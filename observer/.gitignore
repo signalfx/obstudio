@@ -1,0 +1,3 @@
+node_modules
+server/dist
+client/public/assets
