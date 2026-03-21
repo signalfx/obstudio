@@ -86,7 +86,7 @@ export class OtlpInMemoryStore {
    * previous one in full.
    */
   storeMetrics(request: ExportMetricsServiceRequest): void {
-    const resourceMetrics = clone(request.resourceMetrics);
+    const resourceMetrics = normalizeIncomingResourceMetrics(request.resourceMetrics);
     this.state.received.resourceMetrics = resourceMetrics;
     this.state.merged.resourceMetrics = mergeResourceMetrics(this.state.merged.resourceMetrics, resourceMetrics);
     this.emit({ request: this.getMergedMetricsRequest(), signal: "metrics" });
@@ -172,7 +172,7 @@ function mergeResourceMetrics(
     );
   }
 
-  return mergedResourceMetrics;
+  return sortResourceMetricsScopes(mergedResourceMetrics);
 }
 
 /** Merge scopes within a single resource group. */
@@ -198,7 +198,7 @@ function mergeSingleResourceMetrics(existingResourceMetrics: ResourceMetrics, in
 
   return {
     ...clone(incomingResourceMetrics),
-    scopeMetrics: mergedScopeMetrics,
+    scopeMetrics: sortScopeMetricsByName(mergedScopeMetrics),
   };
 }
 
@@ -221,7 +221,7 @@ function mergeSingleScopeMetrics(existingScopeMetrics: ScopeMetrics, incomingSco
 
   return {
     ...clone(incomingScopeMetrics),
-    metrics: mergedMetrics,
+    metrics: sortMetricsByName(mergedMetrics),
   };
 }
 
@@ -353,7 +353,120 @@ function mergeDataPoints<TDataPoint extends MetricDataPoint>(
     mergedDataPoints[existingDataPointIndex] = clone(incomingDataPoint);
   }
 
-  return mergedDataPoints;
+  return sortDataPoints(mergedDataPoints);
+}
+
+function normalizeIncomingResourceMetrics(resourceMetrics: ResourceMetrics[]): ResourceMetrics[] {
+  return clone(resourceMetrics).map((resourceMetricsEntry) => ({
+    ...resourceMetricsEntry,
+    scopeMetrics: sortScopeMetricsByName(
+      resourceMetricsEntry.scopeMetrics.map((scopeMetricsEntry) => ({
+        ...scopeMetricsEntry,
+        metrics: sortMetricsByName(scopeMetricsEntry.metrics.map(normalizeMetric)),
+      })),
+    ),
+  }));
+}
+
+function sortResourceMetricsScopes(resourceMetrics: ResourceMetrics[]): ResourceMetrics[] {
+  return resourceMetrics.map((resourceMetricsEntry) => ({
+    ...resourceMetricsEntry,
+    scopeMetrics: sortScopeMetricsByName(resourceMetricsEntry.scopeMetrics),
+  }));
+}
+
+function sortScopeMetricsByName(scopeMetrics: ScopeMetrics[]): ScopeMetrics[] {
+  return [...scopeMetrics].sort((left, right) => {
+    const leftName = left.scope?.name ?? "";
+    const rightName = right.scope?.name ?? "";
+    const nameComparison = leftName.localeCompare(rightName);
+    if (nameComparison !== 0) {
+      return nameComparison;
+    }
+
+    const leftVersion = left.scope?.version ?? "";
+    const rightVersion = right.scope?.version ?? "";
+    return leftVersion.localeCompare(rightVersion);
+  });
+}
+
+function normalizeMetric(metric: Metric): Metric {
+  if (metric.data === undefined) {
+    return metric;
+  }
+
+  switch (metric.data.$case) {
+    case "gauge":
+      return {
+        ...metric,
+        data: {
+          $case: "gauge",
+          gauge: {
+            ...metric.data.gauge,
+            dataPoints: sortDataPoints(metric.data.gauge.dataPoints.map(sortDataPointAttributes)),
+          },
+        },
+      };
+    case "sum":
+      return {
+        ...metric,
+        data: {
+          $case: "sum",
+          sum: {
+            ...metric.data.sum,
+            dataPoints: sortDataPoints(metric.data.sum.dataPoints.map(sortDataPointAttributes)),
+          },
+        },
+      };
+    case "histogram":
+      return {
+        ...metric,
+        data: {
+          $case: "histogram",
+          histogram: {
+            ...metric.data.histogram,
+            dataPoints: sortDataPoints(metric.data.histogram.dataPoints.map(sortDataPointAttributes)),
+          },
+        },
+      };
+    case "exponentialHistogram":
+      return {
+        ...metric,
+        data: {
+          $case: "exponentialHistogram",
+          exponentialHistogram: {
+            ...metric.data.exponentialHistogram,
+            dataPoints: sortDataPoints(metric.data.exponentialHistogram.dataPoints.map(sortDataPointAttributes)),
+          },
+        },
+      };
+    case "summary":
+      return {
+        ...metric,
+        data: {
+          $case: "summary",
+          summary: {
+            ...metric.data.summary,
+            dataPoints: sortDataPoints(metric.data.summary.dataPoints.map(sortDataPointAttributes)),
+          },
+        },
+      };
+  }
+}
+
+function sortMetricsByName(metrics: Metric[]): Metric[] {
+  return [...metrics].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function sortDataPoints<TDataPoint extends MetricDataPoint>(dataPoints: TDataPoint[]): TDataPoint[] {
+  return [...dataPoints].sort((left, right) => getDataPointKey(left).localeCompare(getDataPointKey(right)));
+}
+
+function sortDataPointAttributes<TDataPoint extends MetricDataPoint>(dataPoint: TDataPoint): TDataPoint {
+  return {
+    ...dataPoint,
+    attributes: [...dataPoint.attributes].sort(compareKeyValueEntries),
+  };
 }
 
 /** Resource identity is the resource payload plus its schema URL. */
@@ -422,6 +535,18 @@ function normalizeKeyValueEntry(entry: { key: string; value?: unknown }): { key:
     key: entry.key,
     value: normalizeForKey(entry.value),
   };
+}
+
+function compareKeyValueEntries(
+  left: { key: string; value?: unknown },
+  right: { key: string; value?: unknown },
+): number {
+  const keyComparison = left.key.localeCompare(right.key);
+  if (keyComparison !== 0) {
+    return keyComparison;
+  }
+
+  return JSON.stringify(normalizeForKey(left.value)).localeCompare(JSON.stringify(normalizeForKey(right.value)));
 }
 
 /** `structuredClone` keeps stored OTLP objects isolated from caller mutations. */
