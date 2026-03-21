@@ -14,6 +14,7 @@ import type {
   ExportTraceServiceResponse as TraceResponse,
 } from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
 import type { Metric } from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
+import { otlpInMemoryStore } from "./otlp-store.js";
 
 const otlpHost = process.env.OTLP_HOST ?? process.env.HOST ?? "127.0.0.1";
 const otlpPort = Number(process.env.OTLP_PORT ?? 4318);
@@ -33,6 +34,7 @@ type OtlpSignalDefinition<TRequest, TResponse> = {
   path: string;
   requestCodec: MessageCodec<TRequest>;
   responseCodec: MessageCodec<TResponse>;
+  persist: (message: TRequest) => void;
   signal: "logs" | "metrics" | "traces";
   summarize: (message: TRequest) => string;
 };
@@ -51,6 +53,7 @@ const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
   requestCodec: logsServiceModule.ExportLogsServiceRequest as MessageCodec<LogsRequest>,
   responseCodec: logsServiceModule.ExportLogsServiceResponse as MessageCodec<LogsResponse>,
+  persist: (message) => otlpInMemoryStore.storeLogs(message),
   signal: "logs",
   summarize: summarizeLogsRequest,
 });
@@ -59,6 +62,7 @@ const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
   path: "/v1/metrics",
   requestCodec: metricsServiceModule.ExportMetricsServiceRequest as MessageCodec<MetricsRequest>,
   responseCodec: metricsServiceModule.ExportMetricsServiceResponse as MessageCodec<MetricsResponse>,
+  persist: (message) => otlpInMemoryStore.storeMetrics(message),
   signal: "metrics",
   summarize: summarizeMetricsRequest,
 });
@@ -67,6 +71,7 @@ const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   path: "/v1/traces",
   requestCodec: traceServiceModule.ExportTraceServiceRequest as MessageCodec<TraceRequest>,
   responseCodec: traceServiceModule.ExportTraceServiceResponse as MessageCodec<TraceResponse>,
+  persist: (message) => otlpInMemoryStore.storeTraces(message),
   signal: "traces",
   summarize: summarizeTraceRequest,
 });
@@ -134,6 +139,7 @@ function handleOtlpRequest<TRequest, TResponse>(
       : signal.requestCodec.decode(payload);
     const responseMessage = signal.responseCodec.create();
 
+    signal.persist(message);
     console.log(`[otlp] accepted ${signal.signal}: ${signal.summarize(message)}`);
     sendOtlpResponse(response, 200, signal.responseCodec, responseMessage, contentType, request.header("accept-encoding"));
   } catch (error) {

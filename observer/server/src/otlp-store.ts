@@ -1,0 +1,382 @@
+import type { ExportLogsServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
+import type { ExportMetricsServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
+import type { ExportTraceServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
+import type {
+  ExponentialHistogram,
+  ExponentialHistogramDataPoint,
+  Gauge,
+  Histogram,
+  HistogramDataPoint,
+  Metric,
+  NumberDataPoint,
+  ResourceMetrics,
+  ScopeMetrics,
+  Sum,
+  Summary,
+  SummaryDataPoint,
+} from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
+import type { ResourceLogs } from "../../shared/otlp/opentelemetry/proto/logs/v1/logs.d.mts";
+import type { ResourceSpans } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
+
+type MetricDataPoint = NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint;
+
+/**
+ * Snapshot of OTLP signal data held in memory.
+ *
+ * `received` keeps the most recent payload for each signal exactly as it arrived.
+ * `merged` keeps the long-lived aggregate view. Metrics are incrementally merged;
+ * logs and traces are currently full-overwrite placeholders until their merge
+ * semantics are defined.
+ */
+export type OtlpStoreState = {
+  received: {
+    resourceLogs: ResourceLogs[];
+    resourceMetrics: ResourceMetrics[];
+    resourceSpans: ResourceSpans[];
+  };
+  merged: {
+    resourceLogs: ResourceLogs[];
+    resourceMetrics: ResourceMetrics[];
+    resourceSpans: ResourceSpans[];
+  };
+};
+
+/**
+ * In-memory OTLP signal store used by the HTTP receiver.
+ *
+ * The store intentionally keeps raw last-seen payloads separate from the merged
+ * view so callers can inspect both the latest export and the accumulated state.
+ */
+export class OtlpInMemoryStore {
+  private state: OtlpStoreState = {
+    received: {
+      resourceLogs: [],
+      resourceMetrics: [],
+      resourceSpans: [],
+    },
+    merged: {
+      resourceLogs: [],
+      resourceMetrics: [],
+      resourceSpans: [],
+    },
+  };
+
+  /** Logs use simple full replacement for now. */
+  storeLogs(request: ExportLogsServiceRequest): void {
+    const resourceLogs = clone(request.resourceLogs);
+    this.state.received.resourceLogs = resourceLogs;
+    this.state.merged.resourceLogs = clone(resourceLogs);
+  }
+
+  /**
+   * Metrics are merged into the existing aggregate by:
+   * Resource + Scope + Metric name + data point attributes.
+   *
+   * When a data point key already exists, the incoming data point replaces the
+   * previous one in full.
+   */
+  storeMetrics(request: ExportMetricsServiceRequest): void {
+    const resourceMetrics = clone(request.resourceMetrics);
+    this.state.received.resourceMetrics = resourceMetrics;
+    this.state.merged.resourceMetrics = mergeResourceMetrics(this.state.merged.resourceMetrics, resourceMetrics);
+  }
+
+  /** Traces use simple full replacement for now. */
+  storeTraces(request: ExportTraceServiceRequest): void {
+    const resourceSpans = clone(request.resourceSpans);
+    this.state.received.resourceSpans = resourceSpans;
+    this.state.merged.resourceSpans = clone(resourceSpans);
+  }
+
+  /** Returns a defensive copy so callers cannot mutate store state by reference. */
+  getState(): OtlpStoreState {
+    return clone(this.state);
+  }
+}
+
+export const otlpInMemoryStore = new OtlpInMemoryStore();
+
+/**
+ * Merge resource metric batches into the aggregate store.
+ *
+ * Resource identity is based on resource contents plus the resource schema URL.
+ */
+function mergeResourceMetrics(
+  existingResourceMetrics: ResourceMetrics[],
+  incomingResourceMetrics: ResourceMetrics[],
+): ResourceMetrics[] {
+  const mergedResourceMetrics = clone(existingResourceMetrics);
+  const resourceIndexByKey = new Map(mergedResourceMetrics.map((resourceMetrics, index) => [getResourceMetricsKey(resourceMetrics), index]));
+
+  for (const incomingResourceMetricsEntry of incomingResourceMetrics) {
+    const resourceMetricsKey = getResourceMetricsKey(incomingResourceMetricsEntry);
+    const existingResourceMetricsIndex = resourceIndexByKey.get(resourceMetricsKey);
+
+    if (existingResourceMetricsIndex === undefined) {
+      resourceIndexByKey.set(resourceMetricsKey, mergedResourceMetrics.length);
+      mergedResourceMetrics.push(clone(incomingResourceMetricsEntry));
+      continue;
+    }
+
+    mergedResourceMetrics[existingResourceMetricsIndex] = mergeSingleResourceMetrics(
+      mergedResourceMetrics[existingResourceMetricsIndex],
+      incomingResourceMetricsEntry,
+    );
+  }
+
+  return mergedResourceMetrics;
+}
+
+/** Merge scopes within a single resource group. */
+function mergeSingleResourceMetrics(existingResourceMetrics: ResourceMetrics, incomingResourceMetrics: ResourceMetrics): ResourceMetrics {
+  const mergedScopeMetrics = clone(existingResourceMetrics.scopeMetrics);
+  const scopeIndexByKey = new Map(mergedScopeMetrics.map((scopeMetrics, index) => [getScopeMetricsKey(scopeMetrics), index]));
+
+  for (const incomingScopeMetrics of incomingResourceMetrics.scopeMetrics) {
+    const scopeMetricsKey = getScopeMetricsKey(incomingScopeMetrics);
+    const existingScopeMetricsIndex = scopeIndexByKey.get(scopeMetricsKey);
+
+    if (existingScopeMetricsIndex === undefined) {
+      scopeIndexByKey.set(scopeMetricsKey, mergedScopeMetrics.length);
+      mergedScopeMetrics.push(clone(incomingScopeMetrics));
+      continue;
+    }
+
+    mergedScopeMetrics[existingScopeMetricsIndex] = mergeSingleScopeMetrics(
+      mergedScopeMetrics[existingScopeMetricsIndex],
+      incomingScopeMetrics,
+    );
+  }
+
+  return {
+    ...clone(incomingResourceMetrics),
+    scopeMetrics: mergedScopeMetrics,
+  };
+}
+
+/** Merge metrics within a single scope by metric name. */
+function mergeSingleScopeMetrics(existingScopeMetrics: ScopeMetrics, incomingScopeMetrics: ScopeMetrics): ScopeMetrics {
+  const mergedMetrics = clone(existingScopeMetrics.metrics);
+  const metricIndexByKey = new Map(mergedMetrics.map((metric, index) => [metric.name, index]));
+
+  for (const incomingMetric of incomingScopeMetrics.metrics) {
+    const existingMetricIndex = metricIndexByKey.get(incomingMetric.name);
+
+    if (existingMetricIndex === undefined) {
+      metricIndexByKey.set(incomingMetric.name, mergedMetrics.length);
+      mergedMetrics.push(clone(incomingMetric));
+      continue;
+    }
+
+    mergedMetrics[existingMetricIndex] = mergeMetric(mergedMetrics[existingMetricIndex], incomingMetric);
+  }
+
+  return {
+    ...clone(incomingScopeMetrics),
+    metrics: mergedMetrics,
+  };
+}
+
+/**
+ * Merge metric payloads while preserving the metric container from the incoming
+ * export and only deduplicating the data point set.
+ */
+function mergeMetric(existingMetric: Metric, incomingMetric: Metric): Metric {
+  if (existingMetric.data?.$case !== incomingMetric.data?.$case || incomingMetric.data === undefined) {
+    return clone(incomingMetric);
+  }
+
+  switch (incomingMetric.data.$case) {
+    case "gauge": {
+      const existingGauge = getGaugeData(existingMetric);
+      return {
+        ...clone(incomingMetric),
+        data: {
+          $case: "gauge",
+          gauge: {
+            ...clone(incomingMetric.data.gauge),
+            dataPoints: mergeDataPoints(existingGauge?.dataPoints ?? [], incomingMetric.data.gauge.dataPoints),
+          },
+        },
+      };
+    }
+    case "sum": {
+      const existingSum = getSumData(existingMetric);
+      return {
+        ...clone(incomingMetric),
+        data: {
+          $case: "sum",
+          sum: {
+            ...clone(incomingMetric.data.sum),
+            dataPoints: mergeDataPoints(existingSum?.dataPoints ?? [], incomingMetric.data.sum.dataPoints),
+          },
+        },
+      };
+    }
+    case "histogram": {
+      const existingHistogram = getHistogramData(existingMetric);
+      return {
+        ...clone(incomingMetric),
+        data: {
+          $case: "histogram",
+          histogram: {
+            ...clone(incomingMetric.data.histogram),
+            dataPoints: mergeDataPoints(existingHistogram?.dataPoints ?? [], incomingMetric.data.histogram.dataPoints),
+          },
+        },
+      };
+    }
+    case "exponentialHistogram": {
+      const existingExponentialHistogram = getExponentialHistogramData(existingMetric);
+      return {
+        ...clone(incomingMetric),
+        data: {
+          $case: "exponentialHistogram",
+          exponentialHistogram: {
+            ...clone(incomingMetric.data.exponentialHistogram),
+            dataPoints: mergeDataPoints(
+              existingExponentialHistogram?.dataPoints ?? [],
+              incomingMetric.data.exponentialHistogram.dataPoints,
+            ),
+          },
+        },
+      };
+    }
+    case "summary": {
+      const existingSummary = getSummaryData(existingMetric);
+      return {
+        ...clone(incomingMetric),
+        data: {
+          $case: "summary",
+          summary: {
+            ...clone(incomingMetric.data.summary),
+            dataPoints: mergeDataPoints(existingSummary?.dataPoints ?? [], incomingMetric.data.summary.dataPoints),
+          },
+        },
+      };
+    }
+  }
+}
+
+/** Helpers keep generated discriminated unions readable in merge branches. */
+function getGaugeData(metric: Metric): Gauge | undefined {
+  return metric.data?.$case === "gauge" ? metric.data.gauge : undefined;
+}
+
+function getSumData(metric: Metric): Sum | undefined {
+  return metric.data?.$case === "sum" ? metric.data.sum : undefined;
+}
+
+function getHistogramData(metric: Metric): Histogram | undefined {
+  return metric.data?.$case === "histogram" ? metric.data.histogram : undefined;
+}
+
+function getExponentialHistogramData(metric: Metric): ExponentialHistogram | undefined {
+  return metric.data?.$case === "exponentialHistogram" ? metric.data.exponentialHistogram : undefined;
+}
+
+function getSummaryData(metric: Metric): Summary | undefined {
+  return metric.data?.$case === "summary" ? metric.data.summary : undefined;
+}
+
+/**
+ * Merge data points by attribute-set identity.
+ *
+ * The attribute set is normalized into a stable key so ordering differences do
+ * not create duplicate time series entries.
+ */
+function mergeDataPoints<TDataPoint extends MetricDataPoint>(
+  existingDataPoints: TDataPoint[],
+  incomingDataPoints: TDataPoint[],
+): TDataPoint[] {
+  const mergedDataPoints = clone(existingDataPoints);
+  const dataPointIndexByKey = new Map(mergedDataPoints.map((dataPoint, index) => [getDataPointKey(dataPoint), index]));
+
+  for (const incomingDataPoint of incomingDataPoints) {
+    const dataPointKey = getDataPointKey(incomingDataPoint);
+    const existingDataPointIndex = dataPointIndexByKey.get(dataPointKey);
+
+    if (existingDataPointIndex === undefined) {
+      dataPointIndexByKey.set(dataPointKey, mergedDataPoints.length);
+      mergedDataPoints.push(clone(incomingDataPoint));
+      continue;
+    }
+
+    mergedDataPoints[existingDataPointIndex] = clone(incomingDataPoint);
+  }
+
+  return mergedDataPoints;
+}
+
+/** Resource identity is the resource payload plus its schema URL. */
+function getResourceMetricsKey(resourceMetrics: ResourceMetrics): string {
+  return stableKey({
+    resource: resourceMetrics.resource,
+    schemaUrl: resourceMetrics.schemaUrl,
+  });
+}
+
+/** Scope identity is the instrumentation scope payload plus its schema URL. */
+function getScopeMetricsKey(scopeMetrics: ScopeMetrics): string {
+  return stableKey({
+    schemaUrl: scopeMetrics.schemaUrl,
+    scope: scopeMetrics.scope,
+  });
+}
+
+/** Data point identity is currently based only on the attribute set. */
+function getDataPointKey(dataPoint: MetricDataPoint): string {
+  return stableKey(dataPoint.attributes);
+}
+
+/** Serialize a normalized value into a deterministic lookup key. */
+function stableKey(value: unknown): string {
+  return JSON.stringify(normalizeForKey(value));
+}
+
+/**
+ * Normalize values before key generation:
+ * `Uint8Array` becomes base64, object keys are sorted, and OTLP KeyValue arrays
+ * are sorted by attribute key/value so semantically equivalent payloads match.
+ */
+function normalizeForKey(value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString("base64");
+  }
+
+  if (globalThis.Array.isArray(value)) {
+    if (value.every((entry) => isKeyValueEntry(entry))) {
+      return [...value]
+        .map((entry) => normalizeKeyValueEntry(entry))
+        .sort((left, right) => left.key.localeCompare(right.key) || JSON.stringify(left.value).localeCompare(JSON.stringify(right.value)));
+    }
+
+    return value.map((entry) => normalizeForKey(entry));
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([entryKey, entryValue]) => [entryKey, normalizeForKey(entryValue)]);
+  return Object.fromEntries(entries);
+}
+
+function isKeyValueEntry(value: unknown): value is { key: string; value?: unknown } {
+  return value !== null && typeof value === "object" && "key" in value && typeof value.key === "string";
+}
+
+function normalizeKeyValueEntry(entry: { key: string; value?: unknown }): { key: string; value: unknown } {
+  return {
+    key: entry.key,
+    value: normalizeForKey(entry.value),
+  };
+}
+
+/** `structuredClone` keeps stored OTLP objects isolated from caller mutations. */
+function clone<TValue>(value: TValue): TValue {
+  return structuredClone(value);
+}
