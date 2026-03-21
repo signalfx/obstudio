@@ -4,7 +4,7 @@ Minimal Node.js application scaffold using TypeScript, Express, and a client-sid
 
 ## Scripts
 
-- `npm run dev` watches the React client and restarts the server when server TypeScript changes
+- `npm run dev` watches the React client, rebuilds browser assets, and triggers browser reloads on client changes via a dev-only SSE channel
 - `npm run build` builds the server and the React client into `dist/`
 - `npm run start` runs the compiled app
 - `npm run typecheck` validates both server and client TypeScript without emitting files
