@@ -19,6 +19,7 @@ export function getStringAttributeValue(attribute: TelemetryAttribute | undefine
 
 export type MetricsRequest = {
   resourceMetrics: Array<{
+    schemaUrl: string;
     resource?: {
       attributes: TelemetryAttribute[];
       entityRefs?: Array<{
@@ -30,6 +31,7 @@ export type MetricsRequest = {
     };
     scopeMetrics: Array<{
       metrics: Metric[];
+      schemaUrl: string;
       scope?: {
         name: string;
         version: string;

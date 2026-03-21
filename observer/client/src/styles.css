@@ -231,7 +231,7 @@ body {
 
 .metric-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   padding: 14px;
   border-bottom: 1px solid var(--border);
@@ -314,17 +314,51 @@ body {
 
 .resource-row__main {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  grid-column: 1 / 4;
+}
+
+.resource-row__line {
+  display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  grid-column: 1 / 4;
   flex-wrap: wrap;
+}
+
+.resource-row__glyph,
+.scope-row__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.resource-row__glyph {
+  color: var(--blue);
+}
+
+.scope-row__glyph {
+  color: var(--yellow);
 }
 
 .resource-row__label {
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
   font-size: 12px;
   color: #ffffff;
+}
+
+.resource-row__schema,
+.scope-row__schema {
+  font-family: "Cascadia Code", "SFMono-Regular", monospace;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .entity-card {
@@ -359,11 +393,13 @@ body {
 }
 
 .scope-row {
+  display: grid;
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--chrome);
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
 }
 
 .scope-row__name {
@@ -373,6 +409,7 @@ body {
 }
 
 .scope-row__version,
+.scope-row__schema,
 .scope-row__count {
   font-size: 11px;
   color: var(--text-dim);

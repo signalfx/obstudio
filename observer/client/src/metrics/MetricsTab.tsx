@@ -42,8 +42,10 @@ type ResourceGroup = {
   id: string;
   label: string;
   metricCount: number;
+  schemaUrl: string;
   scopes: Array<{
     metrics: Metric[];
+    schemaUrl: string;
     scope: Metric["scope"];
   }>;
 };
@@ -83,6 +85,14 @@ function getMetricTypeClass(type: Metric["type"]) {
   }
 }
 
+function getResourceGlyph() {
+  return "⬢";
+}
+
+function getScopeGlyph() {
+  return "◎";
+}
+
 export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
   const resourceGroups = metrics.resourceMetrics.map((resourceMetrics, resourceIndex) => {
     const scopes = resourceMetrics.scopeMetrics.map((scopeMetrics, scopeIndex) => ({
@@ -93,6 +103,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         name: scopeMetrics.scope?.name || "unknown-scope",
         version: scopeMetrics.scope?.version || "unknown",
       },
+      schemaUrl: scopeMetrics.schemaUrl,
     }));
     const attributes = (resourceMetrics.resource?.attributes ?? []).map((attribute) => ({
       key: attribute.key,
@@ -115,6 +126,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
       id: `${resourceIndex}-${getResourceLabel(resourceMetrics.resource?.attributes)}`,
       label: getResourceLabel(resourceMetrics.resource?.attributes),
       metricCount: scopes.reduce((count, scope) => count + scope.metrics.length, 0),
+      schemaUrl: resourceMetrics.schemaUrl,
       scopes,
     };
   });
@@ -153,7 +165,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         <article className="summary-card">
           <p className="summary-card__label">Resources</p>
           <p className="summary-card__value">{resourceCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct resource groups received</p>
+          <p className="summary-card__meta">Distinct resources received</p>
+        </article>
+        <article className="summary-card">
+          <p className="summary-card__label">Scopes</p>
+          <p className="summary-card__value">{scopeCount.toLocaleString()}</p>
+          <p className="summary-card__meta">Distinct instrumentation scopes</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Metrics</p>
@@ -180,25 +197,46 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
             <Fragment key={resourceGroup.id}>
               <div className="resource-row">
                 <div className="resource-row__main">
-                  <span className="resource-row__label">Resource: {resourceGroup.label}</span>
-                  {resourceGroup.attributes.map((attribute) => (
-                    <span key={attribute.key} className="attribute-pill">
-                      <span className="attribute-pill__key">{attribute.key}</span>=
-                      <span className="attribute-pill__value">{attribute.value}</span>
+                  <div className="resource-row__line">
+                    <span className="resource-row__glyph" aria-hidden="true">
+                      {getResourceGlyph()}
                     </span>
-                  ))}
-                  {resourceGroup.entities.map((entity) => (
-                    <div key={entity.id} className="entity-card">
-                      <span className="entity-card__label">Entity: {entity.type}</span>
-                      {entity.schemaUrl ? <span className="entity-card__schema">{entity.schemaUrl}</span> : null}
-                      {entity.attributes.map((attribute) => (
-                        <span key={`${entity.id}-${attribute.key}`} className="attribute-pill">
+                    <span className="resource-row__label">Resource: {resourceGroup.label}</span>
+                  </div>
+                  {resourceGroup.schemaUrl ? (
+                    <div className="resource-row__line">
+                      <span className="resource-row__glyph" aria-hidden="true" />
+                      <span className="resource-row__schema">{resourceGroup.schemaUrl}</span>
+                    </div>
+                  ) : null}
+                  {resourceGroup.attributes.length > 0 ? (
+                    <div className="resource-row__line">
+                      <span className="resource-row__glyph" aria-hidden="true" />
+                      {resourceGroup.attributes.map((attribute) => (
+                        <span key={attribute.key} className="attribute-pill">
                           <span className="attribute-pill__key">{attribute.key}</span>=
                           <span className="attribute-pill__value">{attribute.value}</span>
                         </span>
                       ))}
                     </div>
-                  ))}
+                  ) : null}
+                  {resourceGroup.entities.length > 0 ? (
+                    <div className="resource-row__line">
+                      <span className="resource-row__glyph" aria-hidden="true" />
+                      {resourceGroup.entities.map((entity) => (
+                        <div key={entity.id} className="entity-card">
+                          <span className="entity-card__label">Entity: {entity.type}</span>
+                          {entity.schemaUrl ? <span className="entity-card__schema">{entity.schemaUrl}</span> : null}
+                          {entity.attributes.map((attribute) => (
+                            <span key={`${entity.id}-${attribute.key}`} className="attribute-pill">
+                              <span className="attribute-pill__key">{attribute.key}</span>=
+                              <span className="attribute-pill__value">{attribute.value}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <span className="resource-row__count">
                   {resourceGroup.scopes.length} {resourceGroup.scopes.length === 1 ? "scope" : "scopes"} / {resourceGroup.metricCount}{" "}
@@ -209,8 +247,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
               {resourceGroup.scopes.map((group) => (
                 <Fragment key={`${resourceGroup.id}-${group.scope.name}@${group.scope.version}`}>
                   <div className="scope-row">
-                    <span className="scope-row__name">Scope: {group.scope.name}</span>
+                    <span className="scope-row__glyph" aria-hidden="true">
+                      {getScopeGlyph()}
+                    </span>
+                    <span className="scope-row__name">{group.scope.name}</span>
                     <span className="scope-row__version">@{group.scope.version}</span>
+                    {group.schemaUrl ? <span className="scope-row__schema">{group.schemaUrl}</span> : null}
                     <span className="scope-row__count">
                       {group.metrics.length} {group.metrics.length === 1 ? "metric" : "metrics"}
                     </span>
