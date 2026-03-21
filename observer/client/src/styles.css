@@ -342,6 +342,7 @@ body {
 
 .resource-row__glyph {
   color: var(--blue);
+  font-size: 18px;
 }
 
 .scope-row__glyph {
