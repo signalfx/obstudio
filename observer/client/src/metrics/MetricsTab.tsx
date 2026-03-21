@@ -203,12 +203,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                     </span>
                     <span className="resource-row__label">Resource: {resourceGroup.label}</span>
                   </div>
-                  {resourceGroup.schemaUrl ? (
-                    <div className="resource-row__line">
-                      <span className="resource-row__glyph" aria-hidden="true" />
-                      <span className="resource-row__schema">{resourceGroup.schemaUrl}</span>
-                    </div>
-                  ) : null}
+                  <div className="resource-row__line">
+                    <span className="resource-row__glyph" aria-hidden="true" />
+                    <span className="resource-row__schema">{formatSchemaUrl(resourceGroup.schemaUrl)}</span>
+                  </div>
                   {resourceGroup.attributes.length > 0 ? (
                     <div className="resource-row__line">
                       <span className="resource-row__glyph" aria-hidden="true" />
@@ -250,9 +248,15 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                     <span className="scope-row__glyph" aria-hidden="true">
                       {getScopeGlyph()}
                     </span>
-                    <span className="scope-row__name">{group.scope.name}</span>
-                    <span className="scope-row__version">@{group.scope.version}</span>
-                    {group.schemaUrl ? <span className="scope-row__schema">{group.schemaUrl}</span> : null}
+                    <div className="scope-row__main">
+                      <div className="scope-row__line">
+                        <span className="scope-row__name">{group.scope.name}</span>
+                      </div>
+                      <div className="scope-row__line">
+                        <span className="scope-row__schema">{formatSchemaUrl(group.schemaUrl)}</span>
+                        <span className="scope-row__version">@{group.scope.version}</span>
+                      </div>
+                    </div>
                     <span className="scope-row__count">
                       {group.metrics.length} {group.metrics.length === 1 ? "metric" : "metrics"}
                     </span>
@@ -338,6 +342,10 @@ function getResourceLabel(attributes: TelemetryAttribute[] | undefined): string 
 
 function getAttributeValue(attribute: TelemetryAttribute): string {
   return getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null);
+}
+
+function formatSchemaUrl(schemaUrl: string | undefined): string {
+  return `schema: ${schemaUrl || "none"}`;
 }
 
 function convertMetric(
