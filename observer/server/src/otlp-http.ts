@@ -22,6 +22,7 @@ const otlpPayloadLimit = process.env.OTLP_PAYLOAD_LIMIT ?? "10mb";
 const supportedContentTypes = new Set(["application/json", "application/x-protobuf"]);
 const hexIdPattern = /^[0-9a-fA-F]+$/;
 
+/** Minimal surface needed from the generated ts-proto codecs. */
 type MessageCodec<TMessage> = {
   create: () => TMessage;
   decode: (input: Uint8Array) => TMessage;
@@ -30,6 +31,13 @@ type MessageCodec<TMessage> = {
   toJSON: (message: TMessage) => unknown;
 };
 
+/**
+ * Per-signal transport configuration.
+ *
+ * The receiver uses the same request pipeline for logs, metrics, and traces,
+ * so each signal contributes its codecs, route path, persistence hook, and a
+ * summary formatter for logging.
+ */
 type OtlpSignalDefinition<TRequest, TResponse> = {
   path: string;
   requestCodec: MessageCodec<TRequest>;
@@ -49,6 +57,7 @@ const logsServiceModule = await import(
   new URL("../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js", import.meta.url).href,
 );
 
+/** Static signal definitions drive route registration and request handling. */
 const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
   requestCodec: logsServiceModule.ExportLogsServiceRequest as MessageCodec<LogsRequest>,
@@ -76,6 +85,7 @@ const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   summarize: summarizeTraceRequest,
 });
 
+/** Create an OTLP/HTTP receiver with one endpoint per supported signal. */
 export function createOtlpHttpServer(): http.Server {
   const app = express();
 
@@ -96,6 +106,7 @@ export function listenForOtlpHttp(): http.Server {
   return server;
 }
 
+/** Register a raw-body POST endpoint so OTLP JSON and protobuf share one path. */
 function registerSignalRoute<TRequest, TResponse>(
   app: express.Express,
   signal: OtlpSignalDefinition<TRequest, TResponse>,
@@ -105,6 +116,11 @@ function registerSignalRoute<TRequest, TResponse>(
   });
 }
 
+/**
+ * Common OTLP request pipeline:
+ * validate content type, decode compression, parse OTLP payload, persist it,
+ * and reply using the same transport encoding family as the request.
+ */
 function handleOtlpRequest<TRequest, TResponse>(
   request: express.Request,
   response: express.Response,
@@ -147,6 +163,7 @@ function handleOtlpRequest<TRequest, TResponse>(
   }
 }
 
+/** Extract the media type portion from `Content-Type` and allow only OTLP formats. */
 function parseContentType(headerValue: string | undefined): "application/json" | "application/x-protobuf" | null {
   if (headerValue === undefined) {
     return null;
@@ -156,6 +173,10 @@ function parseContentType(headerValue: string | undefined): "application/json" |
   return supportedContentTypes.has(mediaType) ? mediaType as "application/json" | "application/x-protobuf" : null;
 }
 
+/**
+ * OTLP clients may gzip request bodies. We currently support `identity` and
+ * `gzip`; any other encoding is rejected with `415 Unsupported Media Type`.
+ */
 function decodeRequestBody(body: Buffer, contentEncoding: string | undefined): Uint8Array {
   if (contentEncoding === undefined || contentEncoding.trim() === "") {
     return body;
@@ -183,6 +204,10 @@ function decodeRequestBody(body: Buffer, contentEncoding: string | undefined): U
   return payload;
 }
 
+/**
+ * Encode the success response in the same OTLP format as the request and gzip
+ * the response when the client advertises support for it.
+ */
 function sendOtlpResponse<TResponse>(
   response: express.Response,
   statusCode: number,
@@ -208,6 +233,11 @@ function sendOtlpResponse<TResponse>(
   response.send(payload);
 }
 
+/**
+ * Errors follow the caller's chosen OTLP transport:
+ * JSON callers get a JSON object, protobuf callers get a protobuf-encoded
+ * `google.rpc.Status` payload.
+ */
 function sendStatusError(
   response: express.Response,
   statusCode: number,
@@ -225,6 +255,7 @@ function sendStatusError(
   response.send(Buffer.from(encodeRpcStatus(message)));
 }
 
+/** Encode just enough of `google.rpc.Status` for OTLP protobuf error responses. */
 function encodeRpcStatus(message: string): Uint8Array {
   const messageBytes = Buffer.from(message);
   return Buffer.concat([
@@ -234,6 +265,7 @@ function encodeRpcStatus(message: string): Uint8Array {
   ]);
 }
 
+/** Protobuf status uses base-128 varint framing for string lengths. */
 function encodeVarint(value: number): Uint8Array {
   const bytes: number[] = [];
   let remaining = value >>> 0;
@@ -267,6 +299,7 @@ function normalizeOtlpJson(value: unknown): unknown {
   return Object.fromEntries(normalizedEntries);
 }
 
+/** These summaries feed receiver logs and give quick visibility into accepted payload volume. */
 function summarizeTraceRequest(message: TraceRequest): string {
   const resourceSpans = message.resourceSpans;
   const scopeSpans = resourceSpans.flatMap((resource) => resource.scopeSpans);
@@ -292,6 +325,7 @@ function summarizeMetricsRequest(message: MetricsRequest): string {
   return `${resourceMetrics.length} resource metrics, ${scopeMetrics.length} scope metrics, ${metrics.length} metrics, ${dataPoints} data points`;
 }
 
+/** Count the number of data points regardless of metric aggregation type. */
 function countMetricDataPoints(metric: Metric): number {
   switch (metric.data?.$case) {
     case "gauge":
@@ -309,10 +343,12 @@ function countMetricDataPoints(metric: Metric): number {
   }
 }
 
+/** Preserve explicit error messages when available and fall back otherwise. */
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+/** Identity helper that keeps signal definitions strongly typed at declaration sites. */
 function createSignal<TRequest, TResponse>(
   signal: OtlpSignalDefinition<TRequest, TResponse>,
 ): OtlpSignalDefinition<TRequest, TResponse> {
