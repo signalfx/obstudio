@@ -89,6 +89,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
   const histogramCount = displayMetrics.filter((metric) => metric.type === "Histogram").length;
   const gaugeCount = displayMetrics.filter((metric) => metric.type === "Gauge").length;
   const counterCount = displayMetrics.filter((metric) => metric.type === "Counter").length;
+  const dataPointCount = displayMetrics.reduce((count, metric) => count + (metric.dataPoints?.length ?? 0), 0);
 
   return (
     <section className="tab-panel metrics-panel" role="tabpanel">
@@ -112,19 +113,19 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
 
       <div className="metric-summary">
         <article className="summary-card">
-          <p className="summary-card__label">Hot path</p>
-          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Histogram"))}</p>
-          <p className="summary-card__meta">{findMetricName(displayMetrics, "Histogram")}</p>
+          <p className="summary-card__label">Scopes</p>
+          <p className="summary-card__value">{scopeGroups.length.toLocaleString()}</p>
+          <p className="summary-card__meta">Distinct instrumentation scopes</p>
         </article>
         <article className="summary-card">
-          <p className="summary-card__label">CPU pressure</p>
-          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Gauge"))}</p>
-          <p className="summary-card__meta">{findMetricName(displayMetrics, "Gauge")}</p>
+          <p className="summary-card__label">Metrics</p>
+          <p className="summary-card__value">{displayMetrics.length.toLocaleString()}</p>
+          <p className="summary-card__meta">Merged metric definitions</p>
         </article>
         <article className="summary-card">
-          <p className="summary-card__label">Throughput</p>
-          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Counter"))}</p>
-          <p className="summary-card__meta">{findMetricName(displayMetrics, "Counter")}</p>
+          <p className="summary-card__label">Data points</p>
+          <p className="summary-card__value">{dataPointCount.toLocaleString()}</p>
+          <p className="summary-card__meta">Merged time series entries</p>
         </article>
       </div>
 
@@ -295,21 +296,4 @@ function getMetricPointValue(dataPoint: NumberDataPoint | HistogramDataPoint | E
   }
 
   return 0;
-}
-
-function findMetricValue(metrics: Metric[], type: Metric["type"]): number | undefined {
-  const metric = metrics.find((entry) => entry.type === type);
-  return metric?.dataPoints?.[0]?.value ?? metric?.value;
-}
-
-function findMetricName(metrics: Metric[], type: Metric["type"]): string {
-  return metrics.find((entry) => entry.type === type)?.name ?? "waiting for telemetry";
-}
-
-function formatSummaryValue(value: number | undefined): string {
-  if (value === undefined) {
-    return "--";
-  }
-
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }

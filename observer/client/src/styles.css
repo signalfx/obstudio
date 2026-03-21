@@ -333,6 +333,10 @@ body {
   padding: 0 14px;
 }
 
+.data-point-row {
+  min-height: 30px;
+}
+
 .metric-row:hover,
 .data-point-row:hover,
 .trace-card:hover,
@@ -354,6 +358,10 @@ body {
   gap: 8px;
   min-width: 0;
   padding: 8px 0;
+}
+
+.data-point-row__attributes {
+  padding: 4px 0;
 }
 
 .metric-row__path,
@@ -385,6 +393,7 @@ body {
   text-align: right;
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
   color: #ffffff;
+  padding-right: 8px;
 }
 
 .metric-type {
