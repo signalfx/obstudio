@@ -16,6 +16,8 @@ type DataPoint = {
 };
 
 type Metric = {
+  inlineValue?: number;
+  inlineUnit?: string;
   id: string;
   name: string;
   type: "Counter" | "Gauge" | "Histogram" | "Summary";
@@ -171,9 +173,15 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                       <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
                     </div>
                     <div className="metric-row__value">
-                      {metric.dataPoints || metric.value === undefined ? null : metric.value.toLocaleString()}
+                      {metric.inlineValue !== undefined
+                        ? metric.inlineValue.toLocaleString()
+                        : metric.dataPoints || metric.value === undefined
+                        ? null
+                        : metric.value.toLocaleString()}
                     </div>
-                    <div className="metric-row__unit">{metric.dataPoints ? null : metric.unit}</div>
+                    <div className="metric-row__unit">
+                      {metric.inlineUnit ?? (metric.dataPoints ? null : metric.unit)}
+                    </div>
                   </div>
 
                   {metric.dataPoints?.map((dataPoint, dataPointIndex, dataPoints) => (
@@ -220,25 +228,32 @@ function convertMetric(
     name: scopeMetrics.scope?.name || "unknown-scope",
     version: scopeMetrics.scope?.version || "unknown",
   };
-  const dataPoints = getMetricDataPoints(metric);
+  const rawDataPoints = getMetricDataPoints(metric);
+  const displayDataPoints = rawDataPoints.map((dataPoint) => ({
+    attributes: Object.fromEntries(
+      dataPoint.attributes.map((attribute) => [
+        attribute.key,
+        getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null),
+      ]),
+    ),
+    unit: metric.unit,
+    value: getMetricPointValue(dataPoint),
+  }));
+  const inlineDataPoint = displayDataPoints.length === 1 && Object.keys(displayDataPoints[0].attributes).length === 0
+    ? displayDataPoints[0]
+    : undefined;
+  const dataPoints = inlineDataPoint === undefined ? displayDataPoints : undefined;
 
   return {
-    dataPoints: dataPoints.length > 0 ? dataPoints.map((dataPoint) => ({
-      attributes: Object.fromEntries(
-        dataPoint.attributes.map((attribute) => [
-          attribute.key,
-          getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null),
-        ]),
-      ),
-      unit: metric.unit,
-      value: getMetricPointValue(dataPoint),
-    })) : undefined,
+    dataPoints,
     id: `${resourceIndex}-${scopeIndex}-${metricIndex}`,
+    inlineUnit: inlineDataPoint?.unit,
+    inlineValue: inlineDataPoint?.value,
     name: metric.name,
     scope,
     type: getMetricType(metric),
-    unit: dataPoints.length === 0 ? metric.unit : undefined,
-    value: dataPoints.length === 0 ? undefined : undefined,
+    unit: inlineDataPoint === undefined && displayDataPoints.length === 0 ? metric.unit : undefined,
+    value: inlineDataPoint === undefined && displayDataPoints.length === 0 ? undefined : undefined,
   };
 }
 
