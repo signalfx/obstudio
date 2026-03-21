@@ -1,27 +1,22 @@
-export function TracesTab() {
-  const traces = [
-    {
-      id: "trace-7f31",
-      name: "GET /api/users",
-      duration: "245 ms",
-      service: "observer-server",
-      status: "ok",
-    },
-    {
-      id: "trace-3cc9",
-      name: "POST /api/users",
-      duration: "312 ms",
-      service: "observer-server",
-      status: "warn",
-    },
-    {
-      id: "trace-991a",
-      name: "GET /api/traces",
-      duration: "189 ms",
-      service: "collector",
-      status: "ok",
-    },
-  ];
+import { getStringAttributeValue, type TelemetryAttribute, type TracesRequest } from "../telemetry/types";
+
+type TracesTabProps = {
+  telemetryError: string | null;
+  traces: TracesRequest;
+};
+
+export function TracesTab({ telemetryError, traces }: TracesTabProps) {
+  const entries = traces.resourceSpans.flatMap((resourceSpans) =>
+    resourceSpans.scopeSpans.flatMap((scopeSpans) =>
+      scopeSpans.spans.map((span) => ({
+        duration: formatDuration(span.endTimeUnixNano, span.startTimeUnixNano),
+        id: toHex(span.traceId).slice(0, 8) || "trace",
+        name: span.name || "unnamed span",
+        service: getStringAttribute(resourceSpans.resource?.attributes, "service.name") ?? "unknown-service",
+        status: span.status?.message ? "warn" : "ok",
+      })),
+    ),
+  );
 
   return (
     <section className="tab-panel" role="tabpanel">
@@ -33,13 +28,16 @@ export function TracesTab() {
           <span>Recent traces</span>
         </div>
         <div className="panel-toolbar__meta">
-          <span>{traces.length} samples</span>
+          <span>{entries.length} samples</span>
           <span>Tail mode</span>
         </div>
       </div>
 
+      {telemetryError !== null ? <p className="status error">{telemetryError}</p> : null}
+      {entries.length === 0 ? <p className="status">No traces received yet.</p> : null}
+
       <div className="trace-list">
-        {traces.map((trace) => (
+        {entries.map((trace) => (
           <article key={trace.id} className="trace-card">
             <div className="trace-card__main">
               <div className="trace-card__header">
@@ -55,4 +53,25 @@ export function TracesTab() {
       </div>
     </section>
   );
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function formatDuration(endTimeUnixNano: string, startTimeUnixNano: string): string {
+  const durationNs = Number(endTimeUnixNano) - Number(startTimeUnixNano);
+  if (!Number.isFinite(durationNs) || durationNs <= 0) {
+    return "--";
+  }
+
+  return `${(durationNs / 1_000_000).toFixed(2)} ms`;
+}
+
+function getStringAttribute(
+  attributes: ReadonlyArray<TelemetryAttribute> | undefined,
+  key: string,
+): string | undefined {
+  const attribute = attributes?.find((entry) => entry.key === key);
+  return getStringAttributeValue(attribute);
 }

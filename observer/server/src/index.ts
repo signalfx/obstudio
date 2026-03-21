@@ -6,6 +6,7 @@ import { registerApiRoutes } from "./api.js";
 import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } from "./live-reload.js";
 import { listenForOtlpHttp } from "./otlp-http.js";
 import { registerStaticAssets } from "./static-assets.js";
+import { registerTelemetryWebSocketApi } from "./telemetry-ws-api.js";
 import { registerWebSocketApi, type UpgradeHandler as WsApiUpgradeHandler } from "./ws-api.js";
 
 const app = express();
@@ -27,6 +28,7 @@ if (liveReloadRegistration !== null) {
 
 registerApiRoutes(app);
 webSocketUpgradeHandlers.push(registerWebSocketApi());
+webSocketUpgradeHandlers.push(registerTelemetryWebSocketApi());
 registerStaticAssets(app, { isDev, liveReloadScript, publicDir });
 
 server.on("upgrade", (request, socket, head) => {

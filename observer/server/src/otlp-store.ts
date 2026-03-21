@@ -19,6 +19,7 @@ import type { ResourceLogs } from "../../shared/otlp/opentelemetry/proto/logs/v1
 import type { ResourceSpans } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
 
 type MetricDataPoint = NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint;
+type TelemetrySignal = "logs" | "metrics" | "traces";
 
 /**
  * Snapshot of OTLP signal data held in memory.
@@ -41,6 +42,13 @@ export type OtlpStoreState = {
   };
 };
 
+export type OtlpStoreUpdate =
+  | { request: ExportLogsServiceRequest; signal: "logs" }
+  | { request: ExportMetricsServiceRequest; signal: "metrics" }
+  | { request: ExportTraceServiceRequest; signal: "traces" };
+
+type OtlpStoreListener = (update: OtlpStoreUpdate) => void;
+
 /**
  * In-memory OTLP signal store used by the HTTP receiver.
  *
@@ -48,6 +56,7 @@ export type OtlpStoreState = {
  * view so callers can inspect both the latest export and the accumulated state.
  */
 export class OtlpInMemoryStore {
+  private listeners = new Set<OtlpStoreListener>();
   private state: OtlpStoreState = {
     received: {
       resourceLogs: [],
@@ -66,6 +75,7 @@ export class OtlpInMemoryStore {
     const resourceLogs = clone(request.resourceLogs);
     this.state.received.resourceLogs = resourceLogs;
     this.state.merged.resourceLogs = clone(resourceLogs);
+    this.emit({ request: this.getMergedLogsRequest(), signal: "logs" });
   }
 
   /**
@@ -79,6 +89,7 @@ export class OtlpInMemoryStore {
     const resourceMetrics = clone(request.resourceMetrics);
     this.state.received.resourceMetrics = resourceMetrics;
     this.state.merged.resourceMetrics = mergeResourceMetrics(this.state.merged.resourceMetrics, resourceMetrics);
+    this.emit({ request: this.getMergedMetricsRequest(), signal: "metrics" });
   }
 
   /** Traces use simple full replacement for now. */
@@ -86,11 +97,48 @@ export class OtlpInMemoryStore {
     const resourceSpans = clone(request.resourceSpans);
     this.state.received.resourceSpans = resourceSpans;
     this.state.merged.resourceSpans = clone(resourceSpans);
+    this.emit({ request: this.getMergedTracesRequest(), signal: "traces" });
   }
 
   /** Returns a defensive copy so callers cannot mutate store state by reference. */
   getState(): OtlpStoreState {
     return clone(this.state);
+  }
+
+  getMergedLogsRequest(): ExportLogsServiceRequest {
+    return { resourceLogs: clone(this.state.merged.resourceLogs) };
+  }
+
+  getMergedMetricsRequest(): ExportMetricsServiceRequest {
+    return { resourceMetrics: clone(this.state.merged.resourceMetrics) };
+  }
+
+  getMergedTracesRequest(): ExportTraceServiceRequest {
+    return { resourceSpans: clone(this.state.merged.resourceSpans) };
+  }
+
+  getMergedRequest(signal: TelemetrySignal): ExportLogsServiceRequest | ExportMetricsServiceRequest | ExportTraceServiceRequest {
+    switch (signal) {
+      case "logs":
+        return this.getMergedLogsRequest();
+      case "metrics":
+        return this.getMergedMetricsRequest();
+      case "traces":
+        return this.getMergedTracesRequest();
+    }
+  }
+
+  subscribe(listener: OtlpStoreListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(update: OtlpStoreUpdate): void {
+    for (const listener of this.listeners) {
+      listener(clone(update));
+    }
   }
 }
 

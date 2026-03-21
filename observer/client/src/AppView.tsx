@@ -1,17 +1,20 @@
 import { useState } from "react";
 import type { User } from "@observer/shared";
+import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
+import type { TelemetryState } from "./telemetry";
 import { TracesTab } from "./traces";
 import { UsersTab } from "./users";
 
 type AppViewProps = {
   error: string | null;
   isLoading: boolean;
+  telemetry: TelemetryState;
   users: User[];
 };
 
-export function AppView({ error, isLoading, users }: AppViewProps) {
-  const [activeTab, setActiveTab] = useState<"users" | "metrics" | "traces">("metrics");
+export function AppView({ error, isLoading, telemetry, users }: AppViewProps) {
+  const [activeTab, setActiveTab] = useState<"users" | "metrics" | "traces" | "logs">("metrics");
 
   return (
     <main className="app-shell">
@@ -62,6 +65,20 @@ export function AppView({ error, isLoading, users }: AppViewProps) {
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === "logs"}
+            className={activeTab === "logs" ? "tab-button is-active" : "tab-button"}
+            onClick={() => {
+              setActiveTab("logs");
+            }}
+          >
+            <span className="tab-button__glyph" aria-hidden="true">
+              L
+            </span>
+            Logs
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === "users"}
             className={activeTab === "users" ? "tab-button is-active" : "tab-button"}
             onClick={() => {
@@ -76,8 +93,9 @@ export function AppView({ error, isLoading, users }: AppViewProps) {
         </div>
 
         {activeTab === "users" ? <UsersTab error={error} isLoading={isLoading} users={users} /> : null}
-        {activeTab === "metrics" ? <MetricsTab /> : null}
-        {activeTab === "traces" ? <TracesTab /> : null}
+        {activeTab === "metrics" ? <MetricsTab metrics={telemetry.metrics} telemetryError={telemetry.error} /> : null}
+        {activeTab === "traces" ? <TracesTab telemetryError={telemetry.error} traces={telemetry.traces} /> : null}
+        {activeTab === "logs" ? <LogsTab logs={telemetry.logs} /> : null}
       </section>
     </main>
   );

@@ -302,9 +302,6 @@ body {
 }
 
 .scope-row {
-  position: sticky;
-  top: 37px;
-  z-index: 1;
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
@@ -588,10 +585,6 @@ code {
   .metric-row,
   .data-point-row {
     grid-template-columns: 1fr;
-  }
-
-  .scope-row {
-    top: 0;
   }
 
   .scope-row__count {

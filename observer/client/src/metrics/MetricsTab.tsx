@@ -1,4 +1,13 @@
 import { Fragment } from "react";
+import { getStringAttributeValue } from "../telemetry/types";
+import type {
+  ExponentialHistogramDataPoint,
+  HistogramDataPoint,
+  Metric as OtlpMetric,
+  MetricsRequest,
+  NumberDataPoint,
+  SummaryDataPoint,
+} from "../telemetry/types";
 
 type DataPoint = {
   attributes: Record<string, string>;
@@ -19,112 +28,10 @@ type Metric = {
   };
 };
 
-const mockMetrics: Metric[] = [
-  {
-    id: "1",
-    name: "http.server.request.duration",
-    type: "Histogram",
-    scope: { name: "http-server", version: "1.2.0" },
-    dataPoints: [
-      { attributes: { method: "GET", route: "/api/users" }, value: 245.8, unit: "ms" },
-      { attributes: { method: "POST", route: "/api/users" }, value: 312.4, unit: "ms" },
-      { attributes: { method: "GET", route: "/api/traces" }, value: 189.2, unit: "ms" },
-    ],
-  },
-  {
-    id: "2",
-    name: "http.server.request.count",
-    type: "Counter",
-    value: 15247,
-    unit: "requests",
-    scope: { name: "http-server", version: "1.2.0" },
-  },
-  {
-    id: "3",
-    name: "system.cpu.utilization",
-    type: "Gauge",
-    value: 68.4,
-    unit: "%",
-    scope: { name: "system-metrics", version: "2.1.3" },
-  },
-  {
-    id: "4",
-    name: "system.memory.usage",
-    type: "Gauge",
-    value: 4.2,
-    unit: "GB",
-    scope: { name: "system-metrics", version: "2.1.3" },
-  },
-  {
-    id: "5",
-    name: "db.connection.pool.size",
-    type: "Gauge",
-    scope: { name: "database", version: "3.0.1" },
-    dataPoints: [
-      { attributes: { pool: "primary", database: "users" }, value: 15, unit: "connections" },
-      { attributes: { pool: "secondary", database: "analytics" }, value: 10, unit: "connections" },
-    ],
-  },
-  {
-    id: "6",
-    name: "http.server.response.size",
-    type: "Histogram",
-    value: 1024,
-    unit: "bytes",
-    scope: { name: "http-server", version: "1.2.0" },
-  },
-  {
-    id: "7",
-    name: "cache.hit.rate",
-    type: "Gauge",
-    value: 94.2,
-    unit: "%",
-    scope: { name: "cache-service", version: "1.0.5" },
-  },
-  {
-    id: "8",
-    name: "api.error.count",
-    type: "Counter",
-    value: 12,
-    unit: "errors",
-    scope: { name: "http-server", version: "1.2.0" },
-  },
-  {
-    id: "9",
-    name: "process.runtime.jvm.memory.usage",
-    type: "Gauge",
-    value: 512,
-    unit: "MB",
-    scope: { name: "runtime", version: "2.5.0" },
-  },
-  {
-    id: "10",
-    name: "http.client.request.duration",
-    type: "Histogram",
-    scope: { name: "http-client", version: "1.1.2" },
-    dataPoints: [
-      { attributes: { host: "api.service-a.com", status: "200" }, value: 98.3, unit: "ms" },
-      { attributes: { host: "api.service-b.com", status: "200" }, value: 145.7, unit: "ms" },
-      { attributes: { host: "api.service-a.com", status: "500" }, value: 523.1, unit: "ms" },
-    ],
-  },
-  {
-    id: "11",
-    name: "db.query.duration",
-    type: "Histogram",
-    value: 42.1,
-    unit: "ms",
-    scope: { name: "database", version: "3.0.1" },
-  },
-  {
-    id: "12",
-    name: "system.network.io",
-    type: "Counter",
-    value: 8547231,
-    unit: "bytes",
-    scope: { name: "system-metrics", version: "2.1.3" },
-  },
-];
+type MetricsTabProps = {
+  metrics: MetricsRequest;
+  telemetryError: string | null;
+};
 
 function getMetricGlyph(type: Metric["type"]) {
   switch (type) {
@@ -156,8 +63,14 @@ function getMetricTypeClass(type: Metric["type"]) {
   }
 }
 
-export function MetricsTab() {
-  const metricsByScope = mockMetrics.reduce(
+export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
+  const displayMetrics = metrics.resourceMetrics.flatMap((resourceMetrics, resourceIndex) =>
+    resourceMetrics.scopeMetrics.flatMap((scopeMetrics, scopeIndex) =>
+      scopeMetrics.metrics.map((metric, metricIndex) => convertMetric(metric, resourceIndex, scopeIndex, metricIndex, scopeMetrics)),
+    ),
+  );
+
+  const metricsByScope = displayMetrics.reduce(
     (acc, metric) => {
       const scopeKey = `${metric.scope.name}@${metric.scope.version}`;
       const group = acc[scopeKey] ?? {
@@ -173,9 +86,9 @@ export function MetricsTab() {
   );
 
   const scopeGroups = Object.values(metricsByScope);
-  const histogramCount = mockMetrics.filter((metric) => metric.type === "Histogram").length;
-  const gaugeCount = mockMetrics.filter((metric) => metric.type === "Gauge").length;
-  const counterCount = mockMetrics.filter((metric) => metric.type === "Counter").length;
+  const histogramCount = displayMetrics.filter((metric) => metric.type === "Histogram").length;
+  const gaugeCount = displayMetrics.filter((metric) => metric.type === "Gauge").length;
+  const counterCount = displayMetrics.filter((metric) => metric.type === "Counter").length;
 
   return (
     <section className="tab-panel metrics-panel" role="tabpanel">
@@ -184,7 +97,7 @@ export function MetricsTab() {
           <span className="panel-toolbar__glyph" aria-hidden="true">
             ◫
           </span>
-          <span>{mockMetrics.length} metrics collected</span>
+          <span>{displayMetrics.length} metrics collected</span>
         </div>
         <div className="panel-toolbar__meta">
           <span>{scopeGroups.length} scopes</span>
@@ -194,21 +107,24 @@ export function MetricsTab() {
         </div>
       </div>
 
+      {telemetryError !== null ? <p className="status error">{telemetryError}</p> : null}
+      {displayMetrics.length === 0 ? <p className="status">No metrics received yet.</p> : null}
+
       <div className="metric-summary">
         <article className="summary-card">
           <p className="summary-card__label">Hot path</p>
-          <p className="summary-card__value">312.4 ms</p>
-          <p className="summary-card__meta">POST /api/users p95</p>
+          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Histogram"))}</p>
+          <p className="summary-card__meta">{findMetricName(displayMetrics, "Histogram")}</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">CPU pressure</p>
-          <p className="summary-card__value">68.4%</p>
-          <p className="summary-card__meta">system.cpu.utilization</p>
+          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Gauge"))}</p>
+          <p className="summary-card__meta">{findMetricName(displayMetrics, "Gauge")}</p>
         </article>
         <article className="summary-card">
-          <p className="summary-card__label">Cache health</p>
-          <p className="summary-card__value">94.2%</p>
-          <p className="summary-card__meta">cache.hit.rate</p>
+          <p className="summary-card__label">Throughput</p>
+          <p className="summary-card__value">{formatSummaryValue(findMetricValue(displayMetrics, "Counter"))}</p>
+          <p className="summary-card__meta">{findMetricName(displayMetrics, "Counter")}</p>
         </article>
       </div>
 
@@ -224,7 +140,7 @@ export function MetricsTab() {
           {scopeGroups.map((group) => (
             <Fragment key={`${group.scope.name}@${group.scope.version}`}>
               <div className="scope-row">
-                <span className="scope-row__name">{group.scope.name}</span>
+                <span className="scope-row__name">Scope: {group.scope.name}</span>
                 <span className="scope-row__version">@{group.scope.version}</span>
                 <span className="scope-row__count">
                   {group.metrics.length} {group.metrics.length === 1 ? "metric" : "metrics"}
@@ -290,4 +206,110 @@ export function MetricsTab() {
       </div>
     </section>
   );
+}
+
+function convertMetric(
+  metric: OtlpMetric,
+  resourceIndex: number,
+  scopeIndex: number,
+  metricIndex: number,
+  scopeMetrics: MetricsRequest["resourceMetrics"][number]["scopeMetrics"][number],
+): Metric {
+  const scope = {
+    name: scopeMetrics.scope?.name || "unknown-scope",
+    version: scopeMetrics.scope?.version || "unknown",
+  };
+  const dataPoints = getMetricDataPoints(metric);
+
+  return {
+    dataPoints: dataPoints.length > 0 ? dataPoints.map((dataPoint) => ({
+      attributes: Object.fromEntries(
+        dataPoint.attributes.map((attribute) => [
+          attribute.key,
+          getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null),
+        ]),
+      ),
+      unit: metric.unit,
+      value: getMetricPointValue(dataPoint),
+    })) : undefined,
+    id: `${resourceIndex}-${scopeIndex}-${metricIndex}`,
+    name: metric.name,
+    scope,
+    type: getMetricType(metric),
+    unit: dataPoints.length === 0 ? metric.unit : undefined,
+    value: dataPoints.length === 0 ? undefined : undefined,
+  };
+}
+
+function getMetricType(metric: OtlpMetric): Metric["type"] {
+  switch (metric.data?.$case) {
+    case "gauge":
+      return "Gauge";
+    case "sum":
+      return "Counter";
+    case "histogram":
+    case "exponentialHistogram":
+      return "Histogram";
+    case "summary":
+      return "Summary";
+    default:
+      return "Gauge";
+  }
+}
+
+function getMetricDataPoints(metric: OtlpMetric): Array<NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint> {
+  switch (metric.data?.$case) {
+    case "gauge":
+      return metric.data.gauge.dataPoints;
+    case "sum":
+      return metric.data.sum.dataPoints;
+    case "histogram":
+      return metric.data.histogram.dataPoints;
+    case "exponentialHistogram":
+      return metric.data.exponentialHistogram.dataPoints;
+    case "summary":
+      return metric.data.summary.dataPoints;
+    default:
+      return [];
+  }
+}
+
+function getMetricPointValue(dataPoint: NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint): number {
+  if ("value" in dataPoint) {
+    switch (dataPoint.value?.$case) {
+      case "asDouble":
+        return dataPoint.value.asDouble;
+      case "asInt":
+        return Number(dataPoint.value.asInt);
+      default:
+        return 0;
+    }
+  }
+
+  if ("sum" in dataPoint && typeof dataPoint.sum === "number") {
+    return dataPoint.sum;
+  }
+
+  if ("count" in dataPoint) {
+    return Number(dataPoint.count);
+  }
+
+  return 0;
+}
+
+function findMetricValue(metrics: Metric[], type: Metric["type"]): number | undefined {
+  const metric = metrics.find((entry) => entry.type === type);
+  return metric?.dataPoints?.[0]?.value ?? metric?.value;
+}
+
+function findMetricName(metrics: Metric[], type: Metric["type"]): string {
+  return metrics.find((entry) => entry.type === type)?.name ?? "waiting for telemetry";
+}
+
+function formatSummaryValue(value: number | undefined): string {
+  if (value === undefined) {
+    return "--";
+  }
+
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
