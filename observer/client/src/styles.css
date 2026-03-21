@@ -339,15 +339,13 @@ body {
 
 .metric-row:hover,
 .data-point-row:hover,
-.trace-card:hover,
-.user-card:hover {
+.trace-card:hover {
   background: var(--chrome-2);
 }
 
 .metric-row--bordered,
 .data-point-row--bordered,
-.trace-card,
-.user-card {
+.trace-card {
   border-bottom: 1px solid var(--border);
 }
 
@@ -431,60 +429,11 @@ body {
   color: var(--orange);
 }
 
-.user-list,
 .trace-list {
   margin: 0;
   padding: 0;
   list-style: none;
   overflow: auto;
-}
-
-.user-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-}
-
-.user-card__avatar {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(79, 193, 255, 0.14);
-  color: var(--blue);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.user-card__content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.user-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.user-meta {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.user-status {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(137, 209, 133, 0.14);
-  color: var(--green);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .trace-list {
@@ -607,7 +556,6 @@ code {
     padding-top: 0;
   }
 
-  .user-card,
   .trace-card {
     grid-template-columns: 1fr;
   }

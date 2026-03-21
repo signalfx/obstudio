@@ -1,20 +1,15 @@
 import { useState } from "react";
-import type { User } from "@observer/shared";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
 import type { TelemetryState } from "./telemetry";
 import { TracesTab } from "./traces";
-import { UsersTab } from "./users";
 
 type AppViewProps = {
-  error: string | null;
-  isLoading: boolean;
   telemetry: TelemetryState;
-  users: User[];
 };
 
-export function AppView({ error, isLoading, telemetry, users }: AppViewProps) {
-  const [activeTab, setActiveTab] = useState<"users" | "metrics" | "traces" | "logs">("metrics");
+export function AppView({ telemetry }: AppViewProps) {
+  const [activeTab, setActiveTab] = useState<"metrics" | "traces" | "logs">("metrics");
 
   return (
     <main className="app-shell">
@@ -28,8 +23,8 @@ export function AppView({ error, isLoading, telemetry, users }: AppViewProps) {
             </div>
           </div>
           <div className="title-bar__meta">
-            <span className="pill">{isLoading ? "Syncing" : "Live"}</span>
-            <span className="pill pill--muted">{users.length} users cached</span>
+            <span className="pill">{telemetry.error === null ? "Live" : "Degraded"}</span>
+            <span className="pill pill--muted">Telemetry stream</span>
           </div>
         </header>
 
@@ -76,23 +71,8 @@ export function AppView({ error, isLoading, telemetry, users }: AppViewProps) {
             </span>
             Logs
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "users"}
-            className={activeTab === "users" ? "tab-button is-active" : "tab-button"}
-            onClick={() => {
-              setActiveTab("users");
-            }}
-          >
-            <span className="tab-button__glyph" aria-hidden="true">
-              U
-            </span>
-            Users
-          </button>
         </div>
 
-        {activeTab === "users" ? <UsersTab error={error} isLoading={isLoading} users={users} /> : null}
         {activeTab === "metrics" ? <MetricsTab metrics={telemetry.metrics} telemetryError={telemetry.error} /> : null}
         {activeTab === "traces" ? <TracesTab telemetryError={telemetry.error} traces={telemetry.traces} /> : null}
         {activeTab === "logs" ? <LogsTab logs={telemetry.logs} /> : null}

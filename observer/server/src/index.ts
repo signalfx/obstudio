@@ -7,7 +7,6 @@ import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } f
 import { listenForOtlpHttp } from "./otlp-http.js";
 import { registerStaticAssets } from "./static-assets.js";
 import { registerTelemetryWebSocketApi } from "./telemetry-ws-api.js";
-import { registerWebSocketApi, type UpgradeHandler as WsApiUpgradeHandler } from "./ws-api.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -18,7 +17,7 @@ const isDev = process.env.OBSERVER_DEV === "1";
 const devPublicDir = path.resolve(currentDir, "../../client/public");
 const builtPublicDir = path.join(currentDir, "public");
 const publicDir = isDev ? devPublicDir : builtPublicDir;
-const webSocketUpgradeHandlers: Array<LiveReloadUpgradeHandler | WsApiUpgradeHandler> = [];
+const webSocketUpgradeHandlers: LiveReloadUpgradeHandler[] = [];
 const liveReloadRegistration = isDev ? registerLiveReload(app) : null;
 const liveReloadScript = liveReloadRegistration?.script ?? "";
 
@@ -27,7 +26,6 @@ if (liveReloadRegistration !== null) {
 }
 
 registerApiRoutes(app);
-webSocketUpgradeHandlers.push(registerWebSocketApi());
 webSocketUpgradeHandlers.push(registerTelemetryWebSocketApi());
 registerStaticAssets(app, { isDev, liveReloadScript, publicDir });
 

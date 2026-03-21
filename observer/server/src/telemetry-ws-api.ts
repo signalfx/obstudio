@@ -11,9 +11,13 @@ import type {
   ExportTraceServiceRequest,
 } from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
 import { otlpInMemoryStore, type OtlpStoreUpdate } from "./otlp-store.js";
-import type { UpgradeHandler } from "./ws-api.js";
 
 const telemetryWsApiPath = "/api/telemetry";
+
+export type UpgradeHandler = {
+  handleUpgrade: (request: http.IncomingMessage, socket: Duplex, head: Buffer) => void;
+  path: string;
+};
 
 type TelemetrySignal = "logs" | "metrics" | "traces";
 type TelemetryWebSocketMessage = {
