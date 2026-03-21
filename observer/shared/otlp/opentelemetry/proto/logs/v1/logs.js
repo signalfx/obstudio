@@ -10,7 +10,6 @@ import { Resource } from "../../resource/v1/resource.js";
 /** Possible values for LogRecord.SeverityNumber. */
 export var SeverityNumber;
 (function (SeverityNumber) {
-    /** SEVERITY_NUMBER_UNSPECIFIED - UNSPECIFIED is the default SeverityNumber, it MUST NOT be used. */
     SeverityNumber[SeverityNumber["SEVERITY_NUMBER_UNSPECIFIED"] = 0] = "SEVERITY_NUMBER_UNSPECIFIED";
     SeverityNumber[SeverityNumber["SEVERITY_NUMBER_TRACE"] = 1] = "SEVERITY_NUMBER_TRACE";
     SeverityNumber[SeverityNumber["SEVERITY_NUMBER_TRACE2"] = 2] = "SEVERITY_NUMBER_TRACE2";

@@ -149,8 +149,14 @@ async function transpileGeneratedModules(directory) {
         /from "(\.{1,2}\/[^"]+)"/g,
         (_match, specifier) => `from "${specifier}.js"`,
       );
+      const declarationOutput = source.replace(
+        /from "(\.{1,2}\/[^"]+)"/g,
+        (_match, specifier) => `from "${specifier}.d.mts"`,
+      );
 
       await fs.writeFile(filePath.replace(/\.ts$/, ".js"), rewrittenOutput);
+      await fs.writeFile(filePath.replace(/\.ts$/, ".d.ts"), declarationOutput);
+      await fs.writeFile(filePath.replace(/\.ts$/, ".d.mts"), declarationOutput);
     }),
   );
 }

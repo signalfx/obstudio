@@ -1,6 +1,19 @@
 import express from "express";
 import http from "node:http";
 import { gunzipSync, gzipSync } from "node:zlib";
+import type {
+  ExportLogsServiceRequest as LogsRequest,
+  ExportLogsServiceResponse as LogsResponse,
+} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
+import type {
+  ExportMetricsServiceRequest as MetricsRequest,
+  ExportMetricsServiceResponse as MetricsResponse,
+} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
+import type {
+  ExportTraceServiceRequest as TraceRequest,
+  ExportTraceServiceResponse as TraceResponse,
+} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
+import type { Metric } from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
 
 const otlpHost = process.env.OTLP_HOST ?? process.env.HOST ?? "127.0.0.1";
 const otlpPort = Number(process.env.OTLP_PORT ?? 4318);
@@ -16,12 +29,12 @@ type MessageCodec<TMessage> = {
   toJSON: (message: TMessage) => unknown;
 };
 
-type OtlpSignalDefinition = {
+type OtlpSignalDefinition<TRequest, TResponse> = {
   path: string;
-  requestCodec: MessageCodec<unknown>;
-  responseCodec: MessageCodec<unknown>;
+  requestCodec: MessageCodec<TRequest>;
+  responseCodec: MessageCodec<TResponse>;
   signal: "logs" | "metrics" | "traces";
-  summarize: (message: unknown) => string;
+  summarize: (message: TRequest) => string;
 };
 
 const traceServiceModule = await import(
@@ -34,38 +47,36 @@ const logsServiceModule = await import(
   new URL("../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js", import.meta.url).href,
 );
 
-const signals: OtlpSignalDefinition[] = [
-  {
-    path: "/v1/logs",
-    requestCodec: logsServiceModule.ExportLogsServiceRequest as MessageCodec<unknown>,
-    responseCodec: logsServiceModule.ExportLogsServiceResponse as MessageCodec<unknown>,
-    signal: "logs",
-    summarize: summarizeLogsRequest,
-  },
-  {
-    path: "/v1/metrics",
-    requestCodec: metricsServiceModule.ExportMetricsServiceRequest as MessageCodec<unknown>,
-    responseCodec: metricsServiceModule.ExportMetricsServiceResponse as MessageCodec<unknown>,
-    signal: "metrics",
-    summarize: summarizeMetricsRequest,
-  },
-  {
-    path: "/v1/traces",
-    requestCodec: traceServiceModule.ExportTraceServiceRequest as MessageCodec<unknown>,
-    responseCodec: traceServiceModule.ExportTraceServiceResponse as MessageCodec<unknown>,
-    signal: "traces",
-    summarize: summarizeTraceRequest,
-  },
-];
+const logsSignal = createSignal<LogsRequest, LogsResponse>({
+  path: "/v1/logs",
+  requestCodec: logsServiceModule.ExportLogsServiceRequest as MessageCodec<LogsRequest>,
+  responseCodec: logsServiceModule.ExportLogsServiceResponse as MessageCodec<LogsResponse>,
+  signal: "logs",
+  summarize: summarizeLogsRequest,
+});
+
+const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
+  path: "/v1/metrics",
+  requestCodec: metricsServiceModule.ExportMetricsServiceRequest as MessageCodec<MetricsRequest>,
+  responseCodec: metricsServiceModule.ExportMetricsServiceResponse as MessageCodec<MetricsResponse>,
+  signal: "metrics",
+  summarize: summarizeMetricsRequest,
+});
+
+const tracesSignal = createSignal<TraceRequest, TraceResponse>({
+  path: "/v1/traces",
+  requestCodec: traceServiceModule.ExportTraceServiceRequest as MessageCodec<TraceRequest>,
+  responseCodec: traceServiceModule.ExportTraceServiceResponse as MessageCodec<TraceResponse>,
+  signal: "traces",
+  summarize: summarizeTraceRequest,
+});
 
 export function createOtlpHttpServer(): http.Server {
   const app = express();
 
-  for (const signal of signals) {
-    app.post(signal.path, express.raw({ limit: otlpPayloadLimit, type: () => true }), (request, response) => {
-      handleOtlpRequest(request, response, signal);
-    });
-  }
+  registerSignalRoute(app, logsSignal);
+  registerSignalRoute(app, metricsSignal);
+  registerSignalRoute(app, tracesSignal);
 
   return http.createServer(app);
 }
@@ -80,10 +91,19 @@ export function listenForOtlpHttp(): http.Server {
   return server;
 }
 
-function handleOtlpRequest(
+function registerSignalRoute<TRequest, TResponse>(
+  app: express.Express,
+  signal: OtlpSignalDefinition<TRequest, TResponse>,
+): void {
+  app.post(signal.path, express.raw({ limit: otlpPayloadLimit, type: () => true }), (request, response) => {
+    handleOtlpRequest(request, response, signal);
+  });
+}
+
+function handleOtlpRequest<TRequest, TResponse>(
   request: express.Request,
   response: express.Response,
-  signal: OtlpSignalDefinition,
+  signal: OtlpSignalDefinition<TRequest, TResponse>,
 ): void {
   const contentType = parseContentType(request.header("content-type"));
 
@@ -151,17 +171,17 @@ function decodeRequestBody(body: Buffer, contentEncoding: string | undefined): U
     }
 
     payload = gunzipSync(payload);
-    break
+    break;
   }
 
   return payload;
 }
 
-function sendOtlpResponse(
+function sendOtlpResponse<TResponse>(
   response: express.Response,
   statusCode: number,
-  codec: MessageCodec<unknown>,
-  message: unknown,
+  codec: MessageCodec<TResponse>,
+  message: TResponse,
   contentType: "application/json" | "application/x-protobuf",
   acceptEncoding: string | undefined,
 ): void {
@@ -241,57 +261,54 @@ function normalizeOtlpJson(value: unknown): unknown {
   return Object.fromEntries(normalizedEntries);
 }
 
-function summarizeTraceRequest(message: unknown): string {
-  const resourceSpans = readArrayField(message, "resourceSpans");
-  const scopeSpans = resourceSpans.flatMap((resource) => readArrayField(resource, "scopeSpans"));
-  const spans = scopeSpans.flatMap((scope) => readArrayField(scope, "spans"));
+function summarizeTraceRequest(message: TraceRequest): string {
+  const resourceSpans = message.resourceSpans;
+  const scopeSpans = resourceSpans.flatMap((resource) => resource.scopeSpans);
+  const spans = scopeSpans.flatMap((scope) => scope.spans);
 
   return `${resourceSpans.length} resource spans, ${scopeSpans.length} scope spans, ${spans.length} spans`;
 }
 
-function summarizeLogsRequest(message: unknown): string {
-  const resourceLogs = readArrayField(message, "resourceLogs");
-  const scopeLogs = resourceLogs.flatMap((resource) => readArrayField(resource, "scopeLogs"));
-  const logRecords = scopeLogs.flatMap((scope) => readArrayField(scope, "logRecords"));
+function summarizeLogsRequest(message: LogsRequest): string {
+  const resourceLogs = message.resourceLogs;
+  const scopeLogs = resourceLogs.flatMap((resource) => resource.scopeLogs);
+  const logRecords = scopeLogs.flatMap((scope) => scope.logRecords);
 
   return `${resourceLogs.length} resource logs, ${scopeLogs.length} scope logs, ${logRecords.length} log records`;
 }
 
-function summarizeMetricsRequest(message: unknown): string {
-  const resourceMetrics = readArrayField(message, "resourceMetrics");
-  const scopeMetrics = resourceMetrics.flatMap((resource) => readArrayField(resource, "scopeMetrics"));
-  const metrics = scopeMetrics.flatMap((scope) => readArrayField(scope, "metrics"));
+function summarizeMetricsRequest(message: MetricsRequest): string {
+  const resourceMetrics = message.resourceMetrics;
+  const scopeMetrics = resourceMetrics.flatMap((resource) => resource.scopeMetrics);
+  const metrics = scopeMetrics.flatMap((scope) => scope.metrics);
   const dataPoints = metrics.reduce<number>((count, metric) => count + countMetricDataPoints(metric), 0);
 
   return `${resourceMetrics.length} resource metrics, ${scopeMetrics.length} scope metrics, ${metrics.length} metrics, ${dataPoints} data points`;
 }
 
-function countMetricDataPoints(metric: unknown): number {
-  const metricRecord = asRecord(metric);
-
-  if (metricRecord === null) {
-    return 0;
+function countMetricDataPoints(metric: Metric): number {
+  switch (metric.data?.$case) {
+    case "gauge":
+      return metric.data.gauge.dataPoints.length;
+    case "sum":
+      return metric.data.sum.dataPoints.length;
+    case "histogram":
+      return metric.data.histogram.dataPoints.length;
+    case "exponentialHistogram":
+      return metric.data.exponentialHistogram.dataPoints.length;
+    case "summary":
+      return metric.data.summary.dataPoints.length;
+    default:
+      return 0;
   }
-
-  return [
-    "gauge",
-    "sum",
-    "histogram",
-    "exponentialHistogram",
-    "summary",
-  ].reduce<number>((count, fieldName) => count + readArrayField(metricRecord[fieldName], "dataPoints").length, 0);
-}
-
-function readArrayField(value: unknown, key: string): unknown[] {
-  const record = asRecord(value);
-  const fieldValue = record?.[key];
-  return globalThis.Array.isArray(fieldValue) ? fieldValue : [];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" ? value as Record<string, unknown> : null;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function createSignal<TRequest, TResponse>(
+  signal: OtlpSignalDefinition<TRequest, TResponse>,
+): OtlpSignalDefinition<TRequest, TResponse> {
+  return signal;
 }

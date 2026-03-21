@@ -859,7 +859,7 @@ export const ValueType = {
     },
 };
 function createBaseSample() {
-    return { stackIndex: 0, values: [], attributeIndices: [], linkIndex: 0, timestampsUnixNano: [] };
+    return { stackIndex: 0, attributeIndices: [], linkIndex: 0, values: [], timestampsUnixNano: [] };
 }
 export const Sample = {
     encode(message, writer = new BinaryWriter()) {
@@ -867,18 +867,18 @@ export const Sample = {
             writer.uint32(8).int32(message.stackIndex);
         }
         writer.uint32(18).fork();
-        for (const v of message.values) {
-            writer.int64(v);
-        }
-        writer.join();
-        writer.uint32(26).fork();
         for (const v of message.attributeIndices) {
             writer.int32(v);
         }
         writer.join();
         if (message.linkIndex !== 0) {
-            writer.uint32(32).int32(message.linkIndex);
+            writer.uint32(24).int32(message.linkIndex);
         }
+        writer.uint32(34).fork();
+        for (const v of message.values) {
+            writer.int64(v);
+        }
+        writer.join();
         writer.uint32(42).fork();
         for (const v of message.timestampsUnixNano) {
             writer.fixed64(v);
@@ -902,24 +902,10 @@ export const Sample = {
                 }
                 case 2: {
                     if (tag === 16) {
-                        message.values.push(reader.int64().toString());
-                        continue;
-                    }
-                    if (tag === 18) {
-                        const end2 = reader.uint32() + reader.pos;
-                        while (reader.pos < end2) {
-                            message.values.push(reader.int64().toString());
-                        }
-                        continue;
-                    }
-                    break;
-                }
-                case 3: {
-                    if (tag === 24) {
                         message.attributeIndices.push(reader.int32());
                         continue;
                     }
-                    if (tag === 26) {
+                    if (tag === 18) {
                         const end2 = reader.uint32() + reader.pos;
                         while (reader.pos < end2) {
                             message.attributeIndices.push(reader.int32());
@@ -928,12 +914,26 @@ export const Sample = {
                     }
                     break;
                 }
-                case 4: {
-                    if (tag !== 32) {
+                case 3: {
+                    if (tag !== 24) {
                         break;
                     }
                     message.linkIndex = reader.int32();
                     continue;
+                }
+                case 4: {
+                    if (tag === 32) {
+                        message.values.push(reader.int64().toString());
+                        continue;
+                    }
+                    if (tag === 34) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.values.push(reader.int64().toString());
+                        }
+                        continue;
+                    }
+                    break;
                 }
                 case 5: {
                     if (tag === 41) {
@@ -964,7 +964,6 @@ export const Sample = {
                 : isSet(object.stack_index)
                     ? globalThis.Number(object.stack_index)
                     : 0,
-            values: globalThis.Array.isArray(object?.values) ? object.values.map((e) => globalThis.String(e)) : [],
             attributeIndices: globalThis.Array.isArray(object?.attributeIndices)
                 ? object.attributeIndices.map((e) => globalThis.Number(e))
                 : globalThis.Array.isArray(object?.attribute_indices)
@@ -975,6 +974,7 @@ export const Sample = {
                 : isSet(object.link_index)
                     ? globalThis.Number(object.link_index)
                     : 0,
+            values: globalThis.Array.isArray(object?.values) ? object.values.map((e) => globalThis.String(e)) : [],
             timestampsUnixNano: globalThis.Array.isArray(object?.timestampsUnixNano)
                 ? object.timestampsUnixNano.map((e) => globalThis.String(e))
                 : globalThis.Array.isArray(object?.timestamps_unix_nano)
@@ -987,14 +987,14 @@ export const Sample = {
         if (message.stackIndex !== 0) {
             obj.stackIndex = Math.round(message.stackIndex);
         }
-        if (message.values?.length) {
-            obj.values = message.values;
-        }
         if (message.attributeIndices?.length) {
             obj.attributeIndices = message.attributeIndices.map((e) => Math.round(e));
         }
         if (message.linkIndex !== 0) {
             obj.linkIndex = Math.round(message.linkIndex);
+        }
+        if (message.values?.length) {
+            obj.values = message.values;
         }
         if (message.timestampsUnixNano?.length) {
             obj.timestampsUnixNano = message.timestampsUnixNano;
@@ -1007,9 +1007,9 @@ export const Sample = {
     fromPartial(object) {
         const message = createBaseSample();
         message.stackIndex = object.stackIndex ?? 0;
-        message.values = object.values?.map((e) => e) || [];
         message.attributeIndices = object.attributeIndices?.map((e) => e) || [];
         message.linkIndex = object.linkIndex ?? 0;
+        message.values = object.values?.map((e) => e) || [];
         message.timestampsUnixNano = object.timestampsUnixNano?.map((e) => e) || [];
         return message;
     },

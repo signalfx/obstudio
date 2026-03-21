@@ -32,6 +32,9 @@ export const AnyValue = {
             case "bytesValue":
                 writer.uint32(58).bytes(message.value.bytesValue);
                 break;
+            case "stringValueStrindex":
+                writer.uint32(64).int32(message.value.stringValueStrindex);
+                break;
         }
         return writer;
     },
@@ -91,6 +94,13 @@ export const AnyValue = {
                     message.value = { $case: "bytesValue", bytesValue: reader.bytes() };
                     continue;
                 }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.value = { $case: "stringValueStrindex", stringValueStrindex: reader.int32() };
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -129,7 +139,11 @@ export const AnyValue = {
                                                                 ? { $case: "bytesValue", bytesValue: bytesFromBase64(object.bytesValue) }
                                                                 : isSet(object.bytes_value)
                                                                     ? { $case: "bytesValue", bytesValue: bytesFromBase64(object.bytes_value) }
-                                                                    : undefined,
+                                                                    : isSet(object.stringValueStrindex)
+                                                                        ? { $case: "stringValueStrindex", stringValueStrindex: globalThis.Number(object.stringValueStrindex) }
+                                                                        : isSet(object.string_value_strindex)
+                                                                            ? { $case: "stringValueStrindex", stringValueStrindex: globalThis.Number(object.string_value_strindex) }
+                                                                            : undefined,
         };
     },
     toJSON(message) {
@@ -154,6 +168,9 @@ export const AnyValue = {
         }
         else if (message.value?.$case === "bytesValue") {
             obj.bytesValue = base64FromBytes(message.value.bytesValue);
+        }
+        else if (message.value?.$case === "stringValueStrindex") {
+            obj.stringValueStrindex = Math.round(message.value.stringValueStrindex);
         }
         return obj;
     },
@@ -202,6 +219,12 @@ export const AnyValue = {
             case "bytesValue": {
                 if (object.value?.bytesValue !== undefined && object.value?.bytesValue !== null) {
                     message.value = { $case: "bytesValue", bytesValue: object.value.bytesValue };
+                }
+                break;
+            }
+            case "stringValueStrindex": {
+                if (object.value?.stringValueStrindex !== undefined && object.value?.stringValueStrindex !== null) {
+                    message.value = { $case: "stringValueStrindex", stringValueStrindex: object.value.stringValueStrindex };
                 }
                 break;
             }
@@ -316,7 +339,7 @@ export const KeyValueList = {
     },
 };
 function createBaseKeyValue() {
-    return { key: "", value: undefined };
+    return { key: "", value: undefined, keyStrindex: 0 };
 }
 export const KeyValue = {
     encode(message, writer = new BinaryWriter()) {
@@ -325,6 +348,9 @@ export const KeyValue = {
         }
         if (message.value !== undefined) {
             AnyValue.encode(message.value, writer.uint32(18).fork()).join();
+        }
+        if (message.keyStrindex !== 0) {
+            writer.uint32(24).int32(message.keyStrindex);
         }
         return writer;
     },
@@ -349,6 +375,13 @@ export const KeyValue = {
                     message.value = AnyValue.decode(reader, reader.uint32());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.keyStrindex = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -361,6 +394,11 @@ export const KeyValue = {
         return {
             key: isSet(object.key) ? globalThis.String(object.key) : "",
             value: isSet(object.value) ? AnyValue.fromJSON(object.value) : undefined,
+            keyStrindex: isSet(object.keyStrindex)
+                ? globalThis.Number(object.keyStrindex)
+                : isSet(object.key_strindex)
+                    ? globalThis.Number(object.key_strindex)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -370,6 +408,9 @@ export const KeyValue = {
         }
         if (message.value !== undefined) {
             obj.value = AnyValue.toJSON(message.value);
+        }
+        if (message.keyStrindex !== 0) {
+            obj.keyStrindex = Math.round(message.keyStrindex);
         }
         return obj;
     },
@@ -382,6 +423,7 @@ export const KeyValue = {
         message.value = (object.value !== undefined && object.value !== null)
             ? AnyValue.fromPartial(object.value)
             : undefined;
+        message.keyStrindex = object.keyStrindex ?? 0;
         return message;
     },
 };

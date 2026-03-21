@@ -6,8 +6,8 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { AnyValue, InstrumentationScope, KeyValue } from "../../common/v1/common";
-import { Resource } from "../../resource/v1/resource";
+import { AnyValue, InstrumentationScope, KeyValue } from "../../common/v1/common.d.mts";
+import { Resource } from "../../resource/v1/resource.d.mts";
 
 /** Possible values for LogRecord.SeverityNumber. */
 export enum SeverityNumber {
