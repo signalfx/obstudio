@@ -1,3 +1,4 @@
+import type { User } from "@observer/shared";
 import type express from "express";
 
 export function registerApiRoutes(app: express.Express): void {
@@ -7,5 +8,24 @@ export function registerApiRoutes(app: express.Express): void {
       status: "ok",
       timestamp: new Date().toISOString(),
     });
+  });
+
+  app.get("/api/users", (_request, response) => {
+    const users: User[] = [
+      {
+        firstName: "Ada",
+        lastName: "Lovelace",
+      },
+      {
+        firstName: "Grace",
+        lastName: "Hopper",
+      },
+      {
+        firstName: "Margaret",
+        lastName: "Hamilton",
+      },
+    ];
+
+    response.json(users);
   });
 }

@@ -21718,16 +21718,65 @@ var require_jsx_runtime = __commonJS({
 });
 
 // client/src/main.tsx
-var import_react = __toESM(require_react());
+var import_react2 = __toESM(require_react());
 var import_client = __toESM(require_client());
 
 // client/src/App.tsx
+var import_react = __toESM(require_react());
 var import_jsx_runtime = __toESM(require_jsx_runtime());
 function App() {
+  const [users, setUsers] = (0, import_react.useState)([]);
+  const [isLoading, setIsLoading] = (0, import_react.useState)(true);
+  const [error, setError] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    let isActive = true;
+    const loadUsers = async () => {
+      try {
+        const response = await fetch("/api/users");
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+        const payload = await response.json();
+        if (!isActive) {
+          return;
+        }
+        setUsers(payload);
+        setError(null);
+      } catch (caughtError) {
+        if (!isActive) {
+          return;
+        }
+        const message = caughtError instanceof Error ? caughtError.message : "Unknown error";
+        setError(message);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+    void loadUsers();
+    return () => {
+      isActive = false;
+    };
+  }, []);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", { className: "app-shell", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "hero", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "eyebrow", children: "Observer" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "React is now running inside the Node server app." }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "lede", children: "Express serves the HTML shell, and the browser mounts this React client from bundled assets." })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Shared types now drive both the API and the React client." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "lede", children: [
+      "The server returns a typed user list from ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "/api/users" }),
+      ", and this client renders the same shared data shape."
+    ] }),
+    isLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "status", children: "Loading users..." }) : null,
+    error !== null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "status error", children: [
+      "Failed to load users: ",
+      error
+    ] }) : null,
+    !isLoading && error === null ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "user-list", children: users.map((user) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { className: "user-card", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "user-name", children: [
+      user.firstName,
+      " ",
+      user.lastName
+    ] }) }, `${user.firstName}-${user.lastName}`)) }) : null
   ] }) });
 }
 
@@ -21738,7 +21787,7 @@ if (container === null) {
   throw new Error("Missing #root container.");
 }
 (0, import_client.createRoot)(container).render(
-  /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(App, {}) })
+  /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_react2.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(App, {}) })
 );
 /*! Bundled license information:
 
