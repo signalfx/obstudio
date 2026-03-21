@@ -1,5 +1,6 @@
 import type express from "express";
 import type http from "node:http";
+import type { Duplex } from "node:stream";
 import { WebSocketServer } from "ws";
 
 const liveReloadPath = "/__live-reload";
@@ -39,8 +40,13 @@ const liveReloadScript = `
 </script>
 `;
 
-export function registerLiveReload(app: express.Express, server: http.Server): string {
-  const liveReloadServer = new WebSocketServer({ server, path: liveReloadPath });
+export type UpgradeHandler = {
+  handleUpgrade: (request: http.IncomingMessage, socket: Duplex, head: Buffer) => void;
+  path: string;
+};
+
+export function registerLiveReload(app: express.Express): { script: string; upgradeHandler: UpgradeHandler } {
+  const liveReloadServer = new WebSocketServer({ noServer: true });
 
   const notifyLiveReloadClients = () => {
     for (const client of liveReloadServer.clients) {
@@ -55,5 +61,15 @@ export function registerLiveReload(app: express.Express, server: http.Server): s
     response.sendStatus(204);
   });
 
-  return liveReloadScript;
+  return {
+    script: liveReloadScript,
+    upgradeHandler: {
+      handleUpgrade(request, socket, head) {
+        liveReloadServer.handleUpgrade(request, socket, head, (client, upgradedRequest) => {
+          liveReloadServer.emit("connection", client, upgradedRequest);
+        });
+      },
+      path: liveReloadPath,
+    },
+  };
 }
