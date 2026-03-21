@@ -1,5 +1,5 @@
 import { AppView } from "./AppView";
-import { useUsers } from "./useUsers";
+import { useUsers } from "./users";
 
 export function App() {
   const { error, isLoading, users } = useUsers();

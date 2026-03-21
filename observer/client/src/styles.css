@@ -56,6 +56,35 @@ h1 {
   color: #314236;
 }
 
+.tab-bar {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  border: 1px solid rgba(85, 112, 93, 0.18);
+  background: rgba(255, 252, 245, 0.9);
+  color: #314236;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.tab-button.is-active {
+  background: #152218;
+  color: #f7f3ea;
+  border-color: #152218;
+}
+
+.tab-panel {
+  margin-top: 8px;
+}
+
 .status {
   margin: 24px 0 0;
   font-size: 0.95rem;
