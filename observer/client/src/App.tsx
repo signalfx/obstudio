@@ -52,7 +52,7 @@ export function App() {
     <main className="app-shell">
       <section className="hero">
         <p className="eyebrow">Observer</p>
-        <h1>Shared types 2 now drive both the API and the React client.</h1>
+        <h1>Shared types now drive both the API and the React client.</h1>
         <p className="lede">
           The server returns a typed user list from <code>/api/users</code>, and
           this client renders the same shared data shape.

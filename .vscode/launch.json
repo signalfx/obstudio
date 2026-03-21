@@ -18,22 +18,38 @@
 			"preLaunchTask": "${defaultBuildTask}"
 		},
 		{
+			"name": "Observer Client Watch",
+			"type": "node-terminal",
+			"request": "launch",
+			"cwd": "${workspaceFolder}/observer/client",
+			"command": "npm run dev"
+		},
+		{
 			"name": "Observer Server (dev)",
 			"type": "node",
 			"request": "launch",
 			"cwd": "${workspaceFolder}/observer/server",
-			"runtimeExecutable": "node",
+			"runtimeExecutable": "npm",
 			"runtimeArgs": [
-				"--import",
-				"tsx"
+				"run",
+				"dev"
 			],
-			"program": "${workspaceFolder}/observer/server/src/index.ts",
-			"env": {
-				"OBSERVER_DEV": "1"
-			},
+			"console": "integratedTerminal",
+			"restart": true,
+			"autoAttachChildProcesses": true,
 			"skipFiles": [
 				"<node_internals>/**"
 			]
+		}
+	],
+	"compounds": [
+		{
+			"name": "Observer Full Dev",
+			"configurations": [
+				"Observer Client Watch",
+				"Observer Server (dev)"
+			],
+			"stopAll": true
 		}
 	]
 }
