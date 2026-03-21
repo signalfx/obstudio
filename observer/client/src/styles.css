@@ -396,7 +396,7 @@ body {
 .scope-row {
   display: grid;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--chrome);
@@ -470,6 +470,7 @@ body {
 
 .data-point-row__attributes {
   padding: 2px 0;
+  padding-left: 24px;
 }
 
 .data-point-row .metric-row__value,
