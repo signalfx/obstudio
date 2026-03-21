@@ -7,6 +7,7 @@ import type {
   MetricsRequest,
   NumberDataPoint,
   SummaryDataPoint,
+  TelemetryAttribute,
 } from "../telemetry/types";
 
 type DataPoint = {
@@ -28,6 +29,23 @@ type Metric = {
     name: string;
     version: string;
   };
+};
+
+type ResourceGroup = {
+  attributes: Array<{ key: string; value: string }>;
+  entities: Array<{
+    attributes: Array<{ key: string; value: string }>;
+    id: string;
+    schemaUrl: string;
+    type: string;
+  }>;
+  id: string;
+  label: string;
+  metricCount: number;
+  scopes: Array<{
+    metrics: Metric[];
+    scope: Metric["scope"];
+  }>;
 };
 
 type MetricsTabProps = {
@@ -66,32 +84,49 @@ function getMetricTypeClass(type: Metric["type"]) {
 }
 
 export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
-  const displayMetrics = metrics.resourceMetrics.flatMap((resourceMetrics, resourceIndex) =>
-    resourceMetrics.scopeMetrics.flatMap((scopeMetrics, scopeIndex) =>
-      scopeMetrics.metrics.map((metric, metricIndex) => convertMetric(metric, resourceIndex, scopeIndex, metricIndex, scopeMetrics)),
-    ),
-  );
+  const resourceGroups = metrics.resourceMetrics.map((resourceMetrics, resourceIndex) => {
+    const scopes = resourceMetrics.scopeMetrics.map((scopeMetrics, scopeIndex) => ({
+      metrics: scopeMetrics.metrics.map((metric, metricIndex) =>
+        convertMetric(metric, resourceIndex, scopeIndex, metricIndex, scopeMetrics),
+      ),
+      scope: {
+        name: scopeMetrics.scope?.name || "unknown-scope",
+        version: scopeMetrics.scope?.version || "unknown",
+      },
+    }));
+    const attributes = (resourceMetrics.resource?.attributes ?? []).map((attribute) => ({
+      key: attribute.key,
+      value: getAttributeValue(attribute),
+    }));
+    const attributesByKey = new Map(attributes.map((attribute) => [attribute.key, attribute.value]));
+    const entities = (resourceMetrics.resource?.entityRefs ?? []).map((entityRef, entityIndex) => ({
+      attributes: [...entityRef.idKeys, ...entityRef.descriptionKeys].map((key) => ({
+        key,
+        value: attributesByKey.get(key) ?? "missing",
+      })),
+      id: `${resourceIndex}-${entityIndex}-${entityRef.type}`,
+      schemaUrl: entityRef.schemaUrl,
+      type: entityRef.type,
+    }));
 
-  const metricsByScope = displayMetrics.reduce(
-    (acc, metric) => {
-      const scopeKey = `${metric.scope.name}@${metric.scope.version}`;
-      const group = acc[scopeKey] ?? {
-        scope: metric.scope,
-        metrics: [],
-      };
+    return {
+      attributes,
+      entities,
+      id: `${resourceIndex}-${getResourceLabel(resourceMetrics.resource?.attributes)}`,
+      label: getResourceLabel(resourceMetrics.resource?.attributes),
+      metricCount: scopes.reduce((count, scope) => count + scope.metrics.length, 0),
+      scopes,
+    };
+  });
 
-      group.metrics.push(metric);
-      acc[scopeKey] = group;
-      return acc;
-    },
-    {} as Record<string, { metrics: Metric[]; scope: Metric["scope"] }>,
-  );
-
-  const scopeGroups = Object.values(metricsByScope);
+  const displayMetrics = resourceGroups.flatMap((resourceGroup) => resourceGroup.scopes.flatMap((scopeGroup) => scopeGroup.metrics));
+  const scopeGroups = resourceGroups.flatMap((resourceGroup) => resourceGroup.scopes);
+  const resourceCount = resourceGroups.length;
   const histogramCount = displayMetrics.filter((metric) => metric.type === "Histogram").length;
   const gaugeCount = displayMetrics.filter((metric) => metric.type === "Gauge").length;
   const counterCount = displayMetrics.filter((metric) => metric.type === "Counter").length;
   const dataPointCount = displayMetrics.reduce((count, metric) => count + (metric.dataPoints?.length ?? 0), 0);
+  const scopeCount = scopeGroups.length;
 
   return (
     <section className="tab-panel metrics-panel" role="tabpanel">
@@ -103,7 +138,8 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
           <span>{displayMetrics.length} metrics collected</span>
         </div>
         <div className="panel-toolbar__meta">
-          <span>{scopeGroups.length} scopes</span>
+          <span>{resourceCount} resources</span>
+          <span>{scopeCount} scopes</span>
           <span>{histogramCount} histograms</span>
           <span>{gaugeCount} gauges</span>
           <span>{counterCount} counters</span>
@@ -115,9 +151,9 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
 
       <div className="metric-summary">
         <article className="summary-card">
-          <p className="summary-card__label">Scopes</p>
-          <p className="summary-card__value">{scopeGroups.length.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct instrumentation scopes</p>
+          <p className="summary-card__label">Resources</p>
+          <p className="summary-card__value">{resourceCount.toLocaleString()}</p>
+          <p className="summary-card__meta">Distinct resource groups received</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Metrics</p>
@@ -140,72 +176,104 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         </div>
 
         <div className="metric-table__body">
-          {scopeGroups.map((group) => (
-            <Fragment key={`${group.scope.name}@${group.scope.version}`}>
-              <div className="scope-row">
-                <span className="scope-row__name">Scope: {group.scope.name}</span>
-                <span className="scope-row__version">@{group.scope.version}</span>
-                <span className="scope-row__count">
-                  {group.metrics.length} {group.metrics.length === 1 ? "metric" : "metrics"}
+          {resourceGroups.map((resourceGroup) => (
+            <Fragment key={resourceGroup.id}>
+              <div className="resource-row">
+                <div className="resource-row__main">
+                  <span className="resource-row__label">Resource: {resourceGroup.label}</span>
+                  {resourceGroup.attributes.map((attribute) => (
+                    <span key={attribute.key} className="attribute-pill">
+                      <span className="attribute-pill__key">{attribute.key}</span>=
+                      <span className="attribute-pill__value">{attribute.value}</span>
+                    </span>
+                  ))}
+                  {resourceGroup.entities.map((entity) => (
+                    <div key={entity.id} className="entity-card">
+                      <span className="entity-card__label">Entity: {entity.type}</span>
+                      {entity.schemaUrl ? <span className="entity-card__schema">{entity.schemaUrl}</span> : null}
+                      {entity.attributes.map((attribute) => (
+                        <span key={`${entity.id}-${attribute.key}`} className="attribute-pill">
+                          <span className="attribute-pill__key">{attribute.key}</span>=
+                          <span className="attribute-pill__value">{attribute.value}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <span className="resource-row__count">
+                  {resourceGroup.scopes.length} {resourceGroup.scopes.length === 1 ? "scope" : "scopes"} / {resourceGroup.metricCount}{" "}
+                  {resourceGroup.metricCount === 1 ? "metric" : "metrics"}
                 </span>
               </div>
 
-              {group.metrics.map((metric, index) => (
-                <Fragment key={metric.id}>
-                  <div
-                    className={
-                      index < group.metrics.length - 1 && !metric.dataPoints
-                        ? "metric-row metric-row--bordered"
-                        : "metric-row"
-                    }
-                    role="row"
-                  >
-                    <div className="metric-row__name">
-                      <span className={getMetricTypeClass(metric.type)} aria-hidden="true">
-                        {getMetricGlyph(metric.type)}
-                      </span>
-                      <span className="metric-row__path">{metric.name}</span>
-                      {metric.dataPoints ? (
-                        <span className="metric-row__count">({metric.dataPoints.length})</span>
-                      ) : null}
-                    </div>
-                    <div className="metric-row__type">
-                      <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
-                    </div>
-                    <div className="metric-row__value">
-                      {metric.inlineValue !== undefined
-                        ? metric.inlineValue.toLocaleString()
-                        : metric.dataPoints || metric.value === undefined
-                        ? null
-                        : metric.value.toLocaleString()}
-                    </div>
-                    <div className="metric-row__unit">
-                      {metric.inlineUnit ?? (metric.dataPoints ? null : metric.unit)}
-                    </div>
+              {resourceGroup.scopes.map((group) => (
+                <Fragment key={`${resourceGroup.id}-${group.scope.name}@${group.scope.version}`}>
+                  <div className="scope-row">
+                    <span className="scope-row__name">Scope: {group.scope.name}</span>
+                    <span className="scope-row__version">@{group.scope.version}</span>
+                    <span className="scope-row__count">
+                      {group.metrics.length} {group.metrics.length === 1 ? "metric" : "metrics"}
+                    </span>
                   </div>
 
-                  {metric.dataPoints?.map((dataPoint, dataPointIndex, dataPoints) => (
-                    <div
-                      key={`${metric.id}-${dataPointIndex}`}
-                      className={
-                        dataPointIndex < dataPoints.length - 1 || index < group.metrics.length - 1
-                          ? "data-point-row data-point-row--bordered"
-                          : "data-point-row"
-                      }
-                      role="row"
-                    >
-                      <div className="data-point-row__attributes">
-                        {Object.entries(dataPoint.attributes).map(([key, value]) => (
-                          <span key={key} className="attribute-pill">
-                            <span className="attribute-pill__key">{key}</span>=
-                            <span className="attribute-pill__value">{value}</span>
+                  {group.metrics.map((metric, index) => (
+                    <Fragment key={metric.id}>
+                      <div
+                        className={
+                          index < group.metrics.length - 1 && !metric.dataPoints
+                            ? "metric-row metric-row--bordered"
+                            : "metric-row"
+                        }
+                        role="row"
+                      >
+                        <div className="metric-row__name">
+                          <span className={getMetricTypeClass(metric.type)} aria-hidden="true">
+                            {getMetricGlyph(metric.type)}
                           </span>
-                        ))}
+                          <span className="metric-row__path">{metric.name}</span>
+                          {metric.dataPoints ? (
+                            <span className="metric-row__count">({metric.dataPoints.length})</span>
+                          ) : null}
+                        </div>
+                        <div className="metric-row__type">
+                          <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
+                        </div>
+                        <div className="metric-row__value">
+                          {metric.inlineValue !== undefined
+                            ? metric.inlineValue.toLocaleString()
+                            : metric.dataPoints || metric.value === undefined
+                            ? null
+                            : metric.value.toLocaleString()}
+                        </div>
+                        <div className="metric-row__unit">
+                          {metric.inlineUnit ?? (metric.dataPoints ? null : metric.unit)}
+                        </div>
                       </div>
-                      <div />
-                      <div className="metric-row__value">{dataPoint.value.toLocaleString()}</div>
-                      <div className="metric-row__unit">{dataPoint.unit}</div>
-                    </div>
+
+                      {metric.dataPoints?.map((dataPoint, dataPointIndex, dataPoints) => (
+                        <div
+                          key={`${metric.id}-${dataPointIndex}`}
+                          className={
+                            dataPointIndex < dataPoints.length - 1 || index < group.metrics.length - 1
+                              ? "data-point-row data-point-row--bordered"
+                              : "data-point-row"
+                          }
+                          role="row"
+                        >
+                          <div className="data-point-row__attributes">
+                            {Object.entries(dataPoint.attributes).map(([key, value]) => (
+                              <span key={key} className="attribute-pill">
+                                <span className="attribute-pill__key">{key}</span>=
+                                <span className="attribute-pill__value">{value}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div />
+                          <div className="metric-row__value">{dataPoint.value.toLocaleString()}</div>
+                          <div className="metric-row__unit">{dataPoint.unit}</div>
+                        </div>
+                      ))}
+                    </Fragment>
                   ))}
                 </Fragment>
               ))}
@@ -215,6 +283,19 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
       </div>
     </section>
   );
+}
+
+function getResourceLabel(attributes: TelemetryAttribute[] | undefined): string {
+  return (
+    getStringAttributeValue(attributes?.find((attribute) => attribute.key === "service.name")) ??
+    getStringAttributeValue(attributes?.find((attribute) => attribute.key === "host.name")) ??
+    getStringAttributeValue(attributes?.find((attribute) => attribute.key === "telemetry.sdk.language")) ??
+    "unknown-resource"
+  );
+}
+
+function getAttributeValue(attribute: TelemetryAttribute): string {
+  return getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null);
 }
 
 function convertMetric(
@@ -233,7 +314,7 @@ function convertMetric(
     attributes: Object.fromEntries(
       dataPoint.attributes.map((attribute) => [
         attribute.key,
-        getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null),
+        getAttributeValue(attribute),
       ]),
     ),
     unit: metric.unit,

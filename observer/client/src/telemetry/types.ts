@@ -21,6 +21,12 @@ export type MetricsRequest = {
   resourceMetrics: Array<{
     resource?: {
       attributes: TelemetryAttribute[];
+      entityRefs?: Array<{
+        descriptionKeys: string[];
+        idKeys: string[];
+        schemaUrl: string;
+        type: string;
+      }>;
     };
     scopeMetrics: Array<{
       metrics: Metric[];
