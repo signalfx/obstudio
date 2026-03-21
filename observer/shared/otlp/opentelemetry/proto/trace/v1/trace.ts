@@ -5,8 +5,9 @@
 // source: opentelemetry/proto/trace/v1/trace.proto
 
 /* eslint-disable */
-import type { InstrumentationScope, KeyValue } from "../../common/v1/common";
-import type { Resource } from "../../resource/v1/resource";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { InstrumentationScope, KeyValue } from "../../common/v1/common";
+import { Resource } from "../../resource/v1/resource";
 
 /**
  * SpanFlags represents constants used to interpret the
@@ -40,6 +41,43 @@ export enum SpanFlags {
   SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK = 256,
   SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK = 512,
   UNRECOGNIZED = -1,
+}
+
+export function spanFlagsFromJSON(object: any): SpanFlags {
+  switch (object) {
+    case 0:
+    case "SPAN_FLAGS_DO_NOT_USE":
+      return SpanFlags.SPAN_FLAGS_DO_NOT_USE;
+    case 255:
+    case "SPAN_FLAGS_TRACE_FLAGS_MASK":
+      return SpanFlags.SPAN_FLAGS_TRACE_FLAGS_MASK;
+    case 256:
+    case "SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK":
+      return SpanFlags.SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK;
+    case 512:
+    case "SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK":
+      return SpanFlags.SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SpanFlags.UNRECOGNIZED;
+  }
+}
+
+export function spanFlagsToJSON(object: SpanFlags): string {
+  switch (object) {
+    case SpanFlags.SPAN_FLAGS_DO_NOT_USE:
+      return "SPAN_FLAGS_DO_NOT_USE";
+    case SpanFlags.SPAN_FLAGS_TRACE_FLAGS_MASK:
+      return "SPAN_FLAGS_TRACE_FLAGS_MASK";
+    case SpanFlags.SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK:
+      return "SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK";
+    case SpanFlags.SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK:
+      return "SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK";
+    case SpanFlags.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
 }
 
 /**
@@ -289,6 +327,53 @@ export enum Span_SpanKind {
   UNRECOGNIZED = -1,
 }
 
+export function span_SpanKindFromJSON(object: any): Span_SpanKind {
+  switch (object) {
+    case 0:
+    case "SPAN_KIND_UNSPECIFIED":
+      return Span_SpanKind.SPAN_KIND_UNSPECIFIED;
+    case 1:
+    case "SPAN_KIND_INTERNAL":
+      return Span_SpanKind.SPAN_KIND_INTERNAL;
+    case 2:
+    case "SPAN_KIND_SERVER":
+      return Span_SpanKind.SPAN_KIND_SERVER;
+    case 3:
+    case "SPAN_KIND_CLIENT":
+      return Span_SpanKind.SPAN_KIND_CLIENT;
+    case 4:
+    case "SPAN_KIND_PRODUCER":
+      return Span_SpanKind.SPAN_KIND_PRODUCER;
+    case 5:
+    case "SPAN_KIND_CONSUMER":
+      return Span_SpanKind.SPAN_KIND_CONSUMER;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return Span_SpanKind.UNRECOGNIZED;
+  }
+}
+
+export function span_SpanKindToJSON(object: Span_SpanKind): string {
+  switch (object) {
+    case Span_SpanKind.SPAN_KIND_UNSPECIFIED:
+      return "SPAN_KIND_UNSPECIFIED";
+    case Span_SpanKind.SPAN_KIND_INTERNAL:
+      return "SPAN_KIND_INTERNAL";
+    case Span_SpanKind.SPAN_KIND_SERVER:
+      return "SPAN_KIND_SERVER";
+    case Span_SpanKind.SPAN_KIND_CLIENT:
+      return "SPAN_KIND_CLIENT";
+    case Span_SpanKind.SPAN_KIND_PRODUCER:
+      return "SPAN_KIND_PRODUCER";
+    case Span_SpanKind.SPAN_KIND_CONSUMER:
+      return "SPAN_KIND_CONSUMER";
+    case Span_SpanKind.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /**
  * Event is a time-stamped annotation of the span, consisting of user-supplied
  * text description and key-value pairs.
@@ -391,4 +476,1071 @@ export enum Status_StatusCode {
   /** STATUS_CODE_ERROR - The Span contains an error. */
   STATUS_CODE_ERROR = 2,
   UNRECOGNIZED = -1,
+}
+
+export function status_StatusCodeFromJSON(object: any): Status_StatusCode {
+  switch (object) {
+    case 0:
+    case "STATUS_CODE_UNSET":
+      return Status_StatusCode.STATUS_CODE_UNSET;
+    case 1:
+    case "STATUS_CODE_OK":
+      return Status_StatusCode.STATUS_CODE_OK;
+    case 2:
+    case "STATUS_CODE_ERROR":
+      return Status_StatusCode.STATUS_CODE_ERROR;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return Status_StatusCode.UNRECOGNIZED;
+  }
+}
+
+export function status_StatusCodeToJSON(object: Status_StatusCode): string {
+  switch (object) {
+    case Status_StatusCode.STATUS_CODE_UNSET:
+      return "STATUS_CODE_UNSET";
+    case Status_StatusCode.STATUS_CODE_OK:
+      return "STATUS_CODE_OK";
+    case Status_StatusCode.STATUS_CODE_ERROR:
+      return "STATUS_CODE_ERROR";
+    case Status_StatusCode.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+function createBaseTracesData(): TracesData {
+  return { resourceSpans: [] };
+}
+
+export const TracesData: MessageFns<TracesData> = {
+  encode(message: TracesData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceSpans) {
+      ResourceSpans.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TracesData {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseTracesData();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceSpans.push(ResourceSpans.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): TracesData {
+    return {
+      resourceSpans: globalThis.Array.isArray(object?.resourceSpans)
+        ? object.resourceSpans.map((e: any) => ResourceSpans.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_spans)
+        ? object.resource_spans.map((e: any) => ResourceSpans.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: TracesData): unknown {
+    const obj: any = {};
+    if (message.resourceSpans?.length) {
+      obj.resourceSpans = message.resourceSpans.map((e) => ResourceSpans.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TracesData>, I>>(base?: I): TracesData {
+    return TracesData.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TracesData>, I>>(object: I): TracesData {
+    const message = createBaseTracesData();
+    message.resourceSpans = object.resourceSpans?.map((e) => ResourceSpans.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseResourceSpans(): ResourceSpans {
+  return { resource: undefined, scopeSpans: [], schemaUrl: "" };
+}
+
+export const ResourceSpans: MessageFns<ResourceSpans> = {
+  encode(message: ResourceSpans, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.resource !== undefined) {
+      Resource.encode(message.resource, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.scopeSpans) {
+      ScopeSpans.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResourceSpans {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResourceSpans();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resource = Resource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.scopeSpans.push(ScopeSpans.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResourceSpans {
+    return {
+      resource: isSet(object.resource) ? Resource.fromJSON(object.resource) : undefined,
+      scopeSpans: globalThis.Array.isArray(object?.scopeSpans)
+        ? object.scopeSpans.map((e: any) => ScopeSpans.fromJSON(e))
+        : globalThis.Array.isArray(object?.scope_spans)
+        ? object.scope_spans.map((e: any) => ScopeSpans.fromJSON(e))
+        : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ResourceSpans): unknown {
+    const obj: any = {};
+    if (message.resource !== undefined) {
+      obj.resource = Resource.toJSON(message.resource);
+    }
+    if (message.scopeSpans?.length) {
+      obj.scopeSpans = message.scopeSpans.map((e) => ScopeSpans.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResourceSpans>, I>>(base?: I): ResourceSpans {
+    return ResourceSpans.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResourceSpans>, I>>(object: I): ResourceSpans {
+    const message = createBaseResourceSpans();
+    message.resource = (object.resource !== undefined && object.resource !== null)
+      ? Resource.fromPartial(object.resource)
+      : undefined;
+    message.scopeSpans = object.scopeSpans?.map((e) => ScopeSpans.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseScopeSpans(): ScopeSpans {
+  return { scope: undefined, spans: [], schemaUrl: "" };
+}
+
+export const ScopeSpans: MessageFns<ScopeSpans> = {
+  encode(message: ScopeSpans, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      InstrumentationScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.spans) {
+      Span.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScopeSpans {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScopeSpans();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.scope = InstrumentationScope.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.spans.push(Span.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScopeSpans {
+    return {
+      scope: isSet(object.scope) ? InstrumentationScope.fromJSON(object.scope) : undefined,
+      spans: globalThis.Array.isArray(object?.spans) ? object.spans.map((e: any) => Span.fromJSON(e)) : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ScopeSpans): unknown {
+    const obj: any = {};
+    if (message.scope !== undefined) {
+      obj.scope = InstrumentationScope.toJSON(message.scope);
+    }
+    if (message.spans?.length) {
+      obj.spans = message.spans.map((e) => Span.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScopeSpans>, I>>(base?: I): ScopeSpans {
+    return ScopeSpans.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScopeSpans>, I>>(object: I): ScopeSpans {
+    const message = createBaseScopeSpans();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? InstrumentationScope.fromPartial(object.scope)
+      : undefined;
+    message.spans = object.spans?.map((e) => Span.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseSpan(): Span {
+  return {
+    traceId: new Uint8Array(0),
+    spanId: new Uint8Array(0),
+    traceState: "",
+    parentSpanId: new Uint8Array(0),
+    flags: 0,
+    name: "",
+    kind: 0,
+    startTimeUnixNano: "0",
+    endTimeUnixNano: "0",
+    attributes: [],
+    droppedAttributesCount: 0,
+    events: [],
+    droppedEventsCount: 0,
+    links: [],
+    droppedLinksCount: 0,
+    status: undefined,
+  };
+}
+
+export const Span: MessageFns<Span> = {
+  encode(message: Span, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.traceId.length !== 0) {
+      writer.uint32(10).bytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      writer.uint32(18).bytes(message.spanId);
+    }
+    if (message.traceState !== "") {
+      writer.uint32(26).string(message.traceState);
+    }
+    if (message.parentSpanId.length !== 0) {
+      writer.uint32(34).bytes(message.parentSpanId);
+    }
+    if (message.flags !== 0) {
+      writer.uint32(133).fixed32(message.flags);
+    }
+    if (message.name !== "") {
+      writer.uint32(42).string(message.name);
+    }
+    if (message.kind !== 0) {
+      writer.uint32(48).int32(message.kind);
+    }
+    if (message.startTimeUnixNano !== "0") {
+      writer.uint32(57).fixed64(message.startTimeUnixNano);
+    }
+    if (message.endTimeUnixNano !== "0") {
+      writer.uint32(65).fixed64(message.endTimeUnixNano);
+    }
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(74).fork()).join();
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(80).uint32(message.droppedAttributesCount);
+    }
+    for (const v of message.events) {
+      Span_Event.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.droppedEventsCount !== 0) {
+      writer.uint32(96).uint32(message.droppedEventsCount);
+    }
+    for (const v of message.links) {
+      Span_Link.encode(v!, writer.uint32(106).fork()).join();
+    }
+    if (message.droppedLinksCount !== 0) {
+      writer.uint32(112).uint32(message.droppedLinksCount);
+    }
+    if (message.status !== undefined) {
+      Status.encode(message.status, writer.uint32(122).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Span {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSpan();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.traceId = reader.bytes();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.spanId = reader.bytes();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.traceState = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.parentSpanId = reader.bytes();
+          continue;
+        }
+        case 16: {
+          if (tag !== 133) {
+            break;
+          }
+
+          message.flags = reader.fixed32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.kind = reader.int32() as any;
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.startTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.endTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 10: {
+          if (tag !== 80) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.events.push(Span_Event.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.droppedEventsCount = reader.uint32();
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.links.push(Span_Link.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.droppedLinksCount = reader.uint32();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.status = Status.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Span {
+    return {
+      traceId: isSet(object.traceId)
+        ? bytesFromBase64(object.traceId)
+        : isSet(object.trace_id)
+        ? bytesFromBase64(object.trace_id)
+        : new Uint8Array(0),
+      spanId: isSet(object.spanId)
+        ? bytesFromBase64(object.spanId)
+        : isSet(object.span_id)
+        ? bytesFromBase64(object.span_id)
+        : new Uint8Array(0),
+      traceState: isSet(object.traceState)
+        ? globalThis.String(object.traceState)
+        : isSet(object.trace_state)
+        ? globalThis.String(object.trace_state)
+        : "",
+      parentSpanId: isSet(object.parentSpanId)
+        ? bytesFromBase64(object.parentSpanId)
+        : isSet(object.parent_span_id)
+        ? bytesFromBase64(object.parent_span_id)
+        : new Uint8Array(0),
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      kind: isSet(object.kind) ? span_SpanKindFromJSON(object.kind) : 0,
+      startTimeUnixNano: isSet(object.startTimeUnixNano)
+        ? globalThis.String(object.startTimeUnixNano)
+        : isSet(object.start_time_unix_nano)
+        ? globalThis.String(object.start_time_unix_nano)
+        : "0",
+      endTimeUnixNano: isSet(object.endTimeUnixNano)
+        ? globalThis.String(object.endTimeUnixNano)
+        : isSet(object.end_time_unix_nano)
+        ? globalThis.String(object.end_time_unix_nano)
+        : "0",
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+      events: globalThis.Array.isArray(object?.events)
+        ? object.events.map((e: any) => Span_Event.fromJSON(e))
+        : [],
+      droppedEventsCount: isSet(object.droppedEventsCount)
+        ? globalThis.Number(object.droppedEventsCount)
+        : isSet(object.dropped_events_count)
+        ? globalThis.Number(object.dropped_events_count)
+        : 0,
+      links: globalThis.Array.isArray(object?.links)
+        ? object.links.map((e: any) => Span_Link.fromJSON(e))
+        : [],
+      droppedLinksCount: isSet(object.droppedLinksCount)
+        ? globalThis.Number(object.droppedLinksCount)
+        : isSet(object.dropped_links_count)
+        ? globalThis.Number(object.dropped_links_count)
+        : 0,
+      status: isSet(object.status) ? Status.fromJSON(object.status) : undefined,
+    };
+  },
+
+  toJSON(message: Span): unknown {
+    const obj: any = {};
+    if (message.traceId.length !== 0) {
+      obj.traceId = base64FromBytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      obj.spanId = base64FromBytes(message.spanId);
+    }
+    if (message.traceState !== "") {
+      obj.traceState = message.traceState;
+    }
+    if (message.parentSpanId.length !== 0) {
+      obj.parentSpanId = base64FromBytes(message.parentSpanId);
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.kind !== 0) {
+      obj.kind = span_SpanKindToJSON(message.kind);
+    }
+    if (message.startTimeUnixNano !== "0") {
+      obj.startTimeUnixNano = message.startTimeUnixNano;
+    }
+    if (message.endTimeUnixNano !== "0") {
+      obj.endTimeUnixNano = message.endTimeUnixNano;
+    }
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    if (message.events?.length) {
+      obj.events = message.events.map((e) => Span_Event.toJSON(e));
+    }
+    if (message.droppedEventsCount !== 0) {
+      obj.droppedEventsCount = Math.round(message.droppedEventsCount);
+    }
+    if (message.links?.length) {
+      obj.links = message.links.map((e) => Span_Link.toJSON(e));
+    }
+    if (message.droppedLinksCount !== 0) {
+      obj.droppedLinksCount = Math.round(message.droppedLinksCount);
+    }
+    if (message.status !== undefined) {
+      obj.status = Status.toJSON(message.status);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Span>, I>>(base?: I): Span {
+    return Span.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Span>, I>>(object: I): Span {
+    const message = createBaseSpan();
+    message.traceId = object.traceId ?? new Uint8Array(0);
+    message.spanId = object.spanId ?? new Uint8Array(0);
+    message.traceState = object.traceState ?? "";
+    message.parentSpanId = object.parentSpanId ?? new Uint8Array(0);
+    message.flags = object.flags ?? 0;
+    message.name = object.name ?? "";
+    message.kind = object.kind ?? 0;
+    message.startTimeUnixNano = object.startTimeUnixNano ?? "0";
+    message.endTimeUnixNano = object.endTimeUnixNano ?? "0";
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    message.events = object.events?.map((e) => Span_Event.fromPartial(e)) || [];
+    message.droppedEventsCount = object.droppedEventsCount ?? 0;
+    message.links = object.links?.map((e) => Span_Link.fromPartial(e)) || [];
+    message.droppedLinksCount = object.droppedLinksCount ?? 0;
+    message.status = (object.status !== undefined && object.status !== null)
+      ? Status.fromPartial(object.status)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseSpan_Event(): Span_Event {
+  return { timeUnixNano: "0", name: "", attributes: [], droppedAttributesCount: 0 };
+}
+
+export const Span_Event: MessageFns<Span_Event> = {
+  encode(message: Span_Event, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(9).fixed64(message.timeUnixNano);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(32).uint32(message.droppedAttributesCount);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Span_Event {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSpan_Event();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Span_Event {
+    return {
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+    };
+  },
+
+  toJSON(message: Span_Event): unknown {
+    const obj: any = {};
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Span_Event>, I>>(base?: I): Span_Event {
+    return Span_Event.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Span_Event>, I>>(object: I): Span_Event {
+    const message = createBaseSpan_Event();
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.name = object.name ?? "";
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    return message;
+  },
+};
+
+function createBaseSpan_Link(): Span_Link {
+  return {
+    traceId: new Uint8Array(0),
+    spanId: new Uint8Array(0),
+    traceState: "",
+    attributes: [],
+    droppedAttributesCount: 0,
+    flags: 0,
+  };
+}
+
+export const Span_Link: MessageFns<Span_Link> = {
+  encode(message: Span_Link, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.traceId.length !== 0) {
+      writer.uint32(10).bytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      writer.uint32(18).bytes(message.spanId);
+    }
+    if (message.traceState !== "") {
+      writer.uint32(26).string(message.traceState);
+    }
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(40).uint32(message.droppedAttributesCount);
+    }
+    if (message.flags !== 0) {
+      writer.uint32(53).fixed32(message.flags);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Span_Link {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSpan_Link();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.traceId = reader.bytes();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.spanId = reader.bytes();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.traceState = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 53) {
+            break;
+          }
+
+          message.flags = reader.fixed32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Span_Link {
+    return {
+      traceId: isSet(object.traceId)
+        ? bytesFromBase64(object.traceId)
+        : isSet(object.trace_id)
+        ? bytesFromBase64(object.trace_id)
+        : new Uint8Array(0),
+      spanId: isSet(object.spanId)
+        ? bytesFromBase64(object.spanId)
+        : isSet(object.span_id)
+        ? bytesFromBase64(object.span_id)
+        : new Uint8Array(0),
+      traceState: isSet(object.traceState)
+        ? globalThis.String(object.traceState)
+        : isSet(object.trace_state)
+        ? globalThis.String(object.trace_state)
+        : "",
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+    };
+  },
+
+  toJSON(message: Span_Link): unknown {
+    const obj: any = {};
+    if (message.traceId.length !== 0) {
+      obj.traceId = base64FromBytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      obj.spanId = base64FromBytes(message.spanId);
+    }
+    if (message.traceState !== "") {
+      obj.traceState = message.traceState;
+    }
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Span_Link>, I>>(base?: I): Span_Link {
+    return Span_Link.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Span_Link>, I>>(object: I): Span_Link {
+    const message = createBaseSpan_Link();
+    message.traceId = object.traceId ?? new Uint8Array(0);
+    message.spanId = object.spanId ?? new Uint8Array(0);
+    message.traceState = object.traceState ?? "";
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    message.flags = object.flags ?? 0;
+    return message;
+  },
+};
+
+function createBaseStatus(): Status {
+  return { message: "", code: 0 };
+}
+
+export const Status: MessageFns<Status> = {
+  encode(message: Status, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.message !== "") {
+      writer.uint32(18).string(message.message);
+    }
+    if (message.code !== 0) {
+      writer.uint32(24).int32(message.code);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Status {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStatus();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.code = reader.int32() as any;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Status {
+    return {
+      message: isSet(object.message) ? globalThis.String(object.message) : "",
+      code: isSet(object.code) ? status_StatusCodeFromJSON(object.code) : 0,
+    };
+  },
+
+  toJSON(message: Status): unknown {
+    const obj: any = {};
+    if (message.message !== "") {
+      obj.message = message.message;
+    }
+    if (message.code !== 0) {
+      obj.code = status_StatusCodeToJSON(message.code);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Status>, I>>(base?: I): Status {
+    return Status.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Status>, I>>(object: I): Status {
+    const message = createBaseStatus();
+    message.message = object.message ?? "";
+    message.code = object.code ?? 0;
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

@@ -5,6 +5,7 @@
 // source: opentelemetry/proto/common/v1/common.proto
 
 /* eslint-disable */
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 
 /**
  * Represents any type of attribute value. AnyValue may contain a
@@ -135,4 +136,698 @@ export interface EntityRef {
    * These keys MUST exist in the containing {message}.attributes.
    */
   descriptionKeys: string[];
+}
+
+function createBaseAnyValue(): AnyValue {
+  return { value: undefined };
+}
+
+export const AnyValue: MessageFns<AnyValue> = {
+  encode(message: AnyValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    switch (message.value?.$case) {
+      case "stringValue":
+        writer.uint32(10).string(message.value.stringValue);
+        break;
+      case "boolValue":
+        writer.uint32(16).bool(message.value.boolValue);
+        break;
+      case "intValue":
+        writer.uint32(24).int64(message.value.intValue);
+        break;
+      case "doubleValue":
+        writer.uint32(33).double(message.value.doubleValue);
+        break;
+      case "arrayValue":
+        ArrayValue.encode(message.value.arrayValue, writer.uint32(42).fork()).join();
+        break;
+      case "kvlistValue":
+        KeyValueList.encode(message.value.kvlistValue, writer.uint32(50).fork()).join();
+        break;
+      case "bytesValue":
+        writer.uint32(58).bytes(message.value.bytesValue);
+        break;
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AnyValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseAnyValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.value = { $case: "stringValue", stringValue: reader.string() };
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.value = { $case: "boolValue", boolValue: reader.bool() };
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.value = { $case: "intValue", intValue: reader.int64().toString() };
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.value = { $case: "doubleValue", doubleValue: reader.double() };
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.value = { $case: "arrayValue", arrayValue: ArrayValue.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.value = { $case: "kvlistValue", kvlistValue: KeyValueList.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.value = { $case: "bytesValue", bytesValue: reader.bytes() };
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): AnyValue {
+    return {
+      value: isSet(object.stringValue)
+        ? { $case: "stringValue", stringValue: globalThis.String(object.stringValue) }
+        : isSet(object.string_value)
+        ? { $case: "stringValue", stringValue: globalThis.String(object.string_value) }
+        : isSet(object.boolValue)
+        ? { $case: "boolValue", boolValue: globalThis.Boolean(object.boolValue) }
+        : isSet(object.bool_value)
+        ? { $case: "boolValue", boolValue: globalThis.Boolean(object.bool_value) }
+        : isSet(object.intValue)
+        ? { $case: "intValue", intValue: globalThis.String(object.intValue) }
+        : isSet(object.int_value)
+        ? { $case: "intValue", intValue: globalThis.String(object.int_value) }
+        : isSet(object.doubleValue)
+        ? { $case: "doubleValue", doubleValue: globalThis.Number(object.doubleValue) }
+        : isSet(object.double_value)
+        ? { $case: "doubleValue", doubleValue: globalThis.Number(object.double_value) }
+        : isSet(object.arrayValue)
+        ? { $case: "arrayValue", arrayValue: ArrayValue.fromJSON(object.arrayValue) }
+        : isSet(object.array_value)
+        ? { $case: "arrayValue", arrayValue: ArrayValue.fromJSON(object.array_value) }
+        : isSet(object.kvlistValue)
+        ? { $case: "kvlistValue", kvlistValue: KeyValueList.fromJSON(object.kvlistValue) }
+        : isSet(object.kvlist_value)
+        ? { $case: "kvlistValue", kvlistValue: KeyValueList.fromJSON(object.kvlist_value) }
+        : isSet(object.bytesValue)
+        ? { $case: "bytesValue", bytesValue: bytesFromBase64(object.bytesValue) }
+        : isSet(object.bytes_value)
+        ? { $case: "bytesValue", bytesValue: bytesFromBase64(object.bytes_value) }
+        : undefined,
+    };
+  },
+
+  toJSON(message: AnyValue): unknown {
+    const obj: any = {};
+    if (message.value?.$case === "stringValue") {
+      obj.stringValue = message.value.stringValue;
+    } else if (message.value?.$case === "boolValue") {
+      obj.boolValue = message.value.boolValue;
+    } else if (message.value?.$case === "intValue") {
+      obj.intValue = message.value.intValue;
+    } else if (message.value?.$case === "doubleValue") {
+      obj.doubleValue = message.value.doubleValue;
+    } else if (message.value?.$case === "arrayValue") {
+      obj.arrayValue = ArrayValue.toJSON(message.value.arrayValue);
+    } else if (message.value?.$case === "kvlistValue") {
+      obj.kvlistValue = KeyValueList.toJSON(message.value.kvlistValue);
+    } else if (message.value?.$case === "bytesValue") {
+      obj.bytesValue = base64FromBytes(message.value.bytesValue);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<AnyValue>, I>>(base?: I): AnyValue {
+    return AnyValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AnyValue>, I>>(object: I): AnyValue {
+    const message = createBaseAnyValue();
+    switch (object.value?.$case) {
+      case "stringValue": {
+        if (object.value?.stringValue !== undefined && object.value?.stringValue !== null) {
+          message.value = { $case: "stringValue", stringValue: object.value.stringValue };
+        }
+        break;
+      }
+      case "boolValue": {
+        if (object.value?.boolValue !== undefined && object.value?.boolValue !== null) {
+          message.value = { $case: "boolValue", boolValue: object.value.boolValue };
+        }
+        break;
+      }
+      case "intValue": {
+        if (object.value?.intValue !== undefined && object.value?.intValue !== null) {
+          message.value = { $case: "intValue", intValue: object.value.intValue };
+        }
+        break;
+      }
+      case "doubleValue": {
+        if (object.value?.doubleValue !== undefined && object.value?.doubleValue !== null) {
+          message.value = { $case: "doubleValue", doubleValue: object.value.doubleValue };
+        }
+        break;
+      }
+      case "arrayValue": {
+        if (object.value?.arrayValue !== undefined && object.value?.arrayValue !== null) {
+          message.value = { $case: "arrayValue", arrayValue: ArrayValue.fromPartial(object.value.arrayValue) };
+        }
+        break;
+      }
+      case "kvlistValue": {
+        if (object.value?.kvlistValue !== undefined && object.value?.kvlistValue !== null) {
+          message.value = { $case: "kvlistValue", kvlistValue: KeyValueList.fromPartial(object.value.kvlistValue) };
+        }
+        break;
+      }
+      case "bytesValue": {
+        if (object.value?.bytesValue !== undefined && object.value?.bytesValue !== null) {
+          message.value = { $case: "bytesValue", bytesValue: object.value.bytesValue };
+        }
+        break;
+      }
+    }
+    return message;
+  },
+};
+
+function createBaseArrayValue(): ArrayValue {
+  return { values: [] };
+}
+
+export const ArrayValue: MessageFns<ArrayValue> = {
+  encode(message: ArrayValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.values) {
+      AnyValue.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ArrayValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseArrayValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.values.push(AnyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ArrayValue {
+    return {
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => AnyValue.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ArrayValue): unknown {
+    const obj: any = {};
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => AnyValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ArrayValue>, I>>(base?: I): ArrayValue {
+    return ArrayValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ArrayValue>, I>>(object: I): ArrayValue {
+    const message = createBaseArrayValue();
+    message.values = object.values?.map((e) => AnyValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseKeyValueList(): KeyValueList {
+  return { values: [] };
+}
+
+export const KeyValueList: MessageFns<KeyValueList> = {
+  encode(message: KeyValueList, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.values) {
+      KeyValue.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): KeyValueList {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseKeyValueList();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.values.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): KeyValueList {
+    return {
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => KeyValue.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: KeyValueList): unknown {
+    const obj: any = {};
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => KeyValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<KeyValueList>, I>>(base?: I): KeyValueList {
+    return KeyValueList.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<KeyValueList>, I>>(object: I): KeyValueList {
+    const message = createBaseKeyValueList();
+    message.values = object.values?.map((e) => KeyValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseKeyValue(): KeyValue {
+  return { key: "", value: undefined };
+}
+
+export const KeyValue: MessageFns<KeyValue> = {
+  encode(message: KeyValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== undefined) {
+      AnyValue.encode(message.value, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): KeyValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseKeyValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = AnyValue.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): KeyValue {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? AnyValue.fromJSON(object.value) : undefined,
+    };
+  },
+
+  toJSON(message: KeyValue): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== undefined) {
+      obj.value = AnyValue.toJSON(message.value);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<KeyValue>, I>>(base?: I): KeyValue {
+    return KeyValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<KeyValue>, I>>(object: I): KeyValue {
+    const message = createBaseKeyValue();
+    message.key = object.key ?? "";
+    message.value = (object.value !== undefined && object.value !== null)
+      ? AnyValue.fromPartial(object.value)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseInstrumentationScope(): InstrumentationScope {
+  return { name: "", version: "", attributes: [], droppedAttributesCount: 0 };
+}
+
+export const InstrumentationScope: MessageFns<InstrumentationScope> = {
+  encode(message: InstrumentationScope, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.version !== "") {
+      writer.uint32(18).string(message.version);
+    }
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(32).uint32(message.droppedAttributesCount);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): InstrumentationScope {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseInstrumentationScope();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.version = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): InstrumentationScope {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      version: isSet(object.version) ? globalThis.String(object.version) : "",
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+    };
+  },
+
+  toJSON(message: InstrumentationScope): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.version !== "") {
+      obj.version = message.version;
+    }
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<InstrumentationScope>, I>>(base?: I): InstrumentationScope {
+    return InstrumentationScope.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<InstrumentationScope>, I>>(object: I): InstrumentationScope {
+    const message = createBaseInstrumentationScope();
+    message.name = object.name ?? "";
+    message.version = object.version ?? "";
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    return message;
+  },
+};
+
+function createBaseEntityRef(): EntityRef {
+  return { schemaUrl: "", type: "", idKeys: [], descriptionKeys: [] };
+}
+
+export const EntityRef: MessageFns<EntityRef> = {
+  encode(message: EntityRef, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.schemaUrl !== "") {
+      writer.uint32(10).string(message.schemaUrl);
+    }
+    if (message.type !== "") {
+      writer.uint32(18).string(message.type);
+    }
+    for (const v of message.idKeys) {
+      writer.uint32(26).string(v!);
+    }
+    for (const v of message.descriptionKeys) {
+      writer.uint32(34).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EntityRef {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEntityRef();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.idKeys.push(reader.string());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.descriptionKeys.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EntityRef {
+    return {
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      idKeys: globalThis.Array.isArray(object?.idKeys)
+        ? object.idKeys.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.id_keys)
+        ? object.id_keys.map((e: any) => globalThis.String(e))
+        : [],
+      descriptionKeys: globalThis.Array.isArray(object?.descriptionKeys)
+        ? object.descriptionKeys.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.description_keys)
+        ? object.description_keys.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: EntityRef): unknown {
+    const obj: any = {};
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.idKeys?.length) {
+      obj.idKeys = message.idKeys;
+    }
+    if (message.descriptionKeys?.length) {
+      obj.descriptionKeys = message.descriptionKeys;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EntityRef>, I>>(base?: I): EntityRef {
+    return EntityRef.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EntityRef>, I>>(object: I): EntityRef {
+    const message = createBaseEntityRef();
+    message.schemaUrl = object.schemaUrl ?? "";
+    message.type = object.type ?? "";
+    message.idKeys = object.idKeys?.map((e) => e) || [];
+    message.descriptionKeys = object.descriptionKeys?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

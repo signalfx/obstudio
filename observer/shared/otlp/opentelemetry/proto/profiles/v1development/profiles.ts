@@ -5,8 +5,9 @@
 // source: opentelemetry/proto/profiles/v1development/profiles.proto
 
 /* eslint-disable */
-import type { AnyValue, InstrumentationScope } from "../../common/v1/common";
-import type { Resource } from "../../resource/v1/resource";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { AnyValue, InstrumentationScope } from "../../common/v1/common";
+import { Resource } from "../../resource/v1/resource";
 
 /**
  * ProfilesDictionary represents the profiles data shared across the
@@ -422,4 +423,1839 @@ export interface KeyValueAndUnit {
    * zero indicates implicit (by semconv) or non-defined unit.
    */
   unitStrindex: number;
+}
+
+function createBaseProfilesDictionary(): ProfilesDictionary {
+  return {
+    mappingTable: [],
+    locationTable: [],
+    functionTable: [],
+    linkTable: [],
+    stringTable: [],
+    attributeTable: [],
+    stackTable: [],
+  };
+}
+
+export const ProfilesDictionary: MessageFns<ProfilesDictionary> = {
+  encode(message: ProfilesDictionary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.mappingTable) {
+      Mapping.encode(v!, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.locationTable) {
+      Location.encode(v!, writer.uint32(18).fork()).join();
+    }
+    for (const v of message.functionTable) {
+      FunctionMessage.encode(v!, writer.uint32(26).fork()).join();
+    }
+    for (const v of message.linkTable) {
+      Link.encode(v!, writer.uint32(34).fork()).join();
+    }
+    for (const v of message.stringTable) {
+      writer.uint32(42).string(v!);
+    }
+    for (const v of message.attributeTable) {
+      KeyValueAndUnit.encode(v!, writer.uint32(50).fork()).join();
+    }
+    for (const v of message.stackTable) {
+      Stack.encode(v!, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProfilesDictionary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseProfilesDictionary();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mappingTable.push(Mapping.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.locationTable.push(Location.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.functionTable.push(FunctionMessage.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.linkTable.push(Link.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.stringTable.push(reader.string());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.attributeTable.push(KeyValueAndUnit.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.stackTable.push(Stack.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ProfilesDictionary {
+    return {
+      mappingTable: globalThis.Array.isArray(object?.mappingTable)
+        ? object.mappingTable.map((e: any) => Mapping.fromJSON(e))
+        : globalThis.Array.isArray(object?.mapping_table)
+        ? object.mapping_table.map((e: any) => Mapping.fromJSON(e))
+        : [],
+      locationTable: globalThis.Array.isArray(object?.locationTable)
+        ? object.locationTable.map((e: any) => Location.fromJSON(e))
+        : globalThis.Array.isArray(object?.location_table)
+        ? object.location_table.map((e: any) => Location.fromJSON(e))
+        : [],
+      functionTable: globalThis.Array.isArray(object?.functionTable)
+        ? object.functionTable.map((e: any) => FunctionMessage.fromJSON(e))
+        : globalThis.Array.isArray(object?.function_table)
+        ? object.function_table.map((e: any) => FunctionMessage.fromJSON(e))
+        : [],
+      linkTable: globalThis.Array.isArray(object?.linkTable)
+        ? object.linkTable.map((e: any) => Link.fromJSON(e))
+        : globalThis.Array.isArray(object?.link_table)
+        ? object.link_table.map((e: any) => Link.fromJSON(e))
+        : [],
+      stringTable: globalThis.Array.isArray(object?.stringTable)
+        ? object.stringTable.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.string_table)
+        ? object.string_table.map((e: any) => globalThis.String(e))
+        : [],
+      attributeTable: globalThis.Array.isArray(object?.attributeTable)
+        ? object.attributeTable.map((e: any) => KeyValueAndUnit.fromJSON(e))
+        : globalThis.Array.isArray(object?.attribute_table)
+        ? object.attribute_table.map((e: any) => KeyValueAndUnit.fromJSON(e))
+        : [],
+      stackTable: globalThis.Array.isArray(object?.stackTable)
+        ? object.stackTable.map((e: any) => Stack.fromJSON(e))
+        : globalThis.Array.isArray(object?.stack_table)
+        ? object.stack_table.map((e: any) => Stack.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ProfilesDictionary): unknown {
+    const obj: any = {};
+    if (message.mappingTable?.length) {
+      obj.mappingTable = message.mappingTable.map((e) => Mapping.toJSON(e));
+    }
+    if (message.locationTable?.length) {
+      obj.locationTable = message.locationTable.map((e) => Location.toJSON(e));
+    }
+    if (message.functionTable?.length) {
+      obj.functionTable = message.functionTable.map((e) => FunctionMessage.toJSON(e));
+    }
+    if (message.linkTable?.length) {
+      obj.linkTable = message.linkTable.map((e) => Link.toJSON(e));
+    }
+    if (message.stringTable?.length) {
+      obj.stringTable = message.stringTable;
+    }
+    if (message.attributeTable?.length) {
+      obj.attributeTable = message.attributeTable.map((e) => KeyValueAndUnit.toJSON(e));
+    }
+    if (message.stackTable?.length) {
+      obj.stackTable = message.stackTable.map((e) => Stack.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ProfilesDictionary>, I>>(base?: I): ProfilesDictionary {
+    return ProfilesDictionary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProfilesDictionary>, I>>(object: I): ProfilesDictionary {
+    const message = createBaseProfilesDictionary();
+    message.mappingTable = object.mappingTable?.map((e) => Mapping.fromPartial(e)) || [];
+    message.locationTable = object.locationTable?.map((e) => Location.fromPartial(e)) || [];
+    message.functionTable = object.functionTable?.map((e) => FunctionMessage.fromPartial(e)) || [];
+    message.linkTable = object.linkTable?.map((e) => Link.fromPartial(e)) || [];
+    message.stringTable = object.stringTable?.map((e) => e) || [];
+    message.attributeTable = object.attributeTable?.map((e) => KeyValueAndUnit.fromPartial(e)) || [];
+    message.stackTable = object.stackTable?.map((e) => Stack.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseProfilesData(): ProfilesData {
+  return { resourceProfiles: [], dictionary: undefined };
+}
+
+export const ProfilesData: MessageFns<ProfilesData> = {
+  encode(message: ProfilesData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceProfiles) {
+      ResourceProfiles.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.dictionary !== undefined) {
+      ProfilesDictionary.encode(message.dictionary, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ProfilesData {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseProfilesData();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceProfiles.push(ResourceProfiles.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.dictionary = ProfilesDictionary.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ProfilesData {
+    return {
+      resourceProfiles: globalThis.Array.isArray(object?.resourceProfiles)
+        ? object.resourceProfiles.map((e: any) => ResourceProfiles.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_profiles)
+        ? object.resource_profiles.map((e: any) => ResourceProfiles.fromJSON(e))
+        : [],
+      dictionary: isSet(object.dictionary) ? ProfilesDictionary.fromJSON(object.dictionary) : undefined,
+    };
+  },
+
+  toJSON(message: ProfilesData): unknown {
+    const obj: any = {};
+    if (message.resourceProfiles?.length) {
+      obj.resourceProfiles = message.resourceProfiles.map((e) => ResourceProfiles.toJSON(e));
+    }
+    if (message.dictionary !== undefined) {
+      obj.dictionary = ProfilesDictionary.toJSON(message.dictionary);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ProfilesData>, I>>(base?: I): ProfilesData {
+    return ProfilesData.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ProfilesData>, I>>(object: I): ProfilesData {
+    const message = createBaseProfilesData();
+    message.resourceProfiles = object.resourceProfiles?.map((e) => ResourceProfiles.fromPartial(e)) || [];
+    message.dictionary = (object.dictionary !== undefined && object.dictionary !== null)
+      ? ProfilesDictionary.fromPartial(object.dictionary)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseResourceProfiles(): ResourceProfiles {
+  return { resource: undefined, scopeProfiles: [], schemaUrl: "" };
+}
+
+export const ResourceProfiles: MessageFns<ResourceProfiles> = {
+  encode(message: ResourceProfiles, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.resource !== undefined) {
+      Resource.encode(message.resource, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.scopeProfiles) {
+      ScopeProfiles.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResourceProfiles {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResourceProfiles();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resource = Resource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.scopeProfiles.push(ScopeProfiles.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResourceProfiles {
+    return {
+      resource: isSet(object.resource) ? Resource.fromJSON(object.resource) : undefined,
+      scopeProfiles: globalThis.Array.isArray(object?.scopeProfiles)
+        ? object.scopeProfiles.map((e: any) => ScopeProfiles.fromJSON(e))
+        : globalThis.Array.isArray(object?.scope_profiles)
+        ? object.scope_profiles.map((e: any) => ScopeProfiles.fromJSON(e))
+        : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ResourceProfiles): unknown {
+    const obj: any = {};
+    if (message.resource !== undefined) {
+      obj.resource = Resource.toJSON(message.resource);
+    }
+    if (message.scopeProfiles?.length) {
+      obj.scopeProfiles = message.scopeProfiles.map((e) => ScopeProfiles.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResourceProfiles>, I>>(base?: I): ResourceProfiles {
+    return ResourceProfiles.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResourceProfiles>, I>>(object: I): ResourceProfiles {
+    const message = createBaseResourceProfiles();
+    message.resource = (object.resource !== undefined && object.resource !== null)
+      ? Resource.fromPartial(object.resource)
+      : undefined;
+    message.scopeProfiles = object.scopeProfiles?.map((e) => ScopeProfiles.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseScopeProfiles(): ScopeProfiles {
+  return { scope: undefined, profiles: [], schemaUrl: "" };
+}
+
+export const ScopeProfiles: MessageFns<ScopeProfiles> = {
+  encode(message: ScopeProfiles, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      InstrumentationScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.profiles) {
+      Profile.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScopeProfiles {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScopeProfiles();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.scope = InstrumentationScope.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.profiles.push(Profile.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScopeProfiles {
+    return {
+      scope: isSet(object.scope) ? InstrumentationScope.fromJSON(object.scope) : undefined,
+      profiles: globalThis.Array.isArray(object?.profiles) ? object.profiles.map((e: any) => Profile.fromJSON(e)) : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ScopeProfiles): unknown {
+    const obj: any = {};
+    if (message.scope !== undefined) {
+      obj.scope = InstrumentationScope.toJSON(message.scope);
+    }
+    if (message.profiles?.length) {
+      obj.profiles = message.profiles.map((e) => Profile.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScopeProfiles>, I>>(base?: I): ScopeProfiles {
+    return ScopeProfiles.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScopeProfiles>, I>>(object: I): ScopeProfiles {
+    const message = createBaseScopeProfiles();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? InstrumentationScope.fromPartial(object.scope)
+      : undefined;
+    message.profiles = object.profiles?.map((e) => Profile.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseProfile(): Profile {
+  return {
+    sampleType: undefined,
+    samples: [],
+    timeUnixNano: "0",
+    durationNano: "0",
+    periodType: undefined,
+    period: "0",
+    profileId: new Uint8Array(0),
+    droppedAttributesCount: 0,
+    originalPayloadFormat: "",
+    originalPayload: new Uint8Array(0),
+    attributeIndices: [],
+  };
+}
+
+export const Profile: MessageFns<Profile> = {
+  encode(message: Profile, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.sampleType !== undefined) {
+      ValueType.encode(message.sampleType, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.samples) {
+      Sample.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(25).fixed64(message.timeUnixNano);
+    }
+    if (message.durationNano !== "0") {
+      writer.uint32(32).uint64(message.durationNano);
+    }
+    if (message.periodType !== undefined) {
+      ValueType.encode(message.periodType, writer.uint32(42).fork()).join();
+    }
+    if (message.period !== "0") {
+      writer.uint32(48).int64(message.period);
+    }
+    if (message.profileId.length !== 0) {
+      writer.uint32(58).bytes(message.profileId);
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(64).uint32(message.droppedAttributesCount);
+    }
+    if (message.originalPayloadFormat !== "") {
+      writer.uint32(74).string(message.originalPayloadFormat);
+    }
+    if (message.originalPayload.length !== 0) {
+      writer.uint32(82).bytes(message.originalPayload);
+    }
+    writer.uint32(90).fork();
+    for (const v of message.attributeIndices) {
+      writer.int32(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Profile {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseProfile();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.sampleType = ValueType.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.samples.push(Sample.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.durationNano = reader.uint64().toString();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.periodType = ValueType.decode(reader, reader.uint32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.period = reader.int64().toString();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.profileId = reader.bytes();
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.originalPayloadFormat = reader.string();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.originalPayload = reader.bytes();
+          continue;
+        }
+        case 11: {
+          if (tag === 88) {
+            message.attributeIndices.push(reader.int32());
+
+            continue;
+          }
+
+          if (tag === 90) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.attributeIndices.push(reader.int32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Profile {
+    return {
+      sampleType: isSet(object.sampleType)
+        ? ValueType.fromJSON(object.sampleType)
+        : isSet(object.sample_type)
+        ? ValueType.fromJSON(object.sample_type)
+        : undefined,
+      samples: globalThis.Array.isArray(object?.samples) ? object.samples.map((e: any) => Sample.fromJSON(e)) : [],
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      durationNano: isSet(object.durationNano)
+        ? globalThis.String(object.durationNano)
+        : isSet(object.duration_nano)
+        ? globalThis.String(object.duration_nano)
+        : "0",
+      periodType: isSet(object.periodType)
+        ? ValueType.fromJSON(object.periodType)
+        : isSet(object.period_type)
+        ? ValueType.fromJSON(object.period_type)
+        : undefined,
+      period: isSet(object.period) ? globalThis.String(object.period) : "0",
+      profileId: isSet(object.profileId)
+        ? bytesFromBase64(object.profileId)
+        : isSet(object.profile_id)
+        ? bytesFromBase64(object.profile_id)
+        : new Uint8Array(0),
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+      originalPayloadFormat: isSet(object.originalPayloadFormat)
+        ? globalThis.String(object.originalPayloadFormat)
+        : isSet(object.original_payload_format)
+        ? globalThis.String(object.original_payload_format)
+        : "",
+      originalPayload: isSet(object.originalPayload)
+        ? bytesFromBase64(object.originalPayload)
+        : isSet(object.original_payload)
+        ? bytesFromBase64(object.original_payload)
+        : new Uint8Array(0),
+      attributeIndices: globalThis.Array.isArray(object?.attributeIndices)
+        ? object.attributeIndices.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.attribute_indices)
+        ? object.attribute_indices.map((e: any) => globalThis.Number(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Profile): unknown {
+    const obj: any = {};
+    if (message.sampleType !== undefined) {
+      obj.sampleType = ValueType.toJSON(message.sampleType);
+    }
+    if (message.samples?.length) {
+      obj.samples = message.samples.map((e) => Sample.toJSON(e));
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.durationNano !== "0") {
+      obj.durationNano = message.durationNano;
+    }
+    if (message.periodType !== undefined) {
+      obj.periodType = ValueType.toJSON(message.periodType);
+    }
+    if (message.period !== "0") {
+      obj.period = message.period;
+    }
+    if (message.profileId.length !== 0) {
+      obj.profileId = base64FromBytes(message.profileId);
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    if (message.originalPayloadFormat !== "") {
+      obj.originalPayloadFormat = message.originalPayloadFormat;
+    }
+    if (message.originalPayload.length !== 0) {
+      obj.originalPayload = base64FromBytes(message.originalPayload);
+    }
+    if (message.attributeIndices?.length) {
+      obj.attributeIndices = message.attributeIndices.map((e) => Math.round(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Profile>, I>>(base?: I): Profile {
+    return Profile.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Profile>, I>>(object: I): Profile {
+    const message = createBaseProfile();
+    message.sampleType = (object.sampleType !== undefined && object.sampleType !== null)
+      ? ValueType.fromPartial(object.sampleType)
+      : undefined;
+    message.samples = object.samples?.map((e) => Sample.fromPartial(e)) || [];
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.durationNano = object.durationNano ?? "0";
+    message.periodType = (object.periodType !== undefined && object.periodType !== null)
+      ? ValueType.fromPartial(object.periodType)
+      : undefined;
+    message.period = object.period ?? "0";
+    message.profileId = object.profileId ?? new Uint8Array(0);
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    message.originalPayloadFormat = object.originalPayloadFormat ?? "";
+    message.originalPayload = object.originalPayload ?? new Uint8Array(0);
+    message.attributeIndices = object.attributeIndices?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseLink(): Link {
+  return { traceId: new Uint8Array(0), spanId: new Uint8Array(0) };
+}
+
+export const Link: MessageFns<Link> = {
+  encode(message: Link, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.traceId.length !== 0) {
+      writer.uint32(10).bytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      writer.uint32(18).bytes(message.spanId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Link {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLink();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.traceId = reader.bytes();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.spanId = reader.bytes();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Link {
+    return {
+      traceId: isSet(object.traceId)
+        ? bytesFromBase64(object.traceId)
+        : isSet(object.trace_id)
+        ? bytesFromBase64(object.trace_id)
+        : new Uint8Array(0),
+      spanId: isSet(object.spanId)
+        ? bytesFromBase64(object.spanId)
+        : isSet(object.span_id)
+        ? bytesFromBase64(object.span_id)
+        : new Uint8Array(0),
+    };
+  },
+
+  toJSON(message: Link): unknown {
+    const obj: any = {};
+    if (message.traceId.length !== 0) {
+      obj.traceId = base64FromBytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      obj.spanId = base64FromBytes(message.spanId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Link>, I>>(base?: I): Link {
+    return Link.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Link>, I>>(object: I): Link {
+    const message = createBaseLink();
+    message.traceId = object.traceId ?? new Uint8Array(0);
+    message.spanId = object.spanId ?? new Uint8Array(0);
+    return message;
+  },
+};
+
+function createBaseValueType(): ValueType {
+  return { typeStrindex: 0, unitStrindex: 0 };
+}
+
+export const ValueType: MessageFns<ValueType> = {
+  encode(message: ValueType, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.typeStrindex !== 0) {
+      writer.uint32(8).int32(message.typeStrindex);
+    }
+    if (message.unitStrindex !== 0) {
+      writer.uint32(16).int32(message.unitStrindex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ValueType {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseValueType();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.typeStrindex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.unitStrindex = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ValueType {
+    return {
+      typeStrindex: isSet(object.typeStrindex)
+        ? globalThis.Number(object.typeStrindex)
+        : isSet(object.type_strindex)
+        ? globalThis.Number(object.type_strindex)
+        : 0,
+      unitStrindex: isSet(object.unitStrindex)
+        ? globalThis.Number(object.unitStrindex)
+        : isSet(object.unit_strindex)
+        ? globalThis.Number(object.unit_strindex)
+        : 0,
+    };
+  },
+
+  toJSON(message: ValueType): unknown {
+    const obj: any = {};
+    if (message.typeStrindex !== 0) {
+      obj.typeStrindex = Math.round(message.typeStrindex);
+    }
+    if (message.unitStrindex !== 0) {
+      obj.unitStrindex = Math.round(message.unitStrindex);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ValueType>, I>>(base?: I): ValueType {
+    return ValueType.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ValueType>, I>>(object: I): ValueType {
+    const message = createBaseValueType();
+    message.typeStrindex = object.typeStrindex ?? 0;
+    message.unitStrindex = object.unitStrindex ?? 0;
+    return message;
+  },
+};
+
+function createBaseSample(): Sample {
+  return { stackIndex: 0, values: [], attributeIndices: [], linkIndex: 0, timestampsUnixNano: [] };
+}
+
+export const Sample: MessageFns<Sample> = {
+  encode(message: Sample, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stackIndex !== 0) {
+      writer.uint32(8).int32(message.stackIndex);
+    }
+    writer.uint32(18).fork();
+    for (const v of message.values) {
+      writer.int64(v);
+    }
+    writer.join();
+    writer.uint32(26).fork();
+    for (const v of message.attributeIndices) {
+      writer.int32(v);
+    }
+    writer.join();
+    if (message.linkIndex !== 0) {
+      writer.uint32(32).int32(message.linkIndex);
+    }
+    writer.uint32(42).fork();
+    for (const v of message.timestampsUnixNano) {
+      writer.fixed64(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Sample {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSample();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.stackIndex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag === 16) {
+            message.values.push(reader.int64().toString());
+
+            continue;
+          }
+
+          if (tag === 18) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.values.push(reader.int64().toString());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 3: {
+          if (tag === 24) {
+            message.attributeIndices.push(reader.int32());
+
+            continue;
+          }
+
+          if (tag === 26) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.attributeIndices.push(reader.int32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.linkIndex = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag === 41) {
+            message.timestampsUnixNano.push(reader.fixed64().toString());
+
+            continue;
+          }
+
+          if (tag === 42) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.timestampsUnixNano.push(reader.fixed64().toString());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Sample {
+    return {
+      stackIndex: isSet(object.stackIndex)
+        ? globalThis.Number(object.stackIndex)
+        : isSet(object.stack_index)
+        ? globalThis.Number(object.stack_index)
+        : 0,
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => globalThis.String(e)) : [],
+      attributeIndices: globalThis.Array.isArray(object?.attributeIndices)
+        ? object.attributeIndices.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.attribute_indices)
+        ? object.attribute_indices.map((e: any) => globalThis.Number(e))
+        : [],
+      linkIndex: isSet(object.linkIndex)
+        ? globalThis.Number(object.linkIndex)
+        : isSet(object.link_index)
+        ? globalThis.Number(object.link_index)
+        : 0,
+      timestampsUnixNano: globalThis.Array.isArray(object?.timestampsUnixNano)
+        ? object.timestampsUnixNano.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.timestamps_unix_nano)
+        ? object.timestamps_unix_nano.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Sample): unknown {
+    const obj: any = {};
+    if (message.stackIndex !== 0) {
+      obj.stackIndex = Math.round(message.stackIndex);
+    }
+    if (message.values?.length) {
+      obj.values = message.values;
+    }
+    if (message.attributeIndices?.length) {
+      obj.attributeIndices = message.attributeIndices.map((e) => Math.round(e));
+    }
+    if (message.linkIndex !== 0) {
+      obj.linkIndex = Math.round(message.linkIndex);
+    }
+    if (message.timestampsUnixNano?.length) {
+      obj.timestampsUnixNano = message.timestampsUnixNano;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Sample>, I>>(base?: I): Sample {
+    return Sample.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Sample>, I>>(object: I): Sample {
+    const message = createBaseSample();
+    message.stackIndex = object.stackIndex ?? 0;
+    message.values = object.values?.map((e) => e) || [];
+    message.attributeIndices = object.attributeIndices?.map((e) => e) || [];
+    message.linkIndex = object.linkIndex ?? 0;
+    message.timestampsUnixNano = object.timestampsUnixNano?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseMapping(): Mapping {
+  return { memoryStart: "0", memoryLimit: "0", fileOffset: "0", filenameStrindex: 0, attributeIndices: [] };
+}
+
+export const Mapping: MessageFns<Mapping> = {
+  encode(message: Mapping, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.memoryStart !== "0") {
+      writer.uint32(8).uint64(message.memoryStart);
+    }
+    if (message.memoryLimit !== "0") {
+      writer.uint32(16).uint64(message.memoryLimit);
+    }
+    if (message.fileOffset !== "0") {
+      writer.uint32(24).uint64(message.fileOffset);
+    }
+    if (message.filenameStrindex !== 0) {
+      writer.uint32(32).int32(message.filenameStrindex);
+    }
+    writer.uint32(42).fork();
+    for (const v of message.attributeIndices) {
+      writer.int32(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Mapping {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMapping();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.memoryStart = reader.uint64().toString();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.memoryLimit = reader.uint64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.fileOffset = reader.uint64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.filenameStrindex = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag === 40) {
+            message.attributeIndices.push(reader.int32());
+
+            continue;
+          }
+
+          if (tag === 42) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.attributeIndices.push(reader.int32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Mapping {
+    return {
+      memoryStart: isSet(object.memoryStart)
+        ? globalThis.String(object.memoryStart)
+        : isSet(object.memory_start)
+        ? globalThis.String(object.memory_start)
+        : "0",
+      memoryLimit: isSet(object.memoryLimit)
+        ? globalThis.String(object.memoryLimit)
+        : isSet(object.memory_limit)
+        ? globalThis.String(object.memory_limit)
+        : "0",
+      fileOffset: isSet(object.fileOffset)
+        ? globalThis.String(object.fileOffset)
+        : isSet(object.file_offset)
+        ? globalThis.String(object.file_offset)
+        : "0",
+      filenameStrindex: isSet(object.filenameStrindex)
+        ? globalThis.Number(object.filenameStrindex)
+        : isSet(object.filename_strindex)
+        ? globalThis.Number(object.filename_strindex)
+        : 0,
+      attributeIndices: globalThis.Array.isArray(object?.attributeIndices)
+        ? object.attributeIndices.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.attribute_indices)
+        ? object.attribute_indices.map((e: any) => globalThis.Number(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Mapping): unknown {
+    const obj: any = {};
+    if (message.memoryStart !== "0") {
+      obj.memoryStart = message.memoryStart;
+    }
+    if (message.memoryLimit !== "0") {
+      obj.memoryLimit = message.memoryLimit;
+    }
+    if (message.fileOffset !== "0") {
+      obj.fileOffset = message.fileOffset;
+    }
+    if (message.filenameStrindex !== 0) {
+      obj.filenameStrindex = Math.round(message.filenameStrindex);
+    }
+    if (message.attributeIndices?.length) {
+      obj.attributeIndices = message.attributeIndices.map((e) => Math.round(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Mapping>, I>>(base?: I): Mapping {
+    return Mapping.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Mapping>, I>>(object: I): Mapping {
+    const message = createBaseMapping();
+    message.memoryStart = object.memoryStart ?? "0";
+    message.memoryLimit = object.memoryLimit ?? "0";
+    message.fileOffset = object.fileOffset ?? "0";
+    message.filenameStrindex = object.filenameStrindex ?? 0;
+    message.attributeIndices = object.attributeIndices?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseStack(): Stack {
+  return { locationIndices: [] };
+}
+
+export const Stack: MessageFns<Stack> = {
+  encode(message: Stack, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    writer.uint32(10).fork();
+    for (const v of message.locationIndices) {
+      writer.int32(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Stack {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStack();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag === 8) {
+            message.locationIndices.push(reader.int32());
+
+            continue;
+          }
+
+          if (tag === 10) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.locationIndices.push(reader.int32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Stack {
+    return {
+      locationIndices: globalThis.Array.isArray(object?.locationIndices)
+        ? object.locationIndices.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.location_indices)
+        ? object.location_indices.map((e: any) => globalThis.Number(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Stack): unknown {
+    const obj: any = {};
+    if (message.locationIndices?.length) {
+      obj.locationIndices = message.locationIndices.map((e) => Math.round(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Stack>, I>>(base?: I): Stack {
+    return Stack.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Stack>, I>>(object: I): Stack {
+    const message = createBaseStack();
+    message.locationIndices = object.locationIndices?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseLocation(): Location {
+  return { mappingIndex: 0, address: "0", lines: [], attributeIndices: [] };
+}
+
+export const Location: MessageFns<Location> = {
+  encode(message: Location, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mappingIndex !== 0) {
+      writer.uint32(8).int32(message.mappingIndex);
+    }
+    if (message.address !== "0") {
+      writer.uint32(16).uint64(message.address);
+    }
+    for (const v of message.lines) {
+      Line.encode(v!, writer.uint32(26).fork()).join();
+    }
+    writer.uint32(34).fork();
+    for (const v of message.attributeIndices) {
+      writer.int32(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Location {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLocation();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.mappingIndex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.address = reader.uint64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.lines.push(Line.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag === 32) {
+            message.attributeIndices.push(reader.int32());
+
+            continue;
+          }
+
+          if (tag === 34) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.attributeIndices.push(reader.int32());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Location {
+    return {
+      mappingIndex: isSet(object.mappingIndex)
+        ? globalThis.Number(object.mappingIndex)
+        : isSet(object.mapping_index)
+        ? globalThis.Number(object.mapping_index)
+        : 0,
+      address: isSet(object.address) ? globalThis.String(object.address) : "0",
+      lines: globalThis.Array.isArray(object?.lines) ? object.lines.map((e: any) => Line.fromJSON(e)) : [],
+      attributeIndices: globalThis.Array.isArray(object?.attributeIndices)
+        ? object.attributeIndices.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.attribute_indices)
+        ? object.attribute_indices.map((e: any) => globalThis.Number(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Location): unknown {
+    const obj: any = {};
+    if (message.mappingIndex !== 0) {
+      obj.mappingIndex = Math.round(message.mappingIndex);
+    }
+    if (message.address !== "0") {
+      obj.address = message.address;
+    }
+    if (message.lines?.length) {
+      obj.lines = message.lines.map((e) => Line.toJSON(e));
+    }
+    if (message.attributeIndices?.length) {
+      obj.attributeIndices = message.attributeIndices.map((e) => Math.round(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Location>, I>>(base?: I): Location {
+    return Location.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Location>, I>>(object: I): Location {
+    const message = createBaseLocation();
+    message.mappingIndex = object.mappingIndex ?? 0;
+    message.address = object.address ?? "0";
+    message.lines = object.lines?.map((e) => Line.fromPartial(e)) || [];
+    message.attributeIndices = object.attributeIndices?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseLine(): Line {
+  return { functionIndex: 0, line: "0", column: "0" };
+}
+
+export const Line: MessageFns<Line> = {
+  encode(message: Line, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.functionIndex !== 0) {
+      writer.uint32(8).int32(message.functionIndex);
+    }
+    if (message.line !== "0") {
+      writer.uint32(16).int64(message.line);
+    }
+    if (message.column !== "0") {
+      writer.uint32(24).int64(message.column);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Line {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLine();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.functionIndex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.line = reader.int64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.column = reader.int64().toString();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Line {
+    return {
+      functionIndex: isSet(object.functionIndex)
+        ? globalThis.Number(object.functionIndex)
+        : isSet(object.function_index)
+        ? globalThis.Number(object.function_index)
+        : 0,
+      line: isSet(object.line) ? globalThis.String(object.line) : "0",
+      column: isSet(object.column) ? globalThis.String(object.column) : "0",
+    };
+  },
+
+  toJSON(message: Line): unknown {
+    const obj: any = {};
+    if (message.functionIndex !== 0) {
+      obj.functionIndex = Math.round(message.functionIndex);
+    }
+    if (message.line !== "0") {
+      obj.line = message.line;
+    }
+    if (message.column !== "0") {
+      obj.column = message.column;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Line>, I>>(base?: I): Line {
+    return Line.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Line>, I>>(object: I): Line {
+    const message = createBaseLine();
+    message.functionIndex = object.functionIndex ?? 0;
+    message.line = object.line ?? "0";
+    message.column = object.column ?? "0";
+    return message;
+  },
+};
+
+function createBaseFunctionMessage(): FunctionMessage {
+  return { nameStrindex: 0, systemNameStrindex: 0, filenameStrindex: 0, startLine: "0" };
+}
+
+export const FunctionMessage: MessageFns<FunctionMessage> = {
+  encode(message: FunctionMessage, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.nameStrindex !== 0) {
+      writer.uint32(8).int32(message.nameStrindex);
+    }
+    if (message.systemNameStrindex !== 0) {
+      writer.uint32(16).int32(message.systemNameStrindex);
+    }
+    if (message.filenameStrindex !== 0) {
+      writer.uint32(24).int32(message.filenameStrindex);
+    }
+    if (message.startLine !== "0") {
+      writer.uint32(32).int64(message.startLine);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FunctionMessage {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFunctionMessage();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.nameStrindex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.systemNameStrindex = reader.int32();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.filenameStrindex = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.startLine = reader.int64().toString();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FunctionMessage {
+    return {
+      nameStrindex: isSet(object.nameStrindex)
+        ? globalThis.Number(object.nameStrindex)
+        : isSet(object.name_strindex)
+        ? globalThis.Number(object.name_strindex)
+        : 0,
+      systemNameStrindex: isSet(object.systemNameStrindex)
+        ? globalThis.Number(object.systemNameStrindex)
+        : isSet(object.system_name_strindex)
+        ? globalThis.Number(object.system_name_strindex)
+        : 0,
+      filenameStrindex: isSet(object.filenameStrindex)
+        ? globalThis.Number(object.filenameStrindex)
+        : isSet(object.filename_strindex)
+        ? globalThis.Number(object.filename_strindex)
+        : 0,
+      startLine: isSet(object.startLine)
+        ? globalThis.String(object.startLine)
+        : isSet(object.start_line)
+        ? globalThis.String(object.start_line)
+        : "0",
+    };
+  },
+
+  toJSON(message: FunctionMessage): unknown {
+    const obj: any = {};
+    if (message.nameStrindex !== 0) {
+      obj.nameStrindex = Math.round(message.nameStrindex);
+    }
+    if (message.systemNameStrindex !== 0) {
+      obj.systemNameStrindex = Math.round(message.systemNameStrindex);
+    }
+    if (message.filenameStrindex !== 0) {
+      obj.filenameStrindex = Math.round(message.filenameStrindex);
+    }
+    if (message.startLine !== "0") {
+      obj.startLine = message.startLine;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FunctionMessage>, I>>(base?: I): FunctionMessage {
+    return FunctionMessage.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FunctionMessage>, I>>(object: I): FunctionMessage {
+    const message = createBaseFunctionMessage();
+    message.nameStrindex = object.nameStrindex ?? 0;
+    message.systemNameStrindex = object.systemNameStrindex ?? 0;
+    message.filenameStrindex = object.filenameStrindex ?? 0;
+    message.startLine = object.startLine ?? "0";
+    return message;
+  },
+};
+
+function createBaseKeyValueAndUnit(): KeyValueAndUnit {
+  return { keyStrindex: 0, value: undefined, unitStrindex: 0 };
+}
+
+export const KeyValueAndUnit: MessageFns<KeyValueAndUnit> = {
+  encode(message: KeyValueAndUnit, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.keyStrindex !== 0) {
+      writer.uint32(8).int32(message.keyStrindex);
+    }
+    if (message.value !== undefined) {
+      AnyValue.encode(message.value, writer.uint32(18).fork()).join();
+    }
+    if (message.unitStrindex !== 0) {
+      writer.uint32(24).int32(message.unitStrindex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): KeyValueAndUnit {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseKeyValueAndUnit();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.keyStrindex = reader.int32();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = AnyValue.decode(reader, reader.uint32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.unitStrindex = reader.int32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): KeyValueAndUnit {
+    return {
+      keyStrindex: isSet(object.keyStrindex)
+        ? globalThis.Number(object.keyStrindex)
+        : isSet(object.key_strindex)
+        ? globalThis.Number(object.key_strindex)
+        : 0,
+      value: isSet(object.value) ? AnyValue.fromJSON(object.value) : undefined,
+      unitStrindex: isSet(object.unitStrindex)
+        ? globalThis.Number(object.unitStrindex)
+        : isSet(object.unit_strindex)
+        ? globalThis.Number(object.unit_strindex)
+        : 0,
+    };
+  },
+
+  toJSON(message: KeyValueAndUnit): unknown {
+    const obj: any = {};
+    if (message.keyStrindex !== 0) {
+      obj.keyStrindex = Math.round(message.keyStrindex);
+    }
+    if (message.value !== undefined) {
+      obj.value = AnyValue.toJSON(message.value);
+    }
+    if (message.unitStrindex !== 0) {
+      obj.unitStrindex = Math.round(message.unitStrindex);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<KeyValueAndUnit>, I>>(base?: I): KeyValueAndUnit {
+    return KeyValueAndUnit.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<KeyValueAndUnit>, I>>(object: I): KeyValueAndUnit {
+    const message = createBaseKeyValueAndUnit();
+    message.keyStrindex = object.keyStrindex ?? 0;
+    message.value = (object.value !== undefined && object.value !== null)
+      ? AnyValue.fromPartial(object.value)
+      : undefined;
+    message.unitStrindex = object.unitStrindex ?? 0;
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

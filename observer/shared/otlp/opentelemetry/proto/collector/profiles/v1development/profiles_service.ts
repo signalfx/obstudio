@@ -5,7 +5,8 @@
 // source: opentelemetry/proto/collector/profiles/v1development/profiles_service.proto
 
 /* eslint-disable */
-import type { ProfilesDictionary, ResourceProfiles } from "../../../profiles/v1development/profiles";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { ProfilesDictionary, ResourceProfiles } from "../../../profiles/v1development/profiles";
 
 export interface ExportProfilesServiceRequest {
   /**
@@ -59,4 +60,264 @@ export interface ExportProfilesPartialSuccess {
    * is equivalent to it not being set.
    */
   errorMessage: string;
+}
+
+function createBaseExportProfilesServiceRequest(): ExportProfilesServiceRequest {
+  return { resourceProfiles: [], dictionary: undefined };
+}
+
+export const ExportProfilesServiceRequest: MessageFns<ExportProfilesServiceRequest> = {
+  encode(message: ExportProfilesServiceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceProfiles) {
+      ResourceProfiles.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.dictionary !== undefined) {
+      ProfilesDictionary.encode(message.dictionary, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportProfilesServiceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportProfilesServiceRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceProfiles.push(ResourceProfiles.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.dictionary = ProfilesDictionary.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportProfilesServiceRequest {
+    return {
+      resourceProfiles: globalThis.Array.isArray(object?.resourceProfiles)
+        ? object.resourceProfiles.map((e: any) => ResourceProfiles.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_profiles)
+        ? object.resource_profiles.map((e: any) => ResourceProfiles.fromJSON(e))
+        : [],
+      dictionary: isSet(object.dictionary) ? ProfilesDictionary.fromJSON(object.dictionary) : undefined,
+    };
+  },
+
+  toJSON(message: ExportProfilesServiceRequest): unknown {
+    const obj: any = {};
+    if (message.resourceProfiles?.length) {
+      obj.resourceProfiles = message.resourceProfiles.map((e) => ResourceProfiles.toJSON(e));
+    }
+    if (message.dictionary !== undefined) {
+      obj.dictionary = ProfilesDictionary.toJSON(message.dictionary);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportProfilesServiceRequest>, I>>(base?: I): ExportProfilesServiceRequest {
+    return ExportProfilesServiceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportProfilesServiceRequest>, I>>(object: I): ExportProfilesServiceRequest {
+    const message = createBaseExportProfilesServiceRequest();
+    message.resourceProfiles = object.resourceProfiles?.map((e) => ResourceProfiles.fromPartial(e)) || [];
+    message.dictionary = (object.dictionary !== undefined && object.dictionary !== null)
+      ? ProfilesDictionary.fromPartial(object.dictionary)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseExportProfilesServiceResponse(): ExportProfilesServiceResponse {
+  return { partialSuccess: undefined };
+}
+
+export const ExportProfilesServiceResponse: MessageFns<ExportProfilesServiceResponse> = {
+  encode(message: ExportProfilesServiceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.partialSuccess !== undefined) {
+      ExportProfilesPartialSuccess.encode(message.partialSuccess, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportProfilesServiceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportProfilesServiceResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.partialSuccess = ExportProfilesPartialSuccess.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportProfilesServiceResponse {
+    return {
+      partialSuccess: isSet(object.partialSuccess)
+        ? ExportProfilesPartialSuccess.fromJSON(object.partialSuccess)
+        : isSet(object.partial_success)
+        ? ExportProfilesPartialSuccess.fromJSON(object.partial_success)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ExportProfilesServiceResponse): unknown {
+    const obj: any = {};
+    if (message.partialSuccess !== undefined) {
+      obj.partialSuccess = ExportProfilesPartialSuccess.toJSON(message.partialSuccess);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportProfilesServiceResponse>, I>>(base?: I): ExportProfilesServiceResponse {
+    return ExportProfilesServiceResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportProfilesServiceResponse>, I>>(
+    object: I,
+  ): ExportProfilesServiceResponse {
+    const message = createBaseExportProfilesServiceResponse();
+    message.partialSuccess = (object.partialSuccess !== undefined && object.partialSuccess !== null)
+      ? ExportProfilesPartialSuccess.fromPartial(object.partialSuccess)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseExportProfilesPartialSuccess(): ExportProfilesPartialSuccess {
+  return { rejectedProfiles: "0", errorMessage: "" };
+}
+
+export const ExportProfilesPartialSuccess: MessageFns<ExportProfilesPartialSuccess> = {
+  encode(message: ExportProfilesPartialSuccess, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.rejectedProfiles !== "0") {
+      writer.uint32(8).int64(message.rejectedProfiles);
+    }
+    if (message.errorMessage !== "") {
+      writer.uint32(18).string(message.errorMessage);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportProfilesPartialSuccess {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportProfilesPartialSuccess();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.rejectedProfiles = reader.int64().toString();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.errorMessage = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportProfilesPartialSuccess {
+    return {
+      rejectedProfiles: isSet(object.rejectedProfiles)
+        ? globalThis.String(object.rejectedProfiles)
+        : isSet(object.rejected_profiles)
+        ? globalThis.String(object.rejected_profiles)
+        : "0",
+      errorMessage: isSet(object.errorMessage)
+        ? globalThis.String(object.errorMessage)
+        : isSet(object.error_message)
+        ? globalThis.String(object.error_message)
+        : "",
+    };
+  },
+
+  toJSON(message: ExportProfilesPartialSuccess): unknown {
+    const obj: any = {};
+    if (message.rejectedProfiles !== "0") {
+      obj.rejectedProfiles = message.rejectedProfiles;
+    }
+    if (message.errorMessage !== "") {
+      obj.errorMessage = message.errorMessage;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportProfilesPartialSuccess>, I>>(base?: I): ExportProfilesPartialSuccess {
+    return ExportProfilesPartialSuccess.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportProfilesPartialSuccess>, I>>(object: I): ExportProfilesPartialSuccess {
+    const message = createBaseExportProfilesPartialSuccess();
+    message.rejectedProfiles = object.rejectedProfiles ?? "0";
+    message.errorMessage = object.errorMessage ?? "";
+    return message;
+  },
+};
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

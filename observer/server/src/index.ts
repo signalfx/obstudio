@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerApiRoutes } from "./api.js";
 import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } from "./live-reload.js";
+import { listenForOtlpHttp } from "./otlp-http.js";
 import { registerStaticAssets } from "./static-assets.js";
 import { registerWebSocketApi, type UpgradeHandler as WsApiUpgradeHandler } from "./ws-api.js";
 
@@ -43,3 +44,5 @@ server.on("upgrade", (request, socket, head) => {
 server.listen(port, host, () => {
   console.log(`Observer listening on http://${host}:${port}`);
 });
+
+listenForOtlpHttp();

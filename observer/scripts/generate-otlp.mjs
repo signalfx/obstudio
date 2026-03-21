@@ -1,4 +1,5 @@
 import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { promises as fs } from "node:fs";
 import { finished } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
@@ -6,8 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
+import ts from "typescript";
 
-const releaseTag = process.env.OTEL_PROTO_RELEASE ?? "v1.9.0";
+const releaseTag = process.env.OTEL_PROTO_RELEASE ?? "v1.10.0";
 const archiveUrl = `https://github.com/open-telemetry/opentelemetry-proto/archive/refs/tags/${releaseTag}.tar.gz`;
 
 const require = createRequire(import.meta.url);
@@ -48,7 +50,7 @@ try {
       `--proto_path=${extractedDir}`,
       ...includeArgs,
       `--ts_proto_out=${outputDir}`,
-      "--ts_proto_opt=esModuleInterop=true,forceLong=string,oneof=unions,outputEncodeMethods=false,outputJsonMethods=false,outputClientImpl=false,outputServices=none,exportCommonSymbols=false,useOptionals=messages",
+      "--ts_proto_opt=esModuleInterop=true,forceLong=string,oneof=unions,outputClientImpl=false,outputServices=none,exportCommonSymbols=false,useOptionals=messages",
       ...protoFiles,
     ],
     {
@@ -56,6 +58,8 @@ try {
       stdio: "inherit",
     },
   );
+
+  await transpileGeneratedModules(outputDir);
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }
@@ -125,4 +129,53 @@ async function downloadFile(url, destinationPath) {
 
   const output = createWriteStream(destinationPath);
   await finished(Readable.fromWeb(response.body).pipe(output));
+}
+
+async function transpileGeneratedModules(directory) {
+  const generatedFiles = await collectGeneratedTypeScriptFiles(directory);
+
+  await Promise.all(
+    generatedFiles.map(async (filePath) => {
+      const source = await fs.readFile(filePath, "utf8");
+      const output = ts.transpileModule(source, {
+        compilerOptions: {
+          module: ts.ModuleKind.ESNext,
+          target: ts.ScriptTarget.ES2022,
+        },
+        fileName: filePath,
+      });
+
+      const rewrittenOutput = output.outputText.replace(
+        /from "(\.{1,2}\/[^"]+)"/g,
+        (_match, specifier) => `from "${specifier}.js"`,
+      );
+
+      await fs.writeFile(filePath.replace(/\.ts$/, ".js"), rewrittenOutput);
+    }),
+  );
+}
+
+async function collectGeneratedTypeScriptFiles(rootDirectory) {
+  const queue = [rootDirectory];
+  const files = [];
+
+  while (queue.length > 0) {
+    const currentDirectory = queue.pop();
+    const entries = await fs.readdir(currentDirectory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const resolvedPath = path.join(currentDirectory, entry.name);
+
+      if (entry.isDirectory()) {
+        queue.push(resolvedPath);
+        continue;
+      }
+
+      if (entry.isFile() && entry.name.endsWith(".ts")) {
+        files.push(resolvedPath);
+      }
+    }
+  }
+
+  return files;
 }

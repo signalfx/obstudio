@@ -5,7 +5,8 @@
 // source: opentelemetry/proto/collector/metrics/v1/metrics_service.proto
 
 /* eslint-disable */
-import type { ResourceMetrics } from "../../../metrics/v1/metrics";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { ResourceMetrics } from "../../../metrics/v1/metrics";
 
 export interface ExportMetricsServiceRequest {
   /**
@@ -57,4 +58,244 @@ export interface ExportMetricsPartialSuccess {
    * is equivalent to it not being set.
    */
   errorMessage: string;
+}
+
+function createBaseExportMetricsServiceRequest(): ExportMetricsServiceRequest {
+  return { resourceMetrics: [] };
+}
+
+export const ExportMetricsServiceRequest: MessageFns<ExportMetricsServiceRequest> = {
+  encode(message: ExportMetricsServiceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceMetrics) {
+      ResourceMetrics.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportMetricsServiceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportMetricsServiceRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceMetrics.push(ResourceMetrics.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportMetricsServiceRequest {
+    return {
+      resourceMetrics: globalThis.Array.isArray(object?.resourceMetrics)
+        ? object.resourceMetrics.map((e: any) => ResourceMetrics.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_metrics)
+        ? object.resource_metrics.map((e: any) => ResourceMetrics.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ExportMetricsServiceRequest): unknown {
+    const obj: any = {};
+    if (message.resourceMetrics?.length) {
+      obj.resourceMetrics = message.resourceMetrics.map((e) => ResourceMetrics.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportMetricsServiceRequest>, I>>(base?: I): ExportMetricsServiceRequest {
+    return ExportMetricsServiceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportMetricsServiceRequest>, I>>(object: I): ExportMetricsServiceRequest {
+    const message = createBaseExportMetricsServiceRequest();
+    message.resourceMetrics = object.resourceMetrics?.map((e) => ResourceMetrics.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseExportMetricsServiceResponse(): ExportMetricsServiceResponse {
+  return { partialSuccess: undefined };
+}
+
+export const ExportMetricsServiceResponse: MessageFns<ExportMetricsServiceResponse> = {
+  encode(message: ExportMetricsServiceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.partialSuccess !== undefined) {
+      ExportMetricsPartialSuccess.encode(message.partialSuccess, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportMetricsServiceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportMetricsServiceResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.partialSuccess = ExportMetricsPartialSuccess.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportMetricsServiceResponse {
+    return {
+      partialSuccess: isSet(object.partialSuccess)
+        ? ExportMetricsPartialSuccess.fromJSON(object.partialSuccess)
+        : isSet(object.partial_success)
+        ? ExportMetricsPartialSuccess.fromJSON(object.partial_success)
+        : undefined,
+    };
+  },
+
+  toJSON(message: ExportMetricsServiceResponse): unknown {
+    const obj: any = {};
+    if (message.partialSuccess !== undefined) {
+      obj.partialSuccess = ExportMetricsPartialSuccess.toJSON(message.partialSuccess);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportMetricsServiceResponse>, I>>(base?: I): ExportMetricsServiceResponse {
+    return ExportMetricsServiceResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportMetricsServiceResponse>, I>>(object: I): ExportMetricsServiceResponse {
+    const message = createBaseExportMetricsServiceResponse();
+    message.partialSuccess = (object.partialSuccess !== undefined && object.partialSuccess !== null)
+      ? ExportMetricsPartialSuccess.fromPartial(object.partialSuccess)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseExportMetricsPartialSuccess(): ExportMetricsPartialSuccess {
+  return { rejectedDataPoints: "0", errorMessage: "" };
+}
+
+export const ExportMetricsPartialSuccess: MessageFns<ExportMetricsPartialSuccess> = {
+  encode(message: ExportMetricsPartialSuccess, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.rejectedDataPoints !== "0") {
+      writer.uint32(8).int64(message.rejectedDataPoints);
+    }
+    if (message.errorMessage !== "") {
+      writer.uint32(18).string(message.errorMessage);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExportMetricsPartialSuccess {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExportMetricsPartialSuccess();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.rejectedDataPoints = reader.int64().toString();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.errorMessage = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExportMetricsPartialSuccess {
+    return {
+      rejectedDataPoints: isSet(object.rejectedDataPoints)
+        ? globalThis.String(object.rejectedDataPoints)
+        : isSet(object.rejected_data_points)
+        ? globalThis.String(object.rejected_data_points)
+        : "0",
+      errorMessage: isSet(object.errorMessage)
+        ? globalThis.String(object.errorMessage)
+        : isSet(object.error_message)
+        ? globalThis.String(object.error_message)
+        : "",
+    };
+  },
+
+  toJSON(message: ExportMetricsPartialSuccess): unknown {
+    const obj: any = {};
+    if (message.rejectedDataPoints !== "0") {
+      obj.rejectedDataPoints = message.rejectedDataPoints;
+    }
+    if (message.errorMessage !== "") {
+      obj.errorMessage = message.errorMessage;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExportMetricsPartialSuccess>, I>>(base?: I): ExportMetricsPartialSuccess {
+    return ExportMetricsPartialSuccess.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExportMetricsPartialSuccess>, I>>(object: I): ExportMetricsPartialSuccess {
+    const message = createBaseExportMetricsPartialSuccess();
+    message.rejectedDataPoints = object.rejectedDataPoints ?? "0";
+    message.errorMessage = object.errorMessage ?? "";
+    return message;
+  },
+};
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

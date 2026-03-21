@@ -5,8 +5,9 @@
 // source: opentelemetry/proto/logs/v1/logs.proto
 
 /* eslint-disable */
-import type { AnyValue, InstrumentationScope, KeyValue } from "../../common/v1/common";
-import type { Resource } from "../../resource/v1/resource";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { AnyValue, InstrumentationScope, KeyValue } from "../../common/v1/common";
+import { Resource } from "../../resource/v1/resource";
 
 /** Possible values for LogRecord.SeverityNumber. */
 export enum SeverityNumber {
@@ -39,6 +40,148 @@ export enum SeverityNumber {
   UNRECOGNIZED = -1,
 }
 
+export function severityNumberFromJSON(object: any): SeverityNumber {
+  switch (object) {
+    case 0:
+    case "SEVERITY_NUMBER_UNSPECIFIED":
+      return SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED;
+    case 1:
+    case "SEVERITY_NUMBER_TRACE":
+      return SeverityNumber.SEVERITY_NUMBER_TRACE;
+    case 2:
+    case "SEVERITY_NUMBER_TRACE2":
+      return SeverityNumber.SEVERITY_NUMBER_TRACE2;
+    case 3:
+    case "SEVERITY_NUMBER_TRACE3":
+      return SeverityNumber.SEVERITY_NUMBER_TRACE3;
+    case 4:
+    case "SEVERITY_NUMBER_TRACE4":
+      return SeverityNumber.SEVERITY_NUMBER_TRACE4;
+    case 5:
+    case "SEVERITY_NUMBER_DEBUG":
+      return SeverityNumber.SEVERITY_NUMBER_DEBUG;
+    case 6:
+    case "SEVERITY_NUMBER_DEBUG2":
+      return SeverityNumber.SEVERITY_NUMBER_DEBUG2;
+    case 7:
+    case "SEVERITY_NUMBER_DEBUG3":
+      return SeverityNumber.SEVERITY_NUMBER_DEBUG3;
+    case 8:
+    case "SEVERITY_NUMBER_DEBUG4":
+      return SeverityNumber.SEVERITY_NUMBER_DEBUG4;
+    case 9:
+    case "SEVERITY_NUMBER_INFO":
+      return SeverityNumber.SEVERITY_NUMBER_INFO;
+    case 10:
+    case "SEVERITY_NUMBER_INFO2":
+      return SeverityNumber.SEVERITY_NUMBER_INFO2;
+    case 11:
+    case "SEVERITY_NUMBER_INFO3":
+      return SeverityNumber.SEVERITY_NUMBER_INFO3;
+    case 12:
+    case "SEVERITY_NUMBER_INFO4":
+      return SeverityNumber.SEVERITY_NUMBER_INFO4;
+    case 13:
+    case "SEVERITY_NUMBER_WARN":
+      return SeverityNumber.SEVERITY_NUMBER_WARN;
+    case 14:
+    case "SEVERITY_NUMBER_WARN2":
+      return SeverityNumber.SEVERITY_NUMBER_WARN2;
+    case 15:
+    case "SEVERITY_NUMBER_WARN3":
+      return SeverityNumber.SEVERITY_NUMBER_WARN3;
+    case 16:
+    case "SEVERITY_NUMBER_WARN4":
+      return SeverityNumber.SEVERITY_NUMBER_WARN4;
+    case 17:
+    case "SEVERITY_NUMBER_ERROR":
+      return SeverityNumber.SEVERITY_NUMBER_ERROR;
+    case 18:
+    case "SEVERITY_NUMBER_ERROR2":
+      return SeverityNumber.SEVERITY_NUMBER_ERROR2;
+    case 19:
+    case "SEVERITY_NUMBER_ERROR3":
+      return SeverityNumber.SEVERITY_NUMBER_ERROR3;
+    case 20:
+    case "SEVERITY_NUMBER_ERROR4":
+      return SeverityNumber.SEVERITY_NUMBER_ERROR4;
+    case 21:
+    case "SEVERITY_NUMBER_FATAL":
+      return SeverityNumber.SEVERITY_NUMBER_FATAL;
+    case 22:
+    case "SEVERITY_NUMBER_FATAL2":
+      return SeverityNumber.SEVERITY_NUMBER_FATAL2;
+    case 23:
+    case "SEVERITY_NUMBER_FATAL3":
+      return SeverityNumber.SEVERITY_NUMBER_FATAL3;
+    case 24:
+    case "SEVERITY_NUMBER_FATAL4":
+      return SeverityNumber.SEVERITY_NUMBER_FATAL4;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SeverityNumber.UNRECOGNIZED;
+  }
+}
+
+export function severityNumberToJSON(object: SeverityNumber): string {
+  switch (object) {
+    case SeverityNumber.SEVERITY_NUMBER_UNSPECIFIED:
+      return "SEVERITY_NUMBER_UNSPECIFIED";
+    case SeverityNumber.SEVERITY_NUMBER_TRACE:
+      return "SEVERITY_NUMBER_TRACE";
+    case SeverityNumber.SEVERITY_NUMBER_TRACE2:
+      return "SEVERITY_NUMBER_TRACE2";
+    case SeverityNumber.SEVERITY_NUMBER_TRACE3:
+      return "SEVERITY_NUMBER_TRACE3";
+    case SeverityNumber.SEVERITY_NUMBER_TRACE4:
+      return "SEVERITY_NUMBER_TRACE4";
+    case SeverityNumber.SEVERITY_NUMBER_DEBUG:
+      return "SEVERITY_NUMBER_DEBUG";
+    case SeverityNumber.SEVERITY_NUMBER_DEBUG2:
+      return "SEVERITY_NUMBER_DEBUG2";
+    case SeverityNumber.SEVERITY_NUMBER_DEBUG3:
+      return "SEVERITY_NUMBER_DEBUG3";
+    case SeverityNumber.SEVERITY_NUMBER_DEBUG4:
+      return "SEVERITY_NUMBER_DEBUG4";
+    case SeverityNumber.SEVERITY_NUMBER_INFO:
+      return "SEVERITY_NUMBER_INFO";
+    case SeverityNumber.SEVERITY_NUMBER_INFO2:
+      return "SEVERITY_NUMBER_INFO2";
+    case SeverityNumber.SEVERITY_NUMBER_INFO3:
+      return "SEVERITY_NUMBER_INFO3";
+    case SeverityNumber.SEVERITY_NUMBER_INFO4:
+      return "SEVERITY_NUMBER_INFO4";
+    case SeverityNumber.SEVERITY_NUMBER_WARN:
+      return "SEVERITY_NUMBER_WARN";
+    case SeverityNumber.SEVERITY_NUMBER_WARN2:
+      return "SEVERITY_NUMBER_WARN2";
+    case SeverityNumber.SEVERITY_NUMBER_WARN3:
+      return "SEVERITY_NUMBER_WARN3";
+    case SeverityNumber.SEVERITY_NUMBER_WARN4:
+      return "SEVERITY_NUMBER_WARN4";
+    case SeverityNumber.SEVERITY_NUMBER_ERROR:
+      return "SEVERITY_NUMBER_ERROR";
+    case SeverityNumber.SEVERITY_NUMBER_ERROR2:
+      return "SEVERITY_NUMBER_ERROR2";
+    case SeverityNumber.SEVERITY_NUMBER_ERROR3:
+      return "SEVERITY_NUMBER_ERROR3";
+    case SeverityNumber.SEVERITY_NUMBER_ERROR4:
+      return "SEVERITY_NUMBER_ERROR4";
+    case SeverityNumber.SEVERITY_NUMBER_FATAL:
+      return "SEVERITY_NUMBER_FATAL";
+    case SeverityNumber.SEVERITY_NUMBER_FATAL2:
+      return "SEVERITY_NUMBER_FATAL2";
+    case SeverityNumber.SEVERITY_NUMBER_FATAL3:
+      return "SEVERITY_NUMBER_FATAL3";
+    case SeverityNumber.SEVERITY_NUMBER_FATAL4:
+      return "SEVERITY_NUMBER_FATAL4";
+    case SeverityNumber.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /**
  * LogRecordFlags represents constants used to interpret the
  * LogRecord.flags field, which is protobuf 'fixed32' type and is to
@@ -57,6 +200,33 @@ export enum LogRecordFlags {
   /** LOG_RECORD_FLAGS_TRACE_FLAGS_MASK - Bits 0-7 are used for trace flags. */
   LOG_RECORD_FLAGS_TRACE_FLAGS_MASK = 255,
   UNRECOGNIZED = -1,
+}
+
+export function logRecordFlagsFromJSON(object: any): LogRecordFlags {
+  switch (object) {
+    case 0:
+    case "LOG_RECORD_FLAGS_DO_NOT_USE":
+      return LogRecordFlags.LOG_RECORD_FLAGS_DO_NOT_USE;
+    case 255:
+    case "LOG_RECORD_FLAGS_TRACE_FLAGS_MASK":
+      return LogRecordFlags.LOG_RECORD_FLAGS_TRACE_FLAGS_MASK;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return LogRecordFlags.UNRECOGNIZED;
+  }
+}
+
+export function logRecordFlagsToJSON(object: LogRecordFlags): string {
+  switch (object) {
+    case LogRecordFlags.LOG_RECORD_FLAGS_DO_NOT_USE:
+      return "LOG_RECORD_FLAGS_DO_NOT_USE";
+    case LogRecordFlags.LOG_RECORD_FLAGS_TRACE_FLAGS_MASK:
+      return "LOG_RECORD_FLAGS_TRACE_FLAGS_MASK";
+    case LogRecordFlags.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
 }
 
 /**
@@ -232,4 +402,589 @@ export interface LogRecord {
    * [Optional].
    */
   eventName: string;
+}
+
+function createBaseLogsData(): LogsData {
+  return { resourceLogs: [] };
+}
+
+export const LogsData: MessageFns<LogsData> = {
+  encode(message: LogsData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceLogs) {
+      ResourceLogs.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LogsData {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLogsData();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceLogs.push(ResourceLogs.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LogsData {
+    return {
+      resourceLogs: globalThis.Array.isArray(object?.resourceLogs)
+        ? object.resourceLogs.map((e: any) => ResourceLogs.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_logs)
+        ? object.resource_logs.map((e: any) => ResourceLogs.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: LogsData): unknown {
+    const obj: any = {};
+    if (message.resourceLogs?.length) {
+      obj.resourceLogs = message.resourceLogs.map((e) => ResourceLogs.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LogsData>, I>>(base?: I): LogsData {
+    return LogsData.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LogsData>, I>>(object: I): LogsData {
+    const message = createBaseLogsData();
+    message.resourceLogs = object.resourceLogs?.map((e) => ResourceLogs.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseResourceLogs(): ResourceLogs {
+  return { resource: undefined, scopeLogs: [], schemaUrl: "" };
+}
+
+export const ResourceLogs: MessageFns<ResourceLogs> = {
+  encode(message: ResourceLogs, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.resource !== undefined) {
+      Resource.encode(message.resource, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.scopeLogs) {
+      ScopeLogs.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResourceLogs {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResourceLogs();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resource = Resource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.scopeLogs.push(ScopeLogs.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResourceLogs {
+    return {
+      resource: isSet(object.resource) ? Resource.fromJSON(object.resource) : undefined,
+      scopeLogs: globalThis.Array.isArray(object?.scopeLogs)
+        ? object.scopeLogs.map((e: any) => ScopeLogs.fromJSON(e))
+        : globalThis.Array.isArray(object?.scope_logs)
+        ? object.scope_logs.map((e: any) => ScopeLogs.fromJSON(e))
+        : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ResourceLogs): unknown {
+    const obj: any = {};
+    if (message.resource !== undefined) {
+      obj.resource = Resource.toJSON(message.resource);
+    }
+    if (message.scopeLogs?.length) {
+      obj.scopeLogs = message.scopeLogs.map((e) => ScopeLogs.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResourceLogs>, I>>(base?: I): ResourceLogs {
+    return ResourceLogs.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResourceLogs>, I>>(object: I): ResourceLogs {
+    const message = createBaseResourceLogs();
+    message.resource = (object.resource !== undefined && object.resource !== null)
+      ? Resource.fromPartial(object.resource)
+      : undefined;
+    message.scopeLogs = object.scopeLogs?.map((e) => ScopeLogs.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseScopeLogs(): ScopeLogs {
+  return { scope: undefined, logRecords: [], schemaUrl: "" };
+}
+
+export const ScopeLogs: MessageFns<ScopeLogs> = {
+  encode(message: ScopeLogs, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      InstrumentationScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.logRecords) {
+      LogRecord.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScopeLogs {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScopeLogs();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.scope = InstrumentationScope.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.logRecords.push(LogRecord.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScopeLogs {
+    return {
+      scope: isSet(object.scope) ? InstrumentationScope.fromJSON(object.scope) : undefined,
+      logRecords: globalThis.Array.isArray(object?.logRecords)
+        ? object.logRecords.map((e: any) => LogRecord.fromJSON(e))
+        : globalThis.Array.isArray(object?.log_records)
+        ? object.log_records.map((e: any) => LogRecord.fromJSON(e))
+        : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ScopeLogs): unknown {
+    const obj: any = {};
+    if (message.scope !== undefined) {
+      obj.scope = InstrumentationScope.toJSON(message.scope);
+    }
+    if (message.logRecords?.length) {
+      obj.logRecords = message.logRecords.map((e) => LogRecord.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScopeLogs>, I>>(base?: I): ScopeLogs {
+    return ScopeLogs.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScopeLogs>, I>>(object: I): ScopeLogs {
+    const message = createBaseScopeLogs();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? InstrumentationScope.fromPartial(object.scope)
+      : undefined;
+    message.logRecords = object.logRecords?.map((e) => LogRecord.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseLogRecord(): LogRecord {
+  return {
+    timeUnixNano: "0",
+    observedTimeUnixNano: "0",
+    severityNumber: 0,
+    severityText: "",
+    body: undefined,
+    attributes: [],
+    droppedAttributesCount: 0,
+    flags: 0,
+    traceId: new Uint8Array(0),
+    spanId: new Uint8Array(0),
+    eventName: "",
+  };
+}
+
+export const LogRecord: MessageFns<LogRecord> = {
+  encode(message: LogRecord, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(9).fixed64(message.timeUnixNano);
+    }
+    if (message.observedTimeUnixNano !== "0") {
+      writer.uint32(89).fixed64(message.observedTimeUnixNano);
+    }
+    if (message.severityNumber !== 0) {
+      writer.uint32(16).int32(message.severityNumber);
+    }
+    if (message.severityText !== "") {
+      writer.uint32(26).string(message.severityText);
+    }
+    if (message.body !== undefined) {
+      AnyValue.encode(message.body, writer.uint32(42).fork()).join();
+    }
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.droppedAttributesCount !== 0) {
+      writer.uint32(56).uint32(message.droppedAttributesCount);
+    }
+    if (message.flags !== 0) {
+      writer.uint32(69).fixed32(message.flags);
+    }
+    if (message.traceId.length !== 0) {
+      writer.uint32(74).bytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      writer.uint32(82).bytes(message.spanId);
+    }
+    if (message.eventName !== "") {
+      writer.uint32(98).string(message.eventName);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LogRecord {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLogRecord();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 11: {
+          if (tag !== 89) {
+            break;
+          }
+
+          message.observedTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.severityNumber = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.severityText = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.body = AnyValue.decode(reader, reader.uint32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.droppedAttributesCount = reader.uint32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 69) {
+            break;
+          }
+
+          message.flags = reader.fixed32();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.traceId = reader.bytes();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.spanId = reader.bytes();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.eventName = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LogRecord {
+    return {
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      observedTimeUnixNano: isSet(object.observedTimeUnixNano)
+        ? globalThis.String(object.observedTimeUnixNano)
+        : isSet(object.observed_time_unix_nano)
+        ? globalThis.String(object.observed_time_unix_nano)
+        : "0",
+      severityNumber: isSet(object.severityNumber)
+        ? severityNumberFromJSON(object.severityNumber)
+        : isSet(object.severity_number)
+        ? severityNumberFromJSON(object.severity_number)
+        : 0,
+      severityText: isSet(object.severityText)
+        ? globalThis.String(object.severityText)
+        : isSet(object.severity_text)
+        ? globalThis.String(object.severity_text)
+        : "",
+      body: isSet(object.body) ? AnyValue.fromJSON(object.body) : undefined,
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      droppedAttributesCount: isSet(object.droppedAttributesCount)
+        ? globalThis.Number(object.droppedAttributesCount)
+        : isSet(object.dropped_attributes_count)
+        ? globalThis.Number(object.dropped_attributes_count)
+        : 0,
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+      traceId: isSet(object.traceId)
+        ? bytesFromBase64(object.traceId)
+        : isSet(object.trace_id)
+        ? bytesFromBase64(object.trace_id)
+        : new Uint8Array(0),
+      spanId: isSet(object.spanId)
+        ? bytesFromBase64(object.spanId)
+        : isSet(object.span_id)
+        ? bytesFromBase64(object.span_id)
+        : new Uint8Array(0),
+      eventName: isSet(object.eventName)
+        ? globalThis.String(object.eventName)
+        : isSet(object.event_name)
+        ? globalThis.String(object.event_name)
+        : "",
+    };
+  },
+
+  toJSON(message: LogRecord): unknown {
+    const obj: any = {};
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.observedTimeUnixNano !== "0") {
+      obj.observedTimeUnixNano = message.observedTimeUnixNano;
+    }
+    if (message.severityNumber !== 0) {
+      obj.severityNumber = severityNumberToJSON(message.severityNumber);
+    }
+    if (message.severityText !== "") {
+      obj.severityText = message.severityText;
+    }
+    if (message.body !== undefined) {
+      obj.body = AnyValue.toJSON(message.body);
+    }
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.droppedAttributesCount !== 0) {
+      obj.droppedAttributesCount = Math.round(message.droppedAttributesCount);
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    if (message.traceId.length !== 0) {
+      obj.traceId = base64FromBytes(message.traceId);
+    }
+    if (message.spanId.length !== 0) {
+      obj.spanId = base64FromBytes(message.spanId);
+    }
+    if (message.eventName !== "") {
+      obj.eventName = message.eventName;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<LogRecord>, I>>(base?: I): LogRecord {
+    return LogRecord.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<LogRecord>, I>>(object: I): LogRecord {
+    const message = createBaseLogRecord();
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.observedTimeUnixNano = object.observedTimeUnixNano ?? "0";
+    message.severityNumber = object.severityNumber ?? 0;
+    message.severityText = object.severityText ?? "";
+    message.body = (object.body !== undefined && object.body !== null) ? AnyValue.fromPartial(object.body) : undefined;
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.droppedAttributesCount = object.droppedAttributesCount ?? 0;
+    message.flags = object.flags ?? 0;
+    message.traceId = object.traceId ?? new Uint8Array(0);
+    message.spanId = object.spanId ?? new Uint8Array(0);
+    message.eventName = object.eventName ?? "";
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }

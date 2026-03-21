@@ -5,8 +5,9 @@
 // source: opentelemetry/proto/metrics/v1/metrics.proto
 
 /* eslint-disable */
-import type { InstrumentationScope, KeyValue } from "../../common/v1/common";
-import type { Resource } from "../../resource/v1/resource";
+import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import { InstrumentationScope, KeyValue } from "../../common/v1/common";
+import { Resource } from "../../resource/v1/resource";
 
 /**
  * AggregationTemporality defines how a metric aggregator reports aggregated
@@ -84,6 +85,38 @@ export enum AggregationTemporality {
   UNRECOGNIZED = -1,
 }
 
+export function aggregationTemporalityFromJSON(object: any): AggregationTemporality {
+  switch (object) {
+    case 0:
+    case "AGGREGATION_TEMPORALITY_UNSPECIFIED":
+      return AggregationTemporality.AGGREGATION_TEMPORALITY_UNSPECIFIED;
+    case 1:
+    case "AGGREGATION_TEMPORALITY_DELTA":
+      return AggregationTemporality.AGGREGATION_TEMPORALITY_DELTA;
+    case 2:
+    case "AGGREGATION_TEMPORALITY_CUMULATIVE":
+      return AggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return AggregationTemporality.UNRECOGNIZED;
+  }
+}
+
+export function aggregationTemporalityToJSON(object: AggregationTemporality): string {
+  switch (object) {
+    case AggregationTemporality.AGGREGATION_TEMPORALITY_UNSPECIFIED:
+      return "AGGREGATION_TEMPORALITY_UNSPECIFIED";
+    case AggregationTemporality.AGGREGATION_TEMPORALITY_DELTA:
+      return "AGGREGATION_TEMPORALITY_DELTA";
+    case AggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE:
+      return "AGGREGATION_TEMPORALITY_CUMULATIVE";
+    case AggregationTemporality.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /**
  * DataPointFlags is defined as a protobuf 'uint32' type and is to be used as a
  * bit-field representing 32 distinct boolean flags.  Each flag defined in this
@@ -105,6 +138,33 @@ export enum DataPointFlags {
    */
   DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1,
   UNRECOGNIZED = -1,
+}
+
+export function dataPointFlagsFromJSON(object: any): DataPointFlags {
+  switch (object) {
+    case 0:
+    case "DATA_POINT_FLAGS_DO_NOT_USE":
+      return DataPointFlags.DATA_POINT_FLAGS_DO_NOT_USE;
+    case 1:
+    case "DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK":
+      return DataPointFlags.DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return DataPointFlags.UNRECOGNIZED;
+  }
+}
+
+export function dataPointFlagsToJSON(object: DataPointFlags): string {
+  switch (object) {
+    case DataPointFlags.DATA_POINT_FLAGS_DO_NOT_USE:
+      return "DATA_POINT_FLAGS_DO_NOT_USE";
+    case DataPointFlags.DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK:
+      return "DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK";
+    case DataPointFlags.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
 }
 
 /**
@@ -816,4 +876,2261 @@ export interface Exemplar {
    * or if the trace is not sampled.
    */
   traceId: Uint8Array;
+}
+
+function createBaseMetricsData(): MetricsData {
+  return { resourceMetrics: [] };
+}
+
+export const MetricsData: MessageFns<MetricsData> = {
+  encode(message: MetricsData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.resourceMetrics) {
+      ResourceMetrics.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MetricsData {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMetricsData();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resourceMetrics.push(ResourceMetrics.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MetricsData {
+    return {
+      resourceMetrics: globalThis.Array.isArray(object?.resourceMetrics)
+        ? object.resourceMetrics.map((e: any) => ResourceMetrics.fromJSON(e))
+        : globalThis.Array.isArray(object?.resource_metrics)
+        ? object.resource_metrics.map((e: any) => ResourceMetrics.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: MetricsData): unknown {
+    const obj: any = {};
+    if (message.resourceMetrics?.length) {
+      obj.resourceMetrics = message.resourceMetrics.map((e) => ResourceMetrics.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MetricsData>, I>>(base?: I): MetricsData {
+    return MetricsData.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MetricsData>, I>>(object: I): MetricsData {
+    const message = createBaseMetricsData();
+    message.resourceMetrics = object.resourceMetrics?.map((e) => ResourceMetrics.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseResourceMetrics(): ResourceMetrics {
+  return { resource: undefined, scopeMetrics: [], schemaUrl: "" };
+}
+
+export const ResourceMetrics: MessageFns<ResourceMetrics> = {
+  encode(message: ResourceMetrics, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.resource !== undefined) {
+      Resource.encode(message.resource, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.scopeMetrics) {
+      ScopeMetrics.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ResourceMetrics {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseResourceMetrics();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resource = Resource.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.scopeMetrics.push(ScopeMetrics.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ResourceMetrics {
+    return {
+      resource: isSet(object.resource) ? Resource.fromJSON(object.resource) : undefined,
+      scopeMetrics: globalThis.Array.isArray(object?.scopeMetrics)
+        ? object.scopeMetrics.map((e: any) => ScopeMetrics.fromJSON(e))
+        : globalThis.Array.isArray(object?.scope_metrics)
+        ? object.scope_metrics.map((e: any) => ScopeMetrics.fromJSON(e))
+        : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ResourceMetrics): unknown {
+    const obj: any = {};
+    if (message.resource !== undefined) {
+      obj.resource = Resource.toJSON(message.resource);
+    }
+    if (message.scopeMetrics?.length) {
+      obj.scopeMetrics = message.scopeMetrics.map((e) => ScopeMetrics.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ResourceMetrics>, I>>(base?: I): ResourceMetrics {
+    return ResourceMetrics.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ResourceMetrics>, I>>(object: I): ResourceMetrics {
+    const message = createBaseResourceMetrics();
+    message.resource = (object.resource !== undefined && object.resource !== null)
+      ? Resource.fromPartial(object.resource)
+      : undefined;
+    message.scopeMetrics = object.scopeMetrics?.map((e) => ScopeMetrics.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseScopeMetrics(): ScopeMetrics {
+  return { scope: undefined, metrics: [], schemaUrl: "" };
+}
+
+export const ScopeMetrics: MessageFns<ScopeMetrics> = {
+  encode(message: ScopeMetrics, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scope !== undefined) {
+      InstrumentationScope.encode(message.scope, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.metrics) {
+      Metric.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.schemaUrl !== "") {
+      writer.uint32(26).string(message.schemaUrl);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScopeMetrics {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScopeMetrics();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.scope = InstrumentationScope.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.metrics.push(Metric.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.schemaUrl = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScopeMetrics {
+    return {
+      scope: isSet(object.scope) ? InstrumentationScope.fromJSON(object.scope) : undefined,
+      metrics: globalThis.Array.isArray(object?.metrics) ? object.metrics.map((e: any) => Metric.fromJSON(e)) : [],
+      schemaUrl: isSet(object.schemaUrl)
+        ? globalThis.String(object.schemaUrl)
+        : isSet(object.schema_url)
+        ? globalThis.String(object.schema_url)
+        : "",
+    };
+  },
+
+  toJSON(message: ScopeMetrics): unknown {
+    const obj: any = {};
+    if (message.scope !== undefined) {
+      obj.scope = InstrumentationScope.toJSON(message.scope);
+    }
+    if (message.metrics?.length) {
+      obj.metrics = message.metrics.map((e) => Metric.toJSON(e));
+    }
+    if (message.schemaUrl !== "") {
+      obj.schemaUrl = message.schemaUrl;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScopeMetrics>, I>>(base?: I): ScopeMetrics {
+    return ScopeMetrics.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScopeMetrics>, I>>(object: I): ScopeMetrics {
+    const message = createBaseScopeMetrics();
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? InstrumentationScope.fromPartial(object.scope)
+      : undefined;
+    message.metrics = object.metrics?.map((e) => Metric.fromPartial(e)) || [];
+    message.schemaUrl = object.schemaUrl ?? "";
+    return message;
+  },
+};
+
+function createBaseMetric(): Metric {
+  return { name: "", description: "", unit: "", data: undefined, metadata: [] };
+}
+
+export const Metric: MessageFns<Metric> = {
+  encode(message: Metric, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.description !== "") {
+      writer.uint32(18).string(message.description);
+    }
+    if (message.unit !== "") {
+      writer.uint32(26).string(message.unit);
+    }
+    switch (message.data?.$case) {
+      case "gauge":
+        Gauge.encode(message.data.gauge, writer.uint32(42).fork()).join();
+        break;
+      case "sum":
+        Sum.encode(message.data.sum, writer.uint32(58).fork()).join();
+        break;
+      case "histogram":
+        Histogram.encode(message.data.histogram, writer.uint32(74).fork()).join();
+        break;
+      case "exponentialHistogram":
+        ExponentialHistogram.encode(message.data.exponentialHistogram, writer.uint32(82).fork()).join();
+        break;
+      case "summary":
+        Summary.encode(message.data.summary, writer.uint32(90).fork()).join();
+        break;
+    }
+    for (const v of message.metadata) {
+      KeyValue.encode(v!, writer.uint32(98).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Metric {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMetric();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.description = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.unit = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.data = { $case: "gauge", gauge: Gauge.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.data = { $case: "sum", sum: Sum.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.data = { $case: "histogram", histogram: Histogram.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.data = {
+            $case: "exponentialHistogram",
+            exponentialHistogram: ExponentialHistogram.decode(reader, reader.uint32()),
+          };
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.data = { $case: "summary", summary: Summary.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.metadata.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Metric {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      description: isSet(object.description) ? globalThis.String(object.description) : "",
+      unit: isSet(object.unit) ? globalThis.String(object.unit) : "",
+      data: isSet(object.gauge)
+        ? { $case: "gauge", gauge: Gauge.fromJSON(object.gauge) }
+        : isSet(object.sum)
+        ? { $case: "sum", sum: Sum.fromJSON(object.sum) }
+        : isSet(object.histogram)
+        ? { $case: "histogram", histogram: Histogram.fromJSON(object.histogram) }
+        : isSet(object.exponentialHistogram)
+        ? {
+          $case: "exponentialHistogram",
+          exponentialHistogram: ExponentialHistogram.fromJSON(object.exponentialHistogram),
+        }
+        : isSet(object.exponential_histogram)
+        ? {
+          $case: "exponentialHistogram",
+          exponentialHistogram: ExponentialHistogram.fromJSON(object.exponential_histogram),
+        }
+        : isSet(object.summary)
+        ? { $case: "summary", summary: Summary.fromJSON(object.summary) }
+        : undefined,
+      metadata: globalThis.Array.isArray(object?.metadata) ? object.metadata.map((e: any) => KeyValue.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: Metric): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.description !== "") {
+      obj.description = message.description;
+    }
+    if (message.unit !== "") {
+      obj.unit = message.unit;
+    }
+    if (message.data?.$case === "gauge") {
+      obj.gauge = Gauge.toJSON(message.data.gauge);
+    } else if (message.data?.$case === "sum") {
+      obj.sum = Sum.toJSON(message.data.sum);
+    } else if (message.data?.$case === "histogram") {
+      obj.histogram = Histogram.toJSON(message.data.histogram);
+    } else if (message.data?.$case === "exponentialHistogram") {
+      obj.exponentialHistogram = ExponentialHistogram.toJSON(message.data.exponentialHistogram);
+    } else if (message.data?.$case === "summary") {
+      obj.summary = Summary.toJSON(message.data.summary);
+    }
+    if (message.metadata?.length) {
+      obj.metadata = message.metadata.map((e) => KeyValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Metric>, I>>(base?: I): Metric {
+    return Metric.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Metric>, I>>(object: I): Metric {
+    const message = createBaseMetric();
+    message.name = object.name ?? "";
+    message.description = object.description ?? "";
+    message.unit = object.unit ?? "";
+    switch (object.data?.$case) {
+      case "gauge": {
+        if (object.data?.gauge !== undefined && object.data?.gauge !== null) {
+          message.data = { $case: "gauge", gauge: Gauge.fromPartial(object.data.gauge) };
+        }
+        break;
+      }
+      case "sum": {
+        if (object.data?.sum !== undefined && object.data?.sum !== null) {
+          message.data = { $case: "sum", sum: Sum.fromPartial(object.data.sum) };
+        }
+        break;
+      }
+      case "histogram": {
+        if (object.data?.histogram !== undefined && object.data?.histogram !== null) {
+          message.data = { $case: "histogram", histogram: Histogram.fromPartial(object.data.histogram) };
+        }
+        break;
+      }
+      case "exponentialHistogram": {
+        if (object.data?.exponentialHistogram !== undefined && object.data?.exponentialHistogram !== null) {
+          message.data = {
+            $case: "exponentialHistogram",
+            exponentialHistogram: ExponentialHistogram.fromPartial(object.data.exponentialHistogram),
+          };
+        }
+        break;
+      }
+      case "summary": {
+        if (object.data?.summary !== undefined && object.data?.summary !== null) {
+          message.data = { $case: "summary", summary: Summary.fromPartial(object.data.summary) };
+        }
+        break;
+      }
+    }
+    message.metadata = object.metadata?.map((e) => KeyValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGauge(): Gauge {
+  return { dataPoints: [] };
+}
+
+export const Gauge: MessageFns<Gauge> = {
+  encode(message: Gauge, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dataPoints) {
+      NumberDataPoint.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Gauge {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGauge();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.dataPoints.push(NumberDataPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Gauge {
+    return {
+      dataPoints: globalThis.Array.isArray(object?.dataPoints)
+        ? object.dataPoints.map((e: any) => NumberDataPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.data_points)
+        ? object.data_points.map((e: any) => NumberDataPoint.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Gauge): unknown {
+    const obj: any = {};
+    if (message.dataPoints?.length) {
+      obj.dataPoints = message.dataPoints.map((e) => NumberDataPoint.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Gauge>, I>>(base?: I): Gauge {
+    return Gauge.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Gauge>, I>>(object: I): Gauge {
+    const message = createBaseGauge();
+    message.dataPoints = object.dataPoints?.map((e) => NumberDataPoint.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSum(): Sum {
+  return { dataPoints: [], aggregationTemporality: 0, isMonotonic: false };
+}
+
+export const Sum: MessageFns<Sum> = {
+  encode(message: Sum, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dataPoints) {
+      NumberDataPoint.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.aggregationTemporality !== 0) {
+      writer.uint32(16).int32(message.aggregationTemporality);
+    }
+    if (message.isMonotonic !== false) {
+      writer.uint32(24).bool(message.isMonotonic);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Sum {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSum();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.dataPoints.push(NumberDataPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.aggregationTemporality = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.isMonotonic = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Sum {
+    return {
+      dataPoints: globalThis.Array.isArray(object?.dataPoints)
+        ? object.dataPoints.map((e: any) => NumberDataPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.data_points)
+        ? object.data_points.map((e: any) => NumberDataPoint.fromJSON(e))
+        : [],
+      aggregationTemporality: isSet(object.aggregationTemporality)
+        ? aggregationTemporalityFromJSON(object.aggregationTemporality)
+        : isSet(object.aggregation_temporality)
+        ? aggregationTemporalityFromJSON(object.aggregation_temporality)
+        : 0,
+      isMonotonic: isSet(object.isMonotonic)
+        ? globalThis.Boolean(object.isMonotonic)
+        : isSet(object.is_monotonic)
+        ? globalThis.Boolean(object.is_monotonic)
+        : false,
+    };
+  },
+
+  toJSON(message: Sum): unknown {
+    const obj: any = {};
+    if (message.dataPoints?.length) {
+      obj.dataPoints = message.dataPoints.map((e) => NumberDataPoint.toJSON(e));
+    }
+    if (message.aggregationTemporality !== 0) {
+      obj.aggregationTemporality = aggregationTemporalityToJSON(message.aggregationTemporality);
+    }
+    if (message.isMonotonic !== false) {
+      obj.isMonotonic = message.isMonotonic;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Sum>, I>>(base?: I): Sum {
+    return Sum.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Sum>, I>>(object: I): Sum {
+    const message = createBaseSum();
+    message.dataPoints = object.dataPoints?.map((e) => NumberDataPoint.fromPartial(e)) || [];
+    message.aggregationTemporality = object.aggregationTemporality ?? 0;
+    message.isMonotonic = object.isMonotonic ?? false;
+    return message;
+  },
+};
+
+function createBaseHistogram(): Histogram {
+  return { dataPoints: [], aggregationTemporality: 0 };
+}
+
+export const Histogram: MessageFns<Histogram> = {
+  encode(message: Histogram, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dataPoints) {
+      HistogramDataPoint.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.aggregationTemporality !== 0) {
+      writer.uint32(16).int32(message.aggregationTemporality);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Histogram {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseHistogram();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.dataPoints.push(HistogramDataPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.aggregationTemporality = reader.int32() as any;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Histogram {
+    return {
+      dataPoints: globalThis.Array.isArray(object?.dataPoints)
+        ? object.dataPoints.map((e: any) => HistogramDataPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.data_points)
+        ? object.data_points.map((e: any) => HistogramDataPoint.fromJSON(e))
+        : [],
+      aggregationTemporality: isSet(object.aggregationTemporality)
+        ? aggregationTemporalityFromJSON(object.aggregationTemporality)
+        : isSet(object.aggregation_temporality)
+        ? aggregationTemporalityFromJSON(object.aggregation_temporality)
+        : 0,
+    };
+  },
+
+  toJSON(message: Histogram): unknown {
+    const obj: any = {};
+    if (message.dataPoints?.length) {
+      obj.dataPoints = message.dataPoints.map((e) => HistogramDataPoint.toJSON(e));
+    }
+    if (message.aggregationTemporality !== 0) {
+      obj.aggregationTemporality = aggregationTemporalityToJSON(message.aggregationTemporality);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Histogram>, I>>(base?: I): Histogram {
+    return Histogram.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Histogram>, I>>(object: I): Histogram {
+    const message = createBaseHistogram();
+    message.dataPoints = object.dataPoints?.map((e) => HistogramDataPoint.fromPartial(e)) || [];
+    message.aggregationTemporality = object.aggregationTemporality ?? 0;
+    return message;
+  },
+};
+
+function createBaseExponentialHistogram(): ExponentialHistogram {
+  return { dataPoints: [], aggregationTemporality: 0 };
+}
+
+export const ExponentialHistogram: MessageFns<ExponentialHistogram> = {
+  encode(message: ExponentialHistogram, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dataPoints) {
+      ExponentialHistogramDataPoint.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.aggregationTemporality !== 0) {
+      writer.uint32(16).int32(message.aggregationTemporality);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExponentialHistogram {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExponentialHistogram();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.dataPoints.push(ExponentialHistogramDataPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.aggregationTemporality = reader.int32() as any;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExponentialHistogram {
+    return {
+      dataPoints: globalThis.Array.isArray(object?.dataPoints)
+        ? object.dataPoints.map((e: any) => ExponentialHistogramDataPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.data_points)
+        ? object.data_points.map((e: any) => ExponentialHistogramDataPoint.fromJSON(e))
+        : [],
+      aggregationTemporality: isSet(object.aggregationTemporality)
+        ? aggregationTemporalityFromJSON(object.aggregationTemporality)
+        : isSet(object.aggregation_temporality)
+        ? aggregationTemporalityFromJSON(object.aggregation_temporality)
+        : 0,
+    };
+  },
+
+  toJSON(message: ExponentialHistogram): unknown {
+    const obj: any = {};
+    if (message.dataPoints?.length) {
+      obj.dataPoints = message.dataPoints.map((e) => ExponentialHistogramDataPoint.toJSON(e));
+    }
+    if (message.aggregationTemporality !== 0) {
+      obj.aggregationTemporality = aggregationTemporalityToJSON(message.aggregationTemporality);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExponentialHistogram>, I>>(base?: I): ExponentialHistogram {
+    return ExponentialHistogram.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExponentialHistogram>, I>>(object: I): ExponentialHistogram {
+    const message = createBaseExponentialHistogram();
+    message.dataPoints = object.dataPoints?.map((e) => ExponentialHistogramDataPoint.fromPartial(e)) || [];
+    message.aggregationTemporality = object.aggregationTemporality ?? 0;
+    return message;
+  },
+};
+
+function createBaseSummary(): Summary {
+  return { dataPoints: [] };
+}
+
+export const Summary: MessageFns<Summary> = {
+  encode(message: Summary, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.dataPoints) {
+      SummaryDataPoint.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Summary {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSummary();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.dataPoints.push(SummaryDataPoint.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Summary {
+    return {
+      dataPoints: globalThis.Array.isArray(object?.dataPoints)
+        ? object.dataPoints.map((e: any) => SummaryDataPoint.fromJSON(e))
+        : globalThis.Array.isArray(object?.data_points)
+        ? object.data_points.map((e: any) => SummaryDataPoint.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: Summary): unknown {
+    const obj: any = {};
+    if (message.dataPoints?.length) {
+      obj.dataPoints = message.dataPoints.map((e) => SummaryDataPoint.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Summary>, I>>(base?: I): Summary {
+    return Summary.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Summary>, I>>(object: I): Summary {
+    const message = createBaseSummary();
+    message.dataPoints = object.dataPoints?.map((e) => SummaryDataPoint.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseNumberDataPoint(): NumberDataPoint {
+  return { attributes: [], startTimeUnixNano: "0", timeUnixNano: "0", value: undefined, exemplars: [], flags: 0 };
+}
+
+export const NumberDataPoint: MessageFns<NumberDataPoint> = {
+  encode(message: NumberDataPoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(58).fork()).join();
+    }
+    if (message.startTimeUnixNano !== "0") {
+      writer.uint32(17).fixed64(message.startTimeUnixNano);
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(25).fixed64(message.timeUnixNano);
+    }
+    switch (message.value?.$case) {
+      case "asDouble":
+        writer.uint32(33).double(message.value.asDouble);
+        break;
+      case "asInt":
+        writer.uint32(49).sfixed64(message.value.asInt);
+        break;
+    }
+    for (const v of message.exemplars) {
+      Exemplar.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.flags !== 0) {
+      writer.uint32(64).uint32(message.flags);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NumberDataPoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseNumberDataPoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.startTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.value = { $case: "asDouble", asDouble: reader.double() };
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.value = { $case: "asInt", asInt: reader.sfixed64().toString() };
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.exemplars.push(Exemplar.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.flags = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): NumberDataPoint {
+    return {
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      startTimeUnixNano: isSet(object.startTimeUnixNano)
+        ? globalThis.String(object.startTimeUnixNano)
+        : isSet(object.start_time_unix_nano)
+        ? globalThis.String(object.start_time_unix_nano)
+        : "0",
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      value: isSet(object.asDouble)
+        ? { $case: "asDouble", asDouble: globalThis.Number(object.asDouble) }
+        : isSet(object.as_double)
+        ? { $case: "asDouble", asDouble: globalThis.Number(object.as_double) }
+        : isSet(object.asInt)
+        ? { $case: "asInt", asInt: globalThis.String(object.asInt) }
+        : isSet(object.as_int)
+        ? { $case: "asInt", asInt: globalThis.String(object.as_int) }
+        : undefined,
+      exemplars: globalThis.Array.isArray(object?.exemplars)
+        ? object.exemplars.map((e: any) => Exemplar.fromJSON(e))
+        : [],
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+    };
+  },
+
+  toJSON(message: NumberDataPoint): unknown {
+    const obj: any = {};
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.startTimeUnixNano !== "0") {
+      obj.startTimeUnixNano = message.startTimeUnixNano;
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.value?.$case === "asDouble") {
+      obj.asDouble = message.value.asDouble;
+    } else if (message.value?.$case === "asInt") {
+      obj.asInt = message.value.asInt;
+    }
+    if (message.exemplars?.length) {
+      obj.exemplars = message.exemplars.map((e) => Exemplar.toJSON(e));
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<NumberDataPoint>, I>>(base?: I): NumberDataPoint {
+    return NumberDataPoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NumberDataPoint>, I>>(object: I): NumberDataPoint {
+    const message = createBaseNumberDataPoint();
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.startTimeUnixNano = object.startTimeUnixNano ?? "0";
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    switch (object.value?.$case) {
+      case "asDouble": {
+        if (object.value?.asDouble !== undefined && object.value?.asDouble !== null) {
+          message.value = { $case: "asDouble", asDouble: object.value.asDouble };
+        }
+        break;
+      }
+      case "asInt": {
+        if (object.value?.asInt !== undefined && object.value?.asInt !== null) {
+          message.value = { $case: "asInt", asInt: object.value.asInt };
+        }
+        break;
+      }
+    }
+    message.exemplars = object.exemplars?.map((e) => Exemplar.fromPartial(e)) || [];
+    message.flags = object.flags ?? 0;
+    return message;
+  },
+};
+
+function createBaseHistogramDataPoint(): HistogramDataPoint {
+  return {
+    attributes: [],
+    startTimeUnixNano: "0",
+    timeUnixNano: "0",
+    count: "0",
+    sum: undefined,
+    bucketCounts: [],
+    explicitBounds: [],
+    exemplars: [],
+    flags: 0,
+    min: undefined,
+    max: undefined,
+  };
+}
+
+export const HistogramDataPoint: MessageFns<HistogramDataPoint> = {
+  encode(message: HistogramDataPoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(74).fork()).join();
+    }
+    if (message.startTimeUnixNano !== "0") {
+      writer.uint32(17).fixed64(message.startTimeUnixNano);
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(25).fixed64(message.timeUnixNano);
+    }
+    if (message.count !== "0") {
+      writer.uint32(33).fixed64(message.count);
+    }
+    if (message.sum !== undefined) {
+      writer.uint32(41).double(message.sum);
+    }
+    writer.uint32(50).fork();
+    for (const v of message.bucketCounts) {
+      writer.fixed64(v);
+    }
+    writer.join();
+    writer.uint32(58).fork();
+    for (const v of message.explicitBounds) {
+      writer.double(v);
+    }
+    writer.join();
+    for (const v of message.exemplars) {
+      Exemplar.encode(v!, writer.uint32(66).fork()).join();
+    }
+    if (message.flags !== 0) {
+      writer.uint32(80).uint32(message.flags);
+    }
+    if (message.min !== undefined) {
+      writer.uint32(89).double(message.min);
+    }
+    if (message.max !== undefined) {
+      writer.uint32(97).double(message.max);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): HistogramDataPoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseHistogramDataPoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.startTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.count = reader.fixed64().toString();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.sum = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag === 49) {
+            message.bucketCounts.push(reader.fixed64().toString());
+
+            continue;
+          }
+
+          if (tag === 50) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.bucketCounts.push(reader.fixed64().toString());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 7: {
+          if (tag === 57) {
+            message.explicitBounds.push(reader.double());
+
+            continue;
+          }
+
+          if (tag === 58) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.explicitBounds.push(reader.double());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.exemplars.push(Exemplar.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 10: {
+          if (tag !== 80) {
+            break;
+          }
+
+          message.flags = reader.uint32();
+          continue;
+        }
+        case 11: {
+          if (tag !== 89) {
+            break;
+          }
+
+          message.min = reader.double();
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.max = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): HistogramDataPoint {
+    return {
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      startTimeUnixNano: isSet(object.startTimeUnixNano)
+        ? globalThis.String(object.startTimeUnixNano)
+        : isSet(object.start_time_unix_nano)
+        ? globalThis.String(object.start_time_unix_nano)
+        : "0",
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      count: isSet(object.count) ? globalThis.String(object.count) : "0",
+      sum: isSet(object.sum) ? globalThis.Number(object.sum) : undefined,
+      bucketCounts: globalThis.Array.isArray(object?.bucketCounts)
+        ? object.bucketCounts.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.bucket_counts)
+        ? object.bucket_counts.map((e: any) => globalThis.String(e))
+        : [],
+      explicitBounds: globalThis.Array.isArray(object?.explicitBounds)
+        ? object.explicitBounds.map((e: any) => globalThis.Number(e))
+        : globalThis.Array.isArray(object?.explicit_bounds)
+        ? object.explicit_bounds.map((e: any) => globalThis.Number(e))
+        : [],
+      exemplars: globalThis.Array.isArray(object?.exemplars)
+        ? object.exemplars.map((e: any) => Exemplar.fromJSON(e))
+        : [],
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+      min: isSet(object.min) ? globalThis.Number(object.min) : undefined,
+      max: isSet(object.max) ? globalThis.Number(object.max) : undefined,
+    };
+  },
+
+  toJSON(message: HistogramDataPoint): unknown {
+    const obj: any = {};
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.startTimeUnixNano !== "0") {
+      obj.startTimeUnixNano = message.startTimeUnixNano;
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.count !== "0") {
+      obj.count = message.count;
+    }
+    if (message.sum !== undefined) {
+      obj.sum = message.sum;
+    }
+    if (message.bucketCounts?.length) {
+      obj.bucketCounts = message.bucketCounts;
+    }
+    if (message.explicitBounds?.length) {
+      obj.explicitBounds = message.explicitBounds;
+    }
+    if (message.exemplars?.length) {
+      obj.exemplars = message.exemplars.map((e) => Exemplar.toJSON(e));
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    if (message.min !== undefined) {
+      obj.min = message.min;
+    }
+    if (message.max !== undefined) {
+      obj.max = message.max;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<HistogramDataPoint>, I>>(base?: I): HistogramDataPoint {
+    return HistogramDataPoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<HistogramDataPoint>, I>>(object: I): HistogramDataPoint {
+    const message = createBaseHistogramDataPoint();
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.startTimeUnixNano = object.startTimeUnixNano ?? "0";
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.count = object.count ?? "0";
+    message.sum = object.sum ?? undefined;
+    message.bucketCounts = object.bucketCounts?.map((e) => e) || [];
+    message.explicitBounds = object.explicitBounds?.map((e) => e) || [];
+    message.exemplars = object.exemplars?.map((e) => Exemplar.fromPartial(e)) || [];
+    message.flags = object.flags ?? 0;
+    message.min = object.min ?? undefined;
+    message.max = object.max ?? undefined;
+    return message;
+  },
+};
+
+function createBaseExponentialHistogramDataPoint(): ExponentialHistogramDataPoint {
+  return {
+    attributes: [],
+    startTimeUnixNano: "0",
+    timeUnixNano: "0",
+    count: "0",
+    sum: undefined,
+    scale: 0,
+    zeroCount: "0",
+    positive: undefined,
+    negative: undefined,
+    flags: 0,
+    exemplars: [],
+    min: undefined,
+    max: undefined,
+    zeroThreshold: 0,
+  };
+}
+
+export const ExponentialHistogramDataPoint: MessageFns<ExponentialHistogramDataPoint> = {
+  encode(message: ExponentialHistogramDataPoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.startTimeUnixNano !== "0") {
+      writer.uint32(17).fixed64(message.startTimeUnixNano);
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(25).fixed64(message.timeUnixNano);
+    }
+    if (message.count !== "0") {
+      writer.uint32(33).fixed64(message.count);
+    }
+    if (message.sum !== undefined) {
+      writer.uint32(41).double(message.sum);
+    }
+    if (message.scale !== 0) {
+      writer.uint32(48).sint32(message.scale);
+    }
+    if (message.zeroCount !== "0") {
+      writer.uint32(57).fixed64(message.zeroCount);
+    }
+    if (message.positive !== undefined) {
+      ExponentialHistogramDataPoint_Buckets.encode(message.positive, writer.uint32(66).fork()).join();
+    }
+    if (message.negative !== undefined) {
+      ExponentialHistogramDataPoint_Buckets.encode(message.negative, writer.uint32(74).fork()).join();
+    }
+    if (message.flags !== 0) {
+      writer.uint32(80).uint32(message.flags);
+    }
+    for (const v of message.exemplars) {
+      Exemplar.encode(v!, writer.uint32(90).fork()).join();
+    }
+    if (message.min !== undefined) {
+      writer.uint32(97).double(message.min);
+    }
+    if (message.max !== undefined) {
+      writer.uint32(105).double(message.max);
+    }
+    if (message.zeroThreshold !== 0) {
+      writer.uint32(113).double(message.zeroThreshold);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExponentialHistogramDataPoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExponentialHistogramDataPoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.startTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.count = reader.fixed64().toString();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.sum = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.scale = reader.sint32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.zeroCount = reader.fixed64().toString();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.positive = ExponentialHistogramDataPoint_Buckets.decode(reader, reader.uint32());
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.negative = ExponentialHistogramDataPoint_Buckets.decode(reader, reader.uint32());
+          continue;
+        }
+        case 10: {
+          if (tag !== 80) {
+            break;
+          }
+
+          message.flags = reader.uint32();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.exemplars.push(Exemplar.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.min = reader.double();
+          continue;
+        }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.max = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.zeroThreshold = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExponentialHistogramDataPoint {
+    return {
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      startTimeUnixNano: isSet(object.startTimeUnixNano)
+        ? globalThis.String(object.startTimeUnixNano)
+        : isSet(object.start_time_unix_nano)
+        ? globalThis.String(object.start_time_unix_nano)
+        : "0",
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      count: isSet(object.count) ? globalThis.String(object.count) : "0",
+      sum: isSet(object.sum) ? globalThis.Number(object.sum) : undefined,
+      scale: isSet(object.scale) ? globalThis.Number(object.scale) : 0,
+      zeroCount: isSet(object.zeroCount)
+        ? globalThis.String(object.zeroCount)
+        : isSet(object.zero_count)
+        ? globalThis.String(object.zero_count)
+        : "0",
+      positive: isSet(object.positive) ? ExponentialHistogramDataPoint_Buckets.fromJSON(object.positive) : undefined,
+      negative: isSet(object.negative) ? ExponentialHistogramDataPoint_Buckets.fromJSON(object.negative) : undefined,
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+      exemplars: globalThis.Array.isArray(object?.exemplars)
+        ? object.exemplars.map((e: any) => Exemplar.fromJSON(e))
+        : [],
+      min: isSet(object.min) ? globalThis.Number(object.min) : undefined,
+      max: isSet(object.max) ? globalThis.Number(object.max) : undefined,
+      zeroThreshold: isSet(object.zeroThreshold)
+        ? globalThis.Number(object.zeroThreshold)
+        : isSet(object.zero_threshold)
+        ? globalThis.Number(object.zero_threshold)
+        : 0,
+    };
+  },
+
+  toJSON(message: ExponentialHistogramDataPoint): unknown {
+    const obj: any = {};
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.startTimeUnixNano !== "0") {
+      obj.startTimeUnixNano = message.startTimeUnixNano;
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.count !== "0") {
+      obj.count = message.count;
+    }
+    if (message.sum !== undefined) {
+      obj.sum = message.sum;
+    }
+    if (message.scale !== 0) {
+      obj.scale = Math.round(message.scale);
+    }
+    if (message.zeroCount !== "0") {
+      obj.zeroCount = message.zeroCount;
+    }
+    if (message.positive !== undefined) {
+      obj.positive = ExponentialHistogramDataPoint_Buckets.toJSON(message.positive);
+    }
+    if (message.negative !== undefined) {
+      obj.negative = ExponentialHistogramDataPoint_Buckets.toJSON(message.negative);
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    if (message.exemplars?.length) {
+      obj.exemplars = message.exemplars.map((e) => Exemplar.toJSON(e));
+    }
+    if (message.min !== undefined) {
+      obj.min = message.min;
+    }
+    if (message.max !== undefined) {
+      obj.max = message.max;
+    }
+    if (message.zeroThreshold !== 0) {
+      obj.zeroThreshold = message.zeroThreshold;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExponentialHistogramDataPoint>, I>>(base?: I): ExponentialHistogramDataPoint {
+    return ExponentialHistogramDataPoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExponentialHistogramDataPoint>, I>>(
+    object: I,
+  ): ExponentialHistogramDataPoint {
+    const message = createBaseExponentialHistogramDataPoint();
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.startTimeUnixNano = object.startTimeUnixNano ?? "0";
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.count = object.count ?? "0";
+    message.sum = object.sum ?? undefined;
+    message.scale = object.scale ?? 0;
+    message.zeroCount = object.zeroCount ?? "0";
+    message.positive = (object.positive !== undefined && object.positive !== null)
+      ? ExponentialHistogramDataPoint_Buckets.fromPartial(object.positive)
+      : undefined;
+    message.negative = (object.negative !== undefined && object.negative !== null)
+      ? ExponentialHistogramDataPoint_Buckets.fromPartial(object.negative)
+      : undefined;
+    message.flags = object.flags ?? 0;
+    message.exemplars = object.exemplars?.map((e) => Exemplar.fromPartial(e)) || [];
+    message.min = object.min ?? undefined;
+    message.max = object.max ?? undefined;
+    message.zeroThreshold = object.zeroThreshold ?? 0;
+    return message;
+  },
+};
+
+function createBaseExponentialHistogramDataPoint_Buckets(): ExponentialHistogramDataPoint_Buckets {
+  return { offset: 0, bucketCounts: [] };
+}
+
+export const ExponentialHistogramDataPoint_Buckets: MessageFns<ExponentialHistogramDataPoint_Buckets> = {
+  encode(message: ExponentialHistogramDataPoint_Buckets, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.offset !== 0) {
+      writer.uint32(8).sint32(message.offset);
+    }
+    writer.uint32(18).fork();
+    for (const v of message.bucketCounts) {
+      writer.uint64(v);
+    }
+    writer.join();
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExponentialHistogramDataPoint_Buckets {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExponentialHistogramDataPoint_Buckets();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.offset = reader.sint32();
+          continue;
+        }
+        case 2: {
+          if (tag === 16) {
+            message.bucketCounts.push(reader.uint64().toString());
+
+            continue;
+          }
+
+          if (tag === 18) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.bucketCounts.push(reader.uint64().toString());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ExponentialHistogramDataPoint_Buckets {
+    return {
+      offset: isSet(object.offset) ? globalThis.Number(object.offset) : 0,
+      bucketCounts: globalThis.Array.isArray(object?.bucketCounts)
+        ? object.bucketCounts.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.bucket_counts)
+        ? object.bucket_counts.map((e: any) => globalThis.String(e))
+        : [],
+    };
+  },
+
+  toJSON(message: ExponentialHistogramDataPoint_Buckets): unknown {
+    const obj: any = {};
+    if (message.offset !== 0) {
+      obj.offset = Math.round(message.offset);
+    }
+    if (message.bucketCounts?.length) {
+      obj.bucketCounts = message.bucketCounts;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ExponentialHistogramDataPoint_Buckets>, I>>(
+    base?: I,
+  ): ExponentialHistogramDataPoint_Buckets {
+    return ExponentialHistogramDataPoint_Buckets.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExponentialHistogramDataPoint_Buckets>, I>>(
+    object: I,
+  ): ExponentialHistogramDataPoint_Buckets {
+    const message = createBaseExponentialHistogramDataPoint_Buckets();
+    message.offset = object.offset ?? 0;
+    message.bucketCounts = object.bucketCounts?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseSummaryDataPoint(): SummaryDataPoint {
+  return {
+    attributes: [],
+    startTimeUnixNano: "0",
+    timeUnixNano: "0",
+    count: "0",
+    sum: 0,
+    quantileValues: [],
+    flags: 0,
+  };
+}
+
+export const SummaryDataPoint: MessageFns<SummaryDataPoint> = {
+  encode(message: SummaryDataPoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.attributes) {
+      KeyValue.encode(v!, writer.uint32(58).fork()).join();
+    }
+    if (message.startTimeUnixNano !== "0") {
+      writer.uint32(17).fixed64(message.startTimeUnixNano);
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(25).fixed64(message.timeUnixNano);
+    }
+    if (message.count !== "0") {
+      writer.uint32(33).fixed64(message.count);
+    }
+    if (message.sum !== 0) {
+      writer.uint32(41).double(message.sum);
+    }
+    for (const v of message.quantileValues) {
+      SummaryDataPoint_ValueAtQuantile.encode(v!, writer.uint32(50).fork()).join();
+    }
+    if (message.flags !== 0) {
+      writer.uint32(64).uint32(message.flags);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SummaryDataPoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSummaryDataPoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.attributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.startTimeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.count = reader.fixed64().toString();
+          continue;
+        }
+        case 5: {
+          if (tag !== 41) {
+            break;
+          }
+
+          message.sum = reader.double();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.quantileValues.push(SummaryDataPoint_ValueAtQuantile.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.flags = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SummaryDataPoint {
+    return {
+      attributes: globalThis.Array.isArray(object?.attributes)
+        ? object.attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      startTimeUnixNano: isSet(object.startTimeUnixNano)
+        ? globalThis.String(object.startTimeUnixNano)
+        : isSet(object.start_time_unix_nano)
+        ? globalThis.String(object.start_time_unix_nano)
+        : "0",
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      count: isSet(object.count) ? globalThis.String(object.count) : "0",
+      sum: isSet(object.sum) ? globalThis.Number(object.sum) : 0,
+      quantileValues: globalThis.Array.isArray(object?.quantileValues)
+        ? object.quantileValues.map((e: any) => SummaryDataPoint_ValueAtQuantile.fromJSON(e))
+        : globalThis.Array.isArray(object?.quantile_values)
+        ? object.quantile_values.map((e: any) => SummaryDataPoint_ValueAtQuantile.fromJSON(e))
+        : [],
+      flags: isSet(object.flags) ? globalThis.Number(object.flags) : 0,
+    };
+  },
+
+  toJSON(message: SummaryDataPoint): unknown {
+    const obj: any = {};
+    if (message.attributes?.length) {
+      obj.attributes = message.attributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.startTimeUnixNano !== "0") {
+      obj.startTimeUnixNano = message.startTimeUnixNano;
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.count !== "0") {
+      obj.count = message.count;
+    }
+    if (message.sum !== 0) {
+      obj.sum = message.sum;
+    }
+    if (message.quantileValues?.length) {
+      obj.quantileValues = message.quantileValues.map((e) => SummaryDataPoint_ValueAtQuantile.toJSON(e));
+    }
+    if (message.flags !== 0) {
+      obj.flags = Math.round(message.flags);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SummaryDataPoint>, I>>(base?: I): SummaryDataPoint {
+    return SummaryDataPoint.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SummaryDataPoint>, I>>(object: I): SummaryDataPoint {
+    const message = createBaseSummaryDataPoint();
+    message.attributes = object.attributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.startTimeUnixNano = object.startTimeUnixNano ?? "0";
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    message.count = object.count ?? "0";
+    message.sum = object.sum ?? 0;
+    message.quantileValues = object.quantileValues?.map((e) => SummaryDataPoint_ValueAtQuantile.fromPartial(e)) || [];
+    message.flags = object.flags ?? 0;
+    return message;
+  },
+};
+
+function createBaseSummaryDataPoint_ValueAtQuantile(): SummaryDataPoint_ValueAtQuantile {
+  return { quantile: 0, value: 0 };
+}
+
+export const SummaryDataPoint_ValueAtQuantile: MessageFns<SummaryDataPoint_ValueAtQuantile> = {
+  encode(message: SummaryDataPoint_ValueAtQuantile, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.quantile !== 0) {
+      writer.uint32(9).double(message.quantile);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SummaryDataPoint_ValueAtQuantile {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSummaryDataPoint_ValueAtQuantile();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.quantile = reader.double();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SummaryDataPoint_ValueAtQuantile {
+    return {
+      quantile: isSet(object.quantile) ? globalThis.Number(object.quantile) : 0,
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: SummaryDataPoint_ValueAtQuantile): unknown {
+    const obj: any = {};
+    if (message.quantile !== 0) {
+      obj.quantile = message.quantile;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SummaryDataPoint_ValueAtQuantile>, I>>(
+    base?: I,
+  ): SummaryDataPoint_ValueAtQuantile {
+    return SummaryDataPoint_ValueAtQuantile.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SummaryDataPoint_ValueAtQuantile>, I>>(
+    object: I,
+  ): SummaryDataPoint_ValueAtQuantile {
+    const message = createBaseSummaryDataPoint_ValueAtQuantile();
+    message.quantile = object.quantile ?? 0;
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseExemplar(): Exemplar {
+  return {
+    filteredAttributes: [],
+    timeUnixNano: "0",
+    value: undefined,
+    spanId: new Uint8Array(0),
+    traceId: new Uint8Array(0),
+  };
+}
+
+export const Exemplar: MessageFns<Exemplar> = {
+  encode(message: Exemplar, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.filteredAttributes) {
+      KeyValue.encode(v!, writer.uint32(58).fork()).join();
+    }
+    if (message.timeUnixNano !== "0") {
+      writer.uint32(17).fixed64(message.timeUnixNano);
+    }
+    switch (message.value?.$case) {
+      case "asDouble":
+        writer.uint32(25).double(message.value.asDouble);
+        break;
+      case "asInt":
+        writer.uint32(49).sfixed64(message.value.asInt);
+        break;
+    }
+    if (message.spanId.length !== 0) {
+      writer.uint32(34).bytes(message.spanId);
+    }
+    if (message.traceId.length !== 0) {
+      writer.uint32(42).bytes(message.traceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Exemplar {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseExemplar();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.filteredAttributes.push(KeyValue.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.timeUnixNano = reader.fixed64().toString();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.value = { $case: "asDouble", asDouble: reader.double() };
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.value = { $case: "asInt", asInt: reader.sfixed64().toString() };
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.spanId = reader.bytes();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.traceId = reader.bytes();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Exemplar {
+    return {
+      filteredAttributes: globalThis.Array.isArray(object?.filteredAttributes)
+        ? object.filteredAttributes.map((e: any) => KeyValue.fromJSON(e))
+        : globalThis.Array.isArray(object?.filtered_attributes)
+        ? object.filtered_attributes.map((e: any) => KeyValue.fromJSON(e))
+        : [],
+      timeUnixNano: isSet(object.timeUnixNano)
+        ? globalThis.String(object.timeUnixNano)
+        : isSet(object.time_unix_nano)
+        ? globalThis.String(object.time_unix_nano)
+        : "0",
+      value: isSet(object.asDouble)
+        ? { $case: "asDouble", asDouble: globalThis.Number(object.asDouble) }
+        : isSet(object.as_double)
+        ? { $case: "asDouble", asDouble: globalThis.Number(object.as_double) }
+        : isSet(object.asInt)
+        ? { $case: "asInt", asInt: globalThis.String(object.asInt) }
+        : isSet(object.as_int)
+        ? { $case: "asInt", asInt: globalThis.String(object.as_int) }
+        : undefined,
+      spanId: isSet(object.spanId)
+        ? bytesFromBase64(object.spanId)
+        : isSet(object.span_id)
+        ? bytesFromBase64(object.span_id)
+        : new Uint8Array(0),
+      traceId: isSet(object.traceId)
+        ? bytesFromBase64(object.traceId)
+        : isSet(object.trace_id)
+        ? bytesFromBase64(object.trace_id)
+        : new Uint8Array(0),
+    };
+  },
+
+  toJSON(message: Exemplar): unknown {
+    const obj: any = {};
+    if (message.filteredAttributes?.length) {
+      obj.filteredAttributes = message.filteredAttributes.map((e) => KeyValue.toJSON(e));
+    }
+    if (message.timeUnixNano !== "0") {
+      obj.timeUnixNano = message.timeUnixNano;
+    }
+    if (message.value?.$case === "asDouble") {
+      obj.asDouble = message.value.asDouble;
+    } else if (message.value?.$case === "asInt") {
+      obj.asInt = message.value.asInt;
+    }
+    if (message.spanId.length !== 0) {
+      obj.spanId = base64FromBytes(message.spanId);
+    }
+    if (message.traceId.length !== 0) {
+      obj.traceId = base64FromBytes(message.traceId);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Exemplar>, I>>(base?: I): Exemplar {
+    return Exemplar.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Exemplar>, I>>(object: I): Exemplar {
+    const message = createBaseExemplar();
+    message.filteredAttributes = object.filteredAttributes?.map((e) => KeyValue.fromPartial(e)) || [];
+    message.timeUnixNano = object.timeUnixNano ?? "0";
+    switch (object.value?.$case) {
+      case "asDouble": {
+        if (object.value?.asDouble !== undefined && object.value?.asDouble !== null) {
+          message.value = { $case: "asDouble", asDouble: object.value.asDouble };
+        }
+        break;
+      }
+      case "asInt": {
+        if (object.value?.asInt !== undefined && object.value?.asInt !== null) {
+          message.value = { $case: "asInt", asInt: object.value.asInt };
+        }
+        break;
+      }
+    }
+    message.spanId = object.spanId ?? new Uint8Array(0);
+    message.traceId = object.traceId ?? new Uint8Array(0);
+    return message;
+  },
+};
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
+
+type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+
+type DeepPartial<T> = T extends Builtin ? T
+  : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
+  : T extends ReadonlyArray<infer U> ? ReadonlyArray<DeepPartial<U>>
+  : T extends { $case: string } ? { [K in keyof Omit<T, "$case">]?: DeepPartial<T[K]> } & { $case: T["$case"] }
+  : T extends {} ? { [K in keyof T]?: DeepPartial<T[K]> }
+  : Partial<T>;
+
+type KeysOfUnion<T> = T extends T ? keyof T : never;
+type Exact<P, I extends P> = P extends Builtin ? P
+  : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
+
+function isSet(value: any): boolean {
+  return value !== null && value !== undefined;
+}
+
+interface MessageFns<T> {
+  encode(message: T, writer?: BinaryWriter): BinaryWriter;
+  decode(input: BinaryReader | Uint8Array, length?: number): T;
+  fromJSON(object: any): T;
+  toJSON(message: T): unknown;
+  create<I extends Exact<DeepPartial<T>, I>>(base?: I): T;
+  fromPartial<I extends Exact<DeepPartial<T>, I>>(object: I): T;
 }
