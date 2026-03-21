@@ -281,7 +281,7 @@ body {
 .data-point-row,
 .scope-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 120px 120px;
+  grid-template-columns: minmax(0, 1fr) 120px 180px 120px;
 }
 
 .metric-table__header {
@@ -391,7 +391,7 @@ body {
   text-align: right;
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
   color: #ffffff;
-  padding-right: 8px;
+  padding-right: 14px;
 }
 
 .metric-type {
@@ -513,7 +513,7 @@ code {
   .metric-row,
   .data-point-row,
   .scope-row {
-    grid-template-columns: minmax(0, 1fr) 90px 90px 90px;
+    grid-template-columns: minmax(0, 1fr) 90px 150px 90px;
   }
 }
 
