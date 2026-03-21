@@ -1,0 +1,28 @@
+{
+  "name": "observer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Observer Node.js application scaffolded with TypeScript.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && rm -rf dist/public && mkdir -p dist/public && cp -R public/. dist/public",
+    "clean": "rm -rf dist",
+    "dev": "nodemon --watch src --ext ts --exec \"node --import tsx src/index.ts\"",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.0.0",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}
