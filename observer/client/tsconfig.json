@@ -17,7 +17,7 @@
     "noEmit": true
   },
   "include": [
-    "client/src/**/*.ts",
-    "client/src/**/*.tsx"
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ]
 }

@@ -1,14 +1,19 @@
 # Observer
 
-Minimal Node.js application scaffold using TypeScript, Express, and a client-side React app.
+Workspace with separate Node.js server and React client packages.
 
-## Scripts
+## Packages
 
-- `npm run dev` watches the React client, rebuilds browser assets, and triggers browser reloads on client changes via a dev-only SSE channel
-- `npm run build` builds the server and the React client into `dist/`
-- `npm run start` runs the compiled app
-- `npm run typecheck` validates both server and client TypeScript without emitting files
+- `server/` contains the Express app and production server build
+- `client/` contains the React app and frontend asset build
+
+## Workspace Scripts
+
+- `npm run dev` runs the client asset watcher and the server together
+- `npm run build` builds the client and server through the server package
+- `npm run start` starts the compiled server package
+- `npm run typecheck` validates both packages
 
 ## App
 
-The app serves a React single-page app from `/` on port `3000` by default.
+The server serves the React single-page app and exposes `GET /api` for sample JSON.

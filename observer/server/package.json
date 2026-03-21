@@ -1,0 +1,29 @@
+{
+  "name": "observer-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && rm -rf dist/public && mkdir -p dist/public && cp ../client/public/index.html dist/public/index.html && npm run build:client",
+    "build:client": "node ../client/scripts/build-client.mjs --outdir ../server/dist/public/assets",
+    "dev": "OBSERVER_DEV=1 nodemon --watch src --ext ts --exec \"node --import tsx src/index.ts\"",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}

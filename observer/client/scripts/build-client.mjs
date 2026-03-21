@@ -6,15 +6,16 @@ import { fileURLToPath } from "node:url";
 const args = process.argv.slice(2);
 const watch = args.includes("--watch");
 const outdirIndex = args.indexOf("--outdir");
-
-if (outdirIndex === -1 || outdirIndex === args.length - 1) {
+if (outdirIndex !== -1 && outdirIndex === args.length - 1) {
   console.error("Expected --outdir <path>.");
   process.exit(1);
 }
-
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(currentDir, "..");
-const outdir = path.resolve(projectRoot, args[outdirIndex + 1]);
+const clientRoot = path.resolve(currentDir, "..");
+const defaultOutdir = path.join(clientRoot, "public/assets");
+const outdir = outdirIndex === -1
+  ? defaultOutdir
+  : path.resolve(clientRoot, args[outdirIndex + 1]);
 const liveReloadPort = Number(process.env.PORT ?? 3000);
 
 const triggerLiveReload = async () => {
@@ -41,9 +42,9 @@ const triggerLiveReload = async () => {
 };
 
 const options = {
-  absWorkingDir: projectRoot,
+  absWorkingDir: clientRoot,
   bundle: true,
-  entryPoints: ["client/src/main.tsx"],
+  entryPoints: ["src/main.tsx"],
   format: "esm",
   jsx: "automatic",
   loader: {

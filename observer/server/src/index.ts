@@ -1,21 +1,30 @@
 import express from "express";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { WebSocketServer } from "ws";
 
 const app = express();
+const server = http.createServer(app);
+const host = process.env.HOST ?? "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const devPublicDir = path.resolve(currentDir, "../public");
-const builtPublicDir = path.join(currentDir, "public");
 const isDev = process.env.OBSERVER_DEV === "1";
+const devPublicDir = path.resolve(currentDir, "../../client/public");
+const builtPublicDir = path.join(currentDir, "public");
 const publicDir = isDev ? devPublicDir : builtPublicDir;
-const liveReloadClients = new Set<express.Response>();
+const liveReloadPath = "/__live-reload";
 const liveReloadScript = `
 <script>
   (() => {
-    const source = new EventSource("/__live-reload");
-    source.addEventListener("reload", () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(protocol + "//" + window.location.host + "${liveReloadPath}");
+    socket.addEventListener("message", (event) => {
+      if (event.data !== "reload") {
+        return;
+      }
+
       window.location.reload();
     });
   })();
@@ -23,29 +32,19 @@ const liveReloadScript = `
 `;
 
 if (isDev) {
+  const liveReloadServer = new WebSocketServer({ server, path: liveReloadPath });
+
   const notifyLiveReloadClients = () => {
-    for (const client of liveReloadClients) {
-      client.write("event: reload\ndata: now\n\n");
+    for (const client of liveReloadServer.clients) {
+      if (client.readyState === client.OPEN) {
+        client.send("reload");
+      }
     }
   };
 
   app.post("/__live-reload/trigger", (_request, response) => {
     notifyLiveReloadClients();
     response.sendStatus(204);
-  });
-
-  app.get("/__live-reload", (_request, response) => {
-    response.setHeader("Cache-Control", "no-cache");
-    response.setHeader("Connection", "keep-alive");
-    response.setHeader("Content-Type", "text/event-stream");
-    response.flushHeaders();
-    response.write("retry: 250\n\n");
-    liveReloadClients.add(response);
-
-    response.on("close", () => {
-      liveReloadClients.delete(response);
-      response.end();
-    });
   });
 }
 
@@ -54,7 +53,7 @@ app.use(express.static(publicDir, { index: false }));
 app.get("/api", (_request, response) => {
   response.json({
     service: "observer",
-    status: "ok4",
+    status: "ok5",
     timestamp: new Date().toISOString()
   });
 });
@@ -84,6 +83,6 @@ app.use((request, response, next) => {
   response.type("html").send(renderIndexHtml());
 });
 
-app.listen(port, () => {
-  console.log(`Observer listening on http://localhost:${port}`);
+server.listen(port, host, () => {
+  console.log(`Observer listening on http://${host}:${port}`);
 });
