@@ -16,6 +16,24 @@
 				"${workspaceFolder}/extension/dist/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			"name": "Observer Server (dev)",
+			"type": "node",
+			"request": "launch",
+			"cwd": "${workspaceFolder}/observer/server",
+			"runtimeExecutable": "node",
+			"runtimeArgs": [
+				"--import",
+				"tsx"
+			],
+			"program": "${workspaceFolder}/observer/server/src/index.ts",
+			"env": {
+				"OBSERVER_DEV": "1"
+			},
+			"skipFiles": [
+				"<node_internals>/**"
+			]
 		}
 	]
 }
