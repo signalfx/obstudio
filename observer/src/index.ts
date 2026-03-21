@@ -12,7 +12,17 @@ const publicDir = fs.existsSync(builtPublicDir) ? builtPublicDir : devPublicDir;
 
 app.use(express.static(publicDir));
 
-app.get("/test2", (_request, response) => {
+app.use((request, response, next) => {
+  if (request.method !== "GET") {
+    next();
+    return;
+  }
+
+  if (request.path.startsWith("/assets/") || path.extname(request.path) !== "") {
+    next();
+    return;
+  }
+
   response.sendFile(path.join(publicDir, "index.html"));
 });
 
