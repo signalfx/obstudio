@@ -19,14 +19,33 @@ const liveReloadScript = `
 <script>
   (() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(protocol + "//" + window.location.host + "${liveReloadPath}");
-    socket.addEventListener("message", (event) => {
-      if (event.data !== "reload") {
-        return;
-      }
+    let reconnectTimer = null;
 
-      window.location.reload();
-    });
+    const connect = () => {
+      const socket = new WebSocket(protocol + "//" + window.location.host + "${liveReloadPath}");
+
+      socket.addEventListener("message", (event) => {
+        if (event.data !== "reload") {
+          return;
+        }
+
+        window.location.reload();
+      });
+
+      socket.addEventListener("close", () => {
+        if (reconnectTimer !== null) {
+          window.clearTimeout(reconnectTimer);
+        }
+
+        reconnectTimer = window.setTimeout(connect, 250);
+      });
+
+      socket.addEventListener("error", () => {
+        socket.close();
+      });
+    };
+
+    connect();
   })();
 </script>
 `;
@@ -53,7 +72,7 @@ app.use(express.static(publicDir, { index: false }));
 app.get("/api", (_request, response) => {
   response.json({
     service: "observer",
-    status: "ok5",
+    status: "ok6",
     timestamp: new Date().toISOString()
   });
 });
