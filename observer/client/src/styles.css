@@ -444,7 +444,7 @@ body {
 }
 
 .data-point-row {
-  min-height: 30px;
+  min-height: 24px;
 }
 
 .metric-row:hover,
@@ -469,7 +469,16 @@ body {
 }
 
 .data-point-row__attributes {
+  padding: 2px 0;
+}
+
+.data-point-row .metric-row__value,
+.data-point-row .metric-row__unit {
   padding: 4px 0;
+}
+
+.data-point-row .metric-row__unit {
+  padding-left: 8px;
 }
 
 .metric-row__path,
@@ -504,6 +513,10 @@ body {
 .metric-row__unit {
   padding: 8px 0;
   font-size: 12px;
+}
+
+.metric-row__unit {
+  padding-left: 8px;
 }
 
 .metric-row__value {
