@@ -424,6 +424,15 @@ body {
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
 }
 
+.metric-row__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  text-align: center;
+}
+
 .metric-row__path {
   overflow: hidden;
   text-overflow: ellipsis;

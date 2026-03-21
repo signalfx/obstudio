@@ -227,7 +227,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                         role="row"
                       >
                         <div className="metric-row__name">
-                          <span className={getMetricTypeClass(metric.type)} aria-hidden="true">
+                          <span className={`metric-row__glyph ${getMetricTypeClass(metric.type)}`} aria-hidden="true">
                             {getMetricGlyph(metric.type)}
                           </span>
                           <span className="metric-row__path">{metric.name}</span>
