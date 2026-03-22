@@ -1,0 +1,6 @@
+Copyright (c) SignalFx
+
+All rights reserved.
+
+This software is not licensed for public use, redistribution, or modification
+except as otherwise authorized by the copyright holder.
