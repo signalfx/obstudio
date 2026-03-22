@@ -1,6 +1,7 @@
 import { Fragment } from "react";
-import { getStringAttributeValue } from "../telemetry/types";
+import { getAttributeDisplayInfo, getStringAttributeValue } from "../telemetry/types";
 import type {
+  AttributeDisplayType,
   ExponentialHistogramDataPoint,
   HistogramDataPoint,
   Metric as OtlpMetric,
@@ -11,9 +12,15 @@ import type {
 } from "../telemetry/types";
 
 type DataPoint = {
-  attributes: Record<string, string>;
+  attributes: Array<DisplayAttribute>;
   value: number;
   unit: string;
+};
+
+type DisplayAttribute = {
+  key: string;
+  value: string;
+  valueType: AttributeDisplayType;
 };
 
 type Metric = {
@@ -21,7 +28,7 @@ type Metric = {
   inlineValue?: number;
   inlineUnit?: string;
   id: string;
-  metadata?: Array<{ key: string; value: string }>;
+  metadata?: DisplayAttribute[];
   monotonic?: string;
   name: string;
   temporality?: string;
@@ -36,9 +43,9 @@ type Metric = {
 };
 
 type ResourceGroup = {
-  attributes: Array<{ key: string; value: string }>;
+  attributes: DisplayAttribute[];
   entities: Array<{
-    attributes: Array<{ key: string; value: string }>;
+    attributes: DisplayAttribute[];
     id: string;
     schemaUrl: string;
     type: string;
@@ -109,15 +116,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
       },
       schemaUrl: scopeMetrics.schemaUrl,
     }));
-    const attributes = (resourceMetrics.resource?.attributes ?? []).map((attribute) => ({
-      key: attribute.key,
-      value: getAttributeValue(attribute),
-    }));
-    const attributesByKey = new Map(attributes.map((attribute) => [attribute.key, attribute.value]));
+    const attributes = (resourceMetrics.resource?.attributes ?? []).map(toDisplayAttribute);
+    const attributesByKey = new Map(attributes.map((attribute) => [attribute.key, attribute]));
     const entities = (resourceMetrics.resource?.entityRefs ?? []).map((entityRef, entityIndex) => ({
       attributes: [...entityRef.idKeys, ...entityRef.descriptionKeys].map((key) => ({
+        ...(attributesByKey.get(key) ?? { key, value: "missing", valueType: "unknown" as const }),
         key,
-        value: attributesByKey.get(key) ?? "missing",
       })),
       id: `${resourceIndex}-${entityIndex}-${entityRef.type}`,
       schemaUrl: entityRef.schemaUrl,
@@ -199,7 +203,9 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                         {resourceGroup.attributes.map((attribute) => (
                           <span key={attribute.key} className="attribute-pill">
                             <span className="attribute-pill__key">{attribute.key}</span>=
-                            <span className="attribute-pill__value">{attribute.value}</span>
+                            <span className={getAttributeValueClassName("attribute-pill__value", attribute.valueType)}>
+                              {attribute.value}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -215,7 +221,9 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                           {entity.attributes.map((attribute) => (
                             <span key={`${entity.id}-${attribute.key}`} className="attribute-pill">
                               <span className="attribute-pill__key">{attribute.key}</span>=
-                              <span className="attribute-pill__value">{attribute.value}</span>
+                              <span className={getAttributeValueClassName("attribute-pill__value", attribute.valueType)}>
+                                {attribute.value}
+                              </span>
                             </span>
                           ))}
                         </div>
@@ -282,7 +290,9 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                               {metric.metadata.map((attribute) => (
                                 <span key={attribute.key} className="metadata-pill">
                                   <span className="metadata-pill__key">{attribute.key}</span>=
-                                  <span className="metadata-pill__value">{attribute.value}</span>
+                                  <span className={getAttributeValueClassName("metadata-pill__value", attribute.valueType)}>
+                                    {attribute.value}
+                                  </span>
                                 </span>
                               ))}
                             </div>
@@ -320,10 +330,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                           role="row"
                         >
                           <div className="data-point-row__attributes">
-                            {Object.entries(dataPoint.attributes).map(([key, value]) => (
-                              <span key={key} className="attribute-pill">
-                                <span className="attribute-pill__key">{key}</span>=
-                                <span className="attribute-pill__value">{value}</span>
+                            {dataPoint.attributes.map((attribute) => (
+                              <span key={attribute.key} className="attribute-pill">
+                                <span className="attribute-pill__key">{attribute.key}</span>=
+                                <span className={getAttributeValueClassName("attribute-pill__value", attribute.valueType)}>
+                                  {attribute.value}
+                                </span>
                               </span>
                             ))}
                           </div>
@@ -353,8 +365,13 @@ function getResourceLabel(attributes: TelemetryAttribute[] | undefined): string 
   );
 }
 
-function getAttributeValue(attribute: TelemetryAttribute): string {
-  return getStringAttributeValue(attribute) ?? JSON.stringify(attribute.value?.value ?? null);
+function toDisplayAttribute(attribute: TelemetryAttribute): DisplayAttribute {
+  const { type, value } = getAttributeDisplayInfo(attribute);
+  return { key: attribute.key, value, valueType: type };
+}
+
+function getAttributeValueClassName(baseClassName: string, valueType: AttributeDisplayType): string {
+  return `${baseClassName} ${baseClassName}--${valueType}`;
 }
 
 function formatSchemaUrl(schemaUrl: string | undefined): string {
@@ -374,12 +391,7 @@ function convertMetric(
   };
   const rawDataPoints = getMetricDataPoints(metric);
   const displayDataPoints = rawDataPoints.map((dataPoint) => ({
-    attributes: Object.fromEntries(
-      dataPoint.attributes.map((attribute) => [
-        attribute.key,
-        getAttributeValue(attribute),
-      ]),
-    ),
+    attributes: dataPoint.attributes.map(toDisplayAttribute),
     unit: metric.unit,
     value: getMetricPointValue(dataPoint),
   }));
@@ -396,8 +408,7 @@ function convertMetric(
     inlineValue: inlineDataPoint?.value,
     metadata: metric.metadata.length
       ? metric.metadata.map((attribute) => ({
-          key: attribute.key,
-          value: getAttributeValue(attribute),
+          ...toDisplayAttribute(attribute),
         }))
       : undefined,
     monotonic: getMetricMonotonic(metric),
