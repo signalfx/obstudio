@@ -21,6 +21,7 @@ type Metric = {
   inlineValue?: number;
   inlineUnit?: string;
   id: string;
+  metadata?: Array<{ key: string; value: string }>;
   name: string;
   type: "Counter" | "Gauge" | "Histogram" | "Summary";
   value?: number;
@@ -260,8 +261,20 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                           </div>
                         </div>
                         <div className="metric-row__type">
-                          <span className="metric-row__type-label">Type:</span>{" "}
-                          <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
+                          <div className="metric-row__type-main">
+                            <span className="metric-row__type-label">Type:</span>{" "}
+                            <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
+                          </div>
+                          {metric.metadata?.length ? (
+                            <div className="metric-row__metadata">
+                              {metric.metadata.map((attribute) => (
+                                <span key={attribute.key} className="metadata-pill">
+                                  <span className="metadata-pill__key">{attribute.key}</span>=
+                                  <span className="metadata-pill__value">{attribute.value}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="metric-row__value">
                           {metric.inlineValue !== undefined
@@ -369,6 +382,12 @@ function convertMetric(
     id: `${resourceIndex}-${scopeIndex}-${metricIndex}`,
     inlineUnit: inlineDataPoint?.unit,
     inlineValue: inlineDataPoint?.value,
+    metadata: metric.metadata.length
+      ? metric.metadata.map((attribute) => ({
+          key: attribute.key,
+          value: getAttributeValue(attribute),
+        }))
+      : undefined,
     name: metric.name,
     scope,
     type: getMetricType(metric),

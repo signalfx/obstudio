@@ -529,6 +529,15 @@ body {
   color: var(--text-dim);
 }
 
+.metric-row__metadata {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-top: 4px;
+}
+
 .metric-row__count,
 .metric-row__unit {
   font-size: 12px;
@@ -540,6 +549,16 @@ body {
 .metric-row__unit {
   padding: 8px 0;
   font-size: 12px;
+}
+
+.metric-row__type {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.metric-row__type-main {
+  display: block;
 }
 
 .metric-row__unit {
@@ -587,6 +606,20 @@ body {
 
 .attribute-pill__value {
   color: var(--orange);
+}
+
+.metadata-pill {
+  font-family: "Cascadia Code", "SFMono-Regular", monospace;
+  font-size: 10px;
+  color: #9da0a6;
+}
+
+.metadata-pill__key {
+  color: #b5cea8;
+}
+
+.metadata-pill__value {
+  color: #ce9178;
 }
 
 .trace-list {

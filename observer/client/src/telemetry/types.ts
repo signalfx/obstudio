@@ -106,6 +106,7 @@ export type SummaryDataPoint = {
 
 export type Metric = {
   description: string;
+  metadata: TelemetryAttribute[];
   name: string;
   unit: string;
   data?:
