@@ -198,6 +198,17 @@ export const ExportTracePartialSuccess = {
         return message;
     },
 };
+export const TraceServiceService = {
+    export: {
+        path: "/opentelemetry.proto.collector.trace.v1.TraceService/Export",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(ExportTraceServiceRequest.encode(value).finish()),
+        requestDeserialize: (value) => ExportTraceServiceRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(ExportTraceServiceResponse.encode(value).finish()),
+        responseDeserialize: (value) => ExportTraceServiceResponse.decode(value),
+    },
+};
 function isSet(value) {
     return value !== null && value !== undefined;
 }

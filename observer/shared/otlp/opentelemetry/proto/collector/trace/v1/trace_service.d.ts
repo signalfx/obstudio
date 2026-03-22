@@ -6,6 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import type { handleUnaryCall, UntypedServiceImplementation } from "@grpc/grpc-js";
 import { ResourceSpans } from "../../../trace/v1/trace.d.mts";
 
 export interface ExportTraceServiceRequest {
@@ -273,6 +274,30 @@ export const ExportTracePartialSuccess: MessageFns<ExportTracePartialSuccess> = 
     return message;
   },
 };
+
+/**
+ * Service that can be used to push spans between one Application instrumented with
+ * OpenTelemetry and a collector, or between a collector and a central collector (in this
+ * case spans are sent/received to/from multiple Applications).
+ */
+export type TraceServiceService = typeof TraceServiceService;
+export const TraceServiceService = {
+  export: {
+    path: "/opentelemetry.proto.collector.trace.v1.TraceService/Export" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExportTraceServiceRequest): Buffer =>
+      Buffer.from(ExportTraceServiceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExportTraceServiceRequest => ExportTraceServiceRequest.decode(value),
+    responseSerialize: (value: ExportTraceServiceResponse): Buffer =>
+      Buffer.from(ExportTraceServiceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExportTraceServiceResponse => ExportTraceServiceResponse.decode(value),
+  },
+} as const;
+
+export interface TraceServiceServer extends UntypedServiceImplementation {
+  export: handleUnaryCall<ExportTraceServiceRequest, ExportTraceServiceResponse>;
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

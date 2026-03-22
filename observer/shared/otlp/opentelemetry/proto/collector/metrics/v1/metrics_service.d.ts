@@ -6,6 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import type { handleUnaryCall, UntypedServiceImplementation } from "@grpc/grpc-js";
 import { ResourceMetrics } from "../../../metrics/v1/metrics.d.mts";
 
 export interface ExportMetricsServiceRequest {
@@ -273,6 +274,30 @@ export const ExportMetricsPartialSuccess: MessageFns<ExportMetricsPartialSuccess
     return message;
   },
 };
+
+/**
+ * Service that can be used to push metrics between one Application
+ * instrumented with OpenTelemetry and a collector, or between a collector and a
+ * central collector.
+ */
+export type MetricsServiceService = typeof MetricsServiceService;
+export const MetricsServiceService = {
+  export: {
+    path: "/opentelemetry.proto.collector.metrics.v1.MetricsService/Export" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExportMetricsServiceRequest): Buffer =>
+      Buffer.from(ExportMetricsServiceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExportMetricsServiceRequest => ExportMetricsServiceRequest.decode(value),
+    responseSerialize: (value: ExportMetricsServiceResponse): Buffer =>
+      Buffer.from(ExportMetricsServiceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExportMetricsServiceResponse => ExportMetricsServiceResponse.decode(value),
+  },
+} as const;
+
+export interface MetricsServiceServer extends UntypedServiceImplementation {
+  export: handleUnaryCall<ExportMetricsServiceRequest, ExportMetricsServiceResponse>;
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

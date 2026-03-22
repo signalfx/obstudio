@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.1",
     "@bufbuild/protobuf": "^2.8.0"
   },
   "devDependencies": {

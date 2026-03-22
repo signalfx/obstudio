@@ -4,6 +4,7 @@ import path from "node:path";
 import { registerApiRoutes } from "./api.js";
 import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } from "./live-reload.js";
 import { registerMcpHttpApi } from "./mcp-http.js";
+import { listenForOtlpGrpc } from "./otlp-grpc.js";
 import { listenForOtlpHttp } from "./otlp-http.js";
 import { registerStaticAssets } from "./static-assets.js";
 import { registerTelemetryWebSocketApi } from "./telemetry-ws-api.js";
@@ -47,3 +48,4 @@ server.listen(port, host, () => {
 });
 
 listenForOtlpHttp();
+listenForOtlpGrpc();

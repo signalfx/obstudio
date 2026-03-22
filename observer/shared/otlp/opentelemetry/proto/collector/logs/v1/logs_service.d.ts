@@ -6,6 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import type { handleUnaryCall, UntypedServiceImplementation } from "@grpc/grpc-js";
 import { ResourceLogs } from "../../../logs/v1/logs.d.mts";
 
 export interface ExportLogsServiceRequest {
@@ -273,6 +274,30 @@ export const ExportLogsPartialSuccess: MessageFns<ExportLogsPartialSuccess> = {
     return message;
   },
 };
+
+/**
+ * Service that can be used to push logs between one Application instrumented with
+ * OpenTelemetry and an collector, or between an collector and a central collector (in this
+ * case logs are sent/received to/from multiple Applications).
+ */
+export type LogsServiceService = typeof LogsServiceService;
+export const LogsServiceService = {
+  export: {
+    path: "/opentelemetry.proto.collector.logs.v1.LogsService/Export" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExportLogsServiceRequest): Buffer =>
+      Buffer.from(ExportLogsServiceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExportLogsServiceRequest => ExportLogsServiceRequest.decode(value),
+    responseSerialize: (value: ExportLogsServiceResponse): Buffer =>
+      Buffer.from(ExportLogsServiceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExportLogsServiceResponse => ExportLogsServiceResponse.decode(value),
+  },
+} as const;
+
+export interface LogsServiceServer extends UntypedServiceImplementation {
+  export: handleUnaryCall<ExportLogsServiceRequest, ExportLogsServiceResponse>;
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

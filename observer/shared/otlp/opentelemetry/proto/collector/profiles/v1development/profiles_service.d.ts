@@ -6,6 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
+import type { handleUnaryCall, UntypedServiceImplementation } from "@grpc/grpc-js";
 import { ProfilesDictionary, ResourceProfiles } from "../../../profiles/v1development/profiles.d.mts";
 
 export interface ExportProfilesServiceRequest {
@@ -295,6 +296,29 @@ export const ExportProfilesPartialSuccess: MessageFns<ExportProfilesPartialSucce
     return message;
   },
 };
+
+/**
+ * Service that can be used to push profiles between one Application instrumented with
+ * OpenTelemetry and a collector, or between a collector and a central collector.
+ */
+export type ProfilesServiceService = typeof ProfilesServiceService;
+export const ProfilesServiceService = {
+  export: {
+    path: "/opentelemetry.proto.collector.profiles.v1development.ProfilesService/Export" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExportProfilesServiceRequest): Buffer =>
+      Buffer.from(ExportProfilesServiceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExportProfilesServiceRequest => ExportProfilesServiceRequest.decode(value),
+    responseSerialize: (value: ExportProfilesServiceResponse): Buffer =>
+      Buffer.from(ExportProfilesServiceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExportProfilesServiceResponse => ExportProfilesServiceResponse.decode(value),
+  },
+} as const;
+
+export interface ProfilesServiceServer extends UntypedServiceImplementation {
+  export: handleUnaryCall<ExportProfilesServiceRequest, ExportProfilesServiceResponse>;
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

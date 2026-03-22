@@ -215,6 +215,17 @@ export const ExportProfilesPartialSuccess = {
         return message;
     },
 };
+export const ProfilesServiceService = {
+    export: {
+        path: "/opentelemetry.proto.collector.profiles.v1development.ProfilesService/Export",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(ExportProfilesServiceRequest.encode(value).finish()),
+        requestDeserialize: (value) => ExportProfilesServiceRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(ExportProfilesServiceResponse.encode(value).finish()),
+        responseDeserialize: (value) => ExportProfilesServiceResponse.decode(value),
+    },
+};
 function isSet(value) {
     return value !== null && value !== undefined;
 }

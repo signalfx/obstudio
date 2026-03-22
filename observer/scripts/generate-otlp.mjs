@@ -50,7 +50,7 @@ try {
       `--proto_path=${extractedDir}`,
       ...includeArgs,
       `--ts_proto_out=${outputDir}`,
-      "--ts_proto_opt=esModuleInterop=true,forceLong=string,oneof=unions,outputClientImpl=false,outputServices=none,exportCommonSymbols=false,useOptionals=messages",
+      "--ts_proto_opt=esModuleInterop=true,forceLong=string,oneof=unions,outputClientImpl=false,outputServices=grpc-js,exportCommonSymbols=false,useOptionals=messages",
       ...protoFiles,
     ],
     {
@@ -157,6 +157,7 @@ async function transpileGeneratedModules(directory) {
       await fs.writeFile(filePath.replace(/\.ts$/, ".js"), rewrittenOutput);
       await fs.writeFile(filePath.replace(/\.ts$/, ".d.ts"), declarationOutput);
       await fs.writeFile(filePath.replace(/\.ts$/, ".d.mts"), declarationOutput);
+      await fs.rm(filePath);
     }),
   );
 }

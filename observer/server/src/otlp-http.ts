@@ -2,90 +2,20 @@ import express from "express";
 import http from "node:http";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
-  ExportLogsServiceRequest as ExportLogsServiceRequestCodec,
-  ExportLogsServiceResponse as ExportLogsServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js";
-import {
-  ExportMetricsServiceRequest as ExportMetricsServiceRequestCodec,
-  ExportMetricsServiceResponse as ExportMetricsServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js";
-import {
-  ExportTraceServiceRequest as ExportTraceServiceRequestCodec,
-  ExportTraceServiceResponse as ExportTraceServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js";
-import type {
-  ExportLogsServiceRequest as LogsRequest,
-  ExportLogsServiceResponse as LogsResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
-import type {
-  ExportMetricsServiceRequest as MetricsRequest,
-  ExportMetricsServiceResponse as MetricsResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
-import type {
-  ExportTraceServiceRequest as TraceRequest,
-  ExportTraceServiceResponse as TraceResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
-import type { Metric } from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
-import { otlpInMemoryStore } from "./otlp-store.js";
+  type MessageCodec,
+  type OtlpSignalDefinition,
+  getErrorMessage,
+  ingestOtlpMessage,
+  logsSignal,
+  metricsSignal,
+  normalizeOtlpJson,
+  otlpHost,
+  otlpHttpPort,
+  otlpPayloadLimit,
+  tracesSignal,
+} from "./otlp-ingest.js";
 
-const otlpHost = process.env.OTLP_HOST ?? process.env.HOST ?? "127.0.0.1";
-const otlpPort = Number(process.env.OTLP_PORT ?? 4318);
-const otlpPayloadLimit = process.env.OTLP_PAYLOAD_LIMIT ?? "10mb";
 const supportedContentTypes = new Set(["application/json", "application/x-protobuf"]);
-const hexIdPattern = /^[0-9a-fA-F]+$/;
-
-/** Minimal surface needed from the generated ts-proto codecs. */
-type MessageCodec<TMessage> = {
-  create: () => TMessage;
-  decode: (input: Uint8Array) => TMessage;
-  encode: (message: TMessage) => { finish: () => Uint8Array };
-  fromJSON: (input: unknown) => TMessage;
-  toJSON: (message: TMessage) => unknown;
-};
-
-/**
- * Per-signal transport configuration.
- *
- * The receiver uses the same request pipeline for logs, metrics, and traces,
- * so each signal contributes its codecs, route path, persistence hook, and a
- * summary formatter for logging.
- */
-type OtlpSignalDefinition<TRequest, TResponse> = {
-  path: string;
-  requestCodec: MessageCodec<TRequest>;
-  responseCodec: MessageCodec<TResponse>;
-  persist: (message: TRequest) => void;
-  signal: "logs" | "metrics" | "traces";
-  summarize: (message: TRequest) => string;
-};
-
-/** Static signal definitions drive route registration and request handling. */
-const logsSignal = createSignal<LogsRequest, LogsResponse>({
-  path: "/v1/logs",
-  requestCodec: ExportLogsServiceRequestCodec as MessageCodec<LogsRequest>,
-  responseCodec: ExportLogsServiceResponseCodec as MessageCodec<LogsResponse>,
-  persist: (message) => otlpInMemoryStore.storeLogs(message),
-  signal: "logs",
-  summarize: summarizeLogsRequest,
-});
-
-const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
-  path: "/v1/metrics",
-  requestCodec: ExportMetricsServiceRequestCodec as MessageCodec<MetricsRequest>,
-  responseCodec: ExportMetricsServiceResponseCodec as MessageCodec<MetricsResponse>,
-  persist: (message) => otlpInMemoryStore.storeMetrics(message),
-  signal: "metrics",
-  summarize: summarizeMetricsRequest,
-});
-
-const tracesSignal = createSignal<TraceRequest, TraceResponse>({
-  path: "/v1/traces",
-  requestCodec: ExportTraceServiceRequestCodec as MessageCodec<TraceRequest>,
-  responseCodec: ExportTraceServiceResponseCodec as MessageCodec<TraceResponse>,
-  persist: (message) => otlpInMemoryStore.storeTraces(message),
-  signal: "traces",
-  summarize: summarizeTraceRequest,
-});
 
 /** Create an OTLP/HTTP receiver with one endpoint per supported signal. */
 export function createOtlpHttpServer(): http.Server {
@@ -101,8 +31,8 @@ export function createOtlpHttpServer(): http.Server {
 export function listenForOtlpHttp(): http.Server {
   const server = createOtlpHttpServer();
 
-  server.listen(otlpPort, otlpHost, () => {
-    console.log(`Observer OTLP receiver listening on http://${otlpHost}:${otlpPort}`);
+  server.listen(otlpHttpPort, otlpHost, () => {
+    console.log(`Observer OTLP/HTTP receiver listening on http://${otlpHost}:${otlpHttpPort}`);
   });
 
   return server;
@@ -155,10 +85,7 @@ function handleOtlpRequest<TRequest, TResponse>(
     const message = contentType === "application/json"
       ? signal.requestCodec.fromJSON(normalizeOtlpJson(JSON.parse(Buffer.from(payload).toString("utf8"))))
       : signal.requestCodec.decode(payload);
-    const responseMessage = signal.responseCodec.create();
-
-    signal.persist(message);
-    console.log(`[otlp] accepted ${signal.signal}: ${signal.summarize(message)}`);
+    const responseMessage = ingestOtlpMessage(signal, message);
     sendOtlpResponse(response, 200, signal.responseCodec, responseMessage, contentType, request.header("accept-encoding"));
   } catch (error) {
     sendStatusError(response, 400, getErrorMessage(error, `Failed to decode OTLP ${signal.signal} payload.`), contentType);
@@ -279,80 +206,4 @@ function encodeVarint(value: number): Uint8Array {
 
   bytes.push(remaining);
   return Uint8Array.from(bytes);
-}
-
-function normalizeOtlpJson(value: unknown): unknown {
-  if (globalThis.Array.isArray(value)) {
-    return value.map((entry) => normalizeOtlpJson(entry));
-  }
-
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-
-  const normalizedEntries = Object.entries(value).map(([key, childValue]) => {
-    if ((key === "traceId" || key === "spanId") && typeof childValue === "string" && hexIdPattern.test(childValue)) {
-      return [key, Buffer.from(childValue, "hex").toString("base64")];
-    }
-
-    return [key, normalizeOtlpJson(childValue)];
-  });
-
-  return Object.fromEntries(normalizedEntries);
-}
-
-/** These summaries feed receiver logs and give quick visibility into accepted payload volume. */
-function summarizeTraceRequest(message: TraceRequest): string {
-  const resourceSpans = message.resourceSpans;
-  const scopeSpans = resourceSpans.flatMap((resource) => resource.scopeSpans);
-  const spans = scopeSpans.flatMap((scope) => scope.spans);
-
-  return `${resourceSpans.length} resource spans, ${scopeSpans.length} scope spans, ${spans.length} spans`;
-}
-
-function summarizeLogsRequest(message: LogsRequest): string {
-  const resourceLogs = message.resourceLogs;
-  const scopeLogs = resourceLogs.flatMap((resource) => resource.scopeLogs);
-  const logRecords = scopeLogs.flatMap((scope) => scope.logRecords);
-
-  return `${resourceLogs.length} resource logs, ${scopeLogs.length} scope logs, ${logRecords.length} log records`;
-}
-
-function summarizeMetricsRequest(message: MetricsRequest): string {
-  const resourceMetrics = message.resourceMetrics;
-  const scopeMetrics = resourceMetrics.flatMap((resource) => resource.scopeMetrics);
-  const metrics = scopeMetrics.flatMap((scope) => scope.metrics);
-  const dataPoints = metrics.reduce<number>((count, metric) => count + countMetricDataPoints(metric), 0);
-
-  return `${resourceMetrics.length} resource metrics, ${scopeMetrics.length} scope metrics, ${metrics.length} metrics, ${dataPoints} data points`;
-}
-
-/** Count the number of data points regardless of metric aggregation type. */
-function countMetricDataPoints(metric: Metric): number {
-  switch (metric.data?.$case) {
-    case "gauge":
-      return metric.data.gauge.dataPoints.length;
-    case "sum":
-      return metric.data.sum.dataPoints.length;
-    case "histogram":
-      return metric.data.histogram.dataPoints.length;
-    case "exponentialHistogram":
-      return metric.data.exponentialHistogram.dataPoints.length;
-    case "summary":
-      return metric.data.summary.dataPoints.length;
-    default:
-      return 0;
-  }
-}
-
-/** Preserve explicit error messages when available and fall back otherwise. */
-function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}
-
-/** Identity helper that keeps signal definitions strongly typed at declaration sites. */
-function createSignal<TRequest, TResponse>(
-  signal: OtlpSignalDefinition<TRequest, TResponse>,
-): OtlpSignalDefinition<TRequest, TResponse> {
-  return signal;
 }

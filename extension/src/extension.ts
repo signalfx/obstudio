@@ -15,7 +15,8 @@ const observerPanelViewType = 'observabilityStudioObserver';
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
-const observerOtlpPort = 4318;
+const observerOtlpHttpPort = 4318;
+const observerOtlpGrpcPort = 4317;
 
 export async function activate(context: vscode.ExtensionContext) {
 	observerOutputChannel = vscode.window.createOutputChannel('Observability Studio');
@@ -36,7 +37,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	void startObserver(context, observerOutputChannel).catch((error) => {
 		const message = getErrorMessage(error);
 		observerOutputChannel?.appendLine(`Observer startup failed: ${message}`);
-		void vscode.window.showErrorMessage(`Observability Studio could not start because OTLP port ${observerOtlpPort} is unavailable: ${message}`);
+		void vscode.window.showErrorMessage(
+			`Observability Studio could not start because an OTLP port is unavailable (${observerOtlpHttpPort} HTTP, ${observerOtlpGrpcPort} gRPC): ${message}`,
+		);
 		refreshObserverPanel();
 	});
 
@@ -84,10 +87,12 @@ async function startObserver(context: vscode.ExtensionContext, outputChannel: vs
 
 		// The observer UI can move to any free localhost port, but OTLP stays fixed so
 		// external telemetry producers do not need to rediscover the receiver port.
-		const otlpPort = await ensurePortAvailable(observerOtlpPort);
+		const otlpHttpPort = await ensurePortAvailable(observerOtlpHttpPort);
+		const otlpGrpcPort = await ensurePortAvailable(observerOtlpGrpcPort);
 
 		observerOutputChannel?.appendLine(`Starting observer on http://127.0.0.1:${observerPort}`);
-		observerOutputChannel?.appendLine(`OTLP receiver listening on http://127.0.0.1:${otlpPort}`);
+		observerOutputChannel?.appendLine(`OTLP/HTTP receiver listening on http://127.0.0.1:${otlpHttpPort}`);
+		observerOutputChannel?.appendLine(`OTLP/gRPC receiver listening on 127.0.0.1:${otlpGrpcPort}`);
 
 		observerProcess = cp.spawn(process.execPath, [observerEntry], {
 			cwd: path.dirname(observerEntry),
@@ -95,7 +100,9 @@ async function startObserver(context: vscode.ExtensionContext, outputChannel: vs
 				...process.env,
 				HOST: '127.0.0.1',
 				OTLP_HOST: '127.0.0.1',
-				OTLP_PORT: String(otlpPort),
+				OTLP_PORT: String(otlpHttpPort),
+				OTLP_HTTP_PORT: String(otlpHttpPort),
+				OTLP_GRPC_PORT: String(otlpGrpcPort),
 				PORT: String(observerPort),
 			},
 			stdio: ['ignore', 'pipe', 'pipe'],
