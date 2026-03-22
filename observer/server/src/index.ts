@@ -1,7 +1,6 @@
 import express from "express";
 import http from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { registerApiRoutes } from "./api.js";
 import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } from "./live-reload.js";
 import { registerMcpHttpApi } from "./mcp-http.js";
@@ -13,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const host = process.env.HOST ?? "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const currentDir = path.resolve(path.dirname(process.argv[1] ?? "."));
 const isDev = process.env.OBSERVER_DEV === "1";
 const devPublicDir = path.resolve(currentDir, "../../client/public");
 const builtPublicDir = path.join(currentDir, "public");

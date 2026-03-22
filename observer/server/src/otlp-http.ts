@@ -1,6 +1,18 @@
 import express from "express";
 import http from "node:http";
 import { gunzipSync, gzipSync } from "node:zlib";
+import {
+  ExportLogsServiceRequest as ExportLogsServiceRequestCodec,
+  ExportLogsServiceResponse as ExportLogsServiceResponseCodec,
+} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js";
+import {
+  ExportMetricsServiceRequest as ExportMetricsServiceRequestCodec,
+  ExportMetricsServiceResponse as ExportMetricsServiceResponseCodec,
+} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js";
+import {
+  ExportTraceServiceRequest as ExportTraceServiceRequestCodec,
+  ExportTraceServiceResponse as ExportTraceServiceResponseCodec,
+} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js";
 import type {
   ExportLogsServiceRequest as LogsRequest,
   ExportLogsServiceResponse as LogsResponse,
@@ -47,21 +59,11 @@ type OtlpSignalDefinition<TRequest, TResponse> = {
   summarize: (message: TRequest) => string;
 };
 
-const traceServiceModule = await import(
-  new URL("../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js", import.meta.url).href,
-);
-const metricsServiceModule = await import(
-  new URL("../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js", import.meta.url).href,
-);
-const logsServiceModule = await import(
-  new URL("../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js", import.meta.url).href,
-);
-
 /** Static signal definitions drive route registration and request handling. */
 const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
-  requestCodec: logsServiceModule.ExportLogsServiceRequest as MessageCodec<LogsRequest>,
-  responseCodec: logsServiceModule.ExportLogsServiceResponse as MessageCodec<LogsResponse>,
+  requestCodec: ExportLogsServiceRequestCodec as MessageCodec<LogsRequest>,
+  responseCodec: ExportLogsServiceResponseCodec as MessageCodec<LogsResponse>,
   persist: (message) => otlpInMemoryStore.storeLogs(message),
   signal: "logs",
   summarize: summarizeLogsRequest,
@@ -69,8 +71,8 @@ const logsSignal = createSignal<LogsRequest, LogsResponse>({
 
 const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
   path: "/v1/metrics",
-  requestCodec: metricsServiceModule.ExportMetricsServiceRequest as MessageCodec<MetricsRequest>,
-  responseCodec: metricsServiceModule.ExportMetricsServiceResponse as MessageCodec<MetricsResponse>,
+  requestCodec: ExportMetricsServiceRequestCodec as MessageCodec<MetricsRequest>,
+  responseCodec: ExportMetricsServiceResponseCodec as MessageCodec<MetricsResponse>,
   persist: (message) => otlpInMemoryStore.storeMetrics(message),
   signal: "metrics",
   summarize: summarizeMetricsRequest,
@@ -78,8 +80,8 @@ const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
 
 const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   path: "/v1/traces",
-  requestCodec: traceServiceModule.ExportTraceServiceRequest as MessageCodec<TraceRequest>,
-  responseCodec: traceServiceModule.ExportTraceServiceResponse as MessageCodec<TraceResponse>,
+  requestCodec: ExportTraceServiceRequestCodec as MessageCodec<TraceRequest>,
+  responseCodec: ExportTraceServiceResponseCodec as MessageCodec<TraceResponse>,
   persist: (message) => otlpInMemoryStore.storeTraces(message),
   signal: "traces",
   summarize: summarizeTraceRequest,
