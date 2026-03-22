@@ -308,8 +308,8 @@ body {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background:
-    linear-gradient(180deg, rgba(79, 193, 255, 0.1), transparent),
-    #1f2529;
+    linear-gradient(180deg, rgba(79, 193, 255, 0.16), rgba(79, 193, 255, 0.04)),
+    #20262b;
 }
 
 .resource-row__main {
@@ -389,7 +389,10 @@ body {
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
 }
 
-.resource-row__count {
+.resource-row__count,
+.scope-row__count,
+.metric-row__summary-count {
+  display: block;
   font-size: 11px;
   color: var(--text-dim);
   text-align: right;
@@ -401,7 +404,9 @@ body {
   gap: 8px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--border);
-  background: var(--chrome);
+  background:
+    linear-gradient(180deg, rgba(220, 220, 170, 0.1), rgba(220, 220, 170, 0.03)),
+    #252729;
   grid-template-columns: 16px minmax(0, 1fr) auto;
 }
 
@@ -429,14 +434,9 @@ body {
 }
 
 .scope-row__version,
-.scope-row__schema,
-.scope-row__count {
+.scope-row__schema {
   font-size: 11px;
   color: var(--text-dim);
-}
-
-.scope-row__count {
-  text-align: right;
 }
 
 .metric-row,
@@ -446,8 +446,15 @@ body {
   padding: 0 14px;
 }
 
+.metric-row {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.03);
+}
+
 .data-point-row {
   min-height: 24px;
+  background: rgba(255, 255, 255, 0.012);
 }
 
 .metric-row:hover,
@@ -524,6 +531,7 @@ body {
 .metric-row__unit {
   padding-left: 8px;
 }
+
 
 .metric-row__value {
   text-align: right;

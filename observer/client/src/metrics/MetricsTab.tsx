@@ -142,22 +142,6 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
 
   return (
     <section className="tab-panel metrics-panel" role="tabpanel">
-      <div className="panel-toolbar">
-        <div className="panel-toolbar__title">
-          <span className="panel-toolbar__glyph" aria-hidden="true">
-            ◫
-          </span>
-          <span>{displayMetrics.length} metrics collected</span>
-        </div>
-        <div className="panel-toolbar__meta">
-          <span>{resourceCount} resources</span>
-          <span>{scopeCount} scopes</span>
-          <span>{histogramCount} histograms</span>
-          <span>{gaugeCount} gauges</span>
-          <span>{counterCount} counters</span>
-        </div>
-      </div>
-
       {telemetryError !== null ? <p className="status error">{telemetryError}</p> : null}
       {displayMetrics.length === 0 ? <p className="status">No metrics received yet.</p> : null}
 
@@ -165,7 +149,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         <article className="summary-card">
           <p className="summary-card__label">Resources</p>
           <p className="summary-card__value">{resourceCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct resources received</p>
+          <p className="summary-card__meta">Distinct resources</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Scopes</p>
@@ -175,23 +159,16 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         <article className="summary-card">
           <p className="summary-card__label">Metrics</p>
           <p className="summary-card__value">{displayMetrics.length.toLocaleString()}</p>
-          <p className="summary-card__meta">Merged metric definitions</p>
+          <p className="summary-card__meta">Distinct metric definitions</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Data points</p>
           <p className="summary-card__value">{dataPointCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Merged time series entries</p>
+          <p className="summary-card__meta">Distinct time series</p>
         </article>
       </div>
 
       <div className="metric-table" role="table" aria-label="Collected metrics">
-        <div className="metric-table__header" role="row">
-          <span>Name</span>
-          <span>Type</span>
-          <span>Value</span>
-          <span>Unit</span>
-        </div>
-
         <div className="metric-table__body">
           {resourceGroups.map((resourceGroup, resourceGroupIndex) => (
             <Fragment key={resourceGroup.id}>
@@ -277,11 +254,9 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                             {getMetricGlyph(metric.type)}
                           </span>
                           <span className="metric-row__path">{metric.name}</span>
-                          {metric.dataPoints ? (
-                            <span className="metric-row__count">({metric.dataPoints.length})</span>
-                          ) : null}
                         </div>
                         <div className="metric-row__type">
+                          <span className="metric-row__type-label">Type:</span>{" "}
                           <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
                         </div>
                         <div className="metric-row__value">
@@ -292,7 +267,13 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                             : metric.value.toLocaleString()}
                         </div>
                         <div className="metric-row__unit">
-                          {metric.inlineUnit ?? (metric.dataPoints ? null : metric.unit)}
+                          {metric.dataPoints ? (
+                            <span className="metric-row__summary-count">
+                              {metric.dataPoints.length} {metric.dataPoints.length === 1 ? "point" : "points"}
+                            </span>
+                          ) : (
+                            metric.inlineUnit ?? metric.unit
+                          )}
                         </div>
                       </div>
 
