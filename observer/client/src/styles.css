@@ -285,6 +285,10 @@ body {
   grid-template-columns: minmax(0, 1fr) 120px 180px 120px;
 }
 
+.data-point-row {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
 .metric-table__header {
   position: sticky;
   top: 0;
@@ -505,8 +509,31 @@ body {
   padding: 4px 0;
 }
 
+.data-point-row__reading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.data-point-row__reading .metric-row__value,
+.data-point-row__reading .metric-row__unit {
+  padding: 4px 0;
+}
+
+.data-point-row__reading .metric-row__value {
+  padding-right: 0;
+}
+
+.data-point-row .data-point-row__reading .metric-row__unit {
+  padding-left: 0;
+}
+
 .data-point-row .metric-row__unit {
   padding-left: 8px;
+  white-space: nowrap;
 }
 
 .metric-row__path,
@@ -927,6 +954,10 @@ code {
   .scope-row {
     grid-template-columns: minmax(0, 1fr) 90px 150px 90px;
   }
+
+  .data-point-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
 }
 
 @media (max-width: 720px) {
@@ -953,9 +984,12 @@ code {
 
   .resource-row,
   .scope-row,
-  .metric-row,
-  .data-point-row {
+  .metric-row {
     grid-template-columns: 1fr;
+  }
+
+  .data-point-row__reading {
+    justify-content: flex-start;
   }
 
   .trace-span-row__summary {

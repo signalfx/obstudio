@@ -339,9 +339,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                               </span>
                             ))}
                           </div>
-                          <div />
-                          <div className="metric-row__value">{dataPoint.value.toLocaleString()}</div>
-                          <div className="metric-row__unit">{dataPoint.unit}</div>
+                          <div className="data-point-row__reading">
+                            <span className="metric-row__value">{dataPoint.value.toLocaleString()}</span>
+                            <span className="metric-row__unit">{dataPoint.unit}</span>
+                          </div>
                         </div>
                       ))}
                     </Fragment>
