@@ -20,11 +20,9 @@ type TraceEntry = {
 };
 
 type SpanEntry = {
-  ancestorHasNext: boolean[];
   attributes: TelemetryAttribute[];
   duration: string;
   id: string;
-  isLastChild: boolean;
   name: string;
   statusLabel: string;
   statusTone: "error" | "ok" | "warn";
@@ -106,21 +104,6 @@ export function TracesTab({ telemetryError, traces }: TracesTabProps) {
             <div className="trace-span-list">
               {trace.spans.map((span) => (
                 <div key={span.id} className="trace-span-row">
-                  <div className="trace-span-row__tree" aria-hidden="true">
-                    {span.ancestorHasNext.map((hasNext, index) => (
-                      <span
-                        key={`${span.id}-ancestor-${index}`}
-                        className={`trace-span-row__tree-segment ${hasNext ? "trace-span-row__tree-segment--continue" : ""}`}
-                      />
-                    ))}
-                    {span.ancestorHasNext.length > 0 ? (
-                      <span
-                        className={`trace-span-row__tree-segment trace-span-row__tree-segment--current ${
-                          span.isLastChild ? "trace-span-row__tree-segment--last" : "trace-span-row__tree-segment--continue"
-                        }`}
-                      />
-                    ) : null}
-                  </div>
                   <div className="trace-span-row__content">
                     <div className="trace-span-row__summary">
                       <div className="trace-span-row__identity">
@@ -239,12 +222,12 @@ function buildTraceSpanEntries(spans: TraceSpanNode[]): SpanEntry[] {
   const orderedSpans: SpanEntry[] = [];
   const visited = new Set<string>();
 
-  roots.forEach((root, index) => {
-    appendTraceSpanEntries(root, childrenByParentId, [], index === roots.length - 1, visited, orderedSpans);
+  roots.forEach((root) => {
+    appendTraceSpanEntries(root, childrenByParentId, visited, orderedSpans);
   });
 
   for (const span of [...spans].sort((left, right) => left.index - right.index)) {
-    appendTraceSpanEntries(span, childrenByParentId, [], true, visited, orderedSpans);
+    appendTraceSpanEntries(span, childrenByParentId, visited, orderedSpans);
   }
 
   return orderedSpans;
@@ -253,8 +236,6 @@ function buildTraceSpanEntries(spans: TraceSpanNode[]): SpanEntry[] {
 function appendTraceSpanEntries(
   span: TraceSpanNode,
   childrenByParentId: Map<string, TraceSpanNode[]>,
-  ancestorHasNext: boolean[],
-  isLastChild: boolean,
   visited: Set<string>,
   orderedSpans: SpanEntry[],
 ): void {
@@ -264,26 +245,17 @@ function appendTraceSpanEntries(
 
   visited.add(span.id);
   orderedSpans.push({
-    ancestorHasNext,
     attributes: span.attributes,
     duration: formatDuration(span.endTimeUnixNano, span.startTimeUnixNano),
     id: span.id,
-    isLastChild,
     name: span.name,
     statusLabel: getSpanStatusLabel(span.status),
     statusTone: getSpanStatusTone(span.status),
   });
 
   const children = childrenByParentId.get(span.id) ?? [];
-  children.forEach((child, index) => {
-    appendTraceSpanEntries(
-      child,
-      childrenByParentId,
-      [...ancestorHasNext, !isLastChild],
-      index === children.length - 1,
-      visited,
-      orderedSpans,
-    );
+  children.forEach((child) => {
+    appendTraceSpanEntries(child, childrenByParentId, visited, orderedSpans);
   });
 }
 
