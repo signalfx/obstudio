@@ -12,19 +12,19 @@ import {
   type ExportLogsServiceRequest,
   type ExportLogsServiceResponse,
   type LogsServiceServer,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js";
+} from "../../shared/otlp/collector/logs/v1/logs_service.js";
 import {
   MetricsServiceService,
   type ExportMetricsServiceRequest,
   type ExportMetricsServiceResponse,
   type MetricsServiceServer,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js";
+} from "../../shared/otlp/collector/metrics/v1/metrics_service.js";
 import {
   TraceServiceService,
   type ExportTraceServiceRequest,
   type ExportTraceServiceResponse,
   type TraceServiceServer,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js";
+} from "../../shared/otlp/collector/trace/v1/trace_service.js";
 import {
   getErrorMessage,
   ingestOtlpMessage,

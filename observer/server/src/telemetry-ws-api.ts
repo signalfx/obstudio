@@ -1,18 +1,18 @@
 import type http from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
-import { ExportLogsServiceRequest as ExportLogsServiceRequestCodec } from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js";
-import { ExportMetricsServiceRequest as ExportMetricsServiceRequestCodec } from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js";
-import { ExportTraceServiceRequest as ExportTraceServiceRequestCodec } from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js";
+import { ExportLogsServiceRequest as ExportLogsServiceRequestCodec } from "../../shared/otlp/collector/logs/v1/logs_service.js";
+import { ExportMetricsServiceRequest as ExportMetricsServiceRequestCodec } from "../../shared/otlp/collector/metrics/v1/metrics_service.js";
+import { ExportTraceServiceRequest as ExportTraceServiceRequestCodec } from "../../shared/otlp/collector/trace/v1/trace_service.js";
 import type {
   ExportLogsServiceRequest,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
+} from "../../shared/otlp/collector/logs/v1/logs_service.d.mts";
 import type {
   ExportMetricsServiceRequest,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
+} from "../../shared/otlp/collector/metrics/v1/metrics_service.d.mts";
 import type {
   ExportTraceServiceRequest,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
+} from "../../shared/otlp/collector/trace/v1/trace_service.d.mts";
 import { otlpInMemoryStore, type OtlpStoreUpdate } from "./otlp-store.js";
 
 const telemetryWsApiPath = "/api/telemetry";

@@ -1,28 +1,28 @@
 import {
   ExportLogsServiceRequest as ExportLogsServiceRequestCodec,
   ExportLogsServiceResponse as ExportLogsServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.js";
+} from "../../shared/otlp/collector/logs/v1/logs_service.js";
 import {
   ExportMetricsServiceRequest as ExportMetricsServiceRequestCodec,
   ExportMetricsServiceResponse as ExportMetricsServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.js";
+} from "../../shared/otlp/collector/metrics/v1/metrics_service.js";
 import {
   ExportTraceServiceRequest as ExportTraceServiceRequestCodec,
   ExportTraceServiceResponse as ExportTraceServiceResponseCodec,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.js";
+} from "../../shared/otlp/collector/trace/v1/trace_service.js";
 import type {
   ExportLogsServiceRequest as LogsRequest,
   ExportLogsServiceResponse as LogsResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
+} from "../../shared/otlp/collector/logs/v1/logs_service.d.mts";
 import type {
   ExportMetricsServiceRequest as MetricsRequest,
   ExportMetricsServiceResponse as MetricsResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
+} from "../../shared/otlp/collector/metrics/v1/metrics_service.d.mts";
 import type {
   ExportTraceServiceRequest as TraceRequest,
   ExportTraceServiceResponse as TraceResponse,
-} from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
-import type { Metric } from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
+} from "../../shared/otlp/collector/trace/v1/trace_service.d.mts";
+import type { Metric } from "../../shared/otlp/metrics/v1/metrics.d.mts";
 import { otlpInMemoryStore } from "./otlp-store.js";
 
 export const otlpHost = process.env.OTLP_HOST ?? process.env.HOST ?? "127.0.0.1";

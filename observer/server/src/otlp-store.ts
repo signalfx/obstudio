@@ -1,6 +1,6 @@
-import type { ExportLogsServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/logs/v1/logs_service.d.mts";
-import type { ExportMetricsServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/metrics/v1/metrics_service.d.mts";
-import type { ExportTraceServiceRequest } from "../../shared/otlp/opentelemetry/proto/collector/trace/v1/trace_service.d.mts";
+import type { ExportLogsServiceRequest } from "../../shared/otlp/collector/logs/v1/logs_service.d.mts";
+import type { ExportMetricsServiceRequest } from "../../shared/otlp/collector/metrics/v1/metrics_service.d.mts";
+import type { ExportTraceServiceRequest } from "../../shared/otlp/collector/trace/v1/trace_service.d.mts";
 import type {
   ExponentialHistogram,
   ExponentialHistogramDataPoint,
@@ -14,9 +14,9 @@ import type {
   Sum,
   Summary,
   SummaryDataPoint,
-} from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
-import type { ResourceLogs } from "../../shared/otlp/opentelemetry/proto/logs/v1/logs.d.mts";
-import type { ResourceSpans, ScopeSpans, Span } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
+} from "../../shared/otlp/metrics/v1/metrics.d.mts";
+import type { ResourceLogs } from "../../shared/otlp/logs/v1/logs.d.mts";
+import type { ResourceSpans, ScopeSpans, Span } from "../../shared/otlp/trace/v1/trace.d.mts";
 
 type MetricDataPoint = NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint;
 type TelemetrySignal = "logs" | "metrics" | "traces";

@@ -60,6 +60,7 @@ try {
   );
 
   await transpileGeneratedModules(outputDir);
+  await flattenGeneratedOutput(outputDir);
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }
@@ -160,6 +161,24 @@ async function transpileGeneratedModules(directory) {
       await fs.rm(filePath);
     }),
   );
+}
+
+async function flattenGeneratedOutput(rootDirectory) {
+  const nestedRoot = path.join(rootDirectory, "opentelemetry", "proto");
+
+  if (!existsSync(nestedRoot)) {
+    return;
+  }
+
+  const entries = await fs.readdir(nestedRoot, { withFileTypes: true });
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      await fs.rename(path.join(nestedRoot, entry.name), path.join(rootDirectory, entry.name));
+    }),
+  );
+
+  await fs.rm(path.join(rootDirectory, "opentelemetry"), { recursive: true, force: true });
 }
 
 async function collectGeneratedTypeScriptFiles(rootDirectory) {

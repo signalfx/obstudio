@@ -1,5 +1,5 @@
 import express from "express";
-import type { AnyValue, KeyValue } from "../../shared/otlp/opentelemetry/proto/common/v1/common.d.mts";
+import type { AnyValue, KeyValue } from "../../shared/otlp/common/v1/common.d.mts";
 import type {
   ExponentialHistogramDataPoint,
   HistogramDataPoint,
@@ -7,8 +7,8 @@ import type {
   NumberDataPoint,
   ResourceMetrics,
   SummaryDataPoint,
-} from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
-import type { ResourceSpans, ScopeSpans } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
+} from "../../shared/otlp/metrics/v1/metrics.d.mts";
+import type { ResourceSpans, ScopeSpans } from "../../shared/otlp/trace/v1/trace.d.mts";
 import { otlpInMemoryStore } from "./otlp-store.js";
 
 const mcpHttpPath = process.env.MCP_PATH ?? "/mcp";
