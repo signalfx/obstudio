@@ -303,8 +303,10 @@ body {
 }
 
 .resource-row {
+  display: grid;
   align-items: center;
   gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background:
@@ -338,6 +340,7 @@ body {
   align-items: flex-start;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
   row-gap: 4px;
 }
 
@@ -672,6 +675,17 @@ body {
 .entity-card .attribute-pill__value,
 .metric-row__metadata .metadata-pill__value {
   overflow-wrap: anywhere;
+}
+
+.resource-row__attributes .attribute-pill {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.resource-row__attributes .attribute-pill__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trace-list {
