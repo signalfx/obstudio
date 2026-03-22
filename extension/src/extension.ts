@@ -9,6 +9,9 @@ let observerProcess: cp.ChildProcess | undefined;
 let observerOutputChannel: vscode.OutputChannel | undefined;
 let observerPanel: vscode.WebviewPanel | undefined;
 let observerPort: number | undefined;
+let observerStartupPromise: Promise<void> | undefined;
+
+const observerPanelViewType = 'observabilityStudioObserver';
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
@@ -18,15 +21,24 @@ export async function activate(context: vscode.ExtensionContext) {
 	observerOutputChannel = vscode.window.createOutputChannel('Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
 
-	try {
-		// Start the packaged observer as soon as the extension activates so the UI
-		// and OTLP receiver are ready before the user opens the panel.
-		await startObserver(context, observerOutputChannel);
-	} catch (error) {
+	context.subscriptions.push(
+		vscode.window.registerWebviewPanelSerializer(observerPanelViewType, {
+			async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+				observerPanel = webviewPanel;
+				configureObserverPanel(webviewPanel, context);
+				await showObserverWhenReady(context);
+			},
+		}),
+	);
+
+	// Start the packaged observer as soon as the extension activates so the UI
+	// and OTLP receiver are ready before the user opens the panel.
+	void startObserver(context, observerOutputChannel).catch((error) => {
 		const message = getErrorMessage(error);
-		observerOutputChannel.appendLine(`Observer startup failed: ${message}`);
+		observerOutputChannel?.appendLine(`Observer startup failed: ${message}`);
 		void vscode.window.showErrorMessage(`Observability Studio could not start because OTLP port ${observerOtlpPort} is unavailable: ${message}`);
-	}
+		refreshObserverPanel();
+	});
 
 	console.log('Congratulations, your extension "observability-studio" is now active!');
 
@@ -58,52 +70,70 @@ export function deactivate() {
 }
 
 async function startObserver(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): Promise<void> {
+	if (observerStartupPromise !== undefined) {
+		return observerStartupPromise;
+	}
+
 	if (observerProcess !== undefined) {
 		return;
 	}
 
-	const observerEntry = path.join(context.extensionPath, 'dist', 'observer', 'index.js');
-	observerPort = await getAvailablePort();
+	observerStartupPromise = (async () => {
+		const observerEntry = path.join(context.extensionPath, 'dist', 'observer', 'index.js');
+		observerPort = await getAvailablePort();
 
-	// The observer UI can move to any free localhost port, but OTLP stays fixed so
-	// external telemetry producers do not need to rediscover the receiver port.
-	const otlpPort = await ensurePortAvailable(observerOtlpPort);
+		// The observer UI can move to any free localhost port, but OTLP stays fixed so
+		// external telemetry producers do not need to rediscover the receiver port.
+		const otlpPort = await ensurePortAvailable(observerOtlpPort);
 
-	observerOutputChannel?.appendLine(`Starting observer on http://127.0.0.1:${observerPort}`);
-	observerOutputChannel?.appendLine(`OTLP receiver listening on http://127.0.0.1:${otlpPort}`);
+		observerOutputChannel?.appendLine(`Starting observer on http://127.0.0.1:${observerPort}`);
+		observerOutputChannel?.appendLine(`OTLP receiver listening on http://127.0.0.1:${otlpPort}`);
 
-	observerProcess = cp.spawn(process.execPath, [observerEntry], {
-		cwd: path.dirname(observerEntry),
-		env: {
-			...process.env,
-			HOST: '127.0.0.1',
-			OTLP_HOST: '127.0.0.1',
-			OTLP_PORT: String(otlpPort),
-			PORT: String(observerPort),
-		},
-		stdio: ['ignore', 'pipe', 'pipe'],
+		observerProcess = cp.spawn(process.execPath, [observerEntry], {
+			cwd: path.dirname(observerEntry),
+			env: {
+				...process.env,
+				HOST: '127.0.0.1',
+				OTLP_HOST: '127.0.0.1',
+				OTLP_PORT: String(otlpPort),
+				PORT: String(observerPort),
+			},
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+
+		observerProcess.stdout?.on('data', (chunk: Buffer | string) => {
+			outputChannel.append(chunk.toString());
+		});
+
+		observerProcess.stderr?.on('data', (chunk: Buffer | string) => {
+			outputChannel.append(chunk.toString());
+		});
+
+		observerProcess.on('exit', (code, signal) => {
+			outputChannel.appendLine(`Observer exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+			observerProcess = undefined;
+			observerPort = undefined;
+			observerStartupPromise = undefined;
+			refreshObserverPanel();
+		});
+
+		observerProcess.on('error', (error) => {
+			outputChannel.appendLine(`Failed to start observer: ${error.message}`);
+			void vscode.window.showErrorMessage(`Observability Studio failed to start observer: ${error.message}`);
+			observerProcess = undefined;
+			observerPort = undefined;
+			observerStartupPromise = undefined;
+			refreshObserverPanel();
+		});
+
+		refreshObserverPanel();
+		await waitForObserverReady();
+	})().catch((error) => {
+		observerStartupPromise = undefined;
+		throw error;
 	});
 
-	observerProcess.stdout?.on('data', (chunk: Buffer | string) => {
-		outputChannel.append(chunk.toString());
-	});
-
-	observerProcess.stderr?.on('data', (chunk: Buffer | string) => {
-		outputChannel.append(chunk.toString());
-	});
-
-	observerProcess.on('exit', (code, signal) => {
-		outputChannel.appendLine(`Observer exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`);
-		observerProcess = undefined;
-		observerPort = undefined;
-	});
-
-	observerProcess.on('error', (error) => {
-		outputChannel.appendLine(`Failed to start observer: ${error.message}`);
-		void vscode.window.showErrorMessage(`Observability Studio failed to start observer: ${error.message}`);
-		observerProcess = undefined;
-		observerPort = undefined;
-	});
+	return observerStartupPromise;
 }
 
 function stopObserver(): void {
@@ -114,6 +144,7 @@ function stopObserver(): void {
 	observerProcess.kill();
 	observerProcess = undefined;
 	observerPort = undefined;
+	refreshObserverPanel();
 }
 
 // Ask the OS for an ephemeral localhost port for the observer HTTP UI.
@@ -165,33 +196,118 @@ async function ensurePortAvailable(port: number): Promise<number> {
 	});
 }
 
-function openObserverPanel(context: vscode.ExtensionContext): void {
-	if (observerPort === undefined) {
-		void vscode.window.showErrorMessage('Observer is not running yet.');
-		return;
-	}
-
+async function openObserverPanel(context: vscode.ExtensionContext): Promise<void> {
 	// Reuse the existing panel so the embedded app keeps its current state when the
 	// user invokes the command again.
 	if (observerPanel !== undefined) {
-		observerPanel.webview.html = getObserverWebviewHtml(observerPort);
+		await showObserverWhenReady(context);
 		observerPanel.reveal(vscode.ViewColumn.One);
 		return;
 	}
 
 	observerPanel = vscode.window.createWebviewPanel(
-		'observabilityStudioObserver',
+		observerPanelViewType,
 		'Observer',
 		vscode.ViewColumn.One,
 		{
 			enableScripts: true,
+			retainContextWhenHidden: true,
 		},
 	);
 
-	observerPanel.webview.html = getObserverWebviewHtml(observerPort);
-	observerPanel.onDidDispose(() => {
-		observerPanel = undefined;
+	configureObserverPanel(observerPanel, context);
+	await showObserverWhenReady(context);
+}
+
+function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
+	panel.webview.options = {
+		enableScripts: true,
+	};
+	panel.onDidDispose(() => {
+		if (observerPanel === panel) {
+			observerPanel = undefined;
+		}
 	}, undefined, context.subscriptions);
+}
+
+function refreshObserverPanel(): void {
+	if (observerPanel === undefined) {
+		return;
+	}
+
+	observerPanel.webview.html = observerPort === undefined
+		? getObserverLoadingWebviewHtml()
+		: getObserverWebviewHtml(observerPort);
+}
+
+async function showObserverWhenReady(context: vscode.ExtensionContext): Promise<void> {
+	refreshObserverPanel();
+
+	try {
+		if (observerOutputChannel === undefined) {
+			throw new Error('Observer output channel is not initialized.');
+		}
+
+		await startObserver(context, observerOutputChannel);
+		refreshObserverPanel();
+	} catch (error) {
+		refreshObserverPanel();
+		throw error;
+	}
+}
+
+async function waitForObserverReady(): Promise<void> {
+	if (observerPort === undefined) {
+		throw new Error('Observer port is not available.');
+	}
+
+	const startupDeadline = Date.now() + 15_000;
+	let lastError: unknown;
+
+	while (Date.now() < startupDeadline) {
+		try {
+			await waitForPort(observerPort, 500);
+			return;
+		} catch (error) {
+			lastError = error;
+			if (observerProcess === undefined) {
+				break;
+			}
+			await delay(100);
+		}
+	}
+
+	throw lastError instanceof Error
+		? lastError
+		: new Error('Observer did not become ready in time.');
+}
+
+async function waitForPort(port: number, timeoutMs: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const socket = new net.Socket();
+		let settled = false;
+
+		const finish = (callback: () => void) => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			socket.destroy();
+			callback();
+		};
+
+		socket.setTimeout(timeoutMs);
+		socket.once('connect', () => finish(resolve));
+		socket.once('timeout', () => finish(() => reject(new Error(`Timed out waiting for observer on port ${port}.`))));
+		socket.once('error', (error) => finish(() => reject(error)));
+		socket.connect(port, '127.0.0.1');
+	});
+}
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
 }
 
 function getObserverWebviewHtml(port: number): string {
@@ -226,6 +342,38 @@ function getObserverWebviewHtml(port: number): string {
 </head>
 <body>
 	<iframe src="${observerUrl}" title="Observer"></iframe>
+</body>
+</html>`;
+}
+
+function getObserverLoadingWebviewHtml(): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta
+		http-equiv="Content-Security-Policy"
+		content="default-src 'none'; style-src 'unsafe-inline';"
+	>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Observer</title>
+	<style>
+		body {
+			align-items: center;
+			background: var(--vscode-editor-background);
+			color: var(--vscode-foreground);
+			display: flex;
+			font-family: var(--vscode-font-family);
+			height: 100vh;
+			justify-content: center;
+			margin: 0;
+			padding: 24px;
+			text-align: center;
+		}
+	</style>
+</head>
+<body>
+	<div>Observability Studio is starting…</div>
 </body>
 </html>`;
 }

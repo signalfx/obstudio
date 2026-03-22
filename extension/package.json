@@ -9,7 +9,10 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:observabilityStudioObserver"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
