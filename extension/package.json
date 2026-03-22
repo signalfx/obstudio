@@ -16,6 +16,10 @@
       {
         "command": "observability-studio.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "observability-studio.openObserver",
+        "title": "Open Observer"
       }
     ]
   },
