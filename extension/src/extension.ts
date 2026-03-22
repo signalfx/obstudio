@@ -3,10 +3,15 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
+// Extension-global observer state. The extension hosts one local observer process
+// and optionally one WebView panel that embeds its UI.
 let observerProcess: cp.ChildProcess | undefined;
 let observerOutputChannel: vscode.OutputChannel | undefined;
 let observerPanel: vscode.WebviewPanel | undefined;
 let observerPort: number | undefined;
+
+// The extension exposes a stable OTLP endpoint so instrumented apps can target a
+// predictable localhost port.
 const observerOtlpPort = 4318;
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -14,6 +19,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(observerOutputChannel);
 
 	try {
+		// Start the packaged observer as soon as the extension activates so the UI
+		// and OTLP receiver are ready before the user opens the panel.
 		await startObserver(context, observerOutputChannel);
 	} catch (error) {
 		const message = getErrorMessage(error);
@@ -57,6 +64,9 @@ async function startObserver(context: vscode.ExtensionContext, outputChannel: vs
 
 	const observerEntry = path.join(context.extensionPath, 'dist', 'observer', 'index.js');
 	observerPort = await getAvailablePort();
+
+	// The observer UI can move to any free localhost port, but OTLP stays fixed so
+	// external telemetry producers do not need to rediscover the receiver port.
 	const otlpPort = await ensurePortAvailable(observerOtlpPort);
 
 	observerOutputChannel?.appendLine(`Starting observer on http://127.0.0.1:${observerPort}`);
@@ -106,6 +116,7 @@ function stopObserver(): void {
 	observerPort = undefined;
 }
 
+// Ask the OS for an ephemeral localhost port for the observer HTTP UI.
 async function getAvailablePort(): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const server = net.createServer();
@@ -132,6 +143,8 @@ async function getAvailablePort(): Promise<number> {
 	});
 }
 
+// Probe the fixed OTLP port during startup so activation can fail with a clear
+// message before spawning the observer process.
 async function ensurePortAvailable(port: number): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const server = net.createServer();
@@ -158,6 +171,8 @@ function openObserverPanel(context: vscode.ExtensionContext): void {
 		return;
 	}
 
+	// Reuse the existing panel so the embedded app keeps its current state when the
+	// user invokes the command again.
 	if (observerPanel !== undefined) {
 		observerPanel.webview.html = getObserverWebviewHtml(observerPort);
 		observerPanel.reveal(vscode.ViewColumn.One);
