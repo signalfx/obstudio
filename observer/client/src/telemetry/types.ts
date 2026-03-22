@@ -132,10 +132,14 @@ export type TracesRequest = {
     };
     scopeSpans: Array<{
       spans: Array<{
+        attributes: TelemetryAttribute[];
         endTimeUnixNano: string;
         name: string;
+        parentSpanId: Uint8Array;
+        spanId: Uint8Array;
         startTimeUnixNano: string;
         status?: {
+          code?: number;
           message: string;
         };
         traceId: Uint8Array;

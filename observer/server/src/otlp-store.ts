@@ -16,18 +16,30 @@ import type {
   SummaryDataPoint,
 } from "../../shared/otlp/opentelemetry/proto/metrics/v1/metrics.d.mts";
 import type { ResourceLogs } from "../../shared/otlp/opentelemetry/proto/logs/v1/logs.d.mts";
-import type { ResourceSpans } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
+import type { ResourceSpans, ScopeSpans, Span } from "../../shared/otlp/opentelemetry/proto/trace/v1/trace.d.mts";
 
 type MetricDataPoint = NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint;
 type TelemetrySignal = "logs" | "metrics" | "traces";
+type TraceSpanEnvelope = {
+  resource?: ResourceSpans["resource"];
+  resourceSchemaUrl: string;
+  scope?: ScopeSpans["scope"];
+  scopeSchemaUrl: string;
+  sequence: number;
+  span: Span;
+};
+type TraceAggregate = {
+  spansByKey: Map<string, TraceSpanEnvelope>;
+};
+
+const maxStoredTraces = 100;
 
 /**
  * Snapshot of OTLP signal data held in memory.
  *
  * `received` keeps the most recent payload for each signal exactly as it arrived.
- * `merged` keeps the long-lived aggregate view. Metrics are incrementally merged;
- * logs and traces are currently full-overwrite placeholders until their merge
- * semantics are defined.
+ * `merged` keeps the long-lived aggregate view. Metrics and traces are
+ * incrementally merged while logs currently remain full replacement.
  */
 export type OtlpStoreState = {
   received: {
@@ -92,11 +104,14 @@ export class OtlpInMemoryStore {
     this.emit({ request: this.getMergedMetricsRequest(), signal: "metrics" });
   }
 
-  /** Traces use simple full replacement for now. */
+  /**
+   * Traces are merged by `traceId` and spans within a trace are deduplicated by
+   * `spanId`. The merged view retains the 100 most recent traces by start time.
+   */
   storeTraces(request: ExportTraceServiceRequest): void {
     const resourceSpans = clone(request.resourceSpans);
     this.state.received.resourceSpans = resourceSpans;
-    this.state.merged.resourceSpans = clone(resourceSpans);
+    this.state.merged.resourceSpans = mergeResourceSpans(this.state.merged.resourceSpans, resourceSpans);
     this.emit({ request: this.getMergedTracesRequest(), signal: "traces" });
   }
 
@@ -143,6 +158,218 @@ export class OtlpInMemoryStore {
 }
 
 export const otlpInMemoryStore = new OtlpInMemoryStore();
+
+/**
+ * Merge trace batches into a trace list keyed by `traceId`.
+ *
+ * Each merged `ResourceSpans` entry represents one logical trace and uses the
+ * earliest span's resource/scope as the representative metadata for that trace.
+ */
+function mergeResourceSpans(existingResourceSpans: ResourceSpans[], incomingResourceSpans: ResourceSpans[]): ResourceSpans[] {
+  const tracesByKey = new Map<string, TraceAggregate>();
+  let sequence = 0;
+
+  sequence = ingestTraceResourceSpans(tracesByKey, existingResourceSpans, sequence);
+  ingestTraceResourceSpans(tracesByKey, incomingResourceSpans, sequence);
+
+  return [...tracesByKey.values()]
+    .map(buildMergedTraceResourceSpans)
+    .sort(compareMergedTracesByStartTime)
+    .slice(0, maxStoredTraces);
+}
+
+function ingestTraceResourceSpans(
+  tracesByKey: Map<string, TraceAggregate>,
+  resourceSpansEntries: ResourceSpans[],
+  initialSequence: number,
+): number {
+  let sequence = initialSequence;
+  for (const resourceSpansEntry of resourceSpansEntries) {
+    for (const scopeSpansEntry of resourceSpansEntry.scopeSpans) {
+      for (const span of scopeSpansEntry.spans) {
+        const traceKey = getBytesKey(span.traceId);
+        const spanKey = getBytesKey(span.spanId) || `missing-span-id:${traceKey}:${sequence}`;
+        const existingTrace = tracesByKey.get(traceKey);
+        const trace = existingTrace ?? { spansByKey: new Map<string, TraceSpanEnvelope>() };
+
+        trace.spansByKey.set(spanKey, {
+          resource: clone(resourceSpansEntry.resource),
+          resourceSchemaUrl: resourceSpansEntry.schemaUrl,
+          scope: clone(scopeSpansEntry.scope),
+          scopeSchemaUrl: scopeSpansEntry.schemaUrl,
+          sequence,
+          span: clone(span),
+        });
+        tracesByKey.set(traceKey, trace);
+        sequence += 1;
+      }
+    }
+  }
+
+  return sequence;
+}
+
+function buildMergedTraceResourceSpans(trace: TraceAggregate): ResourceSpans {
+  const orderedSpans = sortTraceSpans([...trace.spansByKey.values()]);
+  const representativeSpan = orderedSpans.reduce<TraceSpanEnvelope | undefined>((current, candidate) => {
+    if (current === undefined) {
+      return candidate;
+    }
+
+    return compareTraceSpanEnvelopes(candidate, current) < 0 ? candidate : current;
+  }, undefined);
+
+  return {
+    resource: clone(representativeSpan?.resource),
+    schemaUrl: representativeSpan?.resourceSchemaUrl ?? "",
+    scopeSpans: [
+      {
+        scope: clone(representativeSpan?.scope),
+        schemaUrl: representativeSpan?.scopeSchemaUrl ?? "",
+        spans: orderedSpans.map((entry) => clone(entry.span)),
+      },
+    ],
+  };
+}
+
+function sortTraceSpans(spans: TraceSpanEnvelope[]): TraceSpanEnvelope[] {
+  const sortedSpans = [...spans].sort(compareTraceSpanEnvelopes);
+  const spanById = new Map(sortedSpans.map((entry) => [getBytesKey(entry.span.spanId), entry] as const).filter(([key]) => key !== ""));
+  const childrenByParentId = new Map<string, TraceSpanEnvelope[]>();
+  const rootSpans: TraceSpanEnvelope[] = [];
+
+  for (const span of sortedSpans) {
+    const parentSpanId = getBytesKey(span.span.parentSpanId);
+
+    if (parentSpanId === "" || !spanById.has(parentSpanId) || parentSpanId === getBytesKey(span.span.spanId)) {
+      rootSpans.push(span);
+      continue;
+    }
+
+    const children = childrenByParentId.get(parentSpanId);
+    if (children === undefined) {
+      childrenByParentId.set(parentSpanId, [span]);
+      continue;
+    }
+
+    children.push(span);
+  }
+
+  for (const children of childrenByParentId.values()) {
+    children.sort(compareTraceSpanEnvelopes);
+  }
+
+  rootSpans.sort(compareTraceSpanEnvelopes);
+
+  const orderedSpans: TraceSpanEnvelope[] = [];
+  const visitedSpanIds = new Set<string>();
+
+  for (const rootSpan of rootSpans) {
+    appendTraceSpanAndChildren(rootSpan, childrenByParentId, visitedSpanIds, orderedSpans);
+  }
+
+  for (const span of sortedSpans) {
+    appendTraceSpanAndChildren(span, childrenByParentId, visitedSpanIds, orderedSpans);
+  }
+
+  return orderedSpans;
+}
+
+function appendTraceSpanAndChildren(
+  span: TraceSpanEnvelope,
+  childrenByParentId: Map<string, TraceSpanEnvelope[]>,
+  visitedSpanIds: Set<string>,
+  orderedSpans: TraceSpanEnvelope[],
+): void {
+  const spanIdentity = getTraceSpanIdentity(span);
+
+  if (visitedSpanIds.has(spanIdentity)) {
+    return;
+  }
+
+  visitedSpanIds.add(spanIdentity);
+  orderedSpans.push(span);
+
+  const children = childrenByParentId.get(getBytesKey(span.span.spanId));
+  if (children === undefined) {
+    return;
+  }
+
+  for (const child of children) {
+    appendTraceSpanAndChildren(child, childrenByParentId, visitedSpanIds, orderedSpans);
+  }
+}
+
+function compareMergedTracesByStartTime(left: ResourceSpans, right: ResourceSpans): number {
+  return compareNanosecondStrings(getTraceStartTime(right), getTraceStartTime(left)) || getMergedTraceId(left).localeCompare(getMergedTraceId(right));
+}
+
+function getTraceStartTime(resourceSpans: ResourceSpans): string {
+  return resourceSpans.scopeSpans
+    .flatMap((scopeSpans) => scopeSpans.spans)
+    .reduce<string>((minimum, span) => {
+      if (minimum === "") {
+        return span.startTimeUnixNano;
+      }
+
+      return compareNanosecondStrings(span.startTimeUnixNano, minimum) < 0 ? span.startTimeUnixNano : minimum;
+    }, "");
+}
+
+function getMergedTraceId(resourceSpans: ResourceSpans): string {
+  return getBytesKey(resourceSpans.scopeSpans[0]?.spans[0]?.traceId ?? new Uint8Array(0));
+}
+
+function compareTraceSpanEnvelopes(left: TraceSpanEnvelope, right: TraceSpanEnvelope): number {
+  return compareNanosecondStrings(left.span.startTimeUnixNano, right.span.startTimeUnixNano)
+    || getBytesKey(left.span.spanId).localeCompare(getBytesKey(right.span.spanId))
+    || left.span.name.localeCompare(right.span.name)
+    || left.sequence - right.sequence;
+}
+
+function getTraceSpanIdentity(span: TraceSpanEnvelope): string {
+  return getBytesKey(span.span.spanId) || `${span.sequence}:${span.span.name}:${span.span.startTimeUnixNano}`;
+}
+
+function compareNanosecondStrings(left: string, right: string): number {
+  const leftValue = parseNanoseconds(left);
+  const rightValue = parseNanoseconds(right);
+
+  if (leftValue !== null && rightValue !== null) {
+    if (leftValue < rightValue) {
+      return -1;
+    }
+    if (leftValue > rightValue) {
+      return 1;
+    }
+    return 0;
+  }
+
+  if (leftValue !== null) {
+    return -1;
+  }
+  if (rightValue !== null) {
+    return 1;
+  }
+
+  return left.localeCompare(right);
+}
+
+function parseNanoseconds(value: string): bigint | null {
+  if (value.trim() === "") {
+    return null;
+  }
+
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function getBytesKey(value: Uint8Array): string {
+  return Buffer.from(value).toString("base64");
+}
 
 /**
  * Merge resource metric batches into the aggregate store.
