@@ -40,12 +40,15 @@ export type MessageCodec<TMessage> = {
 };
 
 export type OtlpSignal = "logs" | "metrics" | "traces";
+export type OtlpIngestContext = {
+  grpcConnectionId?: string;
+};
 
 export type OtlpSignalDefinition<TRequest, TResponse> = {
   path: string;
   requestCodec: MessageCodec<TRequest>;
   responseCodec: MessageCodec<TResponse>;
-  persist: (message: TRequest) => void;
+  persist: (message: TRequest, context: OtlpIngestContext) => void;
   signal: OtlpSignal;
   summarize: (message: TRequest) => string;
 };
@@ -54,7 +57,7 @@ export const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
   requestCodec: ExportLogsServiceRequestCodec as MessageCodec<LogsRequest>,
   responseCodec: ExportLogsServiceResponseCodec as MessageCodec<LogsResponse>,
-  persist: (message) => otlpInMemoryStore.storeLogs(message),
+  persist: (message, context) => otlpInMemoryStore.storeLogs(message, context.grpcConnectionId),
   signal: "logs",
   summarize: summarizeLogsRequest,
 });
@@ -63,7 +66,7 @@ export const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
   path: "/v1/metrics",
   requestCodec: ExportMetricsServiceRequestCodec as MessageCodec<MetricsRequest>,
   responseCodec: ExportMetricsServiceResponseCodec as MessageCodec<MetricsResponse>,
-  persist: (message) => otlpInMemoryStore.storeMetrics(message),
+  persist: (message, context) => otlpInMemoryStore.storeMetrics(message, context.grpcConnectionId),
   signal: "metrics",
   summarize: summarizeMetricsRequest,
 });
@@ -72,7 +75,7 @@ export const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   path: "/v1/traces",
   requestCodec: ExportTraceServiceRequestCodec as MessageCodec<TraceRequest>,
   responseCodec: ExportTraceServiceResponseCodec as MessageCodec<TraceResponse>,
-  persist: (message) => otlpInMemoryStore.storeTraces(message),
+  persist: (message, context) => otlpInMemoryStore.storeTraces(message, context.grpcConnectionId),
   signal: "traces",
   summarize: summarizeTraceRequest,
 });
@@ -80,8 +83,9 @@ export const tracesSignal = createSignal<TraceRequest, TraceResponse>({
 export function ingestOtlpMessage<TRequest, TResponse>(
   signal: OtlpSignalDefinition<TRequest, TResponse>,
   message: TRequest,
+  context: OtlpIngestContext = {},
 ): TResponse {
-  signal.persist(message);
+  signal.persist(message, context);
   console.log(`[otlp] accepted ${signal.signal}: ${signal.summarize(message)}`);
   return signal.responseCodec.create();
 }

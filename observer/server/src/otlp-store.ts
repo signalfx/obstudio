@@ -20,6 +20,11 @@ import type { ResourceSpans, ScopeSpans, Span } from "../../shared/otlp/opentele
 
 type MetricDataPoint = NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint;
 type TelemetrySignal = "logs" | "metrics" | "traces";
+type OtlpSourceState = {
+  resourceLogs: ResourceLogs[];
+  resourceMetrics: ResourceMetrics[];
+  resourceSpans: ResourceSpans[];
+};
 type TraceSpanEnvelope = {
   resource?: ResourceSpans["resource"];
   resourceSchemaUrl: string;
@@ -33,6 +38,8 @@ type TraceAggregate = {
 };
 
 const maxStoredTraces = 100;
+const httpSourceKey = "http:default";
+const grpcSourcePrefix = "grpc:";
 
 /**
  * Snapshot of OTLP signal data held in memory.
@@ -69,6 +76,7 @@ type OtlpStoreListener = (update: OtlpStoreUpdate) => void;
  */
 export class OtlpInMemoryStore {
   private listeners = new Set<OtlpStoreListener>();
+  private sourceStates = new Map<string, OtlpSourceState>();
   private state: OtlpStoreState = {
     received: {
       resourceLogs: [],
@@ -83,10 +91,12 @@ export class OtlpInMemoryStore {
   };
 
   /** Logs use simple full replacement for now. */
-  storeLogs(request: ExportLogsServiceRequest): void {
+  storeLogs(request: ExportLogsServiceRequest, grpcConnectionId?: string): void {
     const resourceLogs = clone(request.resourceLogs);
+    const sourceState = this.getOrCreateSourceState(grpcConnectionId);
     this.state.received.resourceLogs = resourceLogs;
-    this.state.merged.resourceLogs = clone(resourceLogs);
+    sourceState.resourceLogs = clone(resourceLogs);
+    this.state.merged.resourceLogs = this.mergeLogsAcrossSources();
     this.emit({ request: this.getMergedLogsRequest(), signal: "logs" });
   }
 
@@ -97,10 +107,12 @@ export class OtlpInMemoryStore {
    * When a data point key already exists, the incoming data point replaces the
    * previous one in full.
    */
-  storeMetrics(request: ExportMetricsServiceRequest): void {
+  storeMetrics(request: ExportMetricsServiceRequest, grpcConnectionId?: string): void {
     const resourceMetrics = normalizeIncomingResourceMetrics(request.resourceMetrics);
+    const sourceState = this.getOrCreateSourceState(grpcConnectionId);
     this.state.received.resourceMetrics = resourceMetrics;
-    this.state.merged.resourceMetrics = mergeResourceMetrics(this.state.merged.resourceMetrics, resourceMetrics);
+    sourceState.resourceMetrics = mergeResourceMetrics(sourceState.resourceMetrics, resourceMetrics);
+    this.state.merged.resourceMetrics = this.mergeMetricsAcrossSources();
     this.emit({ request: this.getMergedMetricsRequest(), signal: "metrics" });
   }
 
@@ -108,10 +120,27 @@ export class OtlpInMemoryStore {
    * Traces are merged by `traceId` and spans within a trace are deduplicated by
    * `spanId`. The merged view retains the 100 most recent traces by start time.
    */
-  storeTraces(request: ExportTraceServiceRequest): void {
+  storeTraces(request: ExportTraceServiceRequest, grpcConnectionId?: string): void {
     const resourceSpans = clone(request.resourceSpans);
+    const sourceState = this.getOrCreateSourceState(grpcConnectionId);
     this.state.received.resourceSpans = resourceSpans;
-    this.state.merged.resourceSpans = mergeResourceSpans(this.state.merged.resourceSpans, resourceSpans);
+    sourceState.resourceSpans = mergeResourceSpans(sourceState.resourceSpans, resourceSpans);
+    this.state.merged.resourceSpans = this.mergeTracesAcrossSources();
+    this.emit({ request: this.getMergedTracesRequest(), signal: "traces" });
+  }
+
+  evictGrpcConnection(grpcConnectionId: string): void {
+    if (!this.sourceStates.delete(getSourceKey(grpcConnectionId))) {
+      return;
+    }
+
+    this.state.merged = {
+      resourceLogs: this.mergeLogsAcrossSources(),
+      resourceMetrics: this.mergeMetricsAcrossSources(),
+      resourceSpans: this.mergeTracesAcrossSources(),
+    };
+    this.emit({ request: this.getMergedLogsRequest(), signal: "logs" });
+    this.emit({ request: this.getMergedMetricsRequest(), signal: "metrics" });
     this.emit({ request: this.getMergedTracesRequest(), signal: "traces" });
   }
 
@@ -155,9 +184,54 @@ export class OtlpInMemoryStore {
       listener(clone(update));
     }
   }
+
+  private getOrCreateSourceState(grpcConnectionId?: string): OtlpSourceState {
+    const sourceKey = getSourceKey(grpcConnectionId);
+    const existingState = this.sourceStates.get(sourceKey);
+
+    if (existingState !== undefined) {
+      return existingState;
+    }
+
+    const sourceState: OtlpSourceState = {
+      resourceLogs: [],
+      resourceMetrics: [],
+      resourceSpans: [],
+    };
+    this.sourceStates.set(sourceKey, sourceState);
+    return sourceState;
+  }
+
+  private mergeLogsAcrossSources(): ResourceLogs[] {
+    return [...this.sourceStates.values()].flatMap((sourceState) => clone(sourceState.resourceLogs));
+  }
+
+  private mergeMetricsAcrossSources(): ResourceMetrics[] {
+    let mergedMetrics: ResourceMetrics[] = [];
+
+    for (const sourceState of this.sourceStates.values()) {
+      mergedMetrics = mergeResourceMetrics(mergedMetrics, sourceState.resourceMetrics);
+    }
+
+    return mergedMetrics;
+  }
+
+  private mergeTracesAcrossSources(): ResourceSpans[] {
+    let mergedTraces: ResourceSpans[] = [];
+
+    for (const sourceState of this.sourceStates.values()) {
+      mergedTraces = mergeResourceSpans(mergedTraces, sourceState.resourceSpans);
+    }
+
+    return mergedTraces;
+  }
 }
 
 export const otlpInMemoryStore = new OtlpInMemoryStore();
+
+function getSourceKey(grpcConnectionId: string | undefined): string {
+  return grpcConnectionId === undefined ? httpSourceKey : `${grpcSourcePrefix}${grpcConnectionId}`;
+}
 
 /**
  * Merge trace batches into a trace list keyed by `traceId`.
