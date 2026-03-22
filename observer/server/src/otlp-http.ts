@@ -3,6 +3,7 @@ import http from "node:http";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
   type MessageCodec,
+  type OtlpIngestContext,
   type OtlpSignalDefinition,
   getErrorMessage,
   ingestOtlpMessage,
@@ -14,6 +15,7 @@ import {
   otlpPayloadLimit,
   tracesSignal,
 } from "./otlp-ingest.js";
+import { resolveHttpConnectionId } from "./otlp-http-connections.js";
 
 const supportedContentTypes = new Set(["application/json", "application/x-protobuf"]);
 
@@ -44,7 +46,7 @@ function registerSignalRoute<TRequest, TResponse>(
   signal: OtlpSignalDefinition<TRequest, TResponse>,
 ): void {
   app.post(signal.path, express.raw({ limit: otlpPayloadLimit, type: () => true }), (request, response) => {
-    handleOtlpRequest(request, response, signal);
+    void handleOtlpRequest(request, response, signal);
   });
 }
 
@@ -53,11 +55,11 @@ function registerSignalRoute<TRequest, TResponse>(
  * validate content type, decode compression, parse OTLP payload, persist it,
  * and reply using the same transport encoding family as the request.
  */
-function handleOtlpRequest<TRequest, TResponse>(
+async function handleOtlpRequest<TRequest, TResponse>(
   request: express.Request,
   response: express.Response,
   signal: OtlpSignalDefinition<TRequest, TResponse>,
-): void {
+): Promise<void> {
   const contentType = parseContentType(request.header("content-type"));
 
   if (contentType === null) {
@@ -82,14 +84,20 @@ function handleOtlpRequest<TRequest, TResponse>(
   }
 
   try {
+    const context = await getHttpIngestContext(request);
     const message = contentType === "application/json"
       ? signal.requestCodec.fromJSON(normalizeOtlpJson(JSON.parse(Buffer.from(payload).toString("utf8"))))
       : signal.requestCodec.decode(payload);
-    const responseMessage = ingestOtlpMessage(signal, message);
+    const responseMessage = ingestOtlpMessage(signal, message, context);
     sendOtlpResponse(response, 200, signal.responseCodec, responseMessage, contentType, request.header("accept-encoding"));
   } catch (error) {
     sendStatusError(response, 400, getErrorMessage(error, `Failed to decode OTLP ${signal.signal} payload.`), contentType);
   }
+}
+
+async function getHttpIngestContext(request: express.Request): Promise<OtlpIngestContext> {
+  const connectionId = await resolveHttpConnectionId(request);
+  return connectionId === undefined ? {} : { connectionId };
 }
 
 /** Extract the media type portion from `Content-Type` and allow only OTLP formats. */

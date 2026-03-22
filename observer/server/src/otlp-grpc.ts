@@ -183,7 +183,7 @@ function getGrpcIngestContext<TRequest, TResponse>(call: ServerUnaryCall<TReques
     return {};
   }
 
-  return { grpcConnectionId };
+  return { connectionId: grpcConnectionId };
 }
 
 function extractGrpcConnectionInfo(call: object): ConnectionInfoLike | null {
@@ -307,7 +307,7 @@ function evictTrackedGrpcConnection(grpcConnectionId: string, addressKey: string
   evictedGrpcConnections.add(grpcConnectionId);
   grpcConnectionIdsByAddress.delete(addressKey);
   trackedGrpcSessions.delete(grpcConnectionId);
-  otlpInMemoryStore.evictGrpcConnection(grpcConnectionId);
+  otlpInMemoryStore.evictConnection(grpcConnectionId);
   console.log(`[otlp] evicted grpc connection ${grpcConnectionId} (${reason})`);
 }
 

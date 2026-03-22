@@ -41,7 +41,7 @@ export type MessageCodec<TMessage> = {
 
 export type OtlpSignal = "logs" | "metrics" | "traces";
 export type OtlpIngestContext = {
-  grpcConnectionId?: string;
+  connectionId?: string;
 };
 
 export type OtlpSignalDefinition<TRequest, TResponse> = {
@@ -57,7 +57,7 @@ export const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
   requestCodec: ExportLogsServiceRequestCodec as MessageCodec<LogsRequest>,
   responseCodec: ExportLogsServiceResponseCodec as MessageCodec<LogsResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeLogs(message, context.grpcConnectionId),
+  persist: (message, context) => otlpInMemoryStore.storeLogs(message, context.connectionId),
   signal: "logs",
   summarize: summarizeLogsRequest,
 });
@@ -66,7 +66,7 @@ export const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
   path: "/v1/metrics",
   requestCodec: ExportMetricsServiceRequestCodec as MessageCodec<MetricsRequest>,
   responseCodec: ExportMetricsServiceResponseCodec as MessageCodec<MetricsResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeMetrics(message, context.grpcConnectionId),
+  persist: (message, context) => otlpInMemoryStore.storeMetrics(message, context.connectionId),
   signal: "metrics",
   summarize: summarizeMetricsRequest,
 });
@@ -75,7 +75,7 @@ export const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   path: "/v1/traces",
   requestCodec: ExportTraceServiceRequestCodec as MessageCodec<TraceRequest>,
   responseCodec: ExportTraceServiceResponseCodec as MessageCodec<TraceResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeTraces(message, context.grpcConnectionId),
+  persist: (message, context) => otlpInMemoryStore.storeTraces(message, context.connectionId),
   signal: "traces",
   summarize: summarizeTraceRequest,
 });
