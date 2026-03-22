@@ -157,22 +157,18 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         <article className="summary-card">
           <p className="summary-card__label">Resources</p>
           <p className="summary-card__value">{resourceCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct resources</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Scopes</p>
           <p className="summary-card__value">{scopeCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct instrumentation scopes</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Metrics</p>
           <p className="summary-card__value">{displayMetrics.length.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct metric definitions</p>
         </article>
         <article className="summary-card">
           <p className="summary-card__label">Data points</p>
           <p className="summary-card__value">{dataPointCount.toLocaleString()}</p>
-          <p className="summary-card__meta">Distinct time series</p>
         </article>
       </div>
 

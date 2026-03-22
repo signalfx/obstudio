@@ -231,15 +231,16 @@ body {
 
 .metric-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px;
+  grid-template-columns: repeat(4, minmax(max-content, 1fr));
+  gap: 8px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
 }
 
 .summary-card {
-  padding: 14px;
+  min-width: 0;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
@@ -254,13 +255,15 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  white-space: nowrap;
   color: var(--text-dim);
 }
 
 .summary-card__value {
-  margin: 8px 0 4px;
-  font-size: 28px;
+  margin: 6px 0 2px;
+  font-size: clamp(20px, 3vw, 28px);
   font-weight: 600;
+  line-height: 1;
   color: #ffffff;
 }
 
@@ -943,10 +946,6 @@ code {
 }
 
 @media (max-width: 900px) {
-  .metric-summary {
-    grid-template-columns: 1fr;
-  }
-
   .metric-table__header,
   .metric-row,
   .data-point-row,
