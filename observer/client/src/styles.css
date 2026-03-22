@@ -472,7 +472,7 @@ body {
 .metric-row__name,
 .data-point-row__attributes {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
   padding: 8px 0;
@@ -501,9 +501,17 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-top: 1px;
   width: 16px;
   flex: 0 0 16px;
   text-align: center;
+}
+
+.metric-row__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .metric-row__path {
@@ -513,6 +521,12 @@ body {
   font-size: 12px;
   font-weight: 500;
   color: #e2e7eb;
+}
+
+.metric-row__description {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-dim);
 }
 
 .metric-row__count,

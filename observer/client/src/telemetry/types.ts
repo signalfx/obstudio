@@ -105,6 +105,7 @@ export type SummaryDataPoint = {
 };
 
 export type Metric = {
+  description: string;
   name: string;
   unit: string;
   data?:

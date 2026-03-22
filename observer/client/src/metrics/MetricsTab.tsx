@@ -17,6 +17,7 @@ type DataPoint = {
 };
 
 type Metric = {
+  description?: string;
   inlineValue?: number;
   inlineUnit?: string;
   id: string;
@@ -253,7 +254,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                           <span className={`metric-row__glyph ${getMetricTypeClass(metric.type)}`} aria-hidden="true">
                             {getMetricGlyph(metric.type)}
                           </span>
-                          <span className="metric-row__path">{metric.name}</span>
+                          <div className="metric-row__meta">
+                            <span className="metric-row__path">{metric.name}</span>
+                            {metric.description ? <span className="metric-row__description">{metric.description}</span> : null}
+                          </div>
                         </div>
                         <div className="metric-row__type">
                           <span className="metric-row__type-label">Type:</span>{" "}
@@ -360,6 +364,7 @@ function convertMetric(
   const dataPoints = inlineDataPoint === undefined ? displayDataPoints : undefined;
 
   return {
+    description: metric.description || undefined,
     dataPoints,
     id: `${resourceIndex}-${scopeIndex}-${metricIndex}`,
     inlineUnit: inlineDataPoint?.unit,
