@@ -334,6 +334,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: flex-start;
   width: 16px;
   flex: 0 0 16px;
   text-align: center;
@@ -351,7 +352,8 @@ body {
 
 .resource-row__label {
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 560;
   color: #ffffff;
 }
 
@@ -421,8 +423,9 @@ body {
 
 .scope-row__name {
   font-family: "Cascadia Code", "SFMono-Regular", monospace;
-  font-size: 12px;
-  color: var(--blue);
+  font-size: 13px;
+  font-weight: 520;
+  color: #dcdcaa;
 }
 
 .scope-row__version,
@@ -500,7 +503,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #e2e7eb;
 }
 
 .metric-row__count,

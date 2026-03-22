@@ -193,7 +193,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
         </div>
 
         <div className="metric-table__body">
-          {resourceGroups.map((resourceGroup) => (
+          {resourceGroups.map((resourceGroup, resourceGroupIndex) => (
             <Fragment key={resourceGroup.id}>
               <div className="resource-row">
                 <div className="resource-row__main">
@@ -242,7 +242,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                 </span>
               </div>
 
-              {resourceGroup.scopes.map((group) => (
+              {resourceGroup.scopes.map((group, scopeIndex) => (
                 <Fragment key={`${resourceGroup.id}-${group.scope.name}@${group.scope.version}`}>
                   <div className="scope-row">
                     <span className="scope-row__glyph" aria-hidden="true">
@@ -266,7 +266,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                     <Fragment key={metric.id}>
                       <div
                         className={
-                          index < group.metrics.length - 1 && !metric.dataPoints
+                          index < group.metrics.length - 1 || metric.dataPoints
                             ? "metric-row metric-row--bordered"
                             : "metric-row"
                         }
@@ -300,7 +300,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                         <div
                           key={`${metric.id}-${dataPointIndex}`}
                           className={
-                            dataPointIndex < dataPoints.length - 1 || index < group.metrics.length - 1
+                            dataPointIndex < dataPoints.length - 1 ||
+                            index < group.metrics.length - 1 ||
+                            scopeIndex < resourceGroup.scopes.length - 1 ||
+                            resourceGroupIndex < resourceGroups.length - 1
                               ? "data-point-row data-point-row--bordered"
                               : "data-point-row"
                           }
