@@ -111,8 +111,11 @@ export type Metric = {
   unit: string;
   data?:
     | { $case: "gauge"; gauge: { dataPoints: NumberDataPoint[] } }
-    | { $case: "sum"; sum: { dataPoints: NumberDataPoint[] } }
-    | { $case: "histogram"; histogram: { dataPoints: HistogramDataPoint[] } }
-    | { $case: "exponentialHistogram"; exponentialHistogram: { dataPoints: ExponentialHistogramDataPoint[] } }
+    | { $case: "sum"; sum: { aggregationTemporality: number; dataPoints: NumberDataPoint[]; isMonotonic: boolean } }
+    | { $case: "histogram"; histogram: { aggregationTemporality: number; dataPoints: HistogramDataPoint[] } }
+    | {
+        $case: "exponentialHistogram";
+        exponentialHistogram: { aggregationTemporality: number; dataPoints: ExponentialHistogramDataPoint[] };
+      }
     | { $case: "summary"; summary: { dataPoints: SummaryDataPoint[] } };
 };

@@ -22,7 +22,9 @@ type Metric = {
   inlineUnit?: string;
   id: string;
   metadata?: Array<{ key: string; value: string }>;
+  monotonic?: string;
   name: string;
+  temporality?: string;
   type: "Counter" | "Gauge" | "Histogram" | "Summary";
   value?: number;
   unit?: string;
@@ -265,6 +267,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                             <span className="metric-row__type-label">Type:</span>{" "}
                             <span className={getMetricTypeClass(metric.type)}>{metric.type}</span>
                           </div>
+                          {metric.temporality ? (
+                            <div className="metric-row__temporality">Temporality: {metric.temporality}</div>
+                          ) : null}
+                          {metric.monotonic ? <div className="metric-row__temporality">Monotonic: {metric.monotonic}</div> : null}
                           {metric.metadata?.length ? (
                             <div className="metric-row__metadata">
                               {metric.metadata.map((attribute) => (
@@ -388,8 +394,10 @@ function convertMetric(
           value: getAttributeValue(attribute),
         }))
       : undefined,
+    monotonic: getMetricMonotonic(metric),
     name: metric.name,
     scope,
+    temporality: getMetricTemporality(metric),
     type: getMetricType(metric),
     unit: inlineDataPoint === undefined && displayDataPoints.length === 0 ? metric.unit : undefined,
     value: inlineDataPoint === undefined && displayDataPoints.length === 0 ? undefined : undefined,
@@ -426,6 +434,39 @@ function getMetricDataPoints(metric: OtlpMetric): Array<NumberDataPoint | Histog
       return metric.data.summary.dataPoints;
     default:
       return [];
+  }
+}
+
+function getMetricTemporality(metric: OtlpMetric): string | undefined {
+  switch (metric.data?.$case) {
+    case "sum":
+      return formatAggregationTemporality(metric.data.sum.aggregationTemporality);
+    case "histogram":
+      return formatAggregationTemporality(metric.data.histogram.aggregationTemporality);
+    case "exponentialHistogram":
+      return formatAggregationTemporality(metric.data.exponentialHistogram.aggregationTemporality);
+    default:
+      return undefined;
+  }
+}
+
+function getMetricMonotonic(metric: OtlpMetric): string | undefined {
+  switch (metric.data?.$case) {
+    case "sum":
+      return metric.data.sum.isMonotonic ? "Yes" : "No";
+    default:
+      return undefined;
+  }
+}
+
+function formatAggregationTemporality(aggregationTemporality: number): string | undefined {
+  switch (aggregationTemporality) {
+    case 1:
+      return "Delta";
+    case 2:
+      return "Cumulative";
+    default:
+      return "Unspecified";
   }
 }
 

@@ -561,6 +561,12 @@ body {
   display: block;
 }
 
+.metric-row__temporality {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .metric-row__unit {
   padding-left: 8px;
 }
