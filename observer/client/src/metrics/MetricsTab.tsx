@@ -182,21 +182,27 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps) {
                     <span className="resource-row__glyph" aria-hidden="true">
                       {getResourceGlyph()}
                     </span>
-                    <span className="resource-row__label">Resource: {resourceGroup.label}</span>
+                    <div className="resource-row__content">
+                      <span className="resource-row__label">Resource: {resourceGroup.label}</span>
+                    </div>
                   </div>
                   <div className="resource-row__line">
                     <span className="resource-row__glyph" aria-hidden="true" />
-                    <span className="resource-row__schema">{formatSchemaUrl(resourceGroup.schemaUrl)}</span>
+                    <div className="resource-row__content">
+                      <span className="resource-row__schema">{formatSchemaUrl(resourceGroup.schemaUrl)}</span>
+                    </div>
                   </div>
                   {resourceGroup.attributes.length > 0 ? (
                     <div className="resource-row__line">
                       <span className="resource-row__glyph" aria-hidden="true" />
-                      {resourceGroup.attributes.map((attribute) => (
-                        <span key={attribute.key} className="attribute-pill">
-                          <span className="attribute-pill__key">{attribute.key}</span>=
-                          <span className="attribute-pill__value">{attribute.value}</span>
-                        </span>
-                      ))}
+                      <div className="resource-row__content resource-row__attributes">
+                        {resourceGroup.attributes.map((attribute) => (
+                          <span key={attribute.key} className="attribute-pill">
+                            <span className="attribute-pill__key">{attribute.key}</span>=
+                            <span className="attribute-pill__value">{attribute.value}</span>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                   {resourceGroup.entities.length > 0 ? (
