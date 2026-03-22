@@ -58,11 +58,12 @@ useful telemetry, and easy local verification.
 - Expected spans are emitted for the target workflow.
 - Exceptions and error status are recorded on failed operations.
 - OTLP export points at the local Observer configuration used by Observability Studio.
-   - Run application that is being instrumented. Make sure to set the following env variables:
-       - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
-       - `OTEL_METRIC_EXPORT_INTERVAL=1000` (if metrics are added, to make sure they are emitted during testing)
-   - Connect to observer MCP endpoint http://127.0.0.1:3000/mcp. The MCP endpoint must return the telemetry that was emitted by the application.
-   - Verify that metrics and spans emmited are as expected.
+- Run application that is being instrumented. Make sure to set the following env variables:
+    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
+- Assume local observer MCP server is running. Connect to observer MCP endpoint http://127.0.0.1:3000/mcp. 
+  The MCP endpoint must   return the telemetry that was emitted by the application.
+- Verify that metrics and spans emmited are as expected.
 - Shutdown paths flush telemetry cleanly when practical.
 
 ## Output Expectations
