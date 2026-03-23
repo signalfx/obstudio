@@ -23,6 +23,7 @@ Use this skill when the user wants application code instrumented with OpenTeleme
    - inbound requests, RPC calls, queue consumers, CLI commands, or batch jobs
    - outbound HTTP, database, cache, or messaging calls
    - important internal operations where spans help explain latency or failure
+   - Add metrics to key operations and concepts, reflecting operations done or current state.
 - Prefer existing automatic instrumentation packages for common frameworks and clients.
   Add manual spans only where auto-instrumentation is missing or too coarse.
 - Follow OpenTelemetry semantic conventions. Use stable span names, set attributes that
