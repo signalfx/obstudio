@@ -36,6 +36,7 @@ Use this skill when the user wants application code instrumented with OpenTeleme
   If the user wants to run, make sure you run the process with the following env variables set:
     - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     - OTEL_METRIC_EXPORT_INTERVAL=1000
+    - OTEL_BSP_SCHEDULE_DELAY=100
 
 ## Enable debugging in VS Code
 
@@ -48,6 +49,7 @@ debugger the telemetry is sent to a locally running telemetry observer and is re
 often to enable live view in a locally running telemetry observer:
   - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
   - OTEL_METRIC_EXPORT_INTERVAL=1000
+  - OTEL_BSP_SCHEDULE_DELAY=100
 
 ## Implementation Rules
 
