@@ -390,7 +390,7 @@ function convertMetric(
   const displayDataPoints = rawDataPoints.map((dataPoint) => ({
     attributes: dataPoint.attributes.map(toDisplayAttribute),
     unit: metric.unit,
-    value: getMetricPointValue(dataPoint),
+    value: getMetricPointValue(metric, dataPoint),
   }));
   const inlineDataPoint = displayDataPoints.length === 1 && Object.keys(displayDataPoints[0].attributes).length === 0
     ? displayDataPoints[0]
@@ -484,7 +484,10 @@ function formatAggregationTemporality(aggregationTemporality: number): string | 
   }
 }
 
-function getMetricPointValue(dataPoint: NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint): number {
+function getMetricPointValue(
+  metric: OtlpMetric,
+  dataPoint: NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint,
+): number {
   if ("value" in dataPoint) {
     switch (dataPoint.value?.$case) {
       case "asDouble":
@@ -493,6 +496,18 @@ function getMetricPointValue(dataPoint: NumberDataPoint | HistogramDataPoint | E
         return Number(dataPoint.value.asInt);
       default:
         return 0;
+    }
+  }
+
+  if (
+    (metric.data?.$case === "histogram" || metric.data?.$case === "exponentialHistogram") &&
+    "sum" in dataPoint &&
+    typeof dataPoint.sum === "number" &&
+    "count" in dataPoint
+  ) {
+    const count = Number(dataPoint.count);
+    if (count > 0) {
+      return dataPoint.sum / count;
     }
   }
 
