@@ -2,8 +2,7 @@
 
 ## The Layering Principle
 
-Observability Studio is not a VS Code extension. It is not a CLI tool. It is a
-layered product where each layer is independently useful and the outermost layer
+Observability Studio is a layered product where each layer is independently useful and the outermost layer
 is just a distribution mechanism.
 
 ```
@@ -28,11 +27,11 @@ is just a distribution mechanism.
 │  │  │  │  Skills          │    │  Observer             │   │  │  │
 │  │  │  │                  │    │                       │   │  │  │
 │  │  │  │  instrument/     │    │  OTLP receiver        │   │  │  │
-│  │  │  │  terraform/      │    │  DuckDB storage       │   │  │  │
+│  │  │  │  terraform/      │    │    Storage            │   │  │  │
 │  │  │  │  (agent-readable │    │  Query API (REST)     │   │  │  │
 │  │  │  │   markdown)      │    │  MCP server           │   │  │  │
 │  │  │  │                  │    │  Web UI               │   │  │  │
-│  │  │  │                  │    │  Validator             │   │  │  │
+│  │  │  │                  │    │  Validator            │   │  │  │
 │  │  │  └──────────────────┘    └──────────────────────┘   │  │  │
 │  │  └─────────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────────┘  │
@@ -54,8 +53,9 @@ independently:
 
 Developers who use **AI agents** to write, instrument, and debug code. The
 Instrumenter and Terraformer are agent skills. The Telemetry Explorer and
-Validator produce data that agents consume via MCP. The entire workflow is
-agent-driven.
+Validator produce data that agents consume via MCP, but the Telemetry Explorer
+also stands on its own as a live telemetry viewer — no agent workflow required.
+
 
 The product must reach these developers wherever they work: Cursor, Claude Code,
 Windsurf, Cline, Continue, GitHub Copilot, JetBrains AI, OpenAI Codex, and
@@ -185,6 +185,10 @@ HTTP.
 Layer 3 is how obstudio reaches developers. It changes nothing about the
 product. It is packaging, delivery, and convenience.
 
+Two channels are described below. To avoid scope creep we start with these and
+expand to additional channels (e.g. Homebrew, `go install`) once the core
+product is stable.
+
 ### Channel 1: Native Agentic Installation (Primary)
 
 obstudio can install itself directly into any AI coding environment. No
@@ -292,25 +296,6 @@ Recommendation: **Bundled per platform** for the VS Code Marketplace release
 (seamless install experience), with a fallback to PATH lookup so developers who
 installed via Homebrew or `go install` use their existing binary.
 
-### Channel 3: CLI Install
-
-For developers who prefer terminal-first workflows or use AI tools that don't
-have a marketplace (Claude Code, Codex, terminal agents):
-
-```bash
-# macOS / Linux
-brew install obstudio
-
-# Any platform with Go
-go install github.com/signalfx/obstudio/go/cmd/obstudio@latest
-
-# Direct binary download
-curl -fsSL https://github.com/signalfx/obstudio/releases/latest/download/obstudio-$(uname -s)-$(uname -m) -o obstudio
-chmod +x obstudio
-```
-
-After install, `obstudio register --agent <name>` configures the AI tool.
-
 ---
 
 ## Marketplace Precedent
@@ -351,9 +336,12 @@ one of several distribution channels.
 ### Why This Matters for Observability Studio
 
 OTelMe demonstrates that the VS Code marketplace already has demand for local
-OpenTelemetry tooling. The difference with obstudio is reach: OTelMe is locked
-to VS Code. obstudio works with every AI coding tool via MCP, and the extension
-is optional.
+OpenTelemetry tooling. obstudio differs in two ways:
+
+- **Reach** — OTelMe is locked to VS Code. obstudio works with every AI coding
+  tool via MCP, and the extension is optional.
+- **Capabilities** — obstudio adds agent-readable skills, validation, and
+  terraform generation that go beyond live telemetry viewing.
 
 ---
 
@@ -394,31 +382,9 @@ Writes to `~/.cursor/mcp.json`:
 
 Copies skills to `~/.cursor/skills/obstudio/`.
 
-**Workflow after registration:**
-
-```
-User:     "Instrument my Go service with OpenTelemetry"
-
-Cursor:   1. Reads ~/.cursor/skills/obstudio/instrument/SKILL.md
-             Reads ~/.cursor/skills/obstudio/instrument/go.md
-          2. Adds OTel SDK, tracer/meter init, spans, metrics to the code
-          3. Creates/updates .vscode/launch.json with OTLP env vars
-
-User:     Runs the app (F5 or terminal)
-
-User:     "Check if my instrumentation is producing correct telemetry"
-
-Cursor:   4. Calls MCP tool: observer_traces_overview {}
-             → Sees 12 traces, 3 have status "error"
-          5. Calls MCP tool: observer_trace_detail { traceId: "abc123..." }
-             → Sees span "db.query" missing error status on exception
-          6. Calls MCP tool: observer_metrics_overview { serviceName: "my-svc" }
-             → Sees http.server.duration metric, but no db.client.duration
-          7. Fixes the code: adds error status to db span, adds db metric
-          8. "Restart your app — I've fixed 2 issues:
-              - db.query spans now record error status on exceptions
-              - Added db.client.duration histogram"
-```
+After registration the agent can read skills to learn how to instrument code
+and call MCP tools to inspect live telemetry. Concrete workflows are defined in
+the skills themselves and may evolve independently of this document.
 
 #### Claude Code (terminal)
 
@@ -440,38 +406,6 @@ Writes to `~/.claude/settings.json`:
 
 Copies skills to `.claude/skills/obstudio/` in the project root.
 
-**Workflow after registration:**
-
-```
-$ claude
-
-User:     "Instrument this Python Flask app with OpenTelemetry and
-           verify the telemetry looks correct"
-
-Claude:   1. Reads .claude/skills/obstudio/instrument/SKILL.md
-             Reads .claude/skills/obstudio/instrument/python.md
-          2. Adds opentelemetry-sdk, opentelemetry-instrumentation-flask
-             to requirements.txt
-          3. Creates otel_setup.py with TracerProvider, MeterProvider
-          4. Wraps app entrypoint with OTel initialization
-          5. Runs: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-                   python app.py
-          6. Sends a few test requests: curl http://localhost:8080/api/users
-
-          7. Calls MCP tool: observer_traces_overview { serviceName: "flask-app" }
-             → "I see 3 traces. Let me check the details."
-          8. Calls MCP tool: observer_trace_detail { traceId: "def456..." }
-             → "The /api/users endpoint produces a root span with 2 child
-                spans (db.query, redis.get). Attributes look correct.
-                service.name=flask-app. Spans have proper status codes."
-          9. Calls MCP tool: observer_metrics_overview {}
-             → "I see http.server.request.duration and
-                http.server.active_requests. Both use correct semantic
-                conventions."
-         10. "Instrumentation looks good. 3 traces verified, 2 metrics
-              confirmed. No issues found."
-```
-
 #### OpenAI Codex (CLI)
 
 ```bash
@@ -491,34 +425,6 @@ Writes to `~/.codex/config.json`:
 ```
 
 Copies skills to `~/.codex/skills/obstudio/`.
-
-**Workflow after registration:**
-
-```
-$ codex
-
-User:     "Add OpenTelemetry instrumentation to this Java Spring Boot
-           service, then check the telemetry is valid"
-
-Codex:    1. Reads skills from ~/.codex/skills/obstudio/instrument/
-          2. Adds OTel SDK dependencies to pom.xml
-          3. Creates OtelConfig.java with SDK initialization
-          4. Adds @WithSpan annotations, custom metrics
-          5. Runs the app with OTLP endpoint set to localhost:4318
-
-          6. Calls MCP tool: observer_traces_overview {}
-             → Lists 8 traces from "spring-boot-app"
-          7. Calls MCP tool: observer_metric_detail
-                { metricName: "http.server.request.duration" }
-             → Shows histogram buckets, p50/p99 values
-          8. Calls MCP tool: observer_traces_overview { status: "error" }
-             → "1 trace has errors. Let me investigate."
-          9. Calls MCP tool: observer_trace_detail { traceId: "789abc..." }
-             → "Span 'UserRepository.findById' threw NPE but span status
-                is UNSET instead of ERROR. Fixing."
-         10. Fixes UserRepository, sets span status on exception
-         11. "Fixed. Re-run the app to verify."
-```
 
 #### Any MCP-Compatible Tool (generic)
 
@@ -569,28 +475,51 @@ universal.
 
 If a feature only works inside a VS Code extension, it is built wrong. Every
 capability — telemetry visualization, validation, MCP queries, skill-driven
-instrumentation — must work via `obstudio start` + `obstudio register`. Editor
-extensions, marketplace listings, and package manager formulae are delivery
-mechanisms.
+instrumentation — must work via `obstudio start` + `obstudio register`. 
+
+The extension should be a thin shell: lifecycle management (start/stop the binary)
+and editor-specific UI (webviews, status bar). Keeping extension code minimal
+makes it straightforward to add plugins for other IDEs in the future.
 
 ---
 
-## Development Phases
+## Development Components
 
-| Phase | Layer | Deliverable                        | Outcome                                      |
-|-------|-------|------------------------------------|-----------------------------------------------|
-| 1     | 1     | Observer: OTLP ingest + web UI    | Run Observer, view telemetry in browser       |
-| 2     | 1     | Observer: MCP server               | AI agents can query telemetry                 |
-| 3     | 1     | Skills: Instrumenter (multi-lang)  | AI agents can instrument code                 |
-| 4     | 2     | obstudio binary: CLI + lifecycle   | `obstudio start`, `obstudio register`         |
-| 5     | 2     | Validator (OTel Weaver integration)| Conformance checks via CLI and MCP            |
-| 6     | 3     | VS Code extension (thin wrapper)   | Marketplace distribution for VS Code/Cursor   |
-| 7     | 3     | Homebrew formula + binary releases | CLI distribution for all platforms             |
-| 8     | 1     | Skills: Terraformer                | Splunk O11y Cloud terraform generation        |
+Work is organized as independent components, not sequential phases. Components
+within the same tier can progress in parallel. Dependencies between components
+are shown explicitly so engineers can work independently.
 
-Each phase delivers a complete, testable unit at its layer. Layer 1 phases are
-usable immediately without waiting for Layer 2 or 3. Layer 2 composes Layer 1
-into a product. Layer 3 distributes it.
+### Core components (parallel tracks)
+
+| Component              | Layer | Deliverable                                    | Depends On |
+|------------------------|-------|------------------------------------------------|------------|
+| **Observer**           | 1     | OTLP ingest, web UI, MCP server                | —          |
+| **Skills**             | 1     | Instrumenter (multi-lang), Terraformer         | —          |
+
+Observer and Skills have no dependency on each other. They can be developed,
+tested, and shipped by separate engineers or teams from day one.
+
+### Integration components
+
+| Component              | Layer | Deliverable                                    | Depends On |
+|------------------------|-------|------------------------------------------------|------------|
+| **obstudio CLI**       | 2     | `obstudio start`, `obstudio register`          | Observer, Skills |
+| **Validator**          | 2     | OTel Weaver conformance checks via CLI and MCP | Observer   |
+
+The CLI composes Observer and Skills into a single binary and adds lifecycle
+management. The Validator needs Observer's telemetry store but is otherwise
+independent. Both can proceed once the Observer and Skills interfaces stabilize,
+and can run in parallel with each other.
+
+### Distribution
+
+| Component              | Layer | Deliverable                                    | Depends On |
+|------------------------|-------|------------------------------------------------|------------|
+| **VS Code extension**  | 3     | Marketplace distribution for VS Code/Cursor    | obstudio CLI |
+
+The extension is a thin wrapper around the CLI. It can begin development early
+using the CLI's interface contract, but packaging and release depend on a stable
+CLI.
 
 ---
 
