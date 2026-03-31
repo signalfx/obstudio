@@ -1,0 +1,19 @@
+dist:
+  name: obstudio
+  description: Observability Studio — local OpenTelemetry collector
+  output_path: ./build
+  otelcol_version: 0.149.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.149.0
+
+exporters:
+  - gomod: github.com/signalfx/obstudio/observer-go/exporter v0.0.0
+
+extensions:
+  - gomod: github.com/signalfx/obstudio/observer-go/extension v0.0.0
+
+replaces:
+  - github.com/signalfx/obstudio/observer-go => ./
+  - github.com/signalfx/obstudio/observer-go/exporter => ./exporter
+  - github.com/signalfx/obstudio/observer-go/extension => ./extension

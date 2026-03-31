@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Observability Studio</title>
+<style>
+:root {
+  --bg: #1e1e1e; --bg2: #252526; --bg3: #2d2d2d; --border: #3e3e42;
+  --fg: #cccccc; --fg2: #969696; --accent: #4fc1ff; --error: #f44747;
+  --ok: #6a9955; --warn: #cca700; --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 13px; height: 100vh; display: flex; flex-direction: column; }
+header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 8px 16px; display: flex; align-items: center; gap: 16px; }
+header h1 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.stats { display: flex; gap: 12px; font-size: 12px; color: var(--fg2); }
+.stats span { display: flex; align-items: center; gap: 4px; }
+.stats .count { color: var(--accent); font-weight: 600; font-family: var(--mono); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-left: auto; }
+.live-dot.disconnected { background: var(--error); }
+nav { background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; }
+nav button { background: none; border: none; color: var(--fg2); padding: 8px 20px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+nav button:hover { color: var(--fg); }
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+main { flex: 1; overflow: auto; padding: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--fg2); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
+td { padding: 6px 10px; border-bottom: 1px solid var(--bg3); vertical-align: top; }
+tr:hover td { background: var(--bg2); }
+tr.clickable { cursor: pointer; }
+.mono { font-family: var(--mono); font-size: 11px; }
+.status-ok { color: var(--ok); }
+.status-error { color: var(--error); }
+.status-mixed { color: var(--warn); }
+.status-unset { color: var(--fg2); }
+.detail { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; padding: 12px; }
+.detail pre { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--fg); max-height: 400px; overflow: auto; }
+.empty { text-align: center; color: var(--fg2); padding: 48px 0; }
+.empty p { margin-top: 8px; font-size: 12px; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 500; }
+.badge-error { background: rgba(244,71,71,0.15); color: var(--error); }
+.badge-ok { background: rgba(106,153,85,0.15); color: var(--ok); }
+.badge-warn { background: rgba(204,167,0,0.15); color: var(--warn); }
+.severity-error, .severity-fatal { color: var(--error); }
+.severity-warn { color: var(--warn); }
+.severity-info { color: var(--accent); }
+.severity-debug, .severity-trace { color: var(--fg2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Observability Studio</h1>
+  <div class="stats">
+    <span>Traces <span class="count" id="traceCount">0</span></span>
+    <span>Spans <span class="count" id="spanCount">0</span></span>
+    <span>Metrics <span class="count" id="metricCount">0</span></span>
+    <span>Logs <span class="count" id="logCount">0</span></span>
+  </div>
+  <div class="live-dot" id="liveDot" title="SSE connected"></div>
+</header>
+<nav>
+  <button class="active" data-tab="traces">Traces</button>
+  <button data-tab="metrics">Metrics</button>
+  <button data-tab="logs">Logs</button>
+</nav>
+<main id="content"></main>
+<script>
+const $ = (s, p) => (p||document).querySelector(s);
+const $$ = (s, p) => [...(p||document).querySelectorAll(s)];
+let activeTab = 'traces';
+let expandedTrace = null;
+
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.tab;
+    expandedTrace = null;
+    refresh();
+  });
+});
+
+const sse = new EventSource('/api/events');
+sse.addEventListener('telemetry-changed', () => { refreshStats(); refresh(); });
+sse.addEventListener('open', () => { $('#liveDot').classList.remove('disconnected'); });
+sse.addEventListener('error', () => { $('#liveDot').classList.add('disconnected'); });
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  return r.ok ? r.json() : null;
+}
+
+async function refreshStats() {
+  const s = await fetchJSON('/api/query/stats');
+  if (!s) return;
+  $('#traceCount').textContent = s.traceCount;
+  $('#spanCount').textContent = s.spanCount;
+  $('#metricCount').textContent = s.metricCount;
+  $('#logCount').textContent = s.logCount;
+}
+
+async function refresh() {
+  switch (activeTab) {
+    case 'traces': return renderTraces();
+    case 'metrics': return renderMetrics();
+    case 'logs': return renderLogs();
+  }
+}
+
+async function renderTraces() {
+  const traces = await fetchJSON('/api/query/traces?limit=50&spanPreviewCount=8');
+  const el = $('#content');
+  if (!traces || traces.length === 0) {
+    el.innerHTML = '<div class="empty"><p>No traces yet.</p><p>Send OTLP data to localhost:4318</p></div>';
+    return;
+  }
+  let html = '<table><tr><th>Trace ID</th><th>Root Span</th><th>Service</th><th>Spans</th><th>Duration</th><th>Status</th></tr>';
+  for (const t of traces) {
+    const sc = 'status-' + t.status;
+    html += `<tr class="clickable" data-trace="${t.traceId}">
+      <td class="mono">${t.traceId.substring(0,16)}…</td>
+      <td>${esc(t.rootSpanName)}</td>
+      <td>${esc(t.serviceName||'—')}</td>
+      <td>${t.spanCount}</td>
+      <td class="mono">${t.durationMs?.toFixed(1) ?? '—'}ms</td>
+      <td class="${sc}">${t.status}</td>
+    </tr>`;
+    if (expandedTrace === t.traceId) {
+      html += `<tr><td colspan="6" id="traceDetail">Loading...</td></tr>`;
+    }
+  }
+  html += '</table>';
+  el.innerHTML = html;
+
+  el.querySelectorAll('tr.clickable').forEach(row => {
+    row.addEventListener('click', async () => {
+      const tid = row.dataset.trace;
+      expandedTrace = expandedTrace === tid ? null : tid;
+      await renderTraces();
+      if (expandedTrace) {
+        const detail = await fetchJSON(`/api/query/traces/${tid}?eventLimit=20`);
+        const cell = document.getElementById('traceDetail');
+        if (cell && detail) cell.innerHTML = '<div class="detail"><pre>' + esc(JSON.stringify(detail.spans, null, 2)) + '</pre></div>';
+      }
+    });
+  });
+}
+
+async function renderMetrics() {
+  const metrics = await fetchJSON('/api/query/metrics?limit=50&dataPointLimit=5');
+  const el = $('#content');
+  if (!metrics || metrics.length === 0) {
+    el.innerHTML = '<div class="empty"><p>No metrics yet.</p><p>Send OTLP data to localhost:4318</p></div>';
+    return;
+  }
+  let html = '<table><tr><th>Name</th><th>Type</th><th>Service</th><th>Scope</th><th>Points</th><th>Description</th></tr>';
+  for (const m of metrics) {
+    html += `<tr>
+      <td class="mono">${esc(m.name)}</td>
+      <td>${esc(m.type)}</td>
+      <td>${esc(m.serviceName||'—')}</td>
+      <td>${esc(m.scopeName||'—')}</td>
+      <td>${m.dataPointCount}</td>
+      <td style="color:var(--fg2)">${esc(m.description||'—')}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function renderLogs() {
+  const logs = await fetchJSON('/api/query/logs?limit=100');
+  const el = $('#content');
+  if (!logs || logs.length === 0) {
+    el.innerHTML = '<div class="empty"><p>No logs yet.</p><p>Send OTLP data to localhost:4318</p></div>';
+    return;
+  }
+  let html = '<table><tr><th>Time</th><th>Severity</th><th>Service</th><th>Body</th><th>Trace</th></tr>';
+  for (const l of logs) {
+    const ts = l.timeUnixNano ? new Date(l.timeUnixNano).toLocaleTimeString() : '—';
+    const sevClass = 'severity-' + (l.severityText||'').toLowerCase();
+    html += `<tr>
+      <td class="mono">${ts}</td>
+      <td class="${sevClass}">${esc(l.severityText||'—')}</td>
+      <td>${esc(l.resource?.serviceName||'—')}</td>
+      <td style="max-width:500px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.body||'—')}</td>
+      <td class="mono">${l.traceId ? l.traceId.substring(0,8)+'…' : '—'}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+refreshStats();
+refresh();
+</script>
+</body>
+</html>
