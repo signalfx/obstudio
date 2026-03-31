@@ -19,6 +19,15 @@ async function buildObserverServer() {
 		platform: "node",
 		sourcemap: true,
 		target: "node20",
+		external: [
+			"@duckdb/node-bindings",
+			"@duckdb/node-bindings-darwin-arm64",
+			"@duckdb/node-bindings-darwin-x64",
+			"@duckdb/node-bindings-linux-arm64",
+			"@duckdb/node-bindings-linux-x64",
+			"@duckdb/node-bindings-win32-arm64",
+			"@duckdb/node-bindings-win32-x64",
+		],
 	});
 }
 
@@ -48,6 +57,34 @@ function copyObserverHtml() {
 	);
 }
 
+function copyObserverSql() {
+	const sqlSrc = path.join(observerRoot, "server", "src", "sql");
+	const sqlDest = path.join(observerOutDir, "sql");
+	fs.mkdirSync(sqlDest, { recursive: true });
+	for (const file of fs.readdirSync(sqlSrc)) {
+		if (file.endsWith(".sql")) {
+			fs.copyFileSync(path.join(sqlSrc, file), path.join(sqlDest, file));
+		}
+	}
+}
+
+function copyDuckDBNativeBindings() {
+	const nodeModules = path.join(observerRoot, "node_modules");
+	const bindings = ["@duckdb/node-bindings", "@duckdb/node-bindings-darwin-arm64", "@duckdb/node-bindings-darwin-x64", "@duckdb/node-bindings-linux-arm64", "@duckdb/node-bindings-linux-x64", "@duckdb/node-bindings-win32-arm64", "@duckdb/node-bindings-win32-x64"];
+	for (const pkg of bindings) {
+		const srcDir = path.join(nodeModules, pkg);
+		if (!fs.existsSync(srcDir)) continue;
+		const destDir = path.join(observerOutDir, "node_modules", pkg);
+		fs.mkdirSync(destDir, { recursive: true });
+		for (const file of fs.readdirSync(srcDir)) {
+			const srcFile = path.join(srcDir, file);
+			if (fs.statSync(srcFile).isFile()) {
+				fs.copyFileSync(srcFile, path.join(destDir, file));
+			}
+		}
+	}
+}
+
 async function main() {
 	fs.rmSync(observerOutDir, { force: true, recursive: true });
 	fs.mkdirSync(observerAssetsDir, { recursive: true });
@@ -55,6 +92,8 @@ async function main() {
 	await buildObserverServer();
 	await buildObserverClient();
 	copyObserverHtml();
+	copyObserverSql();
+	copyDuckDBNativeBindings();
 }
 
 main().catch((error) => {

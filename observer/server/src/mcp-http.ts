@@ -1,15 +1,6 @@
 import express from "express";
-import type { AnyValue, KeyValue } from "../../shared/otlp/common/v1/common.d.mts";
-import type {
-  ExponentialHistogramDataPoint,
-  HistogramDataPoint,
-  Metric,
-  NumberDataPoint,
-  ResourceMetrics,
-  SummaryDataPoint,
-} from "../../shared/otlp/metrics/v1/metrics.d.mts";
-import type { ResourceSpans, ScopeSpans } from "../../shared/otlp/trace/v1/trace.d.mts";
-import { otlpInMemoryStore } from "./otlp-store.js";
+import { getConnection } from "./duckdb-store.js";
+import { loadSQL } from "./sql-loader.js";
 
 const mcpHttpPath = process.env.MCP_PATH ?? "/mcp";
 const mcpPayloadLimit = "1mb";
@@ -70,7 +61,7 @@ type MpcToolDefinition = {
   name: string;
 };
 
-type MpcToolHandler = (params: Record<string, unknown>) => MpcToolResult;
+type MpcToolHandler = (params: Record<string, unknown>) => MpcToolResult | Promise<MpcToolResult>;
 type MpcToolResult = {
   content: Array<{ text: string; type: "text" }>;
   isError?: boolean;
@@ -370,7 +361,7 @@ export function registerMcpHttpApi(app: express.Express): void {
     });
   });
 
-  app.post(mcpHttpPath, express.text({ limit: mcpPayloadLimit, type: () => true }), (request, response) => {
+  app.post(mcpHttpPath, express.text({ limit: mcpPayloadLimit, type: () => true }), async (request, response) => {
     const protocolVersion = getRequestedProtocolVersion(request);
     applyMcpHeaders(response, protocolVersion);
 
@@ -414,7 +405,7 @@ export function registerMcpHttpApi(app: express.Express): void {
 
     const responses: JsonRpcResponse[] = [];
     for (const entry of requests) {
-      const rpcResponse = handleJsonRpcRequest(entry, protocolVersion);
+      const rpcResponse = await handleJsonRpcRequest(entry, protocolVersion);
       if (rpcResponse !== null) {
         responses.push(rpcResponse);
       }
@@ -429,7 +420,7 @@ export function registerMcpHttpApi(app: express.Express): void {
   });
 }
 
-function handleJsonRpcRequest(payload: unknown, protocolVersion: string): JsonRpcResponse | null {
+async function handleJsonRpcRequest(payload: unknown, protocolVersion: string): Promise<JsonRpcResponse | null> {
   if (!isJsonRpcRequest(payload)) {
     return createErrorResponse(null, -32600, "Invalid JSON-RPC request.");
   }
@@ -456,7 +447,7 @@ function handleJsonRpcRequest(payload: unknown, protocolVersion: string): JsonRp
         tools: [...mcpTools.values()].map(({ definition }) => definition),
       });
     case "tools/call":
-      return handleToolsCall(payload.id ?? null, payload.params);
+      return await handleToolsCall(payload.id ?? null, payload.params);
     default:
       return createErrorResponse(payload.id ?? null, -32601, `Method not found: ${payload.method}`);
   }
@@ -493,7 +484,7 @@ function handleInitializeRequest(id: JsonRpcId, params: unknown, requestedProtoc
   return createResultResponse(id, initialized);
 }
 
-function handleToolsCall(id: JsonRpcId, params: unknown): JsonRpcResponse {
+async function handleToolsCall(id: JsonRpcId, params: unknown): Promise<JsonRpcResponse> {
   if (!isRecord(params)) {
     return createErrorResponse(id, -32602, "tools/call params must be an object.");
   }
@@ -511,7 +502,7 @@ function handleToolsCall(id: JsonRpcId, params: unknown): JsonRpcResponse {
   const argumentsObject = isRecord(params.arguments) ? params.arguments : {};
 
   try {
-    return createResultResponse(id, tool.handler(argumentsObject));
+    return createResultResponse(id, await tool.handler(argumentsObject));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Tool execution failed.";
     return createResultResponse(id, {
@@ -522,7 +513,7 @@ function handleToolsCall(id: JsonRpcId, params: unknown): JsonRpcResponse {
   }
 }
 
-function handleMetricsOverviewTool(params: Record<string, unknown>): MpcToolResult {
+async function handleMetricsOverviewTool(params: Record<string, unknown>): Promise<MpcToolResult> {
   const limit = readInteger(params.limit, 20, 1, maxMetricResults);
   const dataPointLimit = readInteger(params.dataPointLimit, 3, 0, maxMetricDataPoints);
   const filters: MetricMatchFilters = {
@@ -533,8 +524,8 @@ function handleMetricsOverviewTool(params: Record<string, unknown>): MpcToolResu
     type: readOptionalString(params.type),
   };
 
-  const matchedMetrics = collectNormalizedMetrics(dataPointLimit).filter((metric) => matchesMetricFilters(metric, filters)).slice(0, limit);
-  const totals = collectMetricTotals();
+  const matchedMetrics = (await collectNormalizedMetrics(dataPointLimit)).filter((metric) => matchesMetricFilters(metric, filters)).slice(0, limit);
+  const totals = await collectMetricTotals();
 
   return {
     content: [
@@ -553,7 +544,7 @@ function handleMetricsOverviewTool(params: Record<string, unknown>): MpcToolResu
   };
 }
 
-function handleMetricDetailTool(params: Record<string, unknown>): MpcToolResult {
+async function handleMetricDetailTool(params: Record<string, unknown>): Promise<MpcToolResult> {
   const metricName = readRequiredString(params.metricName, "metricName");
   const dataPointLimit = readInteger(params.dataPointLimit, 50, 1, maxMetricDataPoints);
   const filters: MetricMatchFilters = {
@@ -562,7 +553,7 @@ function handleMetricDetailTool(params: Record<string, unknown>): MpcToolResult 
     serviceName: readOptionalString(params.serviceName),
   };
 
-  const matchedMetrics = collectNormalizedMetrics(dataPointLimit).filter((metric) => matchesMetricFilters(metric, filters));
+  const matchedMetrics = (await collectNormalizedMetrics(dataPointLimit)).filter((metric) => matchesMetricFilters(metric, filters));
   return {
     content: [
       {
@@ -580,7 +571,7 @@ function handleMetricDetailTool(params: Record<string, unknown>): MpcToolResult 
   };
 }
 
-function handleTracesOverviewTool(params: Record<string, unknown>): MpcToolResult {
+async function handleTracesOverviewTool(params: Record<string, unknown>): Promise<MpcToolResult> {
   const limit = readInteger(params.limit, 20, 1, maxTraceResults);
   const spanPreviewCount = readInteger(params.spanPreviewCount, 5, 0, maxTraceSpanPreviewCount);
   const filters: TraceMatchFilters = {
@@ -590,7 +581,8 @@ function handleTracesOverviewTool(params: Record<string, unknown>): MpcToolResul
     traceIdPrefix: readOptionalString(params.traceIdPrefix),
   };
 
-  const traces = collectNormalizedTraces(0)
+  const c = getConnection();
+  const traces = (await collectNormalizedTraces(0))
     .filter((trace) => matchesTraceFilters(trace, filters))
     .slice(0, limit)
     .map((trace) => ({
@@ -610,7 +602,9 @@ function handleTracesOverviewTool(params: Record<string, unknown>): MpcToolResul
       traceId: trace.traceId,
     }));
 
-  const totalTraces = otlpInMemoryStore.getMergedTracesRequest().resourceSpans.length;
+  const traceCountReader = await c.runAndReadAll(loadSQL("mcp-trace-count"));
+  const traceCountRow = (traceCountReader.getRowObjectsJson() as Record<string, unknown>[])[0] ?? {};
+  const totalTraces = Number(traceCountRow.total_traces ?? 0);
 
   return {
     content: [
@@ -629,10 +623,10 @@ function handleTracesOverviewTool(params: Record<string, unknown>): MpcToolResul
   };
 }
 
-function handleTraceDetailTool(params: Record<string, unknown>): MpcToolResult {
+async function handleTraceDetailTool(params: Record<string, unknown>): Promise<MpcToolResult> {
   const traceId = normalizeHexId(readRequiredString(params.traceId, "traceId"));
   const eventLimit = readInteger(params.eventLimit, 12, 0, maxTraceEventCount);
-  const trace = collectNormalizedTraces(eventLimit).find((entry) => entry.traceId === traceId);
+  const trace = (await collectNormalizedTraces(eventLimit)).find((entry) => entry.traceId === traceId);
 
   return {
     content: [
@@ -646,143 +640,68 @@ function handleTraceDetailTool(params: Record<string, unknown>): MpcToolResult {
   };
 }
 
-function collectMetricTotals(): { metricCount: number; resourceCount: number; scopeCount: number } {
-  const resourceMetrics = otlpInMemoryStore.getMergedMetricsRequest().resourceMetrics;
+async function collectMetricTotals(): Promise<{ metricCount: number; resourceCount: number; scopeCount: number }> {
+  const c = getConnection();
+  const reader = await c.runAndReadAll(loadSQL("mcp-metric-totals"));
+  const row = (reader.getRowObjectsJson() as Record<string, unknown>[])[0] ?? {};
   return {
-    metricCount: resourceMetrics.reduce(
-      (count, resourceMetric) => count + resourceMetric.scopeMetrics.reduce((scopeCount, scope) => scopeCount + scope.metrics.length, 0),
-      0,
-    ),
-    resourceCount: resourceMetrics.length,
-    scopeCount: resourceMetrics.reduce((count, resourceMetric) => count + resourceMetric.scopeMetrics.length, 0),
+    metricCount: Number(row.metric_count ?? 0),
+    resourceCount: Number(row.resource_count ?? 0),
+    scopeCount: Number(row.scope_count ?? 0),
   };
 }
 
-function collectNormalizedMetrics(dataPointLimit: number): NormalizedMetric[] {
-  return otlpInMemoryStore.getMergedMetricsRequest().resourceMetrics.flatMap((resourceMetrics) =>
-    flattenResourceMetrics(resourceMetrics, dataPointLimit),
-  );
-}
+async function collectNormalizedMetrics(dataPointLimit: number): Promise<NormalizedMetric[]> {
+  const c = getConnection();
+  const reader = await c.runAndReadAll(loadSQL("mcp-metrics-overview"));
+  const rows = reader.getRowObjectsJson() as Record<string, unknown>[];
 
-function flattenResourceMetrics(resourceMetrics: ResourceMetrics, dataPointLimit: number): NormalizedMetric[] {
-  const resourceAttributes = attributesToRecord(resourceMetrics.resource?.attributes);
-  const serviceName = getOptionalString(resourceAttributes["service.name"]);
+  const grouped = new Map<string, { meta: NormalizedMetric; count: number }>();
 
-  return resourceMetrics.scopeMetrics.flatMap((scopeMetrics) =>
-    scopeMetrics.metrics.map((metric) => ({
-      dataPointCount: getMetricDataPoints(metric).length,
-      dataPoints: getMetricDataPoints(metric).slice(0, dataPointLimit).map(summarizeMetricDataPoint),
-      description: metric.description,
-      isMonotonic: getMetricMonotonic(metric),
-      name: metric.name,
-      resource: {
-        attributes: resourceAttributes,
-        schemaUrl: resourceMetrics.schemaUrl,
-        serviceName,
+  for (const row of rows) {
+    const name = String(row.metric_name ?? "");
+    const resourceJson = String(row.resource_json ?? "{}");
+    const scopeJson = String(row.scope_json ?? "{}");
+    const key = `${name}|${scopeJson}|${resourceJson}`;
+
+    const existing = grouped.get(key);
+    if (existing !== undefined) {
+      existing.meta.dataPointCount += 1;
+      if (existing.meta.dataPoints.length < dataPointLimit) {
+        existing.meta.dataPoints.push(safeParseJson(row.data_point_json) as MetricDataPointSummary);
+      }
+      continue;
+    }
+
+    const resource = safeParseJson(resourceJson) as Record<string, unknown>;
+    const scope = safeParseJson(scopeJson) as Record<string, string>;
+
+    grouped.set(key, {
+      meta: {
+        dataPointCount: 1,
+        dataPoints: dataPointLimit > 0 ? [safeParseJson(row.data_point_json) as MetricDataPointSummary] : [],
+        description: String(row.metric_description ?? ""),
+        isMonotonic: row.is_monotonic === true ? true : undefined,
+        name,
+        resource: {
+          attributes: resource,
+          schemaUrl: String(row.resource_schema_url ?? ""),
+          serviceName: getOptionalString(resource["service.name"]),
+        },
+        scope: {
+          name: scope.name ?? "",
+          schemaUrl: String(row.scope_schema_url ?? ""),
+          version: scope.version ?? "",
+        },
+        temporality: String(row.aggregation_temporality ?? "unspecified"),
+        type: String(row.metric_type ?? "unknown"),
+        unit: String(row.metric_unit ?? ""),
       },
-      scope: {
-        name: scopeMetrics.scope?.name ?? "",
-        schemaUrl: scopeMetrics.schemaUrl,
-        version: scopeMetrics.scope?.version ?? "",
-      },
-      temporality: getMetricTemporality(metric),
-      type: getMetricType(metric),
-      unit: metric.unit,
-    })),
-  );
-}
-
-function getMetricDataPoints(metric: Metric): Array<NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint> {
-  switch (metric.data?.$case) {
-    case "gauge":
-      return metric.data.gauge.dataPoints;
-    case "sum":
-      return metric.data.sum.dataPoints;
-    case "histogram":
-      return metric.data.histogram.dataPoints;
-    case "exponentialHistogram":
-      return metric.data.exponentialHistogram.dataPoints;
-    case "summary":
-      return metric.data.summary.dataPoints;
-    default:
-      return [];
-  }
-}
-
-function getMetricType(metric: Metric): string {
-  switch (metric.data?.$case) {
-    case "gauge":
-      return "gauge";
-    case "sum":
-      return metric.data.sum.isMonotonic ? "counter" : "gauge";
-    case "histogram":
-      return "histogram";
-    case "exponentialHistogram":
-      return "exponential_histogram";
-    case "summary":
-      return "summary";
-    default:
-      return "unknown";
-  }
-}
-
-function getMetricTemporality(metric: Metric): string | undefined {
-  switch (metric.data?.$case) {
-    case "sum":
-      return formatAggregationTemporality(metric.data.sum.aggregationTemporality);
-    case "histogram":
-      return formatAggregationTemporality(metric.data.histogram.aggregationTemporality);
-    case "exponentialHistogram":
-      return formatAggregationTemporality(metric.data.exponentialHistogram.aggregationTemporality);
-    default:
-      return undefined;
-  }
-}
-
-function getMetricMonotonic(metric: Metric): boolean | undefined {
-  return metric.data?.$case === "sum" ? metric.data.sum.isMonotonic : undefined;
-}
-
-function summarizeMetricDataPoint(
-  dataPoint: NumberDataPoint | HistogramDataPoint | ExponentialHistogramDataPoint | SummaryDataPoint,
-): MetricDataPointSummary {
-  const summary: MetricDataPointSummary = {
-    attributes: attributesToRecord(dataPoint.attributes),
-    flags: dataPoint.flags,
-    startTimeUnixNano: dataPoint.startTimeUnixNano,
-    timeUnixNano: dataPoint.timeUnixNano,
-  };
-
-  if ("value" in dataPoint) {
-    summary.value = dataPoint.value?.$case === "asDouble" ? dataPoint.value.asDouble : dataPoint.value?.asInt;
-  }
-  if ("count" in dataPoint) {
-    summary.count = dataPoint.count;
-  }
-  if ("sum" in dataPoint && typeof dataPoint.sum === "number") {
-    summary.sum = dataPoint.sum;
-  }
-  if ("min" in dataPoint && typeof dataPoint.min === "number") {
-    summary.min = dataPoint.min;
-  }
-  if ("max" in dataPoint && typeof dataPoint.max === "number") {
-    summary.max = dataPoint.max;
-  }
-  if ("bucketCounts" in dataPoint) {
-    summary.bucketCounts = dataPoint.bucketCounts;
-  }
-  if ("explicitBounds" in dataPoint) {
-    summary.explicitBounds = dataPoint.explicitBounds;
-  }
-  if ("zeroCount" in dataPoint) {
-    summary.zeroCount = dataPoint.zeroCount;
-    summary.zeroThreshold = dataPoint.zeroThreshold;
-  }
-  if ("quantileValues" in dataPoint) {
-    summary.quantiles = dataPoint.quantileValues.map((entry) => ({ quantile: entry.quantile, value: entry.value }));
+      count: 1,
+    });
   }
 
-  return summary;
+  return [...grouped.values()].map((g) => g.meta);
 }
 
 function matchesMetricFilters(metric: NormalizedMetric, filters: MetricMatchFilters): boolean {
@@ -808,70 +727,76 @@ function matchesMetricFilters(metric: NormalizedMetric, filters: MetricMatchFilt
   return true;
 }
 
-function collectNormalizedTraces(eventLimit: number): NormalizedTrace[] {
-  return otlpInMemoryStore.getMergedTracesRequest().resourceSpans.map((resourceSpans) => normalizeTrace(resourceSpans, eventLimit));
-}
+async function collectNormalizedTraces(eventLimit: number): Promise<NormalizedTrace[]> {
+  const c = getConnection();
+  const reader = await c.runAndReadAll(loadSQL("mcp-spans"));
+  const rows = reader.getRowObjectsJson() as Record<string, unknown>[];
 
-function normalizeTrace(resourceSpans: ResourceSpans, eventLimit: number): NormalizedTrace {
-  const spans = flattenTraceSpans(resourceSpans, eventLimit);
-  const rootSpan = spans.find((span) => span.parentSpanId === "") ?? spans[0];
+  const traceMap = new Map<string, NormalizedTraceSpan[]>();
 
-  return {
-    durationMs: calculateDurationMs(rootSpan?.startTimeUnixNano ?? "", rootSpan?.endTimeUnixNano ?? ""),
-    rootSpanName: rootSpan?.name ?? "",
-    serviceName: getOptionalString(rootSpan?.resource.serviceName),
-    spanCount: spans.length,
-    spans,
-    status: getTraceStatus(spans),
-    traceId: spans[0]?.traceId ?? "",
-  };
-}
+  for (const row of rows) {
+    const traceId = String(row.trace_id ?? "");
+    const resource = safeParseJson(row.resource_json) as Record<string, unknown>;
+    const scope = safeParseJson(row.scope_json) as Record<string, string>;
+    const events = (safeParseJson(row.events_json) as Array<Record<string, unknown>>).slice(0, eventLimit);
+    const links = safeParseJson(row.links_json) as Array<Record<string, unknown>>;
 
-function flattenTraceSpans(resourceSpans: ResourceSpans, eventLimit: number): NormalizedTraceSpan[] {
-  const resourceAttributes = attributesToRecord(resourceSpans.resource?.attributes);
-  const resourceServiceName = getOptionalString(resourceAttributes["service.name"]);
-
-  return resourceSpans.scopeSpans.flatMap((scopeSpans) =>
-    scopeSpans.spans.map((span) => ({
-      attributes: attributesToRecord(span.attributes),
-      durationMs: calculateDurationMs(span.startTimeUnixNano, span.endTimeUnixNano),
-      endTimeUnixNano: span.endTimeUnixNano,
-      events: span.events.slice(0, eventLimit).map((event) => ({
-        attributes: attributesToRecord(event.attributes),
-        name: event.name,
-        timeUnixNano: event.timeUnixNano,
+    const span: NormalizedTraceSpan = {
+      attributes: safeParseJson(row.attributes_json) as Record<string, unknown>,
+      durationMs: calculateDurationMs(String(row.start_time_unix_nano ?? ""), String(row.end_time_unix_nano ?? "")),
+      endTimeUnixNano: String(row.end_time_unix_nano ?? ""),
+      events: events.map((e) => ({
+        attributes: (e.attributes ?? {}) as Record<string, unknown>,
+        name: String(e.name ?? ""),
+        timeUnixNano: String(e.timeUnixNano ?? ""),
       })),
-      kind: formatSpanKind(span.kind),
-      links: span.links.map((link) => ({
-        attributes: attributesToRecord(link.attributes),
-        spanId: bytesToHex(link.spanId),
-        traceId: bytesToHex(link.traceId),
+      kind: formatSpanKind(Number(row.kind ?? 0)),
+      links: links.map((l) => ({
+        attributes: (l.attributes ?? {}) as Record<string, unknown>,
+        spanId: String(l.spanId ?? ""),
+        traceId: String(l.traceId ?? ""),
       })),
-      name: span.name,
-      parentSpanId: bytesToHex(span.parentSpanId),
+      name: String(row.name ?? ""),
+      parentSpanId: String(row.parent_span_id ?? ""),
       resource: {
-        attributes: resourceAttributes,
-        schemaUrl: resourceSpans.schemaUrl,
-        serviceName: resourceServiceName,
+        attributes: resource,
+        schemaUrl: String(row.resource_schema_url ?? ""),
+        serviceName: getOptionalString(resource["service.name"]),
       },
-      scope: summarizeScope(scopeSpans),
-      spanId: bytesToHex(span.spanId),
-      startTimeUnixNano: span.startTimeUnixNano,
+      scope: {
+        name: scope.name ?? "",
+        schemaUrl: String(row.scope_schema_url ?? ""),
+        version: scope.version ?? "",
+      },
+      spanId: String(row.span_id ?? ""),
+      startTimeUnixNano: String(row.start_time_unix_nano ?? ""),
       status: {
-        code: formatStatusCode(span.status?.code ?? 0),
-        message: span.status?.message ?? "",
+        code: formatStatusCode(Number(row.status_code ?? 0)),
+        message: String(row.status_message ?? ""),
       },
-      traceId: bytesToHex(span.traceId),
-    })),
-  );
-}
+      traceId,
+    };
 
-function summarizeScope(scopeSpans: ScopeSpans): { name: string; schemaUrl: string; version: string } {
-  return {
-    name: scopeSpans.scope?.name ?? "",
-    schemaUrl: scopeSpans.schemaUrl,
-    version: scopeSpans.scope?.version ?? "",
-  };
+    const existing = traceMap.get(traceId);
+    if (existing !== undefined) {
+      existing.push(span);
+    } else {
+      traceMap.set(traceId, [span]);
+    }
+  }
+
+  return [...traceMap.entries()].map(([, spans]) => {
+    const rootSpan = spans.find((s) => s.parentSpanId === "") ?? spans[0];
+    return {
+      durationMs: calculateDurationMs(rootSpan?.startTimeUnixNano ?? "", rootSpan?.endTimeUnixNano ?? ""),
+      rootSpanName: rootSpan?.name ?? "",
+      serviceName: getOptionalString(rootSpan?.resource.serviceName),
+      spanCount: spans.length,
+      spans,
+      status: getTraceStatus(spans),
+      traceId: spans[0]?.traceId ?? "",
+    };
+  });
 }
 
 function matchesTraceFilters(trace: NormalizedTrace, filters: TraceMatchFilters): boolean {
@@ -922,45 +847,12 @@ function calculateDurationMs(startTimeUnixNano: string, endTimeUnixNano: string)
   }
 }
 
-function attributesToRecord(attributes: KeyValue[] | undefined): Record<string, unknown> {
-  if (attributes === undefined || attributes.length === 0) {
-    return {};
-  }
-
-  return Object.fromEntries(attributes.map((attribute) => [attribute.key, anyValueToJson(attribute.value)]));
-}
-
-function anyValueToJson(value: AnyValue | undefined): unknown {
-  switch (value?.value?.$case) {
-    case "stringValue":
-      return value.value.stringValue;
-    case "boolValue":
-      return value.value.boolValue;
-    case "intValue":
-      return value.value.intValue;
-    case "doubleValue":
-      return value.value.doubleValue;
-    case "bytesValue":
-      return bytesToHex(value.value.bytesValue);
-    case "arrayValue":
-      return value.value.arrayValue.values.map(anyValueToJson);
-    case "kvlistValue":
-      return Object.fromEntries(value.value.kvlistValue.values.map((entry) => [entry.key, anyValueToJson(entry.value)]));
-    case "stringValueStrindex":
-      return value.value.stringValueStrindex;
-    default:
-      return null;
-  }
-}
-
-function formatAggregationTemporality(value: number): string {
-  switch (value) {
-    case 1:
-      return "delta";
-    case 2:
-      return "cumulative";
-    default:
-      return "unspecified";
+function safeParseJson(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
   }
 }
 
@@ -990,10 +882,6 @@ function formatStatusCode(value: number): string {
     default:
       return "unset";
   }
-}
-
-function bytesToHex(value: Uint8Array): string {
-  return Buffer.from(value).toString("hex");
 }
 
 function getRequestedProtocolVersion(request: express.Request): string {

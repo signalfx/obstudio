@@ -2,12 +2,14 @@ import express from "express";
 import http from "node:http";
 import path from "node:path";
 import { registerApiRoutes } from "./api.js";
+import { initDuckDB } from "./duckdb-store.js";
 import { registerLiveReload, type UpgradeHandler as LiveReloadUpgradeHandler } from "./live-reload.js";
 import { registerMcpHttpApi } from "./mcp-http.js";
 import { listenForOtlpGrpc } from "./otlp-grpc.js";
 import { listenForOtlpHttp } from "./otlp-http.js";
 import { registerStaticAssets } from "./static-assets.js";
-import { registerTelemetryWebSocketApi } from "./telemetry-ws-api.js";
+import { registerTelemetryQueryApi } from "./telemetry-query-api.js";
+import { registerTelemetrySSE } from "./telemetry-sse.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -28,7 +30,8 @@ if (liveReloadRegistration !== null) {
 
 registerApiRoutes(app);
 registerMcpHttpApi(app);
-webSocketUpgradeHandlers.push(registerTelemetryWebSocketApi());
+registerTelemetrySSE(app);
+registerTelemetryQueryApi(app);
 registerStaticAssets(app, { isDev, liveReloadScript, publicDir });
 
 server.on("upgrade", (request, socket, head) => {
@@ -43,9 +46,19 @@ server.on("upgrade", (request, socket, head) => {
   matchingHandler.handleUpgrade(request, socket, head);
 });
 
-server.listen(port, host, () => {
-  console.log(`Observer listening on http://${host}:${port}`);
-});
+async function start(): Promise<void> {
+  await initDuckDB();
+  console.log("[duckdb] in-memory store initialized");
 
-listenForOtlpHttp();
-listenForOtlpGrpc();
+  server.listen(port, host, () => {
+    console.log(`Observer listening on http://${host}:${port}`);
+  });
+
+  listenForOtlpHttp();
+  listenForOtlpGrpc();
+}
+
+start().catch((err) => {
+  console.error("Failed to start observer:", err);
+  process.exit(1);
+});

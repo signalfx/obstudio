@@ -47,10 +47,10 @@ export function TracesTab({ telemetryError, traces }: TracesTabProps) {
     const traceSpans = resourceSpans.scopeSpans.flatMap((scopeSpans) =>
       scopeSpans.spans.map((span) => ({
         attributes: span.attributes ?? [],
-        id: toHex(span.spanId) || "unknown-span",
+        id: span.spanId || "unknown-span",
         index: 0,
         name: span.name || "unnamed span",
-        parentId: toHex(span.parentSpanId),
+        parentId: span.parentSpanId,
         startTimeUnixNano: span.startTimeUnixNano,
         endTimeUnixNano: span.endTimeUnixNano,
         status: span.status,
@@ -58,11 +58,11 @@ export function TracesTab({ telemetryError, traces }: TracesTabProps) {
     ).map((span, index) => ({ ...span, index }));
     const spans = buildTraceSpanEntries(traceSpans);
 
-    const traceId = resourceSpans.scopeSpans.flatMap((scopeSpans) => scopeSpans.spans)[0]?.traceId ?? new Uint8Array(0);
+    const traceId = resourceSpans.scopeSpans.flatMap((scopeSpans) => scopeSpans.spans)[0]?.traceId ?? "";
 
     return {
       duration: spans[0]?.duration ?? "--",
-      id: toHex(traceId).slice(0, 8) || "trace",
+      id: traceId.slice(0, 8) || "trace",
       service: getStringAttribute(resourceSpans.resource?.attributes, "service.name") ?? "unknown-service",
       spanCount: spans.length,
       startTimeUnixNano: getTraceStartTimeUnixNano(resourceSpans.scopeSpans.flatMap((scopeSpans) => scopeSpans.spans)),
@@ -139,10 +139,6 @@ export function TracesTab({ telemetryError, traces }: TracesTabProps) {
       </div>
     </section>
   );
-}
-
-function toHex(value: Uint8Array): string {
-  return Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function formatDuration(endTimeUnixNano: string, startTimeUnixNano: string): string {

@@ -36,7 +36,7 @@ import {
   type OtlpIngestContext,
   type OtlpSignalDefinition,
 } from "./otlp-ingest.js";
-import { otlpInMemoryStore } from "./otlp-store.js";
+import { evictConnection as evictDuckDBConnection } from "./duckdb-store.js";
 
 const grpcSessionIds = new WeakMap<ServerHttp2Session, string>();
 const trackedHttp2Servers = new WeakSet<Http2Server | Http2SecureServer>();
@@ -307,7 +307,7 @@ function evictTrackedGrpcConnection(grpcConnectionId: string, addressKey: string
   evictedGrpcConnections.add(grpcConnectionId);
   grpcConnectionIdsByAddress.delete(addressKey);
   trackedGrpcSessions.delete(grpcConnectionId);
-  otlpInMemoryStore.evictConnection(grpcConnectionId);
+  void evictDuckDBConnection(grpcConnectionId);
   console.log(`[otlp] evicted grpc connection ${grpcConnectionId} (${reason})`);
 }
 

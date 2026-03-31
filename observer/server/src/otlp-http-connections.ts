@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type http from "node:http";
-import { otlpInMemoryStore } from "./otlp-store.js";
+import { evictConnection as evictDuckDBConnection } from "./duckdb-store.js";
 
 const execFileAsync = promisify(execFile);
 const trackedHttpConnectionsByAddress = new Map<string, string>();
@@ -85,7 +85,7 @@ function evictHttpConnection(connectionId: string, reason: string): void {
 
   trackedHttpConnections.delete(connectionId);
   trackedHttpConnectionsByAddress.delete(trackedConnection.addressKey);
-  otlpInMemoryStore.evictConnection(connectionId);
+  void evictDuckDBConnection(connectionId);
   console.log(`[otlp] evicted http connection ${connectionId} (${reason})`);
 }
 

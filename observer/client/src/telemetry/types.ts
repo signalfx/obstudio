@@ -1,8 +1,3 @@
-export type TelemetryWebSocketMessage = {
-  payloadBase64: string;
-  signal: "logs" | "metrics" | "traces";
-};
-
 export type TelemetryAnyValue =
   | { $case: "stringValue"; stringValue: string }
   | { $case: "boolValue"; boolValue: boolean }
@@ -135,14 +130,14 @@ export type TracesRequest = {
         attributes: TelemetryAttribute[];
         endTimeUnixNano: string;
         name: string;
-        parentSpanId: Uint8Array;
-        spanId: Uint8Array;
+        parentSpanId: string;
+        spanId: string;
         startTimeUnixNano: string;
         status?: {
           code?: number;
           message: string;
         };
-        traceId: Uint8Array;
+        traceId: string;
       }>;
     }>;
   }>;

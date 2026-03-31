@@ -23,7 +23,7 @@ import type {
   ExportTraceServiceResponse as TraceResponse,
 } from "../../shared/otlp/collector/trace/v1/trace_service.d.mts";
 import type { Metric } from "../../shared/otlp/metrics/v1/metrics.d.mts";
-import { otlpInMemoryStore } from "./otlp-store.js";
+import { persistLogs, persistMetrics, persistTraces } from "./otlp-to-duckdb.js";
 
 export const otlpHost = process.env.OTLP_HOST ?? process.env.HOST ?? "127.0.0.1";
 export const otlpHttpPort = Number(process.env.OTLP_HTTP_PORT ?? process.env.OTLP_PORT ?? 4318);
@@ -57,7 +57,7 @@ export const logsSignal = createSignal<LogsRequest, LogsResponse>({
   path: "/v1/logs",
   requestCodec: ExportLogsServiceRequestCodec as MessageCodec<LogsRequest>,
   responseCodec: ExportLogsServiceResponseCodec as MessageCodec<LogsResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeLogs(message, context.connectionId),
+  persist: (message, context) => { void persistLogs(message, context.connectionId); },
   signal: "logs",
   summarize: summarizeLogsRequest,
 });
@@ -66,7 +66,7 @@ export const metricsSignal = createSignal<MetricsRequest, MetricsResponse>({
   path: "/v1/metrics",
   requestCodec: ExportMetricsServiceRequestCodec as MessageCodec<MetricsRequest>,
   responseCodec: ExportMetricsServiceResponseCodec as MessageCodec<MetricsResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeMetrics(message, context.connectionId),
+  persist: (message, context) => { void persistMetrics(message, context.connectionId); },
   signal: "metrics",
   summarize: summarizeMetricsRequest,
 });
@@ -75,7 +75,7 @@ export const tracesSignal = createSignal<TraceRequest, TraceResponse>({
   path: "/v1/traces",
   requestCodec: ExportTraceServiceRequestCodec as MessageCodec<TraceRequest>,
   responseCodec: ExportTraceServiceResponseCodec as MessageCodec<TraceResponse>,
-  persist: (message, context) => otlpInMemoryStore.storeTraces(message, context.connectionId),
+  persist: (message, context) => { void persistTraces(message, context.connectionId); },
   signal: "traces",
   summarize: summarizeTraceRequest,
 });
