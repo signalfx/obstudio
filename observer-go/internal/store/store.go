@@ -184,36 +184,83 @@ type Store struct {
 	metrics []MetricDataPoint
 	logs    []LogRecord
 
+	lastIngest time.Time
+	sessionGap time.Duration
+
 	subMu       sync.Mutex
 	subscribers map[int]chan Signal
 	nextSubID   int
 }
 
-func New() *Store {
-	return &Store{
+type Option func(*Store)
+
+func WithSessionGap(d time.Duration) Option {
+	return func(s *Store) { s.sessionGap = d }
+}
+
+func New(opts ...Option) *Store {
+	s := &Store{
 		subscribers: make(map[int]chan Signal),
+		sessionGap:  30 * time.Second,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *Store) AddSpans(spans []Span) {
 	s.mu.Lock()
+	s.checkSessionReset()
 	s.spans = append(s.spans, spans...)
+	s.lastIngest = time.Now()
 	s.mu.Unlock()
 	s.notify(SignalTraces)
 }
 
 func (s *Store) AddMetrics(metrics []MetricDataPoint) {
 	s.mu.Lock()
+	s.checkSessionReset()
 	s.metrics = append(s.metrics, metrics...)
+	s.lastIngest = time.Now()
 	s.mu.Unlock()
 	s.notify(SignalMetrics)
 }
 
 func (s *Store) AddLogs(logs []LogRecord) {
 	s.mu.Lock()
+	s.checkSessionReset()
 	s.logs = append(s.logs, logs...)
+	s.lastIngest = time.Now()
 	s.mu.Unlock()
 	s.notify(SignalLogs)
+}
+
+// Clear removes all stored telemetry and resets the session clock.
+func (s *Store) Clear() {
+	s.mu.Lock()
+	s.spans = nil
+	s.metrics = nil
+	s.logs = nil
+	s.lastIngest = time.Time{}
+	s.mu.Unlock()
+	s.notify(SignalTraces)
+	s.notify(SignalMetrics)
+	s.notify(SignalLogs)
+}
+
+// checkSessionReset clears the store when telemetry arrives after a gap
+// longer than sessionGap, indicating the instrumented app was restarted.
+// Must be called with s.mu held.
+func (s *Store) checkSessionReset() {
+	if s.lastIngest.IsZero() || s.sessionGap <= 0 {
+		return
+	}
+	if time.Since(s.lastIngest) > s.sessionGap {
+		s.spans = nil
+		s.metrics = nil
+		s.logs = nil
+	}
 }
 
 func (s *Store) QueryTraces(f TraceFilter) []TraceSummary {

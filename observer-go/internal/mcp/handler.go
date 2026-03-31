@@ -148,6 +148,8 @@ func (h *handler) handleToolsCall(w http.ResponseWriter, _ *http.Request, req js
 		result = h.tracesOverview(args)
 	case "observer_trace_detail":
 		result = h.traceDetail(args)
+	case "observer_clear":
+		result = h.clearStore()
 	default:
 		writeError(w, req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 		return
@@ -214,6 +216,11 @@ func (h *handler) traceDetail(args map[string]any) toolResult {
 	return jsonResult(detail)
 }
 
+func (h *handler) clearStore() toolResult {
+	h.store.Clear()
+	return toolResult{Content: []toolContent{{Type: "text", Text: "All telemetry data cleared."}}}
+}
+
 func buildToolDefs() []toolDef {
 	f := false
 	return []toolDef{
@@ -275,6 +282,14 @@ func buildToolDefs() []toolDef {
 				},
 			},
 			Annotations: toolAnnot{Title: "Observer Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "observer_clear",
+			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Useful when restarting the instrumented application and wanting a clean slate.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+			},
+			Annotations: toolAnnot{Title: "Observer Clear Data", DestructiveHint: true, IdempotentHint: true},
 		},
 	}
 }

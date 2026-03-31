@@ -14,6 +14,7 @@ func Register(mux *http.ServeMux, s *store.Store) {
 	mux.HandleFunc("GET /api/query/metrics", queryMetrics(s))
 	mux.HandleFunc("GET /api/query/logs", queryLogs(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
+	mux.HandleFunc("DELETE /api/data", clearData(s))
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {
@@ -73,6 +74,13 @@ func queryLogs(s *store.Store) http.HandlerFunc {
 func queryStats(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.Stats())
+	}
+}
+
+func clearData(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.Clear()
+		writeJSON(w, map[string]string{"status": "cleared"})
 	}
 }
 
