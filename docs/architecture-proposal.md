@@ -189,7 +189,7 @@ Two channels are described below. To avoid scope creep we start with these and
 expand to additional channels (e.g. Homebrew, `go install`) once the core
 product is stable.
 
-### Channel 1: Native Agentic Installation (Primary)
+### Channel 1: Native Agentic Installation
 
 obstudio can install itself directly into any AI coding environment. No
 extension, no marketplace, no intermediary. The developer runs a single command
