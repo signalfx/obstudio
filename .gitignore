@@ -13,7 +13,5 @@ uv.lock
 # Compiled binaries
 observer-go/obstudio
 
-# Skill-generated artifacts in demo apps (recreated by /observe runs)
-demo/sample-apps/*/.observe/
-demo/sample-apps/*/otel_setup.py
-demo/sample-apps/*/pyproject.toml
+# Demo apps are committed as-is; ignore all future changes
+demo/
