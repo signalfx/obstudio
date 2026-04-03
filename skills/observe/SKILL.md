@@ -120,7 +120,7 @@ Build a single table containing all KPIs -- already instrumented and missing.
 
 | Column          | Description                                              |
 |-----------------|----------------------------------------------------------|
-| Status          | Checkmark if already instrumented, blank if missing      |
+| Status          | `OK` if already instrumented, blank if missing           |
 | KPI             | Name of the KPI                                          |
 | Component       | Which component it belongs to                            |
 | Class           | `Standard` (auto-instrumentation) or `Business` (custom) |
@@ -129,7 +129,7 @@ Build a single table containing all KPIs -- already instrumented and missing.
 | Log             | Yes/No                                                   |
 | Signal Name     | Actual name if exists, proposed name if not               |
 | Trace-Derivable | Yes/No -- can the metric be derived from span data?       |
-| Verified        | Blank initially; set to checkmark by Step 8 validation   |
+| Verified        | Blank initially; set to `OK` by Step 8 validation        |
 
 Classify each KPI:
 - **Standard**: provided by auto-instrumentation libraries
@@ -347,7 +347,7 @@ For each KPI row in `.observe/inventory.md`:
 
 1. If the KPI's Signal Name was found in the Observer (trace span name
    matched or metric name matched with `dataPointCount >= 1`), set the
-   **Verified** column to a checkmark.
+   **Verified** column to `OK`.
 2. If the signal was expected but not found, leave Verified blank and
    add a comment noting what was missing.
 3. Present a summary table to the user:
