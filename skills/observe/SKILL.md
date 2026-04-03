@@ -363,9 +363,14 @@ Coverage:        N%
 
 ### 8h - Teardown
 
-Stop the application and observer-go processes that were started in
-8a-8b. Clean up any temporary data (e.g., SQLite DBs created during
-the run).
+After verification is complete, **always** stop the processes started
+in 8a-8b:
+
+1. Kill the application process (find by port, e.g., `lsof -ti :8080 | xargs kill`).
+2. Kill the observer-go process (find by port, e.g., `lsof -ti :3000 | xargs kill`).
+3. Clean up temporary data created during the run (e.g., SQLite DBs).
+
+Do not leave background processes running.
 
 ---
 
