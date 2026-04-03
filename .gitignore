@@ -13,7 +13,5 @@ uv.lock
 # Compiled binaries
 observer-go/obstudio
 
-# Demo app generated artifacts (baselines are tracked)
-demo/*/.observe/
-demo/*/otel_setup.py
-demo/*/pyproject.toml
+# Demo apps -- baselines committed once, all future changes ignored
+demo/
