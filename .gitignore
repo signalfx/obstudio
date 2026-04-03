@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+uv.lock
+*.db
+.pytest_cache/
+
+# Compiled binaries
+observer-go/obstudio
+
+# Skill-generated artifacts in demo apps (recreated by /observe runs)
+demo/sample-apps/*/.observe/
+demo/sample-apps/*/otel_setup.py
+demo/sample-apps/*/pyproject.toml
