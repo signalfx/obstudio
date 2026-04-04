@@ -11,13 +11,13 @@ description: >-
 
 ## Overview
 
-Start the observer-go collector and the instrumented application,
-exercise every API endpoint, then use the Observer MCP tools (preferred)
+Exercise every API endpoint and use the Observer MCP tools (preferred)
 or REST API to confirm that each KPI's signal is present with correct
-attributes. When running inside Cursor the MCP server is auto-started
-via stdio -- no manual collector launch is needed for tool access.
+attributes. Any MCP-capable agent (Cursor, Claude Code, Windsurf,
+Codex, etc.) can auto-start the Observer via stdio -- when the MCP
+server is available, no manual collector build or launch is needed.
 Updates the Verified column in `.observe/inventory.md` to `OK` for
-confirmed signals. Tears down all processes when done.
+confirmed signals.
 
 ## When to Use
 
@@ -41,11 +41,25 @@ first.
 
 ### Step 2 -- Start Observer
 
-If the MCP server is already running (Cursor auto-starts it via stdio),
-skip directly to Step 3 -- the MCP tools are available without a
-separate collector process.
+**MCP path (preferred):** The Observer MCP server may already be
+running -- any MCP-capable agent (Cursor, Claude Code, Windsurf,
+Codex, etc.) can auto-start it via stdio. Check for the `obstudio`
+MCP server and its tools (`observer_clear`,
+`observer_traces_overview`, `observer_trace_detail`,
+`observer_metrics_overview`, `observer_metric_detail`). If these
+tools are available, **skip directly to Step 3** -- no manual build
+or process management is needed. The MCP server *is* the collector;
+building the binary separately is redundant and wastes time. Clear
+stale data by calling `observer_clear`.
 
-Otherwise start the full collector:
+> **Do not build or start the collector when MCP tools are available.**
+> The MCP server already embeds the OTLP receiver, in-memory store,
+> and query API. Building `make build` or spawning `./build/obstudio`
+> when the MCP server is running will fail on port conflicts and is
+> the single most common mistake agents make in this step.
+
+**Manual fallback:** Only if MCP tools are not available (i.e., the
+agent has no MCP server configured), build and start the collector:
 
 1. Build observer-go if the binary does not exist:
    ```
@@ -53,11 +67,10 @@ Otherwise start the full collector:
    ```
 2. Start the collector in the background:
    ```
-   ./observer-go/obstudio
+   ./build/obstudio
    ```
 3. Wait until `http://localhost:3000/api/query/stats` responds.
-4. Clear any stale data: call `observer_clear` MCP tool or
-   `DELETE /api/data`.
+4. Clear any stale data: `DELETE /api/data`.
 
 ### Step 3 -- Start the Application
 
@@ -86,36 +99,47 @@ For each endpoint / operation identified in the inventory:
 
 ### Step 5 -- Validate Traces
 
-Query the Observer REST API (or MCP tools):
+Use `observer_traces_overview` (MCP) to list traces, then
+`observer_trace_detail` for each trace:
 
-1. `GET /api/query/traces?serviceName=<service-name>` -- confirm traces
-   exist.
-2. For each trace, fetch detail via `GET /api/query/traces/{traceId}`:
+1. `observer_traces_overview(serviceName=<service-name>)` -- confirm
+   traces exist.
+2. For each trace, fetch detail via
+   `observer_trace_detail(traceId=<id>)`:
    - **Root span** matches expected HTTP method + route.
    - **Child spans** for custom instrumentation are present.
    - **Span attributes** match OTel semantic conventions.
    - **Error spans** have `status.code == ERROR` and recorded exceptions.
 
-MCP alternatives: `observer_traces_overview`, `observer_trace_detail`.
+REST fallback: `GET /api/query/traces?serviceName=<service-name>` and
+`GET /api/query/traces/{traceId}`.
 
 ### Step 6 -- Validate Metrics
 
-1. `GET /api/query/metrics?serviceName=<service-name>` -- list metrics.
+Use `observer_metrics_overview` (MCP) to list metrics, then
+`observer_metric_detail` for each KPI:
+
+1. `observer_metrics_overview(serviceName=<service-name>)` -- list all
+   metrics.
 2. For each KPI with `Metric: Yes` in inventory:
-   - `GET /api/query/metrics?metricName=<signal-name>&serviceName=<svc>`
+   - `observer_metric_detail(metricName=<signal-name>, serviceName=<svc>)`
    - Confirm `dataPointCount >= 1`.
-   - Confirm metric `type` matches (sum, histogram, gauge).
+   - Confirm metric `type` matches (sum/counter, histogram, gauge).
 3. Verify auto-instrumented metrics exist (e.g.,
    `http.server.duration`, `http.server.active_requests`).
 
-MCP alternatives: `observer_metrics_overview`, `observer_metric_detail`.
+REST fallback: `GET /api/query/metrics?serviceName=<service-name>` and
+`GET /api/query/metrics?metricName=<name>&serviceName=<svc>`.
 
 ### Step 7 -- Validate Stats
 
-Query `GET /api/query/stats` and confirm:
-- `serviceNames` contains the expected service name.
+Use `observer_metrics_overview` and `observer_traces_overview` to
+confirm:
+- Traces exist for the expected service name.
 - `spanCount > 0`, `traceCount > 0`.
-- `metricCount > 0` if metrics are expected.
+- Metric count > 0 if metrics are expected.
+
+REST fallback: `GET /api/query/stats`.
 
 ### Step 8 -- Update Inventory
 
@@ -135,20 +159,32 @@ Not verified:    N  (list signal names)
 Coverage:        N%
 ```
 
-### Step 9 -- Teardown
+### Step 9 -- Dashboard Review and Teardown
 
-After verification is complete, **always** stop processes:
+After verification is complete, prompt the user before shutting down:
+
+> "The service is running and telemetry is flowing. You can view
+> traces and metrics in the Observer dashboard at
+> http://localhost:3000. Take a look and let me know when you're
+> done -- I'll shut down the test harness."
+
+Do **not** kill the service process until the user confirms they are
+finished reviewing.
+
+Once the user confirms, stop the **application process only**:
 
 1. Kill the application process: `lsof -ti :<app-port> | xargs kill`.
-2. Kill observer-go: `lsof -ti :3000 | xargs kill`.
-3. Clean up temporary data (e.g., SQLite DBs created during the run).
+2. Clean up temporary data (e.g., SQLite DBs created during the run).
 
-Do not leave background processes running.
+**Do not kill the Observer / MCP server.** On the MCP path the agent
+runtime manages the server lifecycle. On the manual-fallback path,
+also kill observer-go: `lsof -ti :3000 | xargs kill`.
 
 ## Common Rationalizations
 
 | Rationalization | Reality |
 |---|---|
+| "I need to build the binary first" | If the MCP server is running, it *is* the collector. Building and spawning a second instance causes port conflicts and wastes time. Check for MCP tools before reaching for `make build`. |
 | "The spans are in the code, they must be there" | Code presence is not proof. Spans must appear in the collector with correct attributes. |
 | "Verification takes too long" | Manual checking misses attribute errors and wrong metric types. Automation catches what eyes miss. |
 | "Metrics will show up eventually" | If dataPointCount is 0 after exercising the API, the wiring is wrong. Waiting will not fix a code bug. |
@@ -156,17 +192,22 @@ Do not leave background processes running.
 
 ## Red Flags
 
+- Agent builds the binary when MCP tools are already available
+- Port conflicts from spawning a second collector instance
 - Observer starts but no traces arrive after exercising APIs
 - Traces exist but custom child spans are missing
 - Metrics have wrong type (counter instead of histogram)
 - Span attributes use non-standard names
 - Error-path requests produce spans without ERROR status
+- Application killed before user had a chance to view the dashboard
 - Processes left running after verification completes
 
 ## Verification
 
+- [ ] MCP tools checked before attempting to build/start collector
 - [ ] Coverage percentage reported to user
-- [ ] Observer REST API queried for every KPI signal name
+- [ ] Observer MCP tools (or REST API) queried for every KPI signal
 - [ ] Verified column updated in `.observe/inventory.md`
-- [ ] All processes (app + observer) killed after validation
+- [ ] User offered dashboard review before teardown
+- [ ] Application process killed after user confirms
 - [ ] Temporary data cleaned up
