@@ -1,0 +1,38 @@
+version: 2
+
+project_name: obstudio
+
+before:
+  hooks:
+    - rm -rf observer-go/cmd/obstudio/_skills
+    - cp -R skills observer-go/cmd/obstudio/_skills
+    - cp docs/examples.md observer-go/cmd/obstudio/_skills/examples.md
+
+builds:
+  - dir: observer-go
+    main: ./cmd/obstudio
+    binary: obstudio
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats:
+      - zip
+    files:
+      - docs/USER.md
+      - docs/examples.md
+
+release:
+  github:
+    owner: signalfx
+    name: obstudio
+
+changelog:
+  sort: asc

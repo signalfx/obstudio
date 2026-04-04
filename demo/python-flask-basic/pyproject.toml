@@ -1,0 +1,11 @@
+[project]
+name = "python-flask-basic"
+version = "0.1.0"
+description = "Greenfield Flask task API -- demo app for obstudio skills"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.1",
+]
+
+[project.scripts]
+dev = "flask:run"

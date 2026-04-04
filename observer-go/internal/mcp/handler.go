@@ -1,13 +1,8 @@
 package mcp
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"sync"
 
 	"github.com/signalfx/obstudio/observer-go/internal/store"
 )
@@ -71,69 +66,52 @@ type toolContent struct {
 	Text string `json:"text"`
 }
 
-type handler struct {
-	store    *store.Store
-	sessions sync.Map
-	tools    []toolDef
+// Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
+type Dispatcher struct {
+	store *store.Store
+	tools []toolDef
 }
 
-func Register(mux *http.ServeMux, s *store.Store) {
-	h := &handler{store: s, tools: buildToolDefs()}
-	mux.HandleFunc("POST /mcp", h.handle)
-	mux.HandleFunc("OPTIONS /mcp", h.handleOptions)
+// NewDispatcher creates a transport-agnostic MCP dispatcher.
+func NewDispatcher(s *store.Store) *Dispatcher {
+	return &Dispatcher{store: s, tools: buildToolDefs()}
 }
 
-func (h *handler) handleOptions(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Allow", "OPTIONS, POST")
-	setCORSHeaders(w)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *handler) handle(w http.ResponseWriter, r *http.Request) {
-	setCORSHeaders(w)
-	w.Header().Set("Content-Type", "application/json")
-
-	var req jsonRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, nil, -32700, "Parse error")
-		return
-	}
-
+// Dispatch processes a single JSON-RPC request and returns a response.
+// Returns (response, handled). When handled is false the caller should
+// send an HTTP 202 or similar acknowledgement (e.g. notifications).
+func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 	switch req.Method {
 	case "initialize":
-		h.handleInitialize(w, r, req)
+		return d.handleInitialize(req), true
 	case "notifications/initialized":
-		w.WriteHeader(http.StatusAccepted)
+		return jsonRPCResponse{}, false
 	case "tools/list":
-		h.handleToolsList(w, r, req)
+		return d.handleToolsList(req), true
 	case "tools/call":
-		h.handleToolsCall(w, r, req)
+		return d.handleToolsCall(req), true
 	default:
-		writeError(w, req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method))
+		return rpcError(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method)), true
 	}
 }
 
-func (h *handler) handleInitialize(w http.ResponseWriter, _ *http.Request, req jsonRPCRequest) {
-	sessionID := generateSessionID()
-	h.sessions.Store(sessionID, true)
-	w.Header().Set("Mcp-Session-Id", sessionID)
-
+func (d *Dispatcher) handleInitialize(req jsonRPCRequest) jsonRPCResponse {
 	params, _ := toMap(req.Params)
 	clientVersion, _ := params["protocolVersion"].(string)
 	negotiated := negotiateVersion(clientVersion)
 
-	writeResult(w, req.ID, map[string]any{
+	return rpcResult(req.ID, map[string]any{
 		"protocolVersion": negotiated,
 		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 		"serverInfo":      map[string]any{"name": "obstudio", "version": "0.1.0"},
 	})
 }
 
-func (h *handler) handleToolsList(w http.ResponseWriter, _ *http.Request, req jsonRPCRequest) {
-	writeResult(w, req.ID, map[string]any{"tools": h.tools})
+func (d *Dispatcher) handleToolsList(req jsonRPCRequest) jsonRPCResponse {
+	return rpcResult(req.ID, map[string]any{"tools": d.tools})
 }
 
-func (h *handler) handleToolsCall(w http.ResponseWriter, _ *http.Request, req jsonRPCRequest) {
+func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 	params, _ := toMap(req.Params)
 	toolName, _ := params["name"].(string)
 	args, _ := toMap(params["arguments"])
@@ -141,24 +119,23 @@ func (h *handler) handleToolsCall(w http.ResponseWriter, _ *http.Request, req js
 	var result toolResult
 	switch toolName {
 	case "observer_metrics_overview":
-		result = h.metricsOverview(args)
+		result = d.metricsOverview(args)
 	case "observer_metric_detail":
-		result = h.metricDetail(args)
+		result = d.metricDetail(args)
 	case "observer_traces_overview":
-		result = h.tracesOverview(args)
+		result = d.tracesOverview(args)
 	case "observer_trace_detail":
-		result = h.traceDetail(args)
+		result = d.traceDetail(args)
 	case "observer_clear":
-		result = h.clearStore()
+		result = d.clearStore()
 	default:
-		writeError(w, req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
-		return
+		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 	}
 
-	writeResult(w, req.ID, result)
+	return rpcResult(req.ID, result)
 }
 
-func (h *handler) metricsOverview(args map[string]any) toolResult {
+func (d *Dispatcher) metricsOverview(args map[string]any) toolResult {
 	f := store.MetricFilter{
 		MetricName:        strArg(args, "metricName"),
 		ServiceName:       strArg(args, "serviceName"),
@@ -168,11 +145,11 @@ func (h *handler) metricsOverview(args map[string]any) toolResult {
 		Limit:             intArg(args, "limit", 20),
 		DataPointLimit:    intArg(args, "dataPointLimit", 3),
 	}
-	groups := h.store.QueryMetrics(f)
-	return jsonResult(groups)
+	groups := d.store.QueryMetrics(f)
+	return jsonToolResult(groups)
 }
 
-func (h *handler) metricDetail(args map[string]any) toolResult {
+func (d *Dispatcher) metricDetail(args map[string]any) toolResult {
 	name := strArg(args, "metricName")
 	if name == "" {
 		return errorResult("metricName is required")
@@ -184,14 +161,14 @@ func (h *handler) metricDetail(args map[string]any) toolResult {
 		Limit:          1,
 		DataPointLimit: intArg(args, "dataPointLimit", 50),
 	}
-	groups := h.store.QueryMetrics(f)
+	groups := d.store.QueryMetrics(f)
 	if len(groups) == 0 {
 		return errorResult(fmt.Sprintf("No metric found with name %q", name))
 	}
-	return jsonResult(groups[0])
+	return jsonToolResult(groups[0])
 }
 
-func (h *handler) tracesOverview(args map[string]any) toolResult {
+func (d *Dispatcher) tracesOverview(args map[string]any) toolResult {
 	f := store.TraceFilter{
 		ServiceName:      strArg(args, "serviceName"),
 		SpanName:         strArg(args, "spanName"),
@@ -200,24 +177,24 @@ func (h *handler) tracesOverview(args map[string]any) toolResult {
 		Limit:            intArg(args, "limit", 20),
 		SpanPreviewCount: intArg(args, "spanPreviewCount", 5),
 	}
-	traces := h.store.QueryTraces(f)
-	return jsonResult(traces)
+	traces := d.store.QueryTraces(f)
+	return jsonToolResult(traces)
 }
 
-func (h *handler) traceDetail(args map[string]any) toolResult {
+func (d *Dispatcher) traceDetail(args map[string]any) toolResult {
 	traceID := strArg(args, "traceId")
 	if traceID == "" {
 		return errorResult("traceId is required")
 	}
-	detail := h.store.GetTrace(traceID, intArg(args, "eventLimit", 12))
+	detail := d.store.GetTrace(traceID, intArg(args, "eventLimit", 12))
 	if detail == nil {
 		return errorResult(fmt.Sprintf("No trace found with id %q", traceID))
 	}
-	return jsonResult(detail)
+	return jsonToolResult(detail)
 }
 
-func (h *handler) clearStore() toolResult {
-	h.store.Clear()
+func (d *Dispatcher) clearStore() toolResult {
+	d.store.Clear()
 	return toolResult{Content: []toolContent{{Type: "text", Text: "All telemetry data cleared."}}}
 }
 
@@ -294,22 +271,15 @@ func buildToolDefs() []toolDef {
 	}
 }
 
-func writeResult(w http.ResponseWriter, id any, result any) {
-	json.NewEncoder(w).Encode(jsonRPCResponse{ID: id, JSONRPC: "2.0", Result: result})
+func rpcResult(id any, result any) jsonRPCResponse {
+	return jsonRPCResponse{ID: id, JSONRPC: "2.0", Result: result}
 }
 
-func writeError(w http.ResponseWriter, id any, code int, msg string) {
-	json.NewEncoder(w).Encode(jsonRPCResponse{ID: id, JSONRPC: "2.0", Error: &jsonRPCError{Code: code, Message: msg}})
+func rpcError(id any, code int, msg string) jsonRPCResponse {
+	return jsonRPCResponse{ID: id, JSONRPC: "2.0", Error: &jsonRPCError{Code: code, Message: msg}}
 }
 
-func setCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
-}
-
-func jsonResult(v any) toolResult {
+func jsonToolResult(v any) toolResult {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return errorResult(err.Error())
@@ -319,14 +289,6 @@ func jsonResult(v any) toolResult {
 
 func errorResult(msg string) toolResult {
 	return toolResult{Content: []toolContent{{Type: "text", Text: msg}}, IsError: true}
-}
-
-func generateSessionID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		log.Printf("[mcp] failed to generate session ID: %v", err)
-	}
-	return hex.EncodeToString(b)
 }
 
 func negotiateVersion(client string) string {

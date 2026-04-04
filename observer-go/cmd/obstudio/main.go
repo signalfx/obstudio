@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	obstudioexporter "github.com/signalfx/obstudio/observer-go/exporter"
 	obstudioextension "github.com/signalfx/obstudio/observer-go/extension"
 	"github.com/signalfx/obstudio/observer-go/internal/store"
@@ -23,7 +25,29 @@ import (
 	"go.opentelemetry.io/collector/service/telemetry/otelconftelemetry"
 )
 
+var version = "dev"
+
 func main() {
+	root := &cobra.Command{
+		Use:     "obstudio",
+		Short:   "Observability Studio -- local OTel collector, MCP server, and skill installer",
+		Version: version,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			runCollector()
+			return nil
+		},
+		SilenceUsage: true,
+	}
+
+	root.AddCommand(newInstallCmd())
+	root.AddCommand(newMCPCmd())
+
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func runCollector() {
 	host := envOr("HOST", "127.0.0.1")
 	port := envOr("PORT", "3000")
 	otlpHTTPPort := envOr("OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318"))
@@ -54,7 +78,7 @@ func main() {
 		BuildInfo: component.BuildInfo{
 			Command:     "obstudio",
 			Description: "Observability Studio — local OpenTelemetry collector",
-			Version:     "0.1.0",
+			Version:     version,
 		},
 		Factories: func() (otelcol.Factories, error) { return factories, nil },
 		ConfigProviderSettings: otelcol.ConfigProviderSettings{
