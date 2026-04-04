@@ -1,0 +1,11 @@
+[project]
+name = "python-fastapi-celery"
+version = "0.1.0"
+description = "FastAPI + Celery + Redis order service -- demo app for obstudio skills"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "celery[redis]>=5.4",
+    "pydantic>=2.10",
+]

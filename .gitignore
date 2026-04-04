@@ -10,8 +10,15 @@ uv.lock
 *.db
 .pytest_cache/
 
-# Compiled binaries
+# Compiled binaries and embedded staging
 observer-go/obstudio
+observer-go/cmd/obstudio/_skills/
 
-# Demo apps -- baselines committed once, all future changes ignored
-demo/
+# Demo apps -- track baselines, ignore generated artifacts
+demo/**/.observe/
+demo/**/.venv/
+demo/**/__pycache__/
+demo/**/uv.lock
+demo/**/*.db
+demo/**/otel_setup.py
+demo/**/otel_*.py

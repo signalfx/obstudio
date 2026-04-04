@@ -1,7 +1,7 @@
 # Fault Domain Patterns
 
 Reference for identifying fault domains and SRE production concerns by
-component type. Use during Step 3 of the observe workflow.
+component type. Use during Step 3 of the `/audit` workflow.
 
 ---
 

@@ -5,8 +5,10 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 ## Repo Layout
 
 - `observer/` -- Observer app (React client, Node/Express server, shared OTLP bindings)
+- `observer-go/` -- Go-based Observer built on the OTel Collector framework, with REST API, MCP server, and Web UI
 - `extension/` -- VS Code extension that packages the Observer
-- `skills/` -- agent skills (e.g., OpenTelemetry instrumentation)
+- `skills/` -- agent skills (composable observability workflows)
+- `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
 - `docs/` -- design docs and examples
 
 ## Code
@@ -31,10 +33,43 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 
 ## Skills
 
-Follow the pattern in `skills/observe/SKILL.md`:
+Skills follow the [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
+anatomy: frontmatter (`name`/`description`), Overview, When to Use, Process, Red Flags,
+Verification. See any skill under `skills/` for the canonical format.
 
-- `SKILL.md` entry point with `name`/`description` frontmatter.
-- Define workflow, implementation rules, and verification checklist.
-- Language-specific guidance in `languages/<lang>.md`, loaded on-demand.
-- Reference material in `references/`, loaded only when a workflow step needs it.
-- Each skill must have automated tests and evals.
+### Available Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `/audit` | Analyze a codebase for observability gaps, produce `.observe/inventory.md` |
+| `/instrument` | Implement OTel instrumentation for KPIs identified by `/audit` |
+| `/verify` | Validate telemetry against the Observer collector |
+| `/provision` | Generate Terraform dashboards, detectors, and alert rules |
+| `/observe` | Composite orchestrator: audit -> instrument -> verify -> provision |
+
+### Shared References
+
+Language-specific guides and reference material live in `skills/references/`,
+shared across all skills:
+
+```
+skills/references/
+├── languages/
+│   ├── go.md
+│   ├── node.md
+│   └── python.md
+├── fault-domain-patterns.md
+├── signal-mapping-guide.md
+└── observability-template.md
+```
+
+Skills load references on-demand. Only the file matching the detected
+language is loaded -- never all at once. This keeps token usage minimal.
+
+### Skill Contract
+
+All skills operate on the same `.observe/` directory:
+- `/audit` creates it (inventory, placeholders for terraform/alerts)
+- `/instrument` updates the KPI table Status column
+- `/verify` updates the KPI table Verified column
+- `/provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
