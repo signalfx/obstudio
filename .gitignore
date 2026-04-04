@@ -22,4 +22,4 @@ demo/**/uv.lock
 demo/**/*.db
 demo/**/otel_setup.py
 demo/**/otel_*.py
-demo
+demo/
