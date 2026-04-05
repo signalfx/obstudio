@@ -181,8 +181,13 @@ order_duration = meter.create_histogram(
 )
 
 # Observable Gauge (callback-based)
-def get_queue_depth(result):
-    result.observe(current_queue_depth())
+# CAUTION: The callback receives CallbackOptions, NOT an observation object.
+# It must yield Observation instances. Using result.observe() will raise
+# AttributeError at export time (not at registration), making it hard to catch.
+from opentelemetry.metrics import Observation
+
+def get_queue_depth(_options):
+    yield Observation(current_queue_depth())
 
 meter.create_observable_gauge(
     "orders.queue.depth",
@@ -240,3 +245,14 @@ For local development with the Observer:
   process gets its own SDK instance.
 - **Singleton provider**: Never call `trace.set_tracer_provider()` more
   than once. If existing OTel setup exists, extend it.
+- **Observable gauge callback signature**: The callback receives a
+  `CallbackOptions` argument and must **yield `Observation` objects**
+  (from `opentelemetry.metrics`). A common mistake is writing
+  `result.observe(value)` -- this fails with `AttributeError` at metric
+  export time, not at registration, so the error only surfaces after the
+  app is running. Correct pattern:
+  ```python
+  from opentelemetry.metrics import Observation
+  def my_callback(_options):
+      yield Observation(current_value())
+  ```
