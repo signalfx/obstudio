@@ -39,9 +39,11 @@ with OpenTelemetry" triggers `/instrument`, and so on.
 
 ### Install from Release
 
+Download the latest zip for your platform from
+[Releases](https://github.com/signalfx/obstudio/releases/latest), then:
+
 ```bash
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_darwin_arm64.zip
-unzip obstudio_darwin_arm64.zip
+unzip obstudio_*_darwin_arm64.zip
 ./obstudio install --target=cursor
 ```
 
