@@ -3,7 +3,7 @@
   "displayName": "Observability Studio",
   "description": "Observability Studio for OpenTelemetry",
   "version": "0.0.1",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/signalfx/obstudio.git"
