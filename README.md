@@ -4,94 +4,6 @@ Local OpenTelemetry observability workspace -- receive, explore, and
 validate telemetry during development. Includes AI agent skills that
 audit codebases and add OpenTelemetry instrumentation automatically.
 
-## Repository Layout
-
-```
-obstudio/
-├── observer/          # Observer app (React UI + Node/Express server)
-├── observer-go/       # Go-based Observer built on the OTel Collector framework
-├── extension/         # VS Code extension that packages the Observer
-├── skills/            # AI agent skills (composable workflows)
-│   ├── audit/         #   /audit -- gap analysis, .observe/ generation
-│   ├── instrument/    #   /instrument -- OTel implementation
-│   ├── verify/        #   /verify -- telemetry validation
-│   ├── provision/     #   /provision -- Terraform, detectors, alerts
-│   ├── observe/       #   /observe -- composite orchestrator
-│   └── references/    #   Shared language guides and reference material
-├── docs/              # Design docs, PRD, and example prompts
-├── demo/              # Sample apps for skill evaluation (gitignored)
-├── Makefile           # Skill packaging
-├── AGENTS.md          # Guidelines for AI agents
-└── CONTRIBUTING.md    # Dev process, PR workflow, releases
-```
-
-## Prerequisites
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Node.js | 20+ | Observer app and VS Code extension |
-| npm | latest | Package management |
-| Go | 1.22+ | observer-go collector |
-| uv | latest | Running Python demo apps |
-| VS Code | 1.110+ | Extension development (optional) |
-
-## Quick Start
-
-### 1. Build and Run the Observer
-
-```bash
-make build
-make run
-```
-
-This starts the collector on:
-
-| Service | URL |
-|---------|-----|
-| Telemetry Explorer | http://localhost:3000 |
-| OTLP/HTTP | http://localhost:4318 |
-| OTLP/gRPC | localhost:4317 |
-| MCP endpoint | http://localhost:3000/mcp |
-
-### 2. Build the Observer (Node/React frontend)
-
-```bash
-cd observer
-npm install
-npm run dev
-```
-
-### 3. Build the VS Code Extension
-
-```bash
-cd extension
-npm install
-npm run build:vsix
-```
-
-## Skills
-
-Skills are composable AI agent workflows that follow the
-[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
-anatomy. Each skill is a `SKILL.md` with: Overview, When to Use,
-Process, Red Flags, and Verification.
-
-### Available Skills
-
-```bash
-make list-skills
-```
-
-| Skill | Command | Description |
-|-------|---------|-------------|
-| Audit | `/audit` | Analyze codebase for observability gaps, produce `.observe/inventory.md` |
-| Instrument | `/instrument` | Implement OTel auto + custom instrumentation for identified KPIs |
-| Verify | `/verify` | Start Observer, exercise APIs, validate traces and metrics |
-| Provision | `/provision` | Generate Terraform dashboards, detectors, and alert rules |
-| Observe | `/observe` | Composite: chains audit -> instrument -> verify -> provision |
-
-### Skill Lifecycle
-
 ```
   AUDIT           INSTRUMENT      VERIFY          PROVISION
  ┌──────┐        ┌──────┐       ┌──────┐        ┌──────┐
@@ -100,56 +12,58 @@ make list-skills
  └──────┘        └──────┘       └──────┘        └──────┘
   /audit          /instrument    /verify          /provision
 
-                       /observe (chains all four)
+                      /observe (chains all four)
 ```
 
-All skills operate on the same `.observe/` directory:
+---
 
-```
-.observe/
-├── inventory.md          # KPI table, components, fault domains
-├── terraform/            # Splunk O11y Cloud dashboards and detectors
-└── alerts/               # Prometheus, Grafana, PagerDuty alert rules
-```
+## Commands
 
-### Shared References
+5 slash commands that map to the observability lifecycle. Each one
+activates the right skill automatically.
 
-Language guides and reference material live in `skills/references/`.
-Skills load them on-demand to minimize token usage:
+| What you're doing | Command | Key principle |
+|---|---|---|
+| Find observability gaps | `/audit` | Measure before you instrument |
+| Add OpenTelemetry code | `/instrument` | Auto + custom instrumentation |
+| Validate telemetry flows | `/verify` | Evidence over assumption |
+| Generate dashboards & alerts | `/provision` | Infrastructure as code |
+| Run the full pipeline | `/observe` | End-to-end in one command |
 
-```
-skills/references/
-├── languages/            # Go, Node.js, Python OTel guides
-├── fault-domain-patterns.md
-├── signal-mapping-guide.md
-└── observability-template.md
-```
+Skills also activate with natural language -- "instrument this service
+with OpenTelemetry" triggers `/instrument`, and so on.
 
-### Install Skills
+---
 
-Download a release archive, extract it, and run the installer:
+## Quick Start
+
+### Install from Release
 
 ```bash
 curl -L https://github.com/signalfx/obstudio/releases/latest/download/obstudio_Darwin_arm64.tar.gz | tar xz
-cd obstudio_Darwin_arm64/
 ./obstudio install --target=cursor
 ```
 
 This copies skills and references to `~/.cursor/skills/obstudio/` and
 configures `~/.cursor/mcp.json` to auto-start the MCP server.
 
-### CLI Reference
+### Build from Source
 
-| Command | Description |
-|---------|-------------|
-| `obstudio` | Start the full collector (OTLP receiver, Web UI, MCP over HTTP) |
-| `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
-| `obstudio mcp` | Start the MCP server over stdio (auto-started by Cursor) |
-| `obstudio --version` | Print version |
-| `obstudio --help` | Show help for all commands |
-| `obstudio install --help` | Show help for the install command |
+```bash
+make build    # compile the Go binary (skills embedded)
+make run      # start the collector
+```
 
-### Using the Skills
+The collector starts on:
+
+| Service | URL |
+|---|---|
+| Telemetry Explorer | http://localhost:3000 |
+| OTLP/HTTP | http://localhost:4318 |
+| OTLP/gRPC | localhost:4317 |
+| MCP endpoint | http://localhost:3000/mcp |
+
+### Use the Skills
 
 In your AI coding agent, navigate to a service directory and run:
 
@@ -166,44 +80,170 @@ Or use individual skills:
 /provision      # generate Terraform/alerts (requires verified KPIs)
 ```
 
-Or use natural language:
-
-```
-instrument this service with OpenTelemetry
-audit this service for observability gaps
-verify my instrumentation is working
-generate dashboards and alerts for this service
-```
-
 See [docs/examples.md](docs/examples.md) for more prompt examples.
 
-## Demo Apps
+---
+
+## All 5 Skills
+
+The commands above are the entry points. Each skill is a structured
+workflow with steps, verification gates, and red flags. They follow the
+[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
+anatomy.
+
+### Analyze -- Understand what's missing
+
+| Skill | What It Does | Use When |
+|---|---|---|
+| [audit](skills/audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with KPIs, fault domains, and component mapping | Starting observability work on any service |
+
+### Build -- Add instrumentation
+
+| Skill | What It Does | Use When |
+|---|---|---|
+| [instrument](skills/instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every gap in the inventory | You have an inventory and need to write the code |
+
+### Verify -- Prove it works
+
+| Skill | What It Does | Use When |
+|---|---|---|
+| [verify](skills/verify/SKILL.md) | Start the Observer collector, exercise service APIs, and check traces and metrics against the inventory | Instrumentation is done and you need evidence it works |
+
+### Ship -- Dashboards and alerts
+
+| Skill | What It Does | Use When |
+|---|---|---|
+| [provision](skills/provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified KPIs | KPIs are verified and you need production monitoring |
+
+### Orchestrate -- End-to-end
+
+| Skill | What It Does | Use When |
+|---|---|---|
+| [observe](skills/observe/SKILL.md) | Chain audit → instrument → verify → provision in sequence | You want full observability in one command |
+
+---
+
+## Shared References
+
+Language guides and reference material live in `skills/references/`.
+Skills load them on-demand to minimize token usage -- only the file
+matching the detected language is loaded.
+
+| Reference | Covers |
+|---|---|
+| [languages/go.md](skills/references/languages/go.md) | Go OTel SDK, auto-instrumentation, custom spans/metrics |
+| [languages/node.md](skills/references/languages/node.md) | Node.js OTel SDK, Express/Fastify instrumentation |
+| [languages/python.md](skills/references/languages/python.md) | Python OTel SDK, Flask/FastAPI/Django instrumentation |
+| [fault-domain-patterns.md](skills/references/fault-domain-patterns.md) | Fault domain taxonomy and boundary detection |
+| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | KPI → OTel signal mapping (traces, metrics, logs) |
+| [observability-template.md](skills/references/observability-template.md) | `.observe/inventory.md` template and format spec |
+
+---
+
+## Skill Contract
+
+All skills operate on the same `.observe/` directory:
+
+```
+.observe/
+├── inventory.md          # KPI table, components, fault domains
+├── terraform/            # Splunk O11y Cloud dashboards and detectors
+└── alerts/               # Prometheus, Grafana, PagerDuty alert rules
+```
+
+- `/audit` creates it (inventory, placeholders for terraform/alerts)
+- `/instrument` updates the KPI table Status column
+- `/verify` updates the KPI table Verified column
+- `/provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
+
+---
+
+## Repository Layout
+
+```
+obstudio/
+├── observer/          # Observer app (React UI + Node/Express server)
+├── observer-go/       # Go-based Observer built on the OTel Collector framework
+├── extension/         # VS Code extension that packages the Observer
+├── skills/            # AI agent skills (composable workflows)
+│   ├── audit/         #   /audit
+│   ├── instrument/    #   /instrument
+│   ├── verify/        #   /verify
+│   ├── provision/     #   /provision
+│   ├── observe/       #   /observe
+│   └── references/    #   Shared language guides and reference material
+├── demo/              # Sample apps for skill evaluation
+├── docs/              # Design docs, PRD, and example prompts
+├── .github/workflows/ # CI (GitHub Actions)
+├── Makefile           # Go build, test, release
+├── AGENTS.md          # Guidelines for AI agents
+└── CONTRIBUTING.md    # Dev process, PR workflow, releases
+```
+
+---
+
+## CLI Reference
+
+| Command | Description |
+|---|---|
+| `obstudio` | Start the full collector (OTLP receiver, Web UI, MCP over HTTP) |
+| `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
+| `obstudio mcp` | Start the MCP server over stdio (auto-started by Cursor) |
+| `obstudio --version` | Print version |
+
+---
+
+## Prerequisites
+
+| Tool | Version | Purpose |
+|---|---|---|
+| Go | 1.25+ | observer-go collector |
+| Node.js | 20+ | Observer app and VS Code extension |
+| npm | latest | Package management |
+| uv | latest | Running Python demo apps |
+
+---
+
+## Development
+
+### Make Targets
+
+| Target | Description |
+|---|---|
+| `make build` | Build the `obstudio` binary (skills embedded) |
+| `make run` | Build and start the collector |
+| `make test` | Run all Go tests |
+| `make vet` | Vet Go source |
+| `make fmt` | Format Go source |
+| `make tidy` | Tidy Go modules |
+| `make list-skills` | List available skills |
+| `make release-local` | Build release archives locally via GoReleaser |
+| `make clean` | Remove build artifacts |
+
+### CI
+
+GitHub Actions runs on every push to `main` and `feature/**` branches:
+
+- **observer-go** -- `go vet`, `make build`, `make test`
+
+See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+### Demo Apps
 
 The `demo/` directory contains sample apps for evaluating skills.
-Baselines are committed; generated artifacts (`.observe/`, `otel_*.py`,
-`.venv/`) are gitignored.
 
 | App | Stack | Run |
-|-----|-------|----|
+|---|---|---|
 | `demo/python-flask-basic/` | Flask (in-memory) | `make dev` |
-| `demo/python-fastapi-celery/` | FastAPI + Celery + Redis (Docker) | `make up` or `make dev` |
-
-Run locally with `uv`:
 
 ```bash
 cd demo/python-flask-basic
 make dev          # starts on :8000
 ```
 
-Run with Docker (FastAPI + Celery + Redis):
+---
 
-```bash
-cd demo/python-fastapi-celery
-make up           # docker compose up --build -d
-make down         # tear down
-```
-
-## Development
+## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development process
 including PR workflow, review policy, testing requirements, and release
@@ -211,12 +251,6 @@ cadence.
 
 See [AGENTS.md](AGENTS.md) for AI agent guidelines.
 
-## Make Targets
+## License
 
-| Target | Description |
-|--------|-------------|
-| `make help` | Show all targets |
-| `make package-skills` | Package skills into `build/skills/` |
-| `make list-skills` | List available skills |
-| `make release-local` | Build release archives locally via GoReleaser |
-| `make clean` | Remove build artifacts |
+UNLICENSED
