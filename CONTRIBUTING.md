@@ -1,165 +1,147 @@
 # Contributing
 
-This repository contains two main parts:
+This repository contains:
 
-- `observer/`: the local Observer application
-- `extension/`: the VS Code extension that packages and runs the Observer
+- `observer-go/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
+- `observer/` -- Observer app (React client, Node/Express server, shared OTLP bindings)
+- `extension/` -- VS Code extension that packages the Observer
+- `skills/` -- AI agent skills (composable observability workflows)
 
 ## Prerequisites
 
-Install these tools before working on the repo:
-
-- Node.js 20 or newer
-- npm
-- VS Code, if you plan to run or test the extension
-- `tar`, if you plan to regenerate OTLP protobuf bindings
-
-Notes:
-
-- The extension manifest targets VS Code `^1.110.0`.
-- Some packaging tooling may warn on older Node 20 patch releases. Using a current Node 20 release is recommended.
-
-## Initial Setup
-
-Install dependencies in both project directories:
-
-```sh
-cd observer
-npm install
-
-cd ../extension
-npm install
-```
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Go | 1.25+ | observer-go collector |
+| Node.js | 20+ | Observer app and VS Code extension |
+| npm | latest | Package management |
+| uv | latest | Running Python demo apps |
 
 ## Build
 
-From the repository root:
+### Observer-Go (primary)
 
 ```sh
-npm run build
+make build    # compile the obstudio binary (skills embedded)
+make run      # build and start the collector
 ```
 
-This builds:
-
-- the Observer client
-- the Observer server
-- the VS Code extension
-
-You can also build each part directly:
+### Observer (React + Node)
 
 ```sh
 cd observer
+npm install
 npm run build
 ```
 
-```sh
-cd extension
-npm run compile
-```
-
-To produce a VS Code extension package:
+### VS Code Extension
 
 ```sh
 cd extension
-npm run build:vsix
+npm install
+npm run compile       # typecheck + lint + esbuild
+npm run build:vsix    # produce VSIX package
 ```
 
 ## Development
 
-Run the Observer app in development mode:
+### Observer-Go
+
+```sh
+make build          # build binary
+make run            # build and run
+make test           # go test ./...
+make vet            # go vet
+make fmt            # go fmt
+make tidy           # go mod tidy
+```
+
+### Observer (React + Node)
 
 ```sh
 cd observer
-npm run dev
+npm run dev           # start client + server in dev mode
+npm run dev:client    # client only
+npm run dev:server    # server only
+npm run typecheck     # typecheck all workspaces
+npm run generate:otlp # regenerate OTLP protobuf bindings
 ```
 
-Useful Observer commands:
-
-- `npm run dev:client`
-- `npm run dev:server`
-- `npm run typecheck`
-- `npm run generate:otlp`
-
-Useful extension commands:
+### VS Code Extension
 
 ```sh
 cd extension
-npm run watch
+npm run watch         # rebuild on change
+npm run check-types   # typecheck
+npm run lint          # eslint
+npm test              # vscode-test
 ```
-
-Other extension build commands:
-
-- `npm run compile`
-- `npm run package`
-- `npm run build:vsix`
 
 ## Testing
 
-There is no single top-level `npm test` command yet. Run the available checks per project.
+### CI
 
-For the Observer:
+GitHub Actions runs on every push to `main` and `feature/**` branches.
+PRs cannot be merged if tests are failing.
 
-```sh
-cd observer
-npm run typecheck
-```
+| Job | What it checks |
+|-----|---------------|
+| observer-go | `go vet`, `make build`, `make test` |
 
-For the extension:
+See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
-```sh
-cd extension
-npm run check-types
-npm run lint
-npm test
-```
-
-Notes:
-
-- `extension/npm test` runs the VS Code extension test flow via `vscode-test`.
-- `extension/npm run package` is also a useful validation step because it performs type-checking, linting, and a production bundle build before packaging.
-
-## OTLP Bindings
-
-If you change OTLP protobuf inputs or the generation flow, regenerate bindings from the `observer` directory:
+### Local
 
 ```sh
-npm run generate:otlp
+make test                        # Go tests
+cd observer && npm run typecheck # Observer type checks
+cd extension && npm test         # Extension tests (requires VS Code)
 ```
 
-Generated OTLP bindings are written under `observer/shared/otlp/`.
+### Testing Policy
+
+- Every PR must include tests for new or changed functionality.
+- All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
+- Code coverage tools will be used to identify untested functionality. See `AGENTS.md` for how AI agents should incorporate coverage analysis.
+- Skills require probabilistic evals with fuzzy verification against golden results.
 
 ## Pull Requests
 
-Create Pull Requests for all changes. Ensure the PR description is included and the commit message mirrors it. PR descriptions are for humans -- it is OK to use AI to produce them but they must be accurate and concise (under one page for most changes). When applicable, include the AI Agent Plan in the PR description. If the plan is too large, commit it as a design doc under `docs/`.
+Create Pull Requests for all changes. The PR description must be accurate
+and concise (under one page). The commit message mirrors the description.
+When applicable, include the AI agent plan. If the plan is too large,
+commit it as a design doc under `docs/`.
 
-Request a Copilot review on every PR. Address suggestions that are reasonable; use your judgement when ignoring Copilot's opinion.
+Request a Copilot review on every PR. Address reasonable suggestions.
 
-Pre-merge human reviews are not required. If the author is satisfied with their PR and with Copilot's review, they can merge it themselves. The quality of the merged code is the author's responsibility.
+Pre-merge human reviews are not required. If the author is satisfied with
+the PR and Copilot's review, they can merge. Post-merge reviews are
+encouraged for knowledge sharing -- comments should be addressed in a
+follow-up PR.
 
-Post-merge reviews are highly encouraged for knowledge sharing. Teammates can review PRs after they are merged. Comments on merged PRs are welcome and should be addressed by the author in a follow-up PR if necessary.
+For major design decisions, request a pre-merge human review. While
+waiting, switch to a different task.
 
-If you need a second opinion, request a pre-merge review from another human. Major design decisions will likely go through this path, with discussion happening before decisions are made. While waiting for a human review, switch to a different task and continue working.
+## Design and Architecture
 
-## Design and Architecture Decisions
-
-Design documents should be committed to the repo under `docs/`. Discussion happens via PRs, live calls, or offline PR comments.
-
-## Automated Testing
-
-Since the project relies heavily on AI tools and reduces human reviews, good testing coverage is essential to compensate.
-
-- Every PR must include tests that verify newly added functionality. As an author, you are responsible for ensuring the necessary tests are present.
-- All tests must run as GitHub Actions. PRs cannot be merged if tests are failing.
-- Unstable or flaky tests are bugs and must be fixed immediately.
-- Code coverage tools will be used to identify untested functionality. See `AGENTS.md` for how AI agents should incorporate coverage analysis.
-- Skills (under `skills/`) must also have automated tests and evaluations. Because skill operation is non-deterministic, use probabilistic evaluation with fuzzy result verification that allows a controlled degree of deviation from golden expected results.
-
-## Quality Tooling
-
-Enable all automated tooling that helps maintain high-quality code: linters, vulnerability checkers, security scanners, and similar tools.
+Design documents live under `docs/`. Discussion happens via PRs, live
+calls, or offline PR comments.
 
 ## Releases
 
-- Weekly releases, automated as much as possible.
-- A changelog is required for each release.
-- A demo is recorded for each release showing all new features.
+Releases are automated via GitHub Actions and GoReleaser. To cut a release:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+This triggers [.github/workflows/release.yml](.github/workflows/release.yml),
+which cross-compiles for linux/darwin/windows, creates a GitHub Release,
+and uploads zip archives.
+
+See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
+
+## Quality Tooling
+
+Enable all automated tooling that helps maintain high-quality code:
+linters, vulnerability checkers, security scanners, and similar tools.
