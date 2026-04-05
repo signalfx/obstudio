@@ -6,16 +6,16 @@ Download the binary for your platform and run the installer:
 
 ```bash
 # macOS (Apple Silicon)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_Darwin_arm64.tar.gz
-tar xzf obstudio_Darwin_arm64.tar.gz
+curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_darwin_arm64.zip
+unzip obstudio_darwin_arm64.zip
 
 # macOS (Intel)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_Darwin_amd64.tar.gz
-tar xzf obstudio_Darwin_amd64.tar.gz
+curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_darwin_amd64.zip
+unzip obstudio_darwin_amd64.zip
 
 # Linux (x86_64)
-curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_Linux_amd64.tar.gz
-tar xzf obstudio_Linux_amd64.tar.gz
+curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_linux_amd64.zip
+unzip obstudio_linux_amd64.zip
 ```
 
 Install skills and configure the MCP server:
