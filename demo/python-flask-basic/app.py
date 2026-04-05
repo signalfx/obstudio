@@ -1,12 +1,46 @@
+from otel_setup import configure_opentelemetry
+
+configure_opentelemetry()
+
+from opentelemetry import metrics
+from opentelemetry.metrics import Observation
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+FlaskInstrumentor().instrument_app(app)
+
+meter = metrics.get_meter("python-flask-basic")
+
+tasks_created_counter = meter.create_counter(
+    "tasks.created.count",
+    description="Total tasks created",
+    unit="{tasks}",
+)
+
+tasks_completed_counter = meter.create_counter(
+    "tasks.completed.count",
+    description="Total tasks marked as completed",
+    unit="{tasks}",
+)
 
 tasks = [
     {"id": 1, "title": "Buy groceries", "done": False},
     {"id": 2, "title": "Walk the dog", "done": True},
 ]
 next_id = 3
+
+
+def _observe_collection_size(_options):
+    yield Observation(len(tasks))
+
+
+tasks_collection_gauge = meter.create_observable_gauge(
+    "tasks.collection.size",
+    callbacks=[_observe_collection_size],
+    description="Current number of tasks in the collection",
+    unit="{tasks}",
+)
 
 
 @app.get("/health")
@@ -34,6 +68,7 @@ def create_task():
     task = {"id": next_id, "title": body.get("title", ""), "done": False}
     next_id += 1
     tasks.append(task)
+    tasks_created_counter.add(1)
     return jsonify(task), 201
 
 
@@ -46,6 +81,8 @@ def update_task(task_id):
     task["title"] = body.get("title", task["title"])
     was_done = task["done"]
     task["done"] = body.get("done", task["done"])
+    if not was_done and task["done"]:
+        tasks_completed_counter.add(1)
     return jsonify(task)
 
 

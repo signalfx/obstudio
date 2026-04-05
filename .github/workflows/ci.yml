@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/**]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observer-go:
+    name: Observer-Go – vet, build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: observer-go/go.mod
+          cache-dependency-path: observer-go/go.sum
+
+      - name: Stage embedded skills
+        run: |
+          cp -R skills observer-go/cmd/obstudio/_skills
+          cp docs/examples.md observer-go/cmd/obstudio/_skills/examples.md
+
+      - name: go vet
+        working-directory: observer-go
+        run: go vet ./...
+
+      - name: Build binary
+        run: make build
+
+      - name: Run tests
+        run: make test
