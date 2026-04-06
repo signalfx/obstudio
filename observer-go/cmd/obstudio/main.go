@@ -11,6 +11,7 @@ import (
 
 	obstudioexporter "github.com/signalfx/obstudio/observer-go/exporter"
 	obstudioextension "github.com/signalfx/obstudio/observer-go/extension"
+	"github.com/signalfx/obstudio/observer-go/internal/mcp"
 	"github.com/signalfx/obstudio/observer-go/internal/store"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
@@ -33,21 +34,30 @@ func main() {
 		Short:   "Observability Studio -- local OTel collector, MCP server, and skill installer",
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			runCollector()
+			run()
 			return nil
 		},
 		SilenceUsage: true,
 	}
 
 	root.AddCommand(newInstallCmd())
-	root.AddCommand(newMCPCmd())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func runCollector() {
+func run() {
+	s := store.New()
+
+	// Start the collector (OTLP receivers + REST API + Web UI) in the background.
+	go startCollector(s)
+
+	// Run stdio MCP on the main goroutine; blocks until stdin closes.
+	mcp.RunStdio(s, os.Stdin, os.Stdout)
+}
+
+func startCollector(s *store.Store) {
 	host := envOr("HOST", "127.0.0.1")
 	port := envOr("PORT", "3000")
 	otlpHTTPPort := envOr("OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318"))
@@ -57,7 +67,11 @@ func runCollector() {
 	otlpHTTPAddr := net.JoinHostPort(host, otlpHTTPPort)
 	otlpGRPCAddr := net.JoinHostPort(host, otlpGRPCPort)
 
-	s := store.New()
+	s.SetEndpoints(store.Endpoints{
+		OTLPHTTP: "http://" + otlpHTTPAddr,
+		OTLPgRPC: otlpGRPCAddr,
+		REST:     "http://" + mainAddr,
+	})
 
 	expFactory := obstudioexporter.NewFactory(s)
 	extFactory := obstudioextension.NewFactory(s)
@@ -92,11 +106,11 @@ func runCollector() {
 		log.Fatalf("failed to create collector: %v", err)
 	}
 
-	fmt.Printf("\nObservability Studio (collector)\n")
-	fmt.Printf("  Telemetry Explorer:  http://%s\n", mainAddr)
-	fmt.Printf("  OTLP/HTTP receiver:  http://%s\n", otlpHTTPAddr)
-	fmt.Printf("  OTLP/gRPC receiver:  %s\n", otlpGRPCAddr)
-	fmt.Printf("  MCP endpoint:        http://%s/mcp\n\n", mainAddr)
+	fmt.Fprintf(os.Stderr, "\nObservability Studio (collector)\n")
+	fmt.Fprintf(os.Stderr, "  Telemetry Explorer:  http://%s\n", mainAddr)
+	fmt.Fprintf(os.Stderr, "  OTLP/HTTP receiver:  http://%s\n", otlpHTTPAddr)
+	fmt.Fprintf(os.Stderr, "  OTLP/gRPC receiver:  %s\n", otlpGRPCAddr)
+	fmt.Fprintf(os.Stderr, "  MCP endpoint:        http://%s/mcp\n\n", mainAddr)
 
 	if err := col.Run(context.Background()); err != nil {
 		log.Fatalf("collector run failed: %v", err)

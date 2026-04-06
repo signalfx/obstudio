@@ -189,9 +189,8 @@ obstudio/
 
 | Command | Description |
 |---|---|
-| `obstudio` | Start the full collector (OTLP receiver, Web UI, MCP over HTTP) |
+| `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
-| `obstudio mcp` | Start the MCP server over stdio (auto-started by Cursor) |
 | `obstudio --version` | Print version |
 
 ---

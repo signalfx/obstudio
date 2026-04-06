@@ -37,7 +37,7 @@ Skills are embedded in the binary -- a single file is all you need.
 The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
 2. Copies the binary alongside the skills (stable path for MCP)
-3. Configures the agent's MCP config to auto-start `obstudio mcp`
+3. Configures the agent's MCP config to auto-start `obstudio`
 
 Restart your editor/agent to activate.
 
@@ -58,9 +58,8 @@ Restart your editor/agent to activate.
 
 | Command | Description |
 |---------|-------------|
-| `obstudio` | Start the full Observer (OTLP receiver, Web UI, HTTP MCP) |
+| `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
-| `obstudio mcp` | Start the MCP server over stdio (auto-started by the agent) |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
 

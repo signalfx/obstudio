@@ -128,6 +128,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.traceDetail(args)
 	case "observer_clear":
 		result = d.clearStore()
+	case "observer_status":
+		result = d.status()
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 	}
@@ -196,6 +198,15 @@ func (d *Dispatcher) traceDetail(args map[string]any) toolResult {
 func (d *Dispatcher) clearStore() toolResult {
 	d.store.Clear()
 	return toolResult{Content: []toolContent{{Type: "text", Text: "All telemetry data cleared."}}}
+}
+
+func (d *Dispatcher) status() toolResult {
+	ep := d.store.GetEndpoints()
+	stats := d.store.Stats()
+	return jsonToolResult(map[string]any{
+		"endpoints": ep,
+		"stats":     stats,
+	})
 }
 
 func buildToolDefs() []toolDef {
@@ -267,6 +278,14 @@ func buildToolDefs() []toolDef {
 				Type: "object", AdditionalProperties: &f,
 			},
 			Annotations: toolAnnot{Title: "Observer Clear Data", DestructiveHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "observer_status",
+			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this to discover which addresses to point instrumented applications at and where to query results.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+			},
+			Annotations: toolAnnot{Title: "Observer Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
 	}
 }

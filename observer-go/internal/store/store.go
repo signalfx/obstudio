@@ -178,6 +178,13 @@ type Stats struct {
 	ServiceNames []string `json:"serviceNames"`
 }
 
+// Endpoints holds the addresses the collector is listening on.
+type Endpoints struct {
+	OTLPHTTP string `json:"otlpHttp,omitempty"`
+	OTLPgRPC string `json:"otlpGrpc,omitempty"`
+	REST     string `json:"rest,omitempty"`
+}
+
 type Store struct {
 	mu      sync.RWMutex
 	spans   []Span
@@ -187,9 +194,23 @@ type Store struct {
 	lastIngest time.Time
 	sessionGap time.Duration
 
+	endpoints Endpoints
+
 	subMu       sync.Mutex
 	subscribers map[int]chan Signal
 	nextSubID   int
+}
+
+func (s *Store) SetEndpoints(e Endpoints) {
+	s.mu.Lock()
+	s.endpoints = e
+	s.mu.Unlock()
+}
+
+func (s *Store) GetEndpoints() Endpoints {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.endpoints
 }
 
 type Option func(*Store)

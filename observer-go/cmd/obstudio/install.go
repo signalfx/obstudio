@@ -124,7 +124,7 @@ func configureMCP(path, binaryPath string) error {
 
 	servers["obstudio"] = map[string]any{
 		"command": binaryPath,
-		"args":    []string{"mcp"},
+		"args":    []string{},
 	}
 	config["mcpServers"] = servers
 
