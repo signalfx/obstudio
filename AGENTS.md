@@ -8,6 +8,7 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- agent skills (composable observability workflows)
 - `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
+- `demo/` -- sample apps for testing and skill evaluation
 - `docs/` -- design docs and examples
 
 ## Code
