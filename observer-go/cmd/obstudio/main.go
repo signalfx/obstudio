@@ -1,3 +1,4 @@
+// Package main implements the Observability Studio CLI entry point.
 package main
 
 import (
@@ -5,25 +6,19 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	obstudioexporter "github.com/signalfx/obstudio/observer-go/exporter"
-	obstudioextension "github.com/signalfx/obstudio/observer-go/extension"
+	"github.com/signalfx/obstudio/observer-go/internal/api"
 	"github.com/signalfx/obstudio/observer-go/internal/mcp"
+	"github.com/signalfx/obstudio/observer-go/internal/otlp"
 	"github.com/signalfx/obstudio/observer-go/internal/store"
-	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/confmap"
-	"go.opentelemetry.io/collector/confmap/provider/yamlprovider"
-	"go.opentelemetry.io/collector/connector"
-	"go.opentelemetry.io/collector/exporter"
-	"go.opentelemetry.io/collector/extension"
-	"go.opentelemetry.io/collector/otelcol"
-	"go.opentelemetry.io/collector/processor"
-	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/otlpreceiver"
-	"go.opentelemetry.io/collector/service/telemetry/otelconftelemetry"
+	"github.com/signalfx/obstudio/observer-go/internal/web"
 )
 
 var version = "dev"
@@ -50,14 +45,6 @@ func main() {
 func run() {
 	s := store.New()
 
-	// Start the collector (OTLP receivers + REST API + Web UI) in the background.
-	go startCollector(s)
-
-	// Run stdio MCP on the main goroutine; blocks until stdin closes.
-	mcp.RunStdio(s, os.Stdin, os.Stdout)
-}
-
-func startCollector(s *store.Store) {
 	host := envOr("HOST", "127.0.0.1")
 	port := envOr("PORT", "3000")
 	otlpHTTPPort := envOr("OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318"))
@@ -73,38 +60,23 @@ func startCollector(s *store.Store) {
 		REST:     "http://" + mainAddr,
 	})
 
-	expFactory := obstudioexporter.NewFactory(s)
-	extFactory := obstudioextension.NewFactory(s)
-	rcvFactory := otlpreceiver.NewFactory()
-
-	factories := otelcol.Factories{
-		Receivers:  map[component.Type]receiver.Factory{rcvFactory.Type(): rcvFactory},
-		Processors: map[component.Type]processor.Factory{},
-		Exporters:  map[component.Type]exporter.Factory{expFactory.Type(): expFactory},
-		Extensions: map[component.Type]extension.Factory{extFactory.Type(): extFactory},
-		Connectors: map[component.Type]connector.Factory{},
-		Telemetry:  otelconftelemetry.NewFactory(),
-	}
-
-	configYAML := collectorConfig(mainAddr, otlpHTTPAddr, otlpGRPCAddr)
-
-	col, err := otelcol.NewCollector(otelcol.CollectorSettings{
-		BuildInfo: component.BuildInfo{
-			Command:     "obstudio",
-			Description: "Observability Studio — local OpenTelemetry collector",
-			Version:     version,
-		},
-		Factories: func() (otelcol.Factories, error) { return factories, nil },
-		ConfigProviderSettings: otelcol.ConfigProviderSettings{
-			ResolverSettings: confmap.ResolverSettings{
-				URIs:              []string{"yaml:" + configYAML},
-				ProviderFactories: []confmap.ProviderFactory{yamlprovider.NewFactory()},
-			},
-		},
-	})
+	ctx := context.Background()
+	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr)
 	if err != nil {
-		log.Fatalf("failed to create collector: %v", err)
+		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
+
+	mux := http.NewServeMux()
+	api.Register(mux, s)
+	mcp.Register(mux, s)
+	webCleanup := web.Register(mux, s)
+
+	srv := &http.Server{Addr: mainAddr, Handler: mux}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
 
 	fmt.Fprintf(os.Stderr, "\nObservability Studio (collector)\n")
 	fmt.Fprintf(os.Stderr, "  Telemetry Explorer:  http://%s\n", mainAddr)
@@ -112,45 +84,18 @@ func startCollector(s *store.Store) {
 	fmt.Fprintf(os.Stderr, "  OTLP/gRPC receiver:  %s\n", otlpGRPCAddr)
 	fmt.Fprintf(os.Stderr, "  MCP endpoint:        http://%s/mcp\n\n", mainAddr)
 
-	if err := col.Run(context.Background()); err != nil {
-		log.Fatalf("collector run failed: %v", err)
-	}
-}
+	go mcp.RunStdio(s, os.Stdin, os.Stdout)
 
-func collectorConfig(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
-	return fmt.Sprintf(`receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: %s
-      http:
-        endpoint: %s
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+	fmt.Fprintf(os.Stderr, "\nShutting down...\n")
 
-exporters:
-  obstudio: {}
-
-extensions:
-  obstudio:
-    endpoint: %s
-
-service:
-  telemetry:
-    metrics:
-      level: none
-    logs:
-      level: warn
-  extensions: [obstudio]
-  pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [obstudio]
-    metrics:
-      receivers: [otlp]
-      exporters: [obstudio]
-    logs:
-      receivers: [otlp]
-      exporters: [obstudio]
-`, otlpGRPCAddr, otlpHTTPAddr, mainAddr)
+	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv.Shutdown(shutCtx)
+	webCleanup()
+	rcv.Shutdown(ctx)
 }
 
 func envOr(key, fallback string) string {

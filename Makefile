@@ -11,26 +11,45 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build run test tidy fmt vet release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
+# --- Client build ---
+
+build-client: ## Build React client into Go static assets
+	cd $(GO_DIR) && $(GO) run ./cmd/build-client
+
+stage-skills: ## Stage skills into observer-go for embedding
+	cd $(GO_DIR) && $(GO) run ./cmd/stage-skills
+
+dev: ## Watch client files and rebuild on changes (hot reload)
+	cd $(GO_DIR)/client && npm run dev
+
 # --- Go build ---
 
-build: ## Build obstudio binary (skills embedded in the binary)
-	@rm -rf $(GO_DIR)/cmd/obstudio/_skills
-	@cp -R skills $(GO_DIR)/cmd/obstudio/_skills
-	@cp docs/examples.md $(GO_DIR)/cmd/obstudio/_skills/examples.md
+build: stage-skills build-client ## Build obstudio binary (client + skills embedded)
 	@mkdir -p $(BUILD_DIR)
 	cd $(GO_DIR) && $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(ABS_BUILD)/$(BINARY) $(GO_CMD)
 
 run: build ## Build and run the collector
 	$(BUILD_DIR)/$(BINARY)
 
-test: ## Run all Go tests
+test: stage-skills ## Run all Go tests
 	cd $(GO_DIR) && $(GO) test ./...
+
+test-extension: ## Run extension unit + integration tests
+	cd extension && npm ci && npm run test:all
+
+test-client: ## Run client unit tests
+	cd $(GO_DIR)/client && npm ci && npx vitest run
+
+test-all: ## Run all tests (Go + client + extension)
+	$(MAKE) test
+	$(MAKE) test-client
+	$(MAKE) test-extension
 
 tidy: ## Tidy Go modules
 	cd $(GO_DIR) && $(GO) mod tidy
@@ -38,7 +57,7 @@ tidy: ## Tidy Go modules
 fmt: ## Format Go source
 	cd $(GO_DIR) && $(GO) fmt ./...
 
-vet: ## Vet Go source
+vet: stage-skills ## Vet Go source
 	cd $(GO_DIR) && $(GO) vet ./...
 
 # --- Release ---
@@ -62,4 +81,4 @@ list-skills: ## List available skills in this repo
 # --- Clean ---
 
 clean: ## Remove build artifacts
-	rm -rf "$(BUILD_DIR)" dist $(GO_DIR)/cmd/obstudio/_skills
+	rm -rf "$(BUILD_DIR)" dist $(GO_DIR)/cmd/obstudio/_skills $(GO_DIR)/internal/web/static/assets

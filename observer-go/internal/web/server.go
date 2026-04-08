@@ -1,51 +1,44 @@
+// Package web implements the WebSocket and static file server for the web UI.
 package web
 
 import (
-	"embed"
-	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/signalfx/obstudio/observer-go/internal/store"
 )
 
-//go:embed static
-var staticFS embed.FS
+// Register adds WebSocket, static file, and SPA routes to the given mux.
+// It returns a cleanup function that should be called on shutdown to
+// unsubscribe from the store.
+func Register(mux *http.ServeMux, s *store.Store) func() {
+	mux.HandleFunc("GET /api/ws", wsHandler(s))
 
-func Register(mux *http.ServeMux, s *store.Store) {
-	mux.HandleFunc("GET /api/events", sseHandler(s))
+	subID, ch := s.Subscribe()
+	go func() {
+		for sig := range ch {
+			broadcastSignal(s, sig)
+		}
+	}()
 
-	sub, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /", http.FileServer(http.FS(sub)))
-}
+	sub, _ := fs.Sub(staticFS(), "static")
+	fileServer := http.FileServer(http.FS(sub))
 
-func sseHandler(s *store.Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+	// SPA fallback: serve index.html for paths that don't match a static file.
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			fileServer.ServeHTTP(w, r)
 			return
 		}
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("X-Accel-Buffering", "no")
-		flusher.Flush()
-
-		subID, ch := s.Subscribe()
-		defer s.Unsubscribe(subID)
-
-		ctx := r.Context()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case sig := <-ch:
-				fmt.Fprintf(w, "event: telemetry-changed\ndata: {\"signal\":\"%s\"}\n\n", sig)
-				flusher.Flush()
-			}
+		index, err := fs.ReadFile(sub, "index.html")
+		if err != nil {
+			fileServer.ServeHTTP(w, r)
+			return
 		}
-	}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(index)
+	})
+
+	return func() { s.Unsubscribe(subID) }
 }

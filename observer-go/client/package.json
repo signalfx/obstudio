@@ -1,0 +1,25 @@
+{
+  "name": "observer-client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "dev": "node scripts/build-client.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.13.23",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "esbuild": "^0.25.10",
+    "happy-dom": "^20.8.9",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  }
+}
