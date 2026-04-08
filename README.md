@@ -165,9 +165,8 @@ All skills operate on the same `.observe/` directory:
 
 ```
 obstudio/
-├── observer/          # Observer app (React UI + Node/Express server)
-├── observer-go/       # Go-based Observer built on the OTel Collector framework
-├── extension/         # VS Code extension that packages the Observer
+├── observer-go/       # Primary collector, REST API, MCP server, and embedded web UI
+├── extension/         # VS Code extension that packages the collector
 ├── skills/            # AI agent skills (composable workflows)
 │   ├── audit/         #   /audit
 │   ├── instrument/    #   /instrument
@@ -200,7 +199,7 @@ obstudio/
 | Tool | Version | Purpose |
 |---|---|---|
 | Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | Observer app and VS Code extension |
+| Node.js | 20+ | observer-go client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
 
