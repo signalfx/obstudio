@@ -2,6 +2,6 @@
   "name": "obstudio",
   "private": true,
   "scripts": {
-    "build": "npm --prefix observer run build --workspace client && npm --prefix observer run build --workspace server && npm --prefix extension run compile"
+    "build": "make build && npm --prefix extension run compile"
   }
 }
