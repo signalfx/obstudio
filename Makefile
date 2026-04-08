@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev demo-node run test test-extension test-client test-all tidy fmt vet release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -27,6 +27,9 @@ stage-skills: ## Stage skills into observer-go for embedding
 
 dev: ## Watch client files and rebuild on changes (hot reload)
 	cd $(GO_DIR)/client && npm run dev
+
+demo-node: ## Run the tracked Node OTEL demo against the default collector
+	cd demo/node-otel && npm install && npm start
 
 # --- Go build ---
 

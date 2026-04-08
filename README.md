@@ -66,6 +66,14 @@ The collector starts on:
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
+Send sample telemetry from this repo checkout:
+
+```bash
+cd demo/node-otel
+npm install
+npm start
+```
+
 ### Use the Skills
 
 In your AI coding agent, navigate to a service directory and run:
@@ -165,9 +173,8 @@ All skills operate on the same `.observe/` directory:
 
 ```
 obstudio/
-├── observer/          # Observer app (React UI + Node/Express server)
-├── observer-go/       # Go-based Observer built on the OTel Collector framework
-├── extension/         # VS Code extension that packages the Observer
+├── observer-go/       # Primary collector, REST API, MCP server, and embedded web UI
+├── extension/         # VS Code extension that packages the collector
 ├── skills/            # AI agent skills (composable workflows)
 │   ├── audit/         #   /audit
 │   ├── instrument/    #   /instrument
@@ -175,7 +182,7 @@ obstudio/
 │   ├── provision/     #   /provision
 │   ├── observe/       #   /observe
 │   └── references/    #   Shared language guides and reference material
-├── demo/              # Sample apps for skill evaluation
+├── demo/              # Sample apps and OTEL verification fixtures
 ├── docs/              # Design docs, PRD, and example prompts
 ├── .github/workflows/ # CI (GitHub Actions)
 ├── Makefile           # Go build, test, release
@@ -200,7 +207,7 @@ obstudio/
 | Tool | Version | Purpose |
 |---|---|---|
 | Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | Observer app and VS Code extension |
+| Node.js | 20+ | observer-go client dev/test, demo apps, and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
 
@@ -215,6 +222,7 @@ obstudio/
 | `make build` | Build the `obstudio` binary (skills embedded) |
 | `make run` | Build and start the collector |
 | `make test` | Run all Go tests |
+| `make demo-node` | Install and run the tracked Node OTEL demo |
 | `make vet` | Vet Go source |
 | `make fmt` | Format Go source |
 | `make tidy` | Tidy Go modules |
@@ -236,11 +244,13 @@ The `demo/` directory contains sample apps for evaluating skills.
 
 | App | Stack | Run |
 |---|---|---|
+| `demo/node-otel/` | Node.js OTEL traffic generator | `npm install && npm start` |
 | `demo/python-flask-basic/` | Flask (in-memory) | `make dev` |
 
 ```bash
-cd demo/python-flask-basic
-make dev          # starts on :8000
+cd demo/node-otel
+npm install
+npm start         # sends OTLP to http://localhost:4318 by default
 ```
 
 ---

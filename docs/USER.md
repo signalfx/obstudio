@@ -106,6 +106,15 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 ```
 
+If you're working from a source checkout, the tracked sample app lives at
+`demo/node-otel/`:
+
+```bash
+cd demo/node-otel
+npm install
+npm start
+```
+
 ## Environment Variables
 
 | Variable | Default | Description |

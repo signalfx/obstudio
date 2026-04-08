@@ -3,8 +3,8 @@
 This repository contains:
 
 - `observer-go/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `observer/` -- Observer app (React client, Node/Express server, shared OTLP bindings)
 - `extension/` -- VS Code extension that packages the Observer
+- `demo/` -- sample applications used to validate telemetry flows
 - `skills/` -- AI agent skills (composable observability workflows)
 
 ## Prerequisites
@@ -12,7 +12,7 @@ This repository contains:
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | Observer app and VS Code extension |
+| Node.js | 20+ | observer-go client dev/test, demo apps, and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
 
@@ -25,14 +25,6 @@ make build    # compile the obstudio binary (skills embedded)
 make run      # build and start the collector
 ```
 
-### Observer (React + Node)
-
-```sh
-cd observer
-npm install
-npm run build
-```
-
 ### VS Code Extension
 
 ```sh
@@ -40,6 +32,14 @@ cd extension
 npm install
 npm run compile       # typecheck + lint + esbuild
 npm run build:vsix    # produce VSIX package
+```
+
+### Node OTEL Demo
+
+```sh
+cd demo/node-otel
+npm install
+npm start
 ```
 
 ## Development
@@ -55,17 +55,6 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
-### Observer (React + Node)
-
-```sh
-cd observer
-npm run dev           # start client + server in dev mode
-npm run dev:client    # client only
-npm run dev:server    # server only
-npm run typecheck     # typecheck all workspaces
-npm run generate:otlp # regenerate OTLP protobuf bindings
-```
-
 ### VS Code Extension
 
 ```sh
@@ -74,6 +63,13 @@ npm run watch         # rebuild on change
 npm run check-types   # typecheck
 npm run lint          # eslint
 npm test              # vscode-test
+```
+
+### Demo Verification
+
+```sh
+make run              # start the collector
+make demo-node        # install and run demo/node-otel against localhost:4318
 ```
 
 ## Testing
@@ -86,15 +82,17 @@ PRs cannot be merged if tests are failing.
 | Job | What it checks |
 |-----|---------------|
 | observer-go | `go vet`, `make build`, `make test` |
+| extension | `npm run test:all` |
+| client | `npx vitest run` |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ### Local
 
 ```sh
-make test                        # Go tests
-cd observer && npm run typecheck # Observer type checks
-cd extension && npm test         # Extension tests (requires VS Code)
+make test-all            # Go + observer-go client + extension integration tests
+npm run build            # root build path for binary + extension
+cd extension && npm test # VS Code-hosted extension tests
 ```
 
 ### Testing Policy

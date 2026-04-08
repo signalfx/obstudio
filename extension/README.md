@@ -46,6 +46,19 @@ From the `extension` directory:
 - `npm run build:vsix` — packages the extension into a `.vsix` file.
 - `npm run test:unit` — runs unit tests.
 
+## Local Verification
+
+After the extension activates, run the tracked repo demo from the repo root:
+
+```sh
+cd demo/node-otel
+npm install
+npm start
+```
+
+The demo sends OTLP to `http://127.0.0.1:4318` by default, which matches the
+extension's bundled receiver.
+
 ## Known Limitations
 
 - The extension expects localhost ports `4317` and `4318` to be free.
