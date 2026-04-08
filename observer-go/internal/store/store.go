@@ -1,50 +1,71 @@
+// Package store implements an in-memory telemetry store with per-connection tracking.
 package store
 
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
+// Signal represents a store update event type.
 type Signal string
 
 const (
-	SignalTraces  Signal = "traces"
+	// SignalTraces indicates traces were added or removed.
+	SignalTraces Signal = "traces"
+	// SignalMetrics indicates metrics were added or removed.
 	SignalMetrics Signal = "metrics"
-	SignalLogs    Signal = "logs"
+	// SignalLogs indicates logs were added or removed.
+	SignalLogs Signal = "logs"
 )
 
+// Default ring buffer capacities.
+const (
+	DefaultSpanCap   = 10_000
+	DefaultMetricCap = 10_000
+	DefaultLogCap    = 10_000
+
+	metricSeriesWindow = 8
+)
+
+// Resource represents the resource associated with telemetry.
 type Resource struct {
 	ServiceName string         `json:"serviceName,omitempty"`
 	Attributes  map[string]any `json:"attributes"`
 	SchemaURL   string         `json:"schemaUrl,omitempty"`
 }
 
+// Scope represents the instrumentation scope.
 type Scope struct {
 	Name      string `json:"name"`
 	Version   string `json:"version,omitempty"`
 	SchemaURL string `json:"schemaUrl,omitempty"`
 }
 
+// SpanStatus represents the completion status of a span.
 type SpanStatus struct {
 	Code    string `json:"code"`
 	Message string `json:"message,omitempty"`
 }
 
+// SpanEvent represents an event that occurred during a span.
 type SpanEvent struct {
 	Name       string         `json:"name"`
 	Timestamp  time.Time      `json:"timeUnixNano"`
 	Attributes map[string]any `json:"attributes"`
 }
 
+// SpanLink represents a link to another span.
 type SpanLink struct {
 	TraceID    string         `json:"traceId"`
 	SpanID     string         `json:"spanId"`
 	Attributes map[string]any `json:"attributes"`
 }
 
+// Span represents an OpenTelemetry trace span.
 type Span struct {
 	TraceID      string         `json:"traceId"`
 	SpanID       string         `json:"spanId"`
@@ -60,13 +81,17 @@ type Span struct {
 	Links        []SpanLink     `json:"links"`
 	Resource     Resource       `json:"resource"`
 	Scope        Scope          `json:"scope"`
+
+	ownerConnID string `json:"-"`
 }
 
+// QuantileValue represents a quantile value in summary metrics.
 type QuantileValue struct {
 	Quantile float64 `json:"quantile"`
 	Value    float64 `json:"value"`
 }
 
+// MetricDataPoint represents a single metric measurement.
 type MetricDataPoint struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
@@ -90,9 +115,13 @@ type MetricDataPoint struct {
 	BucketCounts   []uint64        `json:"bucketCounts,omitempty"`
 	ExplicitBounds []float64       `json:"explicitBounds,omitempty"`
 	Quantiles      []QuantileValue `json:"quantiles,omitempty"`
+
+	ownerConnID string `json:"-"`
 }
 
+// LogRecord represents an OpenTelemetry log record.
 type LogRecord struct {
+	ID             string         `json:"id"`
 	Timestamp      time.Time      `json:"timeUnixNano"`
 	SeverityNumber int32          `json:"severityNumber,omitempty"`
 	SeverityText   string         `json:"severityText,omitempty"`
@@ -102,35 +131,11 @@ type LogRecord struct {
 	SpanID         string         `json:"spanId,omitempty"`
 	Resource       Resource       `json:"resource"`
 	Scope          Scope          `json:"scope"`
+
+	ownerConnID string `json:"-"`
 }
 
-type TraceFilter struct {
-	ServiceName      string
-	SpanName         string
-	Status           string
-	TraceIDPrefix    string
-	Limit            int
-	SpanPreviewCount int
-}
-
-type MetricFilter struct {
-	MetricName        string
-	ServiceName       string
-	ScopeName         string
-	Type              string
-	ResourceAttribute string
-	Limit             int
-	DataPointLimit    int
-}
-
-type LogFilter struct {
-	ServiceName  string
-	SeverityText string
-	Body         string
-	TraceID      string
-	Limit        int
-}
-
+// TraceSummary represents a summary of a single trace.
 type TraceSummary struct {
 	TraceID      string        `json:"traceId"`
 	RootSpanName string        `json:"rootSpanName"`
@@ -141,6 +146,7 @@ type TraceSummary struct {
 	Spans        []SpanPreview `json:"spans,omitempty"`
 }
 
+// SpanPreview represents a preview of a span in a trace.
 type SpanPreview struct {
 	SpanID     string  `json:"spanId"`
 	Name       string  `json:"name"`
@@ -149,6 +155,7 @@ type SpanPreview struct {
 	StatusCode string  `json:"statusCode"`
 }
 
+// TraceDetail represents the full details of a trace.
 type TraceDetail struct {
 	TraceID      string  `json:"traceId"`
 	RootSpanName string  `json:"rootSpanName"`
@@ -159,6 +166,7 @@ type TraceDetail struct {
 	Spans        []Span  `json:"spans"`
 }
 
+// MetricGroup represents a group of metric data points with the same name.
 type MetricGroup struct {
 	Name           string            `json:"name"`
 	Description    string            `json:"description,omitempty"`
@@ -166,16 +174,19 @@ type MetricGroup struct {
 	Type           string            `json:"type"`
 	ServiceName    string            `json:"serviceName,omitempty"`
 	ScopeName      string            `json:"scopeName,omitempty"`
+	SeriesCount    int               `json:"seriesCount,omitempty"`
 	DataPointCount int               `json:"dataPointCount"`
 	DataPoints     []MetricDataPoint `json:"dataPoints,omitempty"`
 }
 
+// Stats represents aggregated statistics about stored telemetry.
 type Stats struct {
-	SpanCount    int      `json:"spanCount"`
-	MetricCount  int      `json:"metricCount"`
-	LogCount     int      `json:"logCount"`
-	TraceCount   int      `json:"traceCount"`
-	ServiceNames []string `json:"serviceNames"`
+	SpanCount       int      `json:"spanCount"`
+	DataPointCount  int      `json:"dataPointCount"`
+	MetricNameCount int      `json:"metricNameCount"`
+	LogCount        int      `json:"logCount"`
+	TraceCount      int      `json:"traceCount"`
+	ServiceNames    []string `json:"serviceNames"`
 }
 
 // Endpoints holds the addresses the collector is listening on.
@@ -185,84 +196,191 @@ type Endpoints struct {
 	REST     string `json:"rest,omitempty"`
 }
 
+// Store is the in-memory telemetry store.
 type Store struct {
 	mu      sync.RWMutex
-	spans   []Span
-	metrics []MetricDataPoint
-	logs    []LogRecord
+	spans   ringBuffer[Span]
+	metrics ringBuffer[MetricDataPoint]
+	logs    ringBuffer[LogRecord]
 
 	lastIngest time.Time
 	sessionGap time.Duration
 
 	endpoints Endpoints
 
+	nextLogID uint64
+
 	subMu       sync.Mutex
 	subscribers map[int]chan Signal
 	nextSubID   int
 }
 
+// ringBuffer is a fixed-capacity circular buffer. When full, the oldest
+// items are silently overwritten. This bounds memory usage.
+type ringBuffer[T any] struct {
+	items []T
+	head  int // next write position
+	count int // number of items currently stored
+	cap   int
+}
+
+func newRingBuffer[T any](capacity int) ringBuffer[T] {
+	return ringBuffer[T]{items: make([]T, capacity), cap: capacity}
+}
+
+// push appends items, overwriting the oldest when at capacity.
+func (rb *ringBuffer[T]) push(items []T) {
+	for _, item := range items {
+		rb.items[rb.head] = item
+		rb.head = (rb.head + 1) % rb.cap
+		if rb.count < rb.cap {
+			rb.count++
+		}
+	}
+}
+
+// snapshot returns a copy of the stored items in insertion order (oldest first).
+func (rb *ringBuffer[T]) snapshot() []T {
+	if rb.count == 0 {
+		return nil
+	}
+	out := make([]T, rb.count)
+	start := 0
+	if rb.count == rb.cap {
+		start = rb.head // oldest item is at head when full
+	}
+	for i := 0; i < rb.count; i++ {
+		out[i] = rb.items[(start+i)%rb.cap]
+	}
+	return out
+}
+
+// clear resets the buffer.
+func (rb *ringBuffer[T]) clear() {
+	rb.head = 0
+	rb.count = 0
+}
+
+// size returns the number of items currently stored.
+func (rb *ringBuffer[T]) size() int {
+	return rb.count
+}
+
+// iterate calls fn for each stored item in insertion order (oldest first).
+// It does not allocate a copy.
+func (rb *ringBuffer[T]) iterate(fn func(T)) {
+	if rb.count == 0 {
+		return
+	}
+	start := 0
+	if rb.count == rb.cap {
+		start = rb.head
+	}
+	for i := 0; i < rb.count; i++ {
+		fn(rb.items[(start+i)%rb.cap])
+	}
+}
+
+// SetEndpoints updates the endpoints where the collector is listening.
 func (s *Store) SetEndpoints(e Endpoints) {
 	s.mu.Lock()
 	s.endpoints = e
 	s.mu.Unlock()
 }
 
-func (s *Store) GetEndpoints() Endpoints {
+// Endpoints returns the addresses where the collector is listening.
+func (s *Store) Endpoints() Endpoints {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.endpoints
 }
 
-type Option func(*Store)
-
-func WithSessionGap(d time.Duration) Option {
-	return func(s *Store) { s.sessionGap = d }
-}
-
-func New(opts ...Option) *Store {
-	s := &Store{
+// New creates a new Store with default configuration.
+func New() *Store {
+	return &Store{
+		spans:       newRingBuffer[Span](DefaultSpanCap),
+		metrics:     newRingBuffer[MetricDataPoint](DefaultMetricCap),
+		logs:        newRingBuffer[LogRecord](DefaultLogCap),
 		subscribers: make(map[int]chan Signal),
 		sessionGap:  30 * time.Second,
 	}
-	for _, o := range opts {
-		o(s)
+}
+
+// AddSpansForConnection adds spans with an associated connection ID for later eviction.
+func (s *Store) AddSpansForConnection(connID string, spans []Span) {
+	s.mu.Lock()
+	reset := s.checkSessionReset()
+	if connID != "" {
+		for i := range spans {
+			spans[i].ownerConnID = connID
+		}
 	}
-	return s
-}
-
-func (s *Store) AddSpans(spans []Span) {
-	s.mu.Lock()
-	s.checkSessionReset()
-	s.spans = append(s.spans, spans...)
+	s.spans.push(spans)
 	s.lastIngest = time.Now()
 	s.mu.Unlock()
-	s.notify(SignalTraces)
+	if reset {
+		s.notify(SignalTraces)
+		s.notify(SignalMetrics)
+		s.notify(SignalLogs)
+	} else {
+		s.notify(SignalTraces)
+	}
 }
 
-func (s *Store) AddMetrics(metrics []MetricDataPoint) {
+// AddMetricsForConnection adds metrics with an associated connection ID for later eviction.
+func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint) {
 	s.mu.Lock()
-	s.checkSessionReset()
-	s.metrics = append(s.metrics, metrics...)
+	reset := s.checkSessionReset()
+	if connID != "" {
+		for i := range metrics {
+			metrics[i].ownerConnID = connID
+		}
+	}
+	s.metrics.push(metrics)
 	s.lastIngest = time.Now()
 	s.mu.Unlock()
-	s.notify(SignalMetrics)
+	if reset {
+		s.notify(SignalTraces)
+		s.notify(SignalMetrics)
+		s.notify(SignalLogs)
+	} else {
+		s.notify(SignalMetrics)
+	}
 }
 
-func (s *Store) AddLogs(logs []LogRecord) {
+// AddLogsForConnection adds logs with an associated connection ID for later eviction.
+func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 	s.mu.Lock()
-	s.checkSessionReset()
-	s.logs = append(s.logs, logs...)
+	reset := s.checkSessionReset()
+	if connID != "" {
+		for i := range logs {
+			logs[i].ownerConnID = connID
+		}
+	}
+	for i := range logs {
+		if logs[i].ID == "" {
+			s.nextLogID++
+			logs[i].ID = "log-" + strconv.FormatUint(s.nextLogID, 10)
+		}
+	}
+	s.logs.push(logs)
 	s.lastIngest = time.Now()
 	s.mu.Unlock()
-	s.notify(SignalLogs)
+	if reset {
+		s.notify(SignalTraces)
+		s.notify(SignalMetrics)
+		s.notify(SignalLogs)
+	} else {
+		s.notify(SignalLogs)
+	}
 }
 
 // Clear removes all stored telemetry and resets the session clock.
 func (s *Store) Clear() {
 	s.mu.Lock()
-	s.spans = nil
-	s.metrics = nil
-	s.logs = nil
+	s.spans.clear()
+	s.metrics.clear()
+	s.logs.clear()
 	s.lastIngest = time.Time{}
 	s.mu.Unlock()
 	s.notify(SignalTraces)
@@ -270,87 +388,178 @@ func (s *Store) Clear() {
 	s.notify(SignalLogs)
 }
 
-// checkSessionReset clears the store when telemetry arrives after a gap
-// longer than sessionGap, indicating the instrumented app was restarted.
-// Must be called with s.mu held.
-func (s *Store) checkSessionReset() {
-	if s.lastIngest.IsZero() || s.sessionGap <= 0 {
+// EvictConnection removes all telemetry data associated with the given
+// connection ID. This is called when a connected process exits (detected
+// via PID monitoring or gRPC session close). Only data from that specific
+// connection is removed; other connections' data is preserved.
+func (s *Store) EvictConnection(connID string) {
+	if connID == "" {
 		return
 	}
-	if time.Since(s.lastIngest) > s.sessionGap {
-		s.spans = nil
-		s.metrics = nil
-		s.logs = nil
+
+	s.mu.Lock()
+	hasSpans := s.rebuildSpansWithoutConnection(connID)
+	hasMetrics := s.rebuildMetricsWithoutConnection(connID)
+	hasLogs := s.rebuildLogsWithoutConnection(connID)
+
+	// If the store is now empty, reset the ingest clock.
+	if s.spans.size() == 0 && s.metrics.size() == 0 && s.logs.size() == 0 {
+		s.lastIngest = time.Time{}
+	}
+	s.mu.Unlock()
+
+	if hasSpans {
+		s.notify(SignalTraces)
+	}
+	if hasMetrics {
+		s.notify(SignalMetrics)
+	}
+	if hasLogs {
+		s.notify(SignalLogs)
 	}
 }
 
-func (s *Store) QueryTraces(f TraceFilter) []TraceSummary {
-	if f.Limit <= 0 {
-		f.Limit = 20
+// rebuildSpansWithoutConnection rebuilds the spans ring buffer, excluding
+// telemetry owned by the given connection.
+// Must be called with s.mu held.
+func (s *Store) rebuildSpansWithoutConnection(connID string) bool {
+	kept := make([]Span, 0, s.spans.size())
+	removed := false
+	s.spans.iterate(func(sp Span) {
+		if sp.ownerConnID == connID {
+			removed = true
+			return
+		}
+		kept = append(kept, sp)
+	})
+	if !removed {
+		return false
 	}
-	if f.SpanPreviewCount <= 0 {
-		f.SpanPreviewCount = 5
+	s.spans.clear()
+	if len(kept) > 0 {
+		s.spans.push(kept)
+	}
+	return true
+}
+
+// rebuildMetricsWithoutConnection rebuilds the metrics ring buffer, excluding
+// telemetry owned by the given connection.
+// Must be called with s.mu held.
+func (s *Store) rebuildMetricsWithoutConnection(connID string) bool {
+	kept := make([]MetricDataPoint, 0, s.metrics.size())
+	removed := false
+	s.metrics.iterate(func(m MetricDataPoint) {
+		if m.ownerConnID == connID {
+			removed = true
+			return
+		}
+		kept = append(kept, m)
+	})
+	if !removed {
+		return false
+	}
+	s.metrics.clear()
+	if len(kept) > 0 {
+		s.metrics.push(kept)
+	}
+	return true
+}
+
+// rebuildLogsWithoutConnection rebuilds the logs ring buffer, excluding
+// telemetry owned by the given connection.
+// Must be called with s.mu held.
+func (s *Store) rebuildLogsWithoutConnection(connID string) bool {
+	kept := make([]LogRecord, 0, s.logs.size())
+	removed := false
+	s.logs.iterate(func(l LogRecord) {
+		if l.ownerConnID == connID {
+			removed = true
+			return
+		}
+		kept = append(kept, l)
+	})
+	if !removed {
+		return false
+	}
+	s.logs.clear()
+	if len(kept) > 0 {
+		s.logs.push(kept)
+	}
+	return true
+}
+
+// checkSessionReset clears the store when telemetry arrives after a gap
+// longer than sessionGap, indicating the instrumented app was restarted.
+// Must be called with s.mu held. Returns true if a reset occurred.
+func (s *Store) checkSessionReset() bool {
+	if s.lastIngest.IsZero() || s.sessionGap <= 0 {
+		return false
+	}
+	if time.Since(s.lastIngest) > s.sessionGap {
+		s.spans.clear()
+		s.metrics.clear()
+		s.logs.clear()
+		return true
+	}
+	return false
+}
+
+// QueryTraces returns the latest traces, newest first, up to the specified limit.
+func (s *Store) QueryTraces(limit int) []TraceSummary {
+	if limit <= 0 {
+		limit = 100
 	}
 
 	s.mu.RLock()
-	grouped := groupSpansByTrace(s.spans)
+	allSpans := s.spans.snapshot()
 	s.mu.RUnlock()
+
+	grouped := groupSpansByTrace(allSpans)
 
 	var results []TraceSummary
 	for traceID, spans := range grouped {
-		if f.TraceIDPrefix != "" && !strings.HasPrefix(traceID, strings.ToLower(f.TraceIDPrefix)) {
-			continue
-		}
-
 		root := findRootSpan(spans)
-		svcName := root.Resource.ServiceName
-		status := computeTraceStatus(spans)
-
-		if f.ServiceName != "" && !strings.EqualFold(svcName, f.ServiceName) {
-			continue
-		}
-		if f.Status != "" && status != f.Status {
-			continue
-		}
-		if f.SpanName != "" {
-			if !anySpanNameMatches(spans, f.SpanName) {
-				continue
-			}
-		}
-
 		dur := computeTraceDuration(spans)
-		previews := makeSpanPreviews(spans, f.SpanPreviewCount)
+		previews := makeSpanPreviews(spans, 8)
 
 		results = append(results, TraceSummary{
 			TraceID:      traceID,
 			RootSpanName: root.Name,
-			ServiceName:  svcName,
+			ServiceName:  root.Resource.ServiceName,
 			SpanCount:    len(spans),
 			DurationMs:   dur,
-			Status:       status,
+			Status:       computeTraceStatus(spans),
 			Spans:        previews,
 		})
 	}
 
+	// Precompute start times to avoid repeated map lookups during sort.
+	startTimes := make(map[string]time.Time, len(grouped))
+	for traceID, spans := range grouped {
+		startTimes[traceID] = getTraceStartTime(spans)
+	}
+
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].TraceID > results[j].TraceID
+		return startTimes[results[i].TraceID].After(startTimes[results[j].TraceID])
 	})
 
-	if len(results) > f.Limit {
-		results = results[:f.Limit]
+	if len(results) > limit {
+		results = results[:limit]
 	}
 	return results
 }
 
-func (s *Store) GetTrace(traceID string, eventLimit int) *TraceDetail {
+// Trace returns the full details of a single trace by ID, limiting events per span.
+func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 	if eventLimit <= 0 {
 		eventLimit = 12
 	}
 
 	s.mu.RLock()
-	grouped := groupSpansByTrace(s.spans)
+	allSpans := s.spans.snapshot()
 	s.mu.RUnlock()
 
+	grouped := groupSpansByTrace(allSpans)
 	spans, ok := grouped[traceID]
 	if !ok {
 		return nil
@@ -377,39 +586,286 @@ func (s *Store) GetTrace(traceID string, eventLimit int) *TraceDetail {
 	}
 }
 
-func (s *Store) QueryMetrics(f MetricFilter) []MetricGroup {
-	if f.Limit <= 0 {
-		f.Limit = 20
-	}
-	if f.DataPointLimit <= 0 {
-		f.DataPointLimit = 3
+// QueryMetrics returns the latest metric groups, newest first, up to the specified limit.
+// The UI path returns a bounded rolling window per series plus explicit
+// series cardinality so live WebSocket payloads stay controlled.
+func (s *Store) QueryMetrics(limit int) []MetricGroup {
+	if limit <= 0 {
+		limit = 100
 	}
 
 	s.mu.RLock()
-	points := make([]MetricDataPoint, len(s.metrics))
-	copy(points, s.metrics)
+	points := s.metrics.snapshot()
+	s.mu.RUnlock()
+
+	type groupKey struct{ name, svc, scope string }
+	type groupAccumulator struct {
+		group      *MetricGroup
+		series     map[string][]MetricDataPoint
+		seriesKeys []string
+	}
+
+	groups := make(map[groupKey]*groupAccumulator)
+	latestByGroup := make(map[groupKey]time.Time)
+
+	// Keep a bounded rolling window for each series in chronological order.
+	for _, dp := range points {
+		key := groupKey{dp.Name, dp.Resource.ServiceName, dp.Scope.Name}
+		acc, exists := groups[key]
+		if !exists {
+			acc = &groupAccumulator{
+				group: &MetricGroup{
+					Name:        dp.Name,
+					Description: dp.Description,
+					Unit:        dp.Unit,
+					Type:        dp.Type,
+					ServiceName: dp.Resource.ServiceName,
+					ScopeName:   dp.Scope.Name,
+				},
+				series: make(map[string][]MetricDataPoint),
+			}
+			groups[key] = acc
+		}
+		acc.group.DataPointCount++
+		seriesKey := metricPreviewSeriesKey(dp)
+		if _, ok := acc.series[seriesKey]; !ok {
+			acc.group.SeriesCount++
+			acc.seriesKeys = append(acc.seriesKeys, seriesKey)
+		}
+		acc.series[seriesKey] = appendBoundedMetricWindow(acc.series[seriesKey], dp, metricSeriesWindow)
+		if dp.Timestamp.After(latestByGroup[key]) {
+			latestByGroup[key] = dp.Timestamp
+		}
+	}
+
+	groupOrder := make([]groupKey, 0, len(groups))
+	for key := range groups {
+		groupOrder = append(groupOrder, key)
+	}
+
+	sort.Slice(groupOrder, func(i, j int) bool {
+		return latestByGroup[groupOrder[i]].After(latestByGroup[groupOrder[j]])
+	})
+
+	if len(groupOrder) > limit {
+		groupOrder = groupOrder[:limit]
+	}
+
+	results := make([]MetricGroup, 0, len(groupOrder))
+	for _, key := range groupOrder {
+		acc := groups[key]
+		group := *acc.group
+		group.DataPoints = make([]MetricDataPoint, 0, minInt(group.DataPointCount, group.SeriesCount*metricSeriesWindow))
+		sort.Strings(acc.seriesKeys)
+		for _, seriesKey := range acc.seriesKeys {
+			group.DataPoints = append(group.DataPoints, acc.series[seriesKey]...)
+		}
+		sort.SliceStable(group.DataPoints, func(i, j int) bool {
+			if group.DataPoints[i].Timestamp.Equal(group.DataPoints[j].Timestamp) {
+				return metricPreviewSeriesKey(group.DataPoints[i]) < metricPreviewSeriesKey(group.DataPoints[j])
+			}
+			return group.DataPoints[i].Timestamp.Before(group.DataPoints[j].Timestamp)
+		})
+		results = append(results, group)
+	}
+	return results
+}
+
+// QueryLogs returns the latest log records, newest first, up to the specified limit.
+func (s *Store) QueryLogs(limit int) []LogRecord {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	s.mu.RLock()
+	all := s.logs.snapshot()
+	s.mu.RUnlock()
+
+	// Return newest first.
+	var results []LogRecord
+	for i := len(all) - 1; i >= 0 && len(results) < limit; i-- {
+		results = append(results, all[i])
+	}
+	return results
+}
+
+// Stats returns aggregated statistics about stored telemetry.
+func (s *Store) Stats() Stats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	traceIDs := make(map[string]struct{})
+	svcSet := make(map[string]struct{})
+	metricNames := make(map[string]struct{})
+
+	s.spans.iterate(func(sp Span) {
+		traceIDs[sp.TraceID] = struct{}{}
+		if sp.Resource.ServiceName != "" {
+			svcSet[sp.Resource.ServiceName] = struct{}{}
+		}
+	})
+	s.metrics.iterate(func(m MetricDataPoint) {
+		metricNames[m.Name] = struct{}{}
+		if m.Resource.ServiceName != "" {
+			svcSet[m.Resource.ServiceName] = struct{}{}
+		}
+	})
+	s.logs.iterate(func(l LogRecord) {
+		if l.Resource.ServiceName != "" {
+			svcSet[l.Resource.ServiceName] = struct{}{}
+		}
+	})
+
+	svcs := make([]string, 0, len(svcSet))
+	for svc := range svcSet {
+		svcs = append(svcs, svc)
+	}
+	sort.Strings(svcs)
+
+	return Stats{
+		SpanCount:       s.spans.size(),
+		DataPointCount:  s.metrics.size(),
+		MetricNameCount: len(metricNames),
+		LogCount:        s.logs.size(),
+		TraceCount:      len(traceIDs),
+		ServiceNames:    svcs,
+	}
+}
+
+// Subscribe registers for updates on store changes and returns a subscription ID and channel.
+func (s *Store) Subscribe() (int, <-chan Signal) {
+	ch := make(chan Signal, 8)
+	s.subMu.Lock()
+	id := s.nextSubID
+	s.nextSubID++
+	s.subscribers[id] = ch
+	s.subMu.Unlock()
+	return id, ch
+}
+
+// Unsubscribe removes a subscriber by its subscription ID and closes
+// its channel so that any goroutine ranging over it will exit.
+func (s *Store) Unsubscribe(id int) {
+	s.subMu.Lock()
+	ch, ok := s.subscribers[id]
+	delete(s.subscribers, id)
+	s.subMu.Unlock()
+	if ok {
+		close(ch)
+	}
+}
+
+func (s *Store) notify(sig Signal) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	for _, ch := range s.subscribers {
+		select {
+		case ch <- sig:
+		default:
+		}
+	}
+}
+
+// --- MCP query helpers (accept filters for MCP tool use) ---
+
+// QueryTracesFiltered is used by MCP tools that need filtering.
+func (s *Store) QueryTracesFiltered(serviceName, spanName, status, traceIDPrefix string, limit, spanPreviewCount int) []TraceSummary {
+	if limit <= 0 {
+		limit = 20
+	}
+	if spanPreviewCount <= 0 {
+		spanPreviewCount = 5
+	}
+
+	s.mu.RLock()
+	allSpans := s.spans.snapshot()
+	s.mu.RUnlock()
+
+	grouped := groupSpansByTrace(allSpans)
+
+	var results []TraceSummary
+	for traceID, spans := range grouped {
+		if traceIDPrefix != "" && !strings.HasPrefix(traceID, strings.ToLower(traceIDPrefix)) {
+			continue
+		}
+		root := findRootSpan(spans)
+		svcName := root.Resource.ServiceName
+		st := computeTraceStatus(spans)
+
+		if serviceName != "" && !strings.EqualFold(svcName, serviceName) {
+			continue
+		}
+		if status != "" && st != status {
+			continue
+		}
+		if spanName != "" && !anySpanNameMatches(spans, spanName) {
+			continue
+		}
+
+		dur := computeTraceDuration(spans)
+		previews := makeSpanPreviews(spans, spanPreviewCount)
+
+		results = append(results, TraceSummary{
+			TraceID:      traceID,
+			RootSpanName: root.Name,
+			ServiceName:  svcName,
+			SpanCount:    len(spans),
+			DurationMs:   dur,
+			Status:       st,
+			Spans:        previews,
+		})
+	}
+
+	startTimes := make(map[string]time.Time, len(grouped))
+	for traceID, spans := range grouped {
+		startTimes[traceID] = getTraceStartTime(spans)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return startTimes[results[i].TraceID].After(startTimes[results[j].TraceID])
+	})
+
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
+}
+
+// QueryMetricsFiltered is used by MCP tools that need filtering.
+func (s *Store) QueryMetricsFiltered(metricName, serviceName, scopeName, metricType, resourceAttribute string, limit, dataPointLimit int) []MetricGroup {
+	if limit <= 0 {
+		limit = 20
+	}
+	if dataPointLimit <= 0 {
+		dataPointLimit = 3
+	}
+
+	s.mu.RLock()
+	points := s.metrics.snapshot()
 	s.mu.RUnlock()
 
 	type groupKey struct{ name, svc, scope string }
 	groups := make(map[groupKey]*MetricGroup)
 	groupOrder := make([]groupKey, 0)
 
-	for _, dp := range points {
-		if f.MetricName != "" && !strings.EqualFold(dp.Name, f.MetricName) {
+	// Iterate newest-first so we keep the most recent datapoints.
+	for i := len(points) - 1; i >= 0; i-- {
+		dp := points[i]
+		if metricName != "" && !strings.EqualFold(dp.Name, metricName) {
 			continue
 		}
-		if f.ServiceName != "" && !strings.EqualFold(dp.Resource.ServiceName, f.ServiceName) {
+		if serviceName != "" && !strings.EqualFold(dp.Resource.ServiceName, serviceName) {
 			continue
 		}
-		if f.ScopeName != "" && !strings.EqualFold(dp.Scope.Name, f.ScopeName) {
+		if scopeName != "" && !strings.EqualFold(dp.Scope.Name, scopeName) {
 			continue
 		}
-		if f.Type != "" && dp.Type != normalizeMetricType(f.Type) {
+		if metricType != "" && dp.Type != normalizeMetricType(metricType) {
 			continue
 		}
-		if f.ResourceAttribute != "" {
+		if resourceAttribute != "" {
 			serialized, _ := json.Marshal(dp.Resource.Attributes)
-			if !strings.Contains(string(serialized), f.ResourceAttribute) {
+			if !strings.Contains(string(serialized), resourceAttribute) {
 				continue
 			}
 		}
@@ -429,115 +885,51 @@ func (s *Store) QueryMetrics(f MetricFilter) []MetricGroup {
 			groupOrder = append(groupOrder, key)
 		}
 		g.DataPointCount++
-		if len(g.DataPoints) < f.DataPointLimit {
+		if len(g.DataPoints) < dataPointLimit {
 			g.DataPoints = append(g.DataPoints, dp)
 		}
 	}
 
 	var results []MetricGroup
 	for _, key := range groupOrder {
-		results = append(results, *groups[key])
+		g := *groups[key]
+		reverseSlice(g.DataPoints)
+		results = append(results, g)
 	}
-	if len(results) > f.Limit {
-		results = results[:f.Limit]
+	if len(results) > limit {
+		results = results[:limit]
 	}
 	return results
 }
 
-func (s *Store) QueryLogs(f LogFilter) []LogRecord {
-	if f.Limit <= 0 {
-		f.Limit = 50
+// QueryLogsFiltered is used by MCP tools that need filtering.
+func (s *Store) QueryLogsFiltered(serviceName, severityText, body, traceID string, limit int) []LogRecord {
+	if limit <= 0 {
+		limit = 50
 	}
 
 	s.mu.RLock()
-	all := make([]LogRecord, len(s.logs))
-	copy(all, s.logs)
+	all := s.logs.snapshot()
 	s.mu.RUnlock()
 
 	var results []LogRecord
-	for i := len(all) - 1; i >= 0 && len(results) < f.Limit; i-- {
+	for i := len(all) - 1; i >= 0 && len(results) < limit; i-- {
 		lr := all[i]
-		if f.ServiceName != "" && !strings.EqualFold(lr.Resource.ServiceName, f.ServiceName) {
+		if serviceName != "" && !strings.EqualFold(lr.Resource.ServiceName, serviceName) {
 			continue
 		}
-		if f.SeverityText != "" && !strings.EqualFold(lr.SeverityText, f.SeverityText) {
+		if severityText != "" && !strings.EqualFold(lr.SeverityText, severityText) {
 			continue
 		}
-		if f.Body != "" && !strings.Contains(strings.ToLower(lr.Body), strings.ToLower(f.Body)) {
+		if body != "" && !strings.Contains(strings.ToLower(lr.Body), strings.ToLower(body)) {
 			continue
 		}
-		if f.TraceID != "" && lr.TraceID != f.TraceID {
+		if traceID != "" && lr.TraceID != traceID {
 			continue
 		}
 		results = append(results, lr)
 	}
 	return results
-}
-
-func (s *Store) Stats() Stats {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	traceIDs := make(map[string]struct{})
-	svcSet := make(map[string]struct{})
-
-	for _, sp := range s.spans {
-		traceIDs[sp.TraceID] = struct{}{}
-		if sp.Resource.ServiceName != "" {
-			svcSet[sp.Resource.ServiceName] = struct{}{}
-		}
-	}
-	for _, m := range s.metrics {
-		if m.Resource.ServiceName != "" {
-			svcSet[m.Resource.ServiceName] = struct{}{}
-		}
-	}
-	for _, l := range s.logs {
-		if l.Resource.ServiceName != "" {
-			svcSet[l.Resource.ServiceName] = struct{}{}
-		}
-	}
-
-	svcs := make([]string, 0, len(svcSet))
-	for svc := range svcSet {
-		svcs = append(svcs, svc)
-	}
-	sort.Strings(svcs)
-
-	return Stats{
-		SpanCount:    len(s.spans),
-		MetricCount:  len(s.metrics),
-		LogCount:     len(s.logs),
-		TraceCount:   len(traceIDs),
-		ServiceNames: svcs,
-	}
-}
-
-func (s *Store) Subscribe() (int, <-chan Signal) {
-	ch := make(chan Signal, 8)
-	s.subMu.Lock()
-	id := s.nextSubID
-	s.nextSubID++
-	s.subscribers[id] = ch
-	s.subMu.Unlock()
-	return id, ch
-}
-
-func (s *Store) Unsubscribe(id int) {
-	s.subMu.Lock()
-	delete(s.subscribers, id)
-	s.subMu.Unlock()
-}
-
-func (s *Store) notify(sig Signal) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	for _, ch := range s.subscribers {
-		select {
-		case ch <- sig:
-		default:
-		}
-	}
 }
 
 func groupSpansByTrace(spans []Span) map[string][]Span {
@@ -546,6 +938,19 @@ func groupSpansByTrace(spans []Span) map[string][]Span {
 		groups[sp.TraceID] = append(groups[sp.TraceID], sp)
 	}
 	return groups
+}
+
+func getTraceStartTime(spans []Span) time.Time {
+	if len(spans) == 0 {
+		return time.Time{}
+	}
+	min := spans[0].StartTime
+	for _, sp := range spans[1:] {
+		if sp.StartTime.Before(min) {
+			min = sp.StartTime
+		}
+	}
+	return min
 }
 
 func findRootSpan(spans []Span) Span {
@@ -641,4 +1046,67 @@ func normalizeMetricType(t string) string {
 	default:
 		return t
 	}
+}
+
+func reverseSlice[T any](s []T) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+}
+
+func metricPreviewSeriesKey(dp MetricDataPoint) string {
+	return "resource:" + stringifyMetricAttributes(dp.Resource.Attributes) + "|point:" + stringifyMetricAttributes(dp.Attributes)
+}
+
+func stringifyMetricAttributes(attrs map[string]any) string {
+	if len(attrs) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(attrs))
+	for key := range attrs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for i, key := range keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(stringifyMetricValue(attrs[key]))
+	}
+	return b.String()
+}
+
+func appendBoundedMetricWindow(points []MetricDataPoint, dp MetricDataPoint, limit int) []MetricDataPoint {
+	if limit <= 0 {
+		return points
+	}
+	if len(points) == limit {
+		copy(points, points[1:])
+		points = points[:limit-1]
+	}
+	return append(points, dp)
+}
+
+func stringifyMetricValue(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	default:
+		encoded, err := json.Marshal(val)
+		if err != nil {
+			return ""
+		}
+		return string(encoded)
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

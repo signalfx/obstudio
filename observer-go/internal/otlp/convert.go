@@ -1,4 +1,4 @@
-package exporter
+package otlp
 
 import (
 	"encoding/hex"
@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
-func convertTraces(td ptrace.Traces) []store.Span {
+func ConvertTraces(td ptrace.Traces) []store.Span {
 	var out []store.Span
 	rss := td.ResourceSpans()
 	for i := 0; i < rss.Len(); i++ {
@@ -47,7 +47,7 @@ func convertTraces(td ptrace.Traces) []store.Span {
 	return out
 }
 
-func convertMetrics(md pmetric.Metrics) []store.MetricDataPoint {
+func ConvertMetrics(md pmetric.Metrics) []store.MetricDataPoint {
 	var out []store.MetricDataPoint
 	rms := md.ResourceMetrics()
 	for i := 0; i < rms.Len(); i++ {
@@ -66,7 +66,7 @@ func convertMetrics(md pmetric.Metrics) []store.MetricDataPoint {
 	return out
 }
 
-func convertLogs(ld plog.Logs) []store.LogRecord {
+func ConvertLogs(ld plog.Logs) []store.LogRecord {
 	var out []store.LogRecord
 	rls := ld.ResourceLogs()
 	for i := 0; i < rls.Len(); i++ {

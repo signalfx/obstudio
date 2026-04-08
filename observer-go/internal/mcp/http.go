@@ -4,9 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/signalfx/obstudio/observer-go/internal/store"
 )
@@ -64,7 +66,8 @@ func setCORSHeaders(w http.ResponseWriter) {
 func generateSessionID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		log.Printf("[mcp] failed to generate session ID: %v", err)
+		log.Printf("[mcp] failed to generate session ID via crypto/rand: %v", err)
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
 }

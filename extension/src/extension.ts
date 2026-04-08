@@ -2,6 +2,7 @@ import * as cp from 'node:child_process';
 import * as net from 'node:net';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { resolveBackend } from './backend';
 
 // Extension-global observer state. The extension hosts one local observer process
 // and optionally one WebView panel that embeds its UI.
@@ -37,17 +38,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	void startObserver(context, observerOutputChannel).catch((error) => {
 		const message = getErrorMessage(error);
 		observerOutputChannel?.appendLine(`Observer startup failed: ${message}`);
-		void vscode.window.showErrorMessage(
-			`Observability Studio could not start because an OTLP port is unavailable (${observerOtlpHttpPort} HTTP, ${observerOtlpGrpcPort} gRPC): ${message}`,
-		);
+		void vscode.window.showErrorMessage(`Observability Studio could not start: ${message}`);
 		refreshObserverPanel();
 	});
 
-	console.log('Congratulations, your extension "observability-studio" is now active!');
-
-	const disposable = vscode.commands.registerCommand('observability-studio.helloWorld', () => {
-		vscode.window.showInformationMessage('Hello World from Observability Studio!');
-	});
 	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
 		openObserverPanel(context);
 	});
@@ -58,7 +52,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	observerStatusBarItem.tooltip = 'Open Observability Studio Observer';
 	observerStatusBarItem.show();
 
-	context.subscriptions.push(disposable);
 	context.subscriptions.push(openObserverDisposable);
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
@@ -82,7 +75,7 @@ async function startObserver(context: vscode.ExtensionContext, outputChannel: vs
 	}
 
 	observerStartupPromise = (async () => {
-		const observerEntry = path.join(context.extensionPath, 'dist', 'observer', 'index.js');
+		const backend = resolveBackend(context.extensionPath);
 		observerPort = await getAvailablePort();
 
 		// The observer UI can move to any free localhost port, but OTLP stays fixed so
@@ -90,12 +83,12 @@ async function startObserver(context: vscode.ExtensionContext, outputChannel: vs
 		const otlpHttpPort = await ensurePortAvailable(observerOtlpHttpPort);
 		const otlpGrpcPort = await ensurePortAvailable(observerOtlpGrpcPort);
 
-		observerOutputChannel?.appendLine(`Starting observer on http://127.0.0.1:${observerPort}`);
+		observerOutputChannel?.appendLine(`Starting ${backend.label} on http://127.0.0.1:${observerPort}`);
 		observerOutputChannel?.appendLine(`OTLP/HTTP receiver listening on http://127.0.0.1:${otlpHttpPort}`);
 		observerOutputChannel?.appendLine(`OTLP/gRPC receiver listening on 127.0.0.1:${otlpGrpcPort}`);
 
-		observerProcess = cp.spawn(process.execPath, [observerEntry], {
-			cwd: path.dirname(observerEntry),
+		observerProcess = cp.spawn(backend.command, backend.args, {
+			cwd: backend.cwd,
 			env: {
 				...process.env,
 				HOST: '127.0.0.1',
@@ -326,7 +319,7 @@ function getObserverWebviewHtml(port: number): string {
 	<meta charset="UTF-8">
 	<meta
 		http-equiv="Content-Security-Policy"
-		content="default-src 'none'; frame-src ${observerUrl}; style-src 'unsafe-inline';"
+		content="default-src 'none'; frame-src ${observerUrl}; style-src 'unsafe-inline'; worker-src 'none';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Observer</title>
@@ -348,7 +341,7 @@ function getObserverWebviewHtml(port: number): string {
 	</style>
 </head>
 <body>
-	<iframe src="${observerUrl}" title="Observer"></iframe>
+	<iframe src="${observerUrl}" title="Observer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
 </body>
 </html>`;
 }

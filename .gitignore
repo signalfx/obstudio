@@ -12,7 +12,9 @@ uv.lock
 
 # Compiled binaries and embedded staging
 observer-go/obstudio
+observer-go/build-client
 observer-go/cmd/obstudio/_skills/
+observer-go/internal/web/static/assets/
 
 # Demo apps -- track baselines, ignore generated artifacts
 demo/**/.observe/

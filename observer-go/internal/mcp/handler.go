@@ -1,3 +1,4 @@
+// Package mcp implements the Model Context Protocol server for AI assistant integration.
 package mcp
 
 import (
@@ -72,14 +73,14 @@ type Dispatcher struct {
 	tools []toolDef
 }
 
-// NewDispatcher creates a transport-agnostic MCP dispatcher.
+// NewDispatcher creates a new transport-agnostic MCP dispatcher.
 func NewDispatcher(s *store.Store) *Dispatcher {
 	return &Dispatcher{store: s, tools: buildToolDefs()}
 }
 
 // Dispatch processes a single JSON-RPC request and returns a response.
-// Returns (response, handled). When handled is false the caller should
-// send an HTTP 202 or similar acknowledgement (e.g. notifications).
+// It returns (response, handled). When handled is false the caller should
+// send an HTTP 202 or similar acknowledgement (e.g. for notifications).
 func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 	switch req.Method {
 	case "initialize":
@@ -96,7 +97,10 @@ func (d *Dispatcher) Dispatch(req jsonRPCRequest) (jsonRPCResponse, bool) {
 }
 
 func (d *Dispatcher) handleInitialize(req jsonRPCRequest) jsonRPCResponse {
-	params, _ := toMap(req.Params)
+	params, ok := toMap(req.Params)
+	if !ok {
+		params = make(map[string]any)
+	}
 	clientVersion, _ := params["protocolVersion"].(string)
 	negotiated := negotiateVersion(clientVersion)
 
@@ -112,7 +116,10 @@ func (d *Dispatcher) handleToolsList(req jsonRPCRequest) jsonRPCResponse {
 }
 
 func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
-	params, _ := toMap(req.Params)
+	params, ok := toMap(req.Params)
+	if !ok {
+		params = make(map[string]any)
+	}
 	toolName, _ := params["name"].(string)
 	args, _ := toMap(params["arguments"])
 
@@ -126,6 +133,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.tracesOverview(args)
 	case "observer_trace_detail":
 		result = d.traceDetail(args)
+	case "observer_logs_overview":
+		result = d.logsOverview(args)
 	case "observer_clear":
 		result = d.clearStore()
 	case "observer_status":
@@ -138,16 +147,15 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 }
 
 func (d *Dispatcher) metricsOverview(args map[string]any) toolResult {
-	f := store.MetricFilter{
-		MetricName:        strArg(args, "metricName"),
-		ServiceName:       strArg(args, "serviceName"),
-		ScopeName:         strArg(args, "scopeName"),
-		Type:              strArg(args, "type"),
-		ResourceAttribute: strArg(args, "resourceAttribute"),
-		Limit:             intArg(args, "limit", 20),
-		DataPointLimit:    intArg(args, "dataPointLimit", 3),
-	}
-	groups := d.store.QueryMetrics(f)
+	groups := d.store.QueryMetricsFiltered(
+		strArg(args, "metricName"),
+		strArg(args, "serviceName"),
+		strArg(args, "scopeName"),
+		strArg(args, "type"),
+		strArg(args, "resourceAttribute"),
+		intArg(args, "limit", 20),
+		intArg(args, "dataPointLimit", 3),
+	)
 	return jsonToolResult(groups)
 }
 
@@ -156,14 +164,13 @@ func (d *Dispatcher) metricDetail(args map[string]any) toolResult {
 	if name == "" {
 		return errorResult("metricName is required")
 	}
-	f := store.MetricFilter{
-		MetricName:     name,
-		ServiceName:    strArg(args, "serviceName"),
-		ScopeName:      strArg(args, "scopeName"),
-		Limit:          1,
-		DataPointLimit: intArg(args, "dataPointLimit", 50),
-	}
-	groups := d.store.QueryMetrics(f)
+	groups := d.store.QueryMetricsFiltered(
+		name,
+		strArg(args, "serviceName"),
+		strArg(args, "scopeName"),
+		"", "", 1,
+		intArg(args, "dataPointLimit", 50),
+	)
 	if len(groups) == 0 {
 		return errorResult(fmt.Sprintf("No metric found with name %q", name))
 	}
@@ -171,15 +178,14 @@ func (d *Dispatcher) metricDetail(args map[string]any) toolResult {
 }
 
 func (d *Dispatcher) tracesOverview(args map[string]any) toolResult {
-	f := store.TraceFilter{
-		ServiceName:      strArg(args, "serviceName"),
-		SpanName:         strArg(args, "spanName"),
-		Status:           strArg(args, "status"),
-		TraceIDPrefix:    strArg(args, "traceIdPrefix"),
-		Limit:            intArg(args, "limit", 20),
-		SpanPreviewCount: intArg(args, "spanPreviewCount", 5),
-	}
-	traces := d.store.QueryTraces(f)
+	traces := d.store.QueryTracesFiltered(
+		strArg(args, "serviceName"),
+		strArg(args, "spanName"),
+		strArg(args, "status"),
+		strArg(args, "traceIdPrefix"),
+		intArg(args, "limit", 20),
+		intArg(args, "spanPreviewCount", 5),
+	)
 	return jsonToolResult(traces)
 }
 
@@ -188,11 +194,22 @@ func (d *Dispatcher) traceDetail(args map[string]any) toolResult {
 	if traceID == "" {
 		return errorResult("traceId is required")
 	}
-	detail := d.store.GetTrace(traceID, intArg(args, "eventLimit", 12))
+	detail := d.store.Trace(traceID, intArg(args, "eventLimit", 12))
 	if detail == nil {
 		return errorResult(fmt.Sprintf("No trace found with id %q", traceID))
 	}
 	return jsonToolResult(detail)
+}
+
+func (d *Dispatcher) logsOverview(args map[string]any) toolResult {
+	logs := d.store.QueryLogsFiltered(
+		strArg(args, "serviceName"),
+		strArg(args, "severityText"),
+		strArg(args, "body"),
+		strArg(args, "traceId"),
+		intArg(args, "limit", 50),
+	)
+	return jsonToolResult(logs)
 }
 
 func (d *Dispatcher) clearStore() toolResult {
@@ -201,7 +218,7 @@ func (d *Dispatcher) clearStore() toolResult {
 }
 
 func (d *Dispatcher) status() toolResult {
-	ep := d.store.GetEndpoints()
+	ep := d.store.Endpoints()
 	stats := d.store.Stats()
 	return jsonToolResult(map[string]any{
 		"endpoints": ep,
@@ -272,6 +289,21 @@ func buildToolDefs() []toolDef {
 			Annotations: toolAnnot{Title: "Observer Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
+			Name:        "observer_logs_overview",
+			Description: "List recent log records from the OTLP in-memory store, with filtering by service, severity, body text, and trace correlation.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Properties: map[string]jsonSchema{
+					"limit":        {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(200), Default: 50, Description: "Maximum number of log records to return."},
+					"serviceName":  {Type: "string", Description: "Optional case-insensitive service.name filter."},
+					"severityText": {Type: "string", Enum: []string{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"}, Description: "Optional severity level filter."},
+					"body":         {Type: "string", Description: "Optional case-insensitive substring filter on the log body."},
+					"traceId":      {Type: "string", Description: "Optional traceId to find logs correlated with a specific trace."},
+				},
+			},
+			Annotations: toolAnnot{Title: "Observer Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
+		},
+		{
 			Name:        "observer_clear",
 			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Useful when restarting the instrumented application and wanting a clean slate.",
 			InputSchema: jsonSchema{
@@ -331,14 +363,25 @@ func strArg(m map[string]any, key string) string {
 	return v
 }
 
+const maxIntArg = 10_000
+
 func intArg(m map[string]any, key string, def int) int {
+	var n int
 	switch v := m[key].(type) {
 	case float64:
-		return int(v)
+		n = int(v)
 	case int:
-		return v
+		n = v
+	default:
+		return def
 	}
-	return def
+	if n < 0 {
+		return def
+	}
+	if n > maxIntArg {
+		return maxIntArg
+	}
+	return n
 }
 
 func intPtr(v int) *int { return &v }
