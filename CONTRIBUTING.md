@@ -14,6 +14,7 @@ This repository contains:
 | Node.js | 20+ | observer-go client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
+| goreleaser | latest | `make release-local` only (optional) |
 
 ## Build
 
