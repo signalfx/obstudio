@@ -2,11 +2,11 @@
 
 Observability Studio is a VS Code extension for viewing OpenTelemetry data locally while you work.
 
-When the extension activates, it starts a bundled observer-go binary, exposes OTLP receivers on localhost, and opens an embedded Observer UI inside VS Code.
+When the extension activates, it starts a bundled observer binary, exposes OTLP receivers on localhost, and opens an embedded Observer UI inside VS Code.
 
 ## Features
 
-- Starts a local observer-go backend automatically on extension activation.
+- Starts a local observer backend automatically on extension activation.
 - Exposes stable OTLP endpoints for local applications:
   - OTLP/HTTP on `127.0.0.1:4318`
   - OTLP/gRPC on `127.0.0.1:4317`
@@ -19,13 +19,13 @@ When the extension activates, it starts a bundled observer-go binary, exposes OT
 
 ## How It Works
 
-The extension packages a pre-built observer-go binary (Go) into the extension bundle under `dist/observer-go/obstudio`. The binary embeds its own web UI via Go's `//go:embed` directive.
+The extension packages a pre-built observer binary (Go) into the extension bundle under `dist/observer/obstudio`. The binary embeds its own web UI via Go's `//go:embed` directive.
 
 At startup, the extension:
 
 1. Finds an available localhost port for the Observer web UI.
 2. Verifies that OTLP ports `4317` and `4318` are available.
-3. Launches the observer-go binary with the assigned ports.
+3. Launches the observer binary with the assigned ports.
 4. Connects the VS Code webview to the local Observer UI via an iframe.
 
 If either OTLP port is already in use, the extension reports a startup error.

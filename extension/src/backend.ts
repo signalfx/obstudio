@@ -9,18 +9,18 @@ export type ObserverBackend = {
 };
 
 export function resolveBackend(extensionPath: string): ObserverBackend {
-	const binary = path.join(extensionPath, 'dist', 'observer-go', 'obstudio');
+	const binary = path.join(extensionPath, 'dist', 'observer', 'obstudio');
 
 	if (fs.existsSync(binary)) {
 		return {
 			args: [],
 			command: binary,
 			cwd: path.dirname(binary),
-			label: 'observer-go',
+			label: 'observer',
 		};
 	}
 
 	throw new Error(
-		`observer-go binary not found at ${binary}. Run 'npm run compile' in the extension directory.`,
+		`observer binary not found at ${binary}. Run 'npm run compile' in the extension directory.`,
 	);
 }

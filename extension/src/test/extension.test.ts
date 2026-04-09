@@ -7,9 +7,9 @@ import { resolveBackend } from '../backend';
 
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
 	getBuildPaths: (extensionRoot?: string) => {
-		observerGoRoot: string;
-		observerGoOutDir: string;
-		observerGoOutBinary: string;
+		observerRoot: string;
+		observerOutDir: string;
+		observerOutBinary: string;
 	};
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
 };
@@ -24,9 +24,9 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 	}
 }
 
-test('resolveBackend returns observer-go binary when it exists', () => {
+test('resolveBackend returns observer binary when it exists', () => {
 	withTempExtensionRoot((extensionRoot) => {
-		const binary = path.join(extensionRoot, 'dist', 'observer-go', 'obstudio');
+		const binary = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
 
 		fs.mkdirSync(path.dirname(binary), { recursive: true });
 		fs.writeFileSync(binary, '#!/bin/sh\n');
@@ -36,13 +36,13 @@ test('resolveBackend returns observer-go binary when it exists', () => {
 		assert.equal(backend.command, binary);
 		assert.deepEqual(backend.args, []);
 		assert.equal(backend.cwd, path.dirname(binary));
-		assert.equal(backend.label, 'observer-go');
+		assert.equal(backend.label, 'observer');
 	});
 });
 
-test('resolveBackend throws when the observer-go binary is missing', () => {
+test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
-		assert.throws(() => resolveBackend(extensionRoot), /observer-go binary not found/);
+		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);
 	});
 });
 
@@ -50,12 +50,12 @@ test('resetObserverOutputDirs removes stale output and recreates the directory',
 	withTempExtensionRoot((extensionRoot) => {
 		const paths = getBuildPaths(extensionRoot);
 
-		fs.mkdirSync(paths.observerGoOutDir, { recursive: true });
-		fs.writeFileSync(path.join(paths.observerGoOutDir, 'stale.txt'), 'stale');
+		fs.mkdirSync(paths.observerOutDir, { recursive: true });
+		fs.writeFileSync(path.join(paths.observerOutDir, 'stale.txt'), 'stale');
 
 		resetObserverOutputDirs(paths);
 
-		assert.equal(fs.existsSync(path.join(paths.observerGoOutDir, 'stale.txt')), false);
-		assert.equal(fs.existsSync(paths.observerGoOutDir), true);
+		assert.equal(fs.existsSync(path.join(paths.observerOutDir, 'stale.txt')), false);
+		assert.equal(fs.existsSync(paths.observerOutDir), true);
 	});
 });

@@ -4,29 +4,29 @@ const path = require("node:path");
 
 function getBuildPaths(extensionRoot = __dirname) {
 	const repoRoot = path.resolve(extensionRoot, "..");
-	const observerGoRoot = path.join(repoRoot, "observer-go");
-	const observerGoOutDir = path.join(extensionRoot, "dist", "observer-go");
-	const observerGoOutBinary = path.join(observerGoOutDir, "obstudio");
+	const observerRoot = path.join(repoRoot, "observer");
+	const observerOutDir = path.join(extensionRoot, "dist", "observer");
+	const observerOutBinary = path.join(observerOutDir, "obstudio");
 
-	return { repoRoot, observerGoRoot, observerGoOutDir, observerGoOutBinary };
+	return { repoRoot, observerRoot, observerOutDir, observerOutBinary };
 }
 
 function resetObserverOutputDirs(paths) {
-	fs.rmSync(paths.observerGoOutDir, { force: true, recursive: true });
-	fs.mkdirSync(paths.observerGoOutDir, { recursive: true });
+	fs.rmSync(paths.observerOutDir, { force: true, recursive: true });
+	fs.mkdirSync(paths.observerOutDir, { recursive: true });
 }
 
 function stageSkills(paths) {
 	console.log("Staging embedded skills via Go...");
 	execFileSync("go", ["run", "./cmd/stage-skills"], {
-		cwd: paths.observerGoRoot,
+		cwd: paths.observerRoot,
 		stdio: "inherit",
 	});
 	console.log("Skills staged.");
 }
 
 function buildClientAssets(paths) {
-	const assetsDir = path.join(paths.observerGoRoot, "internal", "web", "static", "assets");
+	const assetsDir = path.join(paths.observerRoot, "internal", "web", "static", "assets");
 	if (fs.existsSync(path.join(assetsDir, "main.js"))) {
 		console.log("Client assets already built, skipping...");
 		return;
@@ -36,22 +36,22 @@ function buildClientAssets(paths) {
 	// No npm/Node.js required — only the Go toolchain.
 	console.log("Building client assets via Go...");
 	execFileSync("go", ["run", "./cmd/build-client"], {
-		cwd: paths.observerGoRoot,
+		cwd: paths.observerRoot,
 		stdio: "inherit",
 	});
 	console.log("Client assets built.");
 }
 
 function buildObserverGo(paths) {
-	console.log("Building observer-go binary...");
+	console.log("Building observer binary...");
 
-	execFileSync("go", ["build", "-o", paths.observerGoOutBinary, "./cmd/obstudio"], {
-		cwd: paths.observerGoRoot,
+	execFileSync("go", ["build", "-o", paths.observerOutBinary, "./cmd/obstudio"], {
+		cwd: paths.observerRoot,
 		stdio: "inherit",
 	});
 
-	fs.chmodSync(paths.observerGoOutBinary, 0o755);
-	console.log(`Built observer-go binary to ${paths.observerGoOutBinary}`);
+	fs.chmodSync(paths.observerOutBinary, 0o755);
+	console.log(`Built observer binary to ${paths.observerOutBinary}`);
 }
 
 if (require.main === module) {

@@ -60,7 +60,7 @@ it('integration: buildObserverGo produces a binary', { timeout: 120_000 }, async
 		});
 
 		// Verify the binary was created
-		const binaryPath = path.join(extensionRoot, 'dist', 'observer-go', 'obstudio');
+		const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
 		assert.ok(fs.existsSync(binaryPath), `Binary should exist at ${binaryPath}`);
 
 		// Verify it's executable
@@ -98,7 +98,7 @@ it('integration: VSIX packages successfully', { timeout: 120_000 }, async () => 
 	}
 });
 
-it('integration: VSIX contains observer-go binary', { timeout: 120_000 }, async () => {
+it('integration: VSIX contains observer binary', { timeout: 120_000 }, async () => {
 	const context: TestContext = {};
 
 	try {
@@ -112,8 +112,8 @@ it('integration: VSIX contains observer-go binary', { timeout: 120_000 }, async 
 		});
 
 		assert.ok(
-			unzipOutput.includes('extension/dist/observer-go/obstudio'),
-			'VSIX should contain extension/dist/observer-go/obstudio binary'
+			unzipOutput.includes('extension/dist/observer/obstudio'),
+			'VSIX should contain extension/dist/observer/obstudio binary'
 		);
 	} finally {
 		cleanup(context);
@@ -177,8 +177,8 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 });
 
 it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t) => {
-	const binaryPath = path.join(extensionRoot, 'dist', 'observer-go', 'obstudio');
-	const assetsDir = path.join(repoRoot, 'observer-go', 'internal', 'web', 'static', 'assets');
+	const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
+	const assetsDir = path.join(repoRoot, 'observer', 'internal', 'web', 'static', 'assets');
 
 	// Delete pre-existing client assets so build-observer.js must produce them.
 	fs.rmSync(assetsDir, { force: true, recursive: true });

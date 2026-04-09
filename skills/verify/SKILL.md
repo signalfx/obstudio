@@ -66,7 +66,7 @@ Clear stale data: `curl -s -X DELETE http://localhost:3000/api/data`.
 **Manual fallback:** Only if no MCP server is configured, build and
 start the collector:
 
-1. Build observer-go if the binary does not exist:
+1. Build observer if the binary does not exist:
    ```
    make build
    ```
@@ -182,7 +182,7 @@ Once the user confirms, tear down:
 
 **Do not kill the Observer / MCP server.** On the MCP path the agent
 runtime manages the server lifecycle. On the manual-fallback path,
-also kill observer-go: `lsof -ti :3000 | xargs kill`.
+also kill observer: `lsof -ti :3000 | xargs kill`.
 
 ## Common Rationalizations
 

@@ -165,7 +165,7 @@ All skills operate on the same `.observe/` directory:
 
 ```
 obstudio/
-├── observer-go/       # Primary collector, REST API, MCP server, and embedded web UI
+├── observer/       # Primary collector, REST API, MCP server, and embedded web UI
 ├── extension/         # VS Code extension that packages the collector
 ├── skills/            # AI agent skills (composable workflows)
 │   ├── audit/         #   /audit
@@ -198,8 +198,8 @@ obstudio/
 
 | Tool | Version | Purpose |
 |---|---|---|
-| Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | observer-go client dev/test and VS Code extension |
+| Go | 1.25+ | observer collector |
+| Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
 
@@ -225,7 +225,7 @@ obstudio/
 
 GitHub Actions runs on every push to `main` and `feature/**` branches:
 
-- **observer-go** -- `go vet`, `make build`, `make test`
+- **observer** -- `go vet`, `make build`, `make test`
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 

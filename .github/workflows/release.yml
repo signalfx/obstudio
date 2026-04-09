@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: observer-go/client/package-lock.json
+          cache-dependency-path: observer/client/package-lock.json
 
       - name: Pin npm version
         run: |
@@ -29,12 +29,12 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: observer-go/go.mod
-          cache-dependency-path: observer-go/go.sum
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
 
       - name: Install client build dependencies
         timeout-minutes: 10
-        working-directory: observer-go/client
+        working-directory: observer/client
         run: npm ci --no-audit --no-fund --verbose
 
       - uses: goreleaser/goreleaser-action@v6

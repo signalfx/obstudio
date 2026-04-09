@@ -4,11 +4,11 @@ project_name: obstudio
 
 before:
   hooks:
-    - cd observer-go && go run ./cmd/stage-skills
-    - cd observer-go && go run ./cmd/build-client
+    - cd observer && go run ./cmd/stage-skills
+    - cd observer && go run ./cmd/build-client
 
 builds:
-  - dir: observer-go
+  - dir: observer
     main: ./cmd/obstudio
     binary: obstudio
     goos:
