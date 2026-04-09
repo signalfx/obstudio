@@ -174,6 +174,53 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 		source.includes('obstudio'),
 		'extension.js should reference obstudio binary'
 	);
+
+	// Verify all 5 commands are registered in the compiled bundle
+	for (const cmd of [
+		'observability-studio.openObserver',
+		'observability-studio.statusMenu',
+		'observability-studio.startObserver',
+		'observability-studio.stopObserver',
+		'observability-studio.restartObserver',
+	]) {
+		assert.ok(source.includes(cmd), `extension.js should register command "${cmd}"`);
+	}
+
+	// Verify status bar states are present
+	assert.ok(source.includes('loading~spin'), 'extension.js should contain starting spinner icon');
+	assert.ok(source.includes('pulse'), 'extension.js should contain running pulse icon');
+	assert.ok(source.includes('circle-outline'), 'extension.js should contain stopped icon');
+
+	// Verify error and stopped webview pages are present
+	assert.ok(source.includes('Observer could not start'), 'extension.js should contain error webview heading');
+	assert.ok(source.includes('Observer is stopped'), 'extension.js should contain stopped webview message');
+
+	// Verify port conflict detection
+	assert.ok(source.includes('EADDRINUSE'), 'extension.js should handle EADDRINUSE port conflicts');
+	assert.ok(source.includes('lsof'), 'extension.js should use lsof to identify port owners');
+
+	// Verify async stop with SIGTERM/SIGKILL
+	assert.ok(source.includes('SIGTERM'), 'extension.js should send SIGTERM on stop');
+	assert.ok(source.includes('SIGKILL'), 'extension.js should fallback to SIGKILL');
+});
+
+it('integration: package.json registers all commands', () => {
+	const pkgPath = path.join(extensionRoot, 'package.json');
+	const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+	const commands = (pkg.contributes?.commands ?? []).map((c: { command: string }) => c.command);
+
+	for (const expected of [
+		'observability-studio.openObserver',
+		'observability-studio.statusMenu',
+		'observability-studio.startObserver',
+		'observability-studio.stopObserver',
+		'observability-studio.restartObserver',
+	]) {
+		assert.ok(
+			commands.includes(expected),
+			`package.json should register command "${expected}"`
+		);
+	}
 });
 
 it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t) => {
