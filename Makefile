@@ -1,5 +1,5 @@
 BINARY     := obstudio
-GO_DIR     := observer-go
+GO_DIR     := observer
 GO_CMD     := ./cmd/obstudio
 GO         := go
 GOFLAGS    ?=
@@ -22,7 +22,7 @@ help: ## Show available targets
 build-client: ## Build React client into Go static assets
 	cd $(GO_DIR) && $(GO) run ./cmd/build-client
 
-stage-skills: ## Stage skills into observer-go for embedding
+stage-skills: ## Stage skills into observer for embedding
 	cd $(GO_DIR) && $(GO) run ./cmd/stage-skills
 
 dev: ## Watch client files and rebuild on changes (hot reload)
@@ -81,4 +81,4 @@ list-skills: ## List available skills in this repo
 # --- Clean ---
 
 clean: ## Remove build artifacts
-	rm -rf "$(BUILD_DIR)" dist $(GO_DIR)/cmd/obstudio/_skills $(GO_DIR)/internal/web/static/assets
+	rm -rf "$(BUILD_DIR)" dist $(GO_DIR)/cmd/obstudio/_skills $(GO_DIR)/internal/web/static/assets $(GO_DIR)/client/public/assets

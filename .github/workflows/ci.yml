@@ -11,16 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  observer-go:
-    name: Observer-Go – vet, build & test
+  observer:
+    name: Observer – vet, build & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: observer-go/go.mod
-          cache-dependency-path: observer-go/go.sum
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
 
       - name: go vet
         run: make vet
@@ -45,8 +45,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: observer-go/go.mod
-          cache-dependency-path: observer-go/go.sum
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
 
       - name: Install dependencies
         working-directory: extension
@@ -66,12 +66,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: observer-go/client/package-lock.json
+          cache-dependency-path: observer/client/package-lock.json
 
       - name: Install dependencies
-        working-directory: observer-go/client
+        working-directory: observer/client
         run: npm ci
 
       - name: Run tests
-        working-directory: observer-go/client
+        working-directory: observer/client
         run: npx vitest run

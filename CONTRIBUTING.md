@@ -2,7 +2,7 @@
 
 This repository contains:
 
-- `observer-go/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
+- `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
 
@@ -10,15 +10,15 @@ This repository contains:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | observer-go client dev/test and VS Code extension |
+| Go | 1.25+ | observer collector |
+| Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
 | goreleaser | latest | `make release-local` only (optional) |
 
 ## Build
 
-### Observer-Go (primary)
+### Observer (primary)
 
 ```sh
 make build    # compile the obstudio binary (skills embedded)
@@ -36,7 +36,7 @@ npm run build:vsix    # produce VSIX package
 
 ## Development
 
-### Observer-Go
+### Observer
 
 ```sh
 make build          # build binary
@@ -66,7 +66,7 @@ PRs cannot be merged if tests are failing.
 
 | Job | What it checks |
 |-----|---------------|
-| observer-go | `go vet`, `make build`, `make test` |
+| observer | `go vet`, `make build`, `make test` |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
 
@@ -75,7 +75,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 ### Local
 
 ```sh
-make test-all            # Go + observer-go client + extension integration tests
+make test-all            # Go + observer client + extension integration tests
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests
 ```
