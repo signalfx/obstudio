@@ -22,12 +22,13 @@ func NewAPI(store *Store) *API {
 // Handler returns an HTTP handler exposing key/value and search endpoints.
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/kv/", a.handleKV)
-	mux.HandleFunc("/search", a.handleSearch)
+	mux.Handle("/kv/", telemetryHTTPHandler(http.HandlerFunc(a.handleKV), "/kv/{key}"))
+	mux.Handle("/search", telemetryHTTPHandler(http.HandlerFunc(a.handleSearch), "/search"))
 	return mux
 }
 
 func (a *API) handleKV(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	key := strings.TrimPrefix(r.URL.Path, "/kv/")
 	if key == "" || strings.ContainsRune(key, '/') {
 		http.Error(w, "invalid key", http.StatusBadRequest)
@@ -36,7 +37,7 @@ func (a *API) handleKV(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		value, err := a.store.Get(key)
+		value, err := a.store.GetContext(ctx, key)
 		if err != nil {
 			a.writeStoreError(w, err)
 			return
@@ -51,13 +52,13 @@ func (a *API) handleKV(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read body", http.StatusBadRequest)
 			return
 		}
-		if err := a.store.Set(key, value); err != nil {
+		if err := a.store.SetContext(ctx, key, value); err != nil {
 			a.writeStoreError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
 	case http.MethodDelete:
-		err := a.store.Delete(key)
+		err := a.store.DeleteContext(ctx, key)
 		if err != nil {
 			a.writeStoreError(w, err)
 			return
@@ -83,7 +84,7 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Keys []string `json:"keys"`
 	}{
-		Keys: a.store.Search(word),
+		Keys: a.store.SearchContext(r.Context(), word),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

@@ -3,6 +3,7 @@ package kvstore
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -112,6 +117,22 @@ func (s *Store) Close() {
 
 // Get returns the value for a key and marks the key as recently used.
 func (s *Store) Get(key string) ([]byte, error) {
+	return s.GetContext(context.Background(), key)
+}
+
+// GetContext returns the value for a key and marks the key as recently used.
+func (s *Store) GetContext(ctx context.Context, key string) (_ []byte, err error) {
+	start := time.Now()
+	ctx, span := storeOperationTracer().Start(ctx, "kvstore.store.get")
+	defer func() {
+		recordOperationDuration("get", time.Since(start))
+		if err != nil {
+			recordOperationError("get", err)
+			markSpanError(span, err)
+		}
+		span.End()
+	}()
+
 	if err := validateKey(key); err != nil {
 		return nil, err
 	}
@@ -124,11 +145,28 @@ func (s *Store) Get(key string) ([]byte, error) {
 	}
 	s.lru.MoveToFront(e.node)
 	v := append([]byte(nil), e.value...)
+	span.SetAttributes(attribute.String("kvstore.operation", "get"))
 	return v, nil
 }
 
 // Set stores a key/value pair in memory and persists it asynchronously.
 func (s *Store) Set(key string, value []byte) error {
+	return s.SetContext(context.Background(), key, value)
+}
+
+// SetContext stores a key/value pair in memory and persists it asynchronously.
+func (s *Store) SetContext(ctx context.Context, key string, value []byte) (err error) {
+	start := time.Now()
+	ctx, span := storeOperationTracer().Start(ctx, "kvstore.store.set")
+	defer func() {
+		recordOperationDuration("set", time.Since(start))
+		if err != nil {
+			recordOperationError("set", err)
+			markSpanError(span, err)
+		}
+		span.End()
+	}()
+
 	if err := validateKey(key); err != nil {
 		return err
 	}
@@ -156,12 +194,28 @@ func (s *Store) Set(key string, value []byte) error {
 	s.enqueueIndex(indexEvent{kind: "set", key: key, old: oldValue, new: valueCopy})
 
 	s.wg.Add(1)
-	go s.persistAsync(key, valueCopy)
+	go s.persistAsync(ctx, key, valueCopy)
 	return nil
 }
 
 // Delete removes a key from memory and disk.
 func (s *Store) Delete(key string) error {
+	return s.DeleteContext(context.Background(), key)
+}
+
+// DeleteContext removes a key from memory and disk.
+func (s *Store) DeleteContext(ctx context.Context, key string) (err error) {
+	start := time.Now()
+	ctx, span := storeOperationTracer().Start(ctx, "kvstore.store.delete")
+	defer func() {
+		recordOperationDuration("delete", time.Since(start))
+		if err != nil {
+			recordOperationError("delete", err)
+			markSpanError(span, err)
+		}
+		span.End()
+	}()
+
 	if err := validateKey(key); err != nil {
 		return err
 	}
@@ -191,6 +245,18 @@ func (s *Store) Delete(key string) error {
 
 // Search returns keys where values contain the exact word.
 func (s *Store) Search(word string) []string {
+	return s.SearchContext(context.Background(), word)
+}
+
+// SearchContext returns keys where values contain the exact word.
+func (s *Store) SearchContext(ctx context.Context, word string) []string {
+	start := time.Now()
+	_, span := storeOperationTracer().Start(ctx, "kvstore.store.search")
+	defer func() {
+		recordOperationDuration("search", time.Since(start))
+		span.End()
+	}()
+
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
 	keys := s.index[word]
@@ -208,22 +274,35 @@ func (s *Store) Search(word string) []string {
 func (s *Store) enqueueIndex(ev indexEvent) {
 	select {
 	case s.indexCh <- ev:
+		recordIndexBacklog(1)
 	case <-s.doneCh:
 		return
 	default:
 		go func() {
 			select {
 			case s.indexCh <- ev:
+				recordIndexBacklog(1)
 			case <-s.doneCh:
 			}
 		}()
 	}
 }
 
-func (s *Store) persistAsync(key string, value []byte) {
+func (s *Store) persistAsync(ctx context.Context, key string, value []byte) {
 	defer s.wg.Done()
+	start := time.Now()
+	ctx, span := persistenceTracer().Start(ctx, "kvstore.persistence.write", trace.WithAttributes(
+		attribute.String("kvstore.operation", "write"),
+	))
+	defer func() {
+		recordPersistenceDuration("write", time.Since(start))
+		span.End()
+	}()
+
 	path := filepath.Join(s.dataDir, key)
 	if err := os.WriteFile(path, value, 0o644); err != nil {
+		recordPersistenceError("write", err)
+		markSpanError(span, err)
 		s.logger.Printf("failed persisting key %q: %v", key, err)
 		s.mu.Lock()
 		e, ok := s.items[key]
@@ -249,6 +328,7 @@ func (s *Store) evictOldestLocked() {
 	old := append([]byte(nil), e.value...)
 	s.lru.Remove(back)
 	delete(s.items, key)
+	recordEviction()
 	s.enqueueIndex(indexEvent{kind: "delete", key: key, old: old})
 }
 
@@ -259,6 +339,7 @@ func (s *Store) indexLoop() {
 		case <-s.doneCh:
 			return
 		case ev := <-s.indexCh:
+			recordIndexBacklog(-1)
 			s.indexMu.Lock()
 			s.applyIndexEventLocked(ev)
 			s.indexMu.Unlock()
@@ -299,8 +380,18 @@ func (s *Store) removeWordKeyLocked(word, key string) {
 }
 
 func (s *Store) loadFromDisk() error {
+	start := time.Now()
+	_, span := persistenceTracer().Start(context.Background(), "kvstore.persistence.load", trace.WithAttributes(
+		attribute.String("kvstore.operation", "load"),
+	))
+	defer func() {
+		recordLoadDuration(time.Since(start))
+		span.End()
+	}()
+
 	return filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			markSpanError(span, err)
 			return err
 		}
 		if d.IsDir() {
@@ -316,6 +407,7 @@ func (s *Store) loadFromDisk() error {
 		}
 		value, err := os.ReadFile(path)
 		if err != nil {
+			markSpanError(span, err)
 			return err
 		}
 		if len(value) > MaxValueSize {

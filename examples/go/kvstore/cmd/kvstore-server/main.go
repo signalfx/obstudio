@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -15,6 +16,16 @@ func main() {
 		capacity = flag.Int("capacity", 1024, "maximum number of key/value pairs in memory")
 	)
 	flag.Parse()
+
+	shutdown, err := kvstore.InitTelemetry(context.Background(), "kvstore")
+	if err != nil {
+		log.Fatalf("failed to initialize telemetry: %v", err)
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			log.Printf("failed to shut down telemetry: %v", err)
+		}
+	}()
 
 	store, err := kvstore.NewStore(kvstore.StoreConfig{
 		Capacity: *capacity,
