@@ -82,15 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
 
-      - name: Structural eval (python/flask-basic)
-        run: python evals/scripts/check_structural.py examples/python/flask-basic evals/golden/python/flask-basic
-
-      - name: Semconv eval (python/flask-basic)
-        run: python evals/scripts/check_semconv.py examples/python/flask-basic
-
-      - name: Golden comparison eval (python/flask-basic)
-        run: python evals/scripts/run_golden_compare.py examples/python/flask-basic evals/golden/python/flask-basic --threshold 0.80
+      - name: Run all skill evals
+        run: make eval

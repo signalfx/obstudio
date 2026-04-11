@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-structural eval-semconv eval-golden release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -67,6 +67,21 @@ release-local: ## Build release archives locally via GoReleaser (snapshot, no pu
 
 release: ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 	goreleaser release --clean
+
+# --- Evals ---
+
+EVALS_DIR  := evals
+
+eval-structural: ## Run structural eval for python/flask-basic
+	cd $(EVALS_DIR) && uv run scripts/check_structural.py ../examples/python/flask-basic golden/python/flask-basic
+
+eval-semconv: ## Run semconv eval for python/flask-basic
+	cd $(EVALS_DIR) && uv run scripts/check_semconv.py ../examples/python/flask-basic
+
+eval-golden: ## Run golden comparison eval for python/flask-basic
+	cd $(EVALS_DIR) && uv run scripts/run_golden_compare.py ../examples/python/flask-basic golden/python/flask-basic --threshold 0.80
+
+eval: eval-structural eval-semconv eval-golden ## Run all skill evals
 
 # --- Skills ---
 
