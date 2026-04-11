@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-structural eval-semconv eval-golden eval-fixture release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-fixture eval-llm release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -71,32 +71,19 @@ release: ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 # --- Evals ---
 
 EVALS_DIR  := evals
-GOLDEN_DIRS := golden/python/flask-basic golden/node/express-basic golden/go/chi-basic
+APP        ?=
 
-eval-structural: ## Validate golden structural properties
-	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
-		echo "=== structural: $$d ==="; \
-		uv run scripts/check_structural.py --golden-only $$d || exit 1; \
-	done
+eval: ## Run all golden + performance evals (CI-safe)
+	cd $(EVALS_DIR) && uv run pytest -v --tb=short
 
-eval-semconv: ## Validate golden inventories for semconv compliance
-	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
-		echo "=== semconv: $$d ==="; \
-		uv run scripts/check_semconv.py --inventory $$d/inventory.md || exit 1; \
-	done
+eval-fixture: ## Run evals against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
+ifndef APP
+	$(error APP is required — e.g. make eval-fixture APP=examples/python/flask-basic)
+endif
+	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
 
-eval-golden: ## Validate golden inventories for internal consistency
-	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
-		echo "=== golden self-check: $$d ==="; \
-		uv run scripts/run_golden_compare.py --self-check $$d || exit 1; \
-	done
-
-eval: eval-structural eval-semconv eval-golden ## Run all golden validation evals (CI-safe)
-
-eval-fixture: ## Run post-skill evals against an instrumented fixture (local only)
-	cd $(EVALS_DIR) && uv run scripts/check_structural.py ../examples/python/flask-basic golden/python/flask-basic
-	cd $(EVALS_DIR) && uv run scripts/check_semconv.py ../examples/python/flask-basic
-	cd $(EVALS_DIR) && uv run scripts/run_golden_compare.py ../examples/python/flask-basic golden/python/flask-basic --threshold 0.80
+eval-llm: ## Run LLM-based evals via promptfoo (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)
+	cd $(EVALS_DIR) && npx promptfoo eval
 
 # --- Skills ---
 

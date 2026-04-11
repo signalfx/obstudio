@@ -5,7 +5,13 @@ description = "Skill evaluation scripts for obstudio"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
+    "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
 
 [[tool.uv.index]]
 url = "https://pypi.org/simple"
