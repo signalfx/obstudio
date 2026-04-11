@@ -174,7 +174,7 @@ obstudio/
 │   ├── splunk-provision/     #   /splunk-provision
 │   ├── splunk-observe/       #   /splunk-observe
 │   └── references/    #   Shared language guides and reference material
-├── demo/              # Sample apps for skill evaluation
+├── examples/          # Sample apps for skill evaluation, organized by language
 ├── docs/              # Design docs, PRD, and example prompts
 ├── .github/workflows/ # CI (GitHub Actions)
 ├── Makefile           # Go build, test, release
@@ -201,7 +201,7 @@ obstudio/
 | Go | 1.25+ | observer collector |
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
-| uv | latest | Running Python demo apps |
+| uv | latest | Running Python example apps |
 
 ---
 
@@ -229,18 +229,19 @@ GitHub Actions runs on every push to `main` and `feature/**` branches:
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
-### Demo Apps
+### Example Apps
 
-The `demo/` directory contains sample apps for evaluating skills.
+The `examples/` directory contains sample apps organized by language.
 
 | App | Stack | Run |
 |---|---|---|
-| `demo/python-flask-basic/` | Flask (in-memory) | `make dev` |
-| `demo/node-express-basic/` | Express (in-memory) | `npm run dev` |
-| `demo/go-chi-basic/` | Chi (in-memory) | `go run .` |
+| `examples/python/flask-basic/` | Flask (in-memory) | `make dev` |
+| `examples/python/fastapi-celery/` | FastAPI + Celery | `make dev` |
+| `examples/node/express-basic/` | Express (in-memory) | `npm run dev` |
+| `examples/go/chi-basic/` | Chi (in-memory) | `go run .` |
 
 ```bash
-cd demo/python-flask-basic
+cd examples/python/flask-basic
 make dev          # starts on :8000
 ```
 

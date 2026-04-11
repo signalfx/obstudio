@@ -86,11 +86,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Structural eval (python-flask-basic)
-        run: python evals/scripts/check_structural.py demo/python-flask-basic evals/golden/python-flask-basic
+      - name: Structural eval (python/flask-basic)
+        run: python evals/scripts/check_structural.py examples/python/flask-basic evals/golden/python/flask-basic
 
-      - name: Semconv eval (python-flask-basic)
-        run: python evals/scripts/check_semconv.py demo/python-flask-basic
+      - name: Semconv eval (python/flask-basic)
+        run: python evals/scripts/check_semconv.py examples/python/flask-basic
 
-      - name: Golden comparison eval (python-flask-basic)
-        run: python evals/scripts/run_golden_compare.py demo/python-flask-basic evals/golden/python-flask-basic --threshold 0.80
+      - name: Golden comparison eval (python/flask-basic)
+        run: python evals/scripts/run_golden_compare.py examples/python/flask-basic evals/golden/python/flask-basic --threshold 0.80

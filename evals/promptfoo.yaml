@@ -95,7 +95,7 @@ tests:
   # the golden reference structurally.
   - vars:
       input: >
-        Analyze the demo/python-flask-basic directory for observability
+        Analyze the examples/python/flask-basic directory for observability
         gaps and list the signals you would track.
     assert:
       - type: llm-rubric
@@ -112,7 +112,7 @@ tests:
 
   - vars:
       input: >
-        Analyze the demo/node-express-basic directory for observability
+        Analyze the examples/node/express-basic directory for observability
         gaps and list the signals you would track.
     assert:
       - type: llm-rubric
@@ -129,7 +129,7 @@ tests:
 
   - vars:
       input: >
-        Analyze the demo/go-chi-basic directory for observability
+        Analyze the examples/go/chi-basic directory for observability
         gaps and list the signals you would track.
     assert:
       - type: llm-rubric
