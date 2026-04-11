@@ -10,6 +10,11 @@ Checks:
 
 Usage:
   python check_structural.py <fixture_dir> <golden_dir>
+  python check_structural.py --golden-only <golden_dir>
+
+In --golden-only mode, validates that the golden inventory has parseable
+structural properties (language, auto_instrumentation_packages, etc.)
+without requiring an instrumented fixture directory.
 
 Exit code 0 if all checks pass, 1 otherwise.
 """
@@ -27,6 +32,7 @@ def load_golden_props(golden_dir: Path) -> dict:
     text = inventory.read_text()
     props = {}
     in_props = False
+    current_key = None
     for line in text.splitlines():
         if line.strip() == "## Expected Structural Properties":
             in_props = True
@@ -34,12 +40,18 @@ def load_golden_props(golden_dir: Path) -> dict:
         if in_props:
             if line.startswith("##"):
                 break
-            m = re.match(r"^- (\w[\w_]*): (.+)$", line.strip())
+            m = re.match(r"^- (\w[\w_]*):\s*(.*)$", line.strip())
             if m:
-                key, val = m.group(1), m.group(2)
-                props[key] = val
-            elif line.strip().startswith("- ") and not line.strip().startswith("- "):
-                pass
+                current_key = m.group(1)
+                val = m.group(2).strip()
+                if val:
+                    props[current_key] = val
+                else:
+                    props[current_key] = ""
+            elif current_key and re.match(r"^\s+- (.+)$", line):
+                item = re.match(r"^\s+- (.+)$", line).group(1).strip()
+                existing = props.get(current_key, "")
+                props[current_key] = f"{existing}, {item}" if existing else item
     return props
 
 
@@ -112,9 +124,50 @@ def check_deps(fixture_dir: Path, lang: str, expected_packages: list[str]) -> tu
     return True, f"All expected packages found in {found_file.name}"
 
 
+def golden_only_check(golden_dir: Path) -> int:
+    """Validate that golden structural properties are well-formed."""
+    props = load_golden_props(golden_dir)
+    results = []
+
+    lang = props.get("language", "")
+    results.append(("language_set", bool(lang),
+                     f"language={lang}" if lang else "missing 'language' property"))
+
+    expected_keys = ["language", "auto_instrumentation_packages"]
+    found = [k for k in expected_keys if k in props]
+    results.append(("required_props", len(found) == len(expected_keys),
+                     f"found {found}, expected {expected_keys}"))
+
+    auto_pkgs_raw = props.get("auto_instrumentation_packages", "")
+    if auto_pkgs_raw:
+        pkgs = [p.strip().strip('"').strip("'") for p in auto_pkgs_raw.split(",") if p.strip()]
+        results.append(("packages_parseable", len(pkgs) > 0,
+                         f"{len(pkgs)} packages listed"))
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    total = len(results)
+
+    print(f"\nGolden Structural Check: {golden_dir}")
+    print("-" * 50)
+    for name, ok, msg in results:
+        status = "PASS" if ok else "FAIL"
+        print(f"  [{status}] {name}: {msg}")
+    print(f"\n  {passed}/{total} checks passed")
+
+    return 0 if passed == total else 1
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--golden-only":
+        golden_dir = Path(sys.argv[2])
+        if not golden_dir.is_dir():
+            print(f"Golden directory not found: {golden_dir}")
+            sys.exit(2)
+        sys.exit(golden_only_check(golden_dir))
+
     if len(sys.argv) != 3:
         print(f"Usage: {sys.argv[0]} <fixture_dir> <golden_dir>")
+        print(f"       {sys.argv[0]} --golden-only <golden_dir>")
         sys.exit(2)
 
     fixture_dir = Path(sys.argv[1])

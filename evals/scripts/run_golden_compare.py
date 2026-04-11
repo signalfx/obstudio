@@ -11,8 +11,13 @@ using structural similarity. Checks:
 
 Usage:
   python run_golden_compare.py <fixture_dir> <golden_dir> [--threshold 0.80]
+  python run_golden_compare.py --self-check <golden_dir>
 
-Exit code 0 if similarity >= threshold, 1 otherwise.
+In --self-check mode, validates the golden inventory for internal
+consistency (sections, signal tables, category distribution) without
+needing a fixture directory.
+
+Exit code 0 if similarity >= threshold (or self-check passes), 1 otherwise.
 """
 
 import argparse
@@ -118,12 +123,64 @@ def check_sections(text: str) -> list[str]:
     return [s for s in expected if f"## {s}" in text]
 
 
+def self_check(golden_dir: Path) -> int:
+    """Validate a golden inventory for internal consistency."""
+    golden_path = golden_dir / "inventory.md"
+    if not golden_path.exists():
+        print(f"FAIL: No golden at {golden_path}")
+        return 1
+
+    text = golden_path.read_text()
+    tables = parse_signal_tables(text)
+    signals = all_signals(tables)
+
+    results = []
+
+    required_sections = ["SLI Definitions", "Spans", "Metrics", "Logs"]
+    found_sections = [s for s in required_sections if f"## {s}" in text]
+    results.append(("signal_sections", len(found_sections) == len(required_sections),
+                     f"found {len(found_sections)}/{len(required_sections)}: {found_sections}"))
+
+    results.append(("has_signals", len(signals) > 0,
+                     f"{len(signals)} signals across tables"))
+
+    names = extract_signal_names(signals)
+    results.append(("unique_names", len(names) == len(signals),
+                     f"{len(names)} unique / {len(signals)} total"))
+
+    categories = {s.get("Category", "") for s in signals}
+    valid_cats = {"OOB", "Custom", "Derived"}
+    bad = categories - valid_cats - {""}
+    results.append(("valid_categories", len(bad) == 0,
+                     f"categories: {categories}" if bad else "all valid"))
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    total = len(results)
+
+    print(f"\nGolden Self-Check: {golden_dir}")
+    print("-" * 50)
+    for name, ok, detail in results:
+        status = "PASS" if ok else "FAIL"
+        print(f"  [{status}] {name}: {detail}")
+    print(f"\n  {passed}/{total} checks passed")
+
+    return 0 if passed == total else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description="Golden comparison eval")
-    parser.add_argument("fixture_dir", type=Path)
-    parser.add_argument("golden_dir", type=Path)
+    parser.add_argument("fixture_dir", nargs="?", type=Path)
+    parser.add_argument("golden_dir", nargs="?", type=Path)
     parser.add_argument("--threshold", type=float, default=0.80)
+    parser.add_argument("--self-check", type=Path, dest="self_check_dir",
+                        help="Validate golden inventory for internal consistency")
     args = parser.parse_args()
+
+    if args.self_check_dir:
+        sys.exit(self_check(args.self_check_dir))
+
+    if not args.fixture_dir or not args.golden_dir:
+        parser.error("fixture_dir and golden_dir are required (or use --self-check)")
 
     inventory_path = args.fixture_dir / ".observe" / "inventory.md"
     golden_path = args.golden_dir / "inventory.md"
@@ -146,7 +203,6 @@ def main():
 
     scores = []
 
-    # 1. Total signal count similarity
     actual_count = len(actual_all)
     golden_count = len(golden_all)
     if golden_count > 0:
@@ -155,7 +211,6 @@ def main():
         count_ratio = 1.0 if actual_count == 0 else 0.0
     scores.append(("signal_count", count_ratio, f"actual={actual_count} golden={golden_count}"))
 
-    # 2. Signal name overlap (Jaccard)
     actual_names = extract_signal_names(actual_all)
     golden_names = extract_signal_names(golden_all)
     if golden_names:
@@ -166,7 +221,6 @@ def main():
         name_sim = 1.0
     scores.append(("signal_name_overlap", name_sim, f"matched={len(actual_names & golden_names)}/{len(golden_names)}"))
 
-    # 3. Component coverage
     actual_comps = extract_components(actual_all)
     golden_comps = extract_components(golden_all)
     if golden_comps:
@@ -175,7 +229,6 @@ def main():
         comp_sim = 1.0
     scores.append(("component_coverage", comp_sim, f"matched={len(actual_comps & golden_comps)}/{len(golden_comps)}"))
 
-    # 4. Category distribution (Custom signals)
     actual_custom = count_by_category(actual_all, "Custom")
     golden_custom = count_by_category(golden_all, "Custom")
     if golden_custom > 0:
@@ -184,7 +237,6 @@ def main():
         custom_ratio = 1.0 if actual_custom == 0 else 0.0
     scores.append(("custom_signal_ratio", custom_ratio, f"actual={actual_custom} golden={golden_custom}"))
 
-    # 5. Section presence
     actual_sections = check_sections(actual_text)
     section_score = len(actual_sections) / 11.0
     scores.append(("inventory_sections", section_score, f"found={len(actual_sections)}/11"))

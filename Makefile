@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-structural eval-semconv eval-golden release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-structural eval-semconv eval-golden eval-fixture release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -71,17 +71,32 @@ release: ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 # --- Evals ---
 
 EVALS_DIR  := evals
+GOLDEN_DIRS := golden/python/flask-basic golden/node/express-basic golden/go/chi-basic
 
-eval-structural: ## Run structural eval for python/flask-basic
+eval-structural: ## Validate golden structural properties
+	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
+		echo "=== structural: $$d ==="; \
+		uv run scripts/check_structural.py --golden-only $$d || exit 1; \
+	done
+
+eval-semconv: ## Validate golden inventories for semconv compliance
+	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
+		echo "=== semconv: $$d ==="; \
+		uv run scripts/check_semconv.py --inventory $$d/inventory.md || exit 1; \
+	done
+
+eval-golden: ## Validate golden inventories for internal consistency
+	@cd $(EVALS_DIR) && for d in $(GOLDEN_DIRS); do \
+		echo "=== golden self-check: $$d ==="; \
+		uv run scripts/run_golden_compare.py --self-check $$d || exit 1; \
+	done
+
+eval: eval-structural eval-semconv eval-golden ## Run all golden validation evals (CI-safe)
+
+eval-fixture: ## Run post-skill evals against an instrumented fixture (local only)
 	cd $(EVALS_DIR) && uv run scripts/check_structural.py ../examples/python/flask-basic golden/python/flask-basic
-
-eval-semconv: ## Run semconv eval for python/flask-basic
 	cd $(EVALS_DIR) && uv run scripts/check_semconv.py ../examples/python/flask-basic
-
-eval-golden: ## Run golden comparison eval for python/flask-basic
 	cd $(EVALS_DIR) && uv run scripts/run_golden_compare.py ../examples/python/flask-basic golden/python/flask-basic --threshold 0.80
-
-eval: eval-structural eval-semconv eval-golden ## Run all skill evals
 
 # --- Skills ---
 

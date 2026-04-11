@@ -9,13 +9,16 @@ Checks:
 
 Usage:
   python check_semconv.py <fixture_dir>
+  python check_semconv.py --inventory <path/to/inventory.md>
 
-Parses .observe/inventory.md for signal names from the Spans, Metrics,
-and Logs tables and checks them against OTel semantic convention rules.
+Parses .observe/inventory.md (or a directly specified inventory file) for
+signal names from the Spans, Metrics, and Logs tables and checks them
+against OTel semantic convention rules.
 
 Exit code 0 if all checks pass, 1 otherwise.
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -69,9 +72,8 @@ def _parse_table(lines: list[str], start_idx: int) -> list[dict]:
     return rows
 
 
-def parse_signal_tables(fixture_dir: Path) -> dict[str, list[dict]]:
+def parse_signal_tables(inventory: Path) -> dict[str, list[dict]]:
     """Extract signal rows from the Spans, Metrics, and Logs tables."""
-    inventory = fixture_dir / ".observe" / "inventory.md"
     if not inventory.exists():
         return {"spans": [], "metrics": [], "logs": []}
 
@@ -157,21 +159,32 @@ def check_source_for_bad_attrs(fixture_dir: Path) -> list[tuple[str, bool, str]]
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <fixture_dir>")
+    parser = argparse.ArgumentParser(description="Semantic convention eval")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("fixture_dir", nargs="?", type=Path,
+                       help="Fixture directory containing .observe/inventory.md")
+    group.add_argument("--inventory", type=Path,
+                       help="Path to an inventory.md file directly")
+    args = parser.parse_args()
+
+    if args.inventory:
+        inventory_path = args.inventory
+        fixture_dir = None
+    else:
+        fixture_dir = args.fixture_dir
+        inventory_path = fixture_dir / ".observe" / "inventory.md"
+
+    if not inventory_path.exists():
+        print(f"Inventory not found: {inventory_path}")
         sys.exit(2)
 
-    fixture_dir = Path(sys.argv[1])
-    if not fixture_dir.is_dir():
-        print(f"Fixture directory not found: {fixture_dir}")
-        sys.exit(2)
-
-    tables = parse_signal_tables(fixture_dir)
+    tables = parse_signal_tables(inventory_path)
 
     all_results = []
     all_results.extend(check_metric_names(tables["metrics"]))
     all_results.extend(check_span_names(tables["spans"]))
-    all_results.extend(check_source_for_bad_attrs(fixture_dir))
+    if fixture_dir:
+        all_results.extend(check_source_for_bad_attrs(fixture_dir))
 
     passed = sum(1 for _, ok, _ in all_results if ok)
     total = len(all_results)
