@@ -5,7 +5,7 @@ Checks:
   - Single SDK initialization file exists
   - No duplicate SDK init calls
   - Auto-instrumentation packages installed (per golden spec)
-  - Custom metrics defined for business KPIs
+  - Custom metrics defined for Custom-category signals
   - OTel init imported by the entry point
 
 Usage:

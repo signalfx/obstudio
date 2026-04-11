@@ -145,8 +145,8 @@ flow. The agent can run the full audit or skip directly to instrumentation.
 | 1 - Discovery | Detect language, framework, existing OTel, entry points | `languages/<detected>.md` |
 | 2 - Component Mapping | Identify external deps and internal layers | (none) |
 | 3 - Fault Domain Analysis | Assess failure modes per component | `skills/references/fault-domain-patterns.md` |
-| 4 - KPI Identification | Four golden signals + business KPIs | (none) |
-| 5 - Signal Mapping | Build unified KPI table | `skills/references/signal-mapping-guide.md` |
+| 4 - SLI Identification | Four golden signals + business SLIs | (none) |
+| 5 - Signal Mapping | Build SLI definitions and signal tables (Spans/Metrics/Logs) | `skills/references/signal-mapping-guide.md` |
 | 6 - Generate .observability.md | Write audit document | `skills/references/observability-template.md` |
 | 7 - Implement | Install OOB libraries, generate custom spans/metrics | (language file already loaded) |
 | 8 - Verify | Run app, check telemetry via Observer MCP | (none) |
@@ -163,7 +163,7 @@ flowchart TD
     D --> E
     E -->|Yes| F["Install OOB library"]
     E -->|No| G["Generate custom spans/metrics"]
-    F --> H{OOB covers the KPI?}
+    F --> H{OOB covers the SLI?}
     H -->|Yes| I["Done"]
     H -->|No| G
     G --> J["Apply semconv"] --> I
@@ -172,7 +172,7 @@ flowchart TD
 - **OOB**: use when a stable auto-instrumentation library exists (see
   language files for per-language library maps)
 - **Custom**: use when no OOB library exists, OOB coverage is too coarse,
-  business metrics are needed, or KPI is marked `Class: Business`
+  business metrics are needed, or the signal is Category: Custom
 
 ### 4.3 Semantic Convention Enforcement
 

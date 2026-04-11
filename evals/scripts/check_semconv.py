@@ -10,8 +10,8 @@ Checks:
 Usage:
   python check_semconv.py <fixture_dir>
 
-Parses .observe/inventory.md for signal names and checks them against
-OTel semantic convention rules.
+Parses .observe/inventory.md for signal names from the Spans, Metrics,
+and Logs tables and checks them against OTel semantic convention rules.
 
 Exit code 0 if all checks pass, 1 otherwise.
 """
@@ -38,43 +38,71 @@ SPAN_VARIABLE_PATTERNS = [
 ]
 
 
-def parse_inventory_signals(fixture_dir: Path) -> list[dict]:
-    """Extract KPI rows from .observe/inventory.md."""
-    inventory = fixture_dir / ".observe" / "inventory.md"
-    if not inventory.exists():
+def _parse_table(lines: list[str], start_idx: int) -> list[dict]:
+    """Parse a markdown table starting at the header line index."""
+    if start_idx >= len(lines):
         return []
 
-    text = inventory.read_text()
-    signals = []
-    in_table = False
-    headers = []
+    header_line = lines[start_idx]
+    headers = [h.strip() for h in header_line.split("|") if h.strip()]
+    rows = []
+    i = start_idx + 1
 
-    for line in text.splitlines():
-        if "Signal Name" in line and "|" in line:
-            headers = [h.strip() for h in line.split("|") if h.strip()]
-            in_table = True
+    while i < len(lines):
+        line = lines[i]
+        if line.strip().startswith("|---"):
+            i += 1
             continue
-        if in_table and line.strip().startswith("|---"):
-            continue
-        if in_table and "|" in line:
-            cols = [c.strip() for c in line.split("|") if c.strip()]
-            if len(cols) >= len(headers):
-                row = dict(zip(headers, cols))
-                signals.append(row)
-            elif not line.strip():
-                in_table = False
+        if not line.strip() or not line.strip().startswith("|"):
+            break
+        if line.strip().startswith("##"):
+            break
+        cols = [c.strip() for c in line.split("|") if c.strip()]
+        if len(cols) >= 2:
+            row = {}
+            for j, h in enumerate(headers):
+                if j < len(cols):
+                    row[h] = cols[j]
+            rows.append(row)
+        i += 1
 
-    return signals
+    return rows
 
 
-def check_metric_names(signals: list[dict]) -> list[tuple[str, bool, str]]:
+def parse_signal_tables(fixture_dir: Path) -> dict[str, list[dict]]:
+    """Extract signal rows from the Spans, Metrics, and Logs tables."""
+    inventory = fixture_dir / ".observe" / "inventory.md"
+    if not inventory.exists():
+        return {"spans": [], "metrics": [], "logs": []}
+
+    lines = inventory.read_text().splitlines()
+    tables: dict[str, list[dict]] = {"spans": [], "metrics": [], "logs": []}
+
+    current_section = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "## Spans":
+            current_section = "spans"
+        elif stripped == "## Metrics":
+            current_section = "metrics"
+        elif stripped == "## Logs":
+            current_section = "logs"
+        elif stripped.startswith("## ") and current_section:
+            current_section = None
+
+        if current_section and "Signal Name" in line and "|" in line:
+            tables[current_section] = _parse_table(lines, i)
+            current_section = None
+
+    return tables
+
+
+def check_metric_names(metrics: list[dict]) -> list[tuple[str, bool, str]]:
     """Check metric signal names follow conventions."""
     results = []
-    for s in signals:
-        if s.get("Metric") != "Yes":
-            continue
-        name = s.get("Signal Name", "").strip("`")
-        if not name or name == "span error + log":
+    for m in metrics:
+        name = m.get("Signal Name", "").strip("`")
+        if not name:
             continue
         if VALID_METRIC_PATTERN.match(name):
             results.append((f"metric:{name}", True, "Valid metric name"))
@@ -83,12 +111,10 @@ def check_metric_names(signals: list[dict]) -> list[tuple[str, bool, str]]:
     return results
 
 
-def check_span_names(signals: list[dict]) -> list[tuple[str, bool, str]]:
+def check_span_names(spans: list[dict]) -> list[tuple[str, bool, str]]:
     """Check span/trace signal names for low cardinality."""
     results = []
-    for s in signals:
-        if s.get("Trace") != "Yes":
-            continue
+    for s in spans:
         name = s.get("Signal Name", "").strip("`")
         if not name:
             continue
@@ -140,11 +166,11 @@ def main():
         print(f"Fixture directory not found: {fixture_dir}")
         sys.exit(2)
 
-    signals = parse_inventory_signals(fixture_dir)
+    tables = parse_signal_tables(fixture_dir)
 
     all_results = []
-    all_results.extend(check_metric_names(signals))
-    all_results.extend(check_span_names(signals))
+    all_results.extend(check_metric_names(tables["metrics"]))
+    all_results.extend(check_span_names(tables["spans"]))
     all_results.extend(check_source_for_bad_attrs(fixture_dir))
 
     passed = sum(1 for _, ok, _ in all_results if ok)

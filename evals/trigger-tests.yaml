@@ -102,7 +102,7 @@ tests:
     expected_skill: splunk-provision
 
   - description: "splunk-provision - create alerts"
-    input: "Create alert rules for my verified KPIs"
+    input: "Create alert rules for my verified signals"
     expected_skill: splunk-provision
 
   - description: "splunk-provision - build monitoring"

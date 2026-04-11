@@ -37,16 +37,19 @@ individual skill directly (`/splunk-audit`, `/splunk-instrument`, `/splunk-verif
 
 ### Step 1 -- Detect State
 
-Check the current state of `.observe/inventory.md`:
+Check the current state of `.observe/inventory.md` by inspecting the
+Spans, Metrics, and Logs tables:
 
 1. **Missing** -- no `.observe/` directory exists.
    Run: audit -> instrument -> verify -> provision.
-2. **Exists, has blank Status rows** -- audit done, gaps remain.
+2. **Exists, has blank Status rows in any signal table** -- audit done,
+   gaps remain.
    Run: instrument -> verify -> provision.
-3. **All Status=OK, has blank Verified rows** -- instrumented but not
-   validated.
+3. **All Status=OK across all signal tables, has blank Verified rows**
+   -- instrumented but not validated.
    Run: verify -> provision.
-4. **All Verified=OK, no `.tf` files** -- verified but not provisioned.
+4. **All Verified=OK across all signal tables, no `.tf` files** --
+   verified but not provisioned.
    Run: provision.
 
 ### Step 2 -- Execute Skills
@@ -71,7 +74,7 @@ declines at any point, stop and summarize what was completed.
 
 After all skills have run (or the user stopped early), present:
 
-- What was audited (components, fault domains, KPI count)
+- What was audited (components, fault domains, SLI count)
 - What was instrumented (KPIs implemented, SDK init location)
 - What was verified (coverage percentage)
 - What was provisioned (dashboard/detector/alert counts)
@@ -85,11 +88,11 @@ After all skills have run (or the user stopped early), present:
 
 **Actions:**
 1. No `.observe/` directory -- run full pipeline
-2. `/splunk-audit`: detect Python+Flask+SQLAlchemy, identify 10 KPIs, create inventory
-3. Prompt user: "Found 10 gaps. Instrument?" -- user confirms
-4. `/splunk-instrument`: install OTel libraries, create `otel_setup.py`, set 10 Status=OK
+2. `/splunk-audit`: detect Python+Flask+SQLAlchemy, identify 8 SLIs, generate signal tables (3 Spans, 8 Metrics, 1 Log)
+3. Prompt user: "Found 12 signal gaps. Instrument?" -- user confirms
+4. `/splunk-instrument`: install OTel libraries, create `otel_setup.py`, set all Status=OK
 5. Prompt user: "Verify telemetry?" -- user confirms
-6. `/splunk-verify`: start app, exercise APIs, confirm 10/10 signals, set Verified=OK
+6. `/splunk-verify`: start app, exercise APIs, confirm all signals flowing, set Verified=OK
 7. Prompt user: "Generate Terraform?" -- user confirms
 8. `/splunk-provision`: generate dashboards, detectors, alerts
 
@@ -100,8 +103,8 @@ After all skills have run (or the user stopped early), present:
 **User says:** "Continue instrumenting this service"
 
 **Actions:**
-1. `.observe/inventory.md` exists, 4 blank Status rows -- skip audit
-2. `/splunk-instrument`: implement 4 remaining gaps
+1. `.observe/inventory.md` exists, 4 blank Status rows across Metrics and Logs tables -- skip audit
+2. `/splunk-instrument`: implement 4 remaining signal gaps
 3. Prompt user for verify and provision as usual
 
 **Result:** Pipeline resumes from where it left off.

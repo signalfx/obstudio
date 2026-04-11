@@ -19,11 +19,12 @@ metadata:
 ## Overview
 
 Exercise every API endpoint and use the Observer REST API to confirm
-that each KPI's signal is present with correct attributes. The
-Observer MCP server auto-starts via stdio in MCP-capable agents
-(Cursor, Claude Code, Windsurf, Codex, etc.) -- when it is running,
-no manual collector build or launch is needed. Updates the Verified
-column in `.observe/inventory.md` to `OK` for confirmed signals.
+that each signal in the Spans, Metrics, and Logs tables is present
+with correct attributes. The Observer MCP server auto-starts via stdio
+in MCP-capable agents (Cursor, Claude Code, Windsurf, Codex, etc.) --
+when it is running, no manual collector build or launch is needed.
+Updates the Verified column in the appropriate signal table in
+`.observe/inventory.md` to `OK` for confirmed signals.
 
 > **NOTE:** MCP query tools are under active development and may
 > return null. **Always use the REST API** (`http://localhost:3000`)
@@ -39,17 +40,20 @@ column in `.observe/inventory.md` to `OK` for confirmed signals.
 - Re-verifying after code changes
 
 **When NOT to use:** If `.observe/inventory.md` does not exist or has
-no Status=OK rows, tell the user to run `/splunk-audit` and `/splunk-instrument`
-first.
+no Status=OK rows across the Spans, Metrics, and Logs tables, tell
+the user to run `/splunk-audit` and `/splunk-instrument` first.
 
 ## Process
 
 ### Step 1 -- Read Inventory
 
 1. Read `.observe/inventory.md`.
-2. Extract KPI rows where Status=OK.
-3. Build a checklist of Signal Names to validate (traces and metrics).
-4. If no Status=OK rows, stop: "No instrumented KPIs to verify."
+2. Parse the Spans, Metrics, and Logs tables. Extract rows where
+   Status=OK.
+3. Build a checklist of Signal Names to validate, grouped by signal
+   type (spans, metrics, logs).
+4. If no Status=OK rows across any table, stop: "No instrumented
+   signals to verify."
 
 ### Step 2 -- Start Observer
 
@@ -109,33 +113,40 @@ For each endpoint / operation identified in the inventory:
    - One error-path call (e.g., GET a non-existent resource for 404).
 3. Wait 3 seconds after the batch for the SDK to export.
 
-### Step 5 -- Validate Traces
+### Step 5 -- Validate Spans
 
-Query the REST API to list traces, then fetch detail for each:
+Query the REST API to list traces, then check each span from the
+Spans table:
 
 1. `GET /api/query/traces?serviceName=<service-name>` -- confirm
    traces exist.
-2. For each trace, fetch detail via
-   `GET /api/query/traces/{traceId}`:
-   - **Root span** matches expected HTTP method + route.
-   - **Child spans** for custom instrumentation are present.
+2. For each Signal Name in the Spans table with Status=OK, fetch
+   trace detail via `GET /api/query/traces/{traceId}`:
+   - **OOB spans**: root span matches expected HTTP method + route.
+   - **Custom spans**: child spans for custom instrumentation are
+     present.
    - **Span attributes** match OTel semantic conventions.
-   - **Error spans** have `status.code == ERROR` and recorded exceptions.
+   - **Error spans** have `status.code == ERROR` and recorded
+     exceptions.
 
 Future MCP: once MCP query tools are operational, use
 `observer_traces_overview` and `observer_trace_detail` instead.
 
 ### Step 6 -- Validate Metrics
 
-Query the REST API to list metrics, then inspect each KPI:
+Query the REST API to list metrics, then inspect each entry from the
+Metrics table:
 
 1. `GET /api/query/metrics?serviceName=<service-name>` -- list all
    metrics.
-2. For each KPI with `Metric: Yes` in inventory:
+2. For each Signal Name in the Metrics table with Status=OK:
    - `GET /api/query/metrics?metricName=<signal-name>&serviceName=<svc>`
    - Confirm `dataPointCount >= 1`.
-   - Confirm metric `type` matches (sum/counter, histogram, gauge).
-3. Verify auto-instrumented metrics exist (e.g.,
+   - Confirm metric type matches the Type column (Counter, Histogram,
+     Gauge).
+   - For Derived-category metrics, verify the backend is computing
+     them from span data.
+3. Verify OOB-category metrics exist (e.g.,
    `http.server.duration`, `http.server.active_requests`).
 
 Future MCP: once MCP query tools are operational, use
@@ -150,20 +161,22 @@ Query `GET /api/query/stats` and confirm:
 
 ### Step 8 -- Update Inventory
 
-For each KPI row in `.observe/inventory.md`:
+For each signal row across the Spans, Metrics, and Logs tables in
+`.observe/inventory.md`:
 
-1. If the Signal Name was found (trace span matched or metric matched
-   with `dataPointCount >= 1`), set **Verified** to `OK`.
+1. If the Signal Name was found (span matched, metric matched with
+   `dataPointCount >= 1`, or log event confirmed), set **Verified**
+   to `OK` in the appropriate signal table.
 2. If expected but not found, leave Verified blank and add a comment.
 3. Present a summary:
 
 ```
 Verification Results
 --------------------
-Total KPIs:      N
-Verified:        N  OK
-Not verified:    N  (list signal names)
-Coverage:        N%
+Spans:     N/N verified
+Metrics:   N/N verified
+Logs:      N/N verified
+Total:     N/N signals verified (N%)
 ```
 
 ### Step 9 -- Dashboard Review and Teardown
@@ -198,26 +211,26 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 **User says:** "Check if my traces are flowing"
 
 **Actions:**
-1. Read inventory: 8 KPIs with Status=OK
+1. Read inventory: 3 Spans, 6 Metrics, 1 Log with Status=OK
 2. Confirm MCP server is running via `GET /api/query/stats`
 3. Clear stale data via `DELETE /api/data`
 4. Start Flask app with `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
 5. Fire `curl` requests: `POST /items`, `GET /items`, `GET /items/999` (404)
-6. Query REST API: 3 traces found, all spans present, error span has ERROR status
-7. Query metrics: `http.server.duration` and custom `order.count` present
-8. Update inventory: 8/8 Verified=OK, 100% coverage
+6. Query REST API: traces found, all spans present, error span has ERROR status
+7. Query metrics: OOB and Custom metrics present, Derived metrics computed
+8. Update Spans, Metrics, Logs tables: 10/10 Verified=OK
 
-**Result:** All KPIs confirmed flowing. User prompted to review dashboard at localhost:3000.
+**Result:** All signals confirmed flowing. User prompted to review dashboard at localhost:3000.
 
 ### Example 2: Partial verification failure
 
 **User says:** "Validate my instrumentation"
 
 **Actions:**
-1. Read inventory: 6 KPIs with Status=OK
+1. Read inventory: 2 Spans, 4 Metrics with Status=OK
 2. Exercise APIs, query Observer
-3. Traces present but custom `cache.hit_ratio` metric missing (dataPointCount=0)
-4. Update inventory: 5/6 Verified=OK, `cache.hit_ratio` left blank with comment
+3. Spans verified, but Custom metric `cache.hit_ratio` missing (dataPointCount=0)
+4. Update tables: Spans 2/2, Metrics 3/4 Verified=OK
 
 **Result:** 83% coverage reported. User informed that cache metric wiring needs debugging.
 
@@ -260,9 +273,9 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 ## Verification
 
 - [ ] REST API (`/api/query/stats`) checked before attempting to build/start collector
-- [ ] Coverage percentage reported to user
-- [ ] Observer REST API queried for every KPI signal
-- [ ] Verified column updated in `.observe/inventory.md`
+- [ ] Coverage percentage reported to user per signal type and total
+- [ ] Observer REST API queried for every signal in Spans, Metrics, and Logs tables
+- [ ] Verified column updated in the appropriate signal table in `.observe/inventory.md`
 - [ ] User offered dashboard review before teardown
 - [ ] Application process killed after user confirms
 - [ ] Temporary data cleaned up

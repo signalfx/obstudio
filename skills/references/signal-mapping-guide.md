@@ -6,38 +6,40 @@ Reference for mapping KPIs to OpenTelemetry signal types across languages.
 
 ## Signal Type Decision Tree
 
-Use this to decide which signal(s) a KPI needs:
+Use this to decide which signal(s) an SLI needs:
 
 ```
-Is the KPI a point-in-time measurement of current state?
-  YES → Gauge metric (e.g., pool size, queue depth, active connections)
+Is the SLI a point-in-time measurement of current state?
+  YES → Gauge metric (Category: Custom) in Metrics table
   NO  ↓
 
-Is the KPI counting occurrences of an event?
-  YES → Counter metric + consider Log event for context
+Is the SLI counting occurrences of an event?
+  YES → Counter metric (Metrics table) + consider Log event (Logs table) for context
   NO  ↓
 
-Is the KPI measuring duration or distribution?
+Is the SLI measuring duration or distribution?
   YES → Histogram metric
         Can it be derived from trace span duration?
-          YES → Mark Trace-Derivable, consider skipping explicit metric
-          NO  → Explicit histogram required
+          YES → Category: Derived in Metrics table (no explicit emission needed)
+          NO  → Category: Custom or OOB in Metrics table
   NO  ↓
 
-Is the KPI tracking a request/operation flow?
-  YES → Trace span with attributes
-  NO  → Log event with structured fields
+Is the SLI tracking a request/operation flow?
+  YES → Span entry in Spans table
+  NO  → Log event in Logs table
 ```
 
-### When to use multiple signals
+### When an SLI maps to multiple signals
 
-| Scenario | Signals | Rationale |
-|----------|---------|-----------|
-| Error during operation | Metric (counter) + Trace (span error) + Log (details) | Counter for alerting, span for context, log for debugging |
-| Slow operation | Trace (span) + Histogram (if not trace-derived) | Span shows where time was spent |
-| State transition | Log (event) + Metric (gauge update) | Log captures before/after, gauge shows current |
-| Throughput | Counter metric only | Simple monotonic count, trace overhead not justified |
-| Resource utilization | Gauge metric only | Periodic observation, no request context |
+A single SLI often appears in the SLIs column of more than one signal table.
+
+| Scenario | Signal Tables | Rationale |
+|----------|---------------|-----------|
+| Error during operation | Metrics (counter) + Spans (span error) + Logs (details) | Counter for alerting, span for context, log for debugging |
+| Slow operation | Spans + Metrics (Derived histogram, or Custom if not trace-derived) | Span shows where time was spent |
+| State transition | Logs (event) + Metrics (gauge) | Log captures before/after, gauge shows current |
+| Throughput | Metrics (counter) only | Simple monotonic count, trace overhead not justified |
+| Resource utilization | Metrics (gauge) only | Periodic observation, no request context |
 
 ---
 
@@ -60,9 +62,9 @@ double-counting and reduces instrumentation effort.
 - You need real-time counter aggregation faster than trace pipelines
 - The metric must survive when tracing is sampled
 
-### Common trace-derivable KPIs
+### Common trace-derivable SLIs
 
-| KPI | Span Name Pattern | Derived Metric |
+| SLI | Span Name Pattern | Derived Metric |
 |-----|-------------------|----------------|
 | HTTP request latency | `GET /api/resource` | Duration histogram by route |
 | DB query latency | `redis.get`, `sql.query` | Duration histogram by operation |
@@ -243,10 +245,10 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 
 ## Standard Auto-Instrumentation KPIs by Language
 
-These KPIs are provided automatically when using OTel auto-instrumentation
-libraries. Mark them as `Standard` class in the KPI table.
+These signals are provided automatically when using OTel auto-instrumentation
+libraries. Mark them as `OOB` category in the Spans and Metrics tables.
 
-| KPI Category | Go | Python | Node.js | Java |
+| Signal Category | Go | Python | Node.js | Java |
 |-------------------------|-----------------------|--------------------|-----------------------|---------------------|
 | HTTP server metrics | otelmux / otelhttp | opentelemetry-instrumentation-flask/django/fastapi | @opentelemetry/instrumentation-http | javaagent (Servlet) |
 | HTTP client metrics | otelhttp RoundTripper | opentelemetry-instrumentation-requests/httpx | @opentelemetry/instrumentation-http | javaagent |

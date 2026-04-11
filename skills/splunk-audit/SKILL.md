@@ -2,7 +2,7 @@
 name: splunk-audit
 description: >-
   Analyze a codebase for observability readiness and generate a structured
-  .observe/ directory with inventory, fault domains, and KPI mappings.
+  .observe/ directory with inventory, fault domains, and SLI/signal mappings.
   Use when the user types /splunk-audit, asks about observability gaps,
   wants to assess instrumentation coverage, says "what signals am I
   missing", "scan this service for observability", or asks about
@@ -106,46 +106,81 @@ Cross-cutting SRE concerns:
 
 Present fault domains grouped by component as a table.
 
-### Step 4 -- KPI Identification
+### Step 4 -- SLI Identification
 
-For each component and fault domain, identify Key Performance Indicators
+For each component and fault domain, identify Service Level Indicators
 using the four golden signals:
 
-| Signal     | Question                                    |
-|------------|---------------------------------------------|
-| Latency    | How long do operations take? (p50, p95, p99) |
-| Traffic    | How much demand is the system handling?      |
-| Errors     | What is the rate of failed requests?         |
-| Saturation | How full are resources? (pools, queues, mem) |
+| Golden Signal | Question                                    |
+|---------------|---------------------------------------------|
+| Latency       | How long do operations take? (p50, p95, p99) |
+| Traffic       | How much demand is the system handling?      |
+| Errors        | What is the rate of failed requests?         |
+| Saturation    | How full are resources? (pools, queues, mem) |
 
-Also identify business-logic KPIs specific to the domain.
+Also identify business-logic SLIs specific to the domain.
 
-### Step 5 -- Unified KPI Table
+### Step 5 -- SLI Definitions and Signal Tables
 
 Read [signal-mapping-guide.md](../references/signal-mapping-guide.md)
-for guidance on mapping KPIs to OTel signal types.
+for guidance on mapping SLIs to OTel signal types.
 
-Build a single table containing all KPIs -- already instrumented and
-missing.
+Build four tables: an SLI Definitions table and one table per signal
+type (Spans, Metrics, Logs).
 
-| Column          | Description                                              |
-|-----------------|----------------------------------------------------------|
-| Status          | `OK` if already instrumented, blank if missing           |
-| KPI             | Name of the KPI                                          |
-| Component       | Which component it belongs to                            |
-| Class           | `Standard` (auto-instrumentation) or `Business` (custom) |
-| Metric          | Yes/No                                                   |
-| Trace           | Yes/No                                                   |
-| Log             | Yes/No                                                   |
-| Signal Name     | Actual name if exists, proposed name if not               |
-| Trace-Derivable | Yes/No -- can the metric be derived from span data?       |
-| Verified        | Blank initially; set to `OK` by `/splunk-verify`         |
+#### 5a. SLI Definitions
 
-Classify each KPI:
-- **Standard**: provided by auto-instrumentation libraries
-- **Business**: requires custom code
+| Column        | Description                                           |
+|---------------|-------------------------------------------------------|
+| SLI           | Name of the Service Level Indicator                   |
+| Golden Signal | Latency / Traffic / Errors / Saturation               |
+| Component     | Which component it belongs to                         |
+| Target        | Threshold target (e.g., `p99 < 500ms`) or `--`       |
 
-Present the table. Highlight the gap count as the implementation scope.
+#### 5b. Spans
+
+| Column      | Description                                            |
+|-------------|--------------------------------------------------------|
+| Signal Name | Span name pattern (e.g., `HTTP {method} {route}`)     |
+| Category    | `OOB` (auto-instrumentation) or `Custom` (hand-written)|
+| Component   | Which component it belongs to                          |
+| SLIs        | Comma-separated SLI names this span feeds              |
+| Status      | `OK` if instrumented, blank if missing                 |
+| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
+
+#### 5c. Metrics
+
+| Column      | Description                                            |
+|-------------|--------------------------------------------------------|
+| Signal Name | Metric name (e.g., `http.server.request.duration`)     |
+| Type        | Counter / Histogram / Gauge / UpDownCounter            |
+| Category    | `OOB` / `Custom` / `Derived`                          |
+| Component   | Which component it belongs to                          |
+| SLIs        | Comma-separated SLI names this metric feeds            |
+| Unit        | Metric unit (e.g., `s`, `{requests}`, `{bytes}`)      |
+| Status      | `OK` if instrumented, blank if missing                 |
+| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
+
+#### 5d. Logs
+
+| Column      | Description                                            |
+|-------------|--------------------------------------------------------|
+| Signal Name | Log event name pattern                                 |
+| Category    | `OOB` or `Custom`                                      |
+| Component   | Which component it belongs to                          |
+| SLIs        | Comma-separated SLI names this log feeds               |
+| Level       | Log level (ERROR, WARN, INFO, DEBUG)                   |
+| Status      | `OK` if instrumented, blank if missing                 |
+| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
+
+#### Categories
+
+- **OOB**: out-of-the-box from auto-instrumentation libraries, zero custom code
+- **Custom**: requires hand-written instrumentation code
+- **Derived**: backend computes from span data (metrics only); no explicit emission needed
+
+Present coverage summaries per signal type. Highlight the gap count as
+the implementation scope.
 
 ### Step 6 -- Generate or Update .observe/ Directory
 
@@ -155,20 +190,23 @@ input for downstream skills (`/splunk-instrument`, `/splunk-verify`, `/splunk-pr
 #### If `.observe/inventory.md` already exists
 
 1. Read the existing `inventory.md`.
-2. Parse the existing KPI Table to extract the list of previously
-   tracked KPIs with their Status, Signal Name, and Component.
-3. Compare against the KPIs identified in Steps 4-5 of this run:
-   - **New KPIs**: add with blank Status.
-   - **Removed KPIs**: mark with strikethrough or remove, note in a
-     changelog comment at the top.
-   - **Changed KPIs**: update the Status column.
-   - **Unchanged KPIs**: preserve as-is, including manually added
-     notes, runbook links, or alert overrides.
-4. Update the Architecture diagram and Components table if dependencies
+2. Parse the existing Spans, Metrics, and Logs tables to extract the
+   list of previously tracked signals with their Status, Signal Name,
+   Category, and Component.
+3. Compare against the signals identified in Steps 4-5 of this run:
+   - **New signals**: add to the appropriate table with blank Status.
+   - **Removed signals**: remove from the table, note in a changelog
+     comment at the top.
+   - **Changed signals**: update the relevant columns.
+   - **Unchanged signals**: preserve as-is, including Status and
+     Verified values.
+4. Update the SLI Definitions table if new SLIs were identified or
+   existing ones changed.
+5. Update the Architecture diagram and Components table if dependencies
    changed.
-5. Update the Fault Domains table with any new components.
-6. Append `<!-- Last updated: {date} -->`.
-7. Present summary: N new KPIs, N removed, N status changes.
+6. Update the Fault Domains table with any new components.
+7. Append `<!-- Last updated: {date} -->`.
+8. Present summary: N new signals, N removed, N status changes.
 
 #### If `.observe/inventory.md` does not exist (first run)
 
@@ -179,8 +217,8 @@ Create the `.observe/` directory at the repository root:
 
 ```
 .observe/
-  inventory.md              # Audit results: overview, components,
-                            #   fault domains, KPI table, configurability
+  inventory.md              # Audit results: overview, components, fault
+                            #   domains, SLIs, signal tables, configurability
   terraform/                # (placeholder) Splunk O11y Cloud terraform
   alerts/                   # (placeholder) Alert rule definitions
 ```
@@ -190,10 +228,13 @@ Create `.observe/inventory.md` with sections:
 2. Architecture (component diagram from Step 2)
 3. Components
 4. Fault Domains (from Step 3)
-5. KPI Table (from Step 5)
-6. Configurability
-7. Alerts (placeholder -- populated by `/splunk-provision`)
-8. Dashboard Recommendations (placeholder -- populated by `/splunk-provision`)
+5. SLI Definitions (from Step 5)
+6. Spans (from Step 5)
+7. Metrics (from Step 5)
+8. Logs (from Step 5)
+9. Configurability
+10. Alerts (placeholder -- populated by `/splunk-provision`)
+11. Dashboard Recommendations (placeholder -- populated by `/splunk-provision`)
 
 Create `terraform/` and `alerts/` directories with brief READMEs noting
 they will be populated by the `/splunk-provision` skill.
@@ -209,30 +250,31 @@ they will be populated by the `/splunk-provision` skill.
 2. Load `skills/references/languages/python.md`
 3. Find SQLAlchemy, Redis, and 3 HTTP endpoints
 4. Map fault domains (DB connectivity/latency, cache availability, HTTP errors)
-5. Identify 12 KPIs (8 Standard, 4 Business)
-6. Generate `.observe/inventory.md` with 12-row KPI table, all Status blank
+5. Identify 8 SLIs across 4 golden signals
+6. Generate signal tables: 3 Spans (2 OOB, 1 Custom), 8 Metrics (3 OOB, 2 Derived, 3 Custom), 1 Log (Custom)
 
-**Result:** `.observe/` directory created with `inventory.md` (12 gaps), `terraform/`, and `alerts/` placeholders.
+**Result:** `.observe/` directory created with `inventory.md` (12 signals, all Status blank), `terraform/`, and `alerts/` placeholders.
 
 ### Example 2: Re-audit after adding a Kafka consumer
 
 **User says:** "I added a Kafka consumer, re-audit for new gaps"
 
 **Actions:**
-1. Read existing `.observe/inventory.md` (10 KPIs, 8 Status=OK)
+1. Read existing `.observe/inventory.md` (10 signals, 8 Status=OK)
 2. Detect new `confluent-kafka` dependency
-3. Add 4 new KPIs for Kafka (consumer lag, processing latency, error rate, partition saturation)
-4. Merge into existing table preserving OK statuses
+3. Add new SLIs for Kafka (consumer lag, processing latency, error rate, partition saturation)
+4. Add 4 new signals across Spans and Metrics tables, preserving existing Status values
 
-**Result:** Inventory updated with 4 new blank-Status rows appended. Changelog comment added.
+**Result:** Inventory updated with 4 new blank-Status signals. Changelog comment added.
 
 ## Red Flags
 
-- Fewer than 3 KPIs identified for a service with external dependencies
-- No business-class KPIs when the service has domain logic
+- Fewer than 3 SLIs identified for a service with external dependencies
+- No Custom-category signals when the service has domain logic
 - Missing fault domains for any external component
 - Audit completed but `.observe/inventory.md` not generated
-- KPI table has no entries with blank Status (nothing to instrument)
+- All signal tables have no entries with blank Status (nothing to instrument)
+- Metrics table missing Derived entries when OOB spans exist
 
 ## Troubleshooting
 
@@ -242,16 +284,18 @@ they will be populated by the `/splunk-provision` skill.
 
 **Error:** Inventory already exists but user ran `/splunk-audit` again
 **Cause:** User may want a re-audit or may have run the wrong command.
-**Solution:** Follow the merge path (Step 6, "If `.observe/inventory.md` already exists"). Preserve existing Status/Verified values and append new KPIs.
+**Solution:** Follow the merge path (Step 6, "If `.observe/inventory.md` already exists"). Preserve existing Status/Verified values and append new signals.
 
-**Error:** Zero KPIs identified despite external dependencies
+**Error:** Zero signals identified despite external dependencies
 **Cause:** Dependencies detected but no active usage found in code (e.g., imported but unused).
 **Solution:** Check for dynamic imports, factory patterns, or configuration-driven clients. Ask the user to confirm which components are actively used.
 
 ## Verification
 
-- [ ] `.observe/inventory.md` exists with all 8 sections
-- [ ] KPI table has rows for every component boundary found in Step 2
+- [ ] `.observe/inventory.md` exists with all 11 sections
+- [ ] SLI Definitions table lists every identified SLI with golden signal type
+- [ ] Spans, Metrics, and Logs tables have entries for every component boundary found in Step 2
+- [ ] Every signal row has an SLIs column referencing at least one SLI
 - [ ] Architecture diagram is present and matches discovered components
 - [ ] `terraform/` and `alerts/` directories exist
-- [ ] Gap count (blank Status rows) is reported to the user
+- [ ] Gap count (blank Status rows across all signal tables) is reported to the user

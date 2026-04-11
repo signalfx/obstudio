@@ -17,23 +17,24 @@ metadata:
 
 ## Overview
 
-Read the verified KPIs from `.observe/inventory.md`, generate Terraform
-configurations for Splunk Observability Cloud dashboards and detectors,
-and produce alert rule definitions for Prometheus, Grafana, and
-PagerDuty. Also populates the Alerts and Dashboard Recommendations
-sections in `inventory.md`. All output goes into the existing
-`.observe/` directory.
+Read the verified signals from the Spans, Metrics, and Logs tables in
+`.observe/inventory.md`, generate Terraform configurations for Splunk
+Observability Cloud dashboards and detectors, and produce alert rule
+definitions for Prometheus, Grafana, and PagerDuty. Also populates the
+Alerts and Dashboard Recommendations sections in `inventory.md`. All
+output goes into the existing `.observe/` directory.
 
 ## When to Use
 
 - After `/splunk-verify` confirms telemetry is flowing
 - User asks for "dashboards", "detectors", "alerts", or "terraform"
-- Regenerating IaC after KPI changes
+- Regenerating IaC after signal changes
 
 **When NOT to use:** If `.observe/inventory.md` does not exist or has
-no Verified=OK rows, tell the user to run `/splunk-audit`, `/splunk-instrument`, and
-`/splunk-verify` first. Provisioning without verified signals produces configs
-that reference non-existent telemetry.
+no Verified=OK rows across the Spans, Metrics, and Logs tables, tell
+the user to run `/splunk-audit`, `/splunk-instrument`, and `/splunk-verify`
+first. Provisioning without verified signals produces configs that
+reference non-existent telemetry.
 
 ## Process
 
@@ -45,13 +46,16 @@ that reference non-existent telemetry.
 
 Only continue if the user confirms.
 
-### Step 1 -- Read Verified KPIs
+### Step 1 -- Read Verified Signals
 
 1. Read `.observe/inventory.md`.
-2. Extract KPI rows where Verified=OK.
-3. For each KPI, note: Signal Name, Component, metric type (counter,
-   histogram, gauge), and whether it is Standard or Business class.
-4. If no Verified=OK rows, stop: "No verified KPIs to provision."
+2. Parse the Spans, Metrics, and Logs tables. Extract rows where
+   Verified=OK.
+3. For each signal, note: Signal Name, Component, Category (OOB /
+   Custom / Derived), and for metrics the Type column (Counter,
+   Histogram, Gauge).
+4. If no Verified=OK rows across any table, stop: "No verified
+   signals to provision."
 
 ### Step 2 -- Generate Terraform
 
@@ -82,25 +86,28 @@ Define configurable thresholds and metadata:
 - `environment` -- deployment environment (default: `production`)
 - `signalfx_auth_token` -- sensitive, no default
 - `signalfx_api_url` -- default Splunk endpoint
-- Per-KPI threshold variables (e.g., `latency_p99_warning_ms`)
+- Per-SLI threshold variables (e.g., `latency_p99_warning_ms`)
 
 #### `dashboards.tf`
 
 For each component group in the inventory:
 - Create a `signalfx_dashboard_group` resource
-- Create a `signalfx_dashboard` with charts for each KPI:
+- Create a `signalfx_dashboard` with charts sourced from the Metrics
+  table:
   - Counters -> line chart showing rate
   - Histograms -> line chart showing p50/p95/p99
   - Gauges -> single-value chart with thresholds
 
 #### `detectors.tf`
 
-For each KPI, create a `signalfx_detector` resource:
-- **Latency KPIs**: static threshold on p99 (warning), p99 (critical)
-- **Error KPIs**: percentage threshold (>5% warning, >50% critical)
-- **Saturation KPIs**: threshold on gauge value (>80% warning, >90%
+For each verified metric, create a `signalfx_detector` resource.
+Use the SLIs column to determine the golden signal type for threshold
+selection:
+- **Latency SLIs**: static threshold on p99 (warning), p99 (critical)
+- **Error SLIs**: percentage threshold (>5% warning, >50% critical)
+- **Saturation SLIs**: threshold on gauge value (>80% warning, >90%
   critical)
-- **Traffic KPIs**: sudden change detector (drop >50%)
+- **Traffic SLIs**: sudden change detector (drop >50%)
 - Use `var.*` references for all threshold values
 
 ### Step 3 -- Generate Alert Rules
@@ -123,7 +130,7 @@ groups:
           runbook: "<brief response action>"
 ```
 
-Generate one rule per KPI using the same threshold logic as detectors.
+Generate one rule per verified metric using the same threshold logic as detectors.
 
 #### `grafana.yaml`
 
@@ -137,13 +144,13 @@ and severity mappings.
 
 ### Step 4 -- Update Inventory
 
-1. Populate the **Alerts** section (section 7) in
+1. Populate the **Alerts** section (section 10) in
    `.observe/inventory.md` with a table:
 
-   | Alert Name | KPI | Condition | Severity | Runbook |
+   | Alert Name | SLI | Condition | Severity | Runbook |
    |------------|-----|-----------|----------|---------|
 
-2. Populate the **Dashboard Recommendations** section (section 8) with
+2. Populate the **Dashboard Recommendations** section (section 11) with
    concrete chart specs derived from the generated dashboards.
 
 3. Present summary: N dashboards, N detectors, N alert rules generated.
@@ -155,13 +162,13 @@ and severity mappings.
 **User says:** "Generate terraform dashboards for this service"
 
 **Actions:**
-1. Read inventory: 8 KPIs with Verified=OK
+1. Read inventory: 3 Spans, 6 Metrics, 1 Log with Verified=OK
 2. Prompt user for confirmation
 3. Generate `provider.tf`, `variables.tf` with threshold variables
-4. Generate `dashboards.tf` with 2 dashboard groups (HTTP, Business)
-5. Generate `detectors.tf` with 8 detectors (latency p99, error %, etc.)
+4. Generate `dashboards.tf` with 2 dashboard groups (HTTP, Business) from Metrics table
+5. Generate `detectors.tf` with detectors per verified metric (latency p99, error %, etc.)
 6. Generate `prometheus-rules.yaml`, `grafana.yaml`, `pagerduty.yaml`
-7. Update inventory sections 7-8
+7. Update inventory sections 10-11
 
 **Result:** `.observe/terraform/` and `.observe/alerts/` populated. `terraform validate` passes.
 
@@ -170,20 +177,20 @@ and severity mappings.
 **User says:** "I verified 3 new KPIs, update the terraform"
 
 **Actions:**
-1. Read inventory: 3 new Verified=OK rows since last provision
-2. Add 3 new detectors to `detectors.tf`, 3 new charts to `dashboards.tf`
-3. Append 3 new alert rules to each alert file
+1. Read inventory: 3 new Verified=OK signals across Metrics and Spans tables
+2. Add new detectors to `detectors.tf`, new charts to `dashboards.tf`
+3. Append new alert rules to each alert file
 4. Update inventory Alerts and Dashboard tables
 
 **Result:** Existing configs preserved, new KPIs added incrementally.
 
 ## Red Flags
 
-- Terraform references a metric name not present in the inventory
+- Terraform references a metric name not present in the Metrics table
 - Detector thresholds hardcoded instead of using variables
 - Alert rules missing severity labels
 - Dashboard charts with no data source (signal name mismatch)
-- Provisioning run without any Verified=OK KPIs
+- Provisioning run without any Verified=OK signals
 
 ## Troubleshooting
 
@@ -191,11 +198,11 @@ and severity mappings.
 **Cause:** The `signalfx` provider is not configured or the version constraint is wrong.
 **Solution:** Ensure `provider.tf` includes the `splunk-terraform/signalfx` source with a valid version constraint. Run `terraform init` before `validate`.
 
-**Error:** Alert rules reference a metric name not in the inventory
+**Error:** Alert rules reference a metric name not in the Metrics table
 **Cause:** Signal name was changed in the inventory after initial provisioning.
-**Solution:** Re-read the inventory and regenerate the affected detector/alert. Use the current Signal Name column value.
+**Solution:** Re-read the inventory and regenerate the affected detector/alert. Use the current Signal Name column value from the Metrics table.
 
-**Error:** No Verified=OK KPIs found
+**Error:** No Verified=OK signals found
 **Cause:** Provisioning was attempted before verification.
 **Solution:** Run `/splunk-verify` first to confirm telemetry is flowing before generating configs.
 
@@ -203,7 +210,7 @@ and severity mappings.
 
 - [ ] `terraform validate` passes on `.observe/terraform/`
 - [ ] Alert YAML files parse without errors
-- [ ] Every Verified=OK KPI has at least one detector/alert rule
+- [ ] Every Verified=OK metric has at least one detector/alert rule
 - [ ] Alerts section in `inventory.md` is populated (not placeholder)
 - [ ] Dashboard Recommendations section is populated
 - [ ] All threshold values use variables, not hardcoded numbers

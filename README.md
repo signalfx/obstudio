@@ -80,7 +80,7 @@ Or use individual skills:
 /splunk-audit          # analyze gaps only
 /splunk-instrument     # add OTel code (requires .observe/inventory.md)
 /splunk-verify         # validate telemetry (requires instrumented code)
-/splunk-provision      # generate Terraform/alerts (requires verified KPIs)
+/splunk-provision      # generate Terraform/alerts (requires verified signals)
 ```
 
 See [docs/examples.md](docs/examples.md) for more prompt examples.
@@ -98,13 +98,13 @@ anatomy.
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-audit](skills/splunk-audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with KPIs, fault domains, and component mapping | Starting observability work on any service |
+| [splunk-audit](skills/splunk-audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with SLI definitions, signal tables (Spans/Metrics/Logs), fault domains, and component mapping | Starting observability work on any service |
 
 ### Build -- Add instrumentation
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-instrument](skills/splunk-instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every gap in the inventory | You have an inventory and need to write the code |
+| [splunk-instrument](skills/splunk-instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every signal gap in the inventory | You have an inventory and need to write the code |
 
 ### Verify -- Prove it works
 
@@ -116,7 +116,7 @@ anatomy.
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-provision](skills/splunk-provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified KPIs | KPIs are verified and you need production monitoring |
+| [splunk-provision](skills/splunk-provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified signals | Signals are verified and you need production monitoring |
 
 ### Orchestrate -- End-to-end
 
@@ -138,7 +138,7 @@ matching the detected language is loaded.
 | [languages/node.md](skills/references/languages/node.md) | Node.js OTel SDK, Express/Fastify instrumentation |
 | [languages/python.md](skills/references/languages/python.md) | Python OTel SDK, Flask/FastAPI/Django instrumentation |
 | [fault-domain-patterns.md](skills/references/fault-domain-patterns.md) | Fault domain taxonomy and boundary detection |
-| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | KPI → OTel signal mapping (traces, metrics, logs) |
+| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | SLI → OTel signal mapping (spans, metrics, logs) |
 | [observability-template.md](skills/references/observability-template.md) | `.observe/inventory.md` template and format spec |
 
 ---
@@ -149,15 +149,15 @@ All skills operate on the same `.observe/` directory:
 
 ```
 .observe/
-├── inventory.md          # KPI table, components, fault domains
+├── inventory.md          # SLI definitions, signal tables (Spans/Metrics/Logs), components, fault domains
 ├── terraform/            # Splunk O11y Cloud dashboards and detectors
 └── alerts/               # Prometheus, Grafana, PagerDuty alert rules
 ```
 
-- `/splunk-audit` creates it (inventory, placeholders for terraform/alerts)
-- `/splunk-instrument` updates the KPI table Status column
-- `/splunk-verify` updates the KPI table Verified column
-- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
+- `/splunk-audit` creates it (SLI definitions, signal tables, placeholders for terraform/alerts)
+- `/splunk-instrument` updates the Status column in Spans, Metrics, and Logs tables
+- `/splunk-verify` updates the Verified column in Spans, Metrics, and Logs tables
+- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 10-11
 
 ---
 

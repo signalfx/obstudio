@@ -17,21 +17,23 @@ metadata:
 
 ## Overview
 
-Read the `.observe/inventory.md` produced by `/splunk-audit`, identify KPIs
-with blank Status, and implement OpenTelemetry instrumentation for each
-gap. Installs auto-instrumentation libraries for standard KPIs and
-generates custom spans and metrics for business KPIs. Updates the
-Status column to `OK` after implementation.
+Read the `.observe/inventory.md` produced by `/splunk-audit`, identify
+signals with blank Status across the Spans, Metrics, and Logs tables,
+and implement OpenTelemetry instrumentation for each gap. Installs
+auto-instrumentation libraries for OOB signals and generates custom
+spans, metrics, and log events for Custom signals. Updates the Status
+column to `OK` in the appropriate signal table after implementation.
 
 ## When to Use
 
-- `.observe/inventory.md` exists and has KPIs with blank Status
+- `.observe/inventory.md` exists and has signals with blank Status
 - User asks to "instrument this service" or "add OpenTelemetry"
 - After running `/splunk-audit` to implement the identified gaps
 
 **When NOT to use:** If no `.observe/inventory.md` exists, tell the
-user to run `/splunk-audit` first. If all Status columns are already `OK`,
-suggest `/splunk-verify` instead.
+user to run `/splunk-audit` first. If all Status columns across Spans,
+Metrics, and Logs tables are already `OK`, suggest `/splunk-verify`
+instead.
 
 ## Process
 
@@ -46,24 +48,25 @@ suggest `/splunk-verify` instead.
 ### Step 2 -- Read Inventory
 
 1. Read `.observe/inventory.md`.
-2. Parse the KPI table. Identify rows where Status is blank.
-3. If no blank rows exist, report "All KPIs are instrumented" and stop.
+2. Parse the Spans, Metrics, and Logs tables. Identify rows where
+   Status is blank across all three tables.
+3. If no blank rows exist, report "All signals are instrumented" and
+   stop.
 4. Group gaps by component for ordered implementation.
 
 ### Step 3 -- Implement Instrumentation
 
-For each KPI with blank Status:
+For each signal with blank Status:
 
-1. **Check OOB coverage**: consult the language guide's
+1. **OOB-category signals**: consult the language guide's
    auto-instrumentation library map.
-2. **If OOB library exists** and covers the KPI:
    - Install the package via the project's dependency manager.
    - Register the instrumentation in the SDK init file.
-3. **If no OOB library** or coverage is too coarse:
-   - Generate custom spans or metrics following the language guide's
-     patterns.
-4. **Business-class KPIs** (`Class: Business`): always generate custom
-   instrumentation.
+2. **Derived-category metrics**: no explicit emission needed. The
+   backend computes these from span data. Ensure the corresponding
+   OOB span is instrumented.
+3. **Custom-category signals**: generate hand-written spans, metrics,
+   or log events following the language guide's patterns.
 
 #### Implementation Rules
 
@@ -98,10 +101,12 @@ For each KPI with blank Status:
 
 ### Step 4 -- Update Inventory
 
-1. For each implemented KPI, set the Status column to `OK` in
+1. For each implemented signal, set the Status column to `OK` in the
+   appropriate signal table (Spans, Metrics, or Logs) in
    `.observe/inventory.md`.
-2. Update the coverage summary line.
-3. Present a summary: N KPIs instrumented, N remaining gaps (if any).
+2. Update the coverage summary lines for each signal type.
+3. Present a summary: N spans, N metrics, N logs instrumented,
+   N remaining gaps (if any).
 
 ## Examples
 
@@ -111,13 +116,13 @@ For each KPI with blank Status:
 
 **Actions:**
 1. Detect Python, load `languages/python.md`
-2. Read inventory: 3 blank-Status KPIs (HTTP latency, DB query duration, order count)
+2. Read inventory: 2 blank-Status OOB spans, 1 blank-Status Custom metric
 3. Install `opentelemetry-instrumentation-flask` and `opentelemetry-instrumentation-sqlalchemy` via `pyproject.toml`
 4. Create `otel_setup.py` with SDK init, register both instrumentors
-5. Add custom histogram for `order.processing.duration` in the order handler
-6. Update inventory: 3 KPIs now Status=OK
+5. Add custom counter for `order.created.count` in the order handler
+6. Update Spans and Metrics tables: 3 signals now Status=OK
 
-**Result:** App starts with OTel, auto-instruments HTTP and DB, custom metric for business KPI.
+**Result:** App starts with OTel, auto-instruments HTTP and DB, custom metric for business SLI.
 
 ### Example 2: Go service with existing OTel init
 
@@ -126,10 +131,10 @@ For each KPI with blank Status:
 **Actions:**
 1. Detect Go, load `languages/go.md`
 2. Find existing `initOTel()` in `telemetry.go`
-3. Read inventory: 2 blank-Status KPIs (cache hit ratio, queue depth)
+3. Read inventory: 1 blank-Status OOB metric (cache), 1 blank-Status Custom metric (queue depth)
 4. Add `otelredis` wrapper registration in existing init
 5. Add gauge callback for queue depth in worker package
-6. Update inventory: 2 KPIs now Status=OK
+6. Update Metrics table: 2 signals now Status=OK
 
 **Result:** No duplicate init, existing setup extended with 2 new signals.
 
@@ -137,8 +142,8 @@ For each KPI with blank Status:
 
 | Rationalization | Reality |
 |---|---|
-| "Auto-instrumentation covers everything" | It covers HTTP/DB boundaries. Business KPIs and custom domain logic need manual spans. |
-| "This service is too small for custom metrics" | If it has a KPI, it needs a signal. Size is irrelevant. |
+| "Auto-instrumentation covers everything" | It covers HTTP/DB boundaries (OOB). Custom-category signals for business logic still need manual code. |
+| "This service is too small for custom metrics" | If it has an SLI, it needs a signal. Size is irrelevant. |
 | "I'll add error recording later" | Spans without `recordException` hide bugs in traces. Add it now. |
 | "Semantic conventions don't matter internally" | Non-standard names break cross-service dashboards and alerts. |
 | "One SDK init file is overkill for a small app" | Scattering init across files causes double-init bugs and makes teardown unreliable. |
@@ -149,7 +154,7 @@ For each KPI with blank Status:
 - Spans created for trivial getters/setters instead of real boundaries
 - Hardcoded OTLP endpoints instead of env vars
 - High-cardinality attributes on metrics (user IDs, request IDs)
-- Business KPIs skipped because "auto-instrumentation is enough"
+- Custom-category signals skipped because "auto-instrumentation is enough"
 - `recordException` missing from error handling paths
 - New dependencies added without using the project's package manager
 
@@ -169,9 +174,10 @@ For each KPI with blank Status:
 
 ## Verification
 
-- [ ] Every KPI that had blank Status now shows `OK` in inventory
+- [ ] Every signal that had blank Status now shows `OK` in its table
 - [ ] SDK init file exists and is imported by the entry point
 - [ ] App compiles/starts without errors after instrumentation
 - [ ] No duplicate SDK initialization paths
 - [ ] Custom spans follow semantic conventions
 - [ ] Error paths call `recordException` and set span status to ERROR
+- [ ] Derived metrics have corresponding OOB spans instrumented

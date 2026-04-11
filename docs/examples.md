@@ -42,7 +42,7 @@
 | Use Case | Prompt | Skill |
 |----------|--------|-------|
 | Generate all dashboards, detectors, and alert rules at once | `/splunk-provision` -- generate dashboards, detectors, and alert rules | `/splunk-provision` |
-| Create Splunk O11y Cloud Terraform matching the KPI table | Generate Splunk O11y Cloud Terraform for dashboards matching the KPI table in `.observe/inventory.md` | `/splunk-provision` |
+| Create Splunk O11y Cloud Terraform matching the signal tables | Generate Splunk O11y Cloud Terraform for dashboards matching the Metrics table in `.observe/inventory.md` | `/splunk-provision` |
 | Create SignalFx detectors for critical production alerts | Create SignalFx detectors for all Critical-severity alerts in the inventory | `/splunk-provision` |
 | Generate Prometheus alerting rules for warning-level KPIs | Write Prometheus alerting rules for the Warning-level KPIs | `/splunk-provision` |
 | Build a Grafana dashboard from the service health panel | Generate a Grafana dashboard JSON for the service health panel group from the inventory | `/splunk-provision` |

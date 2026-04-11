@@ -2,18 +2,42 @@
 
 > Golden reference for eval comparison
 
-## KPI Table
+## SLI Definitions
 
-| Status | KPI | Component | Class | Metric | Trace | Log | Signal Name | Trace-Derivable |
-|--------|-----|-----------|-------|--------|-------|-----|-------------|-----------------|
-| | HTTP request latency | HTTP Server | Standard | Yes | Yes | No | `http.server.request.duration` | Yes |
-| | HTTP request count | HTTP Server | Standard | Yes | Yes | No | `http.server.request.count` | Yes |
-| | HTTP error rate | HTTP Server | Standard | Yes | Yes | No | `http.server.error.count` | Yes |
-| | HTTP active requests | HTTP Server | Standard | Yes | No | No | `http.server.active_requests` | No |
-| | Task creation count | Business Logic | Business | Yes | No | No | `tasks.created.count` | No |
-| | Task completion count | Business Logic | Business | Yes | No | No | `tasks.completed.count` | No |
-| | Task deletion count | Business Logic | Business | Yes | No | No | `tasks.deleted.count` | No |
-| | Active task count | In-Memory Store | Business | Yes | No | No | `tasks.active.count` | No |
+| SLI | Golden Signal | Component | Target |
+|-----|---------------|-----------|--------|
+| HTTP request latency | Latency | HTTP Server | p99 < 500ms |
+| HTTP request throughput | Traffic | HTTP Server | -- |
+| HTTP error rate | Errors | HTTP Server | < 1% 5xx |
+| HTTP server saturation | Saturation | HTTP Server | -- |
+| Task creation rate | Traffic | Business Logic | -- |
+| Task completion rate | Traffic | Business Logic | -- |
+| Task deletion rate | Traffic | Business Logic | -- |
+| Active task count | Saturation | In-Memory Store | -- |
+
+## Spans
+
+| Signal Name | Category | Component | SLIs | Status | Verified |
+|-------------|----------|-----------|------|--------|----------|
+| `HTTP {method} {route}` | OOB | HTTP Server | HTTP request latency, HTTP request throughput, HTTP error rate | | |
+
+## Metrics
+
+| Signal Name | Type | Category | Component | SLIs | Unit | Status | Verified |
+|-------------|------|----------|-----------|------|------|--------|----------|
+| `http.server.request.duration` | Histogram | Derived | HTTP Server | HTTP request latency | s | | |
+| `http.server.request.count` | Counter | OOB | HTTP Server | HTTP request throughput | {requests} | | |
+| `http.server.error.count` | Counter | OOB | HTTP Server | HTTP error rate | {errors} | | |
+| `http.server.active_requests` | UpDownCounter | OOB | HTTP Server | HTTP server saturation | {requests} | | |
+| `tasks.created.count` | Counter | Custom | Business Logic | Task creation rate | {tasks} | | |
+| `tasks.completed.count` | Counter | Custom | Business Logic | Task completion rate | {tasks} | | |
+| `tasks.deleted.count` | Counter | Custom | Business Logic | Task deletion rate | {tasks} | | |
+| `tasks.active.count` | Gauge | Custom | In-Memory Store | Active task count | {tasks} | | |
+
+## Logs
+
+| Signal Name | Category | Component | SLIs | Level | Status | Verified |
+|-------------|----------|-----------|------|-------|--------|----------|
 
 ## Expected Structural Properties
 
@@ -22,8 +46,10 @@
 - sdk_init_file: telemetry.go (or similar single-file init)
 - auto_instrumentation_packages:
   - "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-- custom_metrics: 4 (tasks.created.count, tasks.completed.count, tasks.deleted.count, tasks.active.count)
+- oob_span_count: 1
+- oob_metric_count: 3
+- derived_metric_count: 1
+- custom_metric_count: 4
+- sli_count: >= 8
 - components: HTTP Server, Business Logic, In-Memory Store
 - fault_domains_count: >= 5
-- kpi_count: >= 8
-- business_kpi_count: >= 4

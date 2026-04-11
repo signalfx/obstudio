@@ -96,44 +96,49 @@ tests:
   - vars:
       input: >
         Analyze the demo/python-flask-basic directory for observability
-        gaps and list the KPIs you would track.
+        gaps and list the signals you would track.
     assert:
       - type: llm-rubric
         value: >
-          The response should identify at minimum these KPIs for a Flask
-          task API: HTTP request latency, HTTP request count, HTTP error
-          rate, task creation count, task completion count, active task
-          count. It should classify HTTP metrics as Standard and task
-          metrics as Business. Signal names should follow OTel conventions
-          (dotted lowercase).
+          The response should identify SLIs for a Flask task API including
+          HTTP request latency, HTTP request throughput, HTTP error rate,
+          task creation rate, task completion rate, and active task count.
+          It should produce signal tables (Spans, Metrics, Logs) with
+          categories: OOB for HTTP auto-instrumentation, Custom for task
+          business metrics, and Derived for latency histograms. Signal
+          names should follow OTel conventions (dotted lowercase).
     options:
       tags: [golden, python-flask-basic]
 
   - vars:
       input: >
         Analyze the demo/node-express-basic directory for observability
-        gaps and list the KPIs you would track.
+        gaps and list the signals you would track.
     assert:
       - type: llm-rubric
         value: >
-          The response should identify at minimum these KPIs for an Express
-          task API: HTTP request latency, HTTP request count, HTTP error
-          rate, task creation count, task completion count, active task
-          count. It should recommend @opentelemetry/instrumentation-express
-          and @opentelemetry/instrumentation-http for auto-instrumentation.
+          The response should identify SLIs for an Express task API
+          including HTTP request latency, HTTP request throughput, HTTP
+          error rate, task creation rate, and active task count. It should
+          produce signal tables with OOB spans and metrics from
+          @opentelemetry/instrumentation-express and
+          @opentelemetry/instrumentation-http, plus Custom metrics for
+          task business logic.
     options:
       tags: [golden, node-express-basic]
 
   - vars:
       input: >
         Analyze the demo/go-chi-basic directory for observability
-        gaps and list the KPIs you would track.
+        gaps and list the signals you would track.
     assert:
       - type: llm-rubric
         value: >
-          The response should identify at minimum these KPIs for a Chi
-          task API: HTTP request latency, HTTP request count, HTTP error
-          rate, task creation count, active task count. It should recommend
-          otelhttp for auto-instrumentation of the HTTP server.
+          The response should identify SLIs for a Chi task API including
+          HTTP request latency, HTTP request throughput, HTTP error rate,
+          task creation rate, and active task count. It should produce
+          signal tables with OOB spans from otelhttp for HTTP server
+          auto-instrumentation, plus Custom metrics for task business
+          logic.
     options:
       tags: [golden, go-chi-basic]

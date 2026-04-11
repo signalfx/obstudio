@@ -3,10 +3,10 @@
 
 Compares the generated .observe/inventory.md against a golden reference
 using structural similarity. Checks:
-  - KPI count matches within tolerance
+  - Signal count matches within tolerance (across Spans, Metrics, Logs)
   - Expected signal names are present
   - Component coverage matches
-  - Business vs Standard class distribution matches
+  - Category distribution matches (OOB/Custom/Derived)
   - Structural sections present
 
 Usage:
@@ -21,47 +21,83 @@ import sys
 from pathlib import Path
 
 
-def parse_kpi_table(text: str) -> list[dict]:
-    """Extract KPI rows from markdown table."""
-    rows = []
-    in_table = False
-    headers = []
+def _parse_table(lines: list[str], start_idx: int) -> list[dict]:
+    """Parse a markdown table starting at the header line index."""
+    if start_idx >= len(lines):
+        return []
 
-    for line in text.splitlines():
-        if "Signal Name" in line and "|" in line:
-            headers = [h.strip() for h in line.split("|") if h.strip()]
-            in_table = True
+    header_line = lines[start_idx]
+    headers = [h.strip() for h in header_line.split("|") if h.strip()]
+    rows = []
+    i = start_idx + 1
+
+    while i < len(lines):
+        line = lines[i]
+        if line.strip().startswith("|---"):
+            i += 1
             continue
-        if in_table and line.strip().startswith("|---"):
-            continue
-        if in_table and "|" in line and line.strip():
-            cols = [c.strip() for c in line.split("|") if c.strip()]
-            if len(cols) >= 4:
-                row = {}
-                for i, h in enumerate(headers):
-                    if i < len(cols):
-                        row[h] = cols[i]
-                rows.append(row)
-        elif in_table and not line.strip():
-            in_table = False
+        if not line.strip() or not line.strip().startswith("|"):
+            break
+        if line.strip().startswith("##"):
+            break
+        cols = [c.strip() for c in line.split("|") if c.strip()]
+        if len(cols) >= 2:
+            row = {}
+            for j, h in enumerate(headers):
+                if j < len(cols):
+                    row[h] = cols[j]
+            rows.append(row)
+        i += 1
 
     return rows
 
 
-def extract_signal_names(kpis: list[dict]) -> set[str]:
+def parse_signal_tables(text: str) -> dict[str, list[dict]]:
+    """Extract signal rows from all three signal tables."""
+    lines = text.splitlines()
+    tables: dict[str, list[dict]] = {"spans": [], "metrics": [], "logs": []}
+
+    current_section = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "## Spans":
+            current_section = "spans"
+        elif stripped == "## Metrics":
+            current_section = "metrics"
+        elif stripped == "## Logs":
+            current_section = "logs"
+        elif stripped.startswith("## ") and current_section:
+            current_section = None
+
+        if current_section and "Signal Name" in line and "|" in line:
+            tables[current_section] = _parse_table(lines, i)
+            current_section = None
+
+    return tables
+
+
+def all_signals(tables: dict[str, list[dict]]) -> list[dict]:
+    """Flatten all signal tables into a single list."""
+    result = []
+    for rows in tables.values():
+        result.extend(rows)
+    return result
+
+
+def extract_signal_names(signals: list[dict]) -> set[str]:
     return {
-        k.get("Signal Name", "").strip("`")
-        for k in kpis
-        if k.get("Signal Name", "").strip("`")
+        s.get("Signal Name", "").strip("`")
+        for s in signals
+        if s.get("Signal Name", "").strip("`")
     }
 
 
-def extract_components(kpis: list[dict]) -> set[str]:
-    return {k.get("Component", "") for k in kpis if k.get("Component")}
+def extract_components(signals: list[dict]) -> set[str]:
+    return {s.get("Component", "") for s in signals if s.get("Component")}
 
 
-def count_by_class(kpis: list[dict], cls: str) -> int:
-    return sum(1 for k in kpis if k.get("Class", "") == cls)
+def count_by_category(signals: list[dict], category: str) -> int:
+    return sum(1 for s in signals if s.get("Category", "") == category)
 
 
 def check_sections(text: str) -> list[str]:
@@ -71,7 +107,10 @@ def check_sections(text: str) -> list[str]:
         "Architecture",
         "Components",
         "Fault Domains",
-        "KPI Table",
+        "SLI Definitions",
+        "Spans",
+        "Metrics",
+        "Logs",
         "Configurability",
         "Alerts",
         "Dashboard Recommendations",
@@ -99,53 +138,56 @@ def main():
     actual_text = inventory_path.read_text()
     golden_text = golden_path.read_text()
 
-    actual_kpis = parse_kpi_table(actual_text)
-    golden_kpis = parse_kpi_table(golden_text)
+    actual_tables = parse_signal_tables(actual_text)
+    golden_tables = parse_signal_tables(golden_text)
+
+    actual_all = all_signals(actual_tables)
+    golden_all = all_signals(golden_tables)
 
     scores = []
 
-    # 1. KPI count similarity
-    actual_count = len(actual_kpis)
-    golden_count = len(golden_kpis)
+    # 1. Total signal count similarity
+    actual_count = len(actual_all)
+    golden_count = len(golden_all)
     if golden_count > 0:
         count_ratio = min(actual_count, golden_count) / max(actual_count, golden_count)
     else:
         count_ratio = 1.0 if actual_count == 0 else 0.0
-    scores.append(("kpi_count", count_ratio, f"actual={actual_count} golden={golden_count}"))
+    scores.append(("signal_count", count_ratio, f"actual={actual_count} golden={golden_count}"))
 
     # 2. Signal name overlap (Jaccard)
-    actual_signals = extract_signal_names(actual_kpis)
-    golden_signals = extract_signal_names(golden_kpis)
-    if golden_signals:
-        intersection = actual_signals & golden_signals
-        union = actual_signals | golden_signals
-        signal_sim = len(intersection) / len(union) if union else 1.0
+    actual_names = extract_signal_names(actual_all)
+    golden_names = extract_signal_names(golden_all)
+    if golden_names:
+        intersection = actual_names & golden_names
+        union = actual_names | golden_names
+        name_sim = len(intersection) / len(union) if union else 1.0
     else:
-        signal_sim = 1.0
-    scores.append(("signal_overlap", signal_sim, f"matched={len(actual_signals & golden_signals)}/{len(golden_signals)}"))
+        name_sim = 1.0
+    scores.append(("signal_name_overlap", name_sim, f"matched={len(actual_names & golden_names)}/{len(golden_names)}"))
 
     # 3. Component coverage
-    actual_comps = extract_components(actual_kpis)
-    golden_comps = extract_components(golden_kpis)
+    actual_comps = extract_components(actual_all)
+    golden_comps = extract_components(golden_all)
     if golden_comps:
         comp_sim = len(actual_comps & golden_comps) / len(golden_comps)
     else:
         comp_sim = 1.0
     scores.append(("component_coverage", comp_sim, f"matched={len(actual_comps & golden_comps)}/{len(golden_comps)}"))
 
-    # 4. Class distribution
-    actual_biz = count_by_class(actual_kpis, "Business")
-    golden_biz = count_by_class(golden_kpis, "Business")
-    if golden_biz > 0:
-        biz_ratio = min(actual_biz, golden_biz) / max(actual_biz, golden_biz)
+    # 4. Category distribution (Custom signals)
+    actual_custom = count_by_category(actual_all, "Custom")
+    golden_custom = count_by_category(golden_all, "Custom")
+    if golden_custom > 0:
+        custom_ratio = min(actual_custom, golden_custom) / max(actual_custom, golden_custom)
     else:
-        biz_ratio = 1.0 if actual_biz == 0 else 0.0
-    scores.append(("business_kpi_ratio", biz_ratio, f"actual={actual_biz} golden={golden_biz}"))
+        custom_ratio = 1.0 if actual_custom == 0 else 0.0
+    scores.append(("custom_signal_ratio", custom_ratio, f"actual={actual_custom} golden={golden_custom}"))
 
     # 5. Section presence
     actual_sections = check_sections(actual_text)
-    section_score = len(actual_sections) / 8.0
-    scores.append(("inventory_sections", section_score, f"found={len(actual_sections)}/8"))
+    section_score = len(actual_sections) / 11.0
+    scores.append(("inventory_sections", section_score, f"found={len(actual_sections)}/11"))
 
     overall = sum(s for _, s, _ in scores) / len(scores)
 
