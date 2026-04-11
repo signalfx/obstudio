@@ -8,7 +8,7 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- agent skills (composable observability workflows)
 - `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
-- `demo/` -- sample apps for testing and skill evaluation
+- `examples/` -- sample apps for testing and skill evaluation, organized by language
 - `docs/` -- design docs and examples
 
 ## Code
@@ -41,11 +41,11 @@ Verification. See any skill under `skills/` for the canonical format.
 
 | Skill | Purpose |
 |-------|---------|
-| `/audit` | Analyze a codebase for observability gaps, produce `.observe/inventory.md` |
-| `/instrument` | Implement OTel instrumentation for KPIs identified by `/audit` |
-| `/verify` | Validate telemetry against the Observer collector |
-| `/provision` | Generate Terraform dashboards, detectors, and alert rules |
-| `/observe` | Composite orchestrator: audit -> instrument -> verify -> provision |
+| `/splunk-audit` | Analyze a codebase for observability gaps, produce `.observe/inventory.md` |
+| `/splunk-instrument` | Implement OTel instrumentation for signals identified by `/splunk-audit` |
+| `/splunk-verify` | Validate telemetry against the Observer collector |
+| `/splunk-provision` | Generate Terraform dashboards, detectors, and alert rules |
+| `/splunk-observe` | Composite orchestrator: audit -> instrument -> verify -> provision |
 
 ### Shared References
 
@@ -69,7 +69,7 @@ language is loaded -- never all at once. This keeps token usage minimal.
 ### Skill Contract
 
 All skills operate on the same `.observe/` directory:
-- `/audit` creates it (inventory, placeholders for terraform/alerts)
-- `/instrument` updates the KPI table Status column
-- `/verify` updates the KPI table Verified column
-- `/provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
+- `/splunk-audit` creates it (SLI definitions, signal tables, placeholders for terraform/alerts)
+- `/splunk-instrument` updates the Status column in the Spans, Metrics, and Logs tables
+- `/splunk-verify` updates the Verified column in the Spans, Metrics, and Logs tables
+- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 10-11

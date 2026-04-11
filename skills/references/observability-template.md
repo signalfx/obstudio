@@ -1,11 +1,11 @@
 # Inventory Template
 
-Use this template when generating `.observe/inventory.md` in the `/audit`
+Use this template when generating `.observe/inventory.md` in the `/splunk-audit`
 skill. Replace all `{placeholder}` values with actual data from the
 analysis. Remove sections that do not apply.
 
-Sections 1-6 are populated by `/audit`. Section 7 (Alerts) and Section 8
-(Dashboard Recommendations) are populated by `/provision`.
+Sections 1-8 are populated by `/splunk-audit`. Section 10 (Alerts) and Section 11
+(Dashboard Recommendations) are populated by `/splunk-provision`.
 
 ---
 
@@ -20,10 +20,13 @@ Sections 1-6 are populated by `/audit`. Section 7 (Alerts) and Section 8
 2. [Architecture](#architecture)
 3. [Components](#components)
 4. [Fault Domains](#fault-domains)
-5. [KPI Table](#kpi-table)
-6. [Configurability](#configurability)
-7. [Alerts](#alerts)
-8. [Dashboard Recommendations](#dashboard-recommendations)
+5. [SLI Definitions](#sli-definitions)
+6. [Spans](#spans)
+7. [Metrics](#metrics)
+8. [Logs](#logs)
+9. [Configurability](#configurability)
+10. [Alerts](#alerts)
+11. [Dashboard Recommendations](#dashboard-recommendations)
 
 ---
 
@@ -83,20 +86,53 @@ graph TD
 
 ---
 
-## KPI Table
+## SLI Definitions
 
-**Coverage summary**: {checked_count}/{total_count} KPIs instrumented ({percentage}%)
+| SLI | Golden Signal | Component | Target |
+|-----|---------------|-----------|--------|
+| {sli_name} | Latency / Traffic / Errors / Saturation | {component} | {target threshold or --} |
 
-| Status | KPI | Component | Class | Metric | Trace | Log | Signal Name | Trace-Derivable |
-|--------|-----|-----------|-------|--------|-------|-----|-------------|-----------------|
-| ✅ | {kpi_name} | {component} | Standard | Yes | Yes | No | {signal_name} | {Yes/No} |
-|    | {kpi_name} | {component} | Business | Yes | No | Yes | {signal_name} | {No} |
+---
+
+## Spans
+
+**Coverage**: {instrumented}/{total} spans instrumented
+
+| Signal Name | Category | Component | SLIs | Status | Verified |
+|-------------|----------|-----------|------|--------|----------|
+| `{span_name}` | OOB | {component} | {sli_1}, {sli_2} | OK | OK |
+| `{span_name}` | Custom | {component} | {sli_name} | | |
+
+---
+
+## Metrics
+
+**Coverage**: {instrumented}/{total} metrics instrumented
+
+| Signal Name | Type | Category | Component | SLIs | Unit | Status | Verified |
+|-------------|------|----------|-----------|------|------|--------|----------|
+| `{metric_name}` | Histogram | Derived | {component} | {sli_name} | s | OK | OK |
+| `{metric_name}` | Counter | OOB | {component} | {sli_name} | {requests} | OK | |
+| `{metric_name}` | Counter | Custom | {component} | {sli_name} | {unit} | | |
+
+---
+
+## Logs
+
+**Coverage**: {instrumented}/{total} log signals instrumented
+
+| Signal Name | Category | Component | SLIs | Level | Status | Verified |
+|-------------|----------|-----------|------|-------|--------|----------|
+| `{log_event_name}` | Custom | {component} | {sli_name} | ERROR | | |
 
 ### Legend
 
-- **Status**: ✅ = already instrumented in code, blank = needs implementation
-- **Class**: Standard = auto-instrumentation provides this, Business = custom code required
-- **Trace-Derivable**: Yes = metric can be computed from span duration by the backend
+- **Status**: OK = already instrumented in code, blank = needs implementation
+- **Verified**: OK = confirmed flowing to collector by `/splunk-verify`, blank = not yet validated
+- **Category**:
+  - **OOB** = out-of-the-box from auto-instrumentation libraries
+  - **Custom** = requires hand-written instrumentation code
+  - **Derived** = backend computes from span data (metrics only)
 
 ---
 
@@ -133,7 +169,7 @@ negligible performance impact.
 
 ## Alerts
 
-| Alert Name | KPI | Condition | Severity | Runbook |
+| Alert Name | SLI | Condition | Severity | Runbook |
 |------------|-----|-----------|----------|---------|
 | {alert_name} | {kpi_name} | {threshold expression} | {Critical/Warning/Info} | {brief response action} |
 

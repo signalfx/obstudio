@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-fixture eval-llm release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -67,6 +67,23 @@ release-local: ## Build release archives locally via GoReleaser (snapshot, no pu
 
 release: ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 	goreleaser release --clean
+
+# --- Evals ---
+
+EVALS_DIR  := evals
+APP        ?=
+
+eval: ## Run all golden + performance evals (CI-safe)
+	cd $(EVALS_DIR) && uv run pytest -v --tb=short
+
+eval-fixture: ## Run evals against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
+ifndef APP
+	$(error APP is required — e.g. make eval-fixture APP=examples/python/flask-basic)
+endif
+	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
+
+eval-llm: ## Run LLM-based evals via promptfoo (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)
+	cd $(EVALS_DIR) && npx promptfoo eval
 
 # --- Skills ---
 

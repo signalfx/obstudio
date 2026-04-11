@@ -1,0 +1,156 @@
+# Trigger tests: verify skills activate on the right queries.
+#
+# Each test case specifies an input prompt and which skill (if any)
+# should be triggered. Target: 90% correct activation across all cases.
+#
+# Categories:
+#   - obvious: direct command invocation
+#   - paraphrased: natural language that should trigger the skill
+#   - negative: queries that should NOT trigger the skill
+
+tests:
+  # ── splunk-audit ─────────────────────────────────────────────
+  - description: "splunk-audit - obvious command"
+    input: "/splunk-audit"
+    expected_skill: splunk-audit
+
+  - description: "splunk-audit - scan for gaps"
+    input: "Scan this service for observability gaps"
+    expected_skill: splunk-audit
+
+  - description: "splunk-audit - what signals missing"
+    input: "What signals am I missing in this codebase?"
+    expected_skill: splunk-audit
+
+  - description: "splunk-audit - observability readiness"
+    input: "Check observability readiness of this project"
+    expected_skill: splunk-audit
+
+  - description: "splunk-audit - assess coverage"
+    input: "Assess the instrumentation coverage before I start coding"
+    expected_skill: splunk-audit
+
+  - description: "splunk-audit - negative (unit tests)"
+    input: "Write unit tests for the auth module"
+    expected_skill: none
+
+  - description: "splunk-audit - negative (code review)"
+    input: "Review this pull request for bugs"
+    expected_skill: none
+
+  # ── splunk-instrument ────────────────────────────────────────
+  - description: "splunk-instrument - obvious command"
+    input: "/splunk-instrument"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - add OTel"
+    input: "Add OpenTelemetry to this service"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - add tracing"
+    input: "Add tracing to my Flask app"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - add metrics"
+    input: "Add metrics for my API endpoints"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - wire telemetry"
+    input: "Wire up telemetry for this Go service"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - implement observability"
+    input: "Implement observability for the order processing module"
+    expected_skill: splunk-instrument
+
+  - description: "splunk-instrument - negative (deploy)"
+    input: "Deploy this service to production"
+    expected_skill: none
+
+  # ── splunk-verify ────────────────────────────────────────────
+  - description: "splunk-verify - obvious command"
+    input: "/splunk-verify"
+    expected_skill: splunk-verify
+
+  - description: "splunk-verify - check telemetry"
+    input: "Check if telemetry is flowing from my service"
+    expected_skill: splunk-verify
+
+  - description: "splunk-verify - test traces"
+    input: "Test my traces and make sure they reach the collector"
+    expected_skill: splunk-verify
+
+  - description: "splunk-verify - are metrics working"
+    input: "Are my metrics actually being exported?"
+    expected_skill: splunk-verify
+
+  - description: "splunk-verify - validate instrumentation"
+    input: "Validate the instrumentation I just added"
+    expected_skill: splunk-verify
+
+  - description: "splunk-verify - negative (linting)"
+    input: "Run the linter on this file"
+    expected_skill: none
+
+  # ── splunk-provision ─────────────────────────────────────────
+  - description: "splunk-provision - obvious command"
+    input: "/splunk-provision"
+    expected_skill: splunk-provision
+
+  - description: "splunk-provision - generate terraform"
+    input: "Generate Terraform dashboards for this service"
+    expected_skill: splunk-provision
+
+  - description: "splunk-provision - create alerts"
+    input: "Create alert rules for my verified signals"
+    expected_skill: splunk-provision
+
+  - description: "splunk-provision - build monitoring"
+    input: "Build monitoring configuration from the inventory"
+    expected_skill: splunk-provision
+
+  - description: "splunk-provision - detectors"
+    input: "Set up SignalFx detectors for my service"
+    expected_skill: splunk-provision
+
+  - description: "splunk-provision - negative (database)"
+    input: "Create a new database migration"
+    expected_skill: none
+
+  # ── splunk-observe ───────────────────────────────────────────
+  - description: "splunk-observe - obvious command"
+    input: "/splunk-observe"
+    expected_skill: splunk-observe
+
+  - description: "splunk-observe - full observability"
+    input: "Make this service fully observable"
+    expected_skill: splunk-observe
+
+  - description: "splunk-observe - end-to-end monitoring"
+    input: "Add end-to-end monitoring to this project"
+    expected_skill: splunk-observe
+
+  - description: "splunk-observe - instrument and verify"
+    input: "Instrument and verify this service"
+    expected_skill: splunk-observe
+
+  - description: "splunk-observe - negative (single phase)"
+    input: "Just run the audit, I don't want instrumentation yet"
+    expected_skill: splunk-audit
+
+  # ── Cross-skill negatives ────────────────────────────────────
+  - description: "negative - weather query"
+    input: "What's the weather in San Francisco?"
+    expected_skill: none
+
+  - description: "negative - generic coding"
+    input: "Refactor this function to use async/await"
+    expected_skill: none
+
+  - description: "negative - documentation"
+    input: "Write API documentation for these endpoints"
+    expected_skill: none
+
+  - description: "negative - git operations"
+    input: "Squash the last 3 commits"
+    expected_skill: none

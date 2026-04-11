@@ -13,7 +13,7 @@ This repository contains:
 | Go | 1.25+ | observer collector |
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
-| uv | latest | Running Python demo apps |
+| uv | latest | Python example apps and skill evals |
 | goreleaser | latest | `make release-local` only (optional) |
 
 ## Build
@@ -69,6 +69,7 @@ PRs cannot be merged if tests are failing.
 | observer | `go vet`, `make build`, `make test` |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
+| skill-evals | `make eval` (golden structural, semconv, consistency) |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -86,6 +87,60 @@ cd extension && npm test # VS Code-hosted extension tests
 - All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
 - Code coverage tools will be used to identify untested functionality. See `AGENTS.md` for how AI agents should incorporate coverage analysis.
 - Skills require probabilistic evals with fuzzy verification against golden results.
+
+## Skill Evals
+
+Skills are evaluated with pytest. Tests and helper modules live in
+`evals/`. Dependencies (PyYAML, pytest) are managed by `uv` with a
+lockfile (`evals/pyproject.toml` and `evals/uv.lock`).
+
+### Running evals
+
+```sh
+make eval                                            # all golden + performance tests (CI-safe)
+make eval-fixture APP=examples/python/flask-basic    # post-skill fixture tests (local)
+```
+
+Or run pytest directly for finer control:
+
+```sh
+cd evals
+uv run pytest                              # all tests
+uv run pytest test_semconv.py -v           # semconv tests only
+uv run pytest -k "performance" -v          # performance tests only
+uv run pytest --app=../examples/python/flask-basic   # include fixture tests
+```
+
+### Test suites
+
+| Test file | What it validates |
+|-----------|-------------------|
+| `test_structural.py` | Golden properties (language, packages) and fixture SDK init / deps |
+| `test_semconv.py` | Metric name format, span cardinality, high-cardinality attribute scan |
+| `test_golden.py` | Signal sections present, unique names, valid categories, golden-vs-fixture comparison |
+| `test_performance.py` | Skill token budgets, reference budgets, combined context window limits |
+
+Tests are parametrized across all golden directories (Python, Node, Go).
+Fixture-mode tests auto-skip when `--app` is not provided, making
+`make eval` safe for CI.
+
+### Adding a new eval fixture
+
+1. Create the example app under `examples/<language>/<app-name>/`.
+2. Run `/splunk-audit` (or `/splunk-observe`) to generate
+   `.observe/inventory.md`.
+3. Review the generated inventory for correctness.
+4. Copy the signal tables and structural properties into a golden file
+   at `evals/golden/<language>/<app-name>/inventory.md`.
+5. Run `make eval` -- the new golden is auto-discovered by pytest.
+
+See [evals/README.md](evals/README.md) for full details on test
+architecture, helpers, and the golden file format.
+
+### CI integration
+
+The `skill-evals` job installs `uv` via `astral-sh/setup-uv` and runs
+`make eval`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Pull Requests
 

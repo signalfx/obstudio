@@ -1,0 +1,13 @@
+{
+  "name": "node-express-basic",
+  "version": "0.1.0",
+  "description": "Greenfield Express task API -- demo app for obstudio skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node app.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
