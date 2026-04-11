@@ -2,8 +2,7 @@
 
 This repository contains:
 
-- `observer-go/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `observer/` -- Observer app (React client, Node/Express server, shared OTLP bindings)
+- `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
 
@@ -11,26 +10,19 @@ This repository contains:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | observer-go collector |
-| Node.js | 20+ | Observer app and VS Code extension |
+| Go | 1.25+ | observer collector |
+| Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Running Python demo apps |
+| goreleaser | latest | `make release-local` only (optional) |
 
 ## Build
 
-### Observer-Go (primary)
+### Observer (primary)
 
 ```sh
 make build    # compile the obstudio binary (skills embedded)
 make run      # build and start the collector
-```
-
-### Observer (React + Node)
-
-```sh
-cd observer
-npm install
-npm run build
 ```
 
 ### VS Code Extension
@@ -44,7 +36,7 @@ npm run build:vsix    # produce VSIX package
 
 ## Development
 
-### Observer-Go
+### Observer
 
 ```sh
 make build          # build binary
@@ -53,17 +45,6 @@ make test           # go test ./...
 make vet            # go vet
 make fmt            # go fmt
 make tidy           # go mod tidy
-```
-
-### Observer (React + Node)
-
-```sh
-cd observer
-npm run dev           # start client + server in dev mode
-npm run dev:client    # client only
-npm run dev:server    # server only
-npm run typecheck     # typecheck all workspaces
-npm run generate:otlp # regenerate OTLP protobuf bindings
 ```
 
 ### VS Code Extension
@@ -85,16 +66,18 @@ PRs cannot be merged if tests are failing.
 
 | Job | What it checks |
 |-----|---------------|
-| observer-go | `go vet`, `make build`, `make test` |
+| observer | `go vet`, `make build`, `make test` |
+| extension | `npm run test:all` |
+| client | `npx vitest run` |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ### Local
 
 ```sh
-make test                        # Go tests
-cd observer && npm run typecheck # Observer type checks
-cd extension && npm test         # Extension tests (requires VS Code)
+make test-all            # Go + observer client + extension integration tests
+npm run build            # root build path for binary + extension
+cd extension && npm test # VS Code-hosted extension tests
 ```
 
 ### Testing Policy

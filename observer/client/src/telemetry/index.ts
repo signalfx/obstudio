@@ -1,1 +1,1 @@
-export { useTelemetry, type TelemetryState } from "./useTelemetry";
+export { useTelemetry, type TelemetryState, type TelemetryHandle } from "./useTelemetry";

@@ -4,12 +4,11 @@ project_name: obstudio
 
 before:
   hooks:
-    - rm -rf observer-go/cmd/obstudio/_skills
-    - cp -R skills observer-go/cmd/obstudio/_skills
-    - cp docs/examples.md observer-go/cmd/obstudio/_skills/examples.md
+    - cd observer && go run ./cmd/stage-skills
+    - cd observer && go run ./cmd/build-client
 
 builds:
-  - dir: observer-go
+  - dir: observer
     main: ./cmd/obstudio
     binary: obstudio
     goos:

@@ -74,8 +74,14 @@ For each KPI with blank Status:
 - Do not create spans for trivial helpers. Only span real diagnostic
   boundaries.
 - Set span status to ERROR and call recordException on failed operations.
-- Use OTel semantic conventions for span names, attributes, and metric
-  names. Custom attribute names: `{domain}.{noun}.{adjective}` format.
+- Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
+  for span and metric naming and attributes for domains where such semantic
+  conventions are defined.
+- For domains where OTel semantic conventions exist emit required spans and metrics only, 
+  with required attributes only. Do not emit spans or metrics that are marked optional,
+  do not include attributes that are marked optional. Do not invent custom spans, 
+  metrics or attributes in domains where OTel semantic conventions exist.
+- For custom attribute names use `{domain}.{noun}.{adjective}` format.
 - Span names must be low-cardinality (no IDs, no variable path segments).
 - Metric attributes must avoid high cardinality.
 - Preserve existing env-var patterns for telemetry config instead of
@@ -84,6 +90,11 @@ For each KPI with blank Status:
   forcing SDK initialization on import.
 - Keep the codebase idiomatic. Match the repo's dependency manager,
   config style, and lifecycle patterns.
+- Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` 
+  or `getMeter` in hot paths.
+- Create metric instruments once during startup and reuse them. Do not create 
+  instruments in hot paths.
+- Metric instruments must be created with appropriate unit and description parameters.
 
 ### Step 4 -- Update Inventory
 

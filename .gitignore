@@ -11,8 +11,11 @@ uv.lock
 .pytest_cache/
 
 # Compiled binaries and embedded staging
-observer-go/obstudio
-observer-go/cmd/obstudio/_skills/
+observer/obstudio
+observer/build-client
+observer/cmd/obstudio/_skills/
+observer/internal/web/static/assets/
+observer/client/public/assets/
 
 # Demo apps -- track baselines, ignore generated artifacts
 demo/**/.observe/
@@ -22,3 +25,5 @@ demo/**/uv.lock
 demo/**/*.db
 demo/**/otel_setup.py
 demo/**/otel_*.py
+
+.idea

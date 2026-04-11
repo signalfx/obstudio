@@ -1,63 +1,70 @@
-const esbuild = require("esbuild");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const extensionRoot = __dirname;
-const repoRoot = path.resolve(extensionRoot, "..");
-const observerRoot = path.join(repoRoot, "observer");
-const observerOutDir = path.join(extensionRoot, "dist", "observer");
-const observerPublicDir = path.join(observerOutDir, "public");
-const observerAssetsDir = path.join(observerPublicDir, "assets");
+function getBuildPaths(extensionRoot = __dirname) {
+	const repoRoot = path.resolve(extensionRoot, "..");
+	const observerRoot = path.join(repoRoot, "observer");
+	const observerOutDir = path.join(extensionRoot, "dist", "observer");
+	const observerOutBinary = path.join(observerOutDir, "obstudio");
 
-async function buildObserverServer() {
-	await esbuild.build({
-		entryPoints: [path.join(observerRoot, "server", "src", "index.ts")],
-		bundle: true,
-		format: "cjs",
-		logLevel: "info",
-		outfile: path.join(observerOutDir, "index.js"),
-		platform: "node",
-		sourcemap: true,
-		target: "node20",
+	return { repoRoot, observerRoot, observerOutDir, observerOutBinary };
+}
+
+function resetObserverOutputDirs(paths) {
+	fs.rmSync(paths.observerOutDir, { force: true, recursive: true });
+	fs.mkdirSync(paths.observerOutDir, { recursive: true });
+}
+
+function stageSkills(paths) {
+	console.log("Staging embedded skills via Go...");
+	execFileSync("go", ["run", "./cmd/stage-skills"], {
+		cwd: paths.observerRoot,
+		stdio: "inherit",
+	});
+	console.log("Skills staged.");
+}
+
+function buildClientAssets(paths) {
+	const assetsDir = path.join(paths.observerRoot, "internal", "web", "static", "assets");
+	if (fs.existsSync(path.join(assetsDir, "main.js"))) {
+		console.log("Client assets already built, skipping...");
+		return;
+	}
+
+	// Use the Go client builder (cmd/build-client) which uses esbuild's Go API.
+	// No npm/Node.js required — only the Go toolchain.
+	console.log("Building client assets via Go...");
+	execFileSync("go", ["run", "./cmd/build-client"], {
+		cwd: paths.observerRoot,
+		stdio: "inherit",
+	});
+	console.log("Client assets built.");
+}
+
+function buildObserverGo(paths) {
+	console.log("Building observer binary...");
+
+	execFileSync("go", ["build", "-o", paths.observerOutBinary, "./cmd/obstudio"], {
+		cwd: paths.observerRoot,
+		stdio: "inherit",
+	});
+
+	fs.chmodSync(paths.observerOutBinary, 0o755);
+	console.log(`Built observer binary to ${paths.observerOutBinary}`);
+}
+
+if (require.main === module) {
+	(async () => {
+		const paths = getBuildPaths();
+		resetObserverOutputDirs(paths);
+		stageSkills(paths);
+		buildClientAssets(paths);
+		buildObserverGo(paths);
+	})().catch((error) => {
+		console.error(error);
+		process.exit(1);
 	});
 }
 
-async function buildObserverClient() {
-	await esbuild.build({
-		absWorkingDir: path.join(observerRoot, "client"),
-		bundle: true,
-		entryPoints: ["src/main.tsx"],
-		format: "esm",
-		jsx: "automatic",
-		loader: {
-			".css": "css",
-		},
-		logLevel: "info",
-		outdir: observerAssetsDir,
-		platform: "browser",
-		sourcemap: true,
-		target: ["es2022"],
-	});
-}
-
-function copyObserverHtml() {
-	fs.mkdirSync(observerPublicDir, { recursive: true });
-	fs.copyFileSync(
-		path.join(observerRoot, "client", "public", "index.html"),
-		path.join(observerPublicDir, "index.html"),
-	);
-}
-
-async function main() {
-	fs.rmSync(observerOutDir, { force: true, recursive: true });
-	fs.mkdirSync(observerAssetsDir, { recursive: true });
-
-	await buildObserverServer();
-	await buildObserverClient();
-	copyObserverHtml();
-}
-
-main().catch((error) => {
-	console.error(error);
-	process.exit(1);
-});
+module.exports = { getBuildPaths, resetObserverOutputDirs, stageSkills, buildClientAssets, buildObserverGo };

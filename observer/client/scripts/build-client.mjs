@@ -12,7 +12,8 @@ if (outdirIndex !== -1 && outdirIndex === args.length - 1) {
 }
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const clientRoot = path.resolve(currentDir, "..");
-const defaultOutdir = path.join(clientRoot, "public/assets");
+const goStaticDir = path.resolve(clientRoot, "../internal/web/static/assets");
+const defaultOutdir = goStaticDir;
 const outdir = outdirIndex === -1
   ? defaultOutdir
   : path.resolve(clientRoot, args[outdirIndex + 1]);
@@ -45,7 +46,7 @@ const options = {
   absWorkingDir: clientRoot,
   bundle: true,
   entryPoints: ["src/main.tsx"],
-  format: "esm",
+  format: "iife",
   jsx: "automatic",
   loader: {
     ".css": "css"

@@ -1,0 +1,143 @@
+import React from "react";
+import type { MetricSeries } from "./useMetricTimeSeries";
+
+type DisplayType = "lines" | "bars" | "area";
+
+interface TimeSeriesChartProps {
+  series: MetricSeries[];
+  displayType: DisplayType;
+  selectedKey: string | null;
+  onSelectSeries: (key: string) => void;
+}
+
+const COLORS = ["#4fc1ff", "#4ec9b0", "#c586c0", "#dcdcaa", "#ce9178", "#569cd6", "#d16969"];
+const CHART_W = 800;
+const CHART_H = 240;
+const PAD = { top: 10, right: 10, bottom: 30, left: 60 };
+
+/** SVG time series chart supporting line, bar, and area display modes. */
+export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeries }: TimeSeriesChartProps): React.ReactElement {
+  if (series.length === 0 || series.every((s) => s.points.length === 0)) {
+    return (
+      <div className="ts-chart--empty">
+        <span>No data points to display.</span>
+        <span className="ts-chart__hint">Waiting for metric data…</span>
+      </div>
+    );
+  }
+
+  const allPoints = series.flatMap((s) => s.points);
+  const timestamps = allPoints.map((p) => new Date(p.timestamp).getTime()).filter((t) => !isNaN(t));
+  const values = allPoints.map((p) => p.value);
+  const minT = Math.min(...timestamps);
+  const maxT = Math.max(...timestamps);
+  const minV = Math.min(0, ...values);
+  const maxV = Math.max(...values) || 1;
+  const rangeT = maxT - minT || 1;
+  const rangeV = maxV - minV || 1;
+
+  const innerW = CHART_W - PAD.left - PAD.right;
+  const innerH = CHART_H - PAD.top - PAD.bottom;
+
+  function x(t: number): number {
+    return PAD.left + ((t - minT) / rangeT) * innerW;
+  }
+  function y(v: number): number {
+    return PAD.top + innerH - ((v - minV) / rangeV) * innerH;
+  }
+
+  return (
+    <div className="ts-chart">
+      <svg className="ts-chart__svg" viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Grid lines + Y labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const val = minV + frac * rangeV;
+          const yPos = y(val);
+          return (
+            <g key={frac}>
+              <line x1={PAD.left} x2={CHART_W - PAD.right} y1={yPos} y2={yPos} stroke="var(--border-soft)" strokeWidth={1} />
+              <text x={PAD.left - 5} y={yPos + 4} className="ts-chart__axis-label" textAnchor="end">
+                {formatValue(val)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Series */}
+        {series.map((s, si) => {
+          const color = COLORS[si % COLORS.length];
+          const opacity = selectedKey === null || selectedKey === s.key ? 1 : 0.2;
+          const sorted = [...s.points]
+            .map((p) => ({ x: x(new Date(p.timestamp).getTime()), y: y(p.value) }))
+            .sort((a, b) => a.x - b.x);
+
+          if (sorted.length === 0) return null;
+
+          if (displayType === "bars") {
+            const barW = Math.max(innerW / Math.max(allPoints.length, 1) - 2, 2);
+            return (
+              <g key={s.key} opacity={opacity} onClick={() => onSelectSeries(s.key)} style={{ cursor: "pointer" }}>
+                {sorted.map((p, i) => (
+                  <rect key={i} x={p.x - barW / 2} y={p.y} width={barW} height={y(minV) - p.y} fill={color} />
+                ))}
+              </g>
+            );
+          }
+
+          const path = sorted.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+
+          if (displayType === "area") {
+            const areaPath = `${path} L${sorted[sorted.length - 1].x},${y(minV)} L${sorted[0].x},${y(minV)} Z`;
+            return (
+              <g key={s.key} opacity={opacity} onClick={() => onSelectSeries(s.key)} style={{ cursor: "pointer" }}>
+                <path d={areaPath} fill={color} fillOpacity={0.15} />
+                <path d={path} fill="none" stroke={color} strokeWidth={2} />
+              </g>
+            );
+          }
+
+          // lines (default)
+          return (
+            <g key={s.key} opacity={opacity} onClick={() => onSelectSeries(s.key)} style={{ cursor: "pointer" }}>
+              <path d={path} fill="none" stroke={color} strokeWidth={2} />
+              {sorted.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={3} fill={color} />
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Series annotations */}
+      <div className="ts-chart__annotations">
+        {series.map((s, si) => {
+          const color = COLORS[si % COLORS.length];
+          const attrs = Object.entries(s.attributes);
+          const svcName = s.resource?.serviceName;
+          const attrStr = attrs.length > 0 ? attrs.map(([k, v]) => `${k}=${v}`).join(", ") : "";
+          const label = svcName ? (attrStr ? `${svcName} · ${attrStr}` : svcName) : (attrStr || "(no dimensions)");
+          const isActive = selectedKey === s.key;
+          const isDimmed = selectedKey !== null && selectedKey !== s.key;
+
+          return (
+            <button
+              key={s.key}
+              className={`ts-chart__annotation ${isActive ? "ts-chart__annotation--active" : ""} ${isDimmed ? "ts-chart__annotation--dimmed" : ""}`}
+              onClick={() => onSelectSeries(s.key)}
+              type="button"
+            >
+              <span className="ts-chart__annotation-dot" style={{ background: color }} />
+              <span className="ts-chart__annotation-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatValue(v: number): string {
+  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(v % 1 === 0 ? 0 : 1);
+}

@@ -4,11 +4,11 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 
 ## Repo Layout
 
-- `observer/` -- Observer app (React client, Node/Express server, shared OTLP bindings)
-- `observer-go/` -- Go-based Observer built on the OTel Collector framework, with REST API, MCP server, and Web UI
+- `observer/` -- Observer: Go backend with OTLP receiver, REST API, MCP server, Web UI, and self-contained React client
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- agent skills (composable observability workflows)
 - `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
+- `demo/` -- sample apps for testing and skill evaluation
 - `docs/` -- design docs and examples
 
 ## Code

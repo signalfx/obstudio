@@ -11,31 +11,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  observer-go:
-    name: Observer-Go – vet, build & test
+  observer:
+    name: Observer – vet, build & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: observer-go/go.mod
-          cache-dependency-path: observer-go/go.sum
-
-      - name: Stage embedded skills
-        run: |
-          cp -R skills observer-go/cmd/obstudio/_skills
-          cp docs/examples.md observer-go/cmd/obstudio/_skills/examples.md
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
 
       - name: go vet
-        working-directory: observer-go
-        run: go vet ./...
+        run: make vet
 
       - name: Build binary
         run: make build
 
       - name: Run tests
         run: make test
+
+  extension:
+    name: Extension – unit & integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Run unit + integration tests
+        working-directory: extension
+        run: npm run test:all
+
+  client:
+    name: Client – unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: observer/client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: observer/client
+        run: npm ci
+
+      - name: Run tests
+        working-directory: observer/client
+        run: npx vitest run
 
   skill-evals:
     name: Skill evals – structural & semconv
