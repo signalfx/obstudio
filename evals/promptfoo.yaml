@@ -1,0 +1,139 @@
+# Promptfoo configuration for obstudio skill evaluation.
+#
+# Eval types:
+#   1. Trigger tests - verify skills activate on correct queries
+#   2. Golden comparison - compare audit output vs golden reference
+#   3. Cross-run consistency - run N times, check structural stability
+#
+# Usage:
+#   npx promptfoo eval                # run all evals
+#   npx promptfoo eval --filter-tag trigger  # trigger tests only
+#   npx promptfoo eval --filter-tag golden   # golden comparison only
+#
+# Prerequisites:
+#   - Node.js 20+
+#   - ANTHROPIC_API_KEY or OPENAI_API_KEY set
+
+description: obstudio skill evaluation suite
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      temperature: 0
+
+prompts:
+  - "{{input}}"
+
+tests:
+  # ── Trigger tests ──────────────────────────────────────────
+  # These use LLM-as-judge to verify the model would activate
+  # the correct skill given the system prompt with skill descriptions.
+  - vars:
+      input: "Scan this service for observability gaps"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should indicate activation of the splunk-audit skill
+          or perform observability gap analysis. It should NOT activate
+          splunk-instrument, splunk-verify, or splunk-provision.
+    options:
+      tags: [trigger, splunk-audit]
+
+  - vars:
+      input: "Add tracing to my Flask app"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should indicate activation of the splunk-instrument
+          skill or begin implementing OpenTelemetry instrumentation.
+    options:
+      tags: [trigger, splunk-instrument]
+
+  - vars:
+      input: "Check if telemetry is flowing from my service"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should indicate activation of the splunk-verify
+          skill or begin validating telemetry against the Observer collector.
+    options:
+      tags: [trigger, splunk-verify]
+
+  - vars:
+      input: "Generate Terraform dashboards for this service"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should indicate activation of the splunk-provision
+          skill or begin generating Terraform/alert configurations.
+    options:
+      tags: [trigger, splunk-provision]
+
+  - vars:
+      input: "Make this service fully observable"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should indicate activation of the splunk-observe
+          skill or begin the full audit-instrument-verify-provision pipeline.
+    options:
+      tags: [trigger, splunk-observe]
+
+  - vars:
+      input: "Write unit tests for the auth module"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should NOT activate any observability skill
+          (splunk-audit, splunk-instrument, splunk-verify, splunk-provision,
+          splunk-observe). It should treat this as a general coding request.
+    options:
+      tags: [trigger, negative]
+
+  # ── Golden comparison tests ────────────────────────────────
+  # These verify that audit output for a known fixture matches
+  # the golden reference structurally.
+  - vars:
+      input: >
+        Analyze the demo/python-flask-basic directory for observability
+        gaps and list the KPIs you would track.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should identify at minimum these KPIs for a Flask
+          task API: HTTP request latency, HTTP request count, HTTP error
+          rate, task creation count, task completion count, active task
+          count. It should classify HTTP metrics as Standard and task
+          metrics as Business. Signal names should follow OTel conventions
+          (dotted lowercase).
+    options:
+      tags: [golden, python-flask-basic]
+
+  - vars:
+      input: >
+        Analyze the demo/node-express-basic directory for observability
+        gaps and list the KPIs you would track.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should identify at minimum these KPIs for an Express
+          task API: HTTP request latency, HTTP request count, HTTP error
+          rate, task creation count, task completion count, active task
+          count. It should recommend @opentelemetry/instrumentation-express
+          and @opentelemetry/instrumentation-http for auto-instrumentation.
+    options:
+      tags: [golden, node-express-basic]
+
+  - vars:
+      input: >
+        Analyze the demo/go-chi-basic directory for observability
+        gaps and list the KPIs you would track.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should identify at minimum these KPIs for a Chi
+          task API: HTTP request latency, HTTP request count, HTTP error
+          rate, task creation count, active task count. It should recommend
+          otelhttp for auto-instrumentation of the HTTP server.
+    options:
+      tags: [golden, go-chi-basic]

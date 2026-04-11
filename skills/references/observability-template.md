@@ -1,11 +1,11 @@
 # Inventory Template
 
-Use this template when generating `.observe/inventory.md` in the `/audit`
+Use this template when generating `.observe/inventory.md` in the `/splunk-audit`
 skill. Replace all `{placeholder}` values with actual data from the
 analysis. Remove sections that do not apply.
 
-Sections 1-6 are populated by `/audit`. Section 7 (Alerts) and Section 8
-(Dashboard Recommendations) are populated by `/provision`.
+Sections 1-6 are populated by `/splunk-audit`. Section 7 (Alerts) and Section 8
+(Dashboard Recommendations) are populated by `/splunk-provision`.
 
 ---
 

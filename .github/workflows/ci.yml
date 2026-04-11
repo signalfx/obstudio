@@ -36,3 +36,22 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  skill-evals:
+    name: Skill evals – structural & semconv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Structural eval (python-flask-basic)
+        run: python evals/scripts/check_structural.py demo/python-flask-basic evals/golden/python-flask-basic
+
+      - name: Semconv eval (python-flask-basic)
+        run: python evals/scripts/check_semconv.py demo/python-flask-basic
+
+      - name: Golden comparison eval (python-flask-basic)
+        run: python evals/scripts/run_golden_compare.py demo/python-flask-basic evals/golden/python-flask-basic --threshold 0.80

@@ -69,11 +69,11 @@ Once installed, open any project in your agent and use:
 
 | Command | What it does |
 |---------|-------------|
-| `/observe` | Full pipeline: audit -> instrument -> verify -> provision |
-| `/audit` | Analyze codebase for observability gaps |
-| `/instrument` | Add OpenTelemetry instrumentation |
-| `/verify` | Validate telemetry flows end-to-end |
-| `/provision` | Generate Terraform dashboards, detectors, and alerts |
+| `/splunk-observe` | Full pipeline: audit -> instrument -> verify -> provision |
+| `/splunk-audit` | Analyze codebase for observability gaps |
+| `/splunk-instrument` | Add OpenTelemetry instrumentation |
+| `/splunk-verify` | Validate telemetry flows end-to-end |
+| `/splunk-provision` | Generate Terraform dashboards, detectors, and alerts |
 
 Or use natural language:
 

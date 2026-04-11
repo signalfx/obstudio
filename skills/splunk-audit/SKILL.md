@@ -1,10 +1,17 @@
 ---
-name: audit
+name: splunk-audit
 description: >-
   Analyze a codebase for observability readiness and generate a structured
   .observe/ directory with inventory, fault domains, and KPI mappings.
-  Use when the user types /audit, asks about observability gaps, or wants
-  to assess instrumentation coverage before writing any code.
+  Use when the user types /splunk-audit, asks about observability gaps,
+  wants to assess instrumentation coverage, says "what signals am I
+  missing", "scan this service for observability", or asks about
+  "observability readiness". Do NOT use for implementing code changes --
+  use /splunk-instrument instead.
+metadata:
+  author: splunk-inc
+  version: 0.0.1
+  category: observability
 ---
 
 # Audit -- Observability Gap Analysis
@@ -22,11 +29,11 @@ this skill is read-only analysis.
 - Starting observability work on a new or existing service
 - Assessing current instrumentation coverage
 - Generating the `.observe/inventory.md` that downstream skills
-  (`/instrument`, `/verify`, `/provision`) consume
+  (`/splunk-instrument`, `/splunk-verify`, `/splunk-provision`) consume
 - Re-auditing after code changes to catch new gaps
 
 **When NOT to use:** If `.observe/inventory.md` already exists and you
-only need to implement instrumentation, use `/instrument` instead.
+only need to implement instrumentation, use `/splunk-instrument` instead.
 
 ## Process
 
@@ -132,7 +139,7 @@ missing.
 | Log             | Yes/No                                                   |
 | Signal Name     | Actual name if exists, proposed name if not               |
 | Trace-Derivable | Yes/No -- can the metric be derived from span data?       |
-| Verified        | Blank initially; set to `OK` by `/verify`                |
+| Verified        | Blank initially; set to `OK` by `/splunk-verify`         |
 
 Classify each KPI:
 - **Standard**: provided by auto-instrumentation libraries
@@ -143,7 +150,7 @@ Present the table. Highlight the gap count as the implementation scope.
 ### Step 6 -- Generate or Update .observe/ Directory
 
 This directory is the single output artifact of the audit skill and the
-input for downstream skills (`/instrument`, `/verify`, `/provision`).
+input for downstream skills (`/splunk-instrument`, `/splunk-verify`, `/splunk-provision`).
 
 #### If `.observe/inventory.md` already exists
 
@@ -185,11 +192,39 @@ Create `.observe/inventory.md` with sections:
 4. Fault Domains (from Step 3)
 5. KPI Table (from Step 5)
 6. Configurability
-7. Alerts (placeholder -- populated by `/provision`)
-8. Dashboard Recommendations (placeholder -- populated by `/provision`)
+7. Alerts (placeholder -- populated by `/splunk-provision`)
+8. Dashboard Recommendations (placeholder -- populated by `/splunk-provision`)
 
 Create `terraform/` and `alerts/` directories with brief READMEs noting
-they will be populated by the `/provision` skill.
+they will be populated by the `/splunk-provision` skill.
+
+## Examples
+
+### Example 1: New Flask service
+
+**User says:** "Scan this Flask app for observability gaps"
+
+**Actions:**
+1. Detect Python + Flask from `requirements.txt`
+2. Load `skills/references/languages/python.md`
+3. Find SQLAlchemy, Redis, and 3 HTTP endpoints
+4. Map fault domains (DB connectivity/latency, cache availability, HTTP errors)
+5. Identify 12 KPIs (8 Standard, 4 Business)
+6. Generate `.observe/inventory.md` with 12-row KPI table, all Status blank
+
+**Result:** `.observe/` directory created with `inventory.md` (12 gaps), `terraform/`, and `alerts/` placeholders.
+
+### Example 2: Re-audit after adding a Kafka consumer
+
+**User says:** "I added a Kafka consumer, re-audit for new gaps"
+
+**Actions:**
+1. Read existing `.observe/inventory.md` (10 KPIs, 8 Status=OK)
+2. Detect new `confluent-kafka` dependency
+3. Add 4 new KPIs for Kafka (consumer lag, processing latency, error rate, partition saturation)
+4. Merge into existing table preserving OK statuses
+
+**Result:** Inventory updated with 4 new blank-Status rows appended. Changelog comment added.
 
 ## Red Flags
 
@@ -198,6 +233,20 @@ they will be populated by the `/provision` skill.
 - Missing fault domains for any external component
 - Audit completed but `.observe/inventory.md` not generated
 - KPI table has no entries with blank Status (nothing to instrument)
+
+## Troubleshooting
+
+**Error:** No dependency manifest found (no `requirements.txt`, `go.mod`, etc.)
+**Cause:** The repository uses an uncommon layout or monorepo structure.
+**Solution:** Ask the user which subdirectory contains the service, then re-scan from that root.
+
+**Error:** Inventory already exists but user ran `/splunk-audit` again
+**Cause:** User may want a re-audit or may have run the wrong command.
+**Solution:** Follow the merge path (Step 6, "If `.observe/inventory.md` already exists"). Preserve existing Status/Verified values and append new KPIs.
+
+**Error:** Zero KPIs identified despite external dependencies
+**Cause:** Dependencies detected but no active usage found in code (e.g., imported but unused).
+**Solution:** Check for dynamic imports, factory patterns, or configuration-driven clients. Ask the user to confirm which components are actively used.
 
 ## Verification
 

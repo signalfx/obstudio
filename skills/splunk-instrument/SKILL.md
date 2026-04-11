@@ -1,17 +1,23 @@
 ---
-name: instrument
+name: splunk-instrument
 description: >-
   Implement OpenTelemetry instrumentation for a service based on its
   .observe/inventory.md. Adds auto-instrumentation libraries and custom
-  spans/metrics for every gap. Use when the user types /instrument, asks
-  to add OTel, or says "instrument this service".
+  spans/metrics for every gap. Use when the user types /splunk-instrument,
+  asks to "add OTel", "add tracing", "add metrics", "implement
+  observability", "wire up telemetry", or says "instrument this service".
+  Do NOT use if no .observe/inventory.md exists -- use /splunk-audit first.
+metadata:
+  author: splunk-inc
+  version: 0.0.1
+  category: observability
 ---
 
 # Instrument -- OTel Implementation
 
 ## Overview
 
-Read the `.observe/inventory.md` produced by `/audit`, identify KPIs
+Read the `.observe/inventory.md` produced by `/splunk-audit`, identify KPIs
 with blank Status, and implement OpenTelemetry instrumentation for each
 gap. Installs auto-instrumentation libraries for standard KPIs and
 generates custom spans and metrics for business KPIs. Updates the
@@ -21,11 +27,11 @@ Status column to `OK` after implementation.
 
 - `.observe/inventory.md` exists and has KPIs with blank Status
 - User asks to "instrument this service" or "add OpenTelemetry"
-- After running `/audit` to implement the identified gaps
+- After running `/splunk-audit` to implement the identified gaps
 
 **When NOT to use:** If no `.observe/inventory.md` exists, tell the
-user to run `/audit` first. If all Status columns are already `OK`,
-suggest `/verify` instead.
+user to run `/splunk-audit` first. If all Status columns are already `OK`,
+suggest `/splunk-verify` instead.
 
 ## Process
 
@@ -86,6 +92,36 @@ For each KPI with blank Status:
 2. Update the coverage summary line.
 3. Present a summary: N KPIs instrumented, N remaining gaps (if any).
 
+## Examples
+
+### Example 1: Python Flask with 3 gaps
+
+**User says:** "Instrument this service"
+
+**Actions:**
+1. Detect Python, load `languages/python.md`
+2. Read inventory: 3 blank-Status KPIs (HTTP latency, DB query duration, order count)
+3. Install `opentelemetry-instrumentation-flask` and `opentelemetry-instrumentation-sqlalchemy` via `pyproject.toml`
+4. Create `otel_setup.py` with SDK init, register both instrumentors
+5. Add custom histogram for `order.processing.duration` in the order handler
+6. Update inventory: 3 KPIs now Status=OK
+
+**Result:** App starts with OTel, auto-instruments HTTP and DB, custom metric for business KPI.
+
+### Example 2: Go service with existing OTel init
+
+**User says:** "Add the missing metrics"
+
+**Actions:**
+1. Detect Go, load `languages/go.md`
+2. Find existing `initOTel()` in `telemetry.go`
+3. Read inventory: 2 blank-Status KPIs (cache hit ratio, queue depth)
+4. Add `otelredis` wrapper registration in existing init
+5. Add gauge callback for queue depth in worker package
+6. Update inventory: 2 KPIs now Status=OK
+
+**Result:** No duplicate init, existing setup extended with 2 new signals.
+
 ## Common Rationalizations
 
 | Rationalization | Reality |
@@ -105,6 +141,20 @@ For each KPI with blank Status:
 - Business KPIs skipped because "auto-instrumentation is enough"
 - `recordException` missing from error handling paths
 - New dependencies added without using the project's package manager
+
+## Troubleshooting
+
+**Error:** "No .observe/inventory.md found"
+**Cause:** The audit step has not been run yet.
+**Solution:** Run `/splunk-audit` first to generate the inventory.
+
+**Error:** SDK initialized in multiple places after instrumentation
+**Cause:** Existing init was not detected (different file name, conditional import).
+**Solution:** Search for `TracerProvider`, `MeterProvider`, or SDK setup calls across the codebase before adding a new init file. Extend the existing one.
+
+**Error:** App fails to start after adding auto-instrumentation
+**Cause:** Version conflict between OTel SDK and instrumentation library, or import order issue.
+**Solution:** Check that all `opentelemetry-*` packages use compatible versions. For Python, ensure `otel_setup.py` is imported before the framework starts. For Node, ensure `--require` flag loads instrumentation before app code.
 
 ## Verification
 

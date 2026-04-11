@@ -1,10 +1,17 @@
 ---
-name: verify
+name: splunk-verify
 description: >-
   Validate that instrumented telemetry is actually flowing by starting
   the Observer collector, exercising the service APIs, and checking
   traces and metrics against the .observe/inventory.md. Use when the
-  user types /verify or asks to validate instrumentation.
+  user types /splunk-verify, asks to "validate instrumentation", "check
+  if telemetry is flowing", "test my traces", "are my metrics working",
+  or wants to confirm OTel signals are reaching the collector. Do NOT
+  use if no instrumented KPIs exist -- use /splunk-instrument first.
+metadata:
+  author: splunk-inc
+  version: 0.0.1
+  category: observability
 ---
 
 # Verify -- Telemetry Validation
@@ -26,13 +33,13 @@ column in `.observe/inventory.md` to `OK` for confirmed signals.
 
 ## When to Use
 
-- After `/instrument` has added OTel code
+- After `/splunk-instrument` has added OTel code
 - User wants to confirm telemetry is flowing end-to-end
 - Debugging why signals are missing in the collector
 - Re-verifying after code changes
 
 **When NOT to use:** If `.observe/inventory.md` does not exist or has
-no Status=OK rows, tell the user to run `/audit` and `/instrument`
+no Status=OK rows, tell the user to run `/splunk-audit` and `/splunk-instrument`
 first.
 
 ## Process
@@ -184,6 +191,36 @@ Once the user confirms, tear down:
 runtime manages the server lifecycle. On the manual-fallback path,
 also kill observer-go: `lsof -ti :3000 | xargs kill`.
 
+## Examples
+
+### Example 1: Verify a Flask app with MCP server running
+
+**User says:** "Check if my traces are flowing"
+
+**Actions:**
+1. Read inventory: 8 KPIs with Status=OK
+2. Confirm MCP server is running via `GET /api/query/stats`
+3. Clear stale data via `DELETE /api/data`
+4. Start Flask app with `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+5. Fire `curl` requests: `POST /items`, `GET /items`, `GET /items/999` (404)
+6. Query REST API: 3 traces found, all spans present, error span has ERROR status
+7. Query metrics: `http.server.duration` and custom `order.count` present
+8. Update inventory: 8/8 Verified=OK, 100% coverage
+
+**Result:** All KPIs confirmed flowing. User prompted to review dashboard at localhost:3000.
+
+### Example 2: Partial verification failure
+
+**User says:** "Validate my instrumentation"
+
+**Actions:**
+1. Read inventory: 6 KPIs with Status=OK
+2. Exercise APIs, query Observer
+3. Traces present but custom `cache.hit_ratio` metric missing (dataPointCount=0)
+4. Update inventory: 5/6 Verified=OK, `cache.hit_ratio` left blank with comment
+
+**Result:** 83% coverage reported. User informed that cache metric wiring needs debugging.
+
 ## Common Rationalizations
 
 | Rationalization | Reality |
@@ -205,6 +242,20 @@ also kill observer-go: `lsof -ti :3000 | xargs kill`.
 - Error-path requests produce spans without ERROR status
 - Application killed before user had a chance to view the dashboard
 - Processes left running after verification completes
+
+## Troubleshooting
+
+**Error:** Port 4318 or 3000 already in use
+**Cause:** A second collector instance was started, or a previous run was not cleaned up.
+**Solution:** Check `GET http://localhost:3000/api/query/stats` first. If it responds, the MCP server is already running. Do not build or start another collector.
+
+**Error:** Traces exist but custom child spans are missing
+**Cause:** Custom instrumentation code is not reached during test requests, or context propagation is broken.
+**Solution:** Verify the test request exercises the code path containing the custom span. Check that the parent context is passed correctly (especially in Go goroutines or Python async handlers).
+
+**Error:** Metrics have dataPointCount=0 after exercising APIs
+**Cause:** Metric export interval too long, or the metric is registered but never recorded.
+**Solution:** Ensure `OTEL_METRIC_EXPORT_INTERVAL=1000` is set. Check that the code path recording the metric is actually hit by the test requests. Verify the metric instrument type matches the recording method.
 
 ## Verification
 

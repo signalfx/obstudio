@@ -10,9 +10,9 @@ audit codebases and add OpenTelemetry instrumentation automatically.
  │ Scan │  ───>  │ Code │ ───>  │ Test │  ───>  │ Ship │
  │ Gaps │        │ OTel │       │  Run │        │  IaC │
  └──────┘        └──────┘       └──────┘        └──────┘
-  /audit          /instrument    /verify          /provision
+  /splunk-audit   /splunk-instrument  /splunk-verify   /splunk-provision
 
-                      /observe (chains all four)
+                   /splunk-observe (chains all four)
 ```
 
 ---
@@ -24,14 +24,14 @@ activates the right skill automatically.
 
 | What you're doing | Command | Key principle |
 |---|---|---|
-| Find observability gaps | `/audit` | Measure before you instrument |
-| Add OpenTelemetry code | `/instrument` | Auto + custom instrumentation |
-| Validate telemetry flows | `/verify` | Evidence over assumption |
-| Generate dashboards & alerts | `/provision` | Infrastructure as code |
-| Run the full pipeline | `/observe` | End-to-end in one command |
+| Find observability gaps | `/splunk-audit` | Measure before you instrument |
+| Add OpenTelemetry code | `/splunk-instrument` | Auto + custom instrumentation |
+| Validate telemetry flows | `/splunk-verify` | Evidence over assumption |
+| Generate dashboards & alerts | `/splunk-provision` | Infrastructure as code |
+| Run the full pipeline | `/splunk-observe` | End-to-end in one command |
 
 Skills also activate with natural language -- "instrument this service
-with OpenTelemetry" triggers `/instrument`, and so on.
+with OpenTelemetry" triggers `/splunk-instrument`, and so on.
 
 ---
 
@@ -71,16 +71,16 @@ The collector starts on:
 In your AI coding agent, navigate to a service directory and run:
 
 ```
-/observe
+/splunk-observe
 ```
 
 Or use individual skills:
 
 ```
-/audit          # analyze gaps only
-/instrument     # add OTel code (requires .observe/inventory.md)
-/verify         # validate telemetry (requires instrumented code)
-/provision      # generate Terraform/alerts (requires verified KPIs)
+/splunk-audit          # analyze gaps only
+/splunk-instrument     # add OTel code (requires .observe/inventory.md)
+/splunk-verify         # validate telemetry (requires instrumented code)
+/splunk-provision      # generate Terraform/alerts (requires verified KPIs)
 ```
 
 See [docs/examples.md](docs/examples.md) for more prompt examples.
@@ -98,31 +98,31 @@ anatomy.
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [audit](skills/audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with KPIs, fault domains, and component mapping | Starting observability work on any service |
+| [splunk-audit](skills/splunk-audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with KPIs, fault domains, and component mapping | Starting observability work on any service |
 
 ### Build -- Add instrumentation
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [instrument](skills/instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every gap in the inventory | You have an inventory and need to write the code |
+| [splunk-instrument](skills/splunk-instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every gap in the inventory | You have an inventory and need to write the code |
 
 ### Verify -- Prove it works
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [verify](skills/verify/SKILL.md) | Start the Observer collector, exercise service APIs, and check traces and metrics against the inventory | Instrumentation is done and you need evidence it works |
+| [splunk-verify](skills/splunk-verify/SKILL.md) | Start the Observer collector, exercise service APIs, and check traces and metrics against the inventory | Instrumentation is done and you need evidence it works |
 
 ### Ship -- Dashboards and alerts
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [provision](skills/provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified KPIs | KPIs are verified and you need production monitoring |
+| [splunk-provision](skills/splunk-provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified KPIs | KPIs are verified and you need production monitoring |
 
 ### Orchestrate -- End-to-end
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [observe](skills/observe/SKILL.md) | Chain audit → instrument → verify → provision in sequence | You want full observability in one command |
+| [splunk-observe](skills/splunk-observe/SKILL.md) | Chain audit → instrument → verify → provision in sequence | You want full observability in one command |
 
 ---
 
@@ -154,10 +154,10 @@ All skills operate on the same `.observe/` directory:
 └── alerts/               # Prometheus, Grafana, PagerDuty alert rules
 ```
 
-- `/audit` creates it (inventory, placeholders for terraform/alerts)
-- `/instrument` updates the KPI table Status column
-- `/verify` updates the KPI table Verified column
-- `/provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
+- `/splunk-audit` creates it (inventory, placeholders for terraform/alerts)
+- `/splunk-instrument` updates the KPI table Status column
+- `/splunk-verify` updates the KPI table Verified column
+- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 7-8
 
 ---
 
@@ -169,11 +169,11 @@ obstudio/
 ├── observer-go/       # Go-based Observer built on the OTel Collector framework
 ├── extension/         # VS Code extension that packages the Observer
 ├── skills/            # AI agent skills (composable workflows)
-│   ├── audit/         #   /audit
-│   ├── instrument/    #   /instrument
-│   ├── verify/        #   /verify
-│   ├── provision/     #   /provision
-│   ├── observe/       #   /observe
+│   ├── splunk-audit/         #   /splunk-audit
+│   ├── splunk-instrument/    #   /splunk-instrument
+│   ├── splunk-verify/        #   /splunk-verify
+│   ├── splunk-provision/     #   /splunk-provision
+│   ├── splunk-observe/       #   /splunk-observe
 │   └── references/    #   Shared language guides and reference material
 ├── demo/              # Sample apps for skill evaluation
 ├── docs/              # Design docs, PRD, and example prompts
@@ -237,6 +237,8 @@ The `demo/` directory contains sample apps for evaluating skills.
 | App | Stack | Run |
 |---|---|---|
 | `demo/python-flask-basic/` | Flask (in-memory) | `make dev` |
+| `demo/node-express-basic/` | Express (in-memory) | `npm run dev` |
+| `demo/go-chi-basic/` | Chi (in-memory) | `go run .` |
 
 ```bash
 cd demo/python-flask-basic

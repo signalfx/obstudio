@@ -1,10 +1,16 @@
 ---
-name: provision
+name: splunk-provision
 description: >-
   Generate Terraform dashboards, SignalFx detectors, and alert rule
   definitions from verified KPIs in .observe/inventory.md. Populates
   .observe/terraform/ and .observe/alerts/. Use when the user types
-  /provision or asks for dashboards, detectors, or alert configs.
+  /splunk-provision, asks for "dashboards", "detectors", "alert configs",
+  "generate terraform", "create alerts", or "build monitoring config".
+  Do NOT use if no verified KPIs exist -- use /splunk-verify first.
+metadata:
+  author: splunk-inc
+  version: 0.0.1
+  category: observability
 ---
 
 # Provision -- Infrastructure Provisioning
@@ -20,13 +26,13 @@ sections in `inventory.md`. All output goes into the existing
 
 ## When to Use
 
-- After `/verify` confirms telemetry is flowing
+- After `/splunk-verify` confirms telemetry is flowing
 - User asks for "dashboards", "detectors", "alerts", or "terraform"
 - Regenerating IaC after KPI changes
 
 **When NOT to use:** If `.observe/inventory.md` does not exist or has
-no Verified=OK rows, tell the user to run `/audit`, `/instrument`, and
-`/verify` first. Provisioning without verified signals produces configs
+no Verified=OK rows, tell the user to run `/splunk-audit`, `/splunk-instrument`, and
+`/splunk-verify` first. Provisioning without verified signals produces configs
 that reference non-existent telemetry.
 
 ## Process
@@ -142,6 +148,35 @@ and severity mappings.
 
 3. Present summary: N dashboards, N detectors, N alert rules generated.
 
+## Examples
+
+### Example 1: Provision dashboards for a verified Flask service
+
+**User says:** "Generate terraform dashboards for this service"
+
+**Actions:**
+1. Read inventory: 8 KPIs with Verified=OK
+2. Prompt user for confirmation
+3. Generate `provider.tf`, `variables.tf` with threshold variables
+4. Generate `dashboards.tf` with 2 dashboard groups (HTTP, Business)
+5. Generate `detectors.tf` with 8 detectors (latency p99, error %, etc.)
+6. Generate `prometheus-rules.yaml`, `grafana.yaml`, `pagerduty.yaml`
+7. Update inventory sections 7-8
+
+**Result:** `.observe/terraform/` and `.observe/alerts/` populated. `terraform validate` passes.
+
+### Example 2: Regenerate after adding new verified KPIs
+
+**User says:** "I verified 3 new KPIs, update the terraform"
+
+**Actions:**
+1. Read inventory: 3 new Verified=OK rows since last provision
+2. Add 3 new detectors to `detectors.tf`, 3 new charts to `dashboards.tf`
+3. Append 3 new alert rules to each alert file
+4. Update inventory Alerts and Dashboard tables
+
+**Result:** Existing configs preserved, new KPIs added incrementally.
+
 ## Red Flags
 
 - Terraform references a metric name not present in the inventory
@@ -149,6 +184,20 @@ and severity mappings.
 - Alert rules missing severity labels
 - Dashboard charts with no data source (signal name mismatch)
 - Provisioning run without any Verified=OK KPIs
+
+## Troubleshooting
+
+**Error:** `terraform validate` fails with "unknown resource type"
+**Cause:** The `signalfx` provider is not configured or the version constraint is wrong.
+**Solution:** Ensure `provider.tf` includes the `splunk-terraform/signalfx` source with a valid version constraint. Run `terraform init` before `validate`.
+
+**Error:** Alert rules reference a metric name not in the inventory
+**Cause:** Signal name was changed in the inventory after initial provisioning.
+**Solution:** Re-read the inventory and regenerate the affected detector/alert. Use the current Signal Name column value.
+
+**Error:** No Verified=OK KPIs found
+**Cause:** Provisioning was attempted before verification.
+**Solution:** Run `/splunk-verify` first to confirm telemetry is flowing before generating configs.
 
 ## Verification
 
