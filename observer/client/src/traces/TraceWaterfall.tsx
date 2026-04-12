@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import type { Span } from "../api/types";
 import { buildWaterfallTree, flattenTree, type WaterfallSpan } from "./waterfall-layout";
+import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 interface TraceWaterfallProps {
   spans: Span[];
@@ -10,18 +11,13 @@ interface TraceWaterfallProps {
 }
 
 // Consistent service colors — same service always gets same color
-const SERVICE_COLORS = [
-  "#4fc1ff", "#4ec9b0", "#c586c0", "#dcdcaa", "#ce9178",
-  "#569cd6", "#d16969", "#89d185", "#b5cea8", "#d7ba7d",
-];
-
 function getServiceColorMap(spans: Span[]): Map<string, string> {
   const map = new Map<string, string>();
   let idx = 0;
   for (const s of spans) {
     const svc = s.resource?.serviceName ?? "unknown";
     if (!map.has(svc)) {
-      map.set(svc, SERVICE_COLORS[idx % SERVICE_COLORS.length]);
+      map.set(svc, TELEMETRY_SERIES_COLORS[idx % TELEMETRY_SERIES_COLORS.length]);
       idx++;
     }
   }
@@ -89,9 +85,8 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           const widthPct = traceDurationMs > 0 ? Math.max((s.durationMs / traceDurationMs) * 100, 0.5) : 100;
           const isError = s.status.code === "ERROR";
           const hasChildren = s.children.length > 0;
-          const svcColor = serviceColors.get(s.resource?.serviceName ?? "unknown") ?? SERVICE_COLORS[0];
+          const svcColor = serviceColors.get(s.resource?.serviceName ?? "unknown") ?? TELEMETRY_SERIES_COLORS[0];
           const childCount = countDescendants(s);
-
           return (
             <div
               key={s.spanId}

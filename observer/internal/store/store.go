@@ -141,7 +141,7 @@ type TraceSummary struct {
 	RootSpanName string        `json:"rootSpanName"`
 	ServiceName  string        `json:"serviceName,omitempty"`
 	SpanCount    int           `json:"spanCount"`
-	DurationMs   float64       `json:"durationMs,omitempty"`
+	DurationMs   float64       `json:"durationMs"`
 	Status       string        `json:"status"`
 	Spans        []SpanPreview `json:"spans,omitempty"`
 }
@@ -161,7 +161,7 @@ type TraceDetail struct {
 	RootSpanName string  `json:"rootSpanName"`
 	ServiceName  string  `json:"serviceName,omitempty"`
 	SpanCount    int     `json:"spanCount"`
-	DurationMs   float64 `json:"durationMs,omitempty"`
+	DurationMs   float64 `json:"durationMs"`
 	Status       string  `json:"status"`
 	Spans        []Span  `json:"spans"`
 }
@@ -761,7 +761,7 @@ func (s *Store) notify(sig Signal) {
 	for _, ch := range s.subscribers {
 		select {
 		case ch <- sig:
-		default:
+			default:
 		}
 	}
 }
@@ -1001,7 +1001,7 @@ func computeTraceDuration(spans []Span) float64 {
 			maxEnd = sp.EndTime
 		}
 	}
-	return float64(maxEnd.Sub(minStart).Milliseconds())
+	return float64(maxEnd.Sub(minStart)) / float64(time.Millisecond)
 }
 
 func anySpanNameMatches(spans []Span, name string) bool {
