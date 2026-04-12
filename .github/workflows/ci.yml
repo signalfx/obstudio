@@ -52,9 +52,17 @@ jobs:
         working-directory: extension
         run: npm ci
 
-      - name: Run unit + integration tests
+      - name: Run unit tests
         working-directory: extension
-        run: npm run test:all
+        run: npm run test:unit
+
+      - name: Run integration tests
+        working-directory: extension
+        run: npm run test:integration
+
+      - name: Run VS Code host tests
+        working-directory: extension
+        run: xvfb-run -a npm run test:host
 
   client:
     name: Client – unit tests

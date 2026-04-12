@@ -3,7 +3,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
-import { resolveBackend } from '../backend';
+import {
+	buildObserverHealthUrl,
+	normalizeObserverBaseUrl,
+	observerPortFromUrl,
+	resolveBackend,
+} from '../backend';
 
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
 	getBuildPaths: (extensionRoot?: string) => {
@@ -44,6 +49,34 @@ test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);
 	});
+});
+
+test('normalizeObserverBaseUrl accepts base URLs and /mcp URLs', () => {
+	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000'), 'http://127.0.0.1:3000');
+	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/'), 'http://127.0.0.1:3000');
+	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/mcp'), 'http://127.0.0.1:3000');
+	assert.equal(normalizeObserverBaseUrl('https://example.com/observer/mcp'), 'https://example.com/observer');
+});
+
+test('buildObserverHealthUrl uses normalized observer base URL', () => {
+	assert.equal(
+		buildObserverHealthUrl('http://127.0.0.1:3000/mcp'),
+		'http://127.0.0.1:3000/api/health',
+	);
+	assert.equal(
+		buildObserverHealthUrl('https://example.com/observer/'),
+		'https://example.com/observer/api/health',
+	);
+});
+
+test('observerPortFromUrl returns explicit and default ports', () => {
+	assert.equal(observerPortFromUrl('http://127.0.0.1:3000'), 3000);
+	assert.equal(observerPortFromUrl('https://example.com'), 443);
+	assert.equal(observerPortFromUrl('http://example.com/service/mcp'), 80);
+});
+
+test('normalizeObserverBaseUrl rejects unsupported schemes', () => {
+	assert.throws(() => normalizeObserverBaseUrl('stdio://obstudio'), /http or https/);
 });
 
 test('resetObserverOutputDirs removes stale output and recreates the directory', () => {
