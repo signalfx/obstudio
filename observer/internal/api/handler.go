@@ -6,14 +6,31 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
+type serverInfo struct {
+	APIVersion string    `json:"apiVersion"`
+	Kind       string    `json:"kind"`
+	Mode       string    `json:"mode"`
+	Owner      string    `json:"owner"`
+	StartedAt  time.Time `json:"startedAt"`
+	Version    string    `json:"version"`
+}
+
+type healthResponse struct {
+	serverInfo
+	Endpoints map[string]string `json:"endpoints"`
+}
+
 // Register adds the REST API routes to the given mux.
 // It registers handlers for querying traces, metrics, logs, and stats.
 func Register(mux *http.ServeMux, s *store.Store) {
+	startedAt := time.Now().UTC()
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
+	mux.HandleFunc("GET /api/health", queryHealth(s, startedAt))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
 	mux.HandleFunc("GET /api/query/traces/{traceId}", queryTraceDetail(s))
 	mux.HandleFunc("GET /api/query/metrics", queryMetrics(s))
@@ -55,6 +72,37 @@ func queryLogs(s *store.Store) http.HandlerFunc {
 func queryStats(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.Stats())
+	}
+}
+
+func queryHealth(s *store.Store, startedAt time.Time) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var endpoints store.Endpoints
+		if s != nil {
+			endpoints = s.Endpoints()
+		}
+
+		mcpEndpoint := ""
+		if endpoints.REST != "" {
+			mcpEndpoint = endpoints.REST + "/mcp"
+		}
+
+		writeJSON(w, healthResponse{
+			serverInfo: serverInfo{
+				APIVersion: "v1",
+				Kind:       "obstudio",
+				Mode:       "standalone",
+				Owner:      "unknown",
+				StartedAt:  startedAt,
+				Version:    "dev",
+			},
+			Endpoints: map[string]string{
+				"mcp":      mcpEndpoint,
+				"otlpGrpc": endpoints.OTLPgRPC,
+				"otlpHttp": endpoints.OTLPHTTP,
+				"rest":     endpoints.REST,
+			},
+		})
 	}
 }
 

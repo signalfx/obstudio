@@ -275,6 +275,85 @@ func TestQueryMetricsSuccess(t *testing.T) {
 	}
 }
 
+func TestQueryHealthReturnsServerMetadataAndEndpoints(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{
+		REST:     "http://127.0.0.1:3000",
+		OTLPHTTP: "http://127.0.0.1:4318",
+		OTLPgRPC: "127.0.0.1:4317",
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/health")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var health map[string]any
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &health); err != nil {
+		t.Fatalf("failed to decode health response: %v", err)
+	}
+
+	if got := health["kind"]; got != "obstudio" {
+		t.Fatalf("expected kind obstudio, got %#v", got)
+	}
+	if got := health["apiVersion"]; got != "v1" {
+		t.Fatalf("expected apiVersion v1, got %#v", got)
+	}
+
+	endpoints, ok := health["endpoints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected endpoints object, got %#v", health["endpoints"])
+	}
+	if got := endpoints["rest"]; got != "http://127.0.0.1:3000" {
+		t.Fatalf("expected rest endpoint, got %#v", got)
+	}
+	if got := endpoints["mcp"]; got != "http://127.0.0.1:3000/mcp" {
+		t.Fatalf("expected mcp endpoint, got %#v", got)
+	}
+	if got := endpoints["otlpHttp"]; got != "http://127.0.0.1:4318" {
+		t.Fatalf("expected otlpHttp endpoint, got %#v", got)
+	}
+	if got := endpoints["otlpGrpc"]; got != "127.0.0.1:4317" {
+		t.Fatalf("expected otlpGrpc endpoint, got %#v", got)
+	}
+}
+
+func TestQueryHealthHandlesNilStore(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, nil)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/health")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var health map[string]any
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &health); err != nil {
+		t.Fatalf("failed to decode health response: %v", err)
+	}
+
+	endpoints, ok := health["endpoints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected endpoints object, got %#v", health["endpoints"])
+	}
+	if got := endpoints["rest"]; got != "" {
+		t.Fatalf("expected empty rest endpoint, got %#v", got)
+	}
+}
+
 func TestQueryLogsSuccess(t *testing.T) {
 	s := store.New()
 	log := store.LogRecord{

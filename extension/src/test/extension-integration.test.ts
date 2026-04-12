@@ -22,6 +22,19 @@ interface TestContext {
 	vsixFile?: string;
 }
 
+type ExtensionPackage = {
+	contributes?: {
+		commands?: Array<{
+			category?: string;
+			command: string;
+			title: string;
+		}>;
+		configuration?: {
+			properties?: Record<string, unknown>;
+		};
+	};
+};
+
 function cleanup(context: TestContext): void {
 	if (context.vsixFile && fs.existsSync(context.vsixFile)) {
 		try {
@@ -221,6 +234,36 @@ it('integration: package.json registers all commands', () => {
 			`package.json should register command "${expected}"`
 		);
 	}
+});
+
+it('integration: contributed commands are grouped under Observability Studio', async () => {
+	const packageJsonPath = path.join(extensionRoot, 'package.json');
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as ExtensionPackage;
+	const commands = packageJson.contributes?.commands ?? [];
+	const expectedCommands = [
+		'observability-studio.openObserver',
+		'observability-studio.configureCodexMCP',
+		'observability-studio.configureClaudeCodeMCP',
+		'observability-studio.configureCursorMCP',
+	];
+
+	for (const commandId of expectedCommands) {
+		const command = commands.find((entry) => entry.command === commandId);
+		assert.ok(command, `command ${commandId} should be contributed`);
+		assert.equal(
+			command?.category,
+			'Observability Studio',
+			`command ${commandId} should be grouped under Observability Studio`,
+		);
+	}
+});
+
+it('integration: package.json contributes sharedObserverUrl setting', async () => {
+	const packageJsonPath = path.join(extensionRoot, 'package.json');
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as ExtensionPackage;
+	const property = packageJson.contributes?.configuration?.properties?.['observability-studio.sharedObserverUrl'];
+
+	assert.ok(property, 'sharedObserverUrl setting should be contributed');
 });
 
 it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t) => {

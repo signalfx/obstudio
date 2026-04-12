@@ -23,25 +23,55 @@
     "commands": [
       {
         "command": "observability-studio.openObserver",
-        "title": "Observability Studio: Open Observer"
+        "title": "Open Observer",
+        "category": "Observability Studio"
       },
       {
         "command": "observability-studio.statusMenu",
-        "title": "Observability Studio: Observer Status"
+        "title": "Observer Status",
+        "category": "Observability Studio"
       },
       {
         "command": "observability-studio.startObserver",
-        "title": "Observability Studio: Start Observer"
+        "title": "Start Observer",
+        "category": "Observability Studio"
       },
       {
         "command": "observability-studio.stopObserver",
-        "title": "Observability Studio: Stop Observer"
+        "title": "Stop Observer",
+        "category": "Observability Studio"
       },
       {
         "command": "observability-studio.restartObserver",
-        "title": "Observability Studio: Restart Observer"
+        "title": "Restart Observer",
+        "category": "Observability Studio"
+      },
+      {
+        "command": "observability-studio.configureCodexMCP",
+        "title": "Configure Codex MCP",
+        "category": "Observability Studio"
+      },
+      {
+        "command": "observability-studio.configureClaudeCodeMCP",
+        "title": "Configure Claude Code MCP",
+        "category": "Observability Studio"
+      },
+      {
+        "command": "observability-studio.configureCursorMCP",
+        "title": "Configure Cursor MCP",
+        "category": "Observability Studio"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Observability Studio",
+      "properties": {
+        "observability-studio.sharedObserverUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts `obstudio` on the fixed shared endpoint `http://127.0.0.1:3000`."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -58,7 +88,8 @@
     "lint": "eslint src",
     "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
-    "test:all": "npm run test:unit && npm run test:integration",
+    "test:host": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
     "test": "vscode-test"
   },
   "devDependencies": {
