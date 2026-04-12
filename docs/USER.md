@@ -32,7 +32,7 @@ Skills are embedded in the binary -- a single file is all you need.
 |--------|-----------------|------------|
 | `cursor` | `~/.cursor/skills/obstudio/` | `~/.cursor/mcp.json` |
 | `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude/settings.json` |
-| `codex` | `~/.codex/skills/obstudio/` | `~/.codex/mcp.json` |
+| `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
 
 The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
@@ -105,6 +105,25 @@ Configure your app to send telemetry:
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 ```
+
+## Validation
+
+When telemetry is flowing, open the **Validation** tab in the Telemetry
+Explorer to run semantic validation against the current in-memory
+snapshot. The latest retained result is summarized in the tab and
+surfaced through the dedicated validation workflow.
+
+Validation is also available programmatically:
+
+| Surface | Entry points |
+|---------|--------------|
+| REST | `GET /api/query/validation/summary`, `GET /api/query/validation/latest`, `POST /api/validation/run`, `POST /api/validation/refresh` |
+| MCP | `observer_validation_status`, `observer_validation_analyze`, `observer_validation_refresh` |
+
+Use `observer_validation_analyze` for most questions about missing
+telemetry or semantic convention issues. Use
+`observer_validation_refresh` only when you explicitly want to rerun
+validation against the current snapshot.
 
 ## Environment Variables
 

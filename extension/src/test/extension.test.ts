@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import test from 'node:test';
 import {
 	buildObserverHealthUrl,
+	buildObserverValidatorSummaryUrl,
 	normalizeObserverBaseUrl,
 	observerPortFromUrl,
 	resolveBackend,
@@ -18,6 +19,7 @@ const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer
 	};
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
 };
+const weaverBinaryName = 'weaver';
 
 function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 	const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-extension-'));
@@ -45,6 +47,14 @@ test('resolveBackend returns observer binary when it exists', () => {
 	});
 });
 
+test('build output layout reserves the bundled weaver runtime path', () => {
+	withTempExtensionRoot((extensionRoot) => {
+		const paths = getBuildPaths(extensionRoot);
+		const expected = path.join(paths.observerOutDir, weaverBinaryName);
+
+		assert.equal(expected.startsWith(paths.observerOutDir), true);
+	});
+});
 test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);
@@ -56,6 +66,17 @@ test('normalizeObserverBaseUrl accepts base URLs and /mcp URLs', () => {
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('http://127.0.0.1:3000/mcp'), 'http://127.0.0.1:3000');
 	assert.equal(normalizeObserverBaseUrl('https://example.com/observer/mcp'), 'https://example.com/observer');
+});
+
+test('buildObserverValidatorSummaryUrl uses normalized observer base URL', () => {
+	assert.equal(
+		buildObserverValidatorSummaryUrl('http://127.0.0.1:3000/mcp'),
+		'http://127.0.0.1:3000/api/query/validation/summary',
+	);
+	assert.equal(
+		buildObserverValidatorSummaryUrl('https://example.com/observer/'),
+		'https://example.com/observer/api/query/validation/summary',
+	);
 });
 
 test('buildObserverHealthUrl uses normalized observer base URL', () => {

@@ -19,8 +19,8 @@ type httpHandler struct {
 }
 
 // Register adds the MCP HTTP endpoints to the given ServeMux.
-func Register(mux *http.ServeMux, s *store.Store) {
-	h := &httpHandler{dispatcher: NewDispatcher(s)}
+func Register(mux *http.ServeMux, s *store.Store, params ...any) {
+	h := &httpHandler{dispatcher: NewDispatcher(s, params...)}
 	mux.HandleFunc("POST /mcp", h.handle)
 	mux.HandleFunc("OPTIONS /mcp", h.handleOptions)
 }

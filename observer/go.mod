@@ -15,6 +15,7 @@ require (
 require (
 	github.com/evanw/esbuild v0.28.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/ulikunitz/xz v0.5.15
 	go.opentelemetry.io/collector/config/configgrpc v0.149.0
 	go.opentelemetry.io/collector/config/confignet v1.55.0
 	go.opentelemetry.io/collector/config/configoptional v1.55.0

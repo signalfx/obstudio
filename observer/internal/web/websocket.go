@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
 const (
@@ -38,8 +39,9 @@ type ServerMessage struct {
 // ── Connection state ─────────────────────────────────────
 
 type conn struct {
-	ws    *websocket.Conn
-	store *store.Store
+	ws        *websocket.Conn
+	store     *store.Store
+	validator *validator.Store
 
 	mu     sync.Mutex
 	closed sync.Once
@@ -65,7 +67,7 @@ var (
 	conns   = make(map[*conn]struct{})
 )
 
-func broadcastSignal(s *store.Store, sig store.Signal) {
+func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 	connsMu.Lock()
 	snapshot := make([]*conn, 0, len(conns))
 	for c := range conns {
@@ -74,13 +76,13 @@ func broadcastSignal(s *store.Store, sig store.Signal) {
 	connsMu.Unlock()
 
 	for _, c := range snapshot {
-		c.onStoreSignal(sig)
+		c.onSignal(sig)
 	}
 }
 
 // ── HTTP handler ─────────────────────────────────────────
 
-func wsHandler(s *store.Store) http.HandlerFunc {
+func wsHandler(s *store.Store, v *validator.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -89,11 +91,12 @@ func wsHandler(s *store.Store) http.HandlerFunc {
 		}
 
 		c := &conn{
-			ws:      ws,
-			store:   s,
-			pending: make(map[string]bool),
-			timers:  make(map[string]*time.Timer),
-			done:    make(chan struct{}),
+			ws:        ws,
+			store:     s,
+			validator: v,
+			pending:   make(map[string]bool),
+			timers:    make(map[string]*time.Timer),
+			done:      make(chan struct{}),
 		}
 
 		connsMu.Lock()
@@ -195,6 +198,7 @@ func (c *conn) pushAll() {
 	c.queryAndSend("metrics")
 	c.queryAndSend("logs")
 	c.queryAndSend("stats")
+	c.queryAndSend("validation")
 }
 
 func (c *conn) queryAndSend(signal string) {
@@ -209,6 +213,8 @@ func (c *conn) queryAndSend(signal string) {
 		data = c.store.QueryLogs(100)
 	case "stats":
 		data = c.store.Stats()
+	case "validation":
+		data = c.validator.Snapshot(0)
 	}
 
 	c.sendMsg(ServerMessage{Type: "update", Signal: signal, Data: data})
@@ -216,7 +222,7 @@ func (c *conn) queryAndSend(signal string) {
 
 // ── Store signal → throttled push ────────────────────────
 
-func (c *conn) onStoreSignal(sig store.Signal) {
+func (c *conn) onSignal(sig string) {
 	c.mu.Lock()
 
 	if !c.subscribed {
@@ -224,11 +230,17 @@ func (c *conn) onStoreSignal(sig store.Signal) {
 		return
 	}
 
-	signals := []string{string(sig)}
-	// Always include stats on any signal change.
-	signals = append(signals, "stats")
+	signals := []string{sig}
+	if sig != "validation" {
+		signals = append(signals, "stats")
+	}
 
 	if c.paused {
+		if sig == "validation" {
+			c.mu.Unlock()
+			c.throttledPush("validation", true)
+			return
+		}
 		if !c.pausedNotified {
 			c.pausedNotified = true
 			c.mu.Unlock()
@@ -241,14 +253,14 @@ func (c *conn) onStoreSignal(sig store.Signal) {
 	c.mu.Unlock()
 
 	for _, s := range signals {
-		c.throttledPush(s)
+		c.throttledPush(s, false)
 	}
 }
 
-func (c *conn) throttledPush(signal string) {
+func (c *conn) throttledPush(signal string, allowWhilePaused bool) {
 	c.mu.Lock()
 
-	if !c.subscribed || c.paused {
+	if !c.subscribed || (c.paused && !allowWhilePaused) {
 		c.mu.Unlock()
 		return
 	}
@@ -269,7 +281,7 @@ func (c *conn) throttledPush(signal string) {
 		c.mu.Unlock()
 
 		if hasPending {
-			c.throttledPush(signal)
+			c.throttledPush(signal, allowWhilePaused)
 		}
 	})
 	c.mu.Unlock()

@@ -1,16 +1,33 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
+
+type fakeValidationRunner struct {
+	summary validator.Summary
+	calls   int
+	onRun   func(context.Context) validator.Summary
+}
+
+func (f *fakeValidationRunner) Run(context.Context) validator.Summary {
+	f.calls++
+	if f.onRun != nil {
+		return f.onRun(context.Background())
+	}
+	return f.summary
+}
 
 func mustGet(t *testing.T, url string) *http.Response {
 	t.Helper()
@@ -225,6 +242,568 @@ func TestQueryTraceDetailNotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected status 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestQueryValidationEndpoints(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusReady, "ready")
+	v.UpsertEntity(validator.Entity{
+		Key:             "span:trace-1:span-1",
+		HighestSeverity: validator.SeverityViolation,
+		Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+		UpdatedAt:       time.Now(),
+		Findings: []validator.Finding{
+			{
+				EntityKey: "span:trace-1:span-1",
+				Source:    "weaver",
+				RuleID:    "missing_attribute",
+				Severity:  validator.SeverityViolation,
+				Message:   "missing attribute",
+				Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+				UpdatedAt: time.Now(),
+			},
+		},
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/summary")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var summary validator.Summary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if !summary.Ready || summary.TotalAdvisories != 1 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+
+	resp = mustGet(t, server.URL+"/api/query/validation/findings?serviceName=checkout")
+	defer resp.Body.Close()
+	var findings []validator.Finding
+	if err := json.NewDecoder(resp.Body).Decode(&findings); err != nil {
+		t.Fatalf("decode findings: %v", err)
+	}
+	if len(findings) != 1 || findings[0].RuleID != "missing_attribute" {
+		t.Fatalf("unexpected findings: %+v", findings)
+	}
+}
+
+func TestQueryValidationStatusEndpoint(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/status")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var summary validator.Summary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.Status != validator.StatusIdle {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+}
+
+func TestAnalyzeValidationAutoRunsWhenNoResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	runner := &fakeValidationRunner{
+		onRun: func(context.Context) validator.Summary {
+			summary := v.StartRun("run-21", time.Unix(10, 0))
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				v.CompleteRun("run-21", map[string]validator.Entity{
+					"span:trace-1:span-1": {
+						Key:             "span:trace-1:span-1",
+						HighestSeverity: validator.SeverityViolation,
+						Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+						UpdatedAt:       time.Unix(20, 0),
+						Findings: []validator.Finding{{
+							EntityKey: "span:trace-1:span-1",
+							Source:    "weaver",
+							RuleID:    "missing_attribute",
+							Severity:  validator.SeverityViolation,
+							Message:   "missing attribute",
+							Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+							UpdatedAt: time.Unix(20, 0),
+						}},
+					},
+				}, validator.RunStats{}, time.Unix(20, 0))
+			}()
+			return summary
+		},
+	}
+
+	mux := http.NewServeMux()
+	Register(mux, s, v, runner)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	req := mustNewRequest(t, http.MethodPost, server.URL+"/api/validation/analyze", strings.NewReader(`{"timeoutSeconds":5}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := mustDo(t, req)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected runner to be called once, got %d", runner.calls)
+	}
+
+	var analysis validator.Analysis
+	if err := json.NewDecoder(resp.Body).Decode(&analysis); err != nil {
+		t.Fatalf("decode analysis: %v", err)
+	}
+	if analysis.AnalysisBasis != validator.AnalysisBasisFreshRun {
+		t.Fatalf("unexpected analysis: %+v", analysis)
+	}
+	if len(analysis.Findings) != 1 {
+		t.Fatalf("expected findings from fresh run, got %+v", analysis)
+	}
+}
+
+func TestAnalyzeValidationReturnsStoredStaleResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-22", startedAt)
+	v.CompleteRun("run-22", map[string]validator.Entity{
+		"metric:checkout::http.server.duration": {
+			Key:             "metric:checkout::http.server.duration",
+			HighestSeverity: validator.SeverityImprovement,
+			Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "metric:checkout::http.server.duration",
+				Source:    "weaver",
+				RuleID:    "deprecated",
+				Severity:  validator.SeverityImprovement,
+				Message:   "deprecated metric",
+				Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	req := mustNewRequest(t, http.MethodPost, server.URL+"/api/validation/analyze", strings.NewReader(`{"serviceName":"checkout"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := mustDo(t, req)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var analysis validator.Analysis
+	if err := json.NewDecoder(resp.Body).Decode(&analysis); err != nil {
+		t.Fatalf("decode analysis: %v", err)
+	}
+	if analysis.AnalysisBasis != validator.AnalysisBasisStaleResult {
+		t.Fatalf("expected stale basis, got %+v", analysis)
+	}
+	if !strings.Contains(analysis.AnalysisMessage, "based on run run-22 completed at") {
+		t.Fatalf("expected stale analysis message, got %+v", analysis)
+	}
+}
+
+func TestRefreshValidationEndpointReturnsFreshAnalysis(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	runner := &fakeValidationRunner{
+		onRun: func(context.Context) validator.Summary {
+			summary := v.StartRun("run-23", time.Unix(10, 0))
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				v.CompleteRun("run-23", map[string]validator.Entity{
+					"log:checkout": {
+						Key:             "log:checkout",
+						HighestSeverity: validator.SeverityInformation,
+						Signal:          validator.SignalRef{Type: "log", ServiceName: "checkout", LogBody: "slow query"},
+						UpdatedAt:       time.Unix(20, 0),
+						Findings: []validator.Finding{{
+							EntityKey: "log:checkout",
+							Source:    "weaver",
+							RuleID:    "unstable",
+							Severity:  validator.SeverityInformation,
+							Message:   "unstable semantic convention",
+							Signal:    validator.SignalRef{Type: "log", ServiceName: "checkout", LogBody: "slow query"},
+							UpdatedAt: time.Unix(20, 0),
+						}},
+					},
+				}, validator.RunStats{}, time.Unix(20, 0))
+			}()
+			return summary
+		},
+	}
+
+	mux := http.NewServeMux()
+	Register(mux, s, v, runner)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	req := mustNewRequest(t, http.MethodPost, server.URL+"/api/validation/refresh", strings.NewReader(`{"timeoutSeconds":5}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := mustDo(t, req)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var analysis validator.Analysis
+	if err := json.NewDecoder(resp.Body).Decode(&analysis); err != nil {
+		t.Fatalf("decode analysis: %v", err)
+	}
+	if analysis.AnalysisBasis != validator.AnalysisBasisFreshRun {
+		t.Fatalf("expected fresh run analysis, got %+v", analysis)
+	}
+}
+
+func TestQueryHealthIncludesServerInfoAndEndpoints(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{
+		OTLPHTTP: "http://127.0.0.1:4318",
+		OTLPgRPC: "127.0.0.1:4317",
+		REST:     "http://127.0.0.1:3000",
+	})
+	startedAt := time.Date(2026, time.April, 10, 8, 0, 0, 0, time.UTC)
+
+	mux := http.NewServeMux()
+	Register(mux, s, ServerInfo{
+		Kind:       "obstudio",
+		APIVersion: "v1",
+		Version:    "0.0.1",
+		Owner:      "extension",
+		Mode:       "shared-fixed",
+		StartedAt:  startedAt,
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/health")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var health healthResponse
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &health); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if health.Kind != "obstudio" {
+		t.Fatalf("expected kind obstudio, got %q", health.Kind)
+	}
+	if health.APIVersion != "v1" {
+		t.Fatalf("expected apiVersion v1, got %q", health.APIVersion)
+	}
+	if health.Version != "0.0.1" {
+		t.Fatalf("expected version 0.0.1, got %q", health.Version)
+	}
+	if health.Owner != "extension" {
+		t.Fatalf("expected owner extension, got %q", health.Owner)
+	}
+	if health.Mode != "shared-fixed" {
+		t.Fatalf("expected mode shared-fixed, got %q", health.Mode)
+	}
+	if !health.StartedAt.Equal(startedAt) {
+		t.Fatalf("expected startedAt %s, got %s", startedAt, health.StartedAt)
+	}
+	if health.Endpoints["rest"] != "http://127.0.0.1:3000" {
+		t.Fatalf("expected rest endpoint http://127.0.0.1:3000, got %q", health.Endpoints["rest"])
+	}
+	if health.Endpoints["mcp"] != "http://127.0.0.1:3000/mcp" {
+		t.Fatalf("expected mcp endpoint http://127.0.0.1:3000/mcp, got %q", health.Endpoints["mcp"])
+	}
+	if health.Endpoints["otlpHttp"] != "http://127.0.0.1:4318" {
+		t.Fatalf("expected otlpHttp endpoint http://127.0.0.1:4318, got %q", health.Endpoints["otlpHttp"])
+	}
+	if health.Endpoints["otlpGrpc"] != "127.0.0.1:4317" {
+		t.Fatalf("expected otlpGrpc endpoint 127.0.0.1:4317, got %q", health.Endpoints["otlpGrpc"])
+	}
+}
+
+func TestValidationFindingsFailClosedWhenNoFreshResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/findings")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", resp.StatusCode)
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload["nextAction"] == nil {
+		t.Fatalf("expected nextAction in fail-closed payload: %+v", payload)
+	}
+}
+
+func TestValidationLatestReturnsStoredStaleResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-3", startedAt)
+	v.CompleteRun("run-3", map[string]validator.Entity{
+		"span:trace-1:span-1": {
+			Key:             "span:trace-1:span-1",
+			HighestSeverity: validator.SeverityViolation,
+			Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "span:trace-1:span-1",
+				Source:    "weaver",
+				RuleID:    "missing_attribute",
+				Severity:  validator.SeverityViolation,
+				Message:   "missing attribute",
+				Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/latest?serviceName=checkout")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var snapshot validator.Snapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if !snapshot.Summary.Stale {
+		t.Fatalf("expected stale snapshot summary, got %+v", snapshot.Summary)
+	}
+	if len(snapshot.Findings) != 1 {
+		t.Fatalf("expected one finding, got %+v", snapshot)
+	}
+}
+
+func TestValidationLatestReturnsAllFindingsByDefault(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-all", startedAt)
+
+	findings := make([]validator.Finding, 0, 250)
+	for i := 0; i < 250; i++ {
+		findings = append(findings, validator.Finding{
+			EntityKey: "metric:checkout::jvm.thread.count",
+			Source:    "weaver",
+			RuleID:    fmt.Sprintf("rule-%03d", i),
+			Severity:  validator.SeverityViolation,
+			Message:   "validation finding",
+			Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "jvm.thread.count"},
+			UpdatedAt: completedAt.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	v.CompleteRun("run-all", map[string]validator.Entity{
+		"metric:checkout::jvm.thread.count": {
+			Key:             "metric:checkout::jvm.thread.count",
+			HighestSeverity: validator.SeverityViolation,
+			Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "jvm.thread.count"},
+			UpdatedAt:       completedAt,
+			Findings:        findings,
+		},
+	}, validator.RunStats{}, completedAt)
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/latest")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var snapshot validator.Snapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if len(snapshot.Findings) != 250 {
+		t.Fatalf("expected all findings without an explicit limit, got %d", len(snapshot.Findings))
+	}
+	if len(snapshot.Issues) != 1 {
+		t.Fatalf("expected grouped issues in validation snapshot, got %d", len(snapshot.Issues))
+	}
+}
+
+func TestValidationFindingsAllowsExplicitRunIDAfterStale(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-9", startedAt)
+	v.CompleteRun("run-9", map[string]validator.Entity{
+		"metric:checkout::http.server.duration": {
+			Key:             "metric:checkout::http.server.duration",
+			HighestSeverity: validator.SeverityImprovement,
+			Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "metric:checkout::http.server.duration",
+				Source:    "weaver",
+				RuleID:    "deprecated",
+				Severity:  validator.SeverityImprovement,
+				Message:   "deprecated metric",
+				Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/findings?runId=run-9")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var findings []validator.Finding
+	if err := json.NewDecoder(resp.Body).Decode(&findings); err != nil {
+		t.Fatalf("decode findings: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected one run-scoped finding, got %+v", findings)
+	}
+}
+
+func TestValidationFindingsReturnsStoredResultWhenStaleResultExists(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-12", startedAt)
+	v.CompleteRun("run-12", map[string]validator.Entity{
+		"metric:checkout::db.client.connections.usage": {
+			Key:             "metric:checkout::db.client.connections.usage",
+			HighestSeverity: validator.SeverityViolation,
+			Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "db.client.connections.usage"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "metric:checkout::db.client.connections.usage",
+				Source:    "weaver",
+				RuleID:    "deprecated",
+				Severity:  validator.SeverityViolation,
+				Message:   "deprecated attribute",
+				Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "db.client.connections.usage"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+
+	mux := http.NewServeMux()
+	Register(mux, s, v)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/validation/findings")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var findings []validator.Finding
+	if err := json.NewDecoder(resp.Body).Decode(&findings); err != nil {
+		t.Fatalf("decode findings: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected one retained finding, got %+v", findings)
+	}
+}
+
+func TestRunValidationEndpoint(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	runner := &fakeValidationRunner{
+		summary: validator.Summary{
+			Enabled:          true,
+			Status:           validator.StatusRunning,
+			Message:          "Validation running",
+			ActiveRunID:      "run-7",
+			LastRunStartedAt: time.Now(),
+		},
+	}
+
+	mux := http.NewServeMux()
+	Register(mux, s, v, runner)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	req := mustNewRequest(t, http.MethodPost, server.URL+"/api/validation/run", nil)
+	resp := mustDo(t, req)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected runner to be called once, got %d", runner.calls)
+	}
+
+	var summary validator.Summary
+	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.ActiveRunID != "run-7" {
+		t.Fatalf("unexpected run summary: %+v", summary)
 	}
 }
 

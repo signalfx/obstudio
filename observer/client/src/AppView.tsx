@@ -4,23 +4,34 @@ import { MetricsTab } from "./metrics";
 import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
 import { KeyboardHelp } from "./components/KeyboardHelp";
+import { FindingsTab } from "./components/FindingsTab";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { buildValidationIndex, buildValidationIssues } from "./validation/utils";
 
 interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
+type AppTab = "metrics" | "traces" | "logs" | "validation";
+
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
-  const [activeTab, setActiveTab] = useState<"metrics" | "traces" | "logs">("metrics");
+  const [activeTab, setActiveTab] = useState<AppTab>(() => initialTabFromLocation());
   const [showHelp, setShowHelp] = useState(false);
 
   const { state, paused, hasNewUpdates, pause, resume, toggle } = telemetry;
+  const validationSummary = state.validation?.summary ?? null;
+  const validationFindings = state.validation?.findings ?? [];
+  const backendValidationIssues = state.validation?.issues ?? [];
+  const validationIndex = useMemo(() => buildValidationIndex(validationFindings), [validationFindings]);
+  const validationIssues = useMemo(
+    () => (backendValidationIssues.length > 0 || validationFindings.length === 0
+      ? backendValidationIssues
+      : buildValidationIssues(validationFindings)),
+    [backendValidationIssues, validationFindings],
+  );
 
-  // pause() is already idempotent (no-op when already paused)
-  // so pass it directly — no wrapper needed.
-
-  const switchTab = useCallback((tab: "metrics" | "traces" | "logs") => {
+  const switchTab = useCallback((tab: AppTab) => {
     setActiveTab(tab);
   }, []);
 
@@ -30,6 +41,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "1": () => switchTab("metrics"),
     "2": () => switchTab("traces"),
     "3": () => switchTab("logs"),
+    "4": () => switchTab("validation"),
   }), [toggle, switchTab]);
 
   useKeyboardShortcuts(shortcuts);
@@ -78,7 +90,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           </div>
         </header>
 
-        {/* Summary cards — hidden when no data */}
         {(state.stats?.traceCount || state.stats?.metricNameCount || state.stats?.logCount) ? (
           <div className="metric-summary">
             {state.stats.traceCount ? (
@@ -137,14 +148,63 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Logs
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "validation"}
+            className={activeTab === "validation" ? "tab-button is-active" : "tab-button"}
+            onClick={() => switchTab("validation")}
+          >
+            Validation
+          </button>
         </div>
 
-        {activeTab === "metrics" ? <MetricsTab metrics={state.metrics ?? []} telemetryError={state.error} /> : null}
-        {activeTab === "traces" ? <TracesTab telemetryError={state.error} traces={state.traces ?? []} onInteract={pause} /> : null}
-        {activeTab === "logs" ? <LogsTab logs={state.logs ?? []} onInteract={pause} /> : null}
+        {activeTab === "metrics" ? (
+          <MetricsTab
+            metrics={state.metrics ?? []}
+            telemetryError={state.error}
+            onInteract={pause}
+          />
+        ) : null}
+        {activeTab === "traces" ? (
+          <TracesTab
+            telemetryError={state.error}
+            traces={state.traces ?? []}
+            onInteract={pause}
+            validationFindings={validationFindings}
+            validationIndex={validationIndex}
+          />
+        ) : null}
+        {activeTab === "logs" ? (
+          <LogsTab
+            logs={state.logs ?? []}
+            onInteract={pause}
+          />
+        ) : null}
+        {activeTab === "validation" ? (
+          <FindingsTab
+            issues={validationIssues}
+            summary={validationSummary}
+          />
+        ) : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}
     </main>
   );
+}
+
+function initialTabFromLocation(): AppTab {
+  if (typeof window === "undefined") return "metrics";
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  switch (tab) {
+    case "metrics":
+    case "traces":
+    case "logs":
+    case "validation":
+      return tab;
+    default:
+      return "metrics";
+  }
 }

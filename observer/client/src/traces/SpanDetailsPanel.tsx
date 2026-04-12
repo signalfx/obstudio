@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import type { Span } from "../api/types";
+import type { Span, ValidationFinding } from "../api/types";
 
 interface SpanDetailsPanelProps {
   span: Span;
+  validationFindings: ValidationFinding[];
 }
 
 type TabId = "info" | "attributes" | "events" | "links";
@@ -17,7 +18,7 @@ function relativeTime(eventNano: string, spanStartNano: string): string {
 }
 
 /** Tabbed detail view for a single span showing info, attributes, events, and links. */
-export function SpanDetailsPanel({ span }: SpanDetailsPanelProps): React.ReactElement {
+export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("info");
 
   const attrCount = Object.keys(span.attributes ?? {}).length;
@@ -67,6 +68,15 @@ export function SpanDetailsPanel({ span }: SpanDetailsPanelProps): React.ReactEl
         {activeTab === "info" ? (
           <div className="span-details__section">
             <div className="span-details__section-body">
+              {validationFindings.length > 0 ? (
+                <div className="span-details__validation">
+                  {validationFindings.map((finding) => (
+                    <div key={`${finding.entityKey}:${finding.ruleId}:${finding.updatedAt}`} className={`validation-inline validation-inline--${finding.severity}`}>
+                      <span>{finding.message}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="span-details__detail-row">
                 <span className="span-details__detail-label">Kind</span>
                 <span className="span-details__detail-value">{span.kind}</span>

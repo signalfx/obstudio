@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from "react";
 import type { Span } from "../api/types";
 import { buildWaterfallTree, flattenTree, type WaterfallSpan } from "./waterfall-layout";
+import { ValidationBadge } from "../components/ValidationBadge";
+import type { ValidationIndex } from "../validation/utils";
+import { lookupSpanValidation } from "../validation/utils";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 interface TraceWaterfallProps {
@@ -8,6 +11,7 @@ interface TraceWaterfallProps {
   selectedSpanId: string | null;
   onSelectSpan: (spanId: string) => void;
   traceDurationMs: number;
+  validationIndex: ValidationIndex;
 }
 
 // Consistent service colors — same service always gets same color
@@ -25,7 +29,7 @@ function getServiceColorMap(spans: Span[]): Map<string, string> {
 }
 
 /** Renders a collapsible span waterfall with timing bars and service colors. */
-export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurationMs }: TraceWaterfallProps): React.ReactElement {
+export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurationMs, validationIndex }: TraceWaterfallProps): React.ReactElement {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const serviceColors = useMemo(() => getServiceColorMap(spans), [spans]);
@@ -87,6 +91,8 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           const hasChildren = s.children.length > 0;
           const svcColor = serviceColors.get(s.resource?.serviceName ?? "unknown") ?? TELEMETRY_SERIES_COLORS[0];
           const childCount = countDescendants(s);
+          const validation = lookupSpanValidation(validationIndex, s.traceId, s.spanId);
+
           return (
             <div
               key={s.spanId}
@@ -107,6 +113,7 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
                 <span className="waterfall__service-dot" style={{ background: svcColor }} />
                 <span className="waterfall__service-name">{s.resource?.serviceName ?? ""}</span>
                 <span className="waterfall__span-name">{s.name}</span>
+                <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
               </div>
               <div className="waterfall__row-timeline">
                 <div

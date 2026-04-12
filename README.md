@@ -66,6 +66,11 @@ The collector starts on:
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
+When telemetry is flowing, open the Telemetry Explorer and use the
+**Validation** tab to run semantic validation against the current
+in-memory snapshot. Validation findings are retained, grouped into
+issues, and surfaced through the dedicated validation workflow.
+
 ### Use the Skills
 
 In your AI coding agent, navigate to a service directory and run:
@@ -84,6 +89,22 @@ Or use individual skills:
 ```
 
 See [docs/examples.md](docs/examples.md) for more prompt examples.
+
+### Run Validation
+
+Validation is available through the Explorer UI, the REST API, and MCP.
+
+1. Start `obstudio`
+2. Send traces, metrics, and logs to the OTLP receiver
+3. Open the **Validation** tab and run validation
+4. Use the findings to jump back to the affected telemetry rows
+
+Programmatic entry points:
+
+| Surface | Entry points |
+|---|---|
+| REST | `/api/query/validation/summary`, `/api/query/validation/latest`, `/api/validation/run`, `/api/validation/refresh` |
+| MCP | `observer_validation_status`, `observer_validation_analyze`, `observer_validation_refresh` |
 
 ---
 

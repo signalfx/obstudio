@@ -1,11 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
 // Test helper to unmarshal JSON tool results
@@ -34,6 +37,29 @@ func toSliceAny(v any) []any {
 		return s
 	}
 	return []any{}
+}
+
+func containsAll(text string, parts ...string) bool {
+	for _, part := range parts {
+		if !strings.Contains(text, part) {
+			return false
+		}
+	}
+	return true
+}
+
+type fakeValidationRunner struct {
+	summary validator.Summary
+	calls   int
+	onRun   func(context.Context) validator.Summary
+}
+
+func (f *fakeValidationRunner) Run(ctx context.Context) validator.Summary {
+	f.calls++
+	if f.onRun != nil {
+		return f.onRun(ctx)
+	}
+	return f.summary
 }
 
 // Test 1: Dispatch Initialize - returns server info, negotiated protocol version, capabilities
@@ -86,9 +112,9 @@ func TestInitializeVersionNegotiation(t *testing.T) {
 	d := NewDispatcher(s)
 
 	tests := []struct {
-		name     string
+		name      string
 		clientVer string
-		expected string
+		expected  string
 	}{
 		{"known version", "2025-06-18", "2025-06-18"},
 		{"known version 2", "2025-03-26", "2025-03-26"},
@@ -118,7 +144,7 @@ func TestInitializeVersionNegotiation(t *testing.T) {
 	}
 }
 
-// Test 3: Dispatch tools/list - returns all 7 tools with names
+// Test 3: Dispatch tools/list - returns all observer tools with names
 func TestDispatchToolsList(t *testing.T) {
 	s := store.New()
 	d := NewDispatcher(s)
@@ -154,18 +180,21 @@ func TestDispatchToolsList(t *testing.T) {
 		t.Fatalf("tools is not []toolDef: %T", toolsRaw)
 	}
 
-	if len(toolsList) != 7 {
-		t.Fatalf("expected 7 tools, got %d", len(toolsList))
+	if len(toolsList) != 10 {
+		t.Fatalf("expected 10 tools, got %d", len(toolsList))
 	}
 
 	expectedToolNames := map[string]bool{
-		"observer_metrics_overview": false,
-		"observer_metric_detail":    false,
-		"observer_traces_overview":  false,
-		"observer_trace_detail":     false,
-		"observer_logs_overview":    false,
-		"observer_clear":            false,
-		"observer_status":           false,
+		"observer_metrics_overview":   false,
+		"observer_metric_detail":      false,
+		"observer_traces_overview":    false,
+		"observer_trace_detail":       false,
+		"observer_logs_overview":      false,
+		"observer_validation_status":  false,
+		"observer_validation_analyze": false,
+		"observer_validation_refresh": false,
+		"observer_clear":              false,
+		"observer_status":             false,
 	}
 
 	for _, tool := range toolsList {
@@ -181,6 +210,246 @@ func TestDispatchToolsList(t *testing.T) {
 		if !found {
 			t.Fatalf("tool not found: %s", name)
 		}
+	}
+}
+
+func TestValidationToolDescriptionsGuideNaturalUsage(t *testing.T) {
+	tools := buildToolDefs()
+	index := make(map[string]toolDef, len(tools))
+	for _, tool := range tools {
+		index[tool.Name] = tool
+	}
+
+	if got := index["observer_validation_status"].Description; !containsAll(got, "whether validation has run", "run is currently in progress") {
+		t.Fatalf("status description lost guidance: %q", got)
+	}
+	if got := index["observer_validation_analyze"].Description; !containsAll(got, "Primary validation tool", "automatically runs validation", "based on the prior run time") {
+		t.Fatalf("analyze description lost guidance: %q", got)
+	}
+	if got := index["observer_validation_refresh"].Description; !containsAll(got, "Explicitly run validation", "explicitly asks to run, re-run, refresh") {
+		t.Fatalf("refresh description lost guidance: %q", got)
+	}
+}
+
+func TestToolsCallValidationRefresh(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	runner := &fakeValidationRunner{
+		onRun: func(context.Context) validator.Summary {
+			summary := v.StartRun("run-1", time.Unix(10, 0))
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				v.CompleteRun("run-1", map[string]validator.Entity{
+					"metric:checkout::http.server.duration": {
+						Key:             "metric:checkout::http.server.duration",
+						HighestSeverity: validator.SeverityImprovement,
+						Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+						UpdatedAt:       time.Unix(20, 0),
+						Findings: []validator.Finding{{
+							EntityKey: "metric:checkout::http.server.duration",
+							Source:    "weaver",
+							RuleID:    "deprecated",
+							Severity:  validator.SeverityImprovement,
+							Message:   "deprecated metric",
+							Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+							UpdatedAt: time.Unix(20, 0),
+						}},
+					},
+				}, validator.RunStats{}, time.Unix(20, 0))
+			}()
+			return summary
+		},
+	}
+	d := NewDispatcher(s, v, runner)
+
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "observer_validation_refresh",
+			"arguments": map[string]any{
+				"timeoutSeconds": 5,
+			},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected runner to be called once, got %d", runner.calls)
+	}
+	data := parseToolResult(t, resp.Result.(toolResult))
+	analysis := toMapAny(data)
+	if analysis["analysisBasis"] != "fresh_run" {
+		t.Fatalf("unexpected refresh analysis: %+v", analysis)
+	}
+}
+
+func TestToolsCallValidationAnalyzeAutoRunsWhenNoResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	runner := &fakeValidationRunner{
+		onRun: func(context.Context) validator.Summary {
+			summary := v.StartRun("run-2", time.Unix(10, 0))
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				v.CompleteRun("run-2", map[string]validator.Entity{
+					"span:trace-1:span-1": {
+						Key:             "span:trace-1:span-1",
+						HighestSeverity: validator.SeverityViolation,
+						Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+						UpdatedAt:       time.Unix(20, 0),
+						Findings: []validator.Finding{{
+							EntityKey: "span:trace-1:span-1",
+							Source:    "weaver",
+							RuleID:    "missing_attribute",
+							Severity:  validator.SeverityViolation,
+							Message:   "missing attribute",
+							Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+							UpdatedAt: time.Unix(20, 0),
+						}},
+					},
+				}, validator.RunStats{}, time.Unix(20, 0))
+			}()
+			return summary
+		},
+	}
+
+	d := NewDispatcher(s, v, runner)
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "observer_validation_analyze",
+			"arguments": map[string]any{
+				"timeoutSeconds": 5,
+			},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected analyze to run validation once, got %d", runner.calls)
+	}
+
+	analysis := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	if analysis["analysisBasis"] != "fresh_run" {
+		t.Fatalf("expected fresh run analysis, got %+v", analysis)
+	}
+}
+
+func TestToolsCallValidationAnalyzeReturnsStoredStaleResult(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-1", startedAt)
+	v.CompleteRun("run-1", map[string]validator.Entity{
+		"span:trace-1:span-1": {
+			Key:             "span:trace-1:span-1",
+			HighestSeverity: validator.SeverityViolation,
+			Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "span:trace-1:span-1",
+				Source:    "weaver",
+				RuleID:    "missing_attribute",
+				Severity:  validator.SeverityViolation,
+				Message:   "missing attribute",
+				Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+
+	d := NewDispatcher(s, v)
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "observer_validation_analyze",
+			"arguments": map[string]any{
+				"serviceName": "checkout",
+			},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	data := parseToolResult(t, resp.Result.(toolResult))
+	snapshot := toMapAny(data)
+	summary := toMapAny(snapshot["summary"])
+	if stale, _ := summary["stale"].(bool); !stale {
+		t.Fatalf("expected stale summary, got %+v", summary)
+	}
+	if snapshot["analysisBasis"] != "stale_result" {
+		t.Fatalf("expected stale analysis basis, got %+v", snapshot)
+	}
+	message, _ := snapshot["analysisMessage"].(string)
+	if !strings.Contains(message, "based on run run-1 completed at") {
+		t.Fatalf("expected stale analysis message, got %+v", snapshot)
+	}
+	findings := toSliceAny(snapshot["findings"])
+	if len(findings) != 1 {
+		t.Fatalf("expected one stale finding, got %+v", snapshot)
+	}
+}
+
+func TestToolsCallValidationAnalyzeReturnsCachedResultWithoutRerun(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	startedAt := time.Unix(10, 0)
+	completedAt := time.Unix(20, 0)
+	v.SetRuntimeStatus(validator.StatusIdle, "Validation has not been run yet")
+	v.StartRun("run-4", startedAt)
+	v.CompleteRun("run-4", map[string]validator.Entity{
+		"span:trace-1:span-1": {
+			Key:             "span:trace-1:span-1",
+			HighestSeverity: validator.SeverityViolation,
+			Signal:          validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+			UpdatedAt:       completedAt,
+			Findings: []validator.Finding{{
+				EntityKey: "span:trace-1:span-1",
+				Source:    "weaver",
+				RuleID:    "missing_attribute",
+				Severity:  validator.SeverityViolation,
+				Message:   "missing attribute",
+				Signal:    validator.SignalRef{Type: "span", ServiceName: "checkout", TraceID: "trace-1", SpanID: "span-1", SpanName: "GET /orders"},
+				UpdatedAt: completedAt,
+			}},
+		},
+	}, validator.RunStats{}, completedAt)
+	v.MarkTelemetryChanged(time.Unix(30, 0))
+	runner := &fakeValidationRunner{}
+
+	d := NewDispatcher(s, v, runner)
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "observer_validation_analyze",
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("expected cached analysis path to avoid rerun, got %d calls", runner.calls)
+	}
+
+	snapshot := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	summary := toMapAny(snapshot["summary"])
+	if stale, _ := summary["stale"].(bool); !stale {
+		t.Fatalf("expected cached stale analysis, got %+v", summary)
 	}
 }
 
@@ -230,6 +499,51 @@ func TestToolsCallObserverStatus(t *testing.T) {
 	stats := toMapAny(statusMap["stats"])
 	if stats["spanCount"] == nil {
 		t.Fatalf("missing spanCount in stats")
+	}
+}
+
+func TestToolsCallValidationStatus(t *testing.T) {
+	s := store.New()
+	v := validator.NewStore()
+	v.SetRuntimeStatus(validator.StatusReady, "ready")
+	v.UpsertEntity(validator.Entity{
+		Key:             "metric:checkout::http.server.duration",
+		HighestSeverity: validator.SeverityImprovement,
+		Signal:          validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+		UpdatedAt:       time.Now(),
+		Findings: []validator.Finding{
+			{
+				EntityKey: "metric:checkout::http.server.duration",
+				Source:    "weaver",
+				RuleID:    "deprecated",
+				Severity:  validator.SeverityImprovement,
+				Message:   "deprecated metric",
+				Signal:    validator.SignalRef{Type: "metric", ServiceName: "checkout", MetricName: "http.server.duration"},
+				UpdatedAt: time.Now(),
+			},
+		},
+	})
+
+	d := NewDispatcher(s, v)
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name": "observer_validation_status",
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	data := parseToolResult(t, resp.Result.(toolResult))
+	summary := toMapAny(data)
+	if summary["status"] != "ready" {
+		t.Fatalf("unexpected status: %v", summary["status"])
+	}
+	if summary["totalAdvisories"] != float64(1) {
+		t.Fatalf("unexpected advisory count: %v", summary["totalAdvisories"])
 	}
 }
 
@@ -493,8 +807,8 @@ func TestToolsCallTraceDetailMissingTraceId(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "observer_trace_detail",
-			"arguments":   map[string]any{},
+			"name":      "observer_trace_detail",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -576,8 +890,8 @@ func TestToolsCallMetricsOverview(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "observer_metrics_overview",
-			"arguments":   map[string]any{},
+			"name":      "observer_metrics_overview",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -754,8 +1068,8 @@ func TestToolsCallMetricDetailMissingName(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "observer_metric_detail",
-			"arguments":   map[string]any{},
+			"name":      "observer_metric_detail",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -828,8 +1142,8 @@ func TestToolsCallLogsOverview(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "observer_logs_overview",
-			"arguments":   map[string]any{},
+			"name":      "observer_logs_overview",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -926,7 +1240,7 @@ func TestToolsCallLogsOverviewWithFilters(t *testing.T) {
 		t.Fatalf("expected 1 log with 'started', got %d", len(logsList2))
 	}
 	log2 := toMapAny(logsList2[0])
-	if !contains(log2["body"].(string), "started") {
+	if !strings.Contains(log2["body"].(string), "started") {
 		t.Fatalf("expected 'started' in body")
 	}
 }
@@ -968,8 +1282,8 @@ func TestToolsCallClear(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "observer_clear",
-			"arguments":   map[string]any{},
+			"name":      "observer_clear",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -997,8 +1311,8 @@ func TestToolsCallUnknownTool(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "tools/call",
 		Params: map[string]any{
-			"name":        "unknown_tool",
-			"arguments":   map[string]any{},
+			"name":      "unknown_tool",
+			"arguments": map[string]any{},
 		},
 	}
 
@@ -1148,14 +1462,4 @@ func TestToolResponseDataCorrectness(t *testing.T) {
 			t.Fatalf("missing required field: %s", field)
 		}
 	}
-}
-
-// Helper function
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

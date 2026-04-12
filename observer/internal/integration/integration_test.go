@@ -581,7 +581,9 @@ func TestE2E_PauseResume(t *testing.T) {
 
 	// Subscribe.
 	subscribeMsg := map[string]any{"type": "subscribe"}
-	ws.WriteJSON(subscribeMsg)
+	if err := ws.WriteJSON(subscribeMsg); err != nil {
+		t.Fatalf("failed to send subscribe: %v", err)
+	}
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -628,17 +630,16 @@ func TestE2E_PauseResume(t *testing.T) {
 	resp, _ = http.Post(otlpHTTPURL+"/v1/traces", "application/json", bytes.NewReader(data))
 	resp.Body.Close()
 
-	// Should receive "paused-update" message.
+	// Should receive "paused-update" message after draining the initial snapshot backlog.
 	ws.SetReadDeadline(time.Now().Add(2 * time.Second))
 	receivedPausedUpdate := false
-	for i := 0; i < 5; i++ {
+	for {
 		var pausedMsg map[string]any
 		if err := ws.ReadJSON(&pausedMsg); err != nil {
 			break
 		}
 
-		pausedType, _ := pausedMsg["type"].(string)
-		if pausedType == "paused-update" {
+		if pausedType, _ := pausedMsg["type"].(string); pausedType == "paused-update" {
 			receivedPausedUpdate = true
 			break
 		}

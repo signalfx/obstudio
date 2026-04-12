@@ -30,6 +30,8 @@ describe("TracesTab", () => {
         ]}
         telemetryError={null}
         onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
     );
 
@@ -51,6 +53,8 @@ describe("TracesTab", () => {
         ]}
         telemetryError={null}
         onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
     );
 
