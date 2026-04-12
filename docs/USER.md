@@ -24,6 +24,12 @@ Install skills and configure the MCP server:
 ./obstudio install --target=cursor
 ```
 
+To auto-start a local Observer on custom ports:
+
+```bash
+./obstudio install --target=codex --port=3900 --otlp-http-port=4918 --otlp-grpc-port=4917
+```
+
 Skills are embedded in the binary -- a single file is all you need.
 
 ### Supported Targets
@@ -38,6 +44,12 @@ The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
 2. Copies the binary alongside the skills (stable path for MCP)
 3. Configures the agent's MCP config to auto-start `obstudio`
+4. When using local mode, can generate a launcher that starts `obstudio` with custom ports
+
+When run interactively without `--shared-url`, the installer can:
+- reuse a detected shared backend
+- start a local backend on default ports
+- prompt for custom local ports
 
 Restart your editor/agent to activate.
 
@@ -60,6 +72,7 @@ Restart your editor/agent to activate.
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
+| `obstudio install --target=<agent> --port=<p> --otlp-http-port=<p> --otlp-grpc-port=<p>` | Install skills and configure a local MCP launcher with custom ports |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
 
@@ -105,6 +118,30 @@ Configure your app to send telemetry:
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 ```
+
+## VS Code Setup
+
+Inside VS Code, use **Observability Studio: Setup Observer** from the
+Command Palette. The Observer status menu also exposes
+**Configure Observer...**.
+
+The setup flow lets you:
+- reuse an existing backend URL
+- start a local backend on default ports
+- choose custom local UI / OTLP HTTP / OTLP gRPC ports
+- configure MCP for Codex, Claude Code, or Cursor
+
+The embedded Observer UI uses the same interface shown below:
+
+![Observer Metrics UI](../extension/media/observer-metrics.png)
+
+Recommended setup flow:
+
+1. Run `Observability Studio: Setup Observer`.
+2. Choose `Reuse existing backend` if you already have `obstudio` running, or `Start local backend` if the extension should manage it.
+3. For local mode, either keep the default ports or enter custom UI / OTLP HTTP / OTLP gRPC ports.
+4. Choose the MCP target to configure: `Codex`, `Claude Code`, or `Cursor`.
+5. Reopen the Observer with `Open Observer` from the status menu.
 
 ## Validation
 

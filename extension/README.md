@@ -2,20 +2,43 @@
 
 Observability Studio is a VS Code extension for viewing OpenTelemetry data locally while you work.
 
-When the extension activates, it starts a bundled observer binary, exposes OTLP receivers on localhost, and opens an embedded Observer UI inside VS Code.
+When the extension activates, it starts or reuses an observer backend, exposes OTLP receivers on localhost, and opens an embedded Observer UI inside VS Code.
+
+The embedded webview serves the same Observer UI shown below:
+
+![Observer Validation UI](media/observer-validation.png)
 
 ## Features
 
 - Starts a local observer backend automatically on extension activation.
-- Exposes stable OTLP endpoints for local applications:
+- Reuses a configured shared backend when `observability-studio.sharedObserverUrl` is set.
+- Exposes default local OTLP endpoints for local applications:
   - OTLP/HTTP on `127.0.0.1:4318`
   - OTLP/gRPC on `127.0.0.1:4317`
+- Provides a guided setup flow for backend mode, ports, and MCP configuration.
 - Opens the Observer UI in a VS Code webview panel.
 - Includes a status bar entry to reopen the Observer quickly.
 
 ## Commands
 
 - `Observability Studio: Open Observer` — opens the Observer webview panel.
+- `Observability Studio: Setup Observer` — choose backend mode, local ports, and configure MCP for Codex, Claude Code, or Cursor.
+
+## How to Use It
+
+1. Open the Command Palette and run `Observability Studio: Setup Observer`.
+2. Choose `Reuse existing backend` or `Start local backend`.
+3. If you choose local mode, keep the default ports or enter custom UI / OTLP HTTP / OTLP gRPC ports.
+4. Choose the MCP target to configure: `Codex`, `Claude Code`, or `Cursor`.
+5. Open the status menu and use `Open Observer` to launch the embedded webview.
+
+The Observer status menu keeps the running-state actions in this order:
+
+1. `Open Observer`
+2. `Configure Observer...`
+3. `Restart Observer`
+4. `Stop Observer`
+5. `Show Output Log`
 
 ## How It Works
 
@@ -23,12 +46,12 @@ The extension packages a pre-built observer binary (Go) into the extension bundl
 
 At startup, the extension:
 
-1. Finds an available localhost port for the Observer web UI.
-2. Verifies that OTLP ports `4317` and `4318` are available.
-3. Launches the observer binary with the assigned ports.
-4. Connects the VS Code webview to the local Observer UI via an iframe.
+1. Reads the configured backend mode and local port settings.
+2. Reuses a shared backend when `observability-studio.sharedObserverUrl` is set.
+3. Otherwise launches the bundled observer binary with the configured local UI / OTLP ports.
+4. Connects the VS Code webview to the selected Observer UI via an iframe.
 
-If either OTLP port is already in use, the extension reports a startup error.
+Use **Configure Observer...** from the Observer status menu to switch between shared and local mode or to choose custom ports.
 
 ## Requirements
 
@@ -46,7 +69,9 @@ From the `extension` directory:
 - `npm run build:vsix` — packages the extension into a `.vsix` file.
 - `npm run test:unit` — runs unit tests.
 
-## Known Limitations
+## Settings
 
-- The extension expects localhost ports `4317` and `4318` to be free.
-- The Observer UI port is dynamic and selected at startup.
+- `observability-studio.sharedObserverUrl`
+- `observability-studio.localObserverPort`
+- `observability-studio.localOtlpHttpPort`
+- `observability-studio.localOtlpGrpcPort`

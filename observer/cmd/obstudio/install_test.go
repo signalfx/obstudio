@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -320,5 +321,208 @@ func TestCopyFileWrapsSourcePathErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing") {
 		t.Fatalf("expected missing source path in error, got %v", err)
+	}
+}
+
+func TestResolveInstallModeRejectsSharedURLAndLocalPorts(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, err := resolveInstallMode(
+		"http://127.0.0.1:3000/mcp",
+		"",
+		false,
+		3900,
+		0,
+		0,
+		installIO{},
+	)
+	if err == nil {
+		t.Fatal("expected shared-url and local ports to be mutually exclusive")
+	}
+	if !strings.Contains(err.Error(), "--shared-url cannot be combined") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveInstallModeUsesDefaultsNonInteractive(t *testing.T) {
+	t.Parallel()
+
+	sharedURL, config, autodetected, err := resolveInstallMode("", "", false, 0, 0, 0, installIO{})
+	if err != nil {
+		t.Fatalf("resolveInstallMode returned error: %v", err)
+	}
+	if sharedURL != "" {
+		t.Fatalf("expected local mode, got shared URL %q", sharedURL)
+	}
+	if autodetected {
+		t.Fatal("did not expect autodetected shared URL")
+	}
+	if config != defaultLocalInstallConfig() {
+		t.Fatalf("unexpected default local config: %#v", config)
+	}
+}
+
+func TestResolveInstallModeInteractiveReuseDetectedSharedObserver(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	sharedURL, config, autodetected, err := resolveInstallMode(
+		"",
+		"http://127.0.0.1:3000/mcp",
+		true,
+		0,
+		0,
+		0,
+		installIO{
+			interactive: true,
+			stdin:       strings.NewReader("1\n"),
+			stdout:      &output,
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveInstallMode returned error: %v", err)
+	}
+	if sharedURL != "http://127.0.0.1:3000/mcp" {
+		t.Fatalf("unexpected shared URL: %q", sharedURL)
+	}
+	if !autodetected {
+		t.Fatal("expected autodetected shared URL")
+	}
+	if config != defaultLocalInstallConfig() {
+		t.Fatalf("unexpected local config: %#v", config)
+	}
+	if !strings.Contains(output.String(), "Detected shared Observer") {
+		t.Fatalf("expected interactive prompt output, got %q", output.String())
+	}
+}
+
+func TestResolveInstallModeInteractiveCustomPorts(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	sharedURL, config, autodetected, err := resolveInstallMode(
+		"",
+		"http://127.0.0.1:3000/mcp",
+		true,
+		0,
+		0,
+		0,
+		installIO{
+			interactive: true,
+			stdin:       strings.NewReader("2\n2\n3900\n4918\n4917\n"),
+			stdout:      &output,
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveInstallMode returned error: %v", err)
+	}
+	if sharedURL != "" {
+		t.Fatalf("expected local mode, got shared URL %q", sharedURL)
+	}
+	if autodetected {
+		t.Fatal("did not expect autodetected shared URL")
+	}
+	if config.observerPort != 3900 || config.otlpHTTPPort != 4918 || config.otlpGRPCPort != 4917 {
+		t.Fatalf("unexpected local config: %#v", config)
+	}
+}
+
+func TestRenderLocalLauncherIncludesSelectedPorts(t *testing.T) {
+	t.Parallel()
+
+	content := renderLocalLauncher("darwin", "/tmp/obstudio", localInstallConfig{
+		observerPort: 3900,
+		otlpHTTPPort: 4918,
+		otlpGRPCPort: 4917,
+	})
+
+	for _, want := range []string{
+		`export HOST="127.0.0.1"`,
+		`export PORT="3900"`,
+		`export OTLP_HTTP_PORT="4918"`,
+		`export OTLP_GRPC_PORT="4917"`,
+		`exec "/tmp/obstudio" "$@"`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected launcher content to include %q, got:\n%s", want, content)
+		}
+	}
+}
+
+func TestInstallSiblingRuntimeCopiesCompanionBinary(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+	weaverPath := filepath.Join(sourceDir, "weaver")
+
+	if err := os.WriteFile(exePath, []byte("observer"), 0o755); err != nil {
+		t.Fatalf("write obstudio binary: %v", err)
+	}
+	if err := os.WriteFile(weaverPath, []byte("weaver"), 0o755); err != nil {
+		t.Fatalf("write weaver binary: %v", err)
+	}
+
+	installedPath, installed, err := installSiblingRuntime(exePath, destDir, "weaver")
+	if err != nil {
+		t.Fatalf("installSiblingRuntime returned error: %v", err)
+	}
+	if !installed {
+		t.Fatal("expected companion runtime to be installed")
+	}
+	if installedPath != filepath.Join(destDir, "weaver") {
+		t.Fatalf("unexpected installed path: %q", installedPath)
+	}
+
+	content, err := os.ReadFile(installedPath)
+	if err != nil {
+		t.Fatalf("read installed runtime: %v", err)
+	}
+	if string(content) != "weaver" {
+		t.Fatalf("unexpected installed runtime content: %q", string(content))
+	}
+}
+
+func TestInstallSiblingRuntimeSkipsMissingCompanionBinary(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+	if err := os.WriteFile(exePath, []byte("observer"), 0o755); err != nil {
+		t.Fatalf("write obstudio binary: %v", err)
+	}
+
+	installedPath, installed, err := installSiblingRuntime(exePath, t.TempDir(), "weaver")
+	if err != nil {
+		t.Fatalf("installSiblingRuntime returned error: %v", err)
+	}
+	if installed {
+		t.Fatal("did not expect companion runtime to be installed")
+	}
+	if installedPath != "" {
+		t.Fatalf("expected empty installed path, got %q", installedPath)
+	}
+}
+
+func TestConfigureMCPUsesLauncherCommandForCodex(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	target := mcpConfigTarget{
+		format: mcpConfigTOML,
+		path:   func() string { return path },
+	}
+
+	if err := configureMCP(target, "/tmp/obstudio-mcp", ""); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(content), `command = "/tmp/obstudio-mcp"`) {
+		t.Fatalf("expected MCP config to point at launcher, got:\n%s", string(content))
 	}
 }

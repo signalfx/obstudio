@@ -293,6 +293,303 @@ async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
 }
 
 suite('VS Code Host', () => {
+	test('status menu shows Configure Observer in the running-state order', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const windowApi = vscode.window as typeof vscode.window & {
+			showQuickPick: typeof vscode.window.showQuickPick;
+		};
+		const originalShowQuickPick = windowApi.showQuickPick;
+		let labels: string[] = [];
+
+		try {
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => {
+					if (!value) {
+						return false;
+					}
+					return value.panelVisible
+						&& value.sharedMode === false
+						&& typeof value.observerUrl === 'string'
+						&& typeof value.panelHtml === 'string'
+						&& value.panelHtml.includes('<iframe');
+				},
+				20_000,
+			);
+			await waitForHttp(state.observerUrl!, 20_000);
+
+			windowApi.showQuickPick = (async (items: readonly any[]) => {
+				labels = items.map((item) => item.label);
+				return undefined;
+			}) as typeof vscode.window.showQuickPick;
+
+			await vscode.commands.executeCommand('observability-studio.statusMenu');
+
+			assert.deepEqual(labels, [
+				'$(window) Open Observer',
+				'$(settings-gear) Configure Observer...',
+				'$(debug-restart) Restart Observer',
+				'$(debug-stop) Stop Observer',
+				'$(output) Show Output Log',
+			]);
+		} finally {
+			windowApi.showQuickPick = originalShowQuickPick;
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+		}
+	});
+
+	test('setup configures a local backend with custom ports and Codex MCP', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const observerPort = await getAvailablePort();
+		const httpPort = await getAvailablePort();
+		const grpcPort = await getAvailablePort();
+		const baseUrl = `http://127.0.0.1:${observerPort}`;
+		const mcpUrl = `${baseUrl}/mcp`;
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
+		const originalCodexConfigPath = originalHome ? path.join(originalHome, '.codex', 'config.toml') : '';
+		const originalCodexSnapshot = snapshotFile(originalCodexConfigPath);
+		const originalSharedObserverUrl = config.get<string>('sharedObserverUrl');
+		const originalLocalObserverPort = config.get<number>('localObserverPort');
+		const originalLocalOtlpHttpPort = config.get<number>('localOtlpHttpPort');
+		const originalLocalOtlpGrpcPort = config.get<number>('localOtlpGrpcPort');
+		const quickPickSelections = ['Start local backend', 'Choose custom ports', 'Codex'];
+		const inputSelections = [String(observerPort), String(httpPort), String(grpcPort)];
+		const infoMessages: string[] = [];
+		const windowApi = vscode.window as typeof vscode.window & {
+			showInformationMessage: typeof vscode.window.showInformationMessage;
+			showInputBox: typeof vscode.window.showInputBox;
+			showQuickPick: typeof vscode.window.showQuickPick;
+		};
+		const originalShowQuickPick = windowApi.showQuickPick;
+		const originalShowInputBox = windowApi.showInputBox;
+		const originalShowInformationMessage = windowApi.showInformationMessage;
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+
+		windowApi.showQuickPick = (async (items: readonly any[]) => {
+			const next = quickPickSelections.shift();
+			if (!next) {
+				return undefined;
+			}
+			return items.find((item) => item?.label === next || item?.id === next);
+		}) as typeof vscode.window.showQuickPick;
+		windowApi.showInputBox = (async () => inputSelections.shift()) as typeof vscode.window.showInputBox;
+		windowApi.showInformationMessage = (async (message: string) => {
+			infoMessages.push(message);
+			return undefined;
+		}) as typeof vscode.window.showInformationMessage;
+
+		try {
+			await vscode.commands.executeCommand('observability-studio.setup');
+			const updatedConfig = vscode.workspace.getConfiguration('observability-studio');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => {
+					if (!value) {
+						return false;
+					}
+					return value.sharedMode === false && value.observerUrl === baseUrl;
+				},
+				20_000,
+			);
+
+			assert.equal(state.sharedMode, false);
+			assert.equal(state.observerUrl, baseUrl);
+			assert.equal(updatedConfig.get('sharedObserverUrl'), '');
+			assert.equal(updatedConfig.get('localObserverPort'), observerPort);
+			assert.equal(updatedConfig.get('localOtlpHttpPort'), httpPort);
+			assert.equal(updatedConfig.get('localOtlpGrpcPort'), grpcPort);
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const panelState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => {
+					if (!value) {
+						return false;
+					}
+					return value.panelVisible && value.observerUrl === baseUrl && typeof value.panelHtml === 'string' && value.panelHtml.includes(baseUrl);
+				},
+				20_000,
+			);
+			assert.ok(panelState.panelHtml?.includes(baseUrl));
+
+			const health = await fetchJson(`${baseUrl}/api/health`);
+			assert.equal(health.endpoints.otlpHttp, `http://127.0.0.1:${httpPort}`);
+			assert.equal(health.endpoints.otlpGrpc, `127.0.0.1:${grpcPort}`);
+
+			await assertCodexConfigured([codexConfigPath, originalCodexConfigPath], mcpUrl);
+			assert.ok(
+				infoMessages.some((message) => message.includes(`Codex MCP ${mcpUrl}`)),
+				'setup should show a concise completion summary',
+			);
+		} finally {
+			windowApi.showQuickPick = originalShowQuickPick;
+			windowApi.showInputBox = originalShowInputBox;
+			windowApi.showInformationMessage = originalShowInformationMessage;
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', originalSharedObserverUrl, vscode.ConfigurationTarget.Global);
+			await config.update('localObserverPort', originalLocalObserverPort, vscode.ConfigurationTarget.Global);
+			await config.update('localOtlpHttpPort', originalLocalOtlpHttpPort, vscode.ConfigurationTarget.Global);
+			await config.update('localOtlpGrpcPort', originalLocalOtlpGrpcPort, vscode.ConfigurationTarget.Global);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			restoreSnapshot(originalCodexSnapshot);
+			fs.rmSync(tempHome, { force: true, recursive: true });
+		}
+	});
+
+	test('setup cancellation at the agent step leaves settings and runtime unchanged', async function () {
+		this.timeout(30_000);
+
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const previousSharedUrl = `${sharedObserver.baseUrl}/mcp`;
+		const observerPort = await getAvailablePort();
+		const httpPort = await getAvailablePort();
+		const grpcPort = await getAvailablePort();
+		const windowApi = vscode.window as typeof vscode.window & {
+			showQuickPick: typeof vscode.window.showQuickPick;
+			showInputBox: typeof vscode.window.showInputBox;
+		};
+		const originalShowQuickPick = windowApi.showQuickPick;
+		const originalShowInputBox = windowApi.showInputBox;
+		const quickPickSelections = ['Start local backend', 'Choose custom ports'];
+		const inputSelections = [String(observerPort), String(httpPort), String(grpcPort)];
+
+		try {
+			await config.update('sharedObserverUrl', previousSharedUrl, vscode.ConfigurationTarget.Global);
+
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			windowApi.showQuickPick = (async (items: readonly any[]) => {
+				const next = quickPickSelections.shift();
+				if (!next) {
+					return undefined;
+				}
+				return items.find((item) => item?.label === next || item?.id === next);
+			}) as typeof vscode.window.showQuickPick;
+			windowApi.showInputBox = (async () => inputSelections.shift()) as typeof vscode.window.showInputBox;
+
+			await vscode.commands.executeCommand('observability-studio.setup');
+			const updatedConfig = vscode.workspace.getConfiguration('observability-studio');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			assert.equal(state.sharedMode, true);
+			assert.equal(state.observerUrl, sharedObserver.baseUrl);
+			assert.equal(updatedConfig.get('sharedObserverUrl'), previousSharedUrl);
+		} finally {
+			windowApi.showQuickPick = originalShowQuickPick;
+			windowApi.showInputBox = originalShowInputBox;
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await sharedObserver.dispose();
+		}
+	});
+
+	test('setup failure restores the previous settings and runtime', async function () {
+		this.timeout(30_000);
+
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const previousSharedUrl = `${sharedObserver.baseUrl}/mcp`;
+		const observerPort = await getAvailablePort();
+		const httpPort = await getAvailablePort();
+		const grpcPort = await getAvailablePort();
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		fs.chmodSync(tempHome, 0o555);
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const errorMessages: string[] = [];
+		const windowApi = vscode.window as typeof vscode.window & {
+			showErrorMessage: typeof vscode.window.showErrorMessage;
+			showInformationMessage: typeof vscode.window.showInformationMessage;
+			showInputBox: typeof vscode.window.showInputBox;
+			showQuickPick: typeof vscode.window.showQuickPick;
+		};
+		const originalShowQuickPick = windowApi.showQuickPick;
+		const originalShowInputBox = windowApi.showInputBox;
+		const originalShowInformationMessage = windowApi.showInformationMessage;
+		const originalShowErrorMessage = windowApi.showErrorMessage;
+		const quickPickSelections = ['Start local backend', 'Choose custom ports', 'Codex'];
+		const inputSelections = [String(observerPort), String(httpPort), String(grpcPort)];
+
+		try {
+			process.env.HOME = tempHome;
+			process.env.USERPROFILE = tempHome;
+			await config.update('sharedObserverUrl', previousSharedUrl, vscode.ConfigurationTarget.Global);
+
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			windowApi.showQuickPick = (async (items: readonly any[]) => {
+				const next = quickPickSelections.shift();
+				if (!next) {
+					return undefined;
+				}
+				return items.find((item) => item?.label === next || item?.id === next);
+			}) as typeof vscode.window.showQuickPick;
+			windowApi.showInputBox = (async () => inputSelections.shift()) as typeof vscode.window.showInputBox;
+			windowApi.showInformationMessage = (async () => undefined) as typeof vscode.window.showInformationMessage;
+			windowApi.showErrorMessage = (async (message: string) => {
+				errorMessages.push(message);
+				return undefined;
+			}) as typeof vscode.window.showErrorMessage;
+
+			await vscode.commands.executeCommand('observability-studio.setup');
+			const updatedConfig = vscode.workspace.getConfiguration('observability-studio');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			assert.equal(state.sharedMode, true);
+			assert.equal(state.observerUrl, sharedObserver.baseUrl);
+			assert.equal(updatedConfig.get('sharedObserverUrl'), previousSharedUrl);
+			assert.ok(
+				errorMessages.some((message) => message.includes('Previous configuration was restored.')),
+				'setup failure should restore the previous configuration',
+			);
+		} finally {
+			windowApi.showQuickPick = originalShowQuickPick;
+			windowApi.showInputBox = originalShowInputBox;
+			windowApi.showInformationMessage = originalShowInformationMessage;
+			windowApi.showErrorMessage = originalShowErrorMessage;
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			fs.chmodSync(tempHome, 0o755);
+			fs.rmSync(tempHome, { force: true, recursive: true });
+			await sharedObserver.dispose();
+		}
+	});
+
 	test('openObserver reuses configured shared backend and configures MCP targets', async function () {
 		this.timeout(30_000);
 

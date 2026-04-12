@@ -228,6 +228,7 @@ it('integration: package.json registers all commands', () => {
 		'observability-studio.startObserver',
 		'observability-studio.stopObserver',
 		'observability-studio.restartObserver',
+		'observability-studio.setup',
 	]) {
 		assert.ok(
 			commands.includes(expected),
@@ -242,6 +243,7 @@ it('integration: contributed commands are grouped under Observability Studio', a
 	const commands = packageJson.contributes?.commands ?? [];
 	const expectedCommands = [
 		'observability-studio.openObserver',
+		'observability-studio.setup',
 		'observability-studio.configureCodexMCP',
 		'observability-studio.configureClaudeCodeMCP',
 		'observability-studio.configureCursorMCP',
@@ -264,6 +266,16 @@ it('integration: package.json contributes sharedObserverUrl setting', async () =
 	const property = packageJson.contributes?.configuration?.properties?.['observability-studio.sharedObserverUrl'];
 
 	assert.ok(property, 'sharedObserverUrl setting should be contributed');
+});
+
+it('integration: package.json contributes local observer port settings', async () => {
+	const packageJsonPath = path.join(extensionRoot, 'package.json');
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as ExtensionPackage;
+	const properties = packageJson.contributes?.configuration?.properties ?? {};
+
+	assert.ok(properties['observability-studio.localObserverPort']);
+	assert.ok(properties['observability-studio.localOtlpHttpPort']);
+	assert.ok(properties['observability-studio.localOtlpGrpcPort']);
 });
 
 it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t) => {

@@ -47,6 +47,11 @@
         "category": "Observability Studio"
       },
       {
+        "command": "observability-studio.setup",
+        "title": "Setup Observer",
+        "category": "Observability Studio"
+      },
+      {
         "command": "observability-studio.configureCodexMCP",
         "title": "Configure Codex MCP",
         "category": "Observability Studio"
@@ -69,6 +74,21 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts `obstudio` on the fixed shared endpoint `http://127.0.0.1:3000`."
+        },
+        "observability-studio.localObserverPort": {
+          "type": "number",
+          "default": 3000,
+          "markdownDescription": "Local Observer UI and MCP port used when `observability-studio.sharedObserverUrl` is unset."
+        },
+        "observability-studio.localOtlpHttpPort": {
+          "type": "number",
+          "default": 4318,
+          "markdownDescription": "Local OTLP/HTTP receiver port used when `observability-studio.sharedObserverUrl` is unset."
+        },
+        "observability-studio.localOtlpGrpcPort": {
+          "type": "number",
+          "default": 4317,
+          "markdownDescription": "Local OTLP/gRPC receiver port used when `observability-studio.sharedObserverUrl` is unset."
         }
       }
     }

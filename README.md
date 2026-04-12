@@ -50,6 +50,15 @@ unzip obstudio_*_darwin_arm64.zip
 This copies skills and references to `~/.cursor/skills/obstudio/` and
 configures `~/.cursor/mcp.json` to auto-start the MCP server.
 
+To use non-default local ports during install:
+
+```bash
+./obstudio install --target=codex --port=3900 --otlp-http-port=4918 --otlp-grpc-port=4917
+```
+
+When run in a terminal without `--shared-url`, the installer can also prompt
+you to reuse a detected shared backend or configure local default/custom ports.
+
 ### Build from Source
 
 ```bash
@@ -70,6 +79,26 @@ When telemetry is flowing, open the Telemetry Explorer and use the
 **Validation** tab to run semantic validation against the current
 in-memory snapshot. Validation findings are retained, grouped into
 issues, and surfaced through the dedicated validation workflow.
+
+In VS Code, use **Observability Studio: Setup Observer** from the Command
+Palette or **Configure Observer...** from the Observer status menu to:
+
+- reuse an existing backend
+- start a local backend on default ports
+- start a local backend on custom UI / OTLP HTTP / OTLP gRPC ports
+- write MCP config for Codex, Claude Code, or Cursor
+
+Observer UI with live telemetry and validation:
+
+![Observer Validation UI](extension/media/observer-validation.png)
+
+How to use the VS Code extension:
+
+1. Open the Command Palette and run `Observability Studio: Setup Observer`, or open the Observer status menu and choose `Configure Observer...`.
+2. Choose `Reuse existing backend` or `Start local backend`.
+3. If you choose local mode, keep the default ports or enter custom UI / OTLP HTTP / OTLP gRPC ports.
+4. Choose `Codex`, `Claude Code`, or `Cursor` to write the MCP config.
+5. Use `Open Observer` from the status menu to open the embedded UI.
 
 ### Use the Skills
 

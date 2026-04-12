@@ -1,7 +1,10 @@
 import * as cp from 'node:child_process';
+import * as fs from 'node:fs/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
 	buildObserverHealthUrl,
@@ -42,21 +45,19 @@ let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
+let observerConfigUpdateInProgress = false;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
+const localObserverPortSetting = 'localObserverPort';
+const localOtlpHttpPortSetting = 'localOtlpHttpPort';
+const localOtlpGrpcPortSetting = 'localOtlpGrpcPort';
 const managedObserverHost = '127.0.0.1';
-const managedObserverPort = 3000;
-const managedObserverBaseUrl = `http://${managedObserverHost}:${managedObserverPort}`;
+const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
-
-// The extension exposes a stable OTLP endpoint so instrumented apps can target a
-// predictable localhost port.
-const observerOtlpHttpPort = 4318;
-const observerOtlpGrpcPort = 4317;
-const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
-const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+const defaultObserverOtlpHttpPort = 4318;
+const defaultObserverOtlpGrpcPort = 4317;
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -68,6 +69,8 @@ type InternalRuntimeState = {
 };
 
 type ObserverProbeOptions = {
+	expectedOtlpGrpc?: string;
+	expectedOtlpHttp?: string;
 	requireStableOtlp: boolean;
 };
 
@@ -75,6 +78,43 @@ type ObserverProbeResult =
 	| { health: ObserverHealth; status: 'ready' }
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
+
+type ManagedObserverConfig = {
+	baseUrl: string;
+	observerPort: number;
+	otlpGrpcEndpoint: string;
+	otlpGrpcPort: number;
+	otlpHttpEndpoint: string;
+	otlpHttpPort: number;
+};
+
+type SetupAgentTarget = 'claude-code' | 'codex' | 'cursor';
+
+type SetupAgentChoice = {
+	description: string;
+	label: string;
+	target: SetupAgentTarget;
+};
+
+type ObserverSettingsSnapshot = {
+	sharedObserverUrl?: string;
+	localObserverPort?: number;
+	localOtlpHttpPort?: number;
+	localOtlpGrpcPort?: number;
+};
+
+type SetupPlan = {
+	agentChoice: SetupAgentChoice;
+	modeSummary: string;
+	observerUrl: string;
+	settings: ObserverSettingsSnapshot;
+};
+
+type FileSnapshot = {
+	content?: string;
+	existed: boolean;
+	filePath: string;
+};
 
 export async function activate(context: vscode.ExtensionContext) {
 	observerOutputChannel = vscode.window.createOutputChannel('Observability Studio');
@@ -98,7 +138,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-		if (!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)) {
+		if (
+			!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)
+			&& !event.affectsConfiguration(`observability-studio.${localObserverPortSetting}`)
+			&& !event.affectsConfiguration(`observability-studio.${localOtlpHttpPortSetting}`)
+			&& !event.affectsConfiguration(`observability-studio.${localOtlpGrpcPortSetting}`)
+		) {
+			return;
+		}
+		if (observerConfigUpdateInProgress) {
 			return;
 		}
 		void restartObserver(context);
@@ -131,6 +179,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: '$(window) Open Observer', id: 'open' },
+					{ label: '$(settings-gear) Configure Observer...', id: 'configure' },
 					{ label: '$(debug-restart) Restart Observer', id: 'restart' },
 					{ label: '$(debug-stop) Stop Observer', id: 'stop' },
 					{ label: '$(output) Show Output Log', id: 'log' },
@@ -143,6 +192,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			);
 			if (pick?.id === 'open') {
 				void vscode.commands.executeCommand('observability-studio.openObserver');
+			} else if (pick?.id === 'configure') {
+				void vscode.commands.executeCommand('observability-studio.setup');
 			} else if (pick?.id === 'restart') {
 				void vscode.commands.executeCommand('observability-studio.restartObserver');
 			} else if (pick?.id === 'stop') {
@@ -153,13 +204,16 @@ export async function activate(context: vscode.ExtensionContext) {
 		} else if (observerLifecycleState.status === 'starting') {
 			const pick = await vscode.window.showQuickPick(
 				[
+					{ label: '$(settings-gear) Configure Observer...', id: 'configure' },
 					{ label: '$(debug-stop) Stop Observer', id: 'stop' },
 					{ label: '$(debug-restart) Restart Observer', id: 'restart' },
 					{ label: '$(output) Show Output Log', id: 'log' },
 				],
 				{ placeHolder: 'Observer is starting...' },
 			);
-			if (pick?.id === 'stop') {
+			if (pick?.id === 'configure') {
+				void vscode.commands.executeCommand('observability-studio.setup');
+			} else if (pick?.id === 'stop') {
 				void vscode.commands.executeCommand('observability-studio.stopObserver');
 			} else if (pick?.id === 'restart') {
 				void vscode.commands.executeCommand('observability-studio.restartObserver');
@@ -170,6 +224,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: '$(play) Start Observer', id: 'start' },
+					{ label: '$(settings-gear) Configure Observer...', id: 'configure' },
 					{ label: '$(output) Show Output Log', id: 'log' },
 				],
 				{
@@ -180,6 +235,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			);
 			if (pick?.id === 'start') {
 				void vscode.commands.executeCommand('observability-studio.startObserver');
+			} else if (pick?.id === 'configure') {
+				void vscode.commands.executeCommand('observability-studio.setup');
 			} else if (pick?.id === 'log') {
 				observerOutputChannel?.show();
 			}
@@ -233,6 +290,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			refreshObserverPanel();
 		}
 	});
+	const setupDisposable = vscode.commands.registerCommand(
+		'observability-studio.setup',
+		() => runSetupFlow(context),
+	);
 	const configureCodexDisposable = vscode.commands.registerCommand(
 		'observability-studio.configureCodexMCP',
 		() => configureAgentMCP(context, 'codex', 'Codex'),
@@ -264,6 +325,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(startDisposable);
 	context.subscriptions.push(stopDisposable);
 	context.subscriptions.push(restartDisposable);
+	context.subscriptions.push(setupDisposable);
 	context.subscriptions.push(configureCodexDisposable);
 	context.subscriptions.push(configureClaudeDisposable);
 	context.subscriptions.push(configureCursorDisposable);
@@ -337,6 +399,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (observerOutputChannel === undefined) {
 			throw new Error('Observer output channel is not initialized.');
 		}
+		const localObserver = getManagedObserverConfig();
 
 		const sharedObserverUrl = getConfiguredSharedObserverUrl();
 		if (sharedObserverUrl !== undefined) {
@@ -355,14 +418,18 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
-		const existingObserver = await probeObserver(managedObserverBaseUrl, 500, { requireStableOtlp: true });
+		const existingObserver = await probeObserver(localObserver.baseUrl, 500, {
+			expectedOtlpGrpc: localObserver.otlpGrpcEndpoint,
+			expectedOtlpHttp: localObserver.otlpHttpEndpoint,
+			requireStableOtlp: true,
+		});
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
 		if (existingObserver.status === 'ready') {
 			observerUsesSharedServer = true;
-			observerBaseUrl = managedObserverBaseUrl;
-			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedObserverPort)) {
+			observerBaseUrl = localObserver.baseUrl;
+			appendObserverOutputLine(`Reusing shared observer at ${localObserver.baseUrl}`);
+			if (completeObserverStart(observerLifecycleState, runId, localObserver.observerPort)) {
 				syncObserverUi();
 			}
 			return;
@@ -370,27 +437,27 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		if (existingObserver.status === 'mismatch') {
 			throw new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${existingObserver.reason}. ` +
+				`Cannot use ${localObserver.baseUrl}: ${existingObserver.reason}. ` +
 				`Stop the conflicting service or configure observability-studio.${sharedObserverUrlSetting}.`,
 			);
 		}
 
 		const backend = resolveBackend(context.extensionPath);
-		const observerPort = await ensurePortAvailable(managedObserverPort);
+		const observerPort = await ensurePortAvailable(localObserver.observerPort);
 		logObserverLifecycle(`Run ${runId}: reserved UI port ${observerPort}.`);
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
-		const otlpHttpPort = await ensurePortAvailable(observerOtlpHttpPort);
+		const otlpHttpPort = await ensurePortAvailable(localObserver.otlpHttpPort);
 		assertObserverRunCurrent(observerLifecycleState, runId);
-		const otlpGrpcPort = await ensurePortAvailable(observerOtlpGrpcPort);
+		const otlpGrpcPort = await ensurePortAvailable(localObserver.otlpGrpcPort);
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
-		observerBaseUrl = managedObserverBaseUrl;
+		observerBaseUrl = localObserver.baseUrl;
 
-		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
-		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
-		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
+		appendObserverOutputLine(`Starting ${backend.label} on ${localObserver.baseUrl}`);
+		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${localObserver.otlpHttpEndpoint}`);
+		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${localObserver.otlpGrpcEndpoint}`);
 
 		startedProcess = cp.spawn(backend.command, backend.args, {
 			cwd: backend.cwd,
@@ -445,8 +512,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 		});
 
-		await waitForObserverReady(managedObserverBaseUrl, { requireStableOtlp: true }, runId);
-		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
+		await waitForObserverReady(localObserver.baseUrl, {
+			expectedOtlpGrpc: localObserver.otlpGrpcEndpoint,
+			expectedOtlpHttp: localObserver.otlpHttpEndpoint,
+			requireStableOtlp: true,
+		}, runId);
+		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${localObserver.baseUrl}.`);
 		if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
@@ -810,11 +881,11 @@ function validateObserverHealth(raw: unknown, options: ObserverProbeOptions): st
 	if (!options.requireStableOtlp) {
 		return undefined;
 	}
-	if (health.endpoints?.otlpHttp !== observerOtlpHttpEndpoint) {
-		return `expected OTLP/HTTP endpoint ${observerOtlpHttpEndpoint}, got ${String(health.endpoints?.otlpHttp)}`;
+	if (health.endpoints?.otlpHttp !== options.expectedOtlpHttp) {
+		return `expected OTLP/HTTP endpoint ${String(options.expectedOtlpHttp)}, got ${String(health.endpoints?.otlpHttp)}`;
 	}
-	if (health.endpoints?.otlpGrpc !== observerOtlpGrpcEndpoint) {
-		return `expected OTLP/gRPC endpoint ${observerOtlpGrpcEndpoint}, got ${String(health.endpoints?.otlpGrpc)}`;
+	if (health.endpoints?.otlpGrpc !== options.expectedOtlpGrpc) {
+		return `expected OTLP/gRPC endpoint ${String(options.expectedOtlpGrpc)}, got ${String(health.endpoints?.otlpGrpc)}`;
 	}
 	return undefined;
 }
@@ -908,9 +979,347 @@ function getConfiguredSharedObserverUrl(): string | undefined {
 	return normalizeObserverBaseUrl(trimmed);
 }
 
+function getManagedObserverConfig(): ManagedObserverConfig {
+	const config = vscode.workspace.getConfiguration('observability-studio');
+	const observerPort = configuredPort(config.get<number>(localObserverPortSetting), defaultManagedObserverPort);
+	const otlpHttpPort = configuredPort(config.get<number>(localOtlpHttpPortSetting), defaultObserverOtlpHttpPort);
+	const otlpGrpcPort = configuredPort(config.get<number>(localOtlpGrpcPortSetting), defaultObserverOtlpGrpcPort);
+
+	return {
+		baseUrl: `http://${managedObserverHost}:${observerPort}`,
+		observerPort,
+		otlpGrpcEndpoint: `${managedObserverHost}:${otlpGrpcPort}`,
+		otlpGrpcPort,
+		otlpHttpEndpoint: `http://${managedObserverHost}:${otlpHttpPort}`,
+		otlpHttpPort,
+	};
+}
+
+function configuredPort(value: number | undefined, fallback: number): number {
+	if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 65535) {
+		return fallback;
+	}
+	return value;
+}
+
+function getObserverSettingsSnapshot(): ObserverSettingsSnapshot {
+	const config = vscode.workspace.getConfiguration('observability-studio');
+	return {
+		sharedObserverUrl: config.get<string>(sharedObserverUrlSetting),
+		localObserverPort: config.get<number>(localObserverPortSetting),
+		localOtlpHttpPort: config.get<number>(localOtlpHttpPortSetting),
+		localOtlpGrpcPort: config.get<number>(localOtlpGrpcPortSetting),
+	};
+}
+
+function buildObserverSettingsEntries(
+	settings: ObserverSettingsSnapshot,
+): Array<readonly [string, string | number | undefined]> {
+	return [
+		[sharedObserverUrlSetting, settings.sharedObserverUrl],
+		[localObserverPortSetting, settings.localObserverPort],
+		[localOtlpHttpPortSetting, settings.localOtlpHttpPort],
+		[localOtlpGrpcPortSetting, settings.localOtlpGrpcPort],
+	];
+}
+
+function agentConfigPath(target: SetupAgentTarget): string {
+	const home = os.homedir();
+	switch (target) {
+		case 'codex':
+			return path.join(home, '.codex', 'config.toml');
+		case 'claude-code':
+			return path.join(home, '.claude', 'settings.json');
+		case 'cursor':
+			return path.join(home, '.cursor', 'mcp.json');
+	}
+}
+
+async function snapshotFile(filePath: string): Promise<FileSnapshot> {
+	try {
+		return {
+			content: await fs.readFile(filePath, 'utf8'),
+			existed: true,
+			filePath,
+		};
+	} catch (error) {
+		const errno = error as NodeJS.ErrnoException;
+		if (errno.code === 'ENOENT') {
+			return { existed: false, filePath };
+		}
+		throw error;
+	}
+}
+
+async function restoreFileSnapshot(snapshot: FileSnapshot): Promise<void> {
+	if (snapshot.existed) {
+		await fs.mkdir(path.dirname(snapshot.filePath), { recursive: true });
+		await fs.writeFile(snapshot.filePath, snapshot.content ?? '', 'utf8');
+		return;
+	}
+	await fs.rm(snapshot.filePath, { force: true });
+}
+
+async function restoreSetupState(
+	context: vscode.ExtensionContext,
+	settings: ObserverSettingsSnapshot,
+	agentSnapshot: FileSnapshot,
+	shouldBeRunning: boolean,
+): Promise<void> {
+	await updateObserverSettings(buildObserverSettingsEntries(settings));
+	await restoreFileSnapshot(agentSnapshot);
+	await stopObserver();
+	if (shouldBeRunning) {
+		await ensureObserverRunning(context);
+	} else {
+		refreshObserverPanel();
+	}
+}
+
+async function collectSetupPlan(previousSettings: ObserverSettingsSnapshot): Promise<SetupPlan | undefined> {
+	const backendChoice = await vscode.window.showQuickPick([
+		{
+			description: 'Point VS Code and MCP clients at an existing obstudio backend',
+			id: 'shared',
+			label: 'Reuse existing backend',
+		},
+		{
+			description: 'Run obstudio from the extension and optionally choose custom ports',
+			id: 'local',
+			label: 'Start local backend',
+		},
+	], {
+		placeHolder: 'Choose how Observability Studio should connect to Observer',
+		title: 'Observability Studio Setup',
+	});
+	if (!backendChoice) {
+		return;
+	}
+
+	let observerConfig = getManagedObserverConfig();
+	let observerUrl = observerConfig.baseUrl;
+	let modeSummary = '';
+	const settings: ObserverSettingsSnapshot = { ...previousSettings };
+
+	if (backendChoice.id === 'shared') {
+		const sharedUrl = await vscode.window.showInputBox({
+			prompt: 'Enter the shared Observer base URL or /mcp URL',
+			title: 'Observability Studio Setup',
+			validateInput: (value) => {
+				try {
+					normalizeObserverBaseUrl(value);
+					return undefined;
+				} catch (error) {
+					return getErrorMessage(error);
+				}
+			},
+			value: getConfiguredSharedObserverUrl() ?? observerConfig.baseUrl,
+		});
+		if (sharedUrl === undefined) {
+			return;
+		}
+		observerUrl = normalizeObserverBaseUrl(sharedUrl);
+		settings.sharedObserverUrl = observerUrl;
+		modeSummary = `Shared backend: ${observerUrl}`;
+	} else {
+		const portMode = await vscode.window.showQuickPick([
+			{
+				description: `Use ${defaultManagedObserverPort} / ${defaultObserverOtlpHttpPort} / ${defaultObserverOtlpGrpcPort}`,
+				id: 'default',
+				label: 'Use default ports',
+			},
+			{
+				description: 'Choose custom UI and OTLP ports',
+				id: 'custom',
+				label: 'Choose custom ports',
+			},
+		], {
+			placeHolder: 'Choose local Observer ports',
+			title: 'Observability Studio Setup',
+		});
+		if (!portMode) {
+			return;
+		}
+
+		if (portMode.id === 'default') {
+			observerConfig = {
+				baseUrl: `http://${managedObserverHost}:${defaultManagedObserverPort}`,
+				observerPort: defaultManagedObserverPort,
+				otlpGrpcEndpoint: `${managedObserverHost}:${defaultObserverOtlpGrpcPort}`,
+				otlpGrpcPort: defaultObserverOtlpGrpcPort,
+				otlpHttpEndpoint: `http://${managedObserverHost}:${defaultObserverOtlpHttpPort}`,
+				otlpHttpPort: defaultObserverOtlpHttpPort,
+			};
+		} else {
+			const observerPort = await promptForPort(
+				'Observer UI port',
+				'Choose the port for the Telemetry Explorer UI and MCP endpoint',
+				observerConfig.observerPort,
+			);
+			if (observerPort === undefined) {
+				return;
+			}
+			const otlpHttpPort = await promptForPort(
+				'OTLP HTTP port',
+				'Choose the port for the OTLP/HTTP receiver',
+				observerConfig.otlpHttpPort,
+				new Set([observerPort]),
+			);
+			if (otlpHttpPort === undefined) {
+				return;
+			}
+			const otlpGrpcPort = await promptForPort(
+				'OTLP gRPC port',
+				'Choose the port for the OTLP/gRPC receiver',
+				observerConfig.otlpGrpcPort,
+				new Set([observerPort, otlpHttpPort]),
+			);
+			if (otlpGrpcPort === undefined) {
+				return;
+			}
+			observerConfig = {
+				baseUrl: `http://${managedObserverHost}:${observerPort}`,
+				observerPort,
+				otlpGrpcEndpoint: `${managedObserverHost}:${otlpGrpcPort}`,
+				otlpGrpcPort,
+				otlpHttpEndpoint: `http://${managedObserverHost}:${otlpHttpPort}`,
+				otlpHttpPort,
+			};
+		}
+
+		observerUrl = observerConfig.baseUrl;
+		settings.sharedObserverUrl = '';
+		settings.localObserverPort = observerConfig.observerPort;
+		settings.localOtlpHttpPort = observerConfig.otlpHttpPort;
+		settings.localOtlpGrpcPort = observerConfig.otlpGrpcPort;
+		modeSummary = `Local backend: ${observerConfig.baseUrl} · OTLP/HTTP ${observerConfig.otlpHttpEndpoint} · OTLP/gRPC ${observerConfig.otlpGrpcEndpoint}`;
+	}
+
+	const agentChoice = await vscode.window.showQuickPick<SetupAgentChoice>([
+		{
+			description: 'Write MCP config into ~/.codex/config.toml',
+			label: 'Codex',
+			target: 'codex',
+		},
+		{
+			description: 'Write MCP config into ~/.claude/settings.json',
+			label: 'Claude Code',
+			target: 'claude-code',
+		},
+		{
+			description: 'Write MCP config into ~/.cursor/mcp.json',
+			label: 'Cursor',
+			target: 'cursor',
+		},
+	], {
+		placeHolder: 'Choose which agent to configure',
+		title: 'Observability Studio Setup',
+	});
+	if (!agentChoice) {
+		return;
+	}
+
+	return {
+		agentChoice,
+		modeSummary,
+		observerUrl,
+		settings,
+	};
+}
+
+async function runSetupFlow(context: vscode.ExtensionContext): Promise<void> {
+	const previousSettings = getObserverSettingsSnapshot();
+	const previousShouldBeRunning = observerLifecycleState.status === 'running' || observerLifecycleState.status === 'starting';
+	const plan = await collectSetupPlan(previousSettings);
+	if (!plan) {
+		return;
+	}
+
+	const selectedAgentSnapshot = await snapshotFile(agentConfigPath(plan.agentChoice.target));
+
+	try {
+		await updateObserverSettings(buildObserverSettingsEntries(plan.settings));
+		await stopObserver();
+		await ensureObserverRunning(context);
+
+		const mcpUrl = await configureAgentMCPForUrl(context, plan.agentChoice.target, plan.agentChoice.label, plan.observerUrl);
+		const summary = `${plan.modeSummary} · ${plan.agentChoice.label} MCP ${mcpUrl}`;
+		observerOutputChannel?.appendLine(`[extension] Setup complete: ${summary}`);
+		void vscode.window.showInformationMessage(`Setup complete: ${summary}`);
+	} catch (error) {
+		let restoreMessage = '';
+		try {
+			await restoreSetupState(context, previousSettings, selectedAgentSnapshot, previousShouldBeRunning);
+			restoreMessage = ' Previous configuration was restored.';
+		} catch (restoreError) {
+			restoreMessage = ` Restore failed: ${getErrorMessage(restoreError)}.`;
+			observerOutputChannel?.appendLine(`[extension] Setup restore failed: ${getErrorMessage(restoreError)}`);
+		}
+
+		const message = `Observability Studio setup failed: ${getErrorMessage(error)}.${restoreMessage}`.replace(/\.\s*\./g, '.');
+		observerOutputChannel?.appendLine(`[extension] ${message}`);
+		void vscode.window.showErrorMessage(message);
+	}
+}
+
+async function promptForPort(
+	title: string,
+	prompt: string,
+	defaultPort: number,
+	disallowedPorts: Set<number> = new Set(),
+): Promise<number | undefined> {
+	const raw = await vscode.window.showInputBox({
+		prompt,
+		title: `Observability Studio Setup: ${title}`,
+		validateInput: (value) => {
+			const parsed = parsePortInput(value);
+			if (typeof parsed === 'string') {
+				return parsed;
+			}
+			if (disallowedPorts.has(parsed)) {
+				return 'Each local port must be different.';
+			}
+			return undefined;
+		},
+		value: String(defaultPort),
+	});
+	if (raw === undefined) {
+		return undefined;
+	}
+	const parsed = parsePortInput(raw);
+	if (typeof parsed === 'string') {
+		throw new Error(parsed);
+	}
+	return parsed;
+}
+
+function parsePortInput(raw: string): number | string {
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) {
+		return 'Port is required.';
+	}
+	const port = Number(trimmed);
+	if (!Number.isInteger(port) || port < 1 || port > 65535) {
+		return 'Port must be an integer between 1 and 65535.';
+	}
+	return port;
+}
+
+async function updateObserverSettings(updates: Array<readonly [string, string | number | undefined]>): Promise<void> {
+	const config = vscode.workspace.getConfiguration('observability-studio');
+	observerConfigUpdateInProgress = true;
+	try {
+		for (const [key, value] of updates) {
+			await config.update(key, value, vscode.ConfigurationTarget.Global);
+		}
+	} finally {
+		observerConfigUpdateInProgress = false;
+	}
+}
+
 async function configureAgentMCP(
 	context: vscode.ExtensionContext,
-	target: 'claude-code' | 'codex' | 'cursor',
+	target: SetupAgentTarget,
 	label: string,
 ): Promise<void> {
 	if (observerOutputChannel === undefined) {
@@ -923,11 +1332,7 @@ async function configureAgentMCP(
 			throw new Error('Observer URL is not available.');
 		}
 
-		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
-		const backend = resolveBackend(context.extensionPath);
-		observerOutputChannel.appendLine(`Configuring ${label} MCP for ${mcpUrl}`);
-		await execFile(backend.command, ['install', '--target', target, '--shared-url', mcpUrl], backend.cwd);
-		observerOutputChannel.appendLine(`${label} MCP configured for ${mcpUrl}`);
+		const mcpUrl = await configureAgentMCPForUrl(context, target, label, observerBaseUrl);
 		void vscode.window.showInformationMessage(`${label} MCP configured for ${mcpUrl}`);
 	} catch (error) {
 		const message = `${label} MCP configuration failed: ${getErrorMessage(error)}`;
@@ -935,6 +1340,24 @@ async function configureAgentMCP(
 		void vscode.window.showErrorMessage(message);
 		throw error;
 	}
+}
+
+async function configureAgentMCPForUrl(
+	context: vscode.ExtensionContext,
+	target: SetupAgentTarget,
+	label: string,
+	baseUrl: string,
+): Promise<string> {
+	if (observerOutputChannel === undefined) {
+		throw new Error('Observer output channel is not initialized.');
+	}
+
+	const mcpUrl = `${normalizeObserverBaseUrl(baseUrl)}/mcp`;
+	const backend = resolveBackend(context.extensionPath);
+	observerOutputChannel.appendLine(`Configuring ${label} MCP for ${mcpUrl}`);
+	await execFile(backend.command, ['install', '--target', target, '--shared-url', mcpUrl], backend.cwd);
+	observerOutputChannel.appendLine(`${label} MCP configured for ${mcpUrl}`);
+	return mcpUrl;
 }
 
 function execFile(command: string, args: string[], cwd: string): Promise<void> {
