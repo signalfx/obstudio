@@ -11,8 +11,8 @@ import (
 
 // RunStdio runs the MCP server over stdin/stdout using newline-delimited
 // JSON-RPC. It blocks until the input stream closes.
-func RunStdio(s *store.Store, in io.Reader, out io.Writer) {
-	d := NewDispatcher(s)
+func RunStdio(s *store.Store, in io.Reader, out io.Writer, params ...any) {
+	d := NewDispatcher(s, params...)
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 	enc := json.NewEncoder(out)

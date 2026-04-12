@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { TraceSummary, TraceDetail } from "../api/types";
+import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail } from "../api/client";
 import { DetailPanel } from "../layout";
 import { TraceWaterfall } from "./TraceWaterfall";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import type { ValidationIndex } from "../validation/utils";
+import { lookupSpanValidation } from "../validation/utils";
 
 interface TracesTabProps {
   traces: TraceSummary[];
   telemetryError: string | null;
   onInteract?: () => void;
+  validationFindings: ValidationFinding[];
+  validationIndex: ValidationIndex;
 }
 
 /** Traces tab with virtualized table and waterfall detail panel. */
-export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps): React.ReactElement {
+export function TracesTab({ traces, telemetryError, onInteract, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [traceDetail, setTraceDetail] = useState<TraceDetail | null>(null);
@@ -126,6 +130,10 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
   });
 
   const selectedSpan = traceDetail?.spans.find((s) => s.spanId === selectedSpanId) ?? null;
+  const selectedSpanValidation = useMemo(
+    () => (selectedSpan ? lookupSpanValidation(validationIndex, selectedSpan.traceId, selectedSpan.spanId)?.findings ?? [] : []),
+    [selectedSpan, validationIndex],
+  );
   const errorSpanCount = traceDetail?.spans.filter((s) => s.status.code === "ERROR").length ?? 0;
 
   const hasDetail = Boolean(selectedTraceId && (traceDetail || detailLoading || detailError));
@@ -233,8 +241,9 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
                 selectedSpanId={selectedSpanId}
                 onSelectSpan={setSelectedSpanId}
                 traceDurationMs={traceDetail.durationMs ?? 0}
+                validationIndex={validationIndex}
               />
-              {selectedSpan ? <SpanDetailsPanel span={selectedSpan} /> : null}
+              {selectedSpan ? <SpanDetailsPanel span={selectedSpan} validationFindings={selectedSpanValidation} /> : null}
             </DetailPanel>
           </div>
         ) : selectedTraceId && detailLoading ? (

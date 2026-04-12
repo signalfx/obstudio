@@ -196,6 +196,13 @@ type Endpoints struct {
 	REST     string `json:"rest,omitempty"`
 }
 
+// TelemetrySnapshot is a point-in-time copy of the in-memory telemetry buffers.
+type TelemetrySnapshot struct {
+	Spans   []Span            `json:"spans"`
+	Metrics []MetricDataPoint `json:"metrics"`
+	Logs    []LogRecord       `json:"logs"`
+}
+
 // Store is the in-memory telemetry store.
 type Store struct {
 	mu      sync.RWMutex
@@ -213,6 +220,12 @@ type Store struct {
 	subMu       sync.Mutex
 	subscribers map[int]chan Signal
 	nextSubID   int
+
+	invalidateMu sync.RWMutex
+	invalidate   func()
+
+	changeMu sync.RWMutex
+	change   func(time.Time)
 }
 
 // ringBuffer is a fixed-capacity circular buffer. When full, the oldest
@@ -295,6 +308,21 @@ func (s *Store) Endpoints() Endpoints {
 	return s.endpoints
 }
 
+// SetInvalidateCallback installs a callback invoked when the store is cleared,
+// reset, or evicted in a way that invalidates derived state such as validation.
+func (s *Store) SetInvalidateCallback(fn func()) {
+	s.invalidateMu.Lock()
+	s.invalidate = fn
+	s.invalidateMu.Unlock()
+}
+
+// SetChangeCallback installs a callback invoked when new telemetry is ingested.
+func (s *Store) SetChangeCallback(fn func(time.Time)) {
+	s.changeMu.Lock()
+	s.change = fn
+	s.changeMu.Unlock()
+}
+
 // New creates a new Store with default configuration.
 func New() *Store {
 	return &Store{
@@ -316,15 +344,20 @@ func (s *Store) AddSpansForConnection(connID string, spans []Span) {
 		}
 	}
 	s.spans.push(spans)
-	s.lastIngest = time.Now()
+	changedAt := time.Now()
+	s.lastIngest = changedAt
 	s.mu.Unlock()
+	if reset {
+		s.runInvalidateCallback()
+	}
+	s.runChangeCallback(changedAt)
 	if reset {
 		s.notify(SignalTraces)
 		s.notify(SignalMetrics)
 		s.notify(SignalLogs)
-	} else {
-		s.notify(SignalTraces)
+		return
 	}
+	s.notify(SignalTraces)
 }
 
 // AddMetricsForConnection adds metrics with an associated connection ID for later eviction.
@@ -337,15 +370,20 @@ func (s *Store) AddMetricsForConnection(connID string, metrics []MetricDataPoint
 		}
 	}
 	s.metrics.push(metrics)
-	s.lastIngest = time.Now()
+	changedAt := time.Now()
+	s.lastIngest = changedAt
 	s.mu.Unlock()
+	if reset {
+		s.runInvalidateCallback()
+	}
+	s.runChangeCallback(changedAt)
 	if reset {
 		s.notify(SignalTraces)
 		s.notify(SignalMetrics)
 		s.notify(SignalLogs)
-	} else {
-		s.notify(SignalMetrics)
+		return
 	}
+	s.notify(SignalMetrics)
 }
 
 // AddLogsForConnection adds logs with an associated connection ID for later eviction.
@@ -364,15 +402,20 @@ func (s *Store) AddLogsForConnection(connID string, logs []LogRecord) {
 		}
 	}
 	s.logs.push(logs)
-	s.lastIngest = time.Now()
+	changedAt := time.Now()
+	s.lastIngest = changedAt
 	s.mu.Unlock()
+	if reset {
+		s.runInvalidateCallback()
+	}
+	s.runChangeCallback(changedAt)
 	if reset {
 		s.notify(SignalTraces)
 		s.notify(SignalMetrics)
 		s.notify(SignalLogs)
-	} else {
-		s.notify(SignalLogs)
+		return
 	}
+	s.notify(SignalLogs)
 }
 
 // Clear removes all stored telemetry and resets the session clock.
@@ -383,6 +426,7 @@ func (s *Store) Clear() {
 	s.logs.clear()
 	s.lastIngest = time.Time{}
 	s.mu.Unlock()
+	s.runInvalidateCallback()
 	s.notify(SignalTraces)
 	s.notify(SignalMetrics)
 	s.notify(SignalLogs)
@@ -407,6 +451,10 @@ func (s *Store) EvictConnection(connID string) {
 		s.lastIngest = time.Time{}
 	}
 	s.mu.Unlock()
+
+	if hasSpans || hasMetrics || hasLogs {
+		s.runInvalidateCallback()
+	}
 
 	if hasSpans {
 		s.notify(SignalTraces)
@@ -732,6 +780,29 @@ func (s *Store) Stats() Stats {
 	}
 }
 
+// SnapshotTelemetry returns a point-in-time copy of all retained telemetry.
+func (s *Store) SnapshotTelemetry() TelemetrySnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	spans := s.spans.snapshot()
+	metrics := s.metrics.snapshot()
+	logs := s.logs.snapshot()
+
+	return TelemetrySnapshot{
+		Spans:   append([]Span(nil), spans...),
+		Metrics: append([]MetricDataPoint(nil), metrics...),
+		Logs:    append([]LogRecord(nil), logs...),
+	}
+}
+
+// LastIngest returns the timestamp of the most recent telemetry ingest.
+func (s *Store) LastIngest() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastIngest
+}
+
 // Subscribe registers for updates on store changes and returns a subscription ID and channel.
 func (s *Store) Subscribe() (int, <-chan Signal) {
 	ch := make(chan Signal, 8)
@@ -761,8 +832,26 @@ func (s *Store) notify(sig Signal) {
 	for _, ch := range s.subscribers {
 		select {
 		case ch <- sig:
-			default:
+		default:
 		}
+	}
+}
+
+func (s *Store) runInvalidateCallback() {
+	s.invalidateMu.RLock()
+	fn := s.invalidate
+	s.invalidateMu.RUnlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+func (s *Store) runChangeCallback(changedAt time.Time) {
+	s.changeMu.RLock()
+	fn := s.change
+	s.changeMu.RUnlock()
+	if fn != nil {
+		fn(changedAt)
 	}
 }
 

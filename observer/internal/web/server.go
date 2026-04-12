@@ -7,18 +7,26 @@ import (
 	"strings"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
 // Register adds WebSocket, static file, and SPA routes to the given mux.
 // It returns a cleanup function that should be called on shutdown to
 // unsubscribe from the store.
-func Register(mux *http.ServeMux, s *store.Store) func() {
-	mux.HandleFunc("GET /api/ws", wsHandler(s))
+func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
+	mux.HandleFunc("GET /api/ws", wsHandler(s, v))
 
 	subID, ch := s.Subscribe()
 	go func() {
 		for sig := range ch {
-			broadcastSignal(s, sig)
+			broadcastSignal(s, v, string(sig))
+		}
+	}()
+
+	validationSubID, validationCh := v.Subscribe()
+	go func() {
+		for range validationCh {
+			broadcastSignal(s, v, string(validator.SignalValidation))
 		}
 	}()
 
@@ -40,5 +48,8 @@ func Register(mux *http.ServeMux, s *store.Store) func() {
 		_, _ = w.Write(index)
 	})
 
-	return func() { s.Unsubscribe(subID) }
+	return func() {
+		s.Unsubscribe(subID)
+		v.Unsubscribe(validationSubID)
+	}
 }

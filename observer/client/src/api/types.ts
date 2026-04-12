@@ -149,3 +149,74 @@ export interface Stats {
   traceCount: number;
   serviceNames: string[];
 }
+
+export type ValidationSeverity = "information" | "improvement" | "violation";
+
+export interface ValidationSignalRef {
+  type: string;
+  serviceName?: string;
+  traceId?: string;
+  spanId?: string;
+  spanName?: string;
+  metricName?: string;
+  scopeName?: string;
+  logBody?: string;
+}
+
+export interface ValidationFinding {
+  entityKey: string;
+  source: string;
+  ruleId: string;
+  severity: ValidationSeverity;
+  message: string;
+  context?: Record<string, unknown>;
+  signal: ValidationSignalRef;
+  updatedAt: string;
+}
+
+export interface ValidationIssue {
+  key: string;
+  severity: ValidationSeverity;
+  message: string;
+  signalType: string;
+  targetLabel: string;
+  serviceName: string;
+  scopeName: string;
+  count: number;
+  violationCount: number;
+  improvementCount: number;
+  informationCount: number;
+  affectedEntityCount: number;
+  firstSeen: string;
+  lastSeen: string;
+  findings: ValidationFinding[];
+}
+
+export interface ValidationSummary {
+  enabled: boolean;
+  ready: boolean;
+  status: "disabled" | "idle" | "running" | "ready" | "error";
+  message?: string;
+  lastError?: string;
+  hasResult: boolean;
+  stale: boolean;
+  needsRun: boolean;
+  activeRunId?: string;
+  resultRunId?: string;
+  lastRunStartedAt?: string;
+  lastRunCompletedAt?: string;
+  lastTelemetryAt?: string;
+  totalEntities: number;
+  totalAdvisories: number;
+  noAdviceCount: number;
+  severityCounts: Record<string, number>;
+  highestSeverityCounts: Record<string, number>;
+  signalCounts: Record<string, number>;
+  updatedAt: string;
+}
+
+export interface ValidationSnapshot {
+  summary: ValidationSummary;
+  findings: ValidationFinding[];
+  issues: ValidationIssue[];
+}

@@ -5,6 +5,7 @@ import * as net from 'node:net';
 import * as vscode from 'vscode';
 import {
 	buildObserverHealthUrl,
+	buildObserverValidatorSummaryUrl,
 	type ObserverHealth,
 	normalizeObserverBaseUrl,
 	observerPortFromUrl,
@@ -63,6 +64,7 @@ type InternalRuntimeState = {
 	panelHtml?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
+	validatorSummaryUrl?: string;
 };
 
 type ObserverProbeOptions = {
@@ -251,6 +253,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			panelHtml: observerPanel?.webview.html,
 			panelVisible: observerPanel !== undefined,
 			sharedMode: observerUsesSharedServer,
+			validatorSummaryUrl: observerBaseUrl === undefined
+				? undefined
+				: buildObserverValidatorSummaryUrl(observerBaseUrl),
 		}),
 	);
 

@@ -14,6 +14,7 @@ type RuntimeState = {
 	panelHtml?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
+	validatorSummaryUrl?: string;
 };
 
 type SharedObserverHandle = {
@@ -206,6 +207,10 @@ async function waitForFileText(filePath: string): Promise<string> {
 	);
 }
 
+async function fetchJson(url: string): Promise<any> {
+	return requestJson(url, 'GET');
+}
+
 async function assertCodexConfigured(filePaths: string[], mcpUrl: string): Promise<void> {
 	for (const filePath of filePaths) {
 		try {
@@ -260,6 +265,31 @@ function restoreSnapshot(snapshot: FileSnapshot): void {
 	}
 
 	fs.rmSync(snapshot.filePath, { force: true });
+}
+
+async function postJson(url: string): Promise<any> {
+	return requestJson(url, 'POST');
+}
+
+async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const request = http.request(url, { method }, (response) => {
+			let body = '';
+			response.setEncoding('utf8');
+			response.on('data', (chunk) => {
+				body += chunk;
+			});
+			response.on('end', () => {
+				try {
+					resolve(JSON.parse(body));
+				} catch (error) {
+					reject(error);
+				}
+			});
+		});
+		request.on('error', reject);
+		request.end();
+	});
 }
 
 suite('VS Code Host', () => {
@@ -344,6 +374,64 @@ suite('VS Code Host', () => {
 				restoreSnapshot(snapshot);
 			}
 			fs.rmSync(tempHome, { force: true, recursive: true });
+		}
+	});
+
+	test('openObserver exposes validator summary for a shared backend', async function () {
+		this.timeout(30_000);
+
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		try {
+			await config.update('sharedObserverUrl', `${sharedObserver.baseUrl}/mcp`, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => {
+					if (!value) {
+						return false;
+					}
+					return value.panelVisible
+						&& value.sharedMode
+						&& value.observerUrl === sharedObserver.baseUrl
+						&& typeof value.panelHtml === 'string'
+						&& value.panelHtml.includes(sharedObserver.baseUrl)
+						&& typeof value.validatorSummaryUrl === 'string';
+				},
+				20_000,
+			);
+
+			assert.ok(state.panelHtml?.includes('<iframe '), 'observer panel should embed the Observer UI in an iframe');
+			assert.ok(
+				state.panelHtml?.includes(sharedObserver.baseUrl),
+				'observer panel iframe should point at the shared backend',
+			);
+
+			const idleSummary = await waitFor(
+				() => fetchJson(state.validatorSummaryUrl!),
+				(value) => value?.enabled === true && value?.status === 'idle',
+				20_000,
+			);
+			assert.equal(idleSummary.enabled, true);
+			assert.equal(idleSummary.hasResult, false);
+
+			const runUrl = state.validatorSummaryUrl!.replace('/api/query/validation/summary', '/api/validation/run');
+			const runSummary = await postJson(runUrl);
+			assert.equal(runSummary.enabled, true);
+
+			const readySummary = await waitFor(
+				() => fetchJson(state.validatorSummaryUrl!),
+				(value) => value?.enabled === true && value?.hasResult === true,
+				20_000,
+			);
+			assert.equal(readySummary.enabled, true);
+			assert.equal(readySummary.hasResult, true);
+		} finally {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await sharedObserver.dispose();
 		}
 	});
 

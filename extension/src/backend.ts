@@ -38,6 +38,10 @@ export function normalizeObserverBaseUrl(raw: string): string {
 	return parsed.toString().replace(/\/$/, '');
 }
 
+export function buildObserverValidatorSummaryUrl(baseUrl: string): string {
+	return `${normalizeObserverBaseUrl(baseUrl)}/api/query/validation/summary`;
+}
+
 export function buildObserverHealthUrl(baseUrl: string): string {
 	return `${normalizeObserverBaseUrl(baseUrl)}/api/health`;
 }

@@ -54,6 +54,17 @@ function buildObserverGo(paths) {
 	console.log(`Built observer binary to ${paths.observerOutBinary}`);
 }
 
+function bundleWeaverRuntime(paths) {
+	console.log("Bundling Weaver validator runtime...");
+
+	execFileSync("go", ["run", "./cmd/fetch-weaver", "-output", paths.observerOutDir], {
+		cwd: paths.observerRoot,
+		stdio: "inherit",
+	});
+
+	console.log(`Bundled Weaver runtime into ${paths.observerOutDir}`);
+}
+
 if (require.main === module) {
 	(async () => {
 		const paths = getBuildPaths();
@@ -61,10 +72,18 @@ if (require.main === module) {
 		stageSkills(paths);
 		buildClientAssets(paths);
 		buildObserverGo(paths);
+		bundleWeaverRuntime(paths);
 	})().catch((error) => {
 		console.error(error);
 		process.exit(1);
 	});
 }
 
-module.exports = { getBuildPaths, resetObserverOutputDirs, stageSkills, buildClientAssets, buildObserverGo };
+module.exports = {
+	getBuildPaths,
+	resetObserverOutputDirs,
+	stageSkills,
+	buildClientAssets,
+	buildObserverGo,
+	bundleWeaverRuntime,
+};

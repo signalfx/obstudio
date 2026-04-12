@@ -58,6 +58,8 @@ describe("TracesTab row layout", () => {
         ]}
         telemetryError={null}
         onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
     );
 
@@ -77,6 +79,7 @@ describe("TracesTab row layout", () => {
     expect(container.querySelector(".trace-row__trace-id")?.textContent).toBe("trace-1234567890ab");
     expect(container.querySelector(".trace-row__service")?.classList.contains("explorer-row__secondary")).toBe(true);
     expect(container.querySelector(".data-table__td--service")?.textContent).toBe("checkout");
+    expect(container.querySelector(".validation-badge")).toBeNull();
     expect(container.querySelector(".data-table__td--status")?.textContent).toContain("error");
     expect(container.querySelector(".data-table__td--duration .explorer-row__numeric")).toBeTruthy();
   });
@@ -90,6 +93,8 @@ describe("TracesTab row layout", () => {
         ]}
         telemetryError={null}
         onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
     );
 
@@ -115,7 +120,7 @@ describe("TracesTab row layout", () => {
     expect(traceStatusLabel("weird")).toBe("unknown");
   });
 
-  it("renders span detail info without validation overlays", () => {
+  it("does not render validation rule ids in the span detail panel", () => {
     render(
       <SpanDetailsPanel
         span={{
@@ -134,11 +139,28 @@ describe("TracesTab row layout", () => {
           resource: { serviceName: "checkout", attributes: {} },
           scope: { name: "otel", version: "" },
         }}
+        validationFindings={[
+          {
+            entityKey: "span:trace-1:span-1",
+            source: "weaver",
+            ruleId: "invalid_format",
+            severity: "violation",
+            message: "Attribute 'traceId' does not match name formatting rules.",
+            signal: {
+              type: "span",
+              serviceName: "checkout",
+              traceId: "trace-1",
+              spanId: "span-1",
+              spanName: "GET /orders",
+            },
+            updatedAt: "2026-04-11T12:00:00Z",
+          },
+        ]}
       />,
     );
 
-    expect(screen.getByText("Kind")).toBeTruthy();
-    expect(screen.queryByText("Validation")).toBeNull();
+    expect(screen.getByText("Attribute 'traceId' does not match name formatting rules.")).toBeTruthy();
+    expect(screen.queryByText("invalid_format")).toBeNull();
   });
 
   it("uses bounded per-tab column caps with trailing spacer tracks", () => {
@@ -187,7 +209,7 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".findings-tab__head .data-table__th {\n  padding: 0 6px;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}");
   });
 
-  it("uses the same vertical centering model for metric master cells", () => {
+  it("uses the same vertical centering model for metric and validation master cells", () => {
     const { readFileSync } = require("fs");
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
@@ -195,5 +217,8 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".data-table__cell-content {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 100%;\n  min-width: 0;\n}");
     expect(css).toContain(".data-table__cell-content--meta {\n  gap: 8px;\n}");
     expect(css).toContain(".data-table__td--metric-meta {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  min-width: 0;\n}");
+    expect(css).toContain(".findings-tab__item-title {\n  display: flex;\n  align-items: center;");
+    expect(css).toContain(".findings-tab__item-rule {\n  display: flex;\n  align-items: center;");
+    expect(css).toContain(".findings-tab__item-count {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;");
   });
 });

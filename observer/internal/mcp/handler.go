@@ -2,10 +2,15 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 )
 
 var supportedVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
@@ -69,13 +74,35 @@ type toolContent struct {
 
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
-	store *store.Store
-	tools []toolDef
+	store             *store.Store
+	validationService *validator.Service
+	tools             []toolDef
 }
 
 // NewDispatcher creates a new transport-agnostic MCP dispatcher.
-func NewDispatcher(s *store.Store) *Dispatcher {
-	return &Dispatcher{store: s, tools: buildToolDefs()}
+func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
+	var validationStore *validator.Store
+	var runner validator.Runner
+	for _, param := range params {
+		switch value := param.(type) {
+		case *validator.Store:
+			if value != nil {
+				validationStore = value
+			}
+		case validator.Runner:
+			if value != nil {
+				runner = value
+			}
+		}
+	}
+	if validationStore == nil {
+		validationStore = validator.NewStore()
+	}
+	return &Dispatcher{
+		store:             s,
+		validationService: validator.NewService(validationStore, runner),
+		tools:             buildToolDefs(),
+	}
 }
 
 // Dispatch processes a single JSON-RPC request and returns a response.
@@ -139,6 +166,12 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.clearStore()
 	case "observer_status":
 		result = d.status()
+	case "observer_validation_status":
+		result = d.validationStatus()
+	case "observer_validation_analyze":
+		result = d.validationAnalyze(args)
+	case "observer_validation_refresh":
+		result = d.validationRefresh(args)
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 	}
@@ -221,9 +254,38 @@ func (d *Dispatcher) status() toolResult {
 	ep := d.store.Endpoints()
 	stats := d.store.Stats()
 	return jsonToolResult(map[string]any{
-		"endpoints": ep,
-		"stats":     stats,
+		"endpoints":  ep,
+		"stats":      stats,
+		"validation": d.validationService.Summary(),
 	})
+}
+
+func (d *Dispatcher) validationStatus() toolResult {
+	return jsonToolResult(d.validationService.Summary())
+}
+
+func (d *Dispatcher) validationAnalyze(args map[string]any) toolResult {
+	query := validationQueryFromArgs(args)
+	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
+	freshness := freshnessArg(args, "freshness", validator.FreshnessAuto)
+	analysis, err := d.validationService.Analyze(context.Background(), query, freshness, timeout)
+	if err != nil {
+		suggestedTool := "observer_validation_analyze"
+		if freshness == validator.FreshnessLatestOK {
+			suggestedTool = "observer_validation_refresh"
+		}
+		return jsonValidationErrorResult(err, suggestedTool, "observer_validation_status")
+	}
+	return jsonToolResult(analysis)
+}
+
+func (d *Dispatcher) validationRefresh(args map[string]any) toolResult {
+	timeout := durationArgSeconds(args, "timeoutSeconds", 90*time.Second, 5*time.Second, 5*time.Minute)
+	analysis, err := d.validationService.Refresh(context.Background(), validationQueryFromArgs(args), timeout)
+	if err != nil {
+		return jsonValidationErrorResult(err, "observer_validation_status")
+	}
+	return jsonToolResult(analysis)
 }
 
 func buildToolDefs() []toolDef {
@@ -231,7 +293,7 @@ func buildToolDefs() []toolDef {
 	return []toolDef{
 		{
 			Name:        "observer_metrics_overview",
-			Description: "List metrics currently present in the OTLP in-memory store, with compact summaries and bounded datapoint previews.",
+			Description: "List metrics currently present in the OTLP in-memory store, with compact summaries and bounded datapoint previews. Use this when the user asks what metrics are flowing right now or wants a quick metrics inventory.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 				Properties: map[string]jsonSchema{
@@ -240,7 +302,7 @@ func buildToolDefs() []toolDef {
 					"resourceAttribute": {Type: "string", Description: "Optional substring that must appear in the serialized resource attributes."},
 					"scopeName":         {Type: "string", Description: "Optional case-insensitive instrumentation scope name filter."},
 					"serviceName":       {Type: "string", Description: "Optional case-insensitive service.name filter."},
-					"type":              {Type: "string", Enum: []string{"counter", "gauge", "histogram", "summary", "exponential_histogram"}, Description: "Optional metric kind filter."},
+					"type":              {Type: "string", Enum: []string{"sum", "gauge", "histogram", "summary", "exponential_histogram"}, Description: "Optional metric type filter."},
 					"limit":             {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100), Default: 20, Description: "Maximum number of metric groups to return."},
 				},
 			},
@@ -248,7 +310,7 @@ func buildToolDefs() []toolDef {
 		},
 		{
 			Name:        "observer_metric_detail",
-			Description: "Fetch a single metric by exact name with resource and scope context plus a larger datapoint window.",
+			Description: "Fetch a single metric by exact name with resource and scope context plus a larger datapoint window. Use this when the user asks about one specific metric or wants to inspect a metric mentioned by validation.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f, Required: []string{"metricName"},
 				Properties: map[string]jsonSchema{
@@ -262,7 +324,7 @@ func buildToolDefs() []toolDef {
 		},
 		{
 			Name:        "observer_traces_overview",
-			Description: "List recent traces from the OTLP in-memory store with compact span previews and status summaries.",
+			Description: "List recent traces from the OTLP in-memory store with compact span previews and status summaries. Use this when the user asks what traces are flowing, whether tracing is working, or which recent traces look interesting.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 				Properties: map[string]jsonSchema{
@@ -278,7 +340,7 @@ func buildToolDefs() []toolDef {
 		},
 		{
 			Name:        "observer_trace_detail",
-			Description: "Fetch one trace by traceId with ordered spans, attributes, links, and bounded event details.",
+			Description: "Fetch one trace by traceId with ordered spans, attributes, links, and bounded event details. Use this after observer_traces_overview or when validation points at a specific trace/span.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f, Required: []string{"traceId"},
 				Properties: map[string]jsonSchema{
@@ -290,7 +352,7 @@ func buildToolDefs() []toolDef {
 		},
 		{
 			Name:        "observer_logs_overview",
-			Description: "List recent log records from the OTLP in-memory store, with filtering by service, severity, body text, and trace correlation.",
+			Description: "List recent log records from the OTLP in-memory store, with filtering by service, severity, body text, and trace correlation. Use this when the user asks what logs are flowing or wants logs related to a trace or validation issue.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 				Properties: map[string]jsonSchema{
@@ -304,8 +366,57 @@ func buildToolDefs() []toolDef {
 			Annotations: toolAnnot{Title: "Observer Logs Overview", ReadOnlyHint: true, IdempotentHint: true},
 		},
 		{
+			Name:        "observer_validation_status",
+			Description: "Return validator runtime state, freshness metadata, run identifiers, and summary counts for the latest retained validation result. Use this when the user explicitly asks whether validation has run, whether a result exists, whether it is stale, or whether a run is currently in progress.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+			},
+			Annotations: toolAnnot{Title: "Observer Validation Status", ReadOnlyHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "observer_validation_analyze",
+			Description: "Primary validation tool. Use this for almost all user requests about validation, missing telemetry, semantic convention issues, or what needs fixing. If validation has never run, this automatically runs validation and returns the result. If the latest retained result is stale, it still returns analysis and explicitly says the analysis is based on the prior run time.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Properties: map[string]jsonSchema{
+					"freshness":      {Type: "string", Enum: []string{"auto", "fresh_required", "latest_ok"}, Default: "auto", Description: "Choose how strictly to require a fresh validation. auto runs validation only when no retained result exists. fresh_required always runs validation now. latest_ok never auto-runs and only uses the latest retained result."},
+					"timeoutSeconds": {Type: "integer", Minimum: intPtr(5), Maximum: intPtr(300), Default: 90, Description: "Maximum time to wait for a fresh validation run to finish."},
+					"limit":          {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(500), Default: 50, Description: "Maximum findings to include in the returned report."},
+					"logBody":        {Type: "string", Description: "Optional substring filter for log body findings."},
+					"metricName":     {Type: "string", Description: "Optional exact metric name filter."},
+					"ruleId":         {Type: "string", Description: "Optional case-insensitive rule identifier filter."},
+					"serviceName":    {Type: "string", Description: "Optional case-insensitive service.name filter."},
+					"severity":       {Type: "string", Enum: []string{"information", "improvement", "violation"}, Description: "Optional severity filter."},
+					"signalType":     {Type: "string", Enum: []string{"resource", "span", "span_event", "metric", "log"}, Description: "Optional signal type filter."},
+					"spanId":         {Type: "string", Description: "Optional exact span id filter."},
+					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
+				},
+			},
+			Annotations: toolAnnot{Title: "Observer Validation Analyze"},
+		},
+		{
+			Name:        "observer_validation_refresh",
+			Description: "Explicitly run validation against the current in-memory telemetry snapshot and wait for that run to complete. Use this only when the user explicitly asks to run, re-run, refresh, or validate the current telemetry now.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Properties: map[string]jsonSchema{
+					"timeoutSeconds": {Type: "integer", Minimum: intPtr(5), Maximum: intPtr(300), Default: 90, Description: "Maximum time to wait for the new validation run to finish."},
+					"limit":          {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(500), Default: 50, Description: "Maximum findings to return."},
+					"logBody":        {Type: "string", Description: "Optional substring filter for log body findings."},
+					"metricName":     {Type: "string", Description: "Optional exact metric name filter."},
+					"ruleId":         {Type: "string", Description: "Optional case-insensitive rule identifier filter."},
+					"serviceName":    {Type: "string", Description: "Optional case-insensitive service.name filter."},
+					"severity":       {Type: "string", Enum: []string{"information", "improvement", "violation"}, Description: "Optional severity filter."},
+					"signalType":     {Type: "string", Enum: []string{"resource", "span", "span_event", "metric", "log"}, Description: "Optional signal type filter."},
+					"spanId":         {Type: "string", Description: "Optional exact span id filter."},
+					"traceId":        {Type: "string", Description: "Optional exact trace id filter."},
+				},
+			},
+			Annotations: toolAnnot{Title: "Observer Validation Refresh"},
+		},
+		{
 			Name:        "observer_clear",
-			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Useful when restarting the instrumented application and wanting a clean slate.",
+			Description: "Clear all telemetry data (traces, metrics, logs) from the in-memory store. Use this only when the user explicitly asks to clear or reset the observer state.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
@@ -313,7 +424,7 @@ func buildToolDefs() []toolDef {
 		},
 		{
 			Name:        "observer_status",
-			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this to discover which addresses to point instrumented applications at and where to query results.",
+			Description: "Return the collector's listening endpoints (OTLP HTTP, OTLP gRPC, REST/Web UI) and current telemetry stats. Use this when the user asks whether telemetry is arriving, what ports to send OTLP to, or whether the observer backend is up.",
 			InputSchema: jsonSchema{
 				Type: "object", AdditionalProperties: &f,
 			},
@@ -340,6 +451,14 @@ func jsonToolResult(v any) toolResult {
 
 func errorResult(msg string) toolResult {
 	return toolResult{Content: []toolContent{{Type: "text", Text: msg}}, IsError: true}
+}
+
+func jsonErrorResult(v any) toolResult {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return errorResult(err.Error())
+	}
+	return toolResult{Content: []toolContent{{Type: "text", Text: string(data)}}, IsError: true}
 }
 
 func negotiateVersion(client string) string {
@@ -385,3 +504,82 @@ func intArg(m map[string]any, key string, def int) int {
 }
 
 func intPtr(v int) *int { return &v }
+
+func boolArg(m map[string]any, key string, def bool) bool {
+	v, ok := m[key].(bool)
+	if !ok {
+		return def
+	}
+	return v
+}
+
+func durationArgSeconds(m map[string]any, key string, def, min, max time.Duration) time.Duration {
+	seconds := intArg(m, key, int(def/time.Second))
+	duration := time.Duration(seconds) * time.Second
+	if duration < min {
+		return min
+	}
+	if duration > max {
+		return max
+	}
+	return duration
+}
+
+func freshnessArg(m map[string]any, key string, def validator.FreshnessMode) validator.FreshnessMode {
+	switch strings.ToLower(strArg(m, key)) {
+	case string(validator.FreshnessAuto):
+		return validator.FreshnessAuto
+	case string(validator.FreshnessFreshRequired):
+		return validator.FreshnessFreshRequired
+	case string(validator.FreshnessLatestOK):
+		return validator.FreshnessLatestOK
+	default:
+		return def
+	}
+}
+
+func validationQueryFromArgs(args map[string]any) validator.Query {
+	return validator.Query{
+		ServiceName: strArg(args, "serviceName"),
+		SignalType:  strArg(args, "signalType"),
+		Severity:    strArg(args, "severity"),
+		RuleID:      strArg(args, "ruleId"),
+		TraceID:     strArg(args, "traceId"),
+		SpanID:      strArg(args, "spanId"),
+		MetricName:  strArg(args, "metricName"),
+		LogBody:     strArg(args, "logBody"),
+		Limit:       intArg(args, "limit", 50),
+	}
+}
+
+func jsonValidationErrorResult(err error, suggestedTools ...string) toolResult {
+	var serviceErr *validator.ServiceError
+	if !errors.As(err, &serviceErr) {
+		payload := map[string]any{"error": err.Error()}
+		if len(suggestedTools) > 0 {
+			payload["suggestedTool"] = suggestedTools[0]
+			payload["suggestedTools"] = suggestedTools
+		}
+		return jsonErrorResult(payload)
+	}
+
+	payload := map[string]any{
+		"error":   serviceErr.Error(),
+		"summary": serviceErr.Summary,
+	}
+	if serviceErr.RequestedRunID != "" {
+		payload["requestedRunId"] = serviceErr.RequestedRunID
+	}
+	if serviceErr.AvailableResultID != "" {
+		payload["availableResultId"] = serviceErr.AvailableResultID
+	}
+	if len(suggestedTools) > 0 {
+		payload["suggestedTool"] = suggestedTools[0]
+		payload["suggestedTools"] = suggestedTools
+	}
+	if serviceErr.Kind == validator.ErrRunStillRunning {
+		payload["suggestedTool"] = "observer_validation_status"
+		payload["suggestedTools"] = []string{"observer_validation_status"}
+	}
+	return jsonErrorResult(payload)
+}

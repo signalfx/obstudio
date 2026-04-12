@@ -18,6 +18,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
+	"github.com/signalfx/obstudio/observer/internal/validator"
 	"github.com/signalfx/obstudio/observer/internal/web"
 )
 
@@ -44,6 +45,11 @@ func main() {
 
 func run() {
 	s := store.New()
+	v := validator.NewStore()
+	validatorManager := validator.NewManager(v, s)
+	s.SetInvalidateCallback(validatorManager.Reset)
+	s.SetChangeCallback(validatorManager.MarkTelemetryChanged)
+	startedAt := time.Now().UTC()
 
 	host := envOr("HOST", "127.0.0.1")
 	port := envOr("PORT", "3000")
@@ -61,15 +67,26 @@ func run() {
 	})
 
 	ctx := context.Background()
+	if err := validatorManager.Start(ctx); err != nil {
+		log.Printf("validator startup failed: %v", err)
+	}
+
 	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr)
 	if err != nil {
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	api.Register(mux, s)
-	mcp.Register(mux, s)
-	webCleanup := web.Register(mux, s)
+	api.Register(mux, s, v, validatorManager, api.ServerInfo{
+		Kind:       "obstudio",
+		APIVersion: "v1",
+		Version:    version,
+		Owner:      envOr("OBSTUDIO_OWNER", "cli"),
+		Mode:       envOr("OBSTUDIO_MODE", "standalone"),
+		StartedAt:  startedAt,
+	})
+	mcp.Register(mux, s, v, validatorManager)
+	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
 	go func() {
@@ -84,7 +101,7 @@ func run() {
 	fmt.Fprintf(os.Stderr, "  OTLP/gRPC receiver:  %s\n", otlpGRPCAddr)
 	fmt.Fprintf(os.Stderr, "  MCP endpoint:        http://%s/mcp\n\n", mainAddr)
 
-	go mcp.RunStdio(s, os.Stdin, os.Stdout)
+	go mcp.RunStdio(s, os.Stdin, os.Stdout, v, validatorManager)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -95,6 +112,7 @@ func run() {
 	defer cancel()
 	srv.Shutdown(shutCtx)
 	webCleanup()
+	validatorManager.Shutdown(shutCtx)
 	rcv.Shutdown(ctx)
 }
 
