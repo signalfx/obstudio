@@ -12,14 +12,16 @@
 #
 # Prerequisites:
 #   - Node.js 20+
-#   - ANTHROPIC_API_KEY or OPENAI_API_KEY set
+#   - AWS credentials configured (AWS_PROFILE or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)
+#   - Claude model access enabled in Amazon Bedrock (us-east-1)
 
 description: obstudio skill evaluation suite
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
     config:
       temperature: 0
+      region: us-east-1
 
 prompts:
   - "{{input}}"

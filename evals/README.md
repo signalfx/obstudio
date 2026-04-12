@@ -92,7 +92,8 @@ response.  They require an API key.
 ### Prerequisites
 
 - Node.js 20+
-- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set in your environment
+- AWS credentials configured (`AWS_PROFILE` or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)
+- Claude model access enabled in Amazon Bedrock (us-east-1)
 
 ### Running
 
@@ -108,9 +109,9 @@ npx promptfoo view                                   # open results in browser
 
 ### Configuration
 
-`promptfoo.yaml` configures the provider (Claude Sonnet at temperature
-0), prompts, and test assertions.  Edit this file to change models, add
-test cases, or adjust rubrics.
+`promptfoo.yaml` configures the provider (Claude Sonnet via Amazon
+Bedrock at temperature 0), prompts, and test assertions.  Edit this file
+to change models, regions, or adjust rubrics.
 
 ---
 
@@ -164,5 +165,5 @@ Categories are `OOB` (auto-instrumentation), `Custom` (hand-written), or
 
 The `skill-evals` job in `.github/workflows/ci.yml` installs `uv` and
 runs `make eval` (deterministic tests).  LLM-based evals can also run
-in CI if an API key secret is configured -- add a step that runs
-`npx promptfoo eval` with `ANTHROPIC_API_KEY` from secrets.
+in CI if AWS credentials are configured -- add a step that runs
+`npx promptfoo eval` with Bedrock access via IAM role or secrets.
