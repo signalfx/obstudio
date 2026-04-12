@@ -144,3 +144,21 @@ tests:
           logic.
     options:
       tags: [golden, go-chi-basic]
+
+  - vars:
+      input: >
+        Analyze the examples/go/kvstore directory for observability
+        gaps and list the signals you would track.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should identify SLIs for a Go key-value store
+          including HTTP request latency, KV get latency, KV set
+          throughput, KV delete throughput, search latency, cache hit
+          rate, eviction rate, and active key count. It should produce
+          OOB spans from otelhttp for HTTP, Custom spans for get/set/
+          delete/search operations, Custom metrics for store gauges and
+          counters, and log signals for persistence failures and
+          evictions. Signal names should follow OTel conventions.
+    options:
+      tags: [golden, go-kvstore]
