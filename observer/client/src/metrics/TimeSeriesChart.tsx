@@ -1,5 +1,6 @@
 import React from "react";
 import type { MetricSeries } from "./useMetricTimeSeries";
+import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 type DisplayType = "lines" | "bars" | "area";
 
@@ -10,7 +11,6 @@ interface TimeSeriesChartProps {
   onSelectSeries: (key: string) => void;
 }
 
-const COLORS = ["#4fc1ff", "#4ec9b0", "#c586c0", "#dcdcaa", "#ce9178", "#569cd6", "#d16969"];
 const CHART_W = 800;
 const CHART_H = 240;
 const PAD = { top: 10, right: 10, bottom: 30, left: 60 };
@@ -65,7 +65,7 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
 
         {/* Series */}
         {series.map((s, si) => {
-          const color = COLORS[si % COLORS.length];
+          const color = TELEMETRY_SERIES_COLORS[si % TELEMETRY_SERIES_COLORS.length];
           const opacity = selectedKey === null || selectedKey === s.key ? 1 : 0.2;
           const sorted = [...s.points]
             .map((p) => ({ x: x(new Date(p.timestamp).getTime()), y: y(p.value) }))
@@ -111,7 +111,7 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
       {/* Series annotations */}
       <div className="ts-chart__annotations">
         {series.map((s, si) => {
-          const color = COLORS[si % COLORS.length];
+          const color = TELEMETRY_SERIES_COLORS[si % TELEMETRY_SERIES_COLORS.length];
           const attrs = Object.entries(s.attributes);
           const svcName = s.resource?.serviceName;
           const attrStr = attrs.length > 0 ? attrs.map(([k, v]) => `${k}=${v}`).join(", ") : "";

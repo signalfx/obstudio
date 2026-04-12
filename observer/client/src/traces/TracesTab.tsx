@@ -15,6 +15,7 @@ interface TracesTabProps {
 
 /** Traces tab with virtualized table and waterfall detail panel. */
 export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps): React.ReactElement {
+  const [query, setQuery] = useState("");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [traceDetail, setTraceDetail] = useState<TraceDetail | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
@@ -77,10 +78,21 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
 
   useKeyboardShortcuts(shortcuts);
 
+  const filteredTraces = useMemo(() => {
+    const trimmedQuery = query.trim().toLowerCase();
+    if (!trimmedQuery) {
+      return traces;
+    }
+    return traces.filter((trace) => {
+      const haystack = [trace.traceId, trace.serviceName ?? "", trace.rootSpanName, trace.status].join(" ").toLowerCase();
+      return haystack.includes(trimmedQuery);
+    });
+  }, [query, traces]);
+
   // Invalidate detail when the selected trace is no longer in the list
   // (e.g., after live updates or store clear).
   // Re-fetch detail when the trace's span count changes (new spans arrived).
-  const selectedSummary = traces.find((t) => t.traceId === selectedTraceId);
+  const selectedSummary = filteredTraces.find((t) => t.traceId === selectedTraceId) ?? traces.find((t) => t.traceId === selectedTraceId);
   useEffect(() => {
     if (!selectedTraceId) return;
     if (!selectedSummary) {
@@ -99,8 +111,15 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
     }
   }, [loadTraceDetail, selectedTraceId, selectedSummary, traces]);
 
+  useEffect(() => {
+    if (!selectedTraceId) return;
+    if (!filteredTraces.some((trace) => trace.traceId === selectedTraceId)) {
+      selectTrace(null);
+    }
+  }, [filteredTraces, selectTrace, selectedTraceId]);
+
   const virtualizer = useVirtualizer({
-    count: traces.length,
+    count: filteredTraces.length,
     getScrollElement: () => tableRef.current,
     estimateSize: () => 36,
     overscan: 10,
@@ -119,8 +138,15 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
       >
         <div className="signal-view__content">
           {traces.length > 0 ? (
-            <div className="explorer__toolbar">
-              <span className="explorer__count">{traces.length} traces</span>
+            <div className="explorer__toolbar explorer__toolbar--controls">
+              <span className="explorer__count">{filteredTraces.length} traces</span>
+              <input
+                className="explorer__input"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search operation, trace ID, service, or status"
+              />
             </div>
           ) : null}
 
@@ -130,21 +156,23 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
 
           {traces.length === 0 ? (
             <p className="explorer__status">Waiting for traces... Send OTLP data to port 4318.</p>
+          ) : filteredTraces.length === 0 ? (
+            <p className="explorer__status">No traces match the current search.</p>
           ) : (
             <>
-          <div className="data-table__head data-table__head--traces">
-            <span className="data-table__th data-table__th--status" />
-            <span className="data-table__th data-table__th--traceid">Trace ID</span>
-            <span className="data-table__th data-table__th--service">Service</span>
+          <div className="data-table__head data-table__head--traces data-table__head--left-cluster">
             <span className="data-table__th data-table__th--operation">Operation</span>
-            <span className="data-table__th data-table__th--duration">Duration</span>
-            <span className="data-table__th data-table__th--spans">Spans</span>
+            <span className="data-table__th data-table__th--trace-id">Trace ID</span>
+            <span className="data-table__th data-table__th--service">Service</span>
+            <span className="data-table__th data-table__th--status">Status</span>
+            <span className="data-table__th data-table__th--duration data-table__th--numeric">Duration</span>
+            <span className="data-table__th data-table__th--spans data-table__th--numeric">Spans</span>
           </div>
 
           <div className="data-table__body" ref={tableRef}>
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+            <div className="data-table__body-inner data-table__body-inner--traces" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
               {virtualizer.getVirtualItems().map((vi) => {
-                const t = traces[vi.index];
+                const t = filteredTraces[vi.index];
                 if (!t) return null;
                 const active = t.traceId === selectedTraceId;
                 return (
@@ -163,18 +191,26 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
                     data-index={vi.index}
                     ref={virtualizer.measureElement}
                   >
-                    <span className={`data-table__td data-table__td--status status-dot status-dot--${t.status}`} />
-                    <span className="data-table__td data-table__td--traceid mono">
-                      {t.traceId.slice(-12)}
+                    <span className="data-table__td data-table__td--operation">
+                      <span className="trace-row__operation explorer-row__primary">{t.rootSpanName}</span>
+                    </span>
+                    <span className="data-table__td data-table__td--trace-id">
+                      <span className="trace-row__trace-id explorer-row__secondary">{t.traceId}</span>
                     </span>
                     <span className="data-table__td data-table__td--service">
-                      {t.serviceName ?? "unknown"}
+                      <span className="trace-row__service explorer-row__secondary">{t.serviceName ?? "unknown"}</span>
                     </span>
-                    <span className="data-table__td data-table__td--operation">{t.rootSpanName}</span>
-                    <span className="data-table__td data-table__td--duration">
-                      {t.durationMs != null ? `${t.durationMs.toFixed(1)}ms` : "--"}
+                    <span className="data-table__td data-table__td--status">
+                      <span className="trace-row__status">
+                        <span className={`trace-status trace-status--plain trace-status--${normalizeTraceStatusClass(t.status)}`}>{traceStatusLabel(t.status)}</span>
+                      </span>
                     </span>
-                    <span className="data-table__td data-table__td--spans">{t.spanCount}</span>
+                    <span className="data-table__td data-table__td--duration data-table__td--numeric">
+                      <span className="explorer-row__numeric">{formatTraceDuration(t.durationMs)}</span>
+                    </span>
+                    <span className="data-table__td data-table__td--spans data-table__td--numeric">
+                      <span className="explorer-row__numeric">{t.spanCount}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -189,7 +225,7 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
           <div className="signal-view__panel">
             <DetailPanel
               title={traceDetail.rootSpanName}
-              subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${traceDetail.durationMs?.toFixed(1) ?? "--"}ms`}
+              subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${formatTraceDuration(traceDetail.durationMs)}`}
               onClose={() => selectTrace(null)}
             >
               <TraceWaterfall
@@ -228,4 +264,35 @@ export function TracesTab({ traces, telemetryError, onInteract }: TracesTabProps
       </div>
     </section>
   );
+}
+
+function formatTraceDuration(durationMs?: number): string {
+  return `${(durationMs ?? 0).toFixed(1)}ms`;
+}
+
+export function traceStatusLabel(status: string): string | null {
+  switch (status) {
+    case "ok":
+      return "ok";
+    case "error":
+      return "error";
+    case "mixed":
+      return "mixed";
+    case "unset":
+      return "unset";
+    default:
+      return "unknown";
+  }
+}
+
+function normalizeTraceStatusClass(status: string): string {
+  switch (status) {
+    case "ok":
+    case "error":
+    case "mixed":
+    case "unset":
+      return status;
+    default:
+      return "unset";
+  }
 }

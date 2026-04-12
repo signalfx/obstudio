@@ -1,7 +1,9 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -690,6 +692,46 @@ func TestQueryTraces_RootSpanDetection(t *testing.T) {
 	}
 }
 
+func TestQueryTraces_ZeroDurationIsIncludedInJSON(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	span := newTestSpan("trace-1", "span-1", "root", now, 0)
+	s.AddSpansForConnection("conn-1", []Span{span})
+
+	results := s.QueryTraces(10)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 trace summary, got %d", len(results))
+	}
+	if results[0].DurationMs != 0 {
+		t.Fatalf("expected zero duration in summary, got %f", results[0].DurationMs)
+	}
+
+	summaryJSON, err := json.Marshal(results[0])
+	if err != nil {
+		t.Fatalf("marshal summary: %v", err)
+	}
+	if !strings.Contains(string(summaryJSON), `"durationMs":0`) {
+		t.Fatalf("expected summary JSON to include zero duration, got %s", summaryJSON)
+	}
+
+	detail := s.Trace("trace-1", 10)
+	if detail == nil {
+		t.Fatal("expected trace detail")
+	}
+	if detail.DurationMs != 0 {
+		t.Fatalf("expected zero duration in detail, got %f", detail.DurationMs)
+	}
+
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	if !strings.Contains(string(detailJSON), `"durationMs":0`) {
+		t.Fatalf("expected detail JSON to include zero duration, got %s", detailJSON)
+	}
+}
+
 // ============================================================================
 // Trace Tests
 // ============================================================================
@@ -826,6 +868,17 @@ func TestComputeTraceDuration_Empty(t *testing.T) {
 	duration := computeTraceDuration([]Span{})
 	if duration != 0 {
 		t.Errorf("expected 0ms for empty slice, got %f", duration)
+	}
+}
+
+func TestComputeTraceDuration_PreservesSubMillisecondPrecision(t *testing.T) {
+	now := time.Now()
+	span := newTestSpan("trace-1", "span-1", "test", now, 0)
+	span.EndTime = span.StartTime.Add(700 * time.Microsecond)
+
+	duration := computeTraceDuration([]Span{span})
+	if duration != 0.7 {
+		t.Errorf("expected 0.7ms, got %f", duration)
 	}
 }
 

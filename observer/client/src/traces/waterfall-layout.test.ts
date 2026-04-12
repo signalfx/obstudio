@@ -3,11 +3,12 @@ import { buildWaterfallTree, flattenTree } from "./waterfall-layout";
 import type { Span } from "../api/types";
 
 function makeSpan(overrides: Partial<Span> & { spanId: string }): Span {
+  const { spanId, ...rest } = overrides;
   return {
     traceId: "abc123",
-    spanId: overrides.spanId,
+    spanId,
     parentSpanId: overrides.parentSpanId ?? "",
-    name: overrides.name ?? `span-${overrides.spanId}`,
+    name: overrides.name ?? `span-${spanId}`,
     kind: "INTERNAL",
     startTimeUnixNano: "1000000000",
     endTimeUnixNano: "2000000000",
@@ -18,7 +19,7 @@ function makeSpan(overrides: Partial<Span> & { spanId: string }): Span {
     links: [],
     resource: { attributes: {} },
     scope: { name: "test" },
-    ...overrides,
+    ...rest,
   };
 }
 

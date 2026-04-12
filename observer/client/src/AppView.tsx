@@ -117,7 +117,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("metrics")}
           >
-            <span className="tab-button__glyph" aria-hidden="true">M</span>
             Metrics
           </button>
           <button
@@ -127,7 +126,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             className={activeTab === "traces" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("traces")}
           >
-            <span className="tab-button__glyph" aria-hidden="true">T</span>
             Traces
           </button>
           <button
@@ -137,7 +135,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             className={activeTab === "logs" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("logs")}
           >
-            <span className="tab-button__glyph" aria-hidden="true">L</span>
             Logs
           </button>
         </div>

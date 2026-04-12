@@ -25,11 +25,32 @@ function logKey(r: LogRecord): string {
 
 /** Logs tab with virtualized table and detail panel for selected log records. */
 export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement {
+  const [query, setQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
   const [selectedLog, setSelectedLog] = useState<LogRecord | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const tableRef = useRef<HTMLDivElement>(null);
 
   const selectedKey = useMemo(() => selectedLog ? logKey(selectedLog) : null, [selectedLog]);
+  const filteredLogs = useMemo(() => {
+    const trimmedQuery = query.trim().toLowerCase();
+    return logs.filter((record) => {
+      const severity = record.severityText ?? "";
+      if (severityFilter && !severity.toLowerCase().includes(severityFilter)) {
+        return false;
+      }
+      if (!trimmedQuery) {
+        return true;
+      }
+      const haystack = [
+        severity,
+        record.body,
+        record.resource?.serviceName ?? "",
+        record.traceId ?? "",
+      ].join(" ").toLowerCase();
+      return haystack.includes(trimmedQuery);
+    });
+  }, [logs, query, severityFilter]);
   const handleInteract = useCallback(() => {
     onInteract?.();
   }, [onInteract]);
@@ -42,8 +63,14 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
     }
   }, [logs, selectedKey]);
 
+  useEffect(() => {
+    if (selectedKey && !filteredLogs.some((record) => logKey(record) === selectedKey)) {
+      setSelectedLog(null);
+    }
+  }, [filteredLogs, selectedKey]);
+
   const virtualizer = useVirtualizer({
-    count: logs.length,
+    count: filteredLogs.length,
     getScrollElement: () => tableRef.current,
     estimateSize: () => 36,
     overscan: 10,
@@ -57,16 +84,37 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
       >
         <div className="signal-view__content">
           {logs.length > 0 ? (
-            <div className="explorer__toolbar">
-              <span className="explorer__count">{logs.length} logs</span>
+            <div className="explorer__toolbar explorer__toolbar--controls">
+              <span className="explorer__count">{filteredLogs.length} logs</span>
+              <select
+                className="explorer__select"
+                value={severityFilter}
+                onChange={(event) => setSeverityFilter(event.target.value)}
+                aria-label="Filter logs by severity"
+              >
+                <option value="">All levels</option>
+                <option value="error">Error</option>
+                <option value="warn">Warn</option>
+                <option value="info">Info</option>
+                <option value="debug">Debug</option>
+              </select>
+              <input
+                className="explorer__input"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search message, service, or trace ID"
+              />
             </div>
           ) : null}
 
           {logs.length === 0 ? (
             <p className="explorer__status">Waiting for logs... Send OTLP data to port 4318.</p>
+          ) : filteredLogs.length === 0 ? (
+            <p className="explorer__status">No logs match the current filters.</p>
           ) : (
             <>
-          <div className="data-table__head data-table__head--logs">
+          <div className="data-table__head data-table__head--logs data-table__head--left-cluster data-table__head--left-cluster-logs">
             <span className="data-table__th data-table__th--severity">Level</span>
             <span className="data-table__th data-table__th--timestamp">Timestamp</span>
             <span className="data-table__th data-table__th--service">Service</span>
@@ -74,9 +122,9 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
           </div>
 
           <div className="data-table__body" ref={tableRef}>
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+            <div className="data-table__body-inner data-table__body-inner--logs" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
               {virtualizer.getVirtualItems().map((vi) => {
-                const r = logs[vi.index];
+                const r = filteredLogs[vi.index];
                 if (!r) return null;
                 const active = selectedKey !== null && logKey(r) === selectedKey;
                 const cls = severityClass(r.severityText ?? "");
@@ -104,12 +152,14 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                       {r.severityText ?? "--"}
                     </span>
                     <span className="data-table__td data-table__td--timestamp">
-                      {formatTimestamp(r.timeUnixNano)}
+                      <span className="explorer-row__secondary">{formatTimestamp(r.timeUnixNano)}</span>
                     </span>
                     <span className="data-table__td data-table__td--service">
-                      {r.resource?.serviceName ?? "unknown"}
+                      <span className="explorer-row__secondary">{r.resource?.serviceName ?? "unknown"}</span>
                     </span>
-                    <span className="data-table__td data-table__td--message">{r.body}</span>
+                    <span className="data-table__td data-table__td--message">
+                      <span className="explorer-row__primary">{r.body}</span>
+                    </span>
                   </button>
                 );
               })}
