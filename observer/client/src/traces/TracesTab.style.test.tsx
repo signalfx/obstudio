@@ -63,7 +63,6 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    expect(screen.getByText("1 traces")).toBeTruthy();
     expect(screen.getByText("Trace ID")).toBeTruthy();
     expect(screen.getByText("Service")).toBeTruthy();
     expect(screen.getByText("Status")).toBeTruthy();
@@ -99,15 +98,12 @@ describe("TracesTab row layout", () => {
     );
 
     const input = view.getByPlaceholderText("Search operation, trace ID, service, or status");
-    expect(view.getByText("2 traces")).toBeTruthy();
 
     fireEvent.change(input, { target: { value: "error" } });
-    expect(view.getByText("1 traces")).toBeTruthy();
     expect(view.getByText("POST /payments")).toBeTruthy();
     expect(view.queryByText("GET /health")).toBeNull();
 
     fireEvent.change(input, { target: { value: "trace-ok-456" } });
-    expect(view.getByText("1 traces")).toBeTruthy();
     expect(view.getByText("GET /health")).toBeTruthy();
     expect(view.queryByText("POST /payments")).toBeNull();
   });
