@@ -12,14 +12,16 @@
 #
 # Prerequisites:
 #   - Node.js 20+
-#   - ANTHROPIC_API_KEY or OPENAI_API_KEY set
+#   - AWS credentials configured (AWS_PROFILE or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)
+#   - Claude model access enabled in Amazon Bedrock (us-east-1)
 
 description: obstudio skill evaluation suite
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
     config:
       temperature: 0
+      region: us-east-1
 
 prompts:
   - "{{input}}"
@@ -142,3 +144,21 @@ tests:
           logic.
     options:
       tags: [golden, go-chi-basic]
+
+  - vars:
+      input: >
+        Analyze the examples/go/kvstore directory for observability
+        gaps and list the signals you would track.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response should identify SLIs for a Go key-value store
+          including HTTP request latency, KV get latency, KV set
+          throughput, KV delete throughput, search latency, cache hit
+          rate, eviction rate, and active key count. It should produce
+          OOB spans from otelhttp for HTTP, Custom spans for get/set/
+          delete/search operations, Custom metrics for store gauges and
+          counters, and log signals for persistence failures and
+          evictions. Signal names should follow OTel conventions.
+    options:
+      tags: [golden, go-kvstore]

@@ -82,7 +82,7 @@ ifndef APP
 endif
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
 
-eval-llm: ## Run LLM-based evals via promptfoo (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)
+eval-llm: ## Run LLM-based evals via promptfoo (requires AWS credentials for Bedrock)
 	cd $(EVALS_DIR) && npx promptfoo eval
 
 # --- Skills ---
