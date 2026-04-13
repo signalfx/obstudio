@@ -23,13 +23,13 @@ jobs:
           cache-dependency-path: observer/go.sum
 
       - name: go vet
-        run: make vet
+        run: make -C observer vet
 
       - name: Build binary
-        run: make build
+        run: make -C observer build
 
       - name: Run tests
-        run: make test
+        run: make -C observer test
 
   extension:
     name: Extension – unit & integration tests

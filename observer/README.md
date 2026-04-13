@@ -10,6 +10,10 @@ agents), and a browser-based Telemetry Explorer.
 make run
 ```
 
+Run this either from the repository root or from `observer/`. The
+`observer/Makefile` delegates to the repo-root build so the commands stay
+in sync.
+
 This builds and starts the collector on default ports:
 
 | Service | URL |
@@ -94,7 +98,8 @@ AI agents can query telemetry via JSON-RPC at `/mcp`:
 
 ## Make Targets
 
-All targets run from the repository root:
+Targets are defined in the repository root and are also available from
+`observer/` via the delegating `Makefile`:
 
 | Target | Description |
 |---|---|
