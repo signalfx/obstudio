@@ -13,15 +13,22 @@
 # Prerequisites:
 #   - Node.js 20+
 #   - AWS credentials configured (AWS_PROFILE or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)
-#   - Claude model access enabled in Amazon Bedrock (us-east-1)
+#   - Claude model access enabled in Amazon Bedrock (us-west-2)
 
 description: obstudio skill evaluation suite
 
 providers:
-  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
     config:
       temperature: 0
-      region: us-east-1
+      region: us-west-2
+
+defaultTest:
+  options:
+    provider:
+      id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+      config:
+        region: us-west-2
 
 prompts:
   - "{{input}}"
