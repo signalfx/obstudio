@@ -28,6 +28,8 @@ type FileSnapshot = {
 	filePath: string;
 };
 
+const sharedObserverStartupRetries = 5;
+
 async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, timeoutMs: number): Promise<T> {
 	const deadline = Date.now() + timeoutMs;
 	let last: T | undefined;
@@ -83,10 +85,39 @@ async function getAvailablePort(): Promise<number> {
 	});
 }
 
-async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
+function isRetryableSharedObserverStartupFailure(stderr: string): boolean {
+	return /\bEADDRINUSE\b/i.test(stderr) || /\baddress already in use\b/i.test(stderr);
+}
+
+async function terminateChild(child: cp.ChildProcess): Promise<void> {
+	if (child.exitCode !== null || child.killed) {
+		return;
+	}
+	child.kill();
+	await Promise.race([
+		new Promise<void>((resolve) => {
+			child.once('exit', () => resolve());
+		}),
+		new Promise<void>((resolve) => {
+			setTimeout(() => {
+				if (child.exitCode === null && !child.killed) {
+					child.kill('SIGKILL');
+				}
+				resolve();
+			}, 2_000);
+		}),
+	]);
+}
+
+async function waitForHttpOrExit(url: string, child: cp.ChildProcess, timeoutMs: number): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	let lastError: unknown;
+
 	while (Date.now() < deadline) {
+		if (child.exitCode !== null || child.killed) {
+			throw new Error(`Observer exited before becoming ready at ${url}.`);
+		}
+
 		try {
 			await new Promise<void>((resolve, reject) => {
 				http.get(url, (response) => {
@@ -100,6 +131,10 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
 			await new Promise((resolve) => setTimeout(resolve, 200));
 		}
 	}
+
+	if (child.exitCode !== null || child.killed) {
+		throw new Error(`Observer exited before becoming ready at ${url}.`);
+	}
 	if (lastError instanceof Error) {
 		throw lastError;
 	}
@@ -107,44 +142,49 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
 }
 
 async function startSharedObserver(binaryPath: string): Promise<SharedObserverHandle> {
-	const port = await getAvailablePort();
-	const grpcPort = await getAvailablePort();
-	const httpPort = await getAvailablePort();
-	const baseUrl = `http://127.0.0.1:${port}`;
-	const child = cp.spawn(binaryPath, [], {
-		env: {
-			...process.env,
-			HOST: '127.0.0.1',
-			PORT: String(port),
-			OTLP_GRPC_PORT: String(grpcPort),
-			OTLP_HTTP_PORT: String(httpPort),
-		},
-		stdio: 'pipe',
-	});
-	let stderr = '';
-	child.stderr?.on('data', (chunk: Buffer | string) => {
-		stderr += chunk.toString();
-	});
+	let lastFailure: Error | undefined;
 
-	try {
-		await waitForHttp(baseUrl, 10_000);
-	} catch (error) {
-		child.kill();
-		throw new Error(`shared observer failed to start: ${error instanceof Error ? error.message : String(error)}\n${stderr}`);
+	for (let attempt = 1; attempt <= sharedObserverStartupRetries; attempt += 1) {
+		const port = await getAvailablePort();
+		const grpcPort = await getAvailablePort();
+		const httpPort = await getAvailablePort();
+		const baseUrl = `http://127.0.0.1:${port}`;
+		const child = cp.spawn(binaryPath, [], {
+			env: {
+				...process.env,
+				HOST: '127.0.0.1',
+				PORT: String(port),
+				OTLP_GRPC_PORT: String(grpcPort),
+				OTLP_HTTP_PORT: String(httpPort),
+			},
+			stdio: 'pipe',
+		});
+		let stderr = '';
+		child.stderr?.on('data', (chunk: Buffer | string) => {
+			stderr += chunk.toString();
+		});
+
+		try {
+			await waitForHttpOrExit(baseUrl, child, 10_000);
+			return {
+				baseUrl,
+				dispose: async () => {
+					await terminateChild(child);
+				},
+			};
+		} catch (error) {
+			await terminateChild(child);
+			lastFailure = new Error(
+				`shared observer failed to start: ${error instanceof Error ? error.message : String(error)}\n${stderr}`,
+			);
+			if (attempt < sharedObserverStartupRetries && isRetryableSharedObserverStartupFailure(stderr)) {
+				continue;
+			}
+			throw lastFailure;
+		}
 	}
 
-	return {
-		baseUrl,
-		dispose: async () => {
-			if (child.exitCode !== null || child.killed) {
-				return;
-			}
-			child.kill();
-			await new Promise<void>((resolve) => {
-				child.once('exit', () => resolve());
-			});
-		},
-	};
+	throw lastFailure ?? new Error('shared observer failed to start');
 }
 
 async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverHandle> {
@@ -293,6 +333,23 @@ async function requestJson(url: string, method: 'GET' | 'POST'): Promise<any> {
 }
 
 suite('VS Code Host', () => {
+	test('shared observer startup retries port collisions', () => {
+		assert.equal(
+			isRetryableSharedObserverStartupFailure(
+				'failed to start OTLP receiver: listen tcp 127.0.0.1:45621: bind: address already in use',
+			),
+			true,
+		);
+		assert.equal(
+			isRetryableSharedObserverStartupFailure('spawn failed: EADDRINUSE'),
+			true,
+		);
+		assert.equal(
+			isRetryableSharedObserverStartupFailure('shared observer failed to start: connect ECONNREFUSED 127.0.0.1:36715'),
+			false,
+		);
+	});
+
 	test('openObserver reuses configured shared backend and configures MCP targets', async function () {
 		this.timeout(30_000);
 
