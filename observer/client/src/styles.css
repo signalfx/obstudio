@@ -45,9 +45,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(0, 122, 204, 0.14), transparent 32%),
-    linear-gradient(180deg, #141414 0%, #101010 100%);
+  background: #121212;
 }
 
 #root {
@@ -59,7 +57,7 @@ body {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
-  padding: 16px;
+  padding: 12px;
 }
 
 .app-frame {
@@ -69,48 +67,46 @@ body {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 10px;
   background: var(--app-bg);
-  box-shadow: var(--surface-shadow);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
 .title-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
-    var(--chrome);
+  background: var(--chrome);
 }
 
 .title-bar__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .title-bar__dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgba(0, 122, 204, 0.16);
+  box-shadow: 0 0 0 4px rgba(0, 122, 204, 0.12);
 }
 
 .title-bar__eyebrow {
-  margin: 0 0 3px;
+  margin: 0 0 1px;
   font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   color: var(--text-dim);
 }
 
 .title-bar__title {
   margin: 0;
-  font-size: clamp(1.05rem, 1.45vw, 1.25rem);
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -118,8 +114,31 @@ body {
 .title-bar__meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.title-bar__help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.title-bar__help:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
 }
 
 .tab-bar {
@@ -149,10 +168,43 @@ body {
 .tab-button.is-active {
   color: var(--text);
   border-color: var(--accent);
+  background: rgba(0, 122, 204, 0.06);
 }
 
 .tab-button:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.tab-button__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.tab-button.is-active .tab-button__count {
+  background: rgba(0, 122, 204, 0.18);
+  color: var(--blue);
+}
+
+.tab-button__count--warn {
+  background: rgba(220, 180, 90, 0.12);
+  color: var(--yellow);
+}
+
+.tab-button.is-active .tab-button__count--warn {
+  background: rgba(220, 180, 90, 0.18);
+  color: var(--yellow);
 }
 
 .tab-panel {
@@ -233,16 +285,16 @@ body {
 
 .metric-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(max-content, 1fr));
-  gap: 8px;
-  padding: 10px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
 }
 
 .summary-card {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -260,24 +312,44 @@ body {
 }
 
 .summary-card__label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   white-space: nowrap;
   color: var(--text-dim);
 }
 
 .summary-card__value {
-  margin: 6px 0 2px;
-  font-size: clamp(20px, 3vw, 28px);
+  margin: 4px 0 2px;
+  font-size: clamp(18px, 2.5vw, 24px);
   font-weight: 600;
   line-height: 1;
   color: #ffffff;
 }
 
 .summary-card__meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-soft);
+}
+
+.summary-card__services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.summary-card__service-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  color: var(--text-soft);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .metric-table {
@@ -2077,7 +2149,7 @@ code {
 .signal-view__panel {
   display: flex;
   flex-direction: column;
-  width: 420px;
+  width: 400px;
   flex-shrink: 0;
   min-height: 0;
   overflow: hidden;
@@ -2153,11 +2225,6 @@ code {
   width: 100%;
 }
 
-.explorer__count {
-  color: var(--text-soft);
-  white-space: nowrap;
-}
-
 .explorer__toolbar--controls {
   justify-content: flex-start;
 }
@@ -2230,6 +2297,13 @@ code {
 .explorer__status--error {
   color: #f48771;
   background: rgba(244, 135, 113, 0.06);
+}
+
+.explorer__status--empty {
+  padding: 32px 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* ======================================
@@ -3079,21 +3153,21 @@ code {
 .stream-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 5px;
+  padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
 
 .stream-toggle__icon {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .stream-toggle--live {
@@ -3117,13 +3191,13 @@ code {
 .pending-badge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
-  border: 1px solid rgba(79, 193, 255, 0.4);
+  padding: 3px 8px;
+  border: 1px solid rgba(79, 193, 255, 0.3);
   border-radius: 999px;
-  background: rgba(79, 193, 255, 0.12);
+  background: rgba(79, 193, 255, 0.08);
   color: var(--blue);
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   cursor: pointer;
   animation: badge-pulse 1.5s ease-in-out infinite;

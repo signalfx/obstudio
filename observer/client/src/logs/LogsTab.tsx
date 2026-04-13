@@ -85,7 +85,6 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
         <div className="signal-view__content">
           {logs.length > 0 ? (
             <div className="explorer__toolbar explorer__toolbar--controls">
-              <span className="explorer__count">{filteredLogs.length} logs</span>
               <select
                 className="explorer__select"
                 value={severityFilter}
@@ -109,7 +108,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
           ) : null}
 
           {logs.length === 0 ? (
-            <p className="explorer__status">Waiting for logs... Send OTLP data to port 4318.</p>
+            <p className="explorer__status explorer__status--empty">No logs received yet. Send OTLP telemetry to port 4318 to begin exploring.</p>
           ) : filteredLogs.length === 0 ? (
             <p className="explorer__status">No logs match the current filters.</p>
           ) : (
