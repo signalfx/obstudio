@@ -128,6 +128,7 @@ describe("AppView validation tab", () => {
     expect(screen.getAllByText("Validation").length).toBeGreaterThan(0);
     expect(screen.getByText("1 issues")).toBeTruthy();
     expect(screen.getByText("Services")).toBeTruthy();
+    expect(screen.getByText("Telemetry stream")).toBeTruthy();
     expect(screen.queryByText(/occurrences/i)).toBeNull();
     expect(container.querySelector(".metric-summary")).toBeTruthy();
     expect(screen.queryByText("Aggregate Validation")).toBeNull();
@@ -149,20 +150,17 @@ describe("AppView validation tab", () => {
     expect(screen.getByRole("tab", { name: /metrics/i }).getAttribute("aria-selected")).toBe("true");
     expect(container.querySelector(".metric-summary")).toBeTruthy();
     expect(screen.getByText("Services")).toBeTruthy();
+    expect(screen.getByText("Telemetry stream")).toBeTruthy();
   });
 
-  it("renders tab labels with count badges", () => {
+  it("renders plain tab labels without letter badges", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
 
     const { container } = render(<AppView telemetry={telemetry} />);
 
-    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
-    const tracesTab = screen.getByRole("tab", { name: /traces/i });
-    const logsTab = screen.getByRole("tab", { name: /logs/i });
-
-    expect(metricsTab.querySelector(".tab-button__count")).toBeTruthy();
-    expect(tracesTab.querySelector(".tab-button__count")).toBeTruthy();
-    expect(logsTab.querySelector(".tab-button__count")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Metrics" }).textContent).toBe("Metrics");
+    expect(screen.getByRole("tab", { name: "Traces" }).textContent).toBe("Traces");
+    expect(screen.getByRole("tab", { name: "Logs" }).textContent).toBe("Logs");
     expect(container.querySelector(".tab-button__glyph")).toBeNull();
   });
 });

@@ -80,6 +80,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
 
       {metricList.length > 0 ? (
         <div className="explorer__toolbar explorer__toolbar--controls">
+          <span className="explorer__count">{visibleMetricList.length} metrics</span>
           <input
             className="explorer__input"
             type="search"
@@ -91,8 +92,8 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
       ) : null}
 
       {metricList.length === 0 && metrics.length === 0 ? (
-        <p className="explorer__status explorer__status--empty" style={{ padding: "40px 20px" }}>
-          No metrics received yet. Send OTLP telemetry to port 4318 to begin exploring.
+        <p className="metrics-explorer__empty" style={{ padding: "40px 20px" }}>
+          Waiting for metrics... Send OTLP data to port 4318.
         </p>
       ) : visibleMetricList.length === 0 ? (
         <p className="metrics-explorer__empty" style={{ padding: "24px 20px" }}>

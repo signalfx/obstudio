@@ -71,6 +71,7 @@ describe("LogsTab", () => {
       />,
     );
 
+    expect(screen.getByText("2 logs")).toBeTruthy();
     expect(container.querySelector(".data-table__head--left-cluster-logs")).toBeTruthy();
     expect(container.querySelector(".data-table__body-inner--logs")).toBeTruthy();
     expect(container.querySelector(".data-table__td--timestamp .explorer-row__secondary")).toBeTruthy();

@@ -78,12 +78,12 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             {state.error !== null ? (
               <span className="pill pill--error">{state.error}</span>
             ) : null}
+            <span className="pill pill--muted">Telemetry stream</span>
             <button
-              className="title-bar__help"
+              className="pill pill--muted"
               onClick={() => setShowHelp(true)}
               title="Keyboard shortcuts (?)"
-              type="button"
-              aria-label="Keyboard shortcuts"
+              style={{ cursor: "pointer", border: "1px solid var(--border)" }}
             >
               ?
             </button>
@@ -111,14 +111,10 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
               </div>
             ) : null}
             {state.stats.serviceNames?.length ? (
-              <div className="summary-card" title={state.stats.serviceNames.join(", ")}>
+              <div className="summary-card">
                 <p className="summary-card__label">Services</p>
                 <p className="summary-card__value">{state.stats.serviceNames.length}</p>
-                <p className="summary-card__services">
-                  {state.stats.serviceNames.map((name) => (
-                    <span key={name} className="summary-card__service-tag">{name}</span>
-                  ))}
-                </p>
+                <p className="summary-card__meta">{state.stats.serviceNames.join(", ")}</p>
               </div>
             ) : null}
           </div>
@@ -133,7 +129,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {state.stats?.metricNameCount ? <span className="tab-button__count">{state.stats.metricNameCount}</span> : null}
           </button>
           <button
             type="button"
@@ -143,7 +138,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             onClick={() => switchTab("traces")}
           >
             Traces
-            {state.stats?.traceCount ? <span className="tab-button__count">{state.stats.traceCount}</span> : null}
           </button>
           <button
             type="button"
@@ -153,7 +147,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             onClick={() => switchTab("logs")}
           >
             Logs
-            {state.stats?.logCount ? <span className="tab-button__count">{state.stats.logCount}</span> : null}
           </button>
           <button
             type="button"
@@ -163,7 +156,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             onClick={() => switchTab("validation")}
           >
             Validation
-            {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn">{validationIssues.length}</span> : null}
           </button>
         </div>
 

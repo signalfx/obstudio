@@ -35,6 +35,8 @@ describe("TracesTab", () => {
       />,
     );
 
+    expect(screen.getByText("2 traces")).toBeTruthy();
+
     fireEvent.change(screen.getByPlaceholderText("Search operation, trace ID, service, or status"), {
       target: { value: "missing-service" },
     });

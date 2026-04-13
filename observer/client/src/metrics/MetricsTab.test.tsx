@@ -50,6 +50,7 @@ describe("MetricsTab", () => {
       />,
     );
 
+    expect(screen.getByText("3 metrics")).toBeTruthy();
     expect(screen.getByText("Type / Unit")).toBeTruthy();
     expect(screen.getByText("Description")).toBeTruthy();
     expect(screen.queryByRole("combobox")).toBeNull();
@@ -60,6 +61,7 @@ describe("MetricsTab", () => {
       target: { value: "duration" },
     });
 
+    expect(screen.getByText("1 metrics")).toBeTruthy();
     expect(screen.queryByText("http.server.request.count")).toBeNull();
     expect(screen.getByText("http.server.duration")).toBeTruthy();
     expect(screen.queryByText("db.client.connections.usage")).toBeNull();
