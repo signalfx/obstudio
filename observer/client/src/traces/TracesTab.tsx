@@ -147,7 +147,6 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
         <div className="signal-view__content">
           {traces.length > 0 ? (
             <div className="explorer__toolbar explorer__toolbar--controls">
-              <span className="explorer__count">{filteredTraces.length} traces</span>
               <input
                 className="explorer__input"
                 type="search"
@@ -163,7 +162,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           ) : null}
 
           {traces.length === 0 ? (
-            <p className="explorer__status">Waiting for traces... Send OTLP data to port 4318.</p>
+            <p className="explorer__status explorer__status--empty">No traces received yet. Send OTLP telemetry to port 4318 to begin exploring.</p>
           ) : filteredTraces.length === 0 ? (
             <p className="explorer__status">No traces match the current search.</p>
           ) : (
