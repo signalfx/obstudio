@@ -2,15 +2,6 @@ version: 2
 
 project_name: obstudio
 
-before:
-  hooks:
-    - cmd: go run ./cmd/stage-skills
-      dir: observer
-    - cmd: npm ci
-      dir: observer/client
-    - cmd: go run ./cmd/build-client
-      dir: observer
-
 builds:
   - dir: observer
     main: ./cmd/obstudio

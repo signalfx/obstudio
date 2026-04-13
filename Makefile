@@ -63,10 +63,12 @@ vet: stage-skills ## Vet Go source
 
 # --- Release ---
 
-release-local: ## Build release archives locally via GoReleaser (snapshot, no publish)
+release-prep: stage-skills build-client ## Prepare assets for GoReleaser (skills + client)
+
+release-local: release-prep ## Build release archives locally via GoReleaser (snapshot, no publish)
 	goreleaser release --snapshot --clean
 
-release: ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
+release: release-prep ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 	goreleaser release --clean
 
 # --- Evals ---

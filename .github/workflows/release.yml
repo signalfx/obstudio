@@ -32,10 +32,9 @@ jobs:
           go-version-file: observer/go.mod
           cache-dependency-path: observer/go.sum
 
-      - name: Install client build dependencies
+      - name: Prepare release assets
         timeout-minutes: 10
-        working-directory: observer/client
-        run: npm ci --no-audit --no-fund --verbose
+        run: make release-prep
 
       - uses: goreleaser/goreleaser-action@v6
         with:
