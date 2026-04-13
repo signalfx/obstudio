@@ -20,6 +20,7 @@ help: ## Show available targets
 # --- Client build ---
 
 build-client: ## Build React client into Go static assets
+	cd $(GO_DIR)/client && npm ci
 	cd $(GO_DIR) && $(GO) run ./cmd/build-client
 
 stage-skills: ## Stage skills into observer for embedding

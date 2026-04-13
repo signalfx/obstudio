@@ -4,8 +4,12 @@ project_name: obstudio
 
 before:
   hooks:
-    - cd observer && go run ./cmd/stage-skills
-    - cd observer && go run ./cmd/build-client
+    - cmd: go run ./cmd/stage-skills
+      dir: observer
+    - cmd: npm ci
+      dir: observer/client
+    - cmd: go run ./cmd/build-client
+      dir: observer
 
 builds:
   - dir: observer
