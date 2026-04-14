@@ -1,5 +1,5 @@
 [project]
-name = "obstudio-evals"
+name = "obstudio-tests"
 version = "0.0.1"
 description = "Skill evaluation scripts for obstudio"
 requires-python = ">=3.12"

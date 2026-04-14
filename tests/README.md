@@ -4,7 +4,7 @@ Two layers of evaluation for obstudio skills:
 
 | Layer | Tool | Requires LLM? | When to run |
 |-------|------|---------------|-------------|
-| **Deterministic** | pytest | No | Every PR (`make test-deterministic`) |
+| **Deterministic** | pytest | No | Every PR (`make pytest`) |
 | **LLM-based** | deepeval (pytest) | Yes | After skill changes, optionally in CI |
 
 Deterministic tests validate skill *output* (structure, naming, budgets)
@@ -19,14 +19,14 @@ using an LLM-as-judge.
 ### Quick start
 
 ```sh
-make test-deterministic                             # CI-safe: golden + performance
+make pytest                                          # CI-safe: golden + performance
 make eval-fixture APP=examples/python/flask-basic  # local: includes fixture tests
 ```
 
 Or run pytest directly:
 
 ```sh
-cd evals
+cd tests
 uv run pytest                                      # all tests
 uv run pytest test_semconv.py -v                   # single suite
 uv run pytest -k "performance" -v                  # keyword filter
@@ -40,11 +40,11 @@ Dependencies are managed by **uv** (lockfile: `pyproject.toml` +
 
 | Mode | When | What runs |
 |------|------|-----------|
-| **Golden-only** | CI, `make test-deterministic` | Validates golden reference files for self-consistency |
+| **Golden-only** | CI, `make pytest` | Validates golden reference files for self-consistency |
 | **Fixture** | Local, `make eval-fixture` | Validates an instrumented app against its golden reference |
 
 Fixture-mode tests auto-skip when `--app` is not provided, so
-`make test-deterministic` is always safe for CI.
+`make pytest` is always safe for CI.
 
 ### Test suites
 
@@ -97,10 +97,10 @@ the response.  They require AWS credentials for Bedrock.
 ### Running
 
 ```sh
-make eval-llm                                        # all LLM evals
+make ab-test                                         # LLM A/B smoke tests
 
 # or run pytest directly for finer control:
-cd evals
+cd tests
 uv run pytest test_llm.py -v                         # all LLM tests
 uv run pytest test_llm.py -m trigger -v              # trigger tests only
 uv run pytest test_llm.py -m golden -v               # golden comparison only
@@ -123,7 +123,7 @@ Edit `BEDROCK_REGION` to change the AWS region.
 ## Architecture
 
 ```
-evals/
+tests/
 ├── conftest.py           # shared fixtures, helpers, constants, CLI options
 ├── test_structural.py    # structural compliance tests
 ├── test_semconv.py       # semantic convention tests
@@ -134,7 +134,6 @@ evals/
 │   ├── node/express-basic/inventory.md
 │   └── go/chi-basic/inventory.md
 ├── test_llm.py           # LLM-based eval tests (deepeval + Bedrock)
-├── trigger-tests.yaml    # trigger test case catalog (reference)
 ├── pyproject.toml        # dependencies + pytest config
 └── uv.lock               # locked dependency versions
 ```
@@ -162,13 +161,13 @@ Categories are `OOB` (auto-instrumentation), `Custom` (hand-written), or
 2. Run `/splunk-audit` to generate `.observe/inventory.md`.
 3. Review for correctness.
 4. Copy signal tables and structural properties into
-   `evals/golden/<language>/<app-name>/inventory.md`.
-5. Run `make test-deterministic` — the new golden is auto-discovered by the
+   `tests/golden/<language>/<app-name>/inventory.md`.
+5. Run `make pytest` — the new golden is auto-discovered by the
    parametrized `golden_dir` fixture in `conftest.py`.
 
 ## CI
 
-The `skill-evals` job in `.github/workflows/ci.yml` installs `uv` and
-runs `make test-deterministic` (deterministic tests).  LLM-based evals can also run
+The `skill-tests` job in `.github/workflows/ci.yml` installs `uv` and
+runs `make pytest` (deterministic tests).  LLM-based A/B tests can also run
 in CI if AWS credentials are configured -- add a step that runs
-`make eval-llm` with Bedrock access via IAM role or secrets.
+`make ab-test` with Bedrock access via IAM role or secrets.

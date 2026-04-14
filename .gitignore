@@ -7,7 +7,7 @@ __pycache__/
 .venv/
 *.egg-info/
 uv.lock
-!evals/uv.lock
+!tests/uv.lock
 *.db
 .pytest_cache/
 

@@ -69,7 +69,7 @@ PRs cannot be merged if tests are failing.
 | observer | `go vet`, `make build`, `make test` |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
-| skill-evals | `make test-deterministic` (golden structural, semconv, consistency) |
+| skill-tests | `make pytest` (golden structural, semconv, consistency) |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -91,21 +91,21 @@ cd extension && npm test # VS Code-hosted extension tests
 ## Skill Evals
 
 Skills are evaluated with two layers: deterministic pytest tests and
-LLM-based deepeval tests. All test modules live in `evals/`.
+LLM-based deepeval tests. All test modules live in `tests/`.
 Dependencies (pytest, deepeval, boto3) are managed by `uv` with a
-lockfile (`evals/pyproject.toml` and `evals/uv.lock`).
+lockfile (`tests/pyproject.toml` and `tests/uv.lock`).
 
 ### Running evals
 
 ```sh
-make test-deterministic                               # all golden + performance tests (CI-safe)
+make pytest                                            # all golden + performance tests (CI-safe)
 make eval-fixture APP=examples/python/flask-basic    # post-skill fixture tests (local)
 ```
 
 Or run pytest directly for finer control:
 
 ```sh
-cd evals
+cd tests
 uv run pytest                              # all tests
 uv run pytest test_semconv.py -v           # semconv tests only
 uv run pytest -k "performance" -v          # performance tests only
@@ -124,7 +124,7 @@ uv run pytest --app=../examples/python/flask-basic   # include fixture tests
 
 Tests are parametrized across all golden directories (Python, Node, Go).
 Fixture-mode tests auto-skip when `--app` is not provided, making
-`make test-deterministic` safe for CI.
+`make pytest` safe for CI.
 
 ### Adding a new eval fixture
 
@@ -133,8 +133,8 @@ Fixture-mode tests auto-skip when `--app` is not provided, making
    `.observe/inventory.md`.
 3. Review the generated inventory for correctness.
 4. Copy the signal tables and structural properties into a golden file
-   at `evals/golden/<language>/<app-name>/inventory.md`.
-5. Run `make test-deterministic` -- the new golden is auto-discovered by pytest.
+   at `tests/golden/<language>/<app-name>/inventory.md`.
+5. Run `make pytest` -- the new golden is auto-discovered by pytest.
 
 ### LLM-based evals
 
@@ -142,20 +142,20 @@ LLM-based evals use deepeval with Bedrock models. They require
 AWS credentials.
 
 ```sh
-make eval-llm                                       # all LLM evals
-cd evals
+make ab-test                                        # LLM A/B smoke tests
+cd tests
 uv run pytest test_llm.py -m trigger -v             # trigger tests only
 uv run pytest test_llm.py -m golden -v              # golden comparison only
 ```
 
-See [evals/README.md](evals/README.md) for full details on test
+See [tests/README.md](tests/README.md) for full details on test
 architecture, helpers, and the golden file format.
 
 ### CI integration
 
-The `skill-evals` job installs `uv` via `astral-sh/setup-uv` and runs
-`make test-deterministic`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
-LLM-based evals (`make eval-llm`) can run in CI when AWS credentials
+The `skill-tests` job installs `uv` via `astral-sh/setup-uv` and runs
+`make pytest`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+LLM-based A/B tests (`make ab-test`) can run in CI when AWS credentials
 are configured via IAM role or secrets.
 
 ## Pull Requests

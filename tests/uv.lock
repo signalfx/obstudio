@@ -829,7 +829,7 @@ wheels = [
 ]
 
 [[package]]
-name = "obstudio-evals"
+name = "obstudio-tests"
 version = "0.0.1"
 source = { virtual = "." }
 dependencies = [

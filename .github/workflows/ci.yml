@@ -84,13 +84,13 @@ jobs:
         working-directory: observer/client
         run: npx vitest run
 
-  skill-evals:
-    name: Skill evals – structural & semconv
+  skill-tests:
+    name: Skill tests – structural & semconv
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v6
 
-      - name: Run all skill evals
-        run: make test-deterministic
+      - name: Run all skill tests
+        run: make pytest

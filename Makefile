@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet pytest eval-fixture ab-test ab-test-full release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -71,24 +71,24 @@ release-local: release-prep ## Build release archives locally via GoReleaser (sn
 release: release-prep ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 	goreleaser release --clean
 
-# --- Evals ---
+# --- Tests ---
 
-EVALS_DIR  := evals
+EVALS_DIR  := tests
 APP        ?=
 
-test-deterministic: ## Run deterministic skill evals (CI-safe, no LLM calls)
+pytest: ## Run deterministic skill tests (CI-safe, no LLM calls)
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --ignore=test_llm.py
 
-eval-fixture: ## Run evals against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
+eval-fixture: ## Run tests against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
 ifndef APP
 	$(error APP is required — e.g. make eval-fixture APP=examples/python/flask-basic)
 endif
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
 
-eval-llm: ## Run LLM smoke evals via deepeval (requires AWS credentials for Bedrock)
+ab-test: ## Run LLM smoke A/B tests via deepeval (requires AWS credentials for Bedrock)
 	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short -m "not release"
 
-eval-llm-full: ## Run ALL LLM evals including release-only tests
+ab-test-full: ## Run ALL LLM A/B tests including release-only tests
 	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short
 
 # --- Skills ---
