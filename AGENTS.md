@@ -8,6 +8,7 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- agent skills (composable observability workflows)
 - `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
+- `evals/` -- skill evaluation suite (deterministic pytest + LLM-based deepeval)
 - `examples/` -- sample apps for testing and skill evaluation, organized by language
 - `docs/` -- design docs and examples
 
@@ -25,6 +26,22 @@ Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the fu
 - Use code coverage analysis to find gaps and generate tests for uncovered paths.
 - All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
 - Skills require probabilistic evals with fuzzy verification against golden results.
+
+### Skill Evals
+
+Two layers live in `evals/`:
+
+| Layer | Tool | Command |
+|-------|------|---------|
+| Deterministic | pytest | `make eval` (CI-safe) |
+| LLM-based | deepeval (pytest) + Bedrock | `make eval-llm` (requires AWS creds) |
+
+- Deterministic tests validate structure, semconv, golden consistency, and token budgets.
+- LLM tests use deepeval's GEval (LLM-as-judge) with Bedrock Claude for trigger routing and golden comparison.
+- All test data (models, trigger cases, golden cases) are inline `pytest.param` tables in `test_llm.py`.
+- Tests are parametrized across multiple generator models for cross-model comparison.
+- Golden references live in `evals/golden/<language>/<app>/inventory.md`.
+- Dependencies are managed by `uv` (`evals/pyproject.toml` + `evals/uv.lock`).
 
 ## PRs
 

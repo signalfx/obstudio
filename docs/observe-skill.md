@@ -233,9 +233,9 @@ verification against golden results.
 **Eval fixtures**: example codebases in supported languages representing
 common archetypes (Web Service, Data Store, Batch Processor, Queue Consumer).
 
-**Eval tooling**: Promptfoo with LLM-as-judge rubrics for golden comparison,
-custom assertion scripts for structural and semconv checks, integration tests
-for telemetry emission using the Observer MCP tools.
+**Eval tooling**: deepeval with LLM-as-judge (GEval) rubrics for golden
+comparison, custom pytest assertions for structural and semconv checks,
+integration tests for telemetry emission using the Observer MCP tools.
 
 ### 5.3 Versioning
 

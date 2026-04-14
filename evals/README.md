@@ -5,7 +5,7 @@ Two layers of evaluation for obstudio skills:
 | Layer | Tool | Requires LLM? | When to run |
 |-------|------|---------------|-------------|
 | **Deterministic** | pytest | No | Every PR (`make eval`) |
-| **LLM-based** | promptfoo | Yes | After skill changes, optionally in CI |
+| **LLM-based** | deepeval (pytest) | Yes | After skill changes, optionally in CI |
 
 Deterministic tests validate skill *output* (structure, naming, budgets)
 using pure Python assertions -- no LLM calls.  LLM-based tests validate
@@ -79,39 +79,44 @@ addopts = "-v --tb=short"
 
 ---
 
-## LLM-based evals (promptfoo)
+## LLM-based evals (deepeval)
 
-These tests invoke an LLM and use an LLM-as-judge to evaluate the
-response.  They require an API key.
+These tests invoke an LLM and use an LLM-as-judge (GEval) to evaluate
+the response.  They require AWS credentials for Bedrock.
 
-| Tag | Config | What it validates |
-|-----|--------|-------------------|
-| `trigger` | `promptfoo.yaml` + `trigger-tests.yaml` | Correct skill activates for a given prompt (30+ positive/negative cases) |
-| `golden` | `promptfoo.yaml` | Audit output for known apps matches expected SLI/signal structure |
+| Marker | Source | What it validates |
+|--------|--------|-------------------|
+| `trigger` | `test_llm.py` | Correct skill activates for a given prompt (35 positive/negative cases) |
+| `golden` | `test_llm.py` | Audit output for known apps matches expected SLI/signal structure |
 
 ### Prerequisites
 
-- Node.js 20+
 - AWS credentials configured (`AWS_PROFILE` or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)
-- Claude model access enabled in Amazon Bedrock (us-east-1)
+- Claude model access enabled in Amazon Bedrock (us-west-2)
 
 ### Running
 
 ```sh
 make eval-llm                                        # all LLM evals
 
-# or run promptfoo directly for finer control:
+# or run pytest directly for finer control:
 cd evals
-npx promptfoo eval --filter-tag trigger              # trigger tests only
-npx promptfoo eval --filter-tag golden               # golden comparison only
-npx promptfoo view                                   # open results in browser
+uv run pytest test_llm.py -v                         # all LLM tests
+uv run pytest test_llm.py -m trigger -v              # trigger tests only
+uv run pytest test_llm.py -m golden -v               # golden comparison only
 ```
 
 ### Configuration
 
-`promptfoo.yaml` configures the provider (Claude Sonnet via Amazon
-Bedrock at temperature 0), prompts, and test assertions.  Edit this file
-to change models, regions, or adjust rubrics.
+All test data is defined as `pytest.param` tables in `test_llm.py`:
+
+- **`MODELS`** -- generator/judge model pairs. Tests run against every
+  entry, enabling cross-model comparison. Add a new `pytest.param` row
+  to evaluate an additional model.
+- **`TRIGGER_CASES`** -- input prompt + rubric pairs for skill routing.
+- **`GOLDEN_CASES`** -- input prompt + rubric pairs for audit quality.
+
+Edit `BEDROCK_REGION` to change the AWS region.
 
 ---
 
@@ -128,8 +133,8 @@ evals/
 │   ├── python/flask-basic/inventory.md
 │   ├── node/express-basic/inventory.md
 │   └── go/chi-basic/inventory.md
-├── promptfoo.yaml        # LLM-based eval config
-├── trigger-tests.yaml    # trigger test case catalog
+├── test_llm.py           # LLM-based eval tests (deepeval + Bedrock)
+├── trigger-tests.yaml    # trigger test case catalog (reference)
 ├── pyproject.toml        # dependencies + pytest config
 └── uv.lock               # locked dependency versions
 ```
@@ -166,4 +171,4 @@ Categories are `OOB` (auto-instrumentation), `Custom` (hand-written), or
 The `skill-evals` job in `.github/workflows/ci.yml` installs `uv` and
 runs `make eval` (deterministic tests).  LLM-based evals can also run
 in CI if AWS credentials are configured -- add a step that runs
-`npx promptfoo eval` with Bedrock access via IAM role or secrets.
+`make eval-llm` with Bedrock access via IAM role or secrets.

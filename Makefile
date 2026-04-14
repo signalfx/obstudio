@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-fixture eval-llm release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet eval eval-fixture eval-llm eval-llm-full release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -85,8 +85,11 @@ ifndef APP
 endif
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
 
-eval-llm: ## Run LLM-based evals via promptfoo (requires AWS credentials for Bedrock)
-	cd $(EVALS_DIR) && npx --registry=https://registry.npmjs.org/ promptfoo eval -c promptfoo.yaml
+eval-llm: ## Run LLM smoke evals via deepeval (requires AWS credentials for Bedrock)
+	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short -m "not release"
+
+eval-llm-full: ## Run ALL LLM evals including release-only tests
+	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short
 
 # --- Skills ---
 
