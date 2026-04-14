@@ -28,3 +28,5 @@ examples/**/otel_setup.py
 examples/**/otel_*.py
 
 .idea
+.deepeval/
+.npmrc

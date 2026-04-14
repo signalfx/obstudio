@@ -243,7 +243,7 @@ def _save_result(
         "output": actual_output[:300],
     }
     with open(results_file, "a") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(record, indent=2) + "\n")
 
 
 @pytest.mark.trigger

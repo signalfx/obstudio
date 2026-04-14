@@ -69,7 +69,7 @@ PRs cannot be merged if tests are failing.
 | observer | `go vet`, `make build`, `make test` |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
-| skill-evals | `make eval` (golden structural, semconv, consistency) |
+| skill-evals | `make test-deterministic` (golden structural, semconv, consistency) |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -98,7 +98,7 @@ lockfile (`evals/pyproject.toml` and `evals/uv.lock`).
 ### Running evals
 
 ```sh
-make eval                                            # all golden + performance tests (CI-safe)
+make test-deterministic                               # all golden + performance tests (CI-safe)
 make eval-fixture APP=examples/python/flask-basic    # post-skill fixture tests (local)
 ```
 
@@ -124,7 +124,7 @@ uv run pytest --app=../examples/python/flask-basic   # include fixture tests
 
 Tests are parametrized across all golden directories (Python, Node, Go).
 Fixture-mode tests auto-skip when `--app` is not provided, making
-`make eval` safe for CI.
+`make test-deterministic` safe for CI.
 
 ### Adding a new eval fixture
 
@@ -134,7 +134,7 @@ Fixture-mode tests auto-skip when `--app` is not provided, making
 3. Review the generated inventory for correctness.
 4. Copy the signal tables and structural properties into a golden file
    at `evals/golden/<language>/<app-name>/inventory.md`.
-5. Run `make eval` -- the new golden is auto-discovered by pytest.
+5. Run `make test-deterministic` -- the new golden is auto-discovered by pytest.
 
 ### LLM-based evals
 
@@ -154,7 +154,7 @@ architecture, helpers, and the golden file format.
 ### CI integration
 
 The `skill-evals` job installs `uv` via `astral-sh/setup-uv` and runs
-`make eval`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+`make test-deterministic`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 LLM-based evals (`make eval-llm`) can run in CI when AWS credentials
 are configured via IAM role or secrets.
 

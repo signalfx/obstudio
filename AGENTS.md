@@ -33,7 +33,7 @@ Two layers live in `evals/`:
 
 | Layer | Tool | Command |
 |-------|------|---------|
-| Deterministic | pytest | `make eval` (CI-safe) |
+| Deterministic | pytest | `make test-deterministic` (CI-safe) |
 | LLM-based | deepeval (pytest) + Bedrock | `make eval-llm` (requires AWS creds) |
 
 - Deterministic tests validate structure, semconv, golden consistency, and token budgets.

@@ -4,7 +4,7 @@ Two layers of evaluation for obstudio skills:
 
 | Layer | Tool | Requires LLM? | When to run |
 |-------|------|---------------|-------------|
-| **Deterministic** | pytest | No | Every PR (`make eval`) |
+| **Deterministic** | pytest | No | Every PR (`make test-deterministic`) |
 | **LLM-based** | deepeval (pytest) | Yes | After skill changes, optionally in CI |
 
 Deterministic tests validate skill *output* (structure, naming, budgets)
@@ -19,7 +19,7 @@ using an LLM-as-judge.
 ### Quick start
 
 ```sh
-make eval                                          # CI-safe: golden + performance
+make test-deterministic                             # CI-safe: golden + performance
 make eval-fixture APP=examples/python/flask-basic  # local: includes fixture tests
 ```
 
@@ -40,11 +40,11 @@ Dependencies are managed by **uv** (lockfile: `pyproject.toml` +
 
 | Mode | When | What runs |
 |------|------|-----------|
-| **Golden-only** | CI, `make eval` | Validates golden reference files for self-consistency |
+| **Golden-only** | CI, `make test-deterministic` | Validates golden reference files for self-consistency |
 | **Fixture** | Local, `make eval-fixture` | Validates an instrumented app against its golden reference |
 
 Fixture-mode tests auto-skip when `--app` is not provided, so
-`make eval` is always safe for CI.
+`make test-deterministic` is always safe for CI.
 
 ### Test suites
 
@@ -163,12 +163,12 @@ Categories are `OOB` (auto-instrumentation), `Custom` (hand-written), or
 3. Review for correctness.
 4. Copy signal tables and structural properties into
    `evals/golden/<language>/<app-name>/inventory.md`.
-5. Run `make eval` — the new golden is auto-discovered by the
+5. Run `make test-deterministic` — the new golden is auto-discovered by the
    parametrized `golden_dir` fixture in `conftest.py`.
 
 ## CI
 
 The `skill-evals` job in `.github/workflows/ci.yml` installs `uv` and
-runs `make eval` (deterministic tests).  LLM-based evals can also run
+runs `make test-deterministic` (deterministic tests).  LLM-based evals can also run
 in CI if AWS credentials are configured -- add a step that runs
 `make eval-llm` with Bedrock access via IAM role or secrets.

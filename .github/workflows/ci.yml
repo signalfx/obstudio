@@ -93,4 +93,4 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Run all skill evals
-        run: make eval
+        run: make test-deterministic
