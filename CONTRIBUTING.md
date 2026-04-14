@@ -69,7 +69,7 @@ PRs cannot be merged if tests are failing.
 | observer | `go vet`, `make build`, `make test` |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
-| skill-evals | `make eval` (golden structural, semconv, consistency) |
+| skill-evals | `make test-deterministic` (golden structural, semconv, consistency) |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -90,14 +90,15 @@ cd extension && npm test # VS Code-hosted extension tests
 
 ## Skill Evals
 
-Skills are evaluated with pytest. Tests and helper modules live in
-`evals/`. Dependencies (PyYAML, pytest) are managed by `uv` with a
+Skills are evaluated with two layers: deterministic pytest tests and
+LLM-based deepeval tests. All test modules live in `evals/`.
+Dependencies (pytest, deepeval, boto3) are managed by `uv` with a
 lockfile (`evals/pyproject.toml` and `evals/uv.lock`).
 
 ### Running evals
 
 ```sh
-make eval                                            # all golden + performance tests (CI-safe)
+make test-deterministic                               # all golden + performance tests (CI-safe)
 make eval-fixture APP=examples/python/flask-basic    # post-skill fixture tests (local)
 ```
 
@@ -113,16 +114,17 @@ uv run pytest --app=../examples/python/flask-basic   # include fixture tests
 
 ### Test suites
 
-| Test file | What it validates |
-|-----------|-------------------|
-| `test_structural.py` | Golden properties (language, packages) and fixture SDK init / deps |
-| `test_semconv.py` | Metric name format, span cardinality, high-cardinality attribute scan |
-| `test_golden.py` | Signal sections present, unique names, valid categories, golden-vs-fixture comparison |
-| `test_performance.py` | Skill token budgets, reference budgets, combined context window limits |
+| Test file | What it validates | LLM? |
+|-----------|-------------------|-------|
+| `test_structural.py` | Golden properties (language, packages) and fixture SDK init / deps | No |
+| `test_semconv.py` | Metric name format, span cardinality, high-cardinality attribute scan | No |
+| `test_golden.py` | Signal sections present, unique names, valid categories, golden-vs-fixture comparison | No |
+| `test_performance.py` | Skill token budgets, reference budgets, combined context window limits | No |
+| `test_llm.py` | Trigger routing (35 cases) and golden comparison (4 cases) via LLM-as-judge, parametrized across multiple generator models | Yes |
 
 Tests are parametrized across all golden directories (Python, Node, Go).
 Fixture-mode tests auto-skip when `--app` is not provided, making
-`make eval` safe for CI.
+`make test-deterministic` safe for CI.
 
 ### Adding a new eval fixture
 
@@ -132,7 +134,19 @@ Fixture-mode tests auto-skip when `--app` is not provided, making
 3. Review the generated inventory for correctness.
 4. Copy the signal tables and structural properties into a golden file
    at `evals/golden/<language>/<app-name>/inventory.md`.
-5. Run `make eval` -- the new golden is auto-discovered by pytest.
+5. Run `make test-deterministic` -- the new golden is auto-discovered by pytest.
+
+### LLM-based evals
+
+LLM-based evals use deepeval with Bedrock models. They require
+AWS credentials.
+
+```sh
+make eval-llm                                       # all LLM evals
+cd evals
+uv run pytest test_llm.py -m trigger -v             # trigger tests only
+uv run pytest test_llm.py -m golden -v              # golden comparison only
+```
 
 See [evals/README.md](evals/README.md) for full details on test
 architecture, helpers, and the golden file format.
@@ -140,7 +154,9 @@ architecture, helpers, and the golden file format.
 ### CI integration
 
 The `skill-evals` job installs `uv` via `astral-sh/setup-uv` and runs
-`make eval`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+`make test-deterministic`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+LLM-based evals (`make eval-llm`) can run in CI when AWS credentials
+are configured via IAM role or secrets.
 
 ## Pull Requests
 

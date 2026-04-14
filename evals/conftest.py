@@ -1,6 +1,7 @@
 """Shared fixtures and helpers for skill evals."""
 
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -171,6 +172,24 @@ def pytest_addoption(parser):
         default=0.90,
         help="Minimum pass rate threshold (default: 0.90)",
     )
+
+
+@pytest.fixture(scope="session")
+def results_file(tmp_path_factory):
+    """JSONL file for eval results, one per session."""
+    d = tmp_path_factory.mktemp("eval-results")
+    path = d / f"eval-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
+    return path
+
+
+def pytest_terminal_summary(terminalreporter):
+    """Print the results file path in the pytest summary block."""
+    tmp_root = terminalreporter.config._tmp_path_factory.getbasetemp()
+    results = sorted(tmp_root.rglob("eval-*.jsonl"))
+    if results:
+        terminalreporter.write_sep("=", "eval results")
+        for r in results:
+            terminalreporter.write_line(f"  {r}")
 
 
 @pytest.fixture
