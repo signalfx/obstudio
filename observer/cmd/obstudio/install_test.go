@@ -222,6 +222,37 @@ func TestValidateSharedURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeSharedURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		raw      string
+		expected string
+	}{
+		{name: "base URL", raw: "http://127.0.0.1:3000", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "base URL with slash", raw: "http://127.0.0.1:3000/", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "existing mcp URL", raw: "http://127.0.0.1:3000/mcp", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "subpath", raw: "https://example.com/obstudio", expected: "https://example.com/obstudio/mcp"},
+		{name: "subpath mcp", raw: "https://example.com/obstudio/mcp", expected: "https://example.com/obstudio/mcp"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := normalizeSharedURL(tc.raw, "--shared-url")
+			if err != nil {
+				t.Fatalf("normalizeSharedURL(%q) returned error: %v", tc.raw, err)
+			}
+			if got != tc.expected {
+				t.Fatalf("normalizeSharedURL(%q) = %q, want %q", tc.raw, got, tc.expected)
+			}
+		})
+	}
+}
+
 func TestValidateSharedURLIncludesSourceLabel(t *testing.T) {
 	t.Parallel()
 

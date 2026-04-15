@@ -124,9 +124,11 @@ func runInstall(target, sharedURL string) error {
 		if autodetectedSharedURL {
 			source = "detected shared observer URL"
 		}
-		if err := validateSharedURL(resolvedSharedURL, source); err != nil {
+		normalizedSharedURL, err := normalizeSharedURL(resolvedSharedURL, source)
+		if err != nil {
 			return err
 		}
+		resolvedSharedURL = normalizedSharedURL
 	}
 
 	home := userHome()
@@ -413,6 +415,28 @@ func validateSharedURL(raw, source string) error {
 		return fmt.Errorf("invalid %s: %s is missing a host", source, raw)
 	}
 	return nil
+}
+
+func normalizeSharedURL(raw, source string) (string, error) {
+	if err := validateSharedURL(raw, source); err != nil {
+		return "", err
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s: %w", source, err)
+	}
+
+	trimmedPath := strings.TrimRight(parsed.Path, "/")
+	switch {
+	case trimmedPath == "":
+		parsed.Path = "/mcp"
+	case strings.HasSuffix(trimmedPath, "/mcp"):
+		parsed.Path = trimmedPath
+	default:
+		parsed.Path = trimmedPath + "/mcp"
+	}
+	return parsed.String(), nil
 }
 
 func extractFS(src fs.FS, destDir string) error {
