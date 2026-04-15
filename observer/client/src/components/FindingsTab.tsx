@@ -51,18 +51,23 @@ const defaultFilters: ValidationFilters = {
 export function FindingsTab({ issues, summary }: ValidationTabProps): React.ReactElement {
   const [filters, setFilters] = useState<ValidationFilters>(defaultFilters);
   const [activeSignalTab, setActiveSignalTab] = useState<ValidationSignalTab>(() => firstAvailableSignal(issues));
+  const [hasExplicitSignalTabSelection, setHasExplicitSignalTabSelection] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const signalFilteredIssues = useMemo(
+    () => filterValidationIssues(issues, { ...filters, signalType: "" }),
+    [issues, filters],
+  );
   const signalIssueCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const tab of signalTabs) {
-      counts[tab.key] = issues.filter((issue) => normalizeSignalType(issue.signalType) === tab.key).length;
+      counts[tab.key] = signalFilteredIssues.filter((issue) => normalizeSignalType(issue.signalType) === tab.key).length;
     }
     return counts;
-  }, [issues]);
-  const availableSignalTabs = useMemo(
-    () => signalTabs.filter((tab) => signalIssueCounts[tab.key] > 0),
+  }, [signalFilteredIssues]);
+  const firstAvailableFilteredSignal = useMemo(
+    () => signalTabs.find((tab) => signalIssueCounts[tab.key] > 0)?.key ?? "metric",
     [signalIssueCounts],
   );
   const activeSignalDefinition = signalTabs.find((tab) => tab.key === activeSignalTab) ?? signalTabs[0];
@@ -80,13 +85,10 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const actionLabel = hasResult ? "Re-run Validation" : "Run Validation";
 
   useEffect(() => {
-    if (availableSignalTabs.length === 0) {
-      return;
+    if (!hasExplicitSignalTabSelection && activeSignalTab !== firstAvailableFilteredSignal) {
+      setActiveSignalTab(firstAvailableFilteredSignal);
     }
-    if (!availableSignalTabs.some((tab) => tab.key === activeSignalTab)) {
-      setActiveSignalTab(availableSignalTabs[0]?.key ?? "metric");
-    }
-  }, [activeSignalTab, availableSignalTabs]);
+  }, [activeSignalTab, firstAvailableFilteredSignal, hasExplicitSignalTabSelection]);
 
   useEffect(() => {
     if (filteredIssues.length === 0) {
@@ -178,10 +180,13 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 className={tab.key === activeSignalTab ? "findings-tab__signal-tab is-active" : "findings-tab__signal-tab"}
                 aria-selected={tab.key === activeSignalTab}
                 data-has-issues={count > 0 ? "true" : "false"}
-                onClick={() => setActiveSignalTab(tab.key)}
+                onClick={() => {
+                  setHasExplicitSignalTabSelection(true);
+                  setActiveSignalTab(tab.key);
+                }}
               >
                 {tab.label}
-                {count > 0 ? <span className="findings-tab__signal-count">{count}</span> : null}
+                <span className="findings-tab__signal-count">{count}</span>
               </button>
             );
           })}
