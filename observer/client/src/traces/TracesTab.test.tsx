@@ -29,7 +29,6 @@ describe("TracesTab", () => {
           { traceId: "trace-2", rootSpanName: "POST /charge", serviceName: "payments", spanCount: 5, durationMs: 88, status: "error" },
         ]}
         telemetryError={null}
-        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -50,7 +49,6 @@ describe("TracesTab", () => {
           { traceId: "trace-missing", rootSpanName: "GET /ready", serviceName: "api", spanCount: 1, status: "ok" } as any,
         ]}
         telemetryError={null}
-        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,

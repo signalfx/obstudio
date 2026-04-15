@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
 import { DetailPanel } from "../layout";
 
 interface LogsTabProps {
   logs: LogRecord[];
-  onInteract?: () => void;
 }
 
 type DetailTab = "overview" | "json";
@@ -24,7 +23,7 @@ function logKey(r: LogRecord): string {
 }
 
 /** Logs tab with virtualized table and detail panel for selected log records. */
-export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement {
+export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
   const [selectedLog, setSelectedLog] = useState<LogRecord | null>(null);
@@ -51,10 +50,6 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
       return haystack.includes(trimmedQuery);
     });
   }, [logs, query, severityFilter]);
-  const handleInteract = useCallback(() => {
-    onInteract?.();
-  }, [onInteract]);
-
   // Invalidate selection when the selected log is no longer in the snapshot
   // (e.g., after store clear, WebSocket reconnect, or eviction from the buffer).
   useEffect(() => {
@@ -80,7 +75,6 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
     <section className="tab-panel" role="tabpanel">
       <div
         className={`signal-view${selectedLog ? " signal-view--with-panel" : ""}`}
-        onPointerDownCapture={handleInteract}
       >
         <div className="signal-view__content">
           {logs.length > 0 ? (
@@ -134,7 +128,6 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                     onClick={() => {
                       setSelectedLog(r);
                       setDetailTab("overview");
-                      onInteract?.();
                     }}
                     type="button"
                     style={{
