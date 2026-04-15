@@ -213,6 +213,122 @@ describe("FindingsTab", () => {
     expect(within(master as HTMLElement).getByText("not_stable")).toBeTruthy();
   });
 
+  it("shows per-tab counts for the currently filtered rows and keeps span rows reachable", () => {
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "metric:checkout:http.server.duration",
+            ruleId: "unit_mismatch",
+            severity: "violation",
+            message: "Unit should be s.",
+            signal: {
+              type: "metric",
+              serviceName: "checkout",
+              scopeName: "otel",
+              metricName: "http.server.duration",
+            },
+          }),
+          makeFinding({
+            entityKey: "span:trace-2:span-2",
+            ruleId: "missing_http_method",
+            severity: "information",
+            message: "missing http.method",
+            signal: {
+              type: "span",
+              serviceName: "checkout",
+              traceId: "trace-2",
+              spanId: "span-2",
+              spanName: "POST /orders",
+            },
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    fireEvent.change(view.container.querySelector(".validation-panel__select") as HTMLSelectElement, {
+      target: { value: "information" },
+    });
+
+    const tablist = view.getByRole("tablist", { name: "Validation signals" });
+    const metricsTab = within(tablist).getByRole("tab", { name: /^Metrics/ });
+    const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
+
+    expect(metricsTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("0");
+    expect(spansTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
+    expect(spansTab.getAttribute("aria-selected")).toBe("true");
+    expect(view.queryByText("No metrics validation issues match the current filters.")).toBeNull();
+
+    const master = view.container.querySelector(".findings-tab__master");
+    expect(master?.classList.contains("findings-tab__master--span")).toBe(true);
+    expect(within(master as HTMLElement).getByText("POST /orders")).toBeTruthy();
+  });
+
+  it("auto-selects the first non-empty tab when results arrive before any explicit tab choice", () => {
+    const view = render(<FindingsTab issues={[]} summary={makeSummary()} />);
+
+    let tablist = view.getByRole("tablist", { name: "Validation signals" });
+    expect(within(tablist).getByRole("tab", { name: /^Metrics/ }).getAttribute("aria-selected")).toBe("true");
+    expect(view.getByText("No metrics validation issues match the current filters.")).toBeTruthy();
+
+    view.rerender(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "span:trace-2:span-2",
+            signal: {
+              type: "span",
+              serviceName: "checkout",
+              traceId: "trace-2",
+              spanId: "span-2",
+              spanName: "POST /orders",
+            },
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    tablist = view.getByRole("tablist", { name: "Validation signals" });
+    const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
+    expect(spansTab.getAttribute("aria-selected")).toBe("true");
+    expect(within(view.container.querySelector(".findings-tab__master") as HTMLElement).getByText("POST /orders")).toBeTruthy();
+  });
+
+  it("keeps an empty validation tab selected and shows its empty state", () => {
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "metric:checkout:http.server.duration",
+            ruleId: "unit_mismatch",
+            severity: "violation",
+            message: "Unit should be s.",
+            signal: {
+              type: "metric",
+              serviceName: "checkout",
+              scopeName: "otel",
+              metricName: "http.server.duration",
+            },
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    const tablist = view.getByRole("tablist", { name: "Validation signals" });
+    const resourcesTab = within(tablist).getByRole("tab", { name: /^Resources/ });
+
+    expect(resourcesTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("0");
+
+    fireEvent.click(resourcesTab);
+
+    expect(resourcesTab.getAttribute("aria-selected")).toBe("true");
+    expect(view.getByText("No resources validation issues match the current filters.")).toBeTruthy();
+    expect(view.container.querySelector(".findings-tab__master")).toBeNull();
+  });
+
   it("does not render generic detail titles or subtitles in any validation subtab", () => {
     const view = render(
       <FindingsTab
