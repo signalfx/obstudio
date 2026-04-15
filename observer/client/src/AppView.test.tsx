@@ -126,7 +126,7 @@ describe("AppView validation tab", () => {
     fireEvent.click(validationTab);
 
     expect(screen.getAllByText("Validation").length).toBeGreaterThan(0);
-    expect(screen.getByText("1 issues")).toBeTruthy();
+    expect(screen.getByText("1 issue")).toBeTruthy();
     expect(screen.getByText("Services")).toBeTruthy();
     expect(screen.queryByText(/occurrences/i)).toBeNull();
     expect(container.querySelector(".metric-summary")).toBeTruthy();
@@ -137,7 +137,7 @@ describe("AppView validation tab", () => {
     expect(screen.getAllByText("http.server.duration").length).toBeGreaterThan(0);
 
     const tablist = screen.getByRole("tablist", { name: "Validation signals" });
-    fireEvent.click(within(tablist).getByRole("tab", { name: "Spans" }));
+    fireEvent.click(within(tablist).getByRole("tab", { name: /^Spans/ }));
     expect(screen.getAllByText("GET /orders").length).toBeGreaterThan(0);
   });
 
@@ -164,5 +164,17 @@ describe("AppView validation tab", () => {
     expect(tracesTab.querySelector(".tab-button__count")).toBeTruthy();
     expect(logsTab.querySelector(".tab-button__count")).toBeTruthy();
     expect(container.querySelector(".tab-button__glyph")).toBeNull();
+  });
+
+  it("does not pause the stream when switching tabs", () => {
+    const telemetry = makeTelemetryHandle([makeFinding({})]);
+
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /traces/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /logs/i }));
+
+    expect(telemetry.pause).not.toHaveBeenCalled();
+    expect(telemetry.toggle).not.toHaveBeenCalled();
   });
 });

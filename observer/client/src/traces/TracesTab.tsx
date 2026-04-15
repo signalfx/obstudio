@@ -12,13 +12,12 @@ import { lookupSpanValidation } from "../validation/utils";
 interface TracesTabProps {
   traces: TraceSummary[];
   telemetryError: string | null;
-  onInteract?: () => void;
   validationFindings: ValidationFinding[];
   validationIndex: ValidationIndex;
 }
 
 /** Traces tab with virtualized table and waterfall detail panel. */
-export function TracesTab({ traces, telemetryError, onInteract, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
+export function TracesTab({ traces, telemetryError, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [traceDetail, setTraceDetail] = useState<TraceDetail | null>(null);
@@ -30,10 +29,6 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   const fetchIdRef = useRef(0);
   const traceDetailRef = useRef(traceDetail);
   traceDetailRef.current = traceDetail;
-  const handleInteract = useCallback(() => {
-    onInteract?.();
-  }, [onInteract]);
-
   const loadTraceDetail = useCallback(async (traceId: string, mode: "panel" | "background" = "panel") => {
     const fetchId = ++fetchIdRef.current;
     if (mode === "panel") {
@@ -67,11 +62,10 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
     setTraceDetail(null);
     setDetailError(null);
     setDetailLoading(false);
-    onInteract?.();
     if (traceId) {
       void loadTraceDetail(traceId, "panel");
     }
-  }, [loadTraceDetail, onInteract]);
+  }, [loadTraceDetail]);
 
   const shortcuts = useMemo(() => ({
     Escape: () => {
@@ -142,7 +136,6 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
     <section className="tab-panel" role="tabpanel">
       <div
         className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`}
-        onPointerDownCapture={handleInteract}
       >
         <div className="signal-view__content">
           {traces.length > 0 ? (

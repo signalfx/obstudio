@@ -19,7 +19,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<AppTab>(() => initialTabFromLocation());
   const [showHelp, setShowHelp] = useState(false);
 
-  const { state, paused, hasNewUpdates, pause, resume, toggle } = telemetry;
+  const { state, paused, hasNewUpdates, resume, toggle } = telemetry;
   const validationSummary = state.validation?.summary ?? null;
   const validationFindings = state.validation?.findings ?? [];
   const backendValidationIssues = state.validation?.issues ?? [];
@@ -171,14 +171,12 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <MetricsTab
             metrics={state.metrics ?? []}
             telemetryError={state.error}
-            onInteract={pause}
           />
         ) : null}
         {activeTab === "traces" ? (
           <TracesTab
             telemetryError={state.error}
             traces={state.traces ?? []}
-            onInteract={pause}
             validationFindings={validationFindings}
             validationIndex={validationIndex}
           />
@@ -186,7 +184,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         {activeTab === "logs" ? (
           <LogsTab
             logs={state.logs ?? []}
-            onInteract={pause}
           />
         ) : null}
         {activeTab === "validation" ? (

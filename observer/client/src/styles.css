@@ -2157,6 +2157,10 @@ code {
   background: var(--app-bg);
 }
 
+.signal-view__panel--metrics {
+  width: 560px;
+}
+
 /* ======================================
    Explorer Layout (legacy, used when sidebar is needed)
    ====================================== */
@@ -3057,6 +3061,10 @@ code {
     width: 340px;
   }
 
+  .signal-view__panel--metrics {
+    width: 420px;
+  }
+
   .explorer--with-panel {
     grid-template-columns: minmax(0, 1fr) 340px;
   }
@@ -3718,6 +3726,11 @@ code {
 .series-detail {
   border-top: 2px solid var(--accent);
   background: var(--chrome);
+}
+
+.series-detail--panel {
+  border-top: 0;
+  background: transparent;
 }
 
 .series-detail__header {
@@ -4882,6 +4895,27 @@ code {
   border-color: rgba(0, 122, 204, 0.3);
   background: rgba(0, 122, 204, 0.12);
   color: var(--text);
+}
+
+.findings-tab__signal-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-soft);
+}
+
+.findings-tab__signal-tab.is-active .findings-tab__signal-count {
+  background: rgba(0, 122, 204, 0.2);
+  color: var(--blue);
 }
 
 .findings-tab__detail-grid {

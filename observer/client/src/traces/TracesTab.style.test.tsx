@@ -57,7 +57,6 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
         ]}
         telemetryError={null}
-        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -91,7 +90,6 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-ok-456", rootSpanName: "GET /health", serviceName: "api-gateway", spanCount: 1, durationMs: 5, status: "ok" },
         ]}
         telemetryError={null}
-        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,

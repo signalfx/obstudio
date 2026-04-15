@@ -54,9 +54,16 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const signalIssueCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of signalTabs) {
+      counts[tab.key] = issues.filter((issue) => normalizeSignalType(issue.signalType) === tab.key).length;
+    }
+    return counts;
+  }, [issues]);
   const availableSignalTabs = useMemo(
-    () => signalTabs.filter((tab) => issues.some((issue) => normalizeSignalType(issue.signalType) === tab.key)),
-    [issues],
+    () => signalTabs.filter((tab) => signalIssueCounts[tab.key] > 0),
+    [signalIssueCounts],
   );
   const activeSignalDefinition = signalTabs.find((tab) => tab.key === activeSignalTab) ?? signalTabs[0];
 
@@ -135,7 +142,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     <section className="tab-panel findings-tab">
       <div className="panel-toolbar findings-tab__header">
         <div className="findings-tab__header-meta">
-          {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} issues</span> : null}
+          {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}
           {showResultState && completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
           {completedAt ? <span className="findings-tab__header-timestamp">Validated {formatTimestamp(completedAt)}</span> : null}
         </div>
@@ -162,7 +169,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
         </select>
         <div className="findings-tab__signal-tabs" role="tablist" aria-label="Validation signals">
           {signalTabs.map((tab) => {
-            const hasIssues = issues.some((issue) => normalizeSignalType(issue.signalType) === tab.key);
+            const count = signalIssueCounts[tab.key] ?? 0;
             return (
               <button
                 key={tab.key}
@@ -170,10 +177,11 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 role="tab"
                 className={tab.key === activeSignalTab ? "findings-tab__signal-tab is-active" : "findings-tab__signal-tab"}
                 aria-selected={tab.key === activeSignalTab}
-                data-has-issues={hasIssues ? "true" : "false"}
+                data-has-issues={count > 0 ? "true" : "false"}
                 onClick={() => setActiveSignalTab(tab.key)}
               >
                 {tab.label}
+                {count > 0 ? <span className="findings-tab__signal-count">{count}</span> : null}
               </button>
             );
           })}

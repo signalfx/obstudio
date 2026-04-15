@@ -21,7 +21,7 @@ export function DetailPanel({
 
   useEffect(() => {
     bodyRef.current?.scrollTo(0, 0);
-  }, [title, subtitle, headerMode, children]);
+  }, [title, subtitle, headerMode]);
 
   return (
     <div className={headerMode === "close-only" ? "detail-panel detail-panel--close-only" : "detail-panel"}>

@@ -67,7 +67,6 @@ describe("LogsTab", () => {
             scope: { name: "otel" },
           },
         ]}
-        onInteract={vi.fn()}
       />,
     );
 
@@ -100,7 +99,6 @@ describe("LogsTab", () => {
             spanId: "span-1",
           },
         ]}
-        onInteract={vi.fn()}
       />,
     );
 
