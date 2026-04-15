@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full release-local release list-skills clean
+.PHONY: help build build-client stage-skills bundle-weaver dev run test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -31,7 +31,11 @@ dev: ## Watch client files and rebuild on changes (hot reload)
 
 # --- Go build ---
 
-build: stage-skills build-client ## Build obstudio binary (client + skills embedded)
+bundle-weaver: ## Fetch the local Weaver validator runtime into build output
+	@mkdir -p $(BUILD_DIR)
+	cd $(GO_DIR) && $(GO) run ./cmd/fetch-weaver -output $(ABS_BUILD)
+
+build: stage-skills build-client bundle-weaver ## Build obstudio binary (client + skills embedded)
 	@mkdir -p $(BUILD_DIR)
 	cd $(GO_DIR) && $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(ABS_BUILD)/$(BINARY) $(GO_CMD)
 
