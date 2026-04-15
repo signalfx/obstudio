@@ -205,6 +205,117 @@ func TestHTTPDeleteTerminatesSession(t *testing.T) {
 	}
 }
 
+func TestHTTPAllowsPostWithoutSessionForExistingClients(t *testing.T) {
+	server := newHTTPTestServer(t)
+	defer server.Close()
+
+	toolsList := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+	}
+	body, _ := json.Marshal(toolsList)
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/mcp", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new tools/list request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("tools/list /mcp: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var toolsResp map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&toolsResp); err != nil {
+		t.Fatalf("decode tools/list response: %v", err)
+	}
+	if toolsResp["result"] == nil {
+		t.Fatalf("expected tools/list result, got %#v", toolsResp)
+	}
+}
+
+func TestHTTPRejectsMalformedJSONWithRPCParseError(t *testing.T) {
+	server := newHTTPTestServer(t)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/mcp", strings.NewReader("{"))
+	if err != nil {
+		t.Fatalf("new malformed request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post malformed json: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("expected application/json, got %q", got)
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode parse error response: %v", err)
+	}
+
+	errPayload, ok := payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %#v", payload)
+	}
+	if code, ok := errPayload["code"].(float64); !ok || code != -32700 {
+		t.Fatalf("expected parse error code -32700, got %#v", errPayload["code"])
+	}
+}
+
+func TestHTTPDeleteRequiresSessionHeader(t *testing.T) {
+	server := newHTTPTestServer(t)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/mcp", nil)
+	if err != nil {
+		t.Fatalf("new delete request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete /mcp: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPLocalhostOriginIsAccepted(t *testing.T) {
+	server := newHTTPTestServer(t)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/mcp", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Origin", "http://localhost:3000")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("get /mcp: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for localhost origin, got %d", resp.StatusCode)
+	}
+}
+
 func TestHTTPRejectsRemoteOrigins(t *testing.T) {
 	server := newHTTPTestServer(t)
 	defer server.Close()

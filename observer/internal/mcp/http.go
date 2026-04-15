@@ -16,12 +16,10 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-type httpSession struct {
-}
-
 type httpHandler struct {
 	dispatcher *Dispatcher
-	sessions   sync.Map
+	// TODO: expire abandoned sessions if we see real accumulation in long-lived use.
+	sessions sync.Map
 }
 
 // Register adds the MCP HTTP endpoints to the given ServeMux.
@@ -99,6 +97,8 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := strings.TrimSpace(r.Header.Get("Mcp-Session-Id"))
+	// Keep direct POST compatibility for existing clients that never open an SSE
+	// stream or send a session header after initialize.
 	if req.Method != "initialize" && sessionID != "" && !h.sessionExists(sessionID) {
 		http.NotFound(w, r)
 		return
@@ -112,7 +112,7 @@ func (h *httpHandler) handle(w http.ResponseWriter, r *http.Request) {
 
 	if req.Method == "initialize" {
 		sessionID = generateSessionID()
-		h.sessions.Store(sessionID, &httpSession{})
+		h.sessions.Store(sessionID, struct{}{})
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
