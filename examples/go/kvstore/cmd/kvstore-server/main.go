@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -9,6 +10,17 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+	shutdown, err := initOTel(ctx)
+	if err != nil {
+		log.Fatalf("failed to initialize telemetry: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			log.Printf("failed to shut down telemetry: %v", err)
+		}
+	}()
+
 	var (
 		addr     = flag.String("addr", ":8080", "HTTP listen address")
 		dataDir  = flag.String("data-dir", "./data", "directory used for persistence")

@@ -3,6 +3,7 @@ package kvstore
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -55,6 +56,8 @@ type Store struct {
 	indexCh chan indexEvent
 	doneCh  chan struct{}
 	wg      sync.WaitGroup
+
+	telemetryRegistration any
 }
 
 type entry struct {
@@ -98,6 +101,9 @@ func NewStore(cfg StoreConfig) (*Store, error) {
 	}
 	s.wg.Add(1)
 	go s.indexLoop()
+	if err := s.initTelemetry(); err != nil {
+		return nil, err
+	}
 	if err := s.loadFromDisk(); err != nil {
 		return nil, err
 	}
@@ -108,6 +114,7 @@ func NewStore(cfg StoreConfig) (*Store, error) {
 func (s *Store) Close() {
 	close(s.doneCh)
 	s.wg.Wait()
+	s.shutdownTelemetry()
 }
 
 // Get returns the value for a key and marks the key as recently used.
@@ -222,8 +229,16 @@ func (s *Store) enqueueIndex(ev indexEvent) {
 
 func (s *Store) persistAsync(key string, value []byte) {
 	defer s.wg.Done()
+	ctx, span := storeTracer.Start(context.Background(), "store.persist")
+	defer span.End()
+
+	start := now()
 	path := filepath.Join(s.dataDir, key)
 	if err := os.WriteFile(path, value, 0o644); err != nil {
+		storePersistDuration.Record(ctx, now().Sub(start).Seconds())
+		recordPersistFailure(ctx, err)
+		recordPersistFailureLog(ctx, key, err)
+		recordPersistSpanError(span, err)
 		s.logger.Printf("failed persisting key %q: %v", key, err)
 		s.mu.Lock()
 		e, ok := s.items[key]
@@ -236,7 +251,9 @@ func (s *Store) persistAsync(key string, value []byte) {
 			return
 		}
 		s.mu.Unlock()
+		return
 	}
+	storePersistDuration.Record(ctx, now().Sub(start).Seconds())
 }
 
 func (s *Store) evictOldestLocked() {
@@ -249,6 +266,7 @@ func (s *Store) evictOldestLocked() {
 	old := append([]byte(nil), e.value...)
 	s.lru.Remove(back)
 	delete(s.items, key)
+	storeEvictions.Add(context.Background(), 1)
 	s.enqueueIndex(indexEvent{kind: "delete", key: key, old: old})
 }
 
@@ -259,9 +277,11 @@ func (s *Store) indexLoop() {
 		case <-s.doneCh:
 			return
 		case ev := <-s.indexCh:
+			start := now()
 			s.indexMu.Lock()
 			s.applyIndexEventLocked(ev)
 			s.indexMu.Unlock()
+			storeIndexUpdateDuration.Record(context.Background(), now().Sub(start).Seconds())
 		}
 	}
 }
@@ -311,6 +331,7 @@ func (s *Store) loadFromDisk() error {
 		}
 		key := filepath.Base(path)
 		if err := validateKey(key); err != nil {
+			recordLoadSkippedLog(context.Background(), "store.load.invalid_key_skipped", logSeverityWarn, key, err)
 			s.logger.Printf("skipping invalid key file %q: %v", key, err)
 			return nil
 		}
@@ -319,6 +340,7 @@ func (s *Store) loadFromDisk() error {
 			return err
 		}
 		if len(value) > MaxValueSize {
+			recordLoadSkippedLog(context.Background(), "store.load.oversized_value_skipped", logSeverityWarn, key, ErrValueTooLarge)
 			s.logger.Printf("skipping oversized value for key %q", key)
 			return nil
 		}

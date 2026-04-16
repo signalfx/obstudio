@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // API exposes Store operations over HTTP.
@@ -22,9 +24,34 @@ func NewAPI(store *Store) *API {
 // Handler returns an HTTP handler exposing key/value and search endpoints.
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/kv/", a.handleKV)
-	mux.HandleFunc("/search", a.handleSearch)
+	mux.Handle("/kv/", instrumentHandler("/kv/*", a.handleKV))
+	mux.Handle("/search", instrumentHandler("/search", a.handleSearch))
 	return mux
+}
+
+func instrumentHandler(route string, handler func(http.ResponseWriter, *http.Request)) http.Handler {
+	return otelhttp.NewHandler(
+		http.HandlerFunc(handler),
+		"http.server",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			return spanName(r.Method, route)
+		}),
+	)
+}
+
+func routePattern(r *http.Request) string {
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/kv/"):
+		return "/kv/*"
+	case r.URL.Path == "/search":
+		return "/search"
+	default:
+		return r.URL.Path
+	}
+}
+
+func spanName(method, route string) string {
+	return method + " " + route
 }
 
 func (a *API) handleKV(w http.ResponseWriter, r *http.Request) {
