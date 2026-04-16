@@ -66,7 +66,7 @@ var targets = map[string]agentTarget{
 		skillsDir: func(home string) string { return filepath.Join(home, ".claude", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
 			format: mcpConfigJSON,
-			path:   func() string { return filepath.Join(userHome(), ".claude", "settings.json") },
+			path:   func() string { return filepath.Join(userHome(), ".claude.json") },
 		},
 	},
 	"codex": {
