@@ -84,7 +84,7 @@ double-counting and reduces instrumentation effort.
 
 ### Naming conventions
 
-- Use dots as separators: `http.server.request.count`
+- Use dots as separators: `http.server.request.duration`
 - Include units in the metric name or unit field: `duration` (seconds), `size` (bytes), `count`
 - Standard suffixes: `.count`, `.duration`, `.total`, `.size`
 - Prefix with component: `http.`, `db.`, `broker.`, `cache.`

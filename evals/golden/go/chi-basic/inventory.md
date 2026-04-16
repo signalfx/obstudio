@@ -26,8 +26,6 @@
 | Signal Name | Type | Category | Component | SLIs | Unit | Status | Verified |
 |-------------|------|----------|-----------|------|------|--------|----------|
 | `http.server.request.duration` | Histogram | Derived | HTTP Server | HTTP request latency | s | | |
-| `http.server.request.count` | Counter | OOB | HTTP Server | HTTP request throughput | {requests} | | |
-| `http.server.error.count` | Counter | OOB | HTTP Server | HTTP error rate | {errors} | | |
 | `http.server.active_requests` | UpDownCounter | OOB | HTTP Server | HTTP server saturation | {requests} | | |
 | `tasks.created.count` | Counter | Custom | Business Logic | Task creation rate | {tasks} | | |
 | `tasks.completed.count` | Counter | Custom | Business Logic | Task completion rate | {tasks} | | |

@@ -32,8 +32,6 @@
 | Signal Name | Type | Category | Component | SLIs | Unit | Status | Verified |
 |-------------|------|----------|-----------|------|------|--------|----------|
 | `http.server.request.duration` | Histogram | Derived | HTTP Server | HTTP request latency | s | | |
-| `http.server.request.count` | Counter | OOB | HTTP Server | HTTP request throughput | {requests} | | |
-| `http.server.error.count` | Counter | OOB | HTTP Server | HTTP error rate | {errors} | | |
 | `kvstore.get.duration` | Histogram | Custom | KV Store | KV get latency | ms | | |
 | `kvstore.set.count` | Counter | Custom | KV Store | KV set throughput | {operations} | | |
 | `kvstore.delete.count` | Counter | Custom | KV Store | KV delete throughput | {operations} | | |
