@@ -361,10 +361,10 @@ suite('VS Code Host', () => {
 		const originalHome = process.env.HOME;
 		const originalUserProfile = process.env.USERPROFILE;
 		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
-		const claudeConfigPath = path.join(tempHome, '.claude', 'settings.json');
+		const claudeConfigPath = path.join(tempHome, '.claude.json');
 		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
 		const originalCodexConfigPath = originalHome ? path.join(originalHome, '.codex', 'config.toml') : '';
-		const originalClaudeConfigPath = originalHome ? path.join(originalHome, '.claude', 'settings.json') : '';
+		const originalClaudeConfigPath = originalHome ? path.join(originalHome, '.claude.json') : '';
 		const originalCursorConfigPath = originalHome ? path.join(originalHome, '.cursor', 'mcp.json') : '';
 		const originalSnapshots = [
 			snapshotFile(originalCodexConfigPath),

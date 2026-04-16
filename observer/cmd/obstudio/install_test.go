@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestClaudeCodeTargetUsesSettingsJSON(t *testing.T) {
+func TestClaudeCodeTargetUsesClaudeJSON(t *testing.T) {
 	t.Parallel()
 
 	target, ok := targets["claude-code"]
@@ -20,8 +20,8 @@ func TestClaudeCodeTargetUsesSettingsJSON(t *testing.T) {
 	}
 
 	path := target.mcpConfig.path()
-	if !strings.HasSuffix(path, filepath.Join(".claude", "settings.json")) {
-		t.Fatalf("expected Claude Code MCP config path to end with .claude/settings.json, got %q", path)
+	if !strings.HasSuffix(path, ".claude.json") {
+		t.Fatalf("expected Claude Code MCP config path to end with .claude.json, got %q", path)
 	}
 }
 
