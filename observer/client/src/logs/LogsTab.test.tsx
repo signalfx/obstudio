@@ -75,6 +75,8 @@ describe("LogsTab", () => {
     expect(container.querySelector(".data-table__head--left-cluster-logs")).toBeTruthy();
     expect(container.querySelector(".data-table__body-inner--logs")).toBeTruthy();
     expect(screen.getByText("Severity")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "TRACE" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "FATAL" })).toBeTruthy();
     expect(container.querySelector(".data-table__td--timestamp .explorer-row__secondary")).toBeTruthy();
     expect(container.querySelector(".data-table__td--service .explorer-row__secondary")).toBeTruthy();
     expect(container.querySelector(".data-table__td--message .explorer-row__primary")).toBeTruthy();
@@ -120,7 +122,7 @@ describe("LogsTab", () => {
           {
             id: "1",
             timeUnixNano: "1712700000000000000",
-            severityNumber: 17,
+            severityNumber: 19,
             body: "persistence operation failed",
             attributes: {},
             resource: { serviceName: "kvstore", attributes: {} },
@@ -141,7 +143,7 @@ describe("LogsTab", () => {
 
     const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity"));
     const severities = severityCells.map((node) => node.textContent);
-    expect(severities).toContain("ERROR");
+    expect(severities).toContain("ERROR3");
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
 
     fireEvent.change(container.querySelector('select[aria-label="Filter logs by severity"]') as HTMLElement, {
@@ -152,15 +154,15 @@ describe("LogsTab", () => {
     expect(screen.queryByText("checkout started")).toBeNull();
   });
 
-  it("uses severityText for color when both severity fields are present", () => {
+  it("shows both severityNumber and severityText when both are present", () => {
     const { container } = render(
       <LogsTab
         logs={[
           {
             id: "1",
             timeUnixNano: "1712700000000000000",
-            severityNumber: 9,
-            severityText: "SEVERE",
+            severityNumber: 3,
+            severityText: "ERROR",
             body: "persistence operation failed",
             attributes: {},
             resource: { serviceName: "kvstore", attributes: {} },
@@ -170,17 +172,17 @@ describe("LogsTab", () => {
       />,
     );
 
-    expect(container.querySelector(".data-table__td--severity")?.textContent).toBe("SEVERE");
-    expect(container.querySelector(".data-table__td--severity")?.classList.contains("sev-badge--error")).toBe(true);
+    expect(container.querySelector(".data-table__td--severity")?.textContent).toBe("TRACE3 (ERROR)");
+    expect(container.querySelector(".data-table__td--severity")?.classList.contains("sev-badge--default")).toBe(true);
 
     fireEvent.change(container.querySelector('select[aria-label="Filter logs by severity"]') as HTMLElement, {
-      target: { value: "error" },
+      target: { value: "trace" },
     });
 
     expect(screen.getByText("persistence operation failed")).toBeTruthy();
   });
 
-  it("uses severityText heuristics for color when severityNumber is absent", () => {
+  it("uses text-only fallback when severityNumber is absent", () => {
     const { container } = render(
       <LogsTab
         logs={[
@@ -205,8 +207,8 @@ describe("LogsTab", () => {
           {
             id: "3",
             timeUnixNano: "1712700000000000002",
-            severityText: "NOTICE",
-            body: "notice text",
+            severityText: "Informational",
+            body: "informational text",
             attributes: {},
             resource: { serviceName: "gamma", attributes: {} },
             scope: { name: "otel" },
@@ -235,9 +237,16 @@ describe("LogsTab", () => {
 
     const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity"));
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
-    expect(severityCells[1]?.classList.contains("sev-badge--warn")).toBe(true);
-    expect(severityCells[2]?.classList.contains("sev-badge--info")).toBe(true);
-    expect(severityCells[3]?.classList.contains("sev-badge--debug")).toBe(true);
+    expect(severityCells[1]?.classList.contains("sev-badge--default")).toBe(true);
+    expect(severityCells[2]?.classList.contains("sev-badge--default")).toBe(true);
+    expect(severityCells[3]?.classList.contains("sev-badge--default")).toBe(true);
     expect(severityCells[4]?.classList.contains("sev-badge--default")).toBe(true);
+
+    fireEvent.change(container.querySelector('select[aria-label="Filter logs by severity"]') as HTMLElement, {
+      target: { value: "info" },
+    });
+
+    expect(screen.getByText("informational text")).toBeTruthy();
+    expect(screen.queryByText("warning text")).toBeNull();
   });
 });

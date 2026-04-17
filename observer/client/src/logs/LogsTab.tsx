@@ -8,65 +8,81 @@ interface LogsTabProps {
 }
 
 type DetailTab = "overview" | "json";
-type SeverityBucket = "error" | "warn" | "info" | "debug" | "default";
+type SeverityBucket = "error" | "default";
+type SeverityFilterValue = "" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 function severityFromNumber(severityNumber?: number): string {
   if (severityNumber === undefined) return "";
-  if (severityNumber >= 1 && severityNumber <= 4) return "TRACE";
-  if (severityNumber >= 5 && severityNumber <= 8) return "DEBUG";
-  if (severityNumber >= 9 && severityNumber <= 12) return "INFO";
-  if (severityNumber >= 13 && severityNumber <= 16) return "WARN";
-  if (severityNumber >= 17 && severityNumber <= 20) return "ERROR";
-  if (severityNumber >= 21 && severityNumber <= 24) return "FATAL";
+  switch (severityNumber) {
+    case 1: return "TRACE";
+    case 2: return "TRACE2";
+    case 3: return "TRACE3";
+    case 4: return "TRACE4";
+    case 5: return "DEBUG";
+    case 6: return "DEBUG2";
+    case 7: return "DEBUG3";
+    case 8: return "DEBUG4";
+    case 9: return "INFO";
+    case 10: return "INFO2";
+    case 11: return "INFO3";
+    case 12: return "INFO4";
+    case 13: return "WARN";
+    case 14: return "WARN2";
+    case 15: return "WARN3";
+    case 16: return "WARN4";
+    case 17: return "ERROR";
+    case 18: return "ERROR2";
+    case 19: return "ERROR3";
+    case 20: return "ERROR4";
+    case 21: return "FATAL";
+    case 22: return "FATAL2";
+    case 23: return "FATAL3";
+    case 24: return "FATAL4";
+  }
   return "";
 }
 
-function severityBucketFromNumber(severityNumber?: number): SeverityBucket | "" {
+function severityFilterFromNumber(severityNumber?: number): SeverityFilterValue {
   if (severityNumber === undefined || severityNumber === 0) return "";
-  if (severityNumber >= 1 && severityNumber <= 8) return "debug";
+  if (severityNumber >= 1 && severityNumber <= 4) return "trace";
+  if (severityNumber >= 5 && severityNumber <= 8) return "debug";
   if (severityNumber >= 9 && severityNumber <= 12) return "info";
   if (severityNumber >= 13 && severityNumber <= 16) return "warn";
-  if (severityNumber >= 17 && severityNumber <= 24) return "error";
+  if (severityNumber >= 17 && severityNumber <= 20) return "error";
+  if (severityNumber >= 21 && severityNumber <= 24) return "fatal";
   return "";
 }
 
-function severityBucketFromText(severityText?: string): SeverityBucket {
+function severityFilterFromText(severityText?: string): SeverityFilterValue {
   const text = severityText?.trim().toUpperCase() ?? "";
-  if (!text) return "default";
-  if (/(^|[^A-Z])(FATAL|CRITICAL|CRIT|SEVERE|ALERT|EMERG|EMERGENCY|PANIC|ERROR)([^A-Z]|$)/.test(text)) return "error";
+  if (!text) return "";
+  if (/(^|[^A-Z])(FATAL)([^A-Z]|$)/.test(text)) return "fatal";
+  if (/(^|[^A-Z])(CRITICAL|CRIT|SEVERE|ALERT|EMERG|EMERGENCY|PANIC|ERROR)([^A-Z]|$)/.test(text)) return "error";
   if (/(^|[^A-Z])(WARN|WARNING)([^A-Z]|$)/.test(text)) return "warn";
   if (/(^|[^A-Z])(INFO|INFORMATIONAL|NOTICE)([^A-Z]|$)/.test(text)) return "info";
-  if (/(^|[^A-Z])(DEBUG|TRACE|VERBOSE|FINE|FINER|FINEST)([^A-Z]|$)/.test(text)) return "debug";
-  return "default";
+  if (/(^|[^A-Z])(TRACE)([^A-Z]|$)/.test(text)) return "trace";
+  if (/(^|[^A-Z])(DEBUG|VERBOSE|FINE|FINER|FINEST)([^A-Z]|$)/.test(text)) return "debug";
+  return "";
+}
+
+function severityFilterValue(record: LogRecord): SeverityFilterValue {
+  const byNumber = severityFilterFromNumber(record.severityNumber);
+  if (byNumber) return byNumber;
+  return severityFilterFromText(record.severityText);
 }
 
 function severityBucket(record: LogRecord): SeverityBucket {
-  const severityText = record.severityText?.trim();
-  if (severityText) return severityBucketFromText(severityText);
-  const byNumber = severityBucketFromNumber(record.severityNumber);
-  if (byNumber) return byNumber;
-  return "default";
-}
-
-function severityFilterToken(bucket: SeverityBucket): string {
-  switch (bucket) {
-    case "error":
-      return "error";
-    case "warn":
-      return "warn";
-    case "info":
-      return "info";
-    case "debug":
-      return "debug";
-    default:
-      return "";
-  }
+  const filterValue = severityFilterValue(record);
+  return filterValue === "error" || filterValue === "fatal" ? "error" : "default";
 }
 
 function displaySeverity(record: LogRecord): string {
+  const severityFromNum = severityFromNumber(record.severityNumber);
   const severityText = record.severityText?.trim();
+  if (severityFromNum && severityText) return `${severityFromNum} (${severityText})`;
+  if (severityFromNum) return severityFromNum;
   if (severityText) return severityText;
-  return severityFromNumber(record.severityNumber);
+  return "";
 }
 
 function logKey(r: LogRecord): string {
@@ -86,8 +102,8 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
     const trimmedQuery = query.trim().toLowerCase();
     return logs.filter((record) => {
       const severity = displaySeverity(record);
-      const bucket = severityBucket(record);
-      if (severityFilter && severityFilterToken(bucket) !== severityFilter) {
+      const filterValue = severityFilterValue(record);
+      if (severityFilter && filterValue !== severityFilter) {
         return false;
       }
       if (!trimmedQuery) {
@@ -95,7 +111,7 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
       }
       const haystack = [
         severity,
-        severityFilterToken(bucket),
+        filterValue,
         record.body,
         record.resource?.serviceName ?? "",
         record.traceId ?? "",
@@ -138,11 +154,13 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                 onChange={(event) => setSeverityFilter(event.target.value)}
                 aria-label="Filter logs by severity"
               >
-                <option value="">All levels</option>
-                <option value="error">Error</option>
-                <option value="warn">Warn</option>
-                <option value="info">Info</option>
-                <option value="debug">Debug</option>
+                <option value="">All severities</option>
+                <option value="trace">TRACE</option>
+                <option value="debug">DEBUG</option>
+                <option value="info">INFO</option>
+                <option value="warn">WARN</option>
+                <option value="error">ERROR</option>
+                <option value="fatal">FATAL</option>
               </select>
               <input
                 className="explorer__input"
