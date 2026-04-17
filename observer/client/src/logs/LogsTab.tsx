@@ -215,8 +215,10 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                     data-index={vi.index}
                     ref={virtualizer.measureElement}
                   >
-                    <span className={`data-table__td data-table__td--severity sev-badge sev-badge--${cls}`}>
-                      {severity || "--"}
+                    <span className="data-table__td data-table__td--severity">
+                      <span className={`sev-badge sev-badge--${cls}`}>
+                        {severity || "--"}
+                      </span>
                     </span>
                     <span className="data-table__td data-table__td--timestamp">
                       <span className="explorer-row__secondary">{formatTimestamp(r.timeUnixNano)}</span>

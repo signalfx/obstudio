@@ -141,7 +141,7 @@ describe("LogsTab", () => {
       />,
     );
 
-    const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity"));
+    const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity .sev-badge"));
     const severities = severityCells.map((node) => node.textContent);
     expect(severities).toContain("ERROR3");
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
@@ -173,8 +173,8 @@ describe("LogsTab", () => {
       />,
     );
 
-    expect(container.querySelector(".data-table__td--severity")?.textContent).toBe("TRACE3 (ERROR)");
-    expect(container.querySelector(".data-table__td--severity")?.classList.contains("sev-badge--default")).toBe(true);
+    expect(container.querySelector(".data-table__td--severity .sev-badge")?.textContent).toBe("TRACE3 (ERROR)");
+    expect(container.querySelector(".data-table__td--severity .sev-badge")?.classList.contains("sev-badge--default")).toBe(true);
 
     fireEvent.change(container.querySelector('select[aria-label="Filter logs by severity"]') as HTMLElement, {
       target: { value: "trace" },
@@ -236,7 +236,7 @@ describe("LogsTab", () => {
       />,
     );
 
-    const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity"));
+    const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity .sev-badge"));
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
     expect(severityCells[1]?.classList.contains("sev-badge--warn")).toBe(true);
     expect(severityCells[2]?.classList.contains("sev-badge--info")).toBe(true);
