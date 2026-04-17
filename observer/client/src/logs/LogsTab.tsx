@@ -8,14 +8,84 @@ interface LogsTabProps {
 }
 
 type DetailTab = "overview" | "json";
+type SeverityBucket = "error" | "warn" | "info" | "default";
+type SeverityFilterValue = "" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
-function severityClass(sev: string): string {
-  const s = sev.toUpperCase();
-  if (s.includes("ERROR") || s.includes("FATAL")) return "error";
-  if (s.includes("WARN")) return "warn";
-  if (s.includes("INFO")) return "info";
-  if (s.includes("DEBUG") || s.includes("TRACE")) return "debug";
+function severityFromNumber(severityNumber?: number): string {
+  if (severityNumber === undefined) return "";
+  switch (severityNumber) {
+    case 1: return "TRACE";
+    case 2: return "TRACE2";
+    case 3: return "TRACE3";
+    case 4: return "TRACE4";
+    case 5: return "DEBUG";
+    case 6: return "DEBUG2";
+    case 7: return "DEBUG3";
+    case 8: return "DEBUG4";
+    case 9: return "INFO";
+    case 10: return "INFO2";
+    case 11: return "INFO3";
+    case 12: return "INFO4";
+    case 13: return "WARN";
+    case 14: return "WARN2";
+    case 15: return "WARN3";
+    case 16: return "WARN4";
+    case 17: return "ERROR";
+    case 18: return "ERROR2";
+    case 19: return "ERROR3";
+    case 20: return "ERROR4";
+    case 21: return "FATAL";
+    case 22: return "FATAL2";
+    case 23: return "FATAL3";
+    case 24: return "FATAL4";
+  }
+  return "";
+}
+
+function severityFilterFromNumber(severityNumber?: number): SeverityFilterValue {
+  if (severityNumber === undefined || severityNumber === 0) return "";
+  if (severityNumber >= 1 && severityNumber <= 4) return "trace";
+  if (severityNumber >= 5 && severityNumber <= 8) return "debug";
+  if (severityNumber >= 9 && severityNumber <= 12) return "info";
+  if (severityNumber >= 13 && severityNumber <= 16) return "warn";
+  if (severityNumber >= 17 && severityNumber <= 20) return "error";
+  if (severityNumber >= 21 && severityNumber <= 24) return "fatal";
+  return "";
+}
+
+function severityFilterFromText(severityText?: string): SeverityFilterValue {
+  const text = severityText?.trim().toUpperCase() ?? "";
+  if (!text) return "";
+  if (/(^|[^A-Z])(FATAL)([^A-Z]|$)/.test(text)) return "fatal";
+  if (/(^|[^A-Z])(CRITICAL|CRIT|SEVERE|ALERT|EMERG|EMERGENCY|PANIC|ERROR)([^A-Z]|$)/.test(text)) return "error";
+  if (/(^|[^A-Z])(WARN|WARNING)([^A-Z]|$)/.test(text)) return "warn";
+  if (/(^|[^A-Z])(INFO|INFORMATIONAL|NOTICE)([^A-Z]|$)/.test(text)) return "info";
+  if (/(^|[^A-Z])(TRACE)([^A-Z]|$)/.test(text)) return "trace";
+  if (/(^|[^A-Z])(DEBUG|VERBOSE|FINE|FINER|FINEST)([^A-Z]|$)/.test(text)) return "debug";
+  return "";
+}
+
+function severityFilterValue(record: LogRecord): SeverityFilterValue {
+  const byNumber = severityFilterFromNumber(record.severityNumber);
+  if (byNumber) return byNumber;
+  return severityFilterFromText(record.severityText);
+}
+
+function severityBucket(record: LogRecord): SeverityBucket {
+  const filterValue = severityFilterValue(record);
+  if (filterValue === "error" || filterValue === "fatal") return "error";
+  if (filterValue === "warn") return "warn";
+  if (filterValue === "info") return "info";
   return "default";
+}
+
+function displaySeverity(record: LogRecord): string {
+  const severityFromNum = severityFromNumber(record.severityNumber);
+  const severityText = record.severityText?.trim();
+  if (severityFromNum && severityText) return `${severityFromNum} (${severityText})`;
+  if (severityFromNum) return severityFromNum;
+  if (severityText) return severityText;
+  return "";
 }
 
 function logKey(r: LogRecord): string {
@@ -34,8 +104,9 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
   const filteredLogs = useMemo(() => {
     const trimmedQuery = query.trim().toLowerCase();
     return logs.filter((record) => {
-      const severity = record.severityText ?? "";
-      if (severityFilter && !severity.toLowerCase().includes(severityFilter)) {
+      const severity = displaySeverity(record);
+      const filterValue = severityFilterValue(record);
+      if (severityFilter && filterValue !== severityFilter) {
         return false;
       }
       if (!trimmedQuery) {
@@ -43,6 +114,7 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
       }
       const haystack = [
         severity,
+        filterValue,
         record.body,
         record.resource?.serviceName ?? "",
         record.traceId ?? "",
@@ -85,11 +157,13 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                 onChange={(event) => setSeverityFilter(event.target.value)}
                 aria-label="Filter logs by severity"
               >
-                <option value="">All levels</option>
-                <option value="error">Error</option>
-                <option value="warn">Warn</option>
-                <option value="info">Info</option>
-                <option value="debug">Debug</option>
+                <option value="">All severities</option>
+                <option value="trace">TRACE</option>
+                <option value="debug">DEBUG</option>
+                <option value="info">INFO</option>
+                <option value="warn">WARN</option>
+                <option value="error">ERROR</option>
+                <option value="fatal">FATAL</option>
               </select>
               <input
                 className="explorer__input"
@@ -108,7 +182,7 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
           ) : (
             <>
           <div className="data-table__head data-table__head--logs data-table__head--left-cluster data-table__head--left-cluster-logs">
-            <span className="data-table__th data-table__th--severity">Level</span>
+            <span className="data-table__th data-table__th--severity">Severity</span>
             <span className="data-table__th data-table__th--timestamp">Timestamp</span>
             <span className="data-table__th data-table__th--service">Service</span>
             <span className="data-table__th data-table__th--message">Message</span>
@@ -120,7 +194,8 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                 const r = filteredLogs[vi.index];
                 if (!r) return null;
                 const active = selectedKey !== null && logKey(r) === selectedKey;
-                const cls = severityClass(r.severityText ?? "");
+                const severity = displaySeverity(r);
+                const cls = severityBucket(r);
                 return (
                   <button
                     key={logKey(r)}
@@ -140,8 +215,10 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                     data-index={vi.index}
                     ref={virtualizer.measureElement}
                   >
-                    <span className={`data-table__td data-table__td--severity sev-badge sev-badge--${cls}`}>
-                      {r.severityText ?? "--"}
+                    <span className="data-table__td data-table__td--severity">
+                      <span className={`sev-badge sev-badge--${cls}`}>
+                        {severity || "--"}
+                      </span>
                     </span>
                     <span className="data-table__td data-table__td--timestamp">
                       <span className="explorer-row__secondary">{formatTimestamp(r.timeUnixNano)}</span>
@@ -165,7 +242,7 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
         {selectedLog ? (
           <div className="signal-view__panel">
             <DetailPanel
-              title={selectedLog.severityText ?? "LOG"}
+              title={displaySeverity(selectedLog) || "LOG"}
               subtitle={selectedLog.resource?.serviceName}
               onClose={() => setSelectedLog(null)}
             >

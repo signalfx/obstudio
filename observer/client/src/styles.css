@@ -2629,7 +2629,7 @@ code {
 
 .data-table__head--logs,
 .data-table__row--logs {
-  --table-columns: 64px 156px 140px minmax(0, 1fr);
+  --table-columns: minmax(120px, 176px) 156px 140px minmax(0, 1fr);
 }
 
 .data-table__head--traces,
@@ -2785,9 +2785,11 @@ code {
 /* Log table columns */
 
 .data-table__td--severity {
+  justify-content: flex-start;
   font-size: var(--font-meta);
   font-weight: 600;
   text-transform: uppercase;
+  overflow: hidden;
 }
 
 .data-table__td--timestamp {
@@ -2822,15 +2824,21 @@ code {
 /* Severity badges */
 
 .sev-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
   min-width: 54px;
   padding: 1px 8px;
   border-radius: 999px;
   font-size: var(--font-label);
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sev-badge--error {
@@ -3127,7 +3135,7 @@ code {
 
   .data-table__head--logs,
   .data-table__row--logs {
-    --table-columns: 70px minmax(0, 1fr);
+    --table-columns: minmax(112px, 140px) minmax(0, 1fr);
   }
 
   .data-table__head--metrics,

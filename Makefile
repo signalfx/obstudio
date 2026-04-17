@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -45,6 +45,9 @@ build-vsix: ## Build the VS Code extension package (.vsix)
 
 run: build ## Build and run the collector
 	$(BUILD_DIR)/$(BINARY)
+
+load-severity-demo: ## Load sample logs covering severityNumber/text combinations and keep the emitter alive for manual UI testing
+	@python3 observer/load_severity_demo.py
 
 test: stage-skills ## Run all Go tests
 	cd $(GO_DIR) && $(GO) test ./...
