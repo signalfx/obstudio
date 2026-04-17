@@ -145,6 +145,7 @@ describe("LogsTab", () => {
     const severities = severityCells.map((node) => node.textContent);
     expect(severities).toContain("ERROR3");
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
+    expect(severityCells[1]?.classList.contains("sev-badge--info")).toBe(true);
 
     fireEvent.change(container.querySelector('select[aria-label="Filter logs by severity"]') as HTMLElement, {
       target: { value: "error" },
@@ -237,8 +238,8 @@ describe("LogsTab", () => {
 
     const severityCells = Array.from(container.querySelectorAll(".data-table__td--severity"));
     expect(severityCells[0]?.classList.contains("sev-badge--error")).toBe(true);
-    expect(severityCells[1]?.classList.contains("sev-badge--default")).toBe(true);
-    expect(severityCells[2]?.classList.contains("sev-badge--default")).toBe(true);
+    expect(severityCells[1]?.classList.contains("sev-badge--warn")).toBe(true);
+    expect(severityCells[2]?.classList.contains("sev-badge--info")).toBe(true);
     expect(severityCells[3]?.classList.contains("sev-badge--default")).toBe(true);
     expect(severityCells[4]?.classList.contains("sev-badge--default")).toBe(true);
 

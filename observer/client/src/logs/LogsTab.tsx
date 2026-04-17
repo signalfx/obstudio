@@ -8,7 +8,7 @@ interface LogsTabProps {
 }
 
 type DetailTab = "overview" | "json";
-type SeverityBucket = "error" | "default";
+type SeverityBucket = "error" | "warn" | "info" | "default";
 type SeverityFilterValue = "" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 function severityFromNumber(severityNumber?: number): string {
@@ -73,7 +73,10 @@ function severityFilterValue(record: LogRecord): SeverityFilterValue {
 
 function severityBucket(record: LogRecord): SeverityBucket {
   const filterValue = severityFilterValue(record);
-  return filterValue === "error" || filterValue === "fatal" ? "error" : "default";
+  if (filterValue === "error" || filterValue === "fatal") return "error";
+  if (filterValue === "warn") return "warn";
+  if (filterValue === "info") return "info";
+  return "default";
 }
 
 function displaySeverity(record: LogRecord): string {
