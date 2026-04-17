@@ -55,7 +55,7 @@
 - auto_instrumentation_packages:
   - "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 - oob_span_count: 1
-- oob_metric_count: 2
+- oob_metric_count: 0
 - derived_metric_count: 1
 - custom_metric_count: 7
 - custom_span_count: 4

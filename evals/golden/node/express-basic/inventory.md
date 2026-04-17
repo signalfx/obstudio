@@ -46,7 +46,7 @@
   - "@opentelemetry/instrumentation-express"
   - "@opentelemetry/instrumentation-http"
 - oob_span_count: 1
-- oob_metric_count: 3
+- oob_metric_count: 1
 - derived_metric_count: 1
 - custom_metric_count: 4
 - sli_count: >= 8
