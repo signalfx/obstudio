@@ -94,11 +94,20 @@ describe("LogsTab", () => {
         logs={[
           {
             id: "1",
-            timeUnixNano: "1712700000000000000",
-            severityText: "INFO",
+            timeUnixNano: "2024-04-09T22:00:00.000000019Z",
+            severityNumber: 10,
+            severityText: "Informational",
             body: "checkout started",
-            attributes: {},
-            resource: { serviceName: "checkout", attributes: {} },
+            attributes: {
+              "demo.case": "checkout started",
+            },
+            resource: {
+              serviceName: "checkout",
+              attributes: {
+                "service.name": "checkout",
+                "deployment.environment": "prod",
+              },
+            },
             scope: { name: "otel" },
             traceId: "trace-1",
             spanId: "span-1",
@@ -109,10 +118,23 @@ describe("LogsTab", () => {
 
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
 
+    expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Message" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Attributes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Resource Attributes" })).toBeTruthy();
+    expect(screen.getByText("2024-04-09T22:00:00.000000019Z")).toBeTruthy();
+    expect(screen.getAllByText("INFO2 (Informational)")).toHaveLength(2);
+    expect(screen.getByText("Severity Number")).toBeTruthy();
+    expect(screen.getByText("Severity Text")).toBeTruthy();
+    expect(screen.getByText("demo.case")).toBeTruthy();
+    expect(screen.queryByText("service.name")).toBeNull();
+    expect(screen.getByText("deployment.environment")).toBeTruthy();
     expect(screen.queryByText("Validation")).toBeNull();
     expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
     expect(screen.getAllByRole("combobox", { name: "Filter logs by severity" }).length).toBeGreaterThan(0);
+
+    const headings = Array.from(container.querySelectorAll(".log-detail__heading")).map((node) => node.textContent);
+    expect(headings).toEqual(["Summary", "Message", "Trace Correlation", "Attributes", "Resource Attributes", "Scope"]);
   });
 
   it("falls back to severityNumber when severityText is missing", () => {
