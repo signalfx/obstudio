@@ -266,6 +266,28 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
               {detailTab === "overview" ? (
                 <div className="log-detail">
                   <div className="log-detail__section">
+                    <h4 className="log-detail__heading">Summary</h4>
+                    <div className="span-details__detail-row">
+                      <span className="span-details__detail-label">Timestamp</span>
+                      <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
+                        {selectedLog.timeUnixNano || "--"}
+                      </span>
+                    </div>
+                    {selectedLog.severityNumber !== undefined ? (
+                      <div className="span-details__detail-row">
+                        <span className="span-details__detail-label">Severity Number</span>
+                        <span className="span-details__detail-value">{selectedLog.severityNumber}</span>
+                      </div>
+                    ) : null}
+                    {selectedLog.severityText ? (
+                      <div className="span-details__detail-row">
+                        <span className="span-details__detail-label">Severity Text</span>
+                        <span className="span-details__detail-value">{selectedLog.severityText}</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="log-detail__section">
                     <h4 className="log-detail__heading">Message</h4>
                     <pre className="log-detail__body">{selectedLog.body}</pre>
                   </div>
@@ -290,19 +312,37 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                     </div>
                   ) : null}
 
-                  {selectedLog.resource ? (
+                  {Object.keys(selectedLog.attributes ?? {}).length > 0 ? (
                     <div className="log-detail__section">
-                      <h4 className="log-detail__heading">Resource</h4>
-                      {selectedLog.resource.serviceName ? (
-                        <div className="span-details__detail-row">
-                          <span className="span-details__detail-label">Service</span>
-                          <span className="span-details__detail-value">{selectedLog.resource.serviceName}</span>
-                        </div>
-                      ) : null}
-                      {Object.keys(selectedLog.resource?.attributes ?? {}).length > 0 ? (
+                      <h4 className="log-detail__heading">Attributes</h4>
                         <table className="log-detail__attrs">
                           <tbody>
-                            {Object.entries(selectedLog.resource?.attributes ?? {}).map(([k, v]) => (
+                            {Object.entries(selectedLog.attributes ?? {}).map(([k, v]) => (
+                              <tr key={k}>
+                                <td className="log-detail__attr-key">{k}</td>
+                                <td className="log-detail__attr-val">{String(v)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                    </div>
+                  ) : null}
+
+                  {hasLogResourceDetails(selectedLog) ? (
+                    <div className="log-detail__section">
+                      <h4 className="log-detail__heading">Resource Attributes</h4>
+                      {selectedLog.resource.schemaUrl ? (
+                        <div className="span-details__detail-row">
+                          <span className="span-details__detail-label">Schema URL</span>
+                          <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
+                            {selectedLog.resource.schemaUrl}
+                          </span>
+                        </div>
+                      ) : null}
+                      {Object.keys(resourceDetailAttributes(selectedLog)).length > 0 ? (
+                        <table className="log-detail__attrs">
+                          <tbody>
+                            {Object.entries(resourceDetailAttributes(selectedLog)).map(([k, v]) => (
                               <tr key={k}>
                                 <td className="log-detail__attr-key">{k}</td>
                                 <td className="log-detail__attr-val">{String(v)}</td>
@@ -326,24 +366,6 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
                       </div>
                     </div>
                   ) : null}
-
-                  <div className="log-detail__section">
-                    <h4 className="log-detail__heading">Attributes</h4>
-                    {Object.keys(selectedLog.attributes ?? {}).length > 0 ? (
-                      <table className="log-detail__attrs">
-                        <tbody>
-                          {Object.entries(selectedLog.attributes ?? {}).map(([k, v]) => (
-                            <tr key={k}>
-                              <td className="log-detail__attr-key">{k}</td>
-                              <td className="log-detail__attr-val">{String(v)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="log-detail__empty">No attributes</p>
-                    )}
-                  </div>
                 </div>
               ) : (
                 <div className="log-detail">
@@ -365,4 +387,16 @@ function formatTimestamp(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return "--";
   return d.toISOString().slice(11, 23);
+}
+
+function resourceDetailAttributes(record: LogRecord): Record<string, unknown> {
+  const attributes = { ...(record.resource?.attributes ?? {}) };
+  if (attributes["service.name"] === record.resource?.serviceName) {
+    delete attributes["service.name"];
+  }
+  return attributes;
+}
+
+function hasLogResourceDetails(record: LogRecord): boolean {
+  return Boolean(record.resource?.schemaUrl) || Object.keys(resourceDetailAttributes(record)).length > 0;
 }
