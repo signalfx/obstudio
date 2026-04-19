@@ -70,6 +70,10 @@ func newTestLog(body string, timestamp time.Time) LogRecord {
 	}
 }
 
+func timePointer(ts time.Time) *time.Time {
+	return &ts
+}
+
 // ============================================================================
 // Ring Buffer Tests
 // ============================================================================
@@ -1185,6 +1189,159 @@ func TestQueryTracesFiltered_RespectsLimit(t *testing.T) {
 	}
 }
 
+func TestQueryTraceSummariesFiltered_FilterBySummaryFields(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	trace1Root := newTestSpan("trace-1", "span-1", "GET /orders", now, 10)
+	trace1Root.Resource.ServiceName = "checkout"
+	trace1Root.Status.Code = "OK"
+
+	trace2Root := newTestSpan("trace-2", "span-1", "POST /checkout", now.Add(100*time.Millisecond), 30)
+	trace2Root.Resource.ServiceName = "payments"
+	trace2Root.Status.Code = "ERROR"
+	trace2Child := newTestSpan("trace-2", "span-2", "db.write", now.Add(110*time.Millisecond), 5)
+	trace2Child.ParentSpanID = "span-1"
+	trace2Child.Resource.ServiceName = "payments"
+	trace2Child.Status.Code = "ERROR"
+
+	s.AddSpansForConnection("conn-1", []Span{trace1Root})
+	s.AddSpansForConnection("conn-1", []Span{trace2Root, trace2Child})
+
+	spanCount := 2
+	minDurationMs := 25.0
+	maxDurationMs := 35.0
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{
+		TraceID:        "trace-2",
+		RootSpanName:   "post /checkout",
+		ServiceName:    "PAYMENTS",
+		Status:         "error",
+		SpanCount:      &spanCount,
+		MinDurationMs:  &minDurationMs,
+		MaxDurationMs:  &maxDurationMs,
+		Limit:          10,
+		SpanPreviewCap: 5,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 filtered result, got %d", len(results))
+	}
+	if results[0].TraceID != "trace-2" {
+		t.Fatalf("expected trace-2, got %s", results[0].TraceID)
+	}
+	if results[0].SpanCount != 2 {
+		t.Fatalf("expected span count 2, got %d", results[0].SpanCount)
+	}
+}
+
+func TestQueryTraceSummariesFiltered_FilterByQuery(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	trace1 := newTestSpan("trace-1", "span-1", "GET /orders", now, 10)
+	trace1.Resource.ServiceName = "checkout"
+
+	trace2 := newTestSpan("trace-2", "span-1", "POST /charge", now.Add(100*time.Millisecond), 20)
+	trace2.Resource.ServiceName = "payments"
+	trace2.Status.Code = "ERROR"
+
+	s.AddSpansForConnection("conn-1", []Span{trace1, trace2})
+
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{
+		Query: "charge",
+		Limit: 10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 query-matched result, got %d", len(results))
+	}
+	if results[0].TraceID != "trace-2" {
+		t.Fatalf("expected trace-2, got %s", results[0].TraceID)
+	}
+}
+
+func TestQueryTraceSummariesFiltered_EmptyReturnsEmptySlice(t *testing.T) {
+	s := New()
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: 10})
+	if results == nil {
+		t.Fatalf("expected empty slice, got nil")
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestQueryTraceSummariesFiltered_FilterBySummaryRanges(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	trace1 := newTestSpan("trace-1", "span-1", "root-a", now, 10)
+	trace2Root := newTestSpan("trace-2", "span-1", "root-b", now.Add(100*time.Millisecond), 30)
+	trace2Child := newTestSpan("trace-2", "span-2", "child-b", now.Add(110*time.Millisecond), 5)
+	trace2Child.ParentSpanID = "span-1"
+	trace3Root := newTestSpan("trace-3", "span-1", "root-c", now.Add(200*time.Millisecond), 60)
+	trace3Child := newTestSpan("trace-3", "span-2", "child-c", now.Add(210*time.Millisecond), 10)
+	trace3Child.ParentSpanID = "span-1"
+
+	s.AddSpansForConnection("conn-1", []Span{trace1})
+	s.AddSpansForConnection("conn-1", []Span{trace2Root, trace2Child})
+	s.AddSpansForConnection("conn-1", []Span{trace3Root, trace3Child})
+
+	minSpanCount := 2
+	maxSpanCount := 2
+	minDurationMs := 20.0
+	maxDurationMs := 40.0
+	timeFrom := now.Add(50 * time.Millisecond)
+	timeTo := now.Add(150 * time.Millisecond)
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{
+		MinSpanCount:  &minSpanCount,
+		MaxSpanCount:  &maxSpanCount,
+		MinDurationMs: &minDurationMs,
+		MaxDurationMs: &maxDurationMs,
+		TimeFrom:      &timeFrom,
+		TimeTo:        &timeTo,
+		Limit:         10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 ranged result, got %d", len(results))
+	}
+	if results[0].TraceID != "trace-2" {
+		t.Fatalf("expected trace-2, got %s", results[0].TraceID)
+	}
+}
+
+func TestQueryTraceSummaryFieldValues(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddSpansForConnection("", []Span{
+		{
+			TraceID:   "trace-1",
+			SpanID:    "span-1",
+			Name:      "GET /orders",
+			Kind:      "internal",
+			StartTime: now,
+			EndTime:   now.Add(10 * time.Millisecond),
+			Status:    SpanStatus{Code: "OK"},
+			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel"},
+		},
+		{
+			TraceID:   "trace-2",
+			SpanID:    "span-2",
+			Name:      "POST /charge",
+			Kind:      "internal",
+			StartTime: now.Add(time.Second),
+			EndTime:   now.Add(time.Second + 5*time.Millisecond),
+			Status:    SpanStatus{Code: "ERROR"},
+			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel"},
+		},
+	})
+
+	values := s.QueryTraceSummaryFieldValues("serviceName", "pa", TraceSummaryFilter{}, 10)
+	if len(values) != 1 || values[0] != "payments" {
+		t.Fatalf("expected [payments], got %v", values)
+	}
+}
+
 // ============================================================================
 // QueryMetricsFiltered Tests
 // ============================================================================
@@ -1289,6 +1446,123 @@ func TestQueryMetricsFiltered_RespectsLimit(t *testing.T) {
 	}
 }
 
+func TestQueryMetricGroupsFiltered_FilterByQueryAndSummaryFields(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	m1 := newTestMetric("http.server.duration", 12, now)
+	m1.Description = "Request duration"
+	m1.Unit = "ms"
+	m1.Type = "histogram"
+	m1.Resource.ServiceName = "checkout"
+	m1.Scope.Name = "otel.http"
+
+	m1b := newTestMetric("http.server.duration", 15, now.Add(10*time.Millisecond))
+	m1b.Description = "Request duration"
+	m1b.Unit = "ms"
+	m1b.Type = "histogram"
+	m1b.Resource.ServiceName = "checkout"
+	m1b.Scope.Name = "otel.http"
+	m1b.Attributes["http.method"] = "GET"
+
+	m2 := newTestMetric("db.client.connections.usage", 5, now.Add(100*time.Millisecond))
+	m2.Description = "Open connections"
+	m2.Unit = "connections"
+	m2.Type = "gauge"
+	m2.Resource.ServiceName = "db"
+	m2.Scope.Name = "otel.db"
+
+	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m1, m1b, m2})
+
+	dataPointCount := 2
+	seriesCount := 2
+	results := s.QueryMetricGroupsFiltered(MetricGroupFilter{
+		Query:          "duration",
+		MetricName:     "http.server.duration",
+		ServiceName:    "CHECKOUT",
+		ScopeName:      "otel.http",
+		Type:           "histogram",
+		Unit:           "ms",
+		DataPointCount: &dataPointCount,
+		SeriesCount:    &seriesCount,
+		Limit:          10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 filtered metric group, got %d", len(results))
+	}
+	if results[0].Name != "http.server.duration" {
+		t.Fatalf("expected http.server.duration, got %s", results[0].Name)
+	}
+	if results[0].SeriesCount != 2 {
+		t.Fatalf("expected series count 2, got %d", results[0].SeriesCount)
+	}
+}
+
+func TestQueryMetricGroupsFiltered_FilterByCountRanges(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	oneSeries := newTestMetric("metric.one", 1, now)
+	oneSeries.Resource.ServiceName = "svc"
+	twoSeriesA := newTestMetric("metric.two", 2, now.Add(100*time.Millisecond))
+	twoSeriesA.Resource.ServiceName = "svc"
+	twoSeriesB := newTestMetric("metric.two", 3, now.Add(110*time.Millisecond))
+	twoSeriesB.Resource.ServiceName = "svc"
+	twoSeriesB.Attributes["dim"] = "b"
+
+	s.AddMetricsForConnection("conn-1", []MetricDataPoint{oneSeries, twoSeriesA, twoSeriesB})
+
+	minSeriesCount := 2
+	maxSeriesCount := 2
+	minDataPointCount := 2
+	maxDataPointCount := 2
+	timeFrom := now.Add(50 * time.Millisecond)
+	timeTo := now.Add(150 * time.Millisecond)
+	results := s.QueryMetricGroupsFiltered(MetricGroupFilter{
+		MinSeriesCount:    &minSeriesCount,
+		MaxSeriesCount:    &maxSeriesCount,
+		MinDataPointCount: &minDataPointCount,
+		MaxDataPointCount: &maxDataPointCount,
+		TimeFrom:          &timeFrom,
+		TimeTo:            &timeTo,
+		Limit:             10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 ranged metric group, got %d", len(results))
+	}
+	if results[0].Name != "metric.two" {
+		t.Fatalf("expected metric.two, got %s", results[0].Name)
+	}
+}
+
+func TestQueryMetricGroupFieldValues(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddMetricsForConnection("", []MetricDataPoint{
+		{
+			Name:      "http.server.duration",
+			Unit:      "ms",
+			Type:      "histogram",
+			Timestamp: now,
+			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel.http"},
+		},
+		{
+			Name:      "db.client.connections.usage",
+			Unit:      "connections",
+			Type:      "gauge",
+			Timestamp: now.Add(time.Second),
+			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel.db"},
+		},
+	})
+
+	values := s.QueryMetricGroupFieldValues("scopeName", "", MetricGroupFilter{ServiceName: "payments"}, 10)
+	if len(values) != 1 || values[0] != "otel.db" {
+		t.Fatalf("expected [otel.db], got %v", values)
+	}
+}
+
 // ============================================================================
 // QueryLogsFiltered Tests
 // ============================================================================
@@ -1390,6 +1664,79 @@ func TestQueryLogsFiltered_RespectsLimit(t *testing.T) {
 	results := s.QueryLogsFiltered("", "", "", "", 5)
 	if len(results) != 5 {
 		t.Errorf("expected 5 results, got %d", len(results))
+	}
+}
+
+func TestQueryLogRecordsFiltered_FilterByQueryAndSummaryFields(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	log1 := newTestLog("checkout started", now)
+	log1.SeverityText = "INFO"
+	log1.Resource.ServiceName = "checkout"
+	log1.TraceID = "trace-1"
+
+	log2 := newTestLog("payment failed", now.Add(100*time.Millisecond))
+	log2.SeverityText = "ERROR"
+	log2.Resource.ServiceName = "payments"
+	log2.TraceID = "trace-2"
+	log2.SpanID = "span-2"
+
+	s.AddLogsForConnection("conn-1", []LogRecord{log1, log2})
+
+	results := s.QueryLogRecordsFiltered(LogRecordFilter{
+		ServiceName:  "PAYMENTS",
+		SeverityText: "error",
+		TraceID:      "trace-2",
+		SpanID:       "span-2",
+		ScopeName:    "test-scope",
+		Query:        "failed",
+		TimeFrom:     timePointer(now.Add(50 * time.Millisecond)),
+		TimeTo:       timePointer(now.Add(150 * time.Millisecond)),
+		Limit:        10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 filtered log record, got %d", len(results))
+	}
+	if results[0].Body != "payment failed" {
+		t.Fatalf("expected payment failed, got %s", results[0].Body)
+	}
+}
+
+func TestQueryLogRecordsFiltered_EmptyReturnsEmptySlice(t *testing.T) {
+	s := New()
+	results := s.QueryLogRecordsFiltered(LogRecordFilter{Limit: 10})
+	if results == nil {
+		t.Fatalf("expected empty slice, got nil")
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestQueryLogRecordFieldValues(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddLogsForConnection("", []LogRecord{
+		{
+			ID:        "1",
+			Timestamp: now,
+			Body:      "checkout started",
+			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "checkout.logger"},
+		},
+		{
+			ID:        "2",
+			Timestamp: now.Add(time.Second),
+			Body:      "payment failed",
+			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "payments.logger"},
+		},
+	})
+
+	values := s.QueryLogRecordFieldValues("scopeName", "pay", LogRecordFilter{}, 10)
+	if len(values) != 1 || values[0] != "payments.logger" {
+		t.Fatalf("expected [payments.logger], got %v", values)
 	}
 }
 

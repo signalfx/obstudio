@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
+import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { useMetricTimeSeries, type MetricSeries } from "./useMetricTimeSeries";
 import type { MetricGroup } from "../api/types";
@@ -12,37 +14,62 @@ interface MetricsTabProps {
 
 type DisplayType = "lines" | "bars" | "area";
 
-/** Metrics tab with expandable metric cards and time series charts. */
+const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: "metricName", label: "Metric", kind: "text" },
+  { key: "scopeName", label: "Scope", kind: "text" },
+  { key: "serviceName", label: "Service", kind: "text" },
+];
+const METRIC_SUGGESTIBLE_FIELDS = new Set(["metricName", "serviceName", "scopeName"]);
+
+function assignQueryFilter(query: MetricsQuery, clause: FilterClause): void {
+  const targetKey = clause.op === "neq" ? "notFilters" : "filters";
+  query[targetKey] = { ...(query[targetKey] ?? {}), [clause.key]: clause.value };
+}
+
+function buildMetricsQuery(clauses: FilterClause[]): MetricsQuery {
+  const query: MetricsQuery = {};
+  for (const clause of clauses) {
+    switch (clause.key) {
+      case "metricName":
+      case "serviceName":
+      case "scopeName":
+        assignQueryFilter(query, clause);
+        break;
+      default:
+        break;
+    }
+  }
+  return query;
+}
+
+/** Metrics tab with list view and a right-side detail panel for the selected metric. */
 export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.ReactElement {
-  const [query, setQuery] = useState("");
+  const [clauses, setClauses] = useState<FilterClause[]>([]);
+  const [serverMetrics, setServerMetrics] = useState<MetricGroup[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
   const [selectedSeriesKey, setSelectedSeriesKey] = useState<string | null>(null);
   const [displayType, setDisplayType] = useState<DisplayType>("lines");
   const seriesOrderRef = useRef<Map<string, string[]>>(new Map());
-
-  const { allSeries, metricList } = useMetricTimeSeries(metrics);
+  const activeQuery = useMemo(() => buildMetricsQuery(clauses), [clauses]);
+  const suggestMetricValues = useCallback((fieldKey: string, prefix: string, signal: AbortSignal) => {
+    if (!METRIC_SUGGESTIBLE_FIELDS.has(fieldKey)) {
+      return Promise.resolve<string[]>([]);
+    }
+    return fetchMetricFilterValues(fieldKey, prefix, buildMetricsQuery(clauses.filter((clause) => clause.key !== fieldKey)), signal);
+  }, [clauses]);
+  const hasActiveFilter = clauses.length > 0;
+  const liveMetrics = Array.isArray(metrics) ? metrics : [];
+  const visibleMetrics = hasActiveFilter ? serverMetrics : liveMetrics;
+  const { allSeries, metricList } = useMetricTimeSeries(visibleMetrics);
   const visibleMetricList = useMemo(() => {
-    const trimmedQuery = query.trim().toLowerCase();
-    return [...metricList]
-      .filter((metric) => {
-        if (!trimmedQuery) {
-          return true;
-        }
-        const haystack = [
-          metric.name,
-          metric.description ?? "",
-          metric.serviceName ?? "",
-          metric.type,
-          metric.unit ?? "",
-        ].join(" ").toLowerCase();
-        return haystack.includes(trimmedQuery);
-      })
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }, [metricList, query]);
+    return [...metricList].sort((left, right) => left.name.localeCompare(right.name));
+  }, [metricList]);
 
   const expandedSeries = useMemo(() => {
     if (!expandedMetric) return [];
-    const currentSeries = allSeries.filter((s) => s.metricName === expandedMetric);
+    const currentSeries = allSeries.filter((series) => series.metricName === expandedMetric);
     const previousOrder = seriesOrderRef.current.get(expandedMetric) ?? [];
     const currentKeys = new Set(currentSeries.map((series) => series.key));
     const nextOrder = [
@@ -56,6 +83,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
       .map((key) => seriesByKey.get(key))
       .filter((series): series is MetricSeries => series !== undefined);
   }, [allSeries, expandedMetric]);
+
   const expandedMeta = useMemo(
     () => (expandedMetric
       ? visibleMetricList.find((metric) => metric.name === expandedMetric)
@@ -66,21 +94,22 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
   );
 
   const selectedDetail = selectedSeriesKey
-    ? expandedSeries.find((s) => s.key === selectedSeriesKey) ?? null
+    ? expandedSeries.find((series) => series.key === selectedSeriesKey) ?? null
     : null;
 
   const stats = useMemo(() => {
     if (!selectedDetail) return null;
-    const vals = selectedDetail.points.map((p) => p.value);
-    if (vals.length === 0) return null;
+    const values = selectedDetail.points.map((point) => point.value);
+    if (values.length === 0) return null;
     return {
-      min: Math.min(...vals),
-      max: Math.max(...vals),
-      avg: vals.reduce((a, b) => a + b, 0) / vals.length,
-      count: vals.length,
+      min: Math.min(...values),
+      max: Math.max(...values),
+      avg: values.reduce((left, right) => left + right, 0) / values.length,
+      count: values.length,
       latest: selectedDetail.latest,
     };
   }, [selectedDetail]);
+
   const selectedAttributes = useMemo(
     () => stableEntries(selectedDetail?.attributes ?? {}),
     [selectedDetail],
@@ -124,6 +153,35 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
   const hasDetail = Boolean(expandedMeta);
 
   useEffect(() => {
+    if (!hasActiveFilter) {
+      setServerMetrics([]);
+      setIsFiltering(false);
+      setFilterError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsFiltering(true);
+    fetchMetrics(activeQuery, controller.signal)
+      .then((nextMetrics) => {
+        if (controller.signal.aborted) return;
+        setServerMetrics(nextMetrics);
+        setFilterError(null);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setFilterError(error instanceof Error ? error.message : "Failed to filter metrics");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsFiltering(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [activeQuery, hasActiveFilter, liveMetrics]);
+
+  useEffect(() => {
     if (!expandedMetric) return;
     if (!visibleMetricList.some((metric) => metric.name === expandedMetric)) {
       setExpandedMetric(null);
@@ -139,21 +197,28 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
             <p className="explorer__status explorer__status--error">{telemetryError}</p>
           ) : null}
 
-          {metricList.length > 0 ? (
+          {filterError ? (
+            <p className="explorer__status explorer__status--error">{filterError}</p>
+          ) : null}
+
+          {visibleMetricList.length > 0 || hasActiveFilter ? (
             <div className="explorer__toolbar explorer__toolbar--controls">
-              <input
-                className="explorer__input"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search metric, description, type, unit, or service"
+              <FilterBar
+                definitions={METRIC_FILTER_DEFINITIONS}
+                clauses={clauses}
+                onChange={setClauses}
+                onSuggestValues={suggestMetricValues}
               />
             </div>
           ) : null}
 
-          {metricList.length === 0 && metrics.length === 0 ? (
+          {visibleMetricList.length === 0 && liveMetrics.length === 0 && !hasActiveFilter ? (
             <p className="explorer__status explorer__status--empty" style={{ padding: "40px 20px" }}>
               No metrics received yet. Send OTLP telemetry to port 4318 to begin exploring.
+            </p>
+          ) : isFiltering && hasActiveFilter && visibleMetricList.length === 0 ? (
+            <p className="metrics-explorer__empty" style={{ padding: "24px 20px" }}>
+              Updating filtered metrics...
             </p>
           ) : visibleMetricList.length === 0 ? (
             <p className="metrics-explorer__empty" style={{ padding: "24px 20px" }}>
@@ -170,30 +235,29 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
           ) : null}
 
           <div className="metrics-card-list">
-            {visibleMetricList.map((m) => {
-              const isExpanded = expandedMetric === m.name;
-
+            {visibleMetricList.map((metric) => {
+              const isExpanded = expandedMetric === metric.name;
               return (
-                <div key={m.name} className="metric-card">
+                <div key={metric.name} className="metric-card">
                   <button
                     className={`data-table__row data-table__row--metrics metric-card__header ${isExpanded ? "metric-card__header--active" : ""}`}
                     onClick={() => {
-                      setExpandedMetric(isExpanded ? null : m.name);
+                      setExpandedMetric(isExpanded ? null : metric.name);
                       setSelectedSeriesKey(null);
                     }}
                     type="button"
                   >
                     <span className="data-table__td data-table__td--metric-name metric-card__info">
-                      <span className="metric-card__name explorer-row__primary">{m.name}</span>
+                      <span className="metric-card__name explorer-row__primary">{metric.name}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-description">
-                      <span className="metric-card__description explorer-row__secondary">{m.description || "--"}</span>
+                      <span className="metric-card__description explorer-row__secondary">{metric.description || "--"}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-meta">
                       <span className="data-table__cell-content data-table__cell-content--meta metric-card__meta">
-                        <span className={`metric-card__badge metric-type metric-type--${m.type}`}>{m.type}</span>
+                        <span className={`metric-card__badge metric-type metric-type--${metric.type}`}>{metric.type}</span>
                         <span className="metric-card__meta-separator explorer-row__secondary">/</span>
-                        <span className="metric-card__unit explorer-row__secondary">{m.unit || "--"}</span>
+                        <span className="metric-card__unit explorer-row__secondary">{metric.unit || "--"}</span>
                       </span>
                     </span>
                   </button>
@@ -225,14 +289,14 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                 <div className="metrics-explorer__controls">
                   <div className="metrics-explorer__display">
                     <span className="metrics-explorer__control-label">Display</span>
-                    {(["lines", "bars", "area"] as DisplayType[]).map((dt) => (
+                    {(["lines", "bars", "area"] as DisplayType[]).map((nextDisplayType) => (
                       <button
-                        key={dt}
-                        className={`pill pill--small ${displayType === dt ? "pill--accent" : "pill--muted"}`}
-                        onClick={() => setDisplayType(dt)}
+                        key={nextDisplayType}
+                        className={`pill pill--small ${displayType === nextDisplayType ? "pill--accent" : "pill--muted"}`}
+                        onClick={() => setDisplayType(nextDisplayType)}
                         type="button"
                       >
-                        {dt.charAt(0).toUpperCase() + dt.slice(1)}
+                        {nextDisplayType.charAt(0).toUpperCase() + nextDisplayType.slice(1)}
                       </button>
                     ))}
                   </div>
@@ -253,32 +317,32 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                     <span className="metrics-explorer__detail-title">Series ({expandedSeries.length})</span>
                   </div>
                   <div className="metrics-explorer__detail-body">
-                    {expandedSeries.map((s, i) => {
-                      const attrs = stableEntries(s.attributes ?? {});
-                      const svcName = s.resource?.serviceName;
+                    {expandedSeries.map((series, index) => {
+                      const attributes = stableEntries(series.attributes ?? {});
+                      const serviceName = series.resource?.serviceName;
                       return (
                         <button
-                          key={s.key}
+                          key={series.key}
                           className="metrics-explorer__series-row"
-                          onClick={() => setSelectedSeriesKey(selectedSeriesKey === s.key ? null : s.key)}
+                          onClick={() => setSelectedSeriesKey(selectedSeriesKey === series.key ? null : series.key)}
                           type="button"
-                          style={{ width: "100%", border: 0, background: selectedSeriesKey === s.key ? "var(--accent-soft)" : "transparent", cursor: "pointer", textAlign: "left", font: "inherit" }}
+                          style={{ width: "100%", border: 0, background: selectedSeriesKey === series.key ? "var(--accent-soft)" : "transparent", cursor: "pointer", textAlign: "left", font: "inherit" }}
                         >
-                          <span className="metrics-explorer__series-dot" style={{ background: TELEMETRY_SERIES_COLORS[i % TELEMETRY_SERIES_COLORS.length] }} />
+                          <span className="metrics-explorer__series-dot" style={{ background: TELEMETRY_SERIES_COLORS[index % TELEMETRY_SERIES_COLORS.length] }} />
                           <span className="metrics-explorer__series-attrs">
-                            {svcName ? <span className="metrics-explorer__series-service">{svcName}</span> : null}
-                            {attrs.length > 0 ? (
+                            {serviceName ? <span className="metrics-explorer__series-service">{serviceName}</span> : null}
+                            {attributes.length > 0 ? (
                               <span className="metrics-explorer__series-dimensions">
-                                {attrs.map(([k, v]) => (
-                                  <span key={k} className="metrics-explorer__series-attr">
-                                    {k}={String(v)}
+                                {attributes.map(([key, value]) => (
+                                  <span key={key} className="metrics-explorer__series-attr">
+                                    {key}={String(value)}
                                   </span>
                                 ))}
                               </span>
-                            ) : !svcName ? <span className="metrics-explorer__series-no-attrs">(no dimensions)</span> : null}
+                            ) : !serviceName ? <span className="metrics-explorer__series-no-attrs">(no dimensions)</span> : null}
                           </span>
-                          <span className="metrics-explorer__series-value">{formatNumber(s.latest)}</span>
-                          <span className="metrics-explorer__series-points">{s.points.length} pts</span>
+                          <span className="metrics-explorer__series-value">{formatNumber(series.latest)}</span>
+                          <span className="metrics-explorer__series-points">{series.points.length} pts</span>
                         </button>
                       );
                     })}
@@ -376,10 +440,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
   );
 }
 
-function formatNumber(v: number): string {
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return v % 1 === 0 ? String(v) : v.toFixed(2);
+function formatNumber(value: number): string {
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
 function stableEntries(attributes: Record<string, unknown>): Array<[string, unknown]> {

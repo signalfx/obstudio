@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
+import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
+import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { DetailPanel } from "../layout";
 
 interface LogsTabProps {
@@ -10,6 +12,62 @@ interface LogsTabProps {
 type DetailTab = "overview" | "json";
 type SeverityBucket = "error" | "warn" | "info" | "default";
 type SeverityFilterValue = "" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+const LOG_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: "scopeName", label: "Scope", kind: "text" },
+  { key: "serviceName", label: "Service", kind: "text" },
+  { key: "message", label: "Message", kind: "text" },
+  { key: "severityNumber", label: "Severity Number", kind: "number", step: 1 },
+  {
+    key: "severityText",
+    label: "Severity",
+    kind: "enum",
+    options: [
+      { label: "TRACE", value: "TRACE" },
+      { label: "DEBUG", value: "DEBUG" },
+      { label: "INFO", value: "INFO" },
+      { label: "WARN", value: "WARN" },
+      { label: "ERROR", value: "ERROR" },
+      { label: "FATAL", value: "FATAL" },
+    ],
+  },
+  { key: "spanId", label: "Span ID", kind: "text" },
+  { key: "traceId", label: "Trace ID", kind: "text" },
+];
+
+const LOG_SUGGESTIBLE_FIELDS = new Set(["serviceName", "scopeName"]);
+
+function assignQueryFilter(query: LogsQuery, clause: FilterClause): void {
+  const targetKey = clause.op === "neq" ? "notFilters" : "filters";
+  query[targetKey] = { ...(query[targetKey] ?? {}), [clause.key]: clause.value };
+}
+
+function buildLogsQuery(clauses: FilterClause[]): LogsQuery {
+  const query: LogsQuery = {};
+  for (const clause of clauses) {
+    switch (clause.key) {
+      case "serviceName":
+        assignQueryFilter(query, clause);
+        break;
+      case "message":
+        query[clause.op === "neq" ? "notFilters" : "filters"] = {
+          ...(query[clause.op === "neq" ? "notFilters" : "filters"] ?? {}),
+          bodyContains: clause.value,
+        };
+        break;
+      case "severityText":
+      case "severityNumber":
+      case "traceId":
+      case "spanId":
+      case "scopeName":
+        assignQueryFilter(query, clause);
+        break;
+      default:
+        break;
+    }
+  }
+  return query;
+}
 
 function severityFromNumber(severityNumber?: number): string {
   if (severityNumber === undefined) return "";
@@ -82,7 +140,12 @@ function severityBucket(record: LogRecord): SeverityBucket {
 function displaySeverity(record: LogRecord): string {
   const severityFromNum = severityFromNumber(record.severityNumber);
   const severityText = record.severityText?.trim();
-  if (severityFromNum && severityText) return `${severityFromNum} (${severityText})`;
+  if (severityFromNum && severityText) {
+    if (severityFromNum.toUpperCase() === severityText.toUpperCase()) {
+      return severityFromNum;
+    }
+    return `${severityFromNum} (${severityText})`;
+  }
   if (severityFromNum) return severityFromNum;
   if (severityText) return severityText;
   return "";
@@ -94,50 +157,71 @@ function logKey(r: LogRecord): string {
 
 /** Logs tab with virtualized table and detail panel for selected log records. */
 export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
-  const [query, setQuery] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("");
+  const [clauses, setClauses] = useState<FilterClause[]>([]);
+  const [serverLogs, setServerLogs] = useState<LogRecord[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<LogRecord | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const tableRef = useRef<HTMLDivElement>(null);
 
   const selectedKey = useMemo(() => selectedLog ? logKey(selectedLog) : null, [selectedLog]);
-  const filteredLogs = useMemo(() => {
-    const trimmedQuery = query.trim().toLowerCase();
-    return logs.filter((record) => {
-      const severity = displaySeverity(record);
-      const filterValue = severityFilterValue(record);
-      if (severityFilter && filterValue !== severityFilter) {
-        return false;
-      }
-      if (!trimmedQuery) {
-        return true;
-      }
-      const haystack = [
-        severity,
-        filterValue,
-        record.body,
-        record.resource?.serviceName ?? "",
-        record.traceId ?? "",
-      ].join(" ").toLowerCase();
-      return haystack.includes(trimmedQuery);
-    });
-  }, [logs, query, severityFilter]);
+  const activeQuery = useMemo(() => buildLogsQuery(clauses), [clauses]);
+  const suggestLogValues = useCallback((fieldKey: string, prefix: string, signal: AbortSignal) => {
+    if (!LOG_SUGGESTIBLE_FIELDS.has(fieldKey)) {
+      return Promise.resolve<string[]>([]);
+    }
+    return fetchLogFilterValues(fieldKey, prefix, buildLogsQuery(clauses.filter((clause) => clause.key !== fieldKey)), signal);
+  }, [clauses]);
+  const hasActiveFilter = clauses.length > 0;
+  const liveLogs = Array.isArray(logs) ? logs : [];
+  const visibleLogs = hasActiveFilter ? serverLogs : liveLogs;
+
+  useEffect(() => {
+    if (!hasActiveFilter) {
+      setServerLogs([]);
+      setIsFiltering(false);
+      setFilterError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsFiltering(true);
+    fetchLogs(activeQuery, controller.signal)
+      .then((nextLogs) => {
+        if (controller.signal.aborted) return;
+        setServerLogs(nextLogs);
+        setFilterError(null);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setFilterError(error instanceof Error ? error.message : "Failed to filter logs");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsFiltering(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [activeQuery, hasActiveFilter, liveLogs]);
+
   // Invalidate selection when the selected log is no longer in the snapshot
   // (e.g., after store clear, WebSocket reconnect, or eviction from the buffer).
   useEffect(() => {
-    if (selectedKey && !logs.some((r) => logKey(r) === selectedKey)) {
+    if (selectedKey && !liveLogs.some((r) => logKey(r) === selectedKey)) {
       setSelectedLog(null);
     }
-  }, [logs, selectedKey]);
+  }, [liveLogs, selectedKey]);
 
   useEffect(() => {
-    if (selectedKey && !filteredLogs.some((record) => logKey(record) === selectedKey)) {
+    if (selectedKey && !visibleLogs.some((record) => logKey(record) === selectedKey)) {
       setSelectedLog(null);
     }
-  }, [filteredLogs, selectedKey]);
+  }, [selectedKey, visibleLogs]);
 
   const virtualizer = useVirtualizer({
-    count: filteredLogs.length,
+    count: visibleLogs.length,
     getScrollElement: () => tableRef.current,
     estimateSize: () => 36,
     overscan: 10,
@@ -149,35 +233,24 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
         className={`signal-view${selectedLog ? " signal-view--with-panel" : ""}`}
       >
         <div className="signal-view__content">
-          {logs.length > 0 ? (
+          {liveLogs.length > 0 || hasActiveFilter ? (
             <div className="explorer__toolbar explorer__toolbar--controls">
-              <select
-                className="explorer__select"
-                value={severityFilter}
-                onChange={(event) => setSeverityFilter(event.target.value)}
-                aria-label="Filter logs by severity"
-              >
-                <option value="">All severities</option>
-                <option value="trace">TRACE</option>
-                <option value="debug">DEBUG</option>
-                <option value="info">INFO</option>
-                <option value="warn">WARN</option>
-                <option value="error">ERROR</option>
-                <option value="fatal">FATAL</option>
-              </select>
-              <input
-                className="explorer__input"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search message, service, or trace ID"
+              <FilterBar
+                definitions={LOG_FILTER_DEFINITIONS}
+                clauses={clauses}
+                onChange={setClauses}
+                onSuggestValues={suggestLogValues}
               />
             </div>
           ) : null}
 
-          {logs.length === 0 ? (
+          {filterError ? (
+            <p className="explorer__status explorer__status--error">{filterError}</p>
+          ) : liveLogs.length === 0 && !hasActiveFilter ? (
             <p className="explorer__status explorer__status--empty">No logs received yet. Send OTLP telemetry to port 4318 to begin exploring.</p>
-          ) : filteredLogs.length === 0 ? (
+          ) : isFiltering && hasActiveFilter && visibleLogs.length === 0 ? (
+            <p className="explorer__status">Updating filtered logs...</p>
+          ) : visibleLogs.length === 0 ? (
             <p className="explorer__status">No logs match the current filters.</p>
           ) : (
             <>
@@ -191,7 +264,7 @@ export function LogsTab({ logs }: LogsTabProps): React.ReactElement {
           <div className="data-table__body" ref={tableRef}>
             <div className="data-table__body-inner data-table__body-inner--logs" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
               {virtualizer.getVirtualItems().map((vi) => {
-                const r = filteredLogs[vi.index];
+                const r = visibleLogs[vi.index];
                 if (!r) return null;
                 const active = selectedKey !== null && logKey(r) === selectedKey;
                 const severity = displaySeverity(r);
