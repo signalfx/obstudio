@@ -135,6 +135,31 @@ type LogRecord struct {
 	ownerConnID string `json:"-"`
 }
 
+// LogRecordFilter narrows log queries using explicit fields, optional time
+// bounds, and a legacy free-text substring query over the summary columns.
+type LogRecordFilter struct {
+	ServiceName           string
+	ExcludeServiceName    string
+	SeverityNumber        *int32
+	ExcludeSeverityNumber *int32
+	SeverityText          string
+	ExcludeSeverityText   string
+	BodyContains          string
+	ExcludeBodyContains   string
+	TraceID               string
+	ExcludeTraceID        string
+	SpanID                string
+	ExcludeSpanID         string
+	ScopeName             string
+	ExcludeScopeName      string
+	TimeAfter             *time.Time
+	TimeBefore            *time.Time
+	TimeFrom              *time.Time
+	TimeTo                *time.Time
+	Query                 string
+	Limit                 int
+}
+
 // TraceSummary represents a summary of a single trace.
 type TraceSummary struct {
 	TraceID      string        `json:"traceId"`
@@ -144,6 +169,36 @@ type TraceSummary struct {
 	DurationMs   float64       `json:"durationMs"`
 	Status       string        `json:"status"`
 	Spans        []SpanPreview `json:"spans,omitempty"`
+}
+
+// TraceSummaryFilter narrows trace summary queries using fields already present
+// on TraceSummary plus optional numeric and time ranges.
+type TraceSummaryFilter struct {
+	Query               string
+	TraceID             string
+	ExcludeTraceID      string
+	RootSpanName        string
+	ExcludeRootSpanName string
+	ServiceName         string
+	ExcludeServiceName  string
+	Status              string
+	ExcludeStatus       string
+	SpanCount           *int
+	SpanCountGT         *int
+	SpanCountLT         *int
+	MinSpanCount        *int
+	MaxSpanCount        *int
+	DurationMs          *float64
+	DurationMsGT        *float64
+	DurationMsLT        *float64
+	TimeAfter           *time.Time
+	TimeBefore          *time.Time
+	MinDurationMs       *float64
+	MaxDurationMs       *float64
+	TimeFrom            *time.Time
+	TimeTo              *time.Time
+	Limit               int
+	SpanPreviewCap      int
 }
 
 // SpanPreview represents a preview of a span in a trace.
@@ -177,6 +232,40 @@ type MetricGroup struct {
 	SeriesCount    int               `json:"seriesCount,omitempty"`
 	DataPointCount int               `json:"dataPointCount"`
 	DataPoints     []MetricDataPoint `json:"dataPoints,omitempty"`
+}
+
+// MetricGroupFilter narrows metric group queries using exact summary fields,
+// optional count and time ranges, and a legacy free-text query over the visible
+// metric columns.
+type MetricGroupFilter struct {
+	Query                      string
+	MetricName                 string
+	ExcludeMetricName          string
+	DescriptionContains        string
+	ExcludeDescriptionContains string
+	Unit                       string
+	ExcludeUnit                string
+	Type                       string
+	ExcludeType                string
+	ServiceName                string
+	ExcludeServiceName         string
+	ScopeName                  string
+	ExcludeScopeName           string
+	DataPointCount             *int
+	DataPointCountGT           *int
+	DataPointCountLT           *int
+	MinDataPointCount          *int
+	MaxDataPointCount          *int
+	SeriesCount                *int
+	SeriesCountGT              *int
+	SeriesCountLT              *int
+	TimeAfter                  *time.Time
+	TimeBefore                 *time.Time
+	MinSeriesCount             *int
+	MaxSeriesCount             *int
+	TimeFrom                   *time.Time
+	TimeTo                     *time.Time
+	Limit                      int
 }
 
 // Stats represents aggregated statistics about stored telemetry.
@@ -554,8 +643,17 @@ func (s *Store) checkSessionReset() bool {
 
 // QueryTraces returns the latest traces, newest first, up to the specified limit.
 func (s *Store) QueryTraces(limit int) []TraceSummary {
-	if limit <= 0 {
-		limit = 100
+	return s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: limit, SpanPreviewCap: 8})
+}
+
+// QueryTraceSummariesFiltered returns trace summaries filtered by fields already
+// surfaced on TraceSummary plus optional numeric ranges.
+func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSummary {
+	if filter.Limit <= 0 {
+		filter.Limit = 100
+	}
+	if filter.SpanPreviewCap <= 0 {
+		filter.SpanPreviewCap = 8
 	}
 
 	s.mu.RLock()
@@ -563,36 +661,50 @@ func (s *Store) QueryTraces(limit int) []TraceSummary {
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
+	if len(grouped) == 0 {
+		return []TraceSummary{}
+	}
 
-	var results []TraceSummary
+	startTimes := make(map[string]time.Time, len(grouped))
+	results := make([]TraceSummary, 0, minInt(len(grouped), filter.Limit))
 	for traceID, spans := range grouped {
+		startTime := getTraceStartTime(spans)
+		if filter.TimeAfter != nil && !startTime.After(*filter.TimeAfter) {
+			continue
+		}
+		if filter.TimeBefore != nil && !startTime.Before(*filter.TimeBefore) {
+			continue
+		}
+		if filter.TimeFrom != nil && startTime.Before(*filter.TimeFrom) {
+			continue
+		}
+		if filter.TimeTo != nil && startTime.After(*filter.TimeTo) {
+			continue
+		}
 		root := findRootSpan(spans)
 		dur := computeTraceDuration(spans)
-		previews := makeSpanPreviews(spans, 8)
-
-		results = append(results, TraceSummary{
+		summary := TraceSummary{
 			TraceID:      traceID,
 			RootSpanName: root.Name,
 			ServiceName:  root.Resource.ServiceName,
 			SpanCount:    len(spans),
 			DurationMs:   dur,
 			Status:       computeTraceStatus(spans),
-			Spans:        previews,
-		})
-	}
-
-	// Precompute start times to avoid repeated map lookups during sort.
-	startTimes := make(map[string]time.Time, len(grouped))
-	for traceID, spans := range grouped {
-		startTimes[traceID] = getTraceStartTime(spans)
+			Spans:        makeSpanPreviews(spans, filter.SpanPreviewCap),
+		}
+		if !matchesTraceSummaryFilter(summary, filter) {
+			continue
+		}
+		startTimes[traceID] = startTime
+		results = append(results, summary)
 	}
 
 	sort.Slice(results, func(i, j int) bool {
 		return startTimes[results[i].TraceID].After(startTimes[results[j].TraceID])
 	})
 
-	if len(results) > limit {
-		results = results[:limit]
+	if len(results) > filter.Limit {
+		results = results[:filter.Limit]
 	}
 	return results
 }
@@ -638,8 +750,14 @@ func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 // The UI path returns a bounded rolling window per series plus explicit
 // series cardinality so live WebSocket payloads stay controlled.
 func (s *Store) QueryMetrics(limit int) []MetricGroup {
-	if limit <= 0 {
-		limit = 100
+	return s.QueryMetricGroupsFiltered(MetricGroupFilter{Limit: limit})
+}
+
+// QueryMetricGroupsFiltered returns metric groups using the same bounded
+// preview shape as QueryMetrics, but with server-side filtering applied.
+func (s *Store) QueryMetricGroupsFiltered(filter MetricGroupFilter) []MetricGroup {
+	if filter.Limit <= 0 {
+		filter.Limit = 100
 	}
 
 	s.mu.RLock()
@@ -656,8 +774,19 @@ func (s *Store) QueryMetrics(limit int) []MetricGroup {
 	groups := make(map[groupKey]*groupAccumulator)
 	latestByGroup := make(map[groupKey]time.Time)
 
-	// Keep a bounded rolling window for each series in chronological order.
 	for _, dp := range points {
+		if filter.TimeAfter != nil && !dp.Timestamp.After(*filter.TimeAfter) {
+			continue
+		}
+		if filter.TimeBefore != nil && !dp.Timestamp.Before(*filter.TimeBefore) {
+			continue
+		}
+		if filter.TimeFrom != nil && dp.Timestamp.Before(*filter.TimeFrom) {
+			continue
+		}
+		if filter.TimeTo != nil && dp.Timestamp.After(*filter.TimeTo) {
+			continue
+		}
 		key := groupKey{dp.Name, dp.Resource.ServiceName, dp.Scope.Name}
 		acc, exists := groups[key]
 		if !exists {
@@ -695,11 +824,7 @@ func (s *Store) QueryMetrics(limit int) []MetricGroup {
 		return latestByGroup[groupOrder[i]].After(latestByGroup[groupOrder[j]])
 	})
 
-	if len(groupOrder) > limit {
-		groupOrder = groupOrder[:limit]
-	}
-
-	results := make([]MetricGroup, 0, len(groupOrder))
+	results := make([]MetricGroup, 0, minInt(len(groupOrder), filter.Limit))
 	for _, key := range groupOrder {
 		acc := groups[key]
 		group := *acc.group
@@ -714,25 +839,114 @@ func (s *Store) QueryMetrics(limit int) []MetricGroup {
 			}
 			return group.DataPoints[i].Timestamp.Before(group.DataPoints[j].Timestamp)
 		})
+		if !matchesMetricGroupFilter(group, filter) {
+			continue
+		}
 		results = append(results, group)
+		if len(results) >= filter.Limit {
+			break
+		}
 	}
 	return results
 }
 
 // QueryLogs returns the latest log records, newest first, up to the specified limit.
 func (s *Store) QueryLogs(limit int) []LogRecord {
-	if limit <= 0 {
-		limit = 100
+	return s.QueryLogRecordsFiltered(LogRecordFilter{Limit: limit})
+}
+
+func (s *Store) QueryTraceSummaryFieldValues(field, prefix string, filter TraceSummaryFilter, limit int) []string {
+	s.mu.RLock()
+	count := s.spans.size()
+	s.mu.RUnlock()
+	if count == 0 {
+		return []string{}
+	}
+	filter = clearTraceSummaryFieldFilter(filter, field)
+	filter.Limit = count
+	filter.SpanPreviewCap = 1
+	summaries := s.QueryTraceSummariesFiltered(filter)
+	return collectSuggestionValues(limit, prefix, summaries, func(summary TraceSummary) string {
+		switch field {
+		case "rootSpanName":
+			return summary.RootSpanName
+		case "serviceName":
+			return summary.ServiceName
+		default:
+			return ""
+		}
+	})
+}
+
+func (s *Store) QueryMetricGroupFieldValues(field, prefix string, filter MetricGroupFilter, limit int) []string {
+	s.mu.RLock()
+	count := s.metrics.size()
+	s.mu.RUnlock()
+	if count == 0 {
+		return []string{}
+	}
+	filter = clearMetricGroupFieldFilter(filter, field)
+	filter.Limit = count
+	groups := s.QueryMetricGroupsFiltered(filter)
+	return collectSuggestionValues(limit, prefix, groups, func(group MetricGroup) string {
+		switch field {
+		case "metricName":
+			return group.Name
+		case "serviceName":
+			return group.ServiceName
+		case "scopeName":
+			return group.ScopeName
+		case "unit":
+			return group.Unit
+		default:
+			return ""
+		}
+	})
+}
+
+func (s *Store) QueryLogRecordFieldValues(field, prefix string, filter LogRecordFilter, limit int) []string {
+	s.mu.RLock()
+	count := s.logs.size()
+	s.mu.RUnlock()
+	if count == 0 {
+		return []string{}
+	}
+	filter = clearLogRecordFieldFilter(filter, field)
+	filter.Limit = count
+	records := s.QueryLogRecordsFiltered(filter)
+	return collectSuggestionValues(limit, prefix, records, func(record LogRecord) string {
+		switch field {
+		case "serviceName":
+			return record.Resource.ServiceName
+		case "scopeName":
+			return record.Scope.Name
+		default:
+			return ""
+		}
+	})
+}
+
+// QueryLogRecordsFiltered returns log records filtered by exact fields plus
+// an optional free-text query over the summary columns shown in the logs table.
+func (s *Store) QueryLogRecordsFiltered(filter LogRecordFilter) []LogRecord {
+	if filter.Limit <= 0 {
+		filter.Limit = 100
 	}
 
 	s.mu.RLock()
 	all := s.logs.snapshot()
 	s.mu.RUnlock()
+	if len(all) == 0 {
+		return []LogRecord{}
+	}
 
-	// Return newest first.
-	var results []LogRecord
-	for i := len(all) - 1; i >= 0 && len(results) < limit; i-- {
-		results = append(results, all[i])
+	results := make([]LogRecord, 0, minInt(len(all), filter.Limit))
+	for i := len(all) - 1; i >= 0 && len(results) < filter.Limit; i-- {
+		lr := all[i]
+		if !matchesLogRecordFilter(lr, filter) {
+			continue
+		}
+		results = append(results, lr)
 	}
 	return results
 }
@@ -993,32 +1207,13 @@ func (s *Store) QueryMetricsFiltered(metricName, serviceName, scopeName, metricT
 
 // QueryLogsFiltered is used by MCP tools that need filtering.
 func (s *Store) QueryLogsFiltered(serviceName, severityText, body, traceID string, limit int) []LogRecord {
-	if limit <= 0 {
-		limit = 50
-	}
-
-	s.mu.RLock()
-	all := s.logs.snapshot()
-	s.mu.RUnlock()
-
-	var results []LogRecord
-	for i := len(all) - 1; i >= 0 && len(results) < limit; i-- {
-		lr := all[i]
-		if serviceName != "" && !strings.EqualFold(lr.Resource.ServiceName, serviceName) {
-			continue
-		}
-		if severityText != "" && !strings.EqualFold(lr.SeverityText, severityText) {
-			continue
-		}
-		if body != "" && !strings.Contains(strings.ToLower(lr.Body), strings.ToLower(body)) {
-			continue
-		}
-		if traceID != "" && lr.TraceID != traceID {
-			continue
-		}
-		results = append(results, lr)
-	}
-	return results
+	return s.QueryLogRecordsFiltered(LogRecordFilter{
+		ServiceName:  serviceName,
+		SeverityText: severityText,
+		BodyContains: body,
+		TraceID:      traceID,
+		Limit:        limit,
+	})
 }
 
 func groupSpansByTrace(spans []Span) map[string][]Span {
@@ -1102,6 +1297,229 @@ func anySpanNameMatches(spans []Span, name string) bool {
 	return false
 }
 
+func matchesTraceSummaryFilter(summary TraceSummary, filter TraceSummaryFilter) bool {
+	if filter.Query != "" {
+		haystack := strings.ToLower(strings.Join([]string{
+			summary.TraceID,
+			summary.RootSpanName,
+			summary.ServiceName,
+			summary.Status,
+		}, " "))
+		if !strings.Contains(haystack, strings.ToLower(filter.Query)) {
+			return false
+		}
+	}
+	if filter.TraceID != "" && !strings.EqualFold(summary.TraceID, filter.TraceID) {
+		return false
+	}
+	if filter.ExcludeTraceID != "" && strings.EqualFold(summary.TraceID, filter.ExcludeTraceID) {
+		return false
+	}
+	if filter.RootSpanName != "" && !strings.EqualFold(summary.RootSpanName, filter.RootSpanName) {
+		return false
+	}
+	if filter.ExcludeRootSpanName != "" && strings.EqualFold(summary.RootSpanName, filter.ExcludeRootSpanName) {
+		return false
+	}
+	if filter.ServiceName != "" && !strings.EqualFold(summary.ServiceName, filter.ServiceName) {
+		return false
+	}
+	if filter.ExcludeServiceName != "" && strings.EqualFold(summary.ServiceName, filter.ExcludeServiceName) {
+		return false
+	}
+	if filter.Status != "" && !strings.EqualFold(summary.Status, filter.Status) {
+		return false
+	}
+	if filter.ExcludeStatus != "" && strings.EqualFold(summary.Status, filter.ExcludeStatus) {
+		return false
+	}
+	if filter.SpanCount != nil && summary.SpanCount != *filter.SpanCount {
+		return false
+	}
+	if filter.SpanCountGT != nil && summary.SpanCount <= *filter.SpanCountGT {
+		return false
+	}
+	if filter.SpanCountLT != nil && summary.SpanCount >= *filter.SpanCountLT {
+		return false
+	}
+	if filter.MinSpanCount != nil && summary.SpanCount < *filter.MinSpanCount {
+		return false
+	}
+	if filter.MaxSpanCount != nil && summary.SpanCount > *filter.MaxSpanCount {
+		return false
+	}
+	if filter.DurationMs != nil && summary.DurationMs != *filter.DurationMs {
+		return false
+	}
+	if filter.DurationMsGT != nil && summary.DurationMs <= *filter.DurationMsGT {
+		return false
+	}
+	if filter.DurationMsLT != nil && summary.DurationMs >= *filter.DurationMsLT {
+		return false
+	}
+	if filter.MinDurationMs != nil && summary.DurationMs < *filter.MinDurationMs {
+		return false
+	}
+	if filter.MaxDurationMs != nil && summary.DurationMs > *filter.MaxDurationMs {
+		return false
+	}
+	return true
+}
+
+func matchesMetricGroupFilter(group MetricGroup, filter MetricGroupFilter) bool {
+	if filter.MetricName != "" && !strings.EqualFold(group.Name, filter.MetricName) {
+		return false
+	}
+	if filter.ExcludeMetricName != "" && strings.EqualFold(group.Name, filter.ExcludeMetricName) {
+		return false
+	}
+	if filter.DescriptionContains != "" && !strings.Contains(strings.ToLower(group.Description), strings.ToLower(filter.DescriptionContains)) {
+		return false
+	}
+	if filter.ExcludeDescriptionContains != "" && strings.Contains(strings.ToLower(group.Description), strings.ToLower(filter.ExcludeDescriptionContains)) {
+		return false
+	}
+	if filter.Unit != "" && !strings.EqualFold(group.Unit, filter.Unit) {
+		return false
+	}
+	if filter.ExcludeUnit != "" && strings.EqualFold(group.Unit, filter.ExcludeUnit) {
+		return false
+	}
+	if filter.Type != "" && !strings.EqualFold(group.Type, filter.Type) {
+		return false
+	}
+	if filter.ExcludeType != "" && strings.EqualFold(group.Type, filter.ExcludeType) {
+		return false
+	}
+	if filter.ServiceName != "" && !strings.EqualFold(group.ServiceName, filter.ServiceName) {
+		return false
+	}
+	if filter.ExcludeServiceName != "" && strings.EqualFold(group.ServiceName, filter.ExcludeServiceName) {
+		return false
+	}
+	if filter.ScopeName != "" && !strings.EqualFold(group.ScopeName, filter.ScopeName) {
+		return false
+	}
+	if filter.ExcludeScopeName != "" && strings.EqualFold(group.ScopeName, filter.ExcludeScopeName) {
+		return false
+	}
+	if filter.DataPointCount != nil && group.DataPointCount != *filter.DataPointCount {
+		return false
+	}
+	if filter.DataPointCountGT != nil && group.DataPointCount <= *filter.DataPointCountGT {
+		return false
+	}
+	if filter.DataPointCountLT != nil && group.DataPointCount >= *filter.DataPointCountLT {
+		return false
+	}
+	if filter.MinDataPointCount != nil && group.DataPointCount < *filter.MinDataPointCount {
+		return false
+	}
+	if filter.MaxDataPointCount != nil && group.DataPointCount > *filter.MaxDataPointCount {
+		return false
+	}
+	if filter.SeriesCount != nil && group.SeriesCount != *filter.SeriesCount {
+		return false
+	}
+	if filter.SeriesCountGT != nil && group.SeriesCount <= *filter.SeriesCountGT {
+		return false
+	}
+	if filter.SeriesCountLT != nil && group.SeriesCount >= *filter.SeriesCountLT {
+		return false
+	}
+	if filter.MinSeriesCount != nil && group.SeriesCount < *filter.MinSeriesCount {
+		return false
+	}
+	if filter.MaxSeriesCount != nil && group.SeriesCount > *filter.MaxSeriesCount {
+		return false
+	}
+	if filter.Query != "" {
+		haystack := strings.ToLower(strings.Join([]string{
+			group.Name,
+			group.Description,
+			group.Unit,
+			group.Type,
+			group.ServiceName,
+			group.ScopeName,
+		}, " "))
+		if !strings.Contains(haystack, strings.ToLower(filter.Query)) {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesLogRecordFilter(record LogRecord, filter LogRecordFilter) bool {
+	if filter.ServiceName != "" && !strings.EqualFold(record.Resource.ServiceName, filter.ServiceName) {
+		return false
+	}
+	if filter.ExcludeServiceName != "" && strings.EqualFold(record.Resource.ServiceName, filter.ExcludeServiceName) {
+		return false
+	}
+	if filter.SeverityNumber != nil && record.SeverityNumber != *filter.SeverityNumber {
+		return false
+	}
+	if filter.ExcludeSeverityNumber != nil && record.SeverityNumber == *filter.ExcludeSeverityNumber {
+		return false
+	}
+	if filter.SeverityText != "" && !strings.EqualFold(record.SeverityText, filter.SeverityText) {
+		return false
+	}
+	if filter.ExcludeSeverityText != "" && strings.EqualFold(record.SeverityText, filter.ExcludeSeverityText) {
+		return false
+	}
+	if filter.BodyContains != "" && !strings.Contains(strings.ToLower(record.Body), strings.ToLower(filter.BodyContains)) {
+		return false
+	}
+	if filter.ExcludeBodyContains != "" && strings.Contains(strings.ToLower(record.Body), strings.ToLower(filter.ExcludeBodyContains)) {
+		return false
+	}
+	if filter.TraceID != "" && record.TraceID != filter.TraceID {
+		return false
+	}
+	if filter.ExcludeTraceID != "" && record.TraceID == filter.ExcludeTraceID {
+		return false
+	}
+	if filter.SpanID != "" && record.SpanID != filter.SpanID {
+		return false
+	}
+	if filter.ExcludeSpanID != "" && record.SpanID == filter.ExcludeSpanID {
+		return false
+	}
+	if filter.ScopeName != "" && !strings.EqualFold(record.Scope.Name, filter.ScopeName) {
+		return false
+	}
+	if filter.ExcludeScopeName != "" && strings.EqualFold(record.Scope.Name, filter.ExcludeScopeName) {
+		return false
+	}
+	if filter.TimeFrom != nil && record.Timestamp.Before(*filter.TimeFrom) {
+		return false
+	}
+	if filter.TimeTo != nil && record.Timestamp.After(*filter.TimeTo) {
+		return false
+	}
+	if filter.TimeAfter != nil && !record.Timestamp.After(*filter.TimeAfter) {
+		return false
+	}
+	if filter.TimeBefore != nil && !record.Timestamp.Before(*filter.TimeBefore) {
+		return false
+	}
+	if filter.Query != "" {
+		haystack := strings.ToLower(strings.Join([]string{
+			record.SeverityText,
+			record.Body,
+			record.Resource.ServiceName,
+			record.TraceID,
+			record.SpanID,
+			record.Scope.Name,
+		}, " "))
+		if !strings.Contains(haystack, strings.ToLower(filter.Query)) {
+			return false
+		}
+	}
+	return true
+}
+
 func makeSpanPreviews(spans []Span, limit int) []SpanPreview {
 	n := len(spans)
 	if n > limit {
@@ -1118,6 +1536,106 @@ func makeSpanPreviews(spans []Span, limit int) []SpanPreview {
 		}
 	}
 	return previews
+}
+
+func clearTraceSummaryFieldFilter(filter TraceSummaryFilter, field string) TraceSummaryFilter {
+	switch field {
+	case "traceId":
+		filter.TraceID = ""
+		filter.ExcludeTraceID = ""
+	case "rootSpanName":
+		filter.RootSpanName = ""
+		filter.ExcludeRootSpanName = ""
+	case "serviceName":
+		filter.ServiceName = ""
+		filter.ExcludeServiceName = ""
+	case "status":
+		filter.Status = ""
+		filter.ExcludeStatus = ""
+	}
+	return filter
+}
+
+func clearMetricGroupFieldFilter(filter MetricGroupFilter, field string) MetricGroupFilter {
+	switch field {
+	case "metricName":
+		filter.MetricName = ""
+		filter.ExcludeMetricName = ""
+	case "descriptionContains":
+		filter.DescriptionContains = ""
+		filter.ExcludeDescriptionContains = ""
+	case "unit":
+		filter.Unit = ""
+		filter.ExcludeUnit = ""
+	case "type":
+		filter.Type = ""
+		filter.ExcludeType = ""
+	case "serviceName":
+		filter.ServiceName = ""
+		filter.ExcludeServiceName = ""
+	case "scopeName":
+		filter.ScopeName = ""
+		filter.ExcludeScopeName = ""
+	}
+	return filter
+}
+
+func clearLogRecordFieldFilter(filter LogRecordFilter, field string) LogRecordFilter {
+	switch field {
+	case "serviceName":
+		filter.ServiceName = ""
+		filter.ExcludeServiceName = ""
+	case "severityNumber":
+		filter.SeverityNumber = nil
+		filter.ExcludeSeverityNumber = nil
+	case "severityText":
+		filter.SeverityText = ""
+		filter.ExcludeSeverityText = ""
+	case "bodyContains":
+		filter.BodyContains = ""
+		filter.ExcludeBodyContains = ""
+	case "traceId":
+		filter.TraceID = ""
+		filter.ExcludeTraceID = ""
+	case "spanId":
+		filter.SpanID = ""
+		filter.ExcludeSpanID = ""
+	case "scopeName":
+		filter.ScopeName = ""
+		filter.ExcludeScopeName = ""
+	}
+	return filter
+}
+
+func collectSuggestionValues[T any](limit int, prefix string, values []T, project func(T) string) []string {
+	if limit <= 0 {
+		limit = 20
+	}
+	normalizedPrefix := strings.ToLower(strings.TrimSpace(prefix))
+	seen := make(map[string]struct{}, len(values))
+	results := make([]string, 0, minInt(len(values), limit))
+	for _, value := range values {
+		candidate := strings.TrimSpace(project(value))
+		if candidate == "" {
+			continue
+		}
+		if normalizedPrefix != "" && !strings.HasPrefix(strings.ToLower(candidate), normalizedPrefix) {
+			continue
+		}
+		key := strings.ToLower(candidate)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		results = append(results, candidate)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return strings.ToLower(results[i]) < strings.ToLower(results[j])
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
 }
 
 func normalizeMetricType(t string) string {

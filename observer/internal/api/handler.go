@@ -58,9 +58,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
+	mux.HandleFunc("GET /api/query/traces/filter-values", queryTraceFilterValues(s))
 	mux.HandleFunc("GET /api/query/traces/{traceId}", queryTraceDetail(s))
 	mux.HandleFunc("GET /api/query/metrics", queryMetrics(s))
+	mux.HandleFunc("GET /api/query/metrics/filter-values", queryMetricFilterValues(s))
 	mux.HandleFunc("GET /api/query/logs", queryLogs(s))
+	mux.HandleFunc("GET /api/query/logs/filter-values", queryLogFilterValues(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
@@ -74,7 +77,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 
 func queryTraces(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, s.QueryTraces(queryInt(r, "limit", 100)))
+		writeJSON(w, s.QueryTraceSummariesFiltered(traceSummaryFilterFromRequest(r)))
 	}
 }
 
@@ -92,13 +95,34 @@ func queryTraceDetail(s *store.Store) http.HandlerFunc {
 
 func queryMetrics(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, s.QueryMetrics(queryInt(r, "limit", 100)))
+		writeJSON(w, s.QueryMetricGroupsFiltered(metricGroupFilterFromRequest(r)))
+	}
+}
+
+func queryTraceFilterValues(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		field, prefix, limit := filterValueRequest(r)
+		writeJSON(w, s.QueryTraceSummaryFieldValues(field, prefix, traceSummaryFilterFromRequest(r), limit))
+	}
+}
+
+func queryMetricFilterValues(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		field, prefix, limit := filterValueRequest(r)
+		writeJSON(w, s.QueryMetricGroupFieldValues(field, prefix, metricGroupFilterFromRequest(r), limit))
+	}
+}
+
+func queryLogFilterValues(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		field, prefix, limit := filterValueRequest(r)
+		writeJSON(w, s.QueryLogRecordFieldValues(field, prefix, logRecordFilterFromRequest(r), limit))
 	}
 }
 
 func queryLogs(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, s.QueryLogs(queryInt(r, "limit", 100)))
+		writeJSON(w, s.QueryLogRecordsFiltered(logRecordFilterFromRequest(r)))
 	}
 }
 
@@ -247,6 +271,174 @@ func validationQueryFromRequest(r *http.Request) validator.Query {
 	}
 }
 
+func traceSummaryFilterFromRequest(r *http.Request) store.TraceSummaryFilter {
+	q := r.URL.Query()
+	filter := store.TraceSummaryFilter{
+		Query:               q.Get("query"),
+		TraceID:             queryEqString(q, "traceId", "traceId"),
+		ExcludeTraceID:      queryNeqString(q, "traceId"),
+		RootSpanName:        queryEqString(q, "rootSpanName", "rootSpanName"),
+		ExcludeRootSpanName: queryNeqString(q, "rootSpanName"),
+		ServiceName:         queryEqString(q, "serviceName", "serviceName"),
+		ExcludeServiceName:  queryNeqString(q, "serviceName"),
+		Status:              queryEqString(q, "status", "status"),
+		ExcludeStatus:       queryNeqString(q, "status"),
+		Limit:               queryInt(r, "limit", 100),
+		SpanPreviewCap:      8,
+	}
+	if n, ok := queryOptionalIntValues(q.Get("filter[spanCount][eq]"), q.Get("filter[spanCount]"), q.Get("spanCount")); ok {
+		filter.SpanCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[spanCount][gt]")); ok {
+		filter.SpanCountGT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[spanCount][lt]")); ok {
+		filter.SpanCountLT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[spanCount][gte]"), q.Get("minSpanCount")); ok {
+		filter.MinSpanCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[spanCount][lte]"), q.Get("maxSpanCount")); ok {
+		filter.MaxSpanCount = &n
+	}
+	if n, ok := queryOptionalFloatValues(q.Get("filter[durationMs][eq]"), q.Get("filter[durationMs]"), q.Get("durationMs")); ok {
+		filter.DurationMs = &n
+	}
+	if n, ok := queryOptionalFloatValues(q.Get("range[durationMs][gt]")); ok {
+		filter.DurationMsGT = &n
+	}
+	if n, ok := queryOptionalFloatValues(q.Get("range[durationMs][lt]")); ok {
+		filter.DurationMsLT = &n
+	}
+	if n, ok := queryOptionalFloatValues(q.Get("range[durationMs][gte]"), q.Get("minDurationMs")); ok {
+		filter.MinDurationMs = &n
+	}
+	if n, ok := queryOptionalFloatValues(q.Get("range[durationMs][lte]"), q.Get("maxDurationMs")); ok {
+		filter.MaxDurationMs = &n
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[from]")); ok {
+		filter.TimeFrom = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[to]")); ok {
+		filter.TimeTo = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[after]")); ok {
+		filter.TimeAfter = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[before]")); ok {
+		filter.TimeBefore = &ts
+	}
+	return filter
+}
+
+func metricGroupFilterFromRequest(r *http.Request) store.MetricGroupFilter {
+	q := r.URL.Query()
+	filter := store.MetricGroupFilter{
+		Query:             q.Get("query"),
+		MetricName:        queryEqString(q, "metricName", "metricName"),
+		ExcludeMetricName: queryNeqString(q, "metricName"),
+		DescriptionContains: firstNonEmpty(
+			q.Get("filter[descriptionContains][eq]"),
+			q.Get("filter[descriptionContains]"),
+			q.Get("description"),
+		),
+		ExcludeDescriptionContains: q.Get("filter[descriptionContains][neq]"),
+		Unit:                       queryEqString(q, "unit", "unit"),
+		ExcludeUnit:                queryNeqString(q, "unit"),
+		Type:                       queryEqString(q, "type", "type"),
+		ExcludeType:                queryNeqString(q, "type"),
+		ServiceName:                queryEqString(q, "serviceName", "serviceName"),
+		ExcludeServiceName:         queryNeqString(q, "serviceName"),
+		ScopeName:                  queryEqString(q, "scopeName", "scopeName"),
+		ExcludeScopeName:           queryNeqString(q, "scopeName"),
+		Limit:                      queryInt(r, "limit", 100),
+	}
+	if n, ok := queryOptionalIntValues(q.Get("filter[dataPointCount][eq]"), q.Get("filter[dataPointCount]"), q.Get("dataPointCount")); ok {
+		filter.DataPointCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[dataPointCount][gt]")); ok {
+		filter.DataPointCountGT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[dataPointCount][lt]")); ok {
+		filter.DataPointCountLT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[dataPointCount][gte]"), q.Get("minDataPointCount")); ok {
+		filter.MinDataPointCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[dataPointCount][lte]"), q.Get("maxDataPointCount")); ok {
+		filter.MaxDataPointCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("filter[seriesCount][eq]"), q.Get("filter[seriesCount]"), q.Get("seriesCount")); ok {
+		filter.SeriesCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[seriesCount][gt]")); ok {
+		filter.SeriesCountGT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[seriesCount][lt]")); ok {
+		filter.SeriesCountLT = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[seriesCount][gte]"), q.Get("minSeriesCount")); ok {
+		filter.MinSeriesCount = &n
+	}
+	if n, ok := queryOptionalIntValues(q.Get("range[seriesCount][lte]"), q.Get("maxSeriesCount")); ok {
+		filter.MaxSeriesCount = &n
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[from]")); ok {
+		filter.TimeFrom = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[to]")); ok {
+		filter.TimeTo = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[after]")); ok {
+		filter.TimeAfter = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[before]")); ok {
+		filter.TimeBefore = &ts
+	}
+	return filter
+}
+
+func logRecordFilterFromRequest(r *http.Request) store.LogRecordFilter {
+	q := r.URL.Query()
+	filter := store.LogRecordFilter{
+		ServiceName:         queryEqString(q, "serviceName", "serviceName"),
+		ExcludeServiceName:  queryNeqString(q, "serviceName"),
+		SeverityText:        queryEqString(q, "severityText", "severityText"),
+		ExcludeSeverityText: queryNeqString(q, "severityText"),
+		BodyContains:        firstNonEmpty(q.Get("filter[bodyContains][eq]"), q.Get("filter[bodyContains]"), q.Get("body")),
+		ExcludeBodyContains: q.Get("filter[bodyContains][neq]"),
+		TraceID:             queryEqString(q, "traceId", "traceId"),
+		ExcludeTraceID:      queryNeqString(q, "traceId"),
+		SpanID:              queryEqString(q, "spanId", "spanId"),
+		ExcludeSpanID:       queryNeqString(q, "spanId"),
+		ScopeName:           queryEqString(q, "scopeName", "scopeName"),
+		ExcludeScopeName:    queryNeqString(q, "scopeName"),
+		Query:               q.Get("query"),
+		Limit:               queryInt(r, "limit", 100),
+	}
+	if n, ok := queryOptionalIntValues(q.Get("filter[severityNumber][eq]"), q.Get("filter[severityNumber]")); ok {
+		severity := int32(n)
+		filter.SeverityNumber = &severity
+	}
+	if n, ok := queryOptionalIntValues(q.Get("filter[severityNumber][neq]")); ok {
+		severity := int32(n)
+		filter.ExcludeSeverityNumber = &severity
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[from]")); ok {
+		filter.TimeFrom = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[to]")); ok {
+		filter.TimeTo = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[after]")); ok {
+		filter.TimeAfter = &ts
+	}
+	if ts, ok := queryOptionalTimeValues(q.Get("time[before]")); ok {
+		filter.TimeBefore = &ts
+	}
+	return filter
+}
+
 func validationQueryFromMap(args map[string]any) validator.Query {
 	return validator.Query{
 		ServiceName: stringArg(args, "serviceName"),
@@ -385,4 +577,112 @@ func queryInt(r *http.Request, key string, def int) int {
 		return maxLimit
 	}
 	return n
+}
+
+func queryOptionalInt(r *http.Request, key string) (int, bool) {
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	if n > maxLimit {
+		return maxLimit, true
+	}
+	return n, true
+}
+
+func queryOptionalFloat(r *http.Request, key string) (float64, bool) {
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func queryOptionalIntValues(values ...string) (int, bool) {
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		if n > maxLimit {
+			return maxLimit, true
+		}
+		return n, true
+	}
+	return 0, false
+}
+
+func queryOptionalFloatValues(values ...string) (float64, bool) {
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
+}
+
+func queryOptionalTimeValues(values ...string) (time.Time, bool) {
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		ts, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return ts, true
+	}
+	return time.Time{}, false
+}
+
+func queryEqString(q map[string][]string, key string, legacyKeys ...string) string {
+	values := []string{
+		firstQueryValue(q, "filter["+key+"][eq]"),
+		firstQueryValue(q, "filter["+key+"]"),
+	}
+	for _, legacyKey := range legacyKeys {
+		values = append(values, firstQueryValue(q, legacyKey))
+	}
+	return firstNonEmpty(values...)
+}
+
+func queryNeqString(q map[string][]string, key string) string {
+	return firstQueryValue(q, "filter["+key+"][neq]")
+}
+
+func filterValueRequest(r *http.Request) (field, prefix string, limit int) {
+	q := r.URL.Query()
+	return q.Get("field"), q.Get("prefix"), queryInt(r, "limit", 20)
+}
+
+func firstQueryValue(q map[string][]string, key string) string {
+	if values, ok := q[key]; ok && len(values) > 0 {
+		return values[0]
+	}
+	return ""
 }

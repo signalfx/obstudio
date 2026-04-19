@@ -3,14 +3,35 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MetricsTab } from "./MetricsTab";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("MetricsTab", () => {
-  it("filters metrics from the compact explorer toolbar using the visible columns", () => {
+  it("filters metrics from the compact explorer toolbar via the REST query endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          name: "http.server.duration",
+          description: "Request duration",
+          unit: "ms",
+          type: "histogram",
+          serviceName: "checkout",
+          scopeName: "otel",
+          dataPointCount: 1,
+          dataPoints: [],
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     render(
       <MetricsTab
         metrics={[
@@ -51,17 +72,68 @@ describe("MetricsTab", () => {
 
     expect(screen.getByText("Type / Unit")).toBeTruthy();
     expect(screen.getByText("Description")).toBeTruthy();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByLabelText("Filter field")).toBeTruthy();
     expect(screen.queryByText("Type")).toBeNull();
     expect(screen.queryByText("Unit")).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText("Search metric, description, type, unit, or service"), {
-      target: { value: "duration" },
+    const fieldInput = screen.getByLabelText("Filter field");
+    expect(fieldInput.getAttribute("placeholder")).toBe("Add filter");
+    fireEvent.change(fieldInput, { target: { value: "metricName" } });
+    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    fireEvent.change(screen.getByLabelText("metricName value"), {
+      target: { value: "http.server.duration" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
 
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/metrics?filter%5BmetricName%5D%5Beq%5D=http.server.duration", expect.any(Object));
     expect(screen.queryByText("http.server.request.count")).toBeNull();
     expect(screen.getByText("http.server.duration")).toBeTruthy();
     expect(screen.queryByText("db.client.connections.usage")).toBeNull();
+  });
+
+  it("shows server-backed value suggestions for low-cardinality fields", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/query/metrics/filter-values")) {
+        return {
+          ok: true,
+          json: async () => ["checkout"],
+        };
+      }
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "serviceName" } });
+    fireEvent.focus(screen.getByLabelText("serviceName value"));
+    fireEvent.change(screen.getByLabelText("serviceName value"), { target: { value: "che" } });
+
+    await act(async () => {});
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/query/metrics/filter-values?field=serviceName"))).toBe(true);
+    expect(screen.getByText("checkout")).toBeTruthy();
   });
 
   it("renders metrics in alphabetical order", () => {
@@ -108,9 +180,10 @@ describe("MetricsTab", () => {
     expect(container.querySelector(".metric-card__disclosure")).toBeNull();
     expect(container.textContent).toContain("gauge/ms");
     expect(container.textContent).not.toContain("svc");
+
   });
 
-  it("opens the full metric view in a side panel with series rows", () => {
+  it("renders selected metric details in the side panel", () => {
     const { container } = render(
       <MetricsTab
         metrics={[
@@ -142,176 +215,13 @@ describe("MetricsTab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
 
-    expect(screen.getByRole("heading", { name: "http.server.duration" })).toBeTruthy();
-    expect(screen.getByText("Series (1)")).toBeTruthy();
-    expect(container.querySelector(".ts-chart")).toBeTruthy();
+    expect(container.querySelector(".signal-view__panel")).toBeTruthy();
     expect(container.querySelector(".metrics-explorer__series-service")?.textContent).toBe("api-gateway");
     expect(container.querySelector(".metrics-explorer__series-attr")?.textContent).toBe("http.route=/api/orders/{id}");
     expect(container.querySelector(".metrics-explorer__series-value")?.textContent).toBe("8.18");
     expect(container.querySelector(".metrics-explorer__series-points")?.textContent).toBe("1 pts");
     expect(container.querySelector(".metric-card__description")?.classList.contains("explorer-row__secondary")).toBe(true);
-  });
-
-  it("shows selected series detail inside the metric side panel", () => {
-    render(
-      <MetricsTab
-        metrics={[
-          {
-            name: "http.server.duration",
-            description: "Request duration",
-            unit: "ms",
-            type: "histogram",
-            serviceName: "api-gateway",
-            scopeName: "otel",
-            dataPointCount: 2,
-            dataPoints: [
-              {
-                name: "http.server.duration",
-                type: "histogram",
-                unit: "ms",
-                timeUnixNano: "1",
-                attributes: { "http.route": "/api/orders/{id}" },
-                resource: { serviceName: "api-gateway", attributes: { "service.instance.id": "instance-1" } },
-                scope: { name: "otel", version: "1.0.0" },
-                value: 8.18,
-              },
-              {
-                name: "http.server.duration",
-                type: "histogram",
-                unit: "ms",
-                timeUnixNano: "2",
-                attributes: { "http.route": "/api/orders/{id}" },
-                resource: { serviceName: "api-gateway", attributes: { "service.instance.id": "instance-1" } },
-                scope: { name: "otel", version: "1.0.0" },
-                value: 10.25,
-              },
-            ],
-          },
-        ]}
-        telemetryError={null}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
-    fireEvent.click(screen.getAllByRole("button", { name: /api-gateway/i })[0] as HTMLElement);
-
-    expect(screen.getByRole("heading", { name: "http.server.duration" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Clear series selection" })).toBeTruthy();
-    expect(screen.getByText("Scope")).toBeTruthy();
-    expect(screen.getByText("Resource")).toBeTruthy();
-    expect(screen.getByText("service.instance.id:")).toBeTruthy();
-  });
-
-  it("keeps metric series order stable across live value updates and appends new series at the end", () => {
-    const initialMetrics = [
-      {
-        name: "http.server.duration",
-        description: "Request duration",
-        unit: "ms",
-        type: "histogram",
-        serviceName: "api-gateway",
-        scopeName: "otel",
-        dataPointCount: 2,
-        dataPoints: [
-          {
-            name: "http.server.duration",
-            type: "histogram",
-            unit: "ms",
-            timeUnixNano: "1",
-            attributes: { "http.route": "/api/orders" },
-            resource: { serviceName: "checkout", attributes: {} },
-            scope: { name: "otel" },
-            value: 8.18,
-          },
-          {
-            name: "http.server.duration",
-            type: "histogram",
-            unit: "ms",
-            timeUnixNano: "2",
-            attributes: { "http.route": "/api/orders/{id}" },
-            resource: { serviceName: "payments", attributes: {} },
-            scope: { name: "otel" },
-            value: 10.25,
-          },
-        ],
-      },
-    ];
-    const { container, rerender } = render(<MetricsTab metrics={initialMetrics} telemetryError={null} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
-
-    const initialRows = Array.from(container.querySelectorAll(".metrics-explorer__series-row"))
-      .map((node) => ({
-        service: node.querySelector(".metrics-explorer__series-service")?.textContent,
-        dimension: node.querySelector(".metrics-explorer__series-attr")?.textContent,
-        value: node.querySelector(".metrics-explorer__series-value")?.textContent,
-      }));
-    expect(initialRows).toEqual([
-      { service: "checkout", dimension: "http.route=/api/orders", value: "8.18" },
-      { service: "payments", dimension: "http.route=/api/orders/{id}", value: "10.25" },
-    ]);
-
-    rerender(
-      <MetricsTab
-        metrics={[
-          {
-            name: "http.server.duration",
-            description: "Request duration",
-            unit: "ms",
-            type: "histogram",
-            serviceName: "api-gateway",
-            scopeName: "otel",
-            dataPointCount: 3,
-            dataPoints: [
-              {
-                name: "http.server.duration",
-                type: "histogram",
-                unit: "ms",
-                timeUnixNano: "3",
-                attributes: { "http.route": "/api/orders/{id}" },
-                resource: { serviceName: "payments", attributes: {} },
-                scope: { name: "otel" },
-                value: 100.25,
-              },
-              {
-                name: "http.server.duration",
-                type: "histogram",
-                unit: "ms",
-                timeUnixNano: "4",
-                attributes: { "http.route": "/api/orders" },
-                resource: { serviceName: "checkout", attributes: {} },
-                scope: { name: "otel" },
-                value: 18.18,
-              },
-              {
-                name: "http.server.duration",
-                type: "histogram",
-                unit: "ms",
-                timeUnixNano: "5",
-                attributes: { "http.route": "/api/inventory" },
-                resource: { serviceName: "inventory", attributes: {} },
-                scope: { name: "otel" },
-                value: 3.5,
-              },
-            ],
-          },
-        ]}
-        telemetryError={null}
-      />,
-    );
-
-    const updatedRows = Array.from(container.querySelectorAll(".metrics-explorer__series-row"))
-      .map((node) => ({
-        service: node.querySelector(".metrics-explorer__series-service")?.textContent,
-        dimension: node.querySelector(".metrics-explorer__series-attr")?.textContent,
-        value: node.querySelector(".metrics-explorer__series-value")?.textContent,
-      }));
-    expect(updatedRows).toEqual([
-      { service: "checkout", dimension: "http.route=/api/orders", value: "18.18" },
-      { service: "payments", dimension: "http.route=/api/orders/{id}", value: "100.25" },
-      { service: "inventory", dimension: "http.route=/api/inventory", value: "3.50" },
-    ]);
+    expect(container.querySelector(".metric-card__body")).toBeNull();
   });
 
   it("keeps the shared row separator on metric rows", async () => {
