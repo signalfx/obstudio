@@ -32,8 +32,6 @@
 | Signal Name | Type | Category | Component | SLIs | Unit | Status | Verified |
 |-------------|------|----------|-----------|------|------|--------|----------|
 | `http.server.request.duration` | Histogram | Derived | HTTP Server | HTTP request latency | s | | |
-| `http.server.request.count` | Counter | OOB | HTTP Server | HTTP request throughput | {requests} | | |
-| `http.server.error.count` | Counter | OOB | HTTP Server | HTTP error rate | {errors} | | |
 | `kvstore.get.duration` | Histogram | Custom | KV Store | KV get latency | ms | | |
 | `kvstore.set.count` | Counter | Custom | KV Store | KV set throughput | {operations} | | |
 | `kvstore.delete.count` | Counter | Custom | KV Store | KV delete throughput | {operations} | | |
@@ -57,7 +55,7 @@
 - auto_instrumentation_packages:
   - "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 - oob_span_count: 1
-- oob_metric_count: 2
+- oob_metric_count: 0
 - derived_metric_count: 1
 - custom_metric_count: 7
 - custom_span_count: 4

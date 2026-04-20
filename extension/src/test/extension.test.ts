@@ -11,6 +11,7 @@ import {
 	resolveBackend,
 } from '../backend';
 
+const extensionRoot = path.resolve(__dirname, '..', '..');
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
 	getBuildPaths: (extensionRoot?: string) => {
 		observerRoot: string;
@@ -34,15 +35,18 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 test('resolveBackend returns observer binary when it exists', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		const binary = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
+		const weaver = path.join(extensionRoot, 'dist', 'observer', 'weaver');
 
 		fs.mkdirSync(path.dirname(binary), { recursive: true });
 		fs.writeFileSync(binary, '#!/bin/sh\n');
+		fs.writeFileSync(weaver, '#!/bin/sh\n');
 
 		const backend = resolveBackend(extensionRoot);
 
 		assert.equal(backend.command, binary);
 		assert.deepEqual(backend.args, []);
 		assert.equal(backend.cwd, path.dirname(binary));
+		assert.equal(backend.env.WEAVER_PATH, weaver);
 		assert.equal(backend.label, 'observer');
 	});
 });
@@ -55,6 +59,37 @@ test('build output layout reserves the bundled weaver runtime path', () => {
 		assert.equal(expected.startsWith(paths.observerOutDir), true);
 	});
 });
+
+test('package metadata declares an extension icon that exists', () => {
+	const packageJSONPath = path.join(extensionRoot, 'package.json');
+	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as { icon?: string };
+
+	assert.equal(typeof packageJSON.icon, 'string');
+	assert.ok(packageJSON.icon);
+	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
+});
+
+test('bundled observer icon uses a high-resolution PNG source', () => {
+	const iconPath = path.join(extensionRoot, 'assets', 'observer-icon.png');
+	const buffer = fs.readFileSync(iconPath);
+
+	assert.equal(buffer.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+	const width = buffer.readUInt32BE(16);
+	const height = buffer.readUInt32BE(20);
+
+	assert.ok(width >= 512, `expected observer icon width >= 512, got ${width}`);
+	assert.ok(height >= 512, `expected observer icon height >= 512, got ${height}`);
+});
+
+test('observer webview panel uses the bundled observer icon', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(source, /panel\.iconPath\s*=\s*\{\s*light:\s*iconUri,\s*dark:\s*iconUri,\s*\}/s);
+	assert.match(source, /applyObserverPanelPresentation\(observerPanel,\s*context\)/);
+	assert.match(source, /observer-icon\.png/);
+});
+
 test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);

@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,7 @@ func main() {
 	goRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))           // observer/
 	clientRoot := filepath.Join(goRoot, "client")                          // observer/client/
 	outdir := filepath.Join(goRoot, "internal", "web", "static", "assets") // observer/internal/web/static/assets/
+	publicDir := filepath.Join(clientRoot, "public")                       // observer/client/public/
 
 	// Verify the client source exists.
 	entry := filepath.Join(clientRoot, "src", "main.tsx")
@@ -69,6 +71,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := copyPublicAssets(publicDir, outdir); err != nil {
+		fmt.Fprintf(os.Stderr, "Copy public assets failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("Built client assets to %s\n", outdir)
 }
 
@@ -86,4 +93,45 @@ func haveClientDependencies(clientRoot string) bool {
 	}
 
 	return true
+}
+
+func copyPublicAssets(publicDir, outdir string) error {
+	entries, err := os.ReadDir(publicDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "index.html" {
+			continue
+		}
+
+		srcPath := filepath.Join(publicDir, entry.Name())
+		dstPath := filepath.Join(outdir, entry.Name())
+		if err := copyFile(srcPath, dstPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func copyFile(srcPath, dstPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return dstFile.Close()
 }

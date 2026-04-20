@@ -1,4 +1,5 @@
 import { context, build } from "esbuild";
+import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,16 @@ const outdir = outdirIndex === -1
   ? defaultOutdir
   : path.resolve(clientRoot, args[outdirIndex + 1]);
 const liveReloadPort = Number(process.env.PORT ?? 3000);
+
+const copyPublicAssets = async () => {
+  const publicDir = path.resolve(clientRoot, "public");
+  const entries = await fs.readdir(publicDir, { withFileTypes: true });
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name !== "index.html")
+      .map((entry) => fs.copyFile(path.join(publicDir, entry.name), path.join(outdir, entry.name))),
+  );
+};
 
 const triggerLiveReload = async () => {
   await new Promise((resolve) => {
@@ -59,6 +70,7 @@ const options = {
       setup(buildContext) {
         buildContext.onEnd(async (result) => {
           if (watch && result.errors.length === 0) {
+            await copyPublicAssets();
             await triggerLiveReload();
           }
         });
@@ -75,5 +87,6 @@ if (watch) {
   console.log(`Watching client files; writing assets to ${outdir}`);
 } else {
   await build(options);
+  await copyPublicAssets();
   console.log(`Built client assets to ${outdir}`);
 }

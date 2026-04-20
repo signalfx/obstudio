@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet pytest eval-fixture ab-test ab-test-full skill-eval skill-eval-all release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full skill-eval skill-eval-all release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -31,12 +31,23 @@ dev: ## Watch client files and rebuild on changes (hot reload)
 
 # --- Go build ---
 
-build: stage-skills build-client ## Build obstudio binary (client + skills embedded)
+bundle-weaver: ## Fetch the local Weaver validator runtime into build output
+	@mkdir -p $(BUILD_DIR)
+	cd $(GO_DIR) && $(GO) run ./cmd/fetch-weaver -output $(ABS_BUILD)
+
+build: stage-skills build-client bundle-weaver ## Build obstudio binary (client + skills embedded)
 	@mkdir -p $(BUILD_DIR)
 	cd $(GO_DIR) && $(GO) build $(GOFLAGS) $(LDFLAGS) -o $(ABS_BUILD)/$(BINARY) $(GO_CMD)
 
+build-vsix: ## Build the VS Code extension package (.vsix)
+	cd extension && npm ci
+	cd extension && npm run build:vsix
+
 run: build ## Build and run the collector
 	$(BUILD_DIR)/$(BINARY)
+
+load-severity-demo: ## Load sample logs covering severityNumber/text combinations and keep the emitter alive for manual UI testing
+	@python3 observer/load_severity_demo.py
 
 test: stage-skills ## Run all Go tests
 	cd $(GO_DIR) && $(GO) test ./...
@@ -76,7 +87,7 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 EVALS_DIR  := tests
 APP        ?=
 
-pytest: ## Run deterministic skill tests (CI-safe, no LLM calls)
+test-deterministic: ## Run deterministic skill evals (CI-safe, no LLM calls)
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --ignore=test_llm.py
 
 eval-fixture: ## Run tests against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
@@ -85,10 +96,10 @@ ifndef APP
 endif
 	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
 
-ab-test: ## Run LLM smoke A/B tests via deepeval (requires AWS credentials for Bedrock)
+eval-llm: ## Run LLM smoke evals via deepeval (requires AWS credentials for Bedrock)
 	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short -m "not release"
 
-ab-test-full: ## Run ALL LLM A/B tests including release-only tests
+eval-llm-full: ## Run ALL LLM evals including release-only tests
 	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short
 
 # --- Skill evals (LLM-based, requires claude CLI) ---

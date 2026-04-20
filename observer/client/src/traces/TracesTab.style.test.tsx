@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TracesTab, traceStatusLabel } from "./TracesTab";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
+import { MetricsTab } from "../metrics/MetricsTab";
 
 declare const require: (id: string) => any;
 declare const process: { cwd(): string };
@@ -24,7 +25,11 @@ vi.mock("@tanstack/react-virtual", () => ({
   }),
 }));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("TracesTab row layout", () => {
   beforeEach(() => {
@@ -67,7 +72,17 @@ describe("TracesTab row layout", () => {
     expect(screen.getByText("Service")).toBeTruthy();
     expect(screen.getByText("Status")).toBeTruthy();
     expect(screen.getByText("Duration")).toBeTruthy();
-    expect(screen.getByPlaceholderText("Search operation, trace ID, service, or status")).toBeTruthy();
+    const filterField = screen.getByLabelText("Filter field");
+    expect(filterField).toBeTruthy();
+    fireEvent.focus(filterField);
+    expect(screen.getByText("Indexed Tags")).toBeTruthy();
+    const menu = container.querySelector(".filter-builder__menu");
+    expect(menu?.textContent).toContain("Service");
+    expect(menu?.textContent).toContain("Min Duration");
+    expect(menu?.textContent).not.toContain("Time From");
+    expect(menu?.textContent).not.toContain("Time To");
+    expect(container.querySelector(".filter-builder__menu-ops")).toBeNull();
+    expect(container.querySelector(".filter-builder__menu-op")).toBeNull();
     expect(container.querySelector(".status-dot")).toBeNull();
     expect(container.querySelector(".data-table__head--left-cluster")).toBeTruthy();
     expect(container.querySelector(".data-table__body-inner--traces")).toBeTruthy();
@@ -83,7 +98,15 @@ describe("TracesTab row layout", () => {
     expect(container.querySelector(".data-table__td--duration .explorer-row__numeric")).toBeTruthy();
   });
 
-  it("filters traces by the dedicated status and trace id columns", () => {
+  it("filters traces by the dedicated status and trace id columns via the REST query endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { traceId: "trace-error-123", rootSpanName: "POST /payments", serviceName: "api-gateway", spanCount: 2, durationMs: 42, status: "error" },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     const view = render(
       <TracesTab
         traces={[
@@ -97,15 +120,109 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    const input = view.getByPlaceholderText("Search operation, trace ID, service, or status");
+    fireEvent.change(view.getByLabelText("Filter field"), { target: { value: "status" } });
+    expect((view.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    fireEvent.change(view.getByLabelText("status value"), { target: { value: "error" } });
+    fireEvent.click(view.getByRole("button", { name: "Apply filter" }));
 
-    fireEvent.change(input, { target: { value: "error" } });
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/traces?filter%5Bstatus%5D%5Beq%5D=error", expect.any(Object));
     expect(view.getByText("POST /payments")).toBeTruthy();
     expect(view.queryByText("GET /health")).toBeNull();
+  });
 
-    fireEvent.change(input, { target: { value: "trace-ok-456" } });
-    expect(view.getByText("GET /health")).toBeTruthy();
-    expect(view.queryByText("POST /payments")).toBeNull();
+  it("uses descriptive filter placeholders instead of example query text", () => {
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText("Add filter")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Service" } });
+    expect(screen.getByLabelText("serviceName value").getAttribute("placeholder")).toBe("Enter checkout");
+  });
+
+  it("uses semantic operator labels for min and max bound filters", () => {
+    render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Duration" } });
+    expect(screen.getByRole("button", { name: ">=" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "<" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset filter draft" }));
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Max Span Count" } });
+    expect(screen.getByRole("button", { name: "<=" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: ">" })).toBeTruthy();
+  });
+
+  it("does not allow negative values in numeric filters", () => {
+    render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Duration" } });
+    const input = screen.getByLabelText("minDurationMs value") as HTMLInputElement;
+
+    expect(input.getAttribute("min")).toBe("0");
+
+    fireEvent.change(input, { target: { value: "-5" } });
+    expect(input.value).toBe("");
+  });
+
+  it("uses whole-number inputs for count filters", () => {
+    render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Span Count" } });
+    const input = screen.getByLabelText("minSpanCount value") as HTMLInputElement;
+
+    expect(input.getAttribute("step")).toBe("1");
+
+    fireEvent.change(input, { target: { value: "1.5" } });
+    expect(input.value).toBe("");
   });
 
   it("shows explicit labels for all trace statuses", () => {
@@ -166,8 +283,8 @@ describe("TracesTab row layout", () => {
 
     expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: 220px 220px 140px 1fr;\n}");
     expect(css).toContain("--table-columns: 220px 240px 140px 96px 88px 56px 1fr;");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 88px 88px 88px 1fr;");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 88px 88px 88px 1fr;");
+    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
+    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
     expect(css).toContain("--table-columns: 220px 240px 88px 1fr;");
     expect(css).toContain(".data-table__head--metrics,\n  .data-table__row--metrics {\n    --table-columns: 220px 100px 1fr;\n  }");
   });
@@ -180,6 +297,11 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: 220px 240px 140px 96px 88px 56px 1fr;\n}");
     expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 34px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
+    expect(css).toContain(".filter-builder {\n  position: relative;\n  display: flex;\n  flex: 0 1 auto;");
+    expect(css).toContain("width: min(100%, 760px);");
+    expect(css).toContain("max-width: min(100%, 760px);");
+    expect(css).toContain(".filter-builder__composer--selected {\n  flex: 0 1 auto;\n  width: min(100%, 640px);");
+    expect(css).toContain(".filter-builder__composer--selected .filter-builder__value {\n  flex: 0 1 320px;");
   });
 
   it("left-aligns stacked trace and metric values so content does not stretch across the cell", () => {

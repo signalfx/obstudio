@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { ValidationFinding, ValidationIssue, ValidationSeverity, ValidationSummary } from "../api/types";
-import { DetailPanel } from "../layout";
+import { DetailPanel, ResizablePanel } from "../layout";
 import {
   filterValidationIssues,
   issueVariantKey,
@@ -51,12 +51,24 @@ const defaultFilters: ValidationFilters = {
 export function FindingsTab({ issues, summary }: ValidationTabProps): React.ReactElement {
   const [filters, setFilters] = useState<ValidationFilters>(defaultFilters);
   const [activeSignalTab, setActiveSignalTab] = useState<ValidationSignalTab>(() => firstAvailableSignal(issues));
+  const [hasExplicitSignalTabSelection, setHasExplicitSignalTabSelection] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const availableSignalTabs = useMemo(
-    () => signalTabs.filter((tab) => issues.some((issue) => normalizeSignalType(issue.signalType) === tab.key)),
-    [issues],
+  const signalFilteredIssues = useMemo(
+    () => filterValidationIssues(issues, { ...filters, signalType: "" }),
+    [issues, filters],
+  );
+  const signalIssueCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of signalTabs) {
+      counts[tab.key] = signalFilteredIssues.filter((issue) => normalizeSignalType(issue.signalType) === tab.key).length;
+    }
+    return counts;
+  }, [signalFilteredIssues]);
+  const firstAvailableFilteredSignal = useMemo(
+    () => signalTabs.find((tab) => signalIssueCounts[tab.key] > 0)?.key ?? "metric",
+    [signalIssueCounts],
   );
   const activeSignalDefinition = signalTabs.find((tab) => tab.key === activeSignalTab) ?? signalTabs[0];
 
@@ -73,13 +85,10 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const actionLabel = hasResult ? "Re-run Validation" : "Run Validation";
 
   useEffect(() => {
-    if (availableSignalTabs.length === 0) {
-      return;
+    if (!hasExplicitSignalTabSelection && activeSignalTab !== firstAvailableFilteredSignal) {
+      setActiveSignalTab(firstAvailableFilteredSignal);
     }
-    if (!availableSignalTabs.some((tab) => tab.key === activeSignalTab)) {
-      setActiveSignalTab(availableSignalTabs[0]?.key ?? "metric");
-    }
-  }, [activeSignalTab, availableSignalTabs]);
+  }, [activeSignalTab, firstAvailableFilteredSignal, hasExplicitSignalTabSelection]);
 
   useEffect(() => {
     if (filteredIssues.length === 0) {
@@ -135,7 +144,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     <section className="tab-panel findings-tab">
       <div className="panel-toolbar findings-tab__header">
         <div className="findings-tab__header-meta">
-          {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} issues</span> : null}
+          {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}
           {showResultState && completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
           {completedAt ? <span className="findings-tab__header-timestamp">Validated {formatTimestamp(completedAt)}</span> : null}
         </div>
@@ -162,7 +171,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
         </select>
         <div className="findings-tab__signal-tabs" role="tablist" aria-label="Validation signals">
           {signalTabs.map((tab) => {
-            const hasIssues = issues.some((issue) => normalizeSignalType(issue.signalType) === tab.key);
+            const count = signalIssueCounts[tab.key] ?? 0;
             return (
               <button
                 key={tab.key}
@@ -170,10 +179,14 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 role="tab"
                 className={tab.key === activeSignalTab ? "findings-tab__signal-tab is-active" : "findings-tab__signal-tab"}
                 aria-selected={tab.key === activeSignalTab}
-                data-has-issues={hasIssues ? "true" : "false"}
-                onClick={() => setActiveSignalTab(tab.key)}
+                data-has-issues={count > 0 ? "true" : "false"}
+                onClick={() => {
+                  setHasExplicitSignalTabSelection(true);
+                  setActiveSignalTab(tab.key);
+                }}
               >
                 {tab.label}
+                <span className="findings-tab__signal-count">{count}</span>
               </button>
             );
           })}
@@ -213,9 +226,9 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                   <div className="data-table__head findings-tab__head">
                     <span className="data-table__th">{activeSignalDefinition.issueLabel}</span>
                     <span className="data-table__th">Rule</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count">Violations</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count">Improvements</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count">Information</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Violations">Viol.</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Improvements">Impr.</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Information">Info</span>
                   </div>
                   <div className="findings-tab__list">
                     {filteredIssues.map((issue) => {
@@ -250,9 +263,16 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                   </div>
                 </div>
                 {selectedIssue ? (
-                  <aside id="validation-issue-detail" className="findings-tab__detail-panel">
-                    <IssueDetailPanel key={selectedIssue.key} issue={selectedIssue} onClose={() => setSelectedKey(null)} />
-                  </aside>
+                  <ResizablePanel
+                    className="findings-tab__detail-panel"
+                    defaultWidth={560}
+                    minWidth={360}
+                    resizeLabel="Resize validation panel"
+                  >
+                    <aside id="validation-issue-detail" className="findings-tab__detail-panel-shell">
+                      <IssueDetailPanel key={selectedIssue.key} issue={selectedIssue} onClose={() => setSelectedKey(null)} />
+                    </aside>
+                  </ResizablePanel>
                 ) : null}
               </div>
             )}
@@ -466,11 +486,14 @@ function isMeaningfulTimestamp(value: string | undefined): value is string {
 
 function IssueDetailPanel({ issue, onClose }: { issue: ValidationIssue; onClose: () => void }): React.ReactElement {
   const issueVariants = groupIssueVariants(issue.findings);
+  const groupedVariants = groupVariantsBySeverity(issueVariants);
+  const serviceLabel = issueResolvedServiceLabel(issue);
   const showScope = Boolean(issue.scopeName) && issue.scopeName !== issue.serviceName;
   const logSamples = issue.signalType === "log" ? sampleLogBodies(issue.findings) : [];
   const resourceAttribute = issue.signalType === "resource" ? uniqueContextValue(issue.findings, "attribute_name") : null;
   const resourceStability = issue.signalType === "resource" ? uniqueContextValue(issue.findings, "stability") : null;
   const rowTitle = issuePrimaryLabel(issue);
+  const headerSubtitle = [signalTypeLabel(issue.signalType), serviceLabel].filter(Boolean).join(" · ");
   const hasMetadata = Boolean(
     (resourceAttribute && resourceAttribute !== rowTitle)
     || resourceStability
@@ -480,12 +503,12 @@ function IssueDetailPanel({ issue, onClose }: { issue: ValidationIssue; onClose:
 
   return (
     <DetailPanel
-      headerMode="close-only"
+      title={rowTitle}
+      subtitle={headerSubtitle}
+      scrollResetKey={issue.key}
       onClose={onClose}
     >
       <div className="findings-tab__detail-body">
-        <h3 className="findings-tab__detail-heading">{rowTitle}</h3>
-
         {issue.signalType === "resource" ? (
           <p className="findings-tab__detail-note">
             Resource attributes apply across traces, metrics, and logs emitted by the same service.
@@ -514,15 +537,31 @@ function IssueDetailPanel({ issue, onClose }: { issue: ValidationIssue; onClose:
         {issueVariants.length > 0 ? (
           <div className={hasIntroSection ? "findings-tab__context" : "findings-tab__context findings-tab__context--first"}>
             <p className="findings-tab__eyebrow">Findings</p>
-            <div className="findings-tab__variant-list">
-              {issueVariants.map((variant) => (
-                <article key={variant.key} className={`validation-item validation-item--${variant.severity}`}>
-                  <div className="validation-item__header">
-                    <span className={`validation-item__severity validation-item__severity--${variant.severity}`}>{variant.severity}</span>
-                    <span className="validation-item__rule">{variant.ruleId}</span>
-                  </div>
-                  <p className="validation-item__message">{variant.message}</p>
-                </article>
+            <div className="findings-tab__severity-groups">
+              {groupedVariants.map(({ severity, variants }) => (
+                variants.length > 0 ? (
+                  <section key={severity} className="findings-tab__severity-group">
+                    <div className="findings-tab__severity-group-header">
+                      <span className={`validation-item__severity validation-item__severity--${severity}`}>{severity}</span>
+                      <span className="findings-tab__severity-group-count">
+                        {variants.length} {variants.length === 1 ? "finding" : "findings"}
+                      </span>
+                    </div>
+                    <div className="findings-tab__variant-list">
+                      {variants.map((variant) => (
+                        <article key={variant.key} className={`validation-item validation-item--${variant.severity} validation-item--detail`}>
+                          <div className="validation-item__field validation-item__field--inline">
+                            <span className="validation-item__field-label">Rule</span>
+                            <div className="validation-item__header">
+                              <span className="validation-item__rule-chip">{variant.ruleId}</span>
+                            </div>
+                          </div>
+                          <p className="validation-item__message validation-item__message--detail">{variant.message}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null
               ))}
             </div>
           </div>
@@ -530,4 +569,14 @@ function IssueDetailPanel({ issue, onClose }: { issue: ValidationIssue; onClose:
       </div>
     </DetailPanel>
   );
+}
+
+function groupVariantsBySeverity(
+  variants: IssueVariant[],
+): Array<{ severity: ValidationSeverity; variants: IssueVariant[] }> {
+  const severities: ValidationSeverity[] = ["violation", "improvement", "information"];
+  return severities.map((severity) => ({
+    severity,
+    variants: variants.filter((variant) => variant.severity === severity),
+  }));
 }

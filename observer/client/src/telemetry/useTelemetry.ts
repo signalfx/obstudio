@@ -110,6 +110,10 @@ function countIssueSeverity(findings: ValidationSnapshot["findings"], severity: 
   return count;
 }
 
+function normalizeArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function mergeValidationSnapshot(
   current: ValidationSnapshot | null,
   incoming: ValidationSnapshot | null,
@@ -245,11 +249,11 @@ export function useTelemetry(): TelemetryHandle {
       const apply = (current: TelemetryState): TelemetryState => {
         switch (signal) {
           case "traces":
-            return { ...current, error: null, traces: (data as TraceSummary[]) ?? [] };
+            return { ...current, error: null, traces: normalizeArray(data as TraceSummary[] | null | undefined) };
           case "metrics":
-            return { ...current, error: null, metrics: (data as MetricGroup[]) ?? [] };
+            return { ...current, error: null, metrics: normalizeArray(data as MetricGroup[] | null | undefined) };
           case "logs":
-            return { ...current, error: null, logs: (data as LogRecord[]) ?? [] };
+            return { ...current, error: null, logs: normalizeArray(data as LogRecord[] | null | undefined) };
           case "stats": {
             const s = data as Stats;
             return { ...current, stats: s ? { ...s, serviceNames: s.serviceNames ?? [] } : null };

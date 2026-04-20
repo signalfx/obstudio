@@ -168,6 +168,9 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 }
 
 func weaverCacheDir() (string, error) {
+	if override := os.Getenv("OBSTUDIO_WEAVER_CACHE_DIR"); override != "" {
+		return filepath.Join(override, weaverVersion), nil
+	}
 	cacheRoot, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user cache dir: %w", err)

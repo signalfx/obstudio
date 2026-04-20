@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestClaudeCodeTargetUsesSettingsJSON(t *testing.T) {
+func TestClaudeCodeTargetUsesClaudeJSON(t *testing.T) {
 	t.Parallel()
 
 	target, ok := targets["claude-code"]
@@ -20,8 +20,8 @@ func TestClaudeCodeTargetUsesSettingsJSON(t *testing.T) {
 	}
 
 	path := target.mcpConfig.path()
-	if !strings.HasSuffix(path, filepath.Join(".claude", "settings.json")) {
-		t.Fatalf("expected Claude Code MCP config path to end with .claude/settings.json, got %q", path)
+	if !strings.HasSuffix(path, ".claude.json") {
+		t.Fatalf("expected Claude Code MCP config path to end with .claude.json, got %q", path)
 	}
 }
 
@@ -217,6 +217,37 @@ func TestValidateSharedURL(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Fatalf("unexpected error for %q: %v", tc.raw, err)
+			}
+		})
+	}
+}
+
+func TestNormalizeSharedURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		raw      string
+		expected string
+	}{
+		{name: "base URL", raw: "http://127.0.0.1:3000", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "base URL with slash", raw: "http://127.0.0.1:3000/", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "existing mcp URL", raw: "http://127.0.0.1:3000/mcp", expected: "http://127.0.0.1:3000/mcp"},
+		{name: "subpath", raw: "https://example.com/obstudio", expected: "https://example.com/obstudio/mcp"},
+		{name: "subpath mcp", raw: "https://example.com/obstudio/mcp", expected: "https://example.com/obstudio/mcp"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := normalizeSharedURL(tc.raw, "--shared-url")
+			if err != nil {
+				t.Fatalf("normalizeSharedURL(%q) returned error: %v", tc.raw, err)
+			}
+			if got != tc.expected {
+				t.Fatalf("normalizeSharedURL(%q) = %q, want %q", tc.raw, got, tc.expected)
 			}
 		})
 	}

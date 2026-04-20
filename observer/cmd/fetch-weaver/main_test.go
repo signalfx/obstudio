@@ -78,3 +78,35 @@ func TestCopyFileCopiesContents(t *testing.T) {
 		t.Fatalf("unexpected destination contents: %q", string(data))
 	}
 }
+
+func TestFetchTargetUsesCachedBinaryFromOverride(t *testing.T) {
+	cacheRoot := t.TempDir()
+	outputDir := t.TempDir()
+	t.Setenv("OBSTUDIO_WEAVER_CACHE_DIR", cacheRoot)
+
+	target, err := findTarget("darwin", "arm64")
+	if err != nil {
+		t.Fatalf("findTarget returned error: %v", err)
+	}
+
+	cacheBinary := filepath.Join(cacheRoot, weaverVersion, target.goos+"-"+target.goarch, target.bundledBinaryName)
+	if err := os.MkdirAll(filepath.Dir(cacheBinary), 0o755); err != nil {
+		t.Fatalf("create cache dir: %v", err)
+	}
+	if err := os.WriteFile(cacheBinary, []byte("cached-weaver"), 0o755); err != nil {
+		t.Fatalf("write cached binary: %v", err)
+	}
+
+	if err := fetchTarget(t.Context(), outputDir, target.goos, target.goarch); err != nil {
+		t.Fatalf("fetchTarget returned error: %v", err)
+	}
+
+	outputBinary := filepath.Join(outputDir, target.bundledBinaryName)
+	data, err := os.ReadFile(outputBinary)
+	if err != nil {
+		t.Fatalf("read output binary: %v", err)
+	}
+	if string(data) != "cached-weaver" {
+		t.Fatalf("unexpected output contents: %q", string(data))
+	}
+}

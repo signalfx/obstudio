@@ -241,7 +241,7 @@ obstudio/
 | `make fmt` | Format Go source |
 | `make tidy` | Tidy Go modules |
 | `make list-skills` | List available skills |
-| `make pytest` | Run deterministic skill tests (no LLM calls) |
+| `make test-deterministic` | Run deterministic skill tests (no LLM calls) |
 | `make skill-eval SKILL=<name>` | Run LLM-based skill evals and show report |
 | `make skill-eval-all` | Run evals for all skills |
 | `make release-local` | Build release archives locally via GoReleaser |
@@ -269,7 +269,7 @@ are excluded from the release binary.
 GitHub Actions runs on every push to `main` and `feature/**` branches:
 
 - **observer** -- `go vet`, `make build`, `make test`
-- **skill-tests** -- structural, semconv, and golden tests via `make pytest`
+- **skill-tests** -- structural, semconv, and golden tests via `make test-deterministic`
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 

@@ -108,6 +108,22 @@ For each signal with blank Status:
 3. Present a summary: N spans, N metrics, N logs instrumented,
    N remaining gaps (if any).
 
+### Step 5 -- Enable debugging in VS Code
+
+This step is REQUIRED whenever `.vscode/launch.json` exists.
+
+1. Check whether `.vscode/launch.json` exists.
+2. If it exists, you MUST update at least one debug configuration for this service to include:
+    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
+    - `OTEL_BSP_SCHEDULE_DELAY=100`
+3. After editing, you MUST report:
+    - which configuration was updated
+    - the file path
+    - whether the env vars were added or already present
+4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
+5. If `.vscode/launch.json` does not exist, explicitly report: `No .vscode/launch.json found; Step 5 skipped.`
+
 ## Examples
 
 ### Example 1: Python Flask with 3 gaps
@@ -181,3 +197,4 @@ For each signal with blank Status:
 - [ ] Custom spans follow semantic conventions
 - [ ] Error paths call `recordException` and set span status to ERROR
 - [ ] Derived metrics have corresponding OOB spans instrumented
+- [ ] If `.vscode/launch.json` exists, at least one service debug config includes the required OTEL env vars

@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsTab } from "./LogsTab";
 
 vi.mock("@tanstack/react-virtual", () => ({
@@ -22,6 +22,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 describe("LogsTab", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     Object.defineProperty(HTMLElement.prototype, "clientHeight", {
       configurable: true,
       value: 400,
@@ -44,7 +45,29 @@ describe("LogsTab", () => {
       }) as DOMRect;
   });
 
-  it("filters logs from the compact explorer toolbar", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("filters logs from the compact explorer toolbar via the REST query endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: "2",
+          timeUnixNano: "1712700000000000001",
+          severityText: "ERROR",
+          body: "payment failed",
+          attributes: {},
+          resource: { serviceName: "payments", attributes: {} },
+          scope: { name: "otel" },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     const { container } = render(
       <LogsTab
         logs={[
@@ -77,11 +100,132 @@ describe("LogsTab", () => {
     expect(container.querySelector(".data-table__td--service .explorer-row__secondary")).toBeTruthy();
     expect(container.querySelector(".data-table__td--message .explorer-row__primary")).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText("Search message, service, or trace ID"), {
-      target: { value: "does-not-match" },
+    fireEvent.change(screen.getByLabelText("Filter field"), {
+      target: { value: "bodyContains" },
     });
+    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    fireEvent.change(screen.getByLabelText("bodyContains value"), {
+      target: { value: "payment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
 
-    expect(screen.getByText("No logs match the current filters.")).toBeTruthy();
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/logs?filter%5BbodyContains%5D%5Beq%5D=payment", expect.any(Object));
+    expect(screen.getByText("payment failed")).toBeTruthy();
+    expect(screen.queryByText("checkout started")).toBeNull();
+  });
+
+  it("encodes negated exact filters with neq operators", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: "2",
+          timeUnixNano: "1712700000000000001",
+          severityText: "ERROR",
+          body: "payment failed",
+          attributes: {},
+          resource: { serviceName: "payments", attributes: {} },
+          scope: { name: "otel" },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {},
+            resource: { serviceName: "checkout", attributes: {} },
+            scope: { name: "otel" },
+          },
+          {
+            id: "2",
+            timeUnixNano: "1712700000000000001",
+            severityText: "ERROR",
+            body: "payment failed",
+            attributes: {},
+            resource: { serviceName: "payments", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), {
+      target: { value: "serviceName" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "!=" }));
+    fireEvent.change(screen.getByLabelText("serviceName value"), {
+      target: { value: "checkout" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/logs?filter%5BserviceName%5D%5Bneq%5D=checkout", expect.any(Object));
+    expect(screen.getByText("payment failed")).toBeTruthy();
+    expect(screen.queryByText("checkout started")).toBeNull();
+  });
+
+  it("uses whole-number inputs for severity number filters", () => {
+    render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {},
+            resource: { serviceName: "checkout", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), {
+      target: { value: "Severity Number" },
+    });
+    const input = screen.getByLabelText("severityNumber value") as HTMLInputElement;
+
+    expect(input.getAttribute("step")).toBe("1");
+
+    fireEvent.change(input, { target: { value: "1.5" } });
+    expect(input.value).toBe("");
+  });
+
+  it("does not show time range fields in the log filter menu", () => {
+    render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {},
+            resource: { serviceName: "checkout", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.focus(screen.getByLabelText("Filter field"));
+
+    expect(screen.queryByText("Time From")).toBeNull();
+    expect(screen.queryByText("Time To")).toBeNull();
   });
 
   it("renders the selected log detail without validation overlays", () => {
@@ -109,6 +253,6 @@ describe("LogsTab", () => {
     expect(screen.getByRole("heading", { name: "Message" })).toBeTruthy();
     expect(screen.queryByText("Validation")).toBeNull();
     expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
-    expect(screen.getAllByRole("combobox", { name: "Filter logs by severity" }).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Filter field")).toBeTruthy();
   });
 });
