@@ -1,0 +1,238 @@
+{
+  "metadata": {
+    "skill_name": "splunk-instrument",
+    "timestamp": "2026-04-20T17:29:07.118915+00:00",
+    "evals_run": [
+      1,
+      2
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "eval_name": "flask-basic",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.6,
+        "passed": 3,
+        "failed": 2,
+        "total": 5,
+        "time_seconds": 264.8,
+        "tokens": 18181,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "An otel_setup.py or similar OTel initialization file is created",
+          "passed": true,
+          "evidence": "OTel setup file found: otel_setup.py"
+        },
+        {
+          "text": "opentelemetry packages are added to pyproject.toml or requirements.txt",
+          "passed": true,
+          "evidence": "OpenTelemetry found in pyproject.toml"
+        },
+        {
+          "text": "Auto-instrumentation for Flask HTTP is configured",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "At least one custom metric (Counter, Histogram, or Gauge) is added in application code",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "inventory.md Status column is updated to OK for instrumented signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "flask-basic",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.6,
+        "passed": 3,
+        "failed": 2,
+        "total": 5,
+        "time_seconds": 138.0,
+        "tokens": 4180,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "An otel_setup.py or similar OTel initialization file is created",
+          "passed": true,
+          "evidence": "OTel setup file found: otel_setup.py"
+        },
+        {
+          "text": "opentelemetry packages are added to pyproject.toml or requirements.txt",
+          "passed": true,
+          "evidence": "OpenTelemetry found in pyproject.toml"
+        },
+        {
+          "text": "Auto-instrumentation for Flask HTTP is configured",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "At least one custom metric (Counter, Histogram, or Gauge) is added in application code",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "inventory.md Status column is updated to OK for instrumented signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "kvstore",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.83,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 465.5,
+        "tokens": 39515,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "go.opentelemetry.io dependencies are added to go.mod",
+          "passed": true,
+          "evidence": "OpenTelemetry found in go.mod"
+        },
+        {
+          "text": "An OTel SDK initialization function is created or added to main",
+          "passed": true,
+          "evidence": "OTel setup file found: telemetry.go"
+        },
+        {
+          "text": "otelhttp or otelchi middleware is wired into the HTTP server",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Custom spans are added for store operations (get, set, delete, or search)",
+          "passed": true,
+          "evidence": "Keyword match: 4/5 keywords found"
+        },
+        {
+          "text": "At least one custom metric instrument is created (Counter, Histogram, or Gauge)",
+          "passed": true,
+          "evidence": "Keyword match: 4/5 keywords found"
+        },
+        {
+          "text": "inventory.md Status column is updated to OK for instrumented signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "kvstore",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.83,
+        "passed": 5,
+        "failed": 1,
+        "total": 6,
+        "time_seconds": 138.4,
+        "tokens": 13158,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "go.opentelemetry.io dependencies are added to go.mod",
+          "passed": true,
+          "evidence": "OpenTelemetry found in go.mod"
+        },
+        {
+          "text": "An OTel SDK initialization function is created or added to main",
+          "passed": true,
+          "evidence": "OTel setup file found: telemetry.go"
+        },
+        {
+          "text": "otelhttp or otelchi middleware is wired into the HTTP server",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Custom spans are added for store operations (get, set, delete, or search)",
+          "passed": true,
+          "evidence": "Keyword match: 4/5 keywords found"
+        },
+        {
+          "text": "At least one custom metric instrument is created (Counter, Histogram, or Gauge)",
+          "passed": true,
+          "evidence": "Keyword match: 4/5 keywords found"
+        },
+        {
+          "text": "inventory.md Status column is updated to OK for instrumented signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 0.71,
+        "stddev": 0.11,
+        "min": 0.6,
+        "max": 0.83
+      },
+      "time_seconds": {
+        "mean": 365.15,
+        "stddev": 100.35,
+        "min": 264.8,
+        "max": 465.5
+      },
+      "tokens": {
+        "mean": 28848.0,
+        "stddev": 10667.0,
+        "min": 18181,
+        "max": 39515
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.71,
+        "stddev": 0.11,
+        "min": 0.6,
+        "max": 0.83
+      },
+      "time_seconds": {
+        "mean": 138.2,
+        "stddev": 0.2,
+        "min": 138.0,
+        "max": 138.4
+      },
+      "tokens": {
+        "mean": 8669.0,
+        "stddev": 4489.0,
+        "min": 4180,
+        "max": 13158
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+226.9",
+      "tokens": "+20179"
+    }
+  }
+}

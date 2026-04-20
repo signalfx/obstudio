@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full skill-eval skill-eval-all release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full skill-eval skill-eval-all skill-eval-report release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -114,6 +114,10 @@ endif
 
 skill-eval-all: ## Run evals for all skills and show reports
 	cd $(EVALS_DIR) && uv run python run_skill_eval.py --all
+
+skill-eval-report: ## Generate markdown report from latest eval results
+	cd $(EVALS_DIR) && uv run python generate_report.py -o ../tests/reports/$$(date +%Y-%m-%d)/REPORT.md
+	cd $(EVALS_DIR) && uv run python generate_report.py
 
 # --- Skills ---
 
