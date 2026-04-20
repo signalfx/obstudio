@@ -5,6 +5,7 @@ export type ObserverBackend = {
 	args: string[];
 	command: string;
 	cwd: string;
+	env: Record<string, string>;
 	label: string;
 };
 
@@ -64,10 +65,16 @@ export function resolveBackend(extensionPath: string): ObserverBackend {
 	const binary = path.join(extensionPath, 'dist', 'observer', 'obstudio');
 
 	if (fs.existsSync(binary)) {
+		const env: Record<string, string> = {};
+		const weaver = path.join(path.dirname(binary), 'weaver');
+		if (fs.existsSync(weaver)) {
+			env.WEAVER_PATH = weaver;
+		}
 		return {
 			args: [],
 			command: binary,
 			cwd: path.dirname(binary),
+			env,
 			label: 'observer',
 		};
 	}

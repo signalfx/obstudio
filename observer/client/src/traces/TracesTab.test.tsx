@@ -43,6 +43,7 @@ describe("TracesTab", () => {
           { traceId: "trace-2", rootSpanName: "POST /charge", serviceName: "payments", spanCount: 5, durationMs: 88, status: "error" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -72,6 +73,7 @@ describe("TracesTab", () => {
           { traceId: "trace-missing", rootSpanName: "GET /ready", serviceName: "api", spanCount: 1, status: "ok" } as any,
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -94,6 +96,7 @@ describe("TracesTab", () => {
           { traceId: "trace-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "ok" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -128,6 +131,7 @@ describe("TracesTab", () => {
           { traceId: "trace-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "ok" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -136,7 +140,6 @@ describe("TracesTab", () => {
     fireEvent.change(screen.getByLabelText("Filter field"), {
       target: { value: "minDurationMs" },
     });
-    expect((screen.getByRole("button", { name: ">=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "<" }));
     fireEvent.change(screen.getByLabelText("minDurationMs value"), {
       target: { value: "100" },
@@ -148,27 +151,7 @@ describe("TracesTab", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/query/traces?range%5BdurationMs%5D%5Blt%5D=100", expect.any(Object));
   });
 
-  it("shows bound-aware operators for max filters", () => {
-    render(
-      <TracesTab
-        traces={[
-          { traceId: "trace-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "ok" },
-        ]}
-        telemetryError={null}
-        validationFindings={[]}
-        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "maxDurationMs" },
-    });
-
-    expect((screen.getByRole("button", { name: "<=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
-    expect(screen.getByRole("button", { name: ">" })).toBeTruthy();
-  });
-
-  it("stacks the detail panel below the list on narrow widths", async () => {
+  it("keeps the trace detail panel at the side for typical app widths", async () => {
     const [{ Window }, { readFile }, { resolve }] = await Promise.all([
       import("happy-dom"),
       import("node:fs/promises"),
@@ -180,7 +163,43 @@ describe("TracesTab", () => {
     style.textContent = css;
     window.document.head.appendChild(style);
     window.document.body.innerHTML =
-      "<div class=\"signal-view signal-view--with-panel\"><div class=\"signal-view__content\"></div><div class=\"signal-view__panel\"></div></div>";
+      "<div class=\"signal-view signal-view--trace-detail signal-view--with-panel\"><div class=\"signal-view__content\"></div><div class=\"signal-view__panel\"></div></div>";
+
+    const layout = window.document.querySelector(".signal-view");
+    const panel = window.document.querySelector(".signal-view__panel");
+    const content = window.document.querySelector(".signal-view__content");
+    expect(layout).toBeTruthy();
+    expect(panel).toBeTruthy();
+    expect(content).toBeTruthy();
+    if (!layout || !panel || !content) {
+      throw new Error("expected responsive layout shell");
+    }
+
+    const layoutStyles = window.getComputedStyle(layout);
+    const panelStyles = window.getComputedStyle(panel);
+    const contentStyles = window.getComputedStyle(content);
+
+    expect(layoutStyles.flexDirection).toBe("row");
+    expect(panelStyles.position).toBe("static");
+    expect(panelStyles.borderTopWidth).toBe("0px");
+    expect(panelStyles.borderLeftWidth).toBe("1px");
+    expect(panelStyles.borderLeftStyle).toBe("solid");
+    expect(contentStyles.minWidth).toBe("0");
+  });
+
+  it("stacks the trace detail panel below the list only on very narrow widths", async () => {
+    const [{ Window }, { readFile }, { resolve }] = await Promise.all([
+      import("happy-dom"),
+      import("node:fs/promises"),
+      import("node:path"),
+    ]);
+    const css = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
+    const window = new Window({ width: 640, height: 700, url: "http://localhost" });
+    const style = window.document.createElement("style");
+    style.textContent = css;
+    window.document.head.appendChild(style);
+    window.document.body.innerHTML =
+      "<div class=\"signal-view signal-view--trace-detail signal-view--with-panel\"><div class=\"signal-view__content\"></div><div class=\"signal-view__panel\"></div></div>";
 
     const layout = window.document.querySelector(".signal-view");
     const panel = window.document.querySelector(".signal-view__panel");

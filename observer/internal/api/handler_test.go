@@ -249,52 +249,6 @@ func TestQueryTracesWithSummaryFieldFilters(t *testing.T) {
 	}
 }
 
-func TestQueryTraceFilterValues(t *testing.T) {
-	s := store.New()
-	now := time.Now()
-	s.AddSpansForConnection("", []store.Span{
-		{
-			TraceID:   "trace-1",
-			SpanID:    "span-1",
-			Name:      "GET /orders",
-			Kind:      "internal",
-			StartTime: now,
-			EndTime:   now.Add(10 * time.Millisecond),
-			Status:    store.SpanStatus{Code: "OK"},
-			Resource:  store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
-			Scope:     store.Scope{Name: "test-scope"},
-		},
-		{
-			TraceID:   "trace-2",
-			SpanID:    "span-2",
-			Name:      "POST /charge",
-			Kind:      "internal",
-			StartTime: now.Add(time.Second),
-			EndTime:   now.Add(time.Second + 10*time.Millisecond),
-			Status:    store.SpanStatus{Code: "ERROR"},
-			Resource:  store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
-			Scope:     store.Scope{Name: "test-scope"},
-		},
-	})
-
-	mux := http.NewServeMux()
-	Register(mux, s)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	resp := mustGet(t, server.URL+"/api/query/traces/filter-values?field=serviceName&prefix=pa")
-	defer resp.Body.Close()
-
-	var values []string
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &values); err != nil {
-		t.Fatalf("unmarshal values: %v", err)
-	}
-	if len(values) != 1 || values[0] != "payments" {
-		t.Fatalf("expected [payments], got %v", values)
-	}
-}
-
 func TestQueryTracesWithServerSideQueryFilter(t *testing.T) {
 	s := store.New()
 	now := time.Now()
@@ -342,6 +296,52 @@ func TestQueryTracesWithServerSideQueryFilter(t *testing.T) {
 	}
 	if traces[0].TraceID != "trace-2" {
 		t.Fatalf("expected trace-2, got %s", traces[0].TraceID)
+	}
+}
+
+func TestQueryTraceFilterValues(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+	s.AddSpansForConnection("", []store.Span{
+		{
+			TraceID:   "trace-1",
+			SpanID:    "span-1",
+			Name:      "GET /orders",
+			Kind:      "internal",
+			StartTime: now,
+			EndTime:   now.Add(10 * time.Millisecond),
+			Status:    store.SpanStatus{Code: "OK"},
+			Resource:  store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     store.Scope{Name: "test-scope"},
+		},
+		{
+			TraceID:   "trace-2",
+			SpanID:    "span-2",
+			Name:      "POST /charge",
+			Kind:      "internal",
+			StartTime: now.Add(time.Second),
+			EndTime:   now.Add(time.Second + 10*time.Millisecond),
+			Status:    store.SpanStatus{Code: "ERROR"},
+			Resource:  store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     store.Scope{Name: "test-scope"},
+		},
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/traces/filter-values?field=serviceName&prefix=pa")
+	defer resp.Body.Close()
+
+	var values []string
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &values); err != nil {
+		t.Fatalf("unmarshal values: %v", err)
+	}
+	if len(values) != 1 || values[0] != "payments" {
+		t.Fatalf("expected [payments], got %v", values)
 	}
 }
 
@@ -1284,48 +1284,6 @@ func TestQueryMetricsWithServerSideFilters(t *testing.T) {
 	}
 }
 
-func TestQueryMetricFilterValues(t *testing.T) {
-	s := store.New()
-	now := time.Now()
-	s.AddMetricsForConnection("", []store.MetricDataPoint{
-		{
-			Name:        "http.server.duration",
-			Description: "Request duration",
-			Unit:        "ms",
-			Type:        "histogram",
-			Timestamp:   now,
-			Resource:    store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
-			Scope:       store.Scope{Name: "otel.http"},
-		},
-		{
-			Name:        "db.client.connections.usage",
-			Description: "Connections",
-			Unit:        "connections",
-			Type:        "gauge",
-			Timestamp:   now.Add(time.Second),
-			Resource:    store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
-			Scope:       store.Scope{Name: "otel.db"},
-		},
-	})
-
-	mux := http.NewServeMux()
-	Register(mux, s)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	resp := mustGet(t, server.URL+"/api/query/metrics/filter-values?field=scopeName&filter%5BserviceName%5D%5Beq%5D=payments")
-	defer resp.Body.Close()
-
-	var values []string
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &values); err != nil {
-		t.Fatalf("unmarshal values: %v", err)
-	}
-	if len(values) != 1 || values[0] != "otel.db" {
-		t.Fatalf("expected [otel.db], got %v", values)
-	}
-}
-
 func TestQueryMetricsWithNegatedServerSideFilters(t *testing.T) {
 	s := store.New()
 	now := time.Now()
@@ -1377,6 +1335,48 @@ func TestQueryMetricsWithNegatedServerSideFilters(t *testing.T) {
 	}
 	if metrics[0].Name != "db.client.connections.usage" {
 		t.Fatalf("expected db.client.connections.usage, got %s", metrics[0].Name)
+	}
+}
+
+func TestQueryMetricFilterValues(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+	s.AddMetricsForConnection("", []store.MetricDataPoint{
+		{
+			Name:        "http.server.duration",
+			Description: "Request duration",
+			Unit:        "ms",
+			Type:        "histogram",
+			Timestamp:   now,
+			Resource:    store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:       store.Scope{Name: "otel.http"},
+		},
+		{
+			Name:        "db.client.connections.usage",
+			Description: "Connections",
+			Unit:        "connections",
+			Type:        "gauge",
+			Timestamp:   now.Add(time.Second),
+			Resource:    store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:       store.Scope{Name: "otel.db"},
+		},
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/metrics/filter-values?field=scopeName&filter%5BserviceName%5D%5Beq%5D=payments")
+	defer resp.Body.Close()
+
+	var values []string
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &values); err != nil {
+		t.Fatalf("unmarshal values: %v", err)
+	}
+	if len(values) != 1 || values[0] != "otel.db" {
+		t.Fatalf("expected [otel.db], got %v", values)
 	}
 }
 
@@ -1560,44 +1560,6 @@ func TestQueryLogsWithServerSideFilters(t *testing.T) {
 	}
 }
 
-func TestQueryLogFilterValues(t *testing.T) {
-	s := store.New()
-	now := time.Now()
-	s.AddLogsForConnection("", []store.LogRecord{
-		{
-			ID:        "1",
-			Timestamp: now,
-			Body:      "checkout started",
-			Resource:  store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
-			Scope:     store.Scope{Name: "checkout.logger"},
-		},
-		{
-			ID:        "2",
-			Timestamp: now.Add(time.Second),
-			Body:      "payment failed",
-			Resource:  store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
-			Scope:     store.Scope{Name: "payments.logger"},
-		},
-	})
-
-	mux := http.NewServeMux()
-	Register(mux, s)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	resp := mustGet(t, server.URL+"/api/query/logs/filter-values?field=scopeName&filter%5BserviceName%5D%5Beq%5D=payments")
-	defer resp.Body.Close()
-
-	var values []string
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &values); err != nil {
-		t.Fatalf("unmarshal values: %v", err)
-	}
-	if len(values) != 1 || values[0] != "payments.logger" {
-		t.Fatalf("expected [payments.logger], got %v", values)
-	}
-}
-
 func TestQueryLogsWithNegatedServerSideFilters(t *testing.T) {
 	s := store.New()
 	now := time.Now()
@@ -1648,6 +1610,44 @@ func TestQueryLogsWithNegatedServerSideFilters(t *testing.T) {
 	}
 	if logs[0].Body != "payment failed" {
 		t.Fatalf("expected payment failed, got %s", logs[0].Body)
+	}
+}
+
+func TestQueryLogFilterValues(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+	s.AddLogsForConnection("", []store.LogRecord{
+		{
+			ID:        "1",
+			Timestamp: now,
+			Body:      "checkout started",
+			Resource:  store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     store.Scope{Name: "checkout.logger"},
+		},
+		{
+			ID:        "2",
+			Timestamp: now.Add(time.Second),
+			Body:      "payment failed",
+			Resource:  store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     store.Scope{Name: "payments.logger"},
+		},
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/logs/filter-values?field=scopeName&filter%5BserviceName%5D%5Beq%5D=payments")
+	defer resp.Body.Close()
+
+	var values []string
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &values); err != nil {
+		t.Fatalf("unmarshal values: %v", err)
+	}
+	if len(values) != 1 || values[0] != "payments.logger" {
+		t.Fatalf("expected [payments.logger], got %v", values)
 	}
 }
 

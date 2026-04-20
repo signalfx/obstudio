@@ -1633,7 +1633,7 @@ func collectSuggestionValues[T any](limit int, prefix string, values []T, projec
 		return strings.ToLower(results[i]) < strings.ToLower(results[j])
 	})
 	if len(results) > limit {
-		results = results[:limit]
+		return results[:limit]
 	}
 	return results
 }

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import React from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MetricGroup } from "../api/types";
 import { MetricsTab } from "./MetricsTab";
 
 afterEach(() => {
@@ -67,17 +68,17 @@ describe("MetricsTab", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
       />,
     );
 
     expect(screen.getByText("Type / Unit")).toBeTruthy();
     expect(screen.getByText("Description")).toBeTruthy();
-    expect(screen.getByLabelText("Filter field")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Add filter")).toBeTruthy();
     expect(screen.queryByText("Type")).toBeNull();
     expect(screen.queryByText("Unit")).toBeNull();
 
     const fieldInput = screen.getByLabelText("Filter field");
-    expect(fieldInput.getAttribute("placeholder")).toBe("Add filter");
     fireEvent.change(fieldInput, { target: { value: "metricName" } });
     expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("metricName value"), {
@@ -123,6 +124,7 @@ describe("MetricsTab", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
       />,
     );
 
@@ -136,7 +138,60 @@ describe("MetricsTab", () => {
     expect(screen.getByText("checkout")).toBeTruthy();
   });
 
-  it("renders metrics in alphabetical order", () => {
+  it("shows metric filters in the requested order", () => {
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.focus(screen.getByLabelText("Filter field"));
+
+    const items = Array.from(document.querySelectorAll(".filter-builder__menu-item .filter-builder__menu-key")).map((node) => node.textContent);
+    expect(items).toEqual(["Metric", "Service", "Scope"]);
+  });
+
+  it("does not show time range fields in the metric filter menu", () => {
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.focus(screen.getByLabelText("Filter field"));
+
+    expect(screen.queryByText("Time From")).toBeNull();
+    expect(screen.queryByText("Time To")).toBeNull();
+  });
+
+  it("renders metrics in alphabetical order and emits interaction callbacks when provided", () => {
+    const onInteract = vi.fn();
     const { container } = render(
       <MetricsTab
         metrics={[
@@ -162,6 +217,7 @@ describe("MetricsTab", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={onInteract}
       />,
     );
 
@@ -169,7 +225,7 @@ describe("MetricsTab", () => {
     expect(names).toEqual(["alpha.metric", "zeta.metric"]);
     expect(container.querySelector(".metric-card__header")?.classList.contains("data-table__row--metrics")).toBe(true);
     expect(container.querySelector(".metric-card__name")?.classList.contains("explorer-row__primary")).toBe(true);
-    expect(container.querySelector(".metric-card__description")?.textContent).toBe("Alpha metric");
+    expect(container.querySelector(".metric-card__description")?.textContent).toBe("Alpha metric · checkout · otel");
     expect(container.querySelector(".metric-card__glyph")).toBeNull();
     expect(container.querySelector(".metric-card__meta")).toBeTruthy();
     expect(container.querySelector(".metric-card__meta")?.classList.contains("data-table__cell-content")).toBe(true);
@@ -181,6 +237,186 @@ describe("MetricsTab", () => {
     expect(container.textContent).toContain("gauge/ms");
     expect(container.textContent).not.toContain("svc");
 
+    fireEvent.pointerDown(screen.getByRole("button", { name: /alpha\.metric/i }));
+    expect(onInteract).toHaveBeenCalled();
+  });
+
+  it("keeps the current metric detail visible while the first filtered request is pending", async () => {
+    let resolveFetch: ((value: { ok: true; json: () => Promise<MetricGroup[]> }) => void) | undefined;
+    const fetchPromise = new Promise<{ ok: true; json: () => Promise<MetricGroup[]> }>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(fetchPromise);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [
+              {
+                name: "http.server.duration",
+                type: "histogram",
+                unit: "ms",
+                timeUnixNano: "1",
+                attributes: {},
+                resource: { serviceName: "checkout", attributes: {} },
+                scope: { name: "otel" },
+                value: 8.18,
+              },
+            ],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
+    expect(document.querySelector(".signal-view__panel")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "metricName" } });
+    fireEvent.change(screen.getByLabelText("metricName value"), {
+      target: { value: "http.server.duration" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    expect(document.querySelector(".signal-view__panel")).toBeTruthy();
+    expect(screen.getAllByText("Request duration · checkout · otel").length).toBeGreaterThan(0);
+
+    resolveFetch?.({
+      ok: true,
+      json: async () => [
+        {
+          name: "http.server.duration",
+          description: "Request duration",
+          unit: "ms",
+          type: "histogram",
+          serviceName: "checkout",
+          scopeName: "otel",
+          dataPointCount: 1,
+          dataPoints: [],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await fetchPromise;
+    });
+  });
+
+  it("does not refetch filtered metrics when live websocket updates replace the metrics prop", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          name: "http.server.duration",
+          description: "Request duration",
+          unit: "ms",
+          type: "histogram",
+          serviceName: "checkout",
+          scopeName: "otel",
+          dataPointCount: 1,
+          dataPoints: [],
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "metricName" } });
+    fireEvent.change(screen.getByLabelText("metricName value"), {
+      target: { value: "http.server.duration" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 2,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps same-service metrics from different scopes as separate cards", () => {
+    const { container } = render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel.http",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel.rpc",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".metric-card")).toHaveLength(2);
+    const descriptions = Array.from(container.querySelectorAll(".metric-card__description")).map((node) => node.textContent);
+    expect(descriptions).toEqual([
+      "Request duration · checkout · otel.http",
+      "Request duration · checkout · otel.rpc",
+    ]);
   });
 
   it("renders selected metric details in the side panel", () => {
@@ -210,6 +446,7 @@ describe("MetricsTab", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
       />,
     );
 
@@ -245,6 +482,7 @@ describe("MetricsTab", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
       />,
     );
 

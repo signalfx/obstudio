@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { Span, ValidationFinding } from "../api/types";
+import { CopyTextButton } from "../layout";
 
 interface SpanDetailsPanelProps {
   span: Span;
@@ -20,10 +21,15 @@ function relativeTime(eventNano: string, spanStartNano: string): string {
 /** Tabbed detail view for a single span showing info, attributes, events, and links. */
 export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("info");
+  const [attributeFilter, setAttributeFilter] = useState("");
 
   const attrCount = Object.keys(span.attributes ?? {}).length;
   const eventCount = (span.events ?? []).length;
   const linkCount = (span.links ?? []).length;
+  const filteredAttributes = useMemo(
+    () => Object.entries(span.attributes ?? {}).filter(([key, value]) => attributeMatchesFilter(key, value, attributeFilter)),
+    [attributeFilter, span.attributes],
+  );
 
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "info", label: "Info" },
@@ -72,6 +78,10 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
                 <div className="span-details__validation">
                   {validationFindings.map((finding) => (
                     <div key={`${finding.entityKey}:${finding.ruleId}:${finding.updatedAt}`} className={`validation-inline validation-inline--${finding.severity}`}>
+                      <span
+                        className={`validation-inline__severity-dot validation-inline__severity-dot--${finding.severity}`}
+                        aria-hidden="true"
+                      />
                       <span>{finding.message}</span>
                     </div>
                   ))}
@@ -89,28 +99,37 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
                 </span>
               </div>
               <div className="span-details__detail-row">
+                <span className="span-details__detail-label">Trace ID</span>
+                <span className="span-details__detail-value">
+                  <span title={span.traceId}>{span.traceId}</span>
+                  <CopyTextButton text={span.traceId} label="Trace ID" />
+                </span>
+              </div>
+              <div className="span-details__detail-row">
                 <span className="span-details__detail-label">Span ID</span>
-                <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
-                  {span.spanId}
+                <span className="span-details__detail-value">
+                  <span title={span.spanId}>{span.spanId}</span>
+                  <CopyTextButton text={span.spanId} label="Span ID" />
                 </span>
               </div>
               {span.parentSpanId ? (
                 <div className="span-details__detail-row">
                   <span className="span-details__detail-label">Parent</span>
-                  <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
-                    {span.parentSpanId}
+                  <span className="span-details__detail-value">
+                    <span title={span.parentSpanId}>{span.parentSpanId}</span>
+                    <CopyTextButton text={span.parentSpanId} label="Parent span ID" />
                   </span>
                 </div>
               ) : null}
               <div className="span-details__detail-row">
                 <span className="span-details__detail-label">Start</span>
-                <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
+                <span className="span-details__detail-value">
                   {formatNanoTimestamp(span.startTimeUnixNano)}
                 </span>
               </div>
               <div className="span-details__detail-row">
                 <span className="span-details__detail-label">Duration</span>
-                <span className="span-details__detail-value" style={{ fontFamily: '"Cascadia Code", monospace', fontSize: "11px" }}>
+                <span className="span-details__detail-value">
                   {formatDuration(span.durationMs)}
                 </span>
               </div>
@@ -137,12 +156,22 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
           <div className="span-details__section">
             <div className="span-details__section-body span-details__attrs">
               {attrCount > 0 ? (
-                Object.entries(span.attributes ?? {}).map(([k, v]) => (
+                <input
+                  type="text"
+                  className="span-details__attr-filter"
+                  placeholder="Filter attributes"
+                  value={attributeFilter}
+                  onChange={(event) => setAttributeFilter(event.target.value)}
+                  aria-label="Filter span attributes"
+                />
+              ) : null}
+              {attrCount > 0 ? (
+                filteredAttributes.length > 0 ? filteredAttributes.map(([k, v]) => (
                   <div key={k} className="span-details__attr-row">
                     <span className="span-details__attr-key">{k}</span>
                     <span className="span-details__attr-value">{String(v)}</span>
                   </div>
-                ))
+                )) : <p className="span-details__empty">No attributes match the current filter</p>
               ) : (
                 <p className="span-details__empty">No attributes</p>
               )}
@@ -225,4 +254,16 @@ function formatDuration(ms: number): string {
   if (ms < 1) return `${(ms * 1000).toFixed(0)}\u00B5s`;
   if (ms < 1000) return `${ms.toFixed(2)}ms`;
   return `${(ms / 1000).toFixed(3)}s`;
+}
+
+function attributeMatchesFilter(key: string, value: unknown, filter: string): boolean {
+  const normalizedFilter = normalizeFilterText(filter);
+  if (!normalizedFilter) {
+    return true;
+  }
+  return normalizeFilterText(key).includes(normalizedFilter) || normalizeFilterText(String(value)).includes(normalizedFilter);
+}
+
+function normalizeFilterText(value: string): string {
+  return value.trim().toLowerCase();
 }

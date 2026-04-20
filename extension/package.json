@@ -19,6 +19,7 @@
     "onWebviewPanel:observabilityStudioObserver"
   ],
   "main": "./dist/extension.js",
+  "icon": "assets/observer-icon.png",
   "contributes": {
     "commands": [
       {

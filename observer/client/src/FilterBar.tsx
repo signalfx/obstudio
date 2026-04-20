@@ -7,6 +7,7 @@ export interface FilterDefinition {
   label?: string;
   kind: FilterFieldKind;
   chipLabel?: string;
+  placeholder?: string;
   operatorLabels?: OperatorLabels;
   options?: Array<{ label: string; value: string }>;
   supportsNot?: boolean;
@@ -73,6 +74,9 @@ function chipText(definition: FilterDefinition | undefined, clause: FilterClause
 }
 
 function valuePlaceholder(definition: FilterDefinition): string {
+  if (definition.placeholder) {
+    return `Enter ${definition.placeholder}`;
+  }
   const label = definition.label ?? definition.chipLabel ?? definition.key;
   if (definition.kind === "datetime") {
     return `Select ${label}`;

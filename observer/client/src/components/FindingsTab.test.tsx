@@ -111,9 +111,9 @@ describe("FindingsTab", () => {
     expect(head).toBeTruthy();
     expect(within(head as HTMLElement).getByText("Metric")).toBeTruthy();
     expect(within(head as HTMLElement).getByText("Rule")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Violations")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Improvements")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Information")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Viol.")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Impr.")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Info")).toBeTruthy();
 
     const master = view.container.querySelector(".findings-tab__master");
     expect(master?.classList.contains("findings-tab__master--metric")).toBe(true);
@@ -371,26 +371,23 @@ describe("FindingsTab", () => {
     let master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("GET /orders").closest("button") as HTMLElement);
     let detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
-    expect(detailPanel.querySelector(".detail-panel__title")).toBeNull();
-    expect(detailPanel.querySelector(".detail-panel__subtitle")).toBeNull();
-    expect(detailPanel.querySelector(".findings-tab__detail-heading")?.textContent).toBe("GET /orders");
+    expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
+    expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Span");
 
     const tablist = view.getByRole("tablist", { name: "Validation signals" });
     fireEvent.click(within(tablist).getByRole("tab", { name: /^Logs/ }));
     master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("Cache hit for order ORD-1781").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
-    expect(detailPanel.querySelector(".detail-panel__title")).toBeNull();
-    expect(detailPanel.querySelector(".detail-panel__subtitle")).toBeNull();
-    expect(detailPanel.querySelector(".findings-tab__detail-heading")?.textContent).toBe("Cache hit for order ORD-1781");
+    expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("Cache hit for order ORD-1781");
+    expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Log");
 
     fireEvent.click(within(tablist).getByRole("tab", { name: /^Resources/ }));
     master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("deployment.environment.name").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
-    expect(detailPanel.querySelector(".detail-panel__title")).toBeNull();
-    expect(detailPanel.querySelector(".detail-panel__subtitle")).toBeNull();
-    expect(detailPanel.querySelector(".findings-tab__detail-heading")?.textContent).toBe("deployment.environment.name");
+    expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("deployment.environment.name");
+    expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Resource");
   });
 
   it("shows the clicked row in the shared side detail panel", () => {
@@ -437,9 +434,8 @@ describe("FindingsTab", () => {
     const detailPanel = view.container.querySelector("#validation-issue-detail");
     expect(detailPanel).toBeTruthy();
     expect(view.container.querySelector(".findings-tab__layout--with-panel")).toBeTruthy();
-    expect((detailPanel as HTMLElement).querySelector(".detail-panel__title")).toBeNull();
-    expect((detailPanel as HTMLElement).querySelector(".detail-panel__subtitle")).toBeNull();
-    expect((detailPanel as HTMLElement).querySelector(".findings-tab__detail-heading")?.textContent).toBe("jvm.thread.count");
+    expect((detailPanel as HTMLElement).querySelector(".detail-panel__title")?.textContent).toBe("jvm.thread.count");
+    expect((detailPanel as HTMLElement).querySelector(".detail-panel__subtitle")?.textContent).toContain("Metric");
     expect((detailPanel as HTMLElement).querySelector(".findings-tab__detail-grid")).toBeNull();
     expect(within(detailPanel as HTMLElement).queryByText("Target")).toBeNull();
     expect(within(detailPanel as HTMLElement).queryByText("Signal")).toBeNull();
@@ -502,6 +498,70 @@ describe("FindingsTab", () => {
     expect(within(detailPanel as HTMLElement).getByText("Resource attributes apply across traces, metrics, and logs emitted by the same service.")).toBeTruthy();
   });
 
+  it("groups detail findings by severity without a summary-card strip", () => {
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "metric:checkout:http.server.request.duration",
+            ruleId: "unit_mismatch",
+            severity: "violation",
+            message: "Unit should be 's', but found 'ms'.",
+            signal: {
+              type: "metric",
+              serviceName: "checkout",
+              scopeName: "otel",
+              metricName: "http.server.request.duration",
+            },
+            updatedAt: "2026-04-09T00:00:00Z",
+          }),
+          makeFinding({
+            entityKey: "metric:checkout:http.server.request.duration",
+            ruleId: "recommended_attribute_not_present",
+            severity: "improvement",
+            message: "Recommended attribute 'network.protocol.version' is not present.",
+            signal: {
+              type: "metric",
+              serviceName: "checkout",
+              scopeName: "otel",
+              metricName: "http.server.request.duration",
+            },
+            updatedAt: "2026-04-09T00:01:00Z",
+          }),
+          makeFinding({
+            entityKey: "metric:checkout:http.server.request.duration",
+            ruleId: "conditionally_required_attribute_not_present",
+            severity: "information",
+            message: "Conditionally required attribute 'http.route' is not present.",
+            signal: {
+              type: "metric",
+              serviceName: "checkout",
+              scopeName: "otel",
+              metricName: "http.server.request.duration",
+            },
+            updatedAt: "2026-04-09T00:02:00Z",
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    const row = view.getByText("http.server.request.duration").closest("button");
+    fireEvent.click(row as HTMLElement);
+
+    const detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
+    expect(within(detailPanel).getAllByText("1 finding")).toHaveLength(3);
+    expect(within(detailPanel).queryByText("Violations")).toBeNull();
+    expect(within(detailPanel).queryByText("Improvements")).toBeNull();
+    expect(within(detailPanel).queryByText("Information")).toBeNull();
+    expect(within(detailPanel).getByText("unit_mismatch")).toBeTruthy();
+    expect(within(detailPanel).getByText("recommended_attribute_not_present")).toBeTruthy();
+    expect(within(detailPanel).getByText("conditionally_required_attribute_not_present")).toBeTruthy();
+    expect(within(detailPanel).getAllByText("Rule")).toHaveLength(3);
+    expect(within(detailPanel).queryByText("Suggested fix")).toBeNull();
+    expect(within(detailPanel).queryByText("Emit this metric with the semantic-convention unit expected by the validator.")).toBeNull();
+  });
+
   it("renders the selected issue in a split view with the compact close-only detail header", () => {
     const view = render(
       <FindingsTab
@@ -532,8 +592,10 @@ describe("FindingsTab", () => {
 
     expect(layout?.classList.contains("findings-tab__layout--with-panel")).toBe(true);
     expect(detailPanel).toBeTruthy();
-    expect(detailPanel?.querySelector(".detail-panel__header--close-only")).toBeTruthy();
+    expect(detailPanel?.querySelector(".detail-panel__header--close-only")).toBeNull();
+    expect(detailPanel?.querySelector(".detail-panel__header .detail-panel__close")).toBeTruthy();
     expect(selected).toBe(item);
-    expect(detailPanel?.querySelector(".findings-tab__detail-heading")?.textContent).toBe("jvm.thread.count");
+    expect(detailPanel?.querySelector(".detail-panel__title")?.textContent).toBe("jvm.thread.count");
+    expect((detailPanel?.closest(".resizable-panel") as HTMLElement | null)?.style.getPropertyValue("--panel-width")).toBe("560px");
   });
 });

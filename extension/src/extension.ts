@@ -396,6 +396,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			cwd: backend.cwd,
 			env: {
 				...process.env,
+				...backend.env,
 				HOST: managedObserverHost,
 				OTLP_HOST: managedObserverHost,
 				OTLP_PORT: String(otlpHttpPort),
@@ -575,6 +576,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 		);
 		configureObserverPanel(observerPanel, context);
 	}
+	applyObserverPanelPresentation(observerPanel, context);
 
 	logObserverLifecycle('Revealing observer webview panel.');
 	observerPanel.reveal(vscode.ViewColumn.One);
@@ -599,6 +601,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 	panel.webview.options = {
 		enableScripts: true,
 	};
+	applyObserverPanelPresentation(panel, context);
 	panel.onDidDispose(() => {
 		if (observerPanel === panel) {
 			logObserverLifecycle('Observer webview panel disposed.');
@@ -606,6 +609,15 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 			observerPanel = undefined;
 		}
 	}, undefined, context.subscriptions);
+}
+
+function applyObserverPanelPresentation(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
+	const iconUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'observer-icon.png');
+	panel.title = 'Observer';
+	panel.iconPath = {
+		light: iconUri,
+		dark: iconUri,
+	};
 }
 
 function refreshObserverPanel(): void {

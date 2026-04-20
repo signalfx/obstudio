@@ -62,6 +62,7 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -78,7 +79,10 @@ describe("TracesTab row layout", () => {
     const menu = container.querySelector(".filter-builder__menu");
     expect(menu?.textContent).toContain("Service");
     expect(menu?.textContent).toContain("Min Duration");
-    expect(menu?.querySelector(".filter-builder__menu-ops")).toBeNull();
+    expect(menu?.textContent).not.toContain("Time From");
+    expect(menu?.textContent).not.toContain("Time To");
+    expect(container.querySelector(".filter-builder__menu-ops")).toBeNull();
+    expect(container.querySelector(".filter-builder__menu-op")).toBeNull();
     expect(container.querySelector(".status-dot")).toBeNull();
     expect(container.querySelector(".data-table__head--left-cluster")).toBeTruthy();
     expect(container.querySelector(".data-table__body-inner--traces")).toBeTruthy();
@@ -110,6 +114,7 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-ok-456", rootSpanName: "GET /health", serviceName: "api-gateway", spanCount: 1, durationMs: 5, status: "ok" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -127,7 +132,7 @@ describe("TracesTab row layout", () => {
     expect(view.queryByText("GET /health")).toBeNull();
   });
 
-  it("uses descriptive value placeholders instead of example content", () => {
+  it("uses descriptive filter placeholders instead of example query text", () => {
     render(
       <MetricsTab
         metrics={[
@@ -143,11 +148,14 @@ describe("TracesTab row layout", () => {
           },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
       />,
     );
 
+    expect(screen.getByPlaceholderText("Add filter")).toBeTruthy();
+
     fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Service" } });
-    expect(screen.getByLabelText("serviceName value").getAttribute("placeholder")).toBe("Enter Service");
+    expect(screen.getByLabelText("serviceName value").getAttribute("placeholder")).toBe("Enter checkout");
   });
 
   it("uses semantic operator labels for min and max bound filters", () => {
@@ -157,6 +165,7 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -179,6 +188,7 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -200,6 +210,7 @@ describe("TracesTab row layout", () => {
           { traceId: "trace-1234567890ab", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 3, durationMs: 42, status: "error" },
         ]}
         telemetryError={null}
+        onInteract={vi.fn()}
         validationFindings={[]}
         validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
       />,
@@ -272,8 +283,8 @@ describe("TracesTab row layout", () => {
 
     expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: 220px 220px 140px 1fr;\n}");
     expect(css).toContain("--table-columns: 220px 240px 140px 96px 88px 56px 1fr;");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 88px 88px 88px 1fr;");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 88px 88px 88px 1fr;");
+    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
+    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
     expect(css).toContain("--table-columns: 220px 240px 88px 1fr;");
     expect(css).toContain(".data-table__head--metrics,\n  .data-table__row--metrics {\n    --table-columns: 220px 100px 1fr;\n  }");
   });
@@ -287,8 +298,8 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 34px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
     expect(css).toContain(".filter-builder {\n  position: relative;\n  display: flex;\n  flex: 0 1 auto;");
-    expect(css).toContain("width: min(100%, 860px);");
-    expect(css).toContain("max-width: min(100%, 860px);");
+    expect(css).toContain("width: min(100%, 760px);");
+    expect(css).toContain("max-width: min(100%, 760px);");
     expect(css).toContain(".filter-builder__composer--selected {\n  flex: 0 1 auto;\n  width: min(100%, 640px);");
     expect(css).toContain(".filter-builder__composer--selected .filter-builder__value {\n  flex: 0 1 320px;");
   });

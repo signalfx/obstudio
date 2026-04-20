@@ -1,23 +1,24 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { useMetricTimeSeries, type MetricSeries } from "./useMetricTimeSeries";
 import type { MetricGroup } from "../api/types";
-import { DetailPanel } from "../layout";
+import { DetailPanel, ResizablePanel } from "../layout";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 interface MetricsTabProps {
   metrics: MetricGroup[];
   telemetryError: string | null;
+  onInteract?: () => void;
 }
 
 type DisplayType = "lines" | "bars" | "area";
 
 const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
-  { key: "metricName", label: "Metric", kind: "text" },
-  { key: "scopeName", label: "Scope", kind: "text" },
-  { key: "serviceName", label: "Service", kind: "text" },
+  { key: "metricName", label: "Metric", kind: "text", placeholder: "http.server.duration" },
+  { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
+  { key: "scopeName", label: "Scope", kind: "text", placeholder: "otel.http" },
 ];
 const METRIC_SUGGESTIBLE_FIELDS = new Set(["metricName", "serviceName", "scopeName"]);
 
@@ -43,15 +44,20 @@ function buildMetricsQuery(clauses: FilterClause[]): MetricsQuery {
 }
 
 /** Metrics tab with list view and a right-side detail panel for the selected metric. */
-export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.ReactElement {
+export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabProps): React.ReactElement {
   const [clauses, setClauses] = useState<FilterClause[]>([]);
   const [serverMetrics, setServerMetrics] = useState<MetricGroup[]>([]);
+  const [hasResolvedFilteredMetrics, setHasResolvedFilteredMetrics] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
-  const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
+  const [expandedMetricKey, setExpandedMetricKey] = useState<string | null>(null);
   const [selectedSeriesKey, setSelectedSeriesKey] = useState<string | null>(null);
   const [displayType, setDisplayType] = useState<DisplayType>("lines");
   const seriesOrderRef = useRef<Map<string, string[]>>(new Map());
+  const handleInteract = useCallback(() => {
+    onInteract?.();
+  }, [onInteract]);
+
   const activeQuery = useMemo(() => buildMetricsQuery(clauses), [clauses]);
   const suggestMetricValues = useCallback((fieldKey: string, prefix: string, signal: AbortSignal) => {
     if (!METRIC_SUGGESTIBLE_FIELDS.has(fieldKey)) {
@@ -61,36 +67,48 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
   }, [clauses]);
   const hasActiveFilter = clauses.length > 0;
   const liveMetrics = Array.isArray(metrics) ? metrics : [];
-  const visibleMetrics = hasActiveFilter ? serverMetrics : liveMetrics;
+  const visibleMetrics = hasActiveFilter
+    ? (hasResolvedFilteredMetrics ? serverMetrics : liveMetrics)
+    : liveMetrics;
   const { allSeries, metricList } = useMetricTimeSeries(visibleMetrics);
   const visibleMetricList = useMemo(() => {
-    return [...metricList].sort((left, right) => left.name.localeCompare(right.name));
+    return [...metricList].sort((left, right) => {
+      const nameCompare = left.name.localeCompare(right.name);
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+      const serviceCompare = left.serviceName.localeCompare(right.serviceName);
+      if (serviceCompare !== 0) {
+        return serviceCompare;
+      }
+      return left.scopeName.localeCompare(right.scopeName);
+    });
   }, [metricList]);
 
   const expandedSeries = useMemo(() => {
-    if (!expandedMetric) return [];
-    const currentSeries = allSeries.filter((series) => series.metricName === expandedMetric);
-    const previousOrder = seriesOrderRef.current.get(expandedMetric) ?? [];
+    if (!expandedMetricKey) return [];
+    const currentSeries = allSeries.filter((series) => series.metricKey === expandedMetricKey);
+    const previousOrder = seriesOrderRef.current.get(expandedMetricKey) ?? [];
     const currentKeys = new Set(currentSeries.map((series) => series.key));
     const nextOrder = [
       ...previousOrder.filter((key) => currentKeys.has(key)),
       ...currentSeries.map((series) => series.key).filter((key) => !previousOrder.includes(key)),
     ];
-    seriesOrderRef.current.set(expandedMetric, nextOrder);
+    seriesOrderRef.current.set(expandedMetricKey, nextOrder);
 
     const seriesByKey = new Map(currentSeries.map((series) => [series.key, series] as const));
     return nextOrder
       .map((key) => seriesByKey.get(key))
       .filter((series): series is MetricSeries => series !== undefined);
-  }, [allSeries, expandedMetric]);
+  }, [allSeries, expandedMetricKey]);
 
   const expandedMeta = useMemo(
-    () => (expandedMetric
-      ? visibleMetricList.find((metric) => metric.name === expandedMetric)
-        ?? metricList.find((metric) => metric.name === expandedMetric)
+    () => (expandedMetricKey
+      ? visibleMetricList.find((metric) => metric.key === expandedMetricKey)
+        ?? metricList.find((metric) => metric.key === expandedMetricKey)
         ?? null
       : null),
-    [expandedMetric, metricList, visibleMetricList],
+    [expandedMetricKey, metricList, visibleMetricList],
   );
 
   const selectedDetail = selectedSeriesKey
@@ -118,23 +136,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
     () => stableEntries(selectedDetail?.resource.attributes ?? {}),
     [selectedDetail],
   );
-  const selectedSubtitle = useMemo(() => {
-    if (!selectedDetail) {
-      return undefined;
+  const showSelectedDescription = useMemo(() => {
+    if (!selectedDetail?.description) {
+      return false;
     }
-    const serviceName = selectedDetail.resource.serviceName;
-    const dimensions = selectedAttributes.map(([key, value]) => `${key}=${String(value)}`);
-    if (serviceName && dimensions.length > 0) {
-      return `${serviceName} · ${dimensions.join(", ")}`;
-    }
-    if (serviceName) {
-      return serviceName;
-    }
-    if (dimensions.length > 0) {
-      return dimensions.join(", ");
-    }
-    return "(no dimensions)";
-  }, [selectedAttributes, selectedDetail]);
+    return normalizeText(selectedDetail.description) !== normalizeText(expandedMeta?.description ?? "");
+  }, [expandedMeta?.description, selectedDetail?.description]);
   const metricSubtitle = useMemo(() => {
     if (!expandedMeta) {
       return undefined;
@@ -143,18 +150,24 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
     if (expandedMeta.description) {
       parts.push(expandedMeta.description);
     }
-    if (expandedMeta.serviceCount > 1) {
-      parts.push(`${expandedMeta.serviceCount} services`);
-    } else if (expandedMeta.serviceName && expandedMeta.serviceName !== "unknown") {
+    if (expandedMeta.serviceName && expandedMeta.serviceName !== "unknown") {
       parts.push(expandedMeta.serviceName);
+    }
+    if (expandedMeta.scopeName) {
+      parts.push(expandedMeta.scopeName);
     }
     return parts.join(" · ") || undefined;
   }, [expandedMeta]);
+  const chartValueLabel = useMemo(
+    () => (expandedMeta ? chartValueLabelForType(expandedMeta.type) : undefined),
+    [expandedMeta],
+  );
   const hasDetail = Boolean(expandedMeta);
 
   useEffect(() => {
     if (!hasActiveFilter) {
       setServerMetrics([]);
+      setHasResolvedFilteredMetrics(false);
       setIsFiltering(false);
       setFilterError(null);
       return;
@@ -166,10 +179,12 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
       .then((nextMetrics) => {
         if (controller.signal.aborted) return;
         setServerMetrics(nextMetrics);
+        setHasResolvedFilteredMetrics(true);
         setFilterError(null);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        setHasResolvedFilteredMetrics(true);
         setFilterError(error instanceof Error ? error.message : "Failed to filter metrics");
       })
       .finally(() => {
@@ -179,19 +194,19 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
       });
 
     return () => controller.abort();
-  }, [activeQuery, hasActiveFilter, liveMetrics]);
+  }, [activeQuery, hasActiveFilter]);
 
   useEffect(() => {
-    if (!expandedMetric) return;
-    if (!visibleMetricList.some((metric) => metric.name === expandedMetric)) {
-      setExpandedMetric(null);
+    if (!expandedMetricKey) return;
+    if (!visibleMetricList.some((metric) => metric.key === expandedMetricKey)) {
+      setExpandedMetricKey(null);
       setSelectedSeriesKey(null);
     }
-  }, [expandedMetric, visibleMetricList]);
+  }, [expandedMetricKey, visibleMetricList]);
 
   return (
     <section className="tab-panel" role="tabpanel">
-      <div className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`}>
+      <div className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`} onPointerDownCapture={handleInteract}>
         <div className="signal-view__content">
           {telemetryError ? (
             <p className="explorer__status explorer__status--error">{telemetryError}</p>
@@ -207,21 +222,22 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                 definitions={METRIC_FILTER_DEFINITIONS}
                 clauses={clauses}
                 onChange={setClauses}
+                fieldPlaceholder="Add filter"
                 onSuggestValues={suggestMetricValues}
               />
             </div>
           ) : null}
 
           {visibleMetricList.length === 0 && liveMetrics.length === 0 && !hasActiveFilter ? (
-            <p className="explorer__status explorer__status--empty" style={{ padding: "40px 20px" }}>
+            <p className="explorer__status explorer__status--empty">
               No metrics received yet. Send OTLP telemetry to port 4318 to begin exploring.
             </p>
           ) : isFiltering && hasActiveFilter && visibleMetricList.length === 0 ? (
-            <p className="metrics-explorer__empty" style={{ padding: "24px 20px" }}>
+            <p className="metrics-explorer__empty">
               Updating filtered metrics...
             </p>
           ) : visibleMetricList.length === 0 ? (
-            <p className="metrics-explorer__empty" style={{ padding: "24px 20px" }}>
+            <p className="metrics-explorer__empty">
               No metrics match the current filters.
             </p>
           ) : null}
@@ -236,13 +252,13 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
 
           <div className="metrics-card-list">
             {visibleMetricList.map((metric) => {
-              const isExpanded = expandedMetric === metric.name;
+              const isExpanded = expandedMetricKey === metric.key;
               return (
-                <div key={metric.name} className="metric-card">
+                <div key={metric.key} className="metric-card">
                   <button
                     className={`data-table__row data-table__row--metrics metric-card__header ${isExpanded ? "metric-card__header--active" : ""}`}
                     onClick={() => {
-                      setExpandedMetric(isExpanded ? null : metric.name);
+                      setExpandedMetricKey(isExpanded ? null : metric.key);
                       setSelectedSeriesKey(null);
                     }}
                     type="button"
@@ -251,7 +267,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                       <span className="metric-card__name explorer-row__primary">{metric.name}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-description">
-                      <span className="metric-card__description explorer-row__secondary">{metric.description || "--"}</span>
+                      <span className="metric-card__description explorer-row__secondary">{formatMetricDescription(metric)}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-meta">
                       <span className="data-table__cell-content data-table__cell-content--meta metric-card__meta">
@@ -268,24 +284,17 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
         </div>
 
         {expandedMeta ? (
-          <div className="signal-view__panel signal-view__panel--metrics">
+          <ResizablePanel className="signal-view__panel signal-view__panel--metrics" resizeLabel="Resize metrics panel">
             <DetailPanel
               title={expandedMeta.name}
               subtitle={metricSubtitle}
+              scrollResetKey={expandedMeta.key}
               onClose={() => {
-                setExpandedMetric(null);
+                setExpandedMetricKey(null);
                 setSelectedSeriesKey(null);
               }}
             >
               <div className="metrics-panel">
-                <div className="series-detail__tags">
-                  <span className={`series-detail__tag series-detail__tag--type metric-type metric-type--${expandedMeta.type}`}>
-                    {expandedMeta.type}
-                  </span>
-                  {expandedMeta.unit ? <span className="series-detail__tag">{expandedMeta.unit}</span> : null}
-                  <span className="series-detail__tag">{expandedSeries.length} series</span>
-                </div>
-
                 <div className="metrics-explorer__controls">
                   <div className="metrics-explorer__display">
                     <span className="metrics-explorer__control-label">Display</span>
@@ -300,7 +309,10 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                       </button>
                     ))}
                   </div>
-                  <span className="metrics-explorer__query-series">{expandedSeries.length} series</span>
+                  <div className="metrics-explorer__control-summary">
+                    {chartValueLabel ? <span className="metrics-explorer__plot-label">{chartValueLabel}</span> : null}
+                    <span className="metrics-explorer__query-series">{expandedSeries.length} series</span>
+                  </div>
                 </div>
 
                 <div className="metrics-explorer__chart">
@@ -351,46 +363,31 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
 
                 {selectedDetail ? (
                   <div className="series-detail series-detail--panel">
-                    <div className="series-detail__header">
-                      <div className="series-detail__title">{selectedSubtitle}</div>
-                      <button className="series-detail__close" onClick={() => setSelectedSeriesKey(null)} type="button" aria-label="Clear series selection">
-                        &times;
-                      </button>
-                    </div>
-
                     {stats ? (
-                      <div className="series-detail__stats">
-                        <div className="stat-card">
-                          <span className="stat-card__label">Latest</span>
-                          <span className="stat-card__value">{formatNumber(stats.latest)}</span>
+                      <>
+                        <div className="series-detail__stats">
+                          <div className="stat-card">
+                            <span className="stat-card__label">Latest</span>
+                            <span className="stat-card__value">{formatNumber(stats.latest)}</span>
+                          </div>
+                          <div className="stat-card">
+                            <span className="stat-card__label">Min</span>
+                            <span className="stat-card__value">{formatNumber(stats.min)}</span>
+                          </div>
+                          <div className="stat-card">
+                            <span className="stat-card__label">Max</span>
+                            <span className="stat-card__value">{formatNumber(stats.max)}</span>
+                          </div>
+                          <div className="stat-card">
+                            <span className="stat-card__label">Avg</span>
+                            <span className="stat-card__value">{formatNumber(stats.avg)}</span>
+                          </div>
                         </div>
-                        <div className="stat-card">
-                          <span className="stat-card__label">Min</span>
-                          <span className="stat-card__value">{formatNumber(stats.min)}</span>
-                        </div>
-                        <div className="stat-card">
-                          <span className="stat-card__label">Max</span>
-                          <span className="stat-card__value">{formatNumber(stats.max)}</span>
-                        </div>
-                        <div className="stat-card">
-                          <span className="stat-card__label">Avg</span>
-                          <span className="stat-card__value">{formatNumber(stats.avg)}</span>
-                        </div>
-                        <div className="stat-card">
-                          <span className="stat-card__label">Points</span>
-                          <span className="stat-card__value">{stats.count}</span>
-                        </div>
-                      </div>
+                        <div className="series-detail__meta-line">{formatPointCount(stats.count)}</div>
+                      </>
                     ) : null}
 
-                    <div className="series-detail__tags">
-                      <span className="series-detail__tag series-detail__tag--type">{selectedDetail.type}</span>
-                      {selectedDetail.unit ? <span className="series-detail__tag">{selectedDetail.unit}</span> : null}
-                      {selectedDetail.temporality ? <span className="series-detail__tag">{selectedDetail.temporality}</span> : null}
-                      {selectedDetail.isMonotonic ? <span className="series-detail__tag">monotonic</span> : null}
-                    </div>
-
-                    {selectedDetail.description ? <p className="series-detail__desc">{selectedDetail.description}</p> : null}
+                    {showSelectedDescription ? <p className="series-detail__desc">{selectedDetail.description}</p> : null}
 
                     <div className="series-detail__section">
                       <div className="series-detail__section-title">Dimensions</div>
@@ -413,7 +410,7 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
                         <div className="series-detail__section-title">Resource</div>
                         <div className="series-detail__tags">
                           {selectedResourceAttributes.map(([key, value]) => (
-                            <span key={key} className="series-detail__dim-tag">
+                            <span key={key} className="series-detail__resource-tag">
                               <span className="series-detail__dim-key">{key}:</span>
                               {String(value)}
                             </span>
@@ -424,16 +421,16 @@ export function MetricsTab({ metrics, telemetryError }: MetricsTabProps): React.
 
                     <div className="series-detail__section">
                       <div className="series-detail__section-title">Scope</div>
-                      <div className="series-detail__tags">
-                        <span className="series-detail__tag">{selectedDetail.scope.name}</span>
-                        {selectedDetail.scope.version ? <span className="series-detail__tag">v{selectedDetail.scope.version}</span> : null}
+                      <div className="series-detail__scope-line">
+                        {selectedDetail.scope.name}
+                        {selectedDetail.scope.version ? ` v${selectedDetail.scope.version}` : ""}
                       </div>
                     </div>
                   </div>
                 ) : null}
               </div>
             </DetailPanel>
-          </div>
+          </ResizablePanel>
         ) : null}
       </div>
     </section>
@@ -446,6 +443,40 @@ function formatNumber(value: number): string {
   return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
+function formatMetricDescription(metric: { description: string; serviceName: string; scopeName: string }): string {
+  const parts: string[] = [];
+  const hasService = metric.serviceName && metric.serviceName !== "unknown";
+  if (metric.description) {
+    parts.push(metric.description);
+  }
+  if (hasService) {
+    parts.push(metric.serviceName);
+  }
+  if (metric.scopeName) {
+    parts.push(metric.scopeName);
+  }
+  return parts.join(" · ") || "--";
+}
+
+function formatPointCount(count: number): string {
+  return `${count} ${count === 1 ? "point" : "points"} retained`;
+}
+
 function stableEntries(attributes: Record<string, unknown>): Array<[string, unknown]> {
   return Object.entries(attributes).sort(([left], [right]) => left.localeCompare(right));
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function chartValueLabelForType(type: string): string {
+  switch (type) {
+    case "histogram":
+    case "exponential_histogram":
+    case "summary":
+      return "Plotting mean value";
+    default:
+      return "Plotting raw value";
+  }
 }
