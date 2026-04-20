@@ -75,11 +75,16 @@ it('integration: buildObserverGo produces a binary', { timeout: 120_000 }, async
 		// Verify the binary was created
 		const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
 		assert.ok(fs.existsSync(binaryPath), `Binary should exist at ${binaryPath}`);
+		const weaverPath = path.join(extensionRoot, 'dist', 'observer', 'weaver');
+		assert.ok(fs.existsSync(weaverPath), `Weaver runtime should exist at ${weaverPath}`);
 
 		// Verify it's executable
 		const stats = fs.statSync(binaryPath);
 		const isExecutable = (stats.mode & 0o111) !== 0;
 		assert.ok(isExecutable, 'Binary should be executable');
+		const weaverStats = fs.statSync(weaverPath);
+		const weaverIsExecutable = (weaverStats.mode & 0o111) !== 0;
+		assert.ok(weaverIsExecutable, 'Weaver runtime should be executable');
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		// Skip (not pass) when the Go toolchain itself is not installed.
@@ -127,6 +132,10 @@ it('integration: VSIX contains observer binary', { timeout: 120_000 }, async () 
 		assert.ok(
 			unzipOutput.includes('extension/dist/observer/obstudio'),
 			'VSIX should contain extension/dist/observer/obstudio binary'
+		);
+		assert.ok(
+			unzipOutput.includes('extension/dist/observer/weaver'),
+			'VSIX should contain extension/dist/observer/weaver runtime'
 		);
 	} finally {
 		cleanup(context);
@@ -339,6 +348,79 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 			}).on('error', reject);
 		});
 		assert.equal(cssStatus, 200, '/assets/main.css should return 200 — client assets not embedded in binary');
+	} finally {
+		child.kill();
+	}
+});
+
+it('integration: packaged binary enables validator when bundled weaver is present', { timeout: 180_000 }, async (t) => {
+	const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
+	const buildObserverPath = path.join(extensionRoot, 'build-observer.js');
+	try {
+		execFileSync('node', [buildObserverPath], {
+			cwd: extensionRoot,
+			stdio: 'pipe',
+			timeout: 120_000,
+		});
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		if (
+			errorMessage.includes('go: command not found') ||
+			errorMessage.includes("'go' is not recognized")
+		) {
+			t.skip('Go toolchain not installed');
+			return;
+		}
+		throw error;
+	}
+
+	assert.ok(fs.existsSync(binaryPath), `Binary should exist at ${binaryPath}`);
+
+	const port = 13582;
+	const child = spawn(binaryPath, [], {
+		env: {
+			...process.env,
+			PORT: String(port),
+			OTLP_GRPC_PORT: '13583',
+			OTLP_HTTP_PORT: '13584',
+		},
+		stdio: 'pipe',
+	});
+
+	try {
+		const summary = await new Promise<Record<string, unknown>>((resolve, reject) => {
+			const timeout = setTimeout(() => reject(new Error('Validator summary did not become available within 10s')), 10_000);
+			const check = () => {
+				http.get(`http://127.0.0.1:${port}/api/query/validation/summary`, (res) => {
+					let body = '';
+					res.setEncoding('utf-8');
+					res.on('data', (chunk) => {
+						body += chunk;
+					});
+					res.on('end', () => {
+						if ((res.statusCode ?? 0) !== 200) {
+							setTimeout(check, 200);
+							return;
+						}
+						try {
+							const parsed = JSON.parse(body) as Record<string, unknown>;
+							if (parsed.status === 'starting') {
+								setTimeout(check, 200);
+								return;
+							}
+							clearTimeout(timeout);
+							resolve(parsed);
+						} catch {
+							setTimeout(check, 200);
+						}
+					});
+				}).on('error', () => setTimeout(check, 200));
+			};
+			check();
+		});
+
+		assert.equal(summary.enabled, true, 'validator should be enabled when packaged weaver is bundled');
+		assert.notEqual(summary.message, 'Validator unavailable', 'packaged binary should not report validator unavailable');
 	} finally {
 		child.kill();
 	}

@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
-import { DetailPanel } from "../layout";
+import { CopyTextButton, DetailPanel, ResizablePanel } from "../layout";
 import { TraceWaterfall } from "./TraceWaterfall";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
@@ -13,17 +13,14 @@ import { lookupSpanValidation } from "../validation/utils";
 interface TracesTabProps {
   traces: TraceSummary[];
   telemetryError: string | null;
+  onInteract?: () => void;
   validationFindings: ValidationFinding[];
   validationIndex: ValidationIndex;
 }
 
 const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
-  { key: "maxDurationMs", label: "Max Duration", kind: "number", chipLabel: "Max Duration", operatorLabels: { eq: "<=", neq: ">" } },
-  { key: "maxSpanCount", label: "Max Span Count", kind: "number", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
-  { key: "minDurationMs", label: "Min Duration", kind: "number", chipLabel: "Min Duration", operatorLabels: { eq: ">=", neq: "<" } },
-  { key: "minSpanCount", label: "Min Span Count", kind: "number", chipLabel: "Min Span Count", operatorLabels: { eq: ">=", neq: "<" }, step: 1 },
-  { key: "rootSpanName", label: "Root Span", kind: "text" },
-  { key: "serviceName", label: "Service", kind: "text" },
+  { key: "serviceName", label: "Service", kind: "text", placeholder: "payments" },
+  { key: "rootSpanName", label: "Root Span", kind: "text", placeholder: "POST /charge" },
   {
     key: "status",
     label: "Status",
@@ -35,7 +32,11 @@ const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
       { label: "unset", value: "unset" },
     ],
   },
-  { key: "traceId", label: "Trace ID", kind: "text" },
+  { key: "traceId", label: "Trace ID", kind: "text", placeholder: "22222222222222222222222222222222" },
+  { key: "minDurationMs", label: "Min Duration", kind: "number", placeholder: "100", chipLabel: "Min Duration", operatorLabels: { eq: ">=", neq: "<" } },
+  { key: "maxDurationMs", label: "Max Duration", kind: "number", placeholder: "500", chipLabel: "Max Duration", operatorLabels: { eq: "<=", neq: ">" } },
+  { key: "minSpanCount", label: "Min Span Count", kind: "number", placeholder: "1", chipLabel: "Min Span Count", operatorLabels: { eq: ">=", neq: "<" }, step: 1 },
+  { key: "maxSpanCount", label: "Max Span Count", kind: "number", placeholder: "10", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
 ];
 const TRACE_SUGGESTIBLE_FIELDS = new Set(["rootSpanName", "serviceName"]);
 
@@ -90,6 +91,12 @@ function buildTracesQuery(clauses: FilterClause[]): TracesQuery {
           },
         };
         break;
+      case "timeFrom":
+        query.time = { ...(query.time ?? {}), [clause.op === "neq" ? "before" : "from"]: clause.value };
+        break;
+      case "timeTo":
+        query.time = { ...(query.time ?? {}), [clause.op === "neq" ? "after" : "to"]: clause.value };
+        break;
       default:
         break;
     }
@@ -98,7 +105,7 @@ function buildTracesQuery(clauses: FilterClause[]): TracesQuery {
 }
 
 /** Traces tab with virtualized table and waterfall detail panel. */
-export function TracesTab({ traces, telemetryError, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
+export function TracesTab({ traces, telemetryError, onInteract, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
   const [clauses, setClauses] = useState<FilterClause[]>([]);
   const [serverTraces, setServerTraces] = useState<TraceSummary[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
@@ -109,10 +116,14 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
 
   const fetchIdRef = useRef(0);
   const traceDetailRef = useRef(traceDetail);
   traceDetailRef.current = traceDetail;
+  const handleInteract = useCallback(() => {
+    onInteract?.();
+  }, [onInteract]);
   const activeQuery = useMemo(() => buildTracesQuery(clauses), [clauses]);
   const suggestTraceValues = useCallback((fieldKey: string, prefix: string, signal: AbortSignal) => {
     if (!TRACE_SUGGESTIBLE_FIELDS.has(fieldKey)) {
@@ -157,10 +168,11 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
     setTraceDetail(null);
     setDetailError(null);
     setDetailLoading(false);
+    onInteract?.();
     if (traceId) {
       void loadTraceDetail(traceId, "panel");
     }
-  }, [loadTraceDetail]);
+  }, [loadTraceDetail, onInteract]);
 
   const shortcuts = useMemo(() => ({
     Escape: () => {
@@ -248,7 +260,8 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
   return (
     <section className="tab-panel" role="tabpanel">
       <div
-        className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`}
+        className={`signal-view signal-view--trace-detail${hasDetail ? " signal-view--with-panel" : ""}`}
+        onPointerDownCapture={handleInteract}
       >
         <div className="signal-view__content">
           {liveTraces.length > 0 || hasActiveFilter ? (
@@ -278,7 +291,7 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
             <p className="explorer__status">No traces match the current filters.</p>
           ) : (
             <>
-          <div className="data-table__head data-table__head--traces data-table__head--left-cluster">
+          <div ref={headRef} className="data-table__head data-table__head--traces data-table__head--left-cluster data-table__head--scroll-sync">
             <span className="data-table__th data-table__th--operation">Operation</span>
             <span className="data-table__th data-table__th--trace-id">Trace ID</span>
             <span className="data-table__th data-table__th--service">Service</span>
@@ -287,8 +300,16 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
             <span className="data-table__th data-table__th--spans data-table__th--numeric">Spans</span>
           </div>
 
-          <div className="data-table__body" ref={tableRef}>
-            <div className="data-table__body-inner data-table__body-inner--traces" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+          <div
+            className="data-table__body"
+            ref={tableRef}
+            onScroll={(event) => {
+              if (headRef.current) {
+                headRef.current.scrollLeft = event.currentTarget.scrollLeft;
+              }
+            }}
+          >
+            <div className="data-table__body-inner data-table__body-inner--traces data-table__body-inner--scroll-sync" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
               {virtualizer.getVirtualItems().map((vi) => {
                 const t = visibleTraces[vi.index];
                 if (!t) return null;
@@ -340,12 +361,21 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
 
         {/* Detail panel */}
         {selectedTraceId && traceDetail ? (
-          <div className="signal-view__panel">
+          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
             <DetailPanel
               title={traceDetail.rootSpanName}
               subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${formatTraceDuration(traceDetail.durationMs)}`}
               onClose={() => selectTrace(null)}
             >
+              <div className="trace-detail__summary">
+                <div className="span-details__detail-row">
+                  <span className="span-details__detail-label">Trace ID</span>
+                  <span className="span-details__detail-value">
+                    <span title={traceDetail.traceId}>{traceDetail.traceId}</span>
+                    <CopyTextButton text={traceDetail.traceId} label="Trace ID" />
+                  </span>
+                </div>
+              </div>
               <TraceWaterfall
                 spans={traceDetail.spans}
                 selectedSpanId={selectedSpanId}
@@ -355,15 +385,15 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
               />
               {selectedSpan ? <SpanDetailsPanel span={selectedSpan} validationFindings={selectedSpanValidation} /> : null}
             </DetailPanel>
-          </div>
+          </ResizablePanel>
         ) : selectedTraceId && detailLoading ? (
-          <div className="signal-view__panel">
+          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
             <DetailPanel title="Loading..." onClose={() => selectTrace(null)}>
               <p className="explorer__status">Fetching trace detail...</p>
             </DetailPanel>
-          </div>
+          </ResizablePanel>
         ) : selectedTraceId && detailError ? (
-          <div className="signal-view__panel">
+          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
             <DetailPanel
               title="Trace detail unavailable"
               subtitle={selectedSummary?.rootSpanName ?? selectedTraceId.slice(-12)}
@@ -378,7 +408,7 @@ export function TracesTab({ traces, telemetryError, validationFindings, validati
                 Retry
               </button>
             </DetailPanel>
-          </div>
+          </ResizablePanel>
         ) : null}
       </div>
     </section>

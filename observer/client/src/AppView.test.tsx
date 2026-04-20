@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 
 import React from "react";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ValidationFinding, ValidationSummary } from "./api/types";
+import type { MetricGroup, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
@@ -76,6 +78,19 @@ function makeTelemetryHandle(findings: ValidationFinding[]): TelemetryHandle {
   };
 }
 
+function makeMetric(name: string): MetricGroup {
+  return {
+    name,
+    description: `${name} description`,
+    unit: "ms",
+    type: "gauge",
+    serviceName: "checkout",
+    scopeName: "otel",
+    dataPointCount: 1,
+    dataPoints: [],
+  };
+}
+
 afterEach(() => {
   cleanup();
   window.history.replaceState({}, "", "/");
@@ -137,7 +152,7 @@ describe("AppView validation tab", () => {
     expect(screen.getAllByText("http.server.duration").length).toBeGreaterThan(0);
 
     const tablist = screen.getByRole("tablist", { name: "Validation signals" });
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Spans/ }));
+    fireEvent.click(within(tablist).getByRole("tab", { name: /Spans/ }));
     expect(screen.getAllByText("GET /orders").length).toBeGreaterThan(0);
   });
 
@@ -159,22 +174,33 @@ describe("AppView validation tab", () => {
     const metricsTab = screen.getByRole("tab", { name: /metrics/i });
     const tracesTab = screen.getByRole("tab", { name: /traces/i });
     const logsTab = screen.getByRole("tab", { name: /logs/i });
+    const validationTab = screen.getByRole("tab", { name: /validation/i });
 
-    expect(metricsTab.querySelector(".tab-button__count")).toBeTruthy();
-    expect(tracesTab.querySelector(".tab-button__count")).toBeTruthy();
-    expect(logsTab.querySelector(".tab-button__count")).toBeTruthy();
+    expect(metricsTab.textContent).toContain("Metrics");
+    expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
+    expect(tracesTab.textContent).toContain("Traces");
+    expect(tracesTab.querySelector(".tab-button__count")?.textContent).toBe("2");
+    expect(logsTab.textContent).toContain("Logs");
+    expect(logsTab.querySelector(".tab-button__count")?.textContent).toBe("5");
+    expect(validationTab.textContent).toContain("Validation");
+    expect(validationTab.querySelector(".tab-button__count")?.textContent).toBe("1");
     expect(container.querySelector(".tab-button__glyph")).toBeNull();
   });
 
-  it("does not pause the stream when switching tabs", () => {
+  it("does not auto-pause when interacting with the signal tabs", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
+    telemetry.state.metrics = [makeMetric("alpha.metric")];
 
     render(<AppView telemetry={telemetry} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /traces/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /logs/i }));
+    fireEvent.click(screen.getByRole("button", { name: /alpha\.metric/i }));
 
     expect(telemetry.pause).not.toHaveBeenCalled();
-    expect(telemetry.toggle).not.toHaveBeenCalled();
+  });
+
+  it("allows title-bar controls to wrap when the header gets crowded", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(css).toContain(".title-bar__meta {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}");
   });
 });

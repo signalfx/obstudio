@@ -1308,40 +1308,6 @@ func TestQueryTraceSummariesFiltered_FilterBySummaryRanges(t *testing.T) {
 	}
 }
 
-func TestQueryTraceSummaryFieldValues(t *testing.T) {
-	s := New()
-	now := time.Now()
-	s.AddSpansForConnection("", []Span{
-		{
-			TraceID:   "trace-1",
-			SpanID:    "span-1",
-			Name:      "GET /orders",
-			Kind:      "internal",
-			StartTime: now,
-			EndTime:   now.Add(10 * time.Millisecond),
-			Status:    SpanStatus{Code: "OK"},
-			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
-			Scope:     Scope{Name: "otel"},
-		},
-		{
-			TraceID:   "trace-2",
-			SpanID:    "span-2",
-			Name:      "POST /charge",
-			Kind:      "internal",
-			StartTime: now.Add(time.Second),
-			EndTime:   now.Add(time.Second + 5*time.Millisecond),
-			Status:    SpanStatus{Code: "ERROR"},
-			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
-			Scope:     Scope{Name: "otel"},
-		},
-	})
-
-	values := s.QueryTraceSummaryFieldValues("serviceName", "pa", TraceSummaryFilter{}, 10)
-	if len(values) != 1 || values[0] != "payments" {
-		t.Fatalf("expected [payments], got %v", values)
-	}
-}
-
 // ============================================================================
 // QueryMetricsFiltered Tests
 // ============================================================================
@@ -1443,6 +1409,40 @@ func TestQueryMetricsFiltered_RespectsLimit(t *testing.T) {
 	results := s.QueryMetricsFiltered("", "", "", "", "", 5, 3)
 	if len(results) != 5 {
 		t.Errorf("expected 5 results, got %d", len(results))
+	}
+}
+
+func TestQueryTraceSummaryFieldValues(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddSpansForConnection("", []Span{
+		{
+			TraceID:   "trace-1",
+			SpanID:    "span-1",
+			Name:      "GET /orders",
+			Kind:      "internal",
+			StartTime: now,
+			EndTime:   now.Add(10 * time.Millisecond),
+			Status:    SpanStatus{Code: "OK"},
+			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel"},
+		},
+		{
+			TraceID:   "trace-2",
+			SpanID:    "span-2",
+			Name:      "POST /charge",
+			Kind:      "internal",
+			StartTime: now.Add(time.Second),
+			EndTime:   now.Add(time.Second + 5*time.Millisecond),
+			Status:    SpanStatus{Code: "ERROR"},
+			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:     Scope{Name: "otel"},
+		},
+	})
+
+	values := s.QueryTraceSummaryFieldValues("serviceName", "pa", TraceSummaryFilter{}, 10)
+	if len(values) != 1 || values[0] != "payments" {
+		t.Fatalf("expected [payments], got %v", values)
 	}
 }
 

@@ -1,1 +1,1 @@
-export { DetailPanel } from "./DetailPanel";
+export { CopyTextButton, DetailPanel, ResizablePanel } from "./DetailPanel";
