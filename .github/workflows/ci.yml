@@ -104,7 +104,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Run all skill tests
-        run: make pytest
+        run: make test-deterministic
 
   # skill-evals:
   #   name: Skill evals – LLM-based benchmarks
