@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EVALS_DIR = REPO_ROOT / "evals"
+EVALS_DIR = REPO_ROOT / "tests"
 GOLDEN_DIR = EVALS_DIR / "golden"
 SKILLS_DIR = REPO_ROOT / "skills"
 REFS_DIR = SKILLS_DIR / "references"

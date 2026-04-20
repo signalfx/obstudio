@@ -1,0 +1,218 @@
+{
+  "metadata": {
+    "skill_name": "splunk-verify",
+    "timestamp": "2026-04-20T18:13:38.180871+00:00",
+    "evals_run": [
+      1,
+      2
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "eval_name": "flask-basic",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.4,
+        "passed": 2,
+        "failed": 3,
+        "total": 5,
+        "time_seconds": 279.1,
+        "tokens": 16734,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The skill attempts to start or connect to the Observer collector",
+          "passed": true,
+          "evidence": "Keyword match: 4/6 keywords found"
+        },
+        {
+          "text": "HTTP endpoints of the service are exercised (GET, POST, or similar requests)",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Trace data is queried or checked from the collector",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Metric data is queried or checked from the collector",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "inventory.md Verified column is updated to OK for confirmed signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "flask-basic",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.4,
+        "passed": 2,
+        "failed": 3,
+        "total": 5,
+        "time_seconds": 197.7,
+        "tokens": 9851,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The skill attempts to start or connect to the Observer collector",
+          "passed": true,
+          "evidence": "Keyword match: 4/6 keywords found"
+        },
+        {
+          "text": "HTTP endpoints of the service are exercised (GET, POST, or similar requests)",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Trace data is queried or checked from the collector",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "Metric data is queried or checked from the collector",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "inventory.md Verified column is updated to OK for confirmed signals",
+          "passed": true,
+          "evidence": "inventory.md exists with content"
+        }
+      ]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "kvstore",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 2,
+        "failed": 2,
+        "total": 4,
+        "time_seconds": 229.0,
+        "tokens": 18433,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The skill attempts to build and run the Go service",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "KV store endpoints are exercised (PUT, GET, DELETE operations)",
+          "passed": true,
+          "evidence": "Keyword match: 3/4 keywords found"
+        },
+        {
+          "text": "Trace or metric data is checked from the collector",
+          "passed": true,
+          "evidence": "Keyword match: 3/4 keywords found"
+        },
+        {
+          "text": "A coverage summary is reported showing verified vs total signals",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        }
+      ]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "kvstore",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 2,
+        "failed": 2,
+        "total": 4,
+        "time_seconds": 197.7,
+        "tokens": 6192,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The skill attempts to build and run the Go service",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        },
+        {
+          "text": "KV store endpoints are exercised (PUT, GET, DELETE operations)",
+          "passed": true,
+          "evidence": "Keyword match: 3/4 keywords found"
+        },
+        {
+          "text": "Trace or metric data is checked from the collector",
+          "passed": true,
+          "evidence": "Keyword match: 3/4 keywords found"
+        },
+        {
+          "text": "A coverage summary is reported showing verified vs total signals",
+          "passed": false,
+          "evidence": "Could not verify assertion programmatically"
+        }
+      ]
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 0.45,
+        "stddev": 0.05,
+        "min": 0.4,
+        "max": 0.5
+      },
+      "time_seconds": {
+        "mean": 254.05,
+        "stddev": 25.05,
+        "min": 229.0,
+        "max": 279.1
+      },
+      "tokens": {
+        "mean": 17583.5,
+        "stddev": 849.5,
+        "min": 16734,
+        "max": 18433
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.45,
+        "stddev": 0.05,
+        "min": 0.4,
+        "max": 0.5
+      },
+      "time_seconds": {
+        "mean": 197.7,
+        "stddev": 0.0,
+        "min": 197.7,
+        "max": 197.7
+      },
+      "tokens": {
+        "mean": 8021.5,
+        "stddev": 1829.5,
+        "min": 6192,
+        "max": 9851
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+56.4",
+      "tokens": "+9562"
+    }
+  }
+}

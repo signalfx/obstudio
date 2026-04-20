@@ -1,0 +1,30 @@
+{
+  "skill_name": "splunk-verify",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Verify that telemetry is flowing from this Flask app. The service is at examples/python/flask-basic/",
+      "app": "examples/python/flask-basic",
+      "expected_output": "Observer collector started, service exercised, traces and metrics confirmed, inventory Verified column updated",
+      "expectations": [
+        "The skill attempts to start or connect to the Observer collector",
+        "HTTP endpoints of the service are exercised (GET, POST, or similar requests)",
+        "Trace data is queried or checked from the collector",
+        "Metric data is queried or checked from the collector",
+        "inventory.md Verified column is updated to OK for confirmed signals"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Check if my instrumentation is actually working for the kvstore service at examples/go/kvstore/",
+      "app": "examples/go/kvstore",
+      "expected_output": "Service started, KV operations exercised, telemetry validated against inventory",
+      "expectations": [
+        "The skill attempts to build and run the Go service",
+        "KV store endpoints are exercised (PUT, GET, DELETE operations)",
+        "Trace or metric data is checked from the collector",
+        "A coverage summary is reported showing verified vs total signals"
+      ]
+    }
+  ]
+}

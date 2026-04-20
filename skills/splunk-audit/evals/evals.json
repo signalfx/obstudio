@@ -1,0 +1,53 @@
+{
+  "skill_name": "splunk-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Scan this Go service for observability gaps. The code is in examples/go/chi-basic/",
+      "app": "examples/go/chi-basic",
+      "expected_output": ".observe/inventory.md created with all 11 sections for a chi-based Go HTTP app with no external dependencies",
+      "expectations": [
+        "inventory.md file exists in the app .observe/ directory",
+        "inventory.md contains all 11 sections: Service Overview, Architecture, Components, Fault Domains, SLI Definitions, Spans, Metrics, Logs, Configurability, Alerts, Dashboard Recommendations",
+        "Service Overview table lists Go as the language and chi as the framework",
+        "Architecture section contains a mermaid diagram",
+        "SLI Definitions table has at least 4 entries covering Latency, Traffic, Errors, and Saturation",
+        "Spans table includes at least one OOB category span for HTTP",
+        "Metrics table includes http.server.request.duration as a Histogram",
+        "Components section does NOT list external databases, caches, or message queues",
+        "Configurability section mentions OTEL_SDK_DISABLED",
+        "All Status columns in signal tables are blank since this is a fresh audit"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want to assess the observability readiness of my Express app. It's at examples/node/express-basic/",
+      "app": "examples/node/express-basic",
+      "expected_output": ".observe/inventory.md created for a Node.js Express app with appropriate signal mappings",
+      "expectations": [
+        "inventory.md file exists in the app .observe/ directory",
+        "Service Overview identifies Node.js as the language and Express as the framework",
+        "Components section does NOT list external databases, caches, or message queues",
+        "Fault Domains table includes HTTP Server entries for connectivity, latency, errors, and capacity",
+        "Spans table includes at least one OOB category span for HTTP",
+        "Metrics table includes at least 3 metric entries",
+        "Logs table has at least 1 log signal entry",
+        "Alerts and Dashboard Recommendations sections are present"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I added a new endpoint to handle order cancellations with refund logic. Re-audit for new observability gaps. The service is at examples/python/fastapi-celery/",
+      "app": "examples/python/fastapi-celery",
+      "expected_output": "Existing .observe/inventory.md updated with new signals for cancellation/refund, preserving existing entries",
+      "expectations": [
+        "inventory.md file exists and was updated (not created from scratch)",
+        "New SLI entries related to cancellation or refund are present in the SLI Definitions table",
+        "New signal entries with blank Status appear for the cancellation/refund domain",
+        "A last-updated date or changelog comment is present",
+        "Redis component is still listed in the Components table",
+        "Celery component is still listed in the Components table"
+      ]
+    }
+  ]
+}
