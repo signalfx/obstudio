@@ -5,7 +5,7 @@
       "id": 1,
       "prompt": "Make this Express app fully observable. The service is at examples/node/express-basic/",
       "app": "examples/node/express-basic",
-      "expected_output": "Full lifecycle: audit creates inventory, instrument adds OTel, verify confirms telemetry, provision creates dashboards",
+      "expected_output": "Full lifecycle: audit creates inventory, instrument adds OTel, verify confirms telemetry",
       "expectations": [
         ".observe/inventory.md is created with signal tables",
         "OpenTelemetry packages are added to package.json",

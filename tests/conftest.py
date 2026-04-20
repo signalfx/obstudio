@@ -30,10 +30,8 @@ GOLDEN_IDS = [
 CHARS_PER_TOKEN = 4
 
 SKILL_TOKEN_BUDGETS = {
-    "splunk-audit": 4000,
-    "splunk-instrument": 2500,
-    "splunk-verify": 3500,
-    "splunk-provision": 2500,
+    "splunk-audit": 2500,
+    "splunk-instrument": 2300,
     "splunk-observe": 1500,
 }
 

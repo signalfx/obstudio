@@ -5,21 +5,21 @@ validate telemetry during development. Includes AI agent skills that
 audit codebases and add OpenTelemetry instrumentation automatically.
 
 ```
-  AUDIT           INSTRUMENT      VERIFY          PROVISION
- ┌──────┐        ┌──────┐       ┌──────┐        ┌──────┐
- │ Scan │  ───>  │ Code │ ───>  │ Test │  ───>  │ Ship │
- │ Gaps │        │ OTel │       │  Run │        │  IaC │
- └──────┘        └──────┘       └──────┘        └──────┘
-  /splunk-audit   /splunk-instrument  /splunk-verify   /splunk-provision
+  AUDIT           INSTRUMENT      VERIFY
+ ┌──────┐        ┌──────┐       ┌──────┐
+ │ Scan │  ───>  │ Code │ ───>  │ Test │
+ │ Gaps │        │ OTel │       │  Run │
+ └──────┘        └──────┘       └──────┘
+  /splunk-audit   /splunk-instrument  /splunk-verify
 
-                   /splunk-observe (chains all four)
+                /splunk-observe (chains all three)
 ```
 
 ---
 
 ## Commands
 
-5 slash commands that map to the observability lifecycle. Each one
+4 slash commands that map to the observability lifecycle. Each one
 activates the right skill automatically.
 
 | What you're doing | Command | Key principle |
@@ -27,7 +27,6 @@ activates the right skill automatically.
 | Find observability gaps | `/splunk-audit` | Measure before you instrument |
 | Add OpenTelemetry code | `/splunk-instrument` | Auto + custom instrumentation |
 | Validate telemetry flows | `/splunk-verify` | Evidence over assumption |
-| Generate dashboards & alerts | `/splunk-provision` | Infrastructure as code |
 | Run the full pipeline | `/splunk-observe` | End-to-end in one command |
 
 Skills also activate with natural language -- "instrument this service
@@ -85,7 +84,6 @@ Or use individual skills:
 /splunk-audit          # analyze gaps only
 /splunk-instrument     # add OTel code (requires .observe/inventory.md)
 /splunk-verify         # validate telemetry (requires instrumented code)
-/splunk-provision      # generate Terraform/alerts (requires verified signals)
 ```
 
 See [docs/examples.md](docs/examples.md) for more prompt examples.
@@ -108,7 +106,7 @@ Programmatic entry points:
 
 ---
 
-## All 5 Skills
+## All 4 Skills
 
 The commands above are the entry points. Each skill is a structured
 workflow with steps, verification gates, and red flags. They follow the
@@ -133,17 +131,11 @@ anatomy.
 |---|---|---|
 | [splunk-verify](skills/splunk-verify/SKILL.md) | Start the Observer collector, exercise service APIs, and check traces and metrics against the inventory | Instrumentation is done and you need evidence it works |
 
-### Ship -- Dashboards and alerts
-
-| Skill | What It Does | Use When |
-|---|---|---|
-| [splunk-provision](skills/splunk-provision/SKILL.md) | Generate Terraform dashboards, SignalFx detectors, and alert rule definitions from verified signals | Signals are verified and you need production monitoring |
-
 ### Orchestrate -- End-to-end
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-observe](skills/splunk-observe/SKILL.md) | Chain audit → instrument → verify → provision in sequence | You want full observability in one command |
+| [splunk-observe](skills/splunk-observe/SKILL.md) | Chain audit → instrument → verify in sequence | You want full observability in one command |
 
 ---
 
@@ -170,15 +162,12 @@ All skills operate on the same `.observe/` directory:
 
 ```
 .observe/
-├── inventory.md          # SLI definitions, signal tables (Spans/Metrics/Logs), components, fault domains
-├── terraform/            # Splunk O11y Cloud dashboards and detectors
-└── alerts/               # Prometheus, Grafana, PagerDuty alert rules
+└── inventory.md          # SLI definitions, signal tables (Spans/Metrics/Logs), components, fault domains
 ```
 
-- `/splunk-audit` creates it (SLI definitions, signal tables, placeholders for terraform/alerts)
+- `/splunk-audit` creates it (SLI definitions, signal tables)
 - `/splunk-instrument` updates the Status column in Spans, Metrics, and Logs tables
 - `/splunk-verify` updates the Verified column in Spans, Metrics, and Logs tables
-- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 10-11
 
 ---
 
@@ -192,7 +181,6 @@ obstudio/
 │   ├── splunk-audit/         #   /splunk-audit
 │   ├── splunk-instrument/    #   /splunk-instrument
 │   ├── splunk-verify/        #   /splunk-verify
-│   ├── splunk-provision/     #   /splunk-provision
 │   ├── splunk-observe/       #   /splunk-observe
 │   └── references/    #   Shared language guides and reference material
 ├── tests/             # Skill tests and LLM-based eval runner

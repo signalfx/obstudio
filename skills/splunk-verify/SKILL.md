@@ -1,5 +1,6 @@
 ---
-name: splunk-verify
+
+## name: splunk-verify
 description: >-
   Validate that instrumented telemetry is actually flowing by starting
   the Observer collector, exercising the service APIs, and checking
@@ -12,7 +13,6 @@ metadata:
   author: splunk-inc
   version: 0.0.1
   category: observability
----
 
 # Verify -- Telemetry Validation
 
@@ -49,11 +49,11 @@ the user to run `/splunk-audit` and `/splunk-instrument` first.
 
 1. Read `.observe/inventory.md`.
 2. Parse the Spans, Metrics, and Logs tables. Extract rows where
-   Status=OK.
+  Status=OK.
 3. Build a checklist of Signal Names to validate, grouped by signal
-   type (spans, metrics, logs).
+  type (spans, metrics, logs).
 4. If no Status=OK rows across any table, stop: "No instrumented
-   signals to verify."
+  signals to verify."
 
 ### Step 2 -- Start Observer
 
@@ -78,13 +78,13 @@ Clear stale data: `curl -s -X DELETE http://localhost:3000/api/data`.
 start the collector:
 
 1. Build observer if the binary does not exist:
-   ```
+  ```
    make build
-   ```
+  ```
 2. Start the collector in the background:
-   ```
+  ```
    ./build/obstudio
-   ```
+  ```
 3. Wait until `http://localhost:3000/api/query/stats` responds.
 4. Clear any stale data: `curl -s -X DELETE http://localhost:3000/api/data`.
 
@@ -107,10 +107,10 @@ Use the project's existing run command (Makefile, `uv run`, `go run`,
 For each endpoint / operation identified in the inventory:
 
 1. Determine method, path, and a minimal valid payload from the route
-   definitions.
+  definitions.
 2. Fire the request using `curl`.
-   - One happy-path call per CRUD operation.
-   - One error-path call (e.g., GET a non-existent resource for 404).
+  - One happy-path call per CRUD operation.
+  - One error-path call (e.g., GET a non-existent resource for 404).
 3. Wait 3 seconds after the batch for the SDK to export.
 
 ### Step 5 -- Validate Spans
@@ -119,15 +119,15 @@ Query the REST API to list traces, then check each span from the
 Spans table:
 
 1. `GET /api/query/traces?serviceName=<service-name>` -- confirm
-   traces exist.
+  traces exist.
 2. For each Signal Name in the Spans table with Status=OK, fetch
-   trace detail via `GET /api/query/traces/{traceId}`:
-   - **OOB spans**: root span matches expected HTTP method + route.
-   - **Custom spans**: child spans for custom instrumentation are
-     present.
-   - **Span attributes** match OTel semantic conventions.
-   - **Error spans** have `status.code == ERROR` and recorded
-     exceptions.
+  trace detail via `GET /api/query/traces/{traceId}`:
+  - **OOB spans**: root span matches expected HTTP method + route.
+  - **Custom spans**: child spans for custom instrumentation are
+  present.
+  - **Span attributes** match OTel semantic conventions.
+  - **Error spans** have `status.code == ERROR` and recorded
+  exceptions.
 
 Future MCP: once MCP query tools are operational, use
 `observer_traces_overview` and `observer_trace_detail` instead.
@@ -138,16 +138,16 @@ Query the REST API to list metrics, then inspect each entry from the
 Metrics table:
 
 1. `GET /api/query/metrics?serviceName=<service-name>` -- list all
-   metrics.
+  metrics.
 2. For each Signal Name in the Metrics table with Status=OK:
-   - `GET /api/query/metrics?metricName=<signal-name>&serviceName=<svc>`
-   - Confirm `dataPointCount >= 1`.
-   - Confirm metric type matches the Type column (Counter, Histogram,
-     Gauge).
-   - For Derived-category metrics, verify the backend is computing
-     them from span data.
+  - `GET /api/query/metrics?metricName=<signal-name>&serviceName=<svc>`
+  - Confirm `dataPointCount >= 1`.
+  - Confirm metric type matches the Type column (Counter, Histogram,
+  Gauge).
+  - For Derived-category metrics, verify the backend is computing
+  them from span data.
 3. Verify OOB-category metrics exist (e.g.,
-   `http.server.duration`, `http.server.active_requests`).
+  `http.server.duration`, `http.server.active_requests`).
 
 Future MCP: once MCP query tools are operational, use
 `observer_metrics_overview` and `observer_metric_detail` instead.
@@ -155,6 +155,7 @@ Future MCP: once MCP query tools are operational, use
 ### Step 7 -- Validate Stats
 
 Query `GET /api/query/stats` and confirm:
+
 - Traces exist for the expected service name.
 - `spanCount > 0`, `traceCount > 0`.
 - Metric count > 0 if metrics are expected.
@@ -165,7 +166,7 @@ For each signal row across the Spans, Metrics, and Logs tables in
 `.observe/inventory.md`:
 
 1. If the Signal Name was found (span matched, metric matched with
-   `dataPointCount >= 1`, or log event confirmed), set **Verified**
+  `dataPointCount >= 1`, or log event confirmed), set **Verified**
    to `OK` in the appropriate signal table.
 2. If expected but not found, leave Verified blank and add a comment.
 3. Present a summary:
@@ -185,7 +186,7 @@ After verification is complete, prompt the user before shutting down:
 
 > "The service is running and telemetry is flowing. You can view
 > traces and metrics in the Observer dashboard at
-> http://localhost:3000. Take a look and let me know when you're
+> [http://localhost:3000](http://localhost:3000). Take a look and let me know when you're
 > done -- I'll shut down the test harness."
 
 Do **not** kill the service process until the user confirms they are
@@ -195,7 +196,7 @@ Once the user confirms, tear down:
 
 1. Kill the application process: `lsof -ti :<app-port> | xargs kill`.
 2. Clear the Observer store so the next run starts fresh:
-   `curl -s -X DELETE http://localhost:3000/api/data`. The MCP
+  `curl -s -X DELETE http://localhost:3000/api/data`. The MCP
    server is never brought down between runs, so stale data from
    this session will pollute the next verification if not cleared.
 3. Clean up temporary data (e.g., SQLite DBs created during the run).
@@ -211,6 +212,7 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 **User says:** "Check if my traces are flowing"
 
 **Actions:**
+
 1. Read inventory: 3 Spans, 6 Metrics, 1 Log with Status=OK
 2. Confirm MCP server is running via `GET /api/query/stats`
 3. Clear stale data via `DELETE /api/data`
@@ -227,6 +229,7 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 **User says:** "Validate my instrumentation"
 
 **Actions:**
+
 1. Read inventory: 2 Spans, 4 Metrics with Status=OK
 2. Exercise APIs, query Observer
 3. Spans verified, but Custom metric `cache.hit_ratio` missing (dataPointCount=0)
@@ -236,13 +239,15 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 
 ## Common Rationalizations
 
-| Rationalization | Reality |
-|---|---|
-| "I need to build the binary first" | If the MCP server is running, it *is* the collector. Building and spawning a second instance causes port conflicts and wastes time. Check `GET /api/query/stats` before reaching for `make build`. |
-| "The spans are in the code, they must be there" | Code presence is not proof. Spans must appear in the collector with correct attributes. |
-| "Verification takes too long" | Manual checking misses attribute errors and wrong metric types. Automation catches what eyes miss. |
-| "Metrics will show up eventually" | If dataPointCount is 0 after exercising the API, the wiring is wrong. Waiting will not fix a code bug. |
-| "I'll just check the Observer UI manually" | Manual spot-checks miss missing child spans, wrong status codes, and uncovered endpoints. |
+
+| Rationalization                                 | Reality                                                                                                                                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "I need to build the binary first"              | If the MCP server is running, it *is* the collector. Building and spawning a second instance causes port conflicts and wastes time. Check `GET /api/query/stats` before reaching for `make build`. |
+| "The spans are in the code, they must be there" | Code presence is not proof. Spans must appear in the collector with correct attributes.                                                                                                            |
+| "Verification takes too long"                   | Manual checking misses attribute errors and wrong metric types. Automation catches what eyes miss.                                                                                                 |
+| "Metrics will show up eventually"               | If dataPointCount is 0 after exercising the API, the wiring is wrong. Waiting will not fix a code bug.                                                                                             |
+| "I'll just check the Observer UI manually"      | Manual spot-checks miss missing child spans, wrong status codes, and uncovered endpoints.                                                                                                          |
+
 
 ## Red Flags
 
@@ -272,10 +277,11 @@ also kill observer: `lsof -ti :3000 | xargs kill`.
 
 ## Verification
 
-- [ ] REST API (`/api/query/stats`) checked before attempting to build/start collector
-- [ ] Coverage percentage reported to user per signal type and total
-- [ ] Observer REST API queried for every signal in Spans, Metrics, and Logs tables
-- [ ] Verified column updated in the appropriate signal table in `.observe/inventory.md`
-- [ ] User offered dashboard review before teardown
-- [ ] Application process killed after user confirms
-- [ ] Temporary data cleaned up
+- REST API (`/api/query/stats`) checked before attempting to build/start collector
+- Coverage percentage reported to user per signal type and total
+- Observer REST API queried for every signal in Spans, Metrics, and Logs tables
+- Verified column updated in the appropriate signal table in `.observe/inventory.md`
+- User offered dashboard review before teardown
+- Application process killed after user confirms
+- Temporary data cleaned up
+

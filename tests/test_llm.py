@@ -161,7 +161,7 @@ def _get_client(model_id: str) -> BedrockModel:
 _NONE_RUBRIC = (
     "The response should NOT activate any observability skill "
     "(splunk-audit, splunk-instrument, splunk-verify, "
-    "splunk-provision, splunk-observe). It should treat this "
+    "splunk-observe). It should treat this "
     "as a general coding request."
 )
 
@@ -202,14 +202,6 @@ TRIGGER_CASES = [
     pytest.param("Are my metrics actually being exported?", _skill_rubric("splunk-verify"), id="verify-metrics-working", marks=_R),
     pytest.param("Validate the instrumentation I just added", _skill_rubric("splunk-verify"), id="verify-validate", marks=_R),
     pytest.param("Run the linter on this file", _NONE_RUBRIC, id="verify-neg-linting"),
-
-    # ── splunk-provision (smoke: obvious + 1 negative) ──────────
-    pytest.param("/splunk-provision", _skill_rubric("splunk-provision"), id="provision-obvious"),
-    pytest.param("Generate Terraform dashboards for this service", _skill_rubric("splunk-provision"), id="provision-terraform", marks=_R),
-    pytest.param("Create alert rules for my verified signals", _skill_rubric("splunk-provision"), id="provision-alerts", marks=_R),
-    pytest.param("Build monitoring configuration from the inventory", _skill_rubric("splunk-provision"), id="provision-monitoring", marks=_R),
-    pytest.param("Set up SignalFx detectors for my service", _skill_rubric("splunk-provision"), id="provision-detectors", marks=_R),
-    pytest.param("Create a new database migration", _NONE_RUBRIC, id="provision-neg-database"),
 
     # ── splunk-observe (smoke: obvious only) ─────────────────────
     pytest.param("/splunk-observe", _skill_rubric("splunk-observe"), id="observe-obvious"),

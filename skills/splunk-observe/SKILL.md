@@ -1,13 +1,13 @@
 ---
 name: splunk-observe
 description: >-
-  Full observability workflow -- audit, instrument, verify, and
-  provision. Chains the four sub-skills in sequence. Use when the user
-  types /splunk-observe, asks for "end-to-end observability", "make this
+  Full observability workflow -- audit, instrument, and verify. Chains
+  the three sub-skills in sequence. Use when the user types
+  /splunk-observe, asks for "end-to-end observability", "make this
   service observable", "add full monitoring", or "instrument and verify
   this service". Do NOT use if only one phase is needed -- use the
-  individual skill (/splunk-audit, /splunk-instrument, /splunk-verify,
-  or /splunk-provision) instead.
+  individual skill (/splunk-audit, /splunk-instrument, or
+  /splunk-verify) instead.
 metadata:
   author: splunk-inc
   version: 0.0.1
@@ -19,7 +19,7 @@ metadata:
 ## Overview
 
 Run the complete observability workflow by invoking `/splunk-audit`,
-`/splunk-instrument`, `/splunk-verify`, and `/splunk-provision` in sequence. Detects which
+`/splunk-instrument`, and `/splunk-verify` in sequence. Detects which
 sub-skills need to run based on the current state of
 `.observe/inventory.md` and skips completed phases.
 
@@ -30,8 +30,8 @@ sub-skills need to run based on the current state of
 - Starting from scratch on a new service
 
 **When NOT to use:** If the user wants a specific phase only, use the
-individual skill directly (`/splunk-audit`, `/splunk-instrument`, `/splunk-verify`, or
-`/splunk-provision`).
+individual skill directly (`/splunk-audit`, `/splunk-instrument`, or
+`/splunk-verify`).
 
 ## Process
 
@@ -41,16 +41,13 @@ Check the current state of `.observe/inventory.md` by inspecting the
 Spans, Metrics, and Logs tables:
 
 1. **Missing** -- no `.observe/` directory exists.
-   Run: audit -> instrument -> verify -> provision.
+   Run: audit -> instrument -> verify.
 2. **Exists, has blank Status rows in any signal table** -- audit done,
    gaps remain.
-   Run: instrument -> verify -> provision.
+   Run: instrument -> verify.
 3. **All Status=OK across all signal tables, has blank Verified rows**
    -- instrumented but not validated.
-   Run: verify -> provision.
-4. **All Verified=OK across all signal tables, no `.tf` files** --
-   verified but not provisioned.
-   Run: provision.
+   Run: verify.
 
 ### Step 2 -- Execute Skills
 
@@ -63,9 +60,6 @@ For each skill in the determined sequence:
 4. **Before `/splunk-verify`**: prompt:
    > "Instrumentation complete. Want me to validate telemetry against
    > the Observer?"
-5. **Before `/splunk-provision`**: prompt:
-   > "Telemetry verified. Want me to generate Terraform dashboards,
-   > detectors, and alert rules?"
 
 Only proceed to the next skill if the user confirms. If the user
 declines at any point, stop and summarize what was completed.
@@ -77,7 +71,6 @@ After all skills have run (or the user stopped early), present:
 - What was audited (components, fault domains, SLI count)
 - What was instrumented (KPIs implemented, SDK init location)
 - What was verified (coverage percentage)
-- What was provisioned (dashboard/detector/alert counts)
 - Location of all artifacts in `.observe/`
 
 ## Examples
@@ -93,10 +86,8 @@ After all skills have run (or the user stopped early), present:
 4. `/splunk-instrument`: install OTel libraries, create `otel_setup.py`, set all Status=OK
 5. Prompt user: "Verify telemetry?" -- user confirms
 6. `/splunk-verify`: start app, exercise APIs, confirm all signals flowing, set Verified=OK
-7. Prompt user: "Generate Terraform?" -- user confirms
-8. `/splunk-provision`: generate dashboards, detectors, alerts
 
-**Result:** Service goes from zero to fully observable with IaC artifacts in one session.
+**Result:** Service goes from zero to fully observable in one session.
 
 ### Example 2: Resume from partial state
 
@@ -105,14 +96,14 @@ After all skills have run (or the user stopped early), present:
 **Actions:**
 1. `.observe/inventory.md` exists, 4 blank Status rows across Metrics and Logs tables -- skip audit
 2. `/splunk-instrument`: implement 4 remaining signal gaps
-3. Prompt user for verify and provision as usual
+3. Prompt user for verify as usual
 
 **Result:** Pipeline resumes from where it left off.
 
 ## Red Flags
 
 - Skipping the audit phase when `.observe/inventory.md` does not exist
-- Running all four phases without prompting the user between each
+- Running all three phases without prompting the user between each
 - State detection incorrectly identifies completed phases
 - Final summary omits a phase that was executed
 - User declines a phase but the orchestrator continues anyway

@@ -29,7 +29,7 @@ this skill is read-only analysis.
 - Starting observability work on a new or existing service
 - Assessing current instrumentation coverage
 - Generating the `.observe/inventory.md` that downstream skills
-  (`/splunk-instrument`, `/splunk-verify`, `/splunk-provision`) consume
+  (`/splunk-instrument`, `/splunk-verify`) consume
 - Re-auditing after code changes to catch new gaps
 
 **When NOT to use:** If `.observe/inventory.md` already exists and you
@@ -68,20 +68,12 @@ Identify all components the service interacts with and its internal
 layers.
 
 **External components** -- search for client libraries, connection
-strings, driver imports:
-- Databases (SQL, NoSQL, key-value)
-- Caches (Redis, Memcached)
-- Message queues / brokers (Kafka, RabbitMQ, Redis pub/sub, NATS)
-- External HTTP/gRPC APIs
-- File storage (S3, local FS, GCS)
-- Auth providers (OAuth, LDAP, SAML)
+strings, driver imports for databases, caches, message queues,
+external APIs, file storage, and auth providers.
 
-**Internal layers** -- identify architectural tiers:
-- Presentation (HTTP handlers, gRPC servers, CLI)
-- Business logic (services, use cases, domain)
-- Data access (repositories, DAOs, ORM models)
-- Background workers (cron, schedulers, consumers)
-- Middleware (auth, logging, rate limiting)
+**Internal layers** -- identify architectural tiers: presentation
+(HTTP/gRPC), business logic, data access, background workers,
+and middleware.
 
 Present a component interaction list or diagram. Use a mermaid diagram
 when there are 3+ external components.
@@ -98,11 +90,8 @@ For each component from Step 2, assess:
 - **Capacity**: pool exhaustion, memory pressure, queue growth, disk full
 - **Availability**: single point of failure, failover path
 
-Cross-cutting SRE concerns:
-- Cascading failures, retry storms, thundering herd
-- Poison pill messages, head-of-line blocking
-- Stale state, split brain, clock skew
-- Cold start, deployment rollback impact
+Also consider cross-cutting SRE concerns: cascading failures, retry
+storms, poison pill messages, stale state, cold start.
 
 Present fault domains grouped by component as a table.
 
@@ -125,59 +114,11 @@ Also identify business-logic SLIs specific to the domain.
 Read [signal-mapping-guide.md](../references/signal-mapping-guide.md)
 for guidance on mapping SLIs to OTel signal types.
 
-Build four tables: an SLI Definitions table and one table per signal
-type (Spans, Metrics, Logs).
-
-#### 5a. SLI Definitions
-
-| Column        | Description                                           |
-|---------------|-------------------------------------------------------|
-| SLI           | Name of the Service Level Indicator                   |
-| Golden Signal | Latency / Traffic / Errors / Saturation               |
-| Component     | Which component it belongs to                         |
-| Target        | Threshold target (e.g., `p99 < 500ms`) or `--`       |
-
-#### 5b. Spans
-
-| Column      | Description                                            |
-|-------------|--------------------------------------------------------|
-| Signal Name | Span name pattern (e.g., `HTTP {method} {route}`)     |
-| Category    | `OOB` (auto-instrumentation) or `Custom` (hand-written)|
-| Component   | Which component it belongs to                          |
-| SLIs        | Comma-separated SLI names this span feeds              |
-| Status      | `OK` if instrumented, blank if missing                 |
-| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
-
-#### 5c. Metrics
-
-| Column      | Description                                            |
-|-------------|--------------------------------------------------------|
-| Signal Name | Metric name (e.g., `http.server.request.duration`)     |
-| Type        | Counter / Histogram / Gauge / UpDownCounter            |
-| Category    | `OOB` / `Custom` / `Derived`                          |
-| Component   | Which component it belongs to                          |
-| SLIs        | Comma-separated SLI names this metric feeds            |
-| Unit        | Metric unit (e.g., `s`, `{requests}`, `{bytes}`)      |
-| Status      | `OK` if instrumented, blank if missing                 |
-| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
-
-#### 5d. Logs
-
-| Column      | Description                                            |
-|-------------|--------------------------------------------------------|
-| Signal Name | Log event name pattern                                 |
-| Category    | `OOB` or `Custom`                                      |
-| Component   | Which component it belongs to                          |
-| SLIs        | Comma-separated SLI names this log feeds               |
-| Level       | Log level (ERROR, WARN, INFO, DEBUG)                   |
-| Status      | `OK` if instrumented, blank if missing                 |
-| Verified    | Blank initially; set to `OK` by `/splunk-verify`       |
-
-#### Categories
-
-- **OOB**: out-of-the-box from auto-instrumentation libraries, zero custom code
-- **Custom**: requires hand-written instrumentation code
-- **Derived**: backend computes from span data (metrics only); no explicit emission needed
+Build four tables using the schema from
+[observability-template.md](../references/observability-template.md):
+SLI Definitions, Spans, Metrics, and Logs. Each signal row must include
+Signal Name, Category (`OOB`/`Custom`/`Derived`), Component, SLIs,
+Status (blank for gaps, `OK` for instrumented), and Verified (blank).
 
 Present coverage summaries per signal type. Highlight the gap count as
 the implementation scope.
@@ -185,7 +126,7 @@ the implementation scope.
 ### Step 6 -- Generate or Update .observe/ Directory
 
 This directory is the single output artifact of the audit skill and the
-input for downstream skills (`/splunk-instrument`, `/splunk-verify`, `/splunk-provision`).
+input for downstream skills (`/splunk-instrument`, `/splunk-verify`).
 
 #### If `.observe/inventory.md` already exists
 
@@ -219,8 +160,6 @@ Create the `.observe/` directory at the repository root:
 .observe/
   inventory.md              # Audit results: overview, components, fault
                             #   domains, SLIs, signal tables, configurability
-  terraform/                # (placeholder) Splunk O11y Cloud terraform
-  alerts/                   # (placeholder) Alert rule definitions
 ```
 
 Create `.observe/inventory.md` with sections:
@@ -233,39 +172,12 @@ Create `.observe/inventory.md` with sections:
 7. Metrics (from Step 5)
 8. Logs (from Step 5)
 9. Configurability
-10. Alerts (placeholder -- populated by `/splunk-provision`)
-11. Dashboard Recommendations (placeholder -- populated by `/splunk-provision`)
-
-Create `terraform/` and `alerts/` directories with brief READMEs noting
-they will be populated by the `/splunk-provision` skill.
 
 ## Examples
 
-### Example 1: New Flask service
+**New service:** User says "Scan this Flask app" -> detect Python+Flask, load language guide, find SQLAlchemy+Redis+3 endpoints, map fault domains, identify 8 SLIs, generate 12 signals (all Status blank). Result: `.observe/` created.
 
-**User says:** "Scan this Flask app for observability gaps"
-
-**Actions:**
-1. Detect Python + Flask from `requirements.txt`
-2. Load `skills/references/languages/python.md`
-3. Find SQLAlchemy, Redis, and 3 HTTP endpoints
-4. Map fault domains (DB connectivity/latency, cache availability, HTTP errors)
-5. Identify 8 SLIs across 4 golden signals
-6. Generate signal tables: 3 Spans (2 OOB, 1 Custom), 8 Metrics (3 OOB, 2 Derived, 3 Custom), 1 Log (Custom)
-
-**Result:** `.observe/` directory created with `inventory.md` (12 signals, all Status blank), `terraform/`, and `alerts/` placeholders.
-
-### Example 2: Re-audit after adding a Kafka consumer
-
-**User says:** "I added a Kafka consumer, re-audit for new gaps"
-
-**Actions:**
-1. Read existing `.observe/inventory.md` (10 signals, 8 Status=OK)
-2. Detect new `confluent-kafka` dependency
-3. Add new SLIs for Kafka (consumer lag, processing latency, error rate, partition saturation)
-4. Add 4 new signals across Spans and Metrics tables, preserving existing Status values
-
-**Result:** Inventory updated with 4 new blank-Status signals. Changelog comment added.
+**Re-audit:** User says "I added Kafka, re-audit" -> read existing inventory (10 signals, 8 OK), detect new dependency, add 4 new blank-Status signals preserving existing Status values. Result: inventory updated with changelog.
 
 ## Red Flags
 
@@ -278,17 +190,11 @@ they will be populated by the `/splunk-provision` skill.
 
 ## Troubleshooting
 
-**Error:** No dependency manifest found (no `requirements.txt`, `go.mod`, etc.)
-**Cause:** The repository uses an uncommon layout or monorepo structure.
-**Solution:** Ask the user which subdirectory contains the service, then re-scan from that root.
+**No dependency manifest found:** Ask the user which subdirectory contains the service, then re-scan from that root.
 
-**Error:** Inventory already exists but user ran `/splunk-audit` again
-**Cause:** User may want a re-audit or may have run the wrong command.
-**Solution:** Follow the merge path (Step 6, "If `.observe/inventory.md` already exists"). Preserve existing Status/Verified values and append new signals.
+**Inventory already exists:** Follow the merge path (Step 6). Preserve existing Status/Verified values and append new signals.
 
-**Error:** Zero signals identified despite external dependencies
-**Cause:** Dependencies detected but no active usage found in code (e.g., imported but unused).
-**Solution:** Check for dynamic imports, factory patterns, or configuration-driven clients. Ask the user to confirm which components are actively used.
+**Zero signals despite dependencies:** Check for dynamic imports or config-driven clients. Ask the user to confirm which components are actively used.
 
 ## Verification
 
@@ -297,5 +203,4 @@ they will be populated by the `/splunk-provision` skill.
 - [ ] Spans, Metrics, and Logs tables have entries for every component boundary found in Step 2
 - [ ] Every signal row has an SLIs column referencing at least one SLI
 - [ ] Architecture diagram is present and matches discovered components
-- [ ] `terraform/` and `alerts/` directories exist
 - [ ] Gap count (blank Status rows across all signal tables) is reported to the user

@@ -4,8 +4,7 @@ Use this template when generating `.observe/inventory.md` in the `/splunk-audit`
 skill. Replace all `{placeholder}` values with actual data from the
 analysis. Remove sections that do not apply.
 
-Sections 1-8 are populated by `/splunk-audit`. Section 10 (Alerts) and Section 11
-(Dashboard Recommendations) are populated by `/splunk-provision`.
+Sections 1-9 are populated by `/splunk-audit`.
 
 ---
 
@@ -25,8 +24,6 @@ Sections 1-8 are populated by `/splunk-audit`. Section 10 (Alerts) and Section 1
 7. [Metrics](#metrics)
 8. [Logs](#logs)
 9. [Configurability](#configurability)
-10. [Alerts](#alerts)
-11. [Dashboard Recommendations](#dashboard-recommendations)
 
 ---
 
@@ -165,50 +162,4 @@ OTEL_SDK_DISABLED=true ./your-service
 When disabled, OTel API calls (spans, metrics, logs) become no-ops with
 negligible performance impact.
 
----
-
-## Alerts
-
-| Alert Name | SLI | Condition | Severity | Runbook |
-|------------|-----|-----------|----------|---------|
-| {alert_name} | {kpi_name} | {threshold expression} | {Critical/Warning/Info} | {brief response action} |
-
-### Severity Definitions
-
-- **Critical**: Page on-call immediately. Service is down, data loss risk,
-  or complete functionality loss.
-- **Warning**: Create a ticket. Degraded performance, approaching resource
-  limits, or partial failures.
-- **Info**: Dashboard-only. Notable events for awareness, not immediately
-  actionable.
-
----
-
-## Dashboard Recommendations
-
-### Service Health
-
-- Request rate by endpoint (line chart)
-- Error rate by status code (line chart)
-- Latency percentiles p50/p95/p99 (line chart)
-- Active connections (gauge)
-
-### {Primary Data Store} Health
-
-- Operation latency p95 (line chart)
-- Connection pool utilization (gauge)
-- Error rate by operation (line chart)
-
-### Business Metrics
-
-- {domain-specific metric 1} over time (line chart)
-- {domain-specific metric 2} current value (single stat)
-- {domain-specific metric 3} by category (bar chart)
-
-### System Resources
-
-- Memory usage: heap, stack (line chart)
-- CPU usage (line chart)
-- Goroutine/thread count (line chart)
-- GC pause time (line chart)
 ```

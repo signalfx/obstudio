@@ -1,5 +1,6 @@
 ---
-name: splunk-instrument
+
+## name: splunk-instrument
 description: >-
   Implement OpenTelemetry instrumentation for a service based on its
   .observe/inventory.md. Adds auto-instrumentation libraries and custom
@@ -11,7 +12,6 @@ metadata:
   author: splunk-inc
   version: 0.0.1
   category: observability
----
 
 # Instrument -- OTel Implementation
 
@@ -40,18 +40,18 @@ instead.
 ### Step 1 -- Detect Language and Load Guide
 
 1. Detect the primary language from project files (`go.mod`,
-   `requirements.txt`, `package.json`, etc.).
+  `requirements.txt`, `package.json`, etc.).
 2. Read `skills/references/languages/<detected>.md`.
-   Only load the matching language guide.
+  Only load the matching language guide.
 3. Check for existing OTel SDK initialization (imports, setup files).
 
 ### Step 2 -- Read Inventory
 
 1. Read `.observe/inventory.md`.
 2. Parse the Spans, Metrics, and Logs tables. Identify rows where
-   Status is blank across all three tables.
+  Status is blank across all three tables.
 3. If no blank rows exist, report "All signals are instrumented" and
-   stop.
+  stop.
 4. Group gaps by component for ordered implementation.
 
 ### Step 3 -- Implement Instrumentation
@@ -59,14 +59,14 @@ instead.
 For each signal with blank Status:
 
 1. **OOB-category signals**: consult the language guide's
-   auto-instrumentation library map.
-   - Install the package via the project's dependency manager.
-   - Register the instrumentation in the SDK init file.
+  auto-instrumentation library map.
+  - Install the package via the project's dependency manager.
+  - Register the instrumentation in the SDK init file.
 2. **Derived-category metrics**: no explicit emission needed. The
-   backend computes these from span data. Ensure the corresponding
+  backend computes these from span data. Ensure the corresponding
    OOB span is instrumented.
 3. **Custom-category signals**: generate hand-written spans, metrics,
-   or log events following the language guide's patterns.
+  or log events following the language guide's patterns.
 
 #### Implementation Rules
 
@@ -75,38 +75,38 @@ For each signal with blank Status:
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
 - Do not create spans for trivial helpers. Only span real diagnostic
-  boundaries.
+boundaries.
 - Set span status to ERROR and call recordException on failed operations.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
-  for span and metric naming and attributes for domains where such semantic
-  conventions are defined.
+for span and metric naming and attributes for domains where such semantic
+conventions are defined.
 - For domains where OTel semantic conventions exist emit required spans and metrics only, 
-  with required attributes only. Do not emit spans or metrics that are marked optional,
-  do not include attributes that are marked optional. Do not invent custom spans, 
-  metrics or attributes in domains where OTel semantic conventions exist.
+with required attributes only. Do not emit spans or metrics that are marked optional,
+do not include attributes that are marked optional. Do not invent custom spans, 
+metrics or attributes in domains where OTel semantic conventions exist.
 - For custom attribute names use `{domain}.{noun}.{adjective}` format.
 - Span names must be low-cardinality (no IDs, no variable path segments).
 - Metric attributes must avoid high cardinality.
 - Preserve existing env-var patterns for telemetry config instead of
-  hardcoding endpoints.
+hardcoding endpoints.
 - If the app is a library, provide an opt-in setup path rather than
-  forcing SDK initialization on import.
+forcing SDK initialization on import.
 - Keep the codebase idiomatic. Match the repo's dependency manager,
-  config style, and lifecycle patterns.
+config style, and lifecycle patterns.
 - Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` 
-  or `getMeter` in hot paths.
+or `getMeter` in hot paths.
 - Create metric instruments once during startup and reuse them. Do not create 
-  instruments in hot paths.
+instruments in hot paths.
 - Metric instruments must be created with appropriate unit and description parameters.
 
 ### Step 4 -- Update Inventory
 
 1. For each implemented signal, set the Status column to `OK` in the
-   appropriate signal table (Spans, Metrics, or Logs) in
+  appropriate signal table (Spans, Metrics, or Logs) in
    `.observe/inventory.md`.
 2. Update the coverage summary lines for each signal type.
 3. Present a summary: N spans, N metrics, N logs instrumented,
-   N remaining gaps (if any).
+  N remaining gaps (if any).
 
 ### Step 5 -- Enable debugging in VS Code
 
@@ -114,11 +114,11 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 1. Check whether `.vscode/launch.json` exists.
 2. If it exists, you MUST update at least one debug configuration for this service to include:
-    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+  - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
     - `OTEL_METRIC_EXPORT_INTERVAL=1000`
     - `OTEL_BSP_SCHEDULE_DELAY=100`
 3. After editing, you MUST report:
-    - which configuration was updated
+  - which configuration was updated
     - the file path
     - whether the env vars were added or already present
 4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
@@ -131,6 +131,7 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 **User says:** "Instrument this service"
 
 **Actions:**
+
 1. Detect Python, load `languages/python.md`
 2. Read inventory: 2 blank-Status OOB spans, 1 blank-Status Custom metric
 3. Install `opentelemetry-instrumentation-flask` and `opentelemetry-instrumentation-sqlalchemy` via `pyproject.toml`
@@ -145,6 +146,7 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 **User says:** "Add the missing metrics"
 
 **Actions:**
+
 1. Detect Go, load `languages/go.md`
 2. Find existing `initOTel()` in `telemetry.go`
 3. Read inventory: 1 blank-Status OOB metric (cache), 1 blank-Status Custom metric (queue depth)
@@ -156,13 +158,13 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 ## Common Rationalizations
 
-| Rationalization | Reality |
-|---|---|
-| "Auto-instrumentation covers everything" | It covers HTTP/DB boundaries (OOB). Custom-category signals for business logic still need manual code. |
-| "This service is too small for custom metrics" | If it has an SLI, it needs a signal. Size is irrelevant. |
-| "I'll add error recording later" | Spans without `recordException` hide bugs in traces. Add it now. |
-| "Semantic conventions don't matter internally" | Non-standard names break cross-service dashboards and alerts. |
-| "One SDK init file is overkill for a small app" | Scattering init across files causes double-init bugs and makes teardown unreliable. |
+
+| Rationalization                                | Reality                                                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| "Auto-instrumentation covers everything"       | It covers HTTP/DB boundaries (OOB). Custom signals for business logic still need manual code. |
+| "I'll add error recording later"               | Spans without `recordException` hide bugs in traces. Add it now.                              |
+| "Semantic conventions don't matter internally" | Non-standard names break cross-service dashboards and alerts.                                 |
+
 
 ## Red Flags
 
@@ -176,25 +178,19 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 ## Troubleshooting
 
-**Error:** "No .observe/inventory.md found"
-**Cause:** The audit step has not been run yet.
-**Solution:** Run `/splunk-audit` first to generate the inventory.
+**No inventory found:** Run `/splunk-audit` first to generate `.observe/inventory.md`.
 
-**Error:** SDK initialized in multiple places after instrumentation
-**Cause:** Existing init was not detected (different file name, conditional import).
-**Solution:** Search for `TracerProvider`, `MeterProvider`, or SDK setup calls across the codebase before adding a new init file. Extend the existing one.
+**Duplicate SDK init:** Search for `TracerProvider`/`MeterProvider` across the codebase before adding a new init file. Extend the existing one.
 
-**Error:** App fails to start after adding auto-instrumentation
-**Cause:** Version conflict between OTel SDK and instrumentation library, or import order issue.
-**Solution:** Check that all `opentelemetry-*` packages use compatible versions. For Python, ensure `otel_setup.py` is imported before the framework starts. For Node, ensure `--require` flag loads instrumentation before app code.
+**App fails to start after instrumentation:** Check OTel package version compatibility. For Python, ensure `otel_setup.py` is imported before the framework starts. For Node, ensure `--require` loads instrumentation before app code.
 
 ## Verification
 
-- [ ] Every signal that had blank Status now shows `OK` in its table
-- [ ] SDK init file exists and is imported by the entry point
-- [ ] App compiles/starts without errors after instrumentation
-- [ ] No duplicate SDK initialization paths
-- [ ] Custom spans follow semantic conventions
-- [ ] Error paths call `recordException` and set span status to ERROR
-- [ ] Derived metrics have corresponding OOB spans instrumented
-- [ ] If `.vscode/launch.json` exists, at least one service debug config includes the required OTEL env vars
+- Every signal that had blank Status now shows `OK` in its table
+- SDK init file exists and is imported by the entry point
+- App compiles/starts without errors after instrumentation
+- No duplicate SDK initialization paths
+- Custom spans follow semantic conventions
+- Error paths call `recordException` and set span status to ERROR
+- Derived metrics have corresponding OOB spans instrumented
+- If `.vscode/launch.json` exists, at least one service debug config includes the required OTEL env vars

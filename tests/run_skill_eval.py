@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -403,6 +404,147 @@ def check_assertion(assertion: str, inventory_text: str, observe_dir: Path, app_
         if inventory_text:
             return True, "inventory.md exists with content"
         return False, "inventory.md missing or empty"
+
+    # Signal-count Status=OK checks per table: "N signals have Status=OK in Spans table"
+    status_ok_match = re.match(
+        r"(?:at least )?(\d+) signals? have status[=\s]ok in (spans?|metrics?|logs?) table",
+        a,
+    )
+    if status_ok_match:
+        expected = int(status_ok_match.group(1))
+        table_key = status_ok_match.group(2).rstrip("s").capitalize() + "s"
+        section = _extract_section(inventory_text, f"## {table_key}")
+        ok_rows = [l for l in section.split("\n") if l.strip().startswith("|") and "`" in l and "| OK" in l]
+        at_least = "at least" in a
+        if at_least and len(ok_rows) >= expected:
+            return True, f"{len(ok_rows)} Status=OK rows in {table_key} (>= {expected})"
+        if not at_least and len(ok_rows) == expected:
+            return True, f"{len(ok_rows)} Status=OK rows in {table_key}"
+        return False, f"Found {len(ok_rows)} Status=OK rows in {table_key}, expected {'at least ' if at_least else ''}{expected}"
+
+    # Total Status=OK across all tables: "at least N signals have Status=OK across all tables"
+    total_ok_match = re.match(r"at least (\d+) signals? have status[=\s]ok across all tables", a)
+    if total_ok_match:
+        expected = int(total_ok_match.group(1))
+        total_ok = 0
+        for section_key in ["## Spans", "## Metrics", "## Logs"]:
+            section = _extract_section(inventory_text, section_key)
+            total_ok += sum(1 for l in section.split("\n") if l.strip().startswith("|") and "`" in l and "| OK" in l)
+        if total_ok >= expected:
+            return True, f"{total_ok} total Status=OK rows across all tables (>= {expected})"
+        return False, f"Found {total_ok} total Status=OK rows, expected at least {expected}"
+
+    # Specific signal name Status=OK check: "signal X has Status=OK in Y table"
+    signal_ok_match = re.match(r"signal (.+?) has status[=\s]ok in (spans?|metrics?|logs?) table", a)
+    if signal_ok_match:
+        signal_name = signal_ok_match.group(1).strip()
+        table_key = signal_ok_match.group(2).rstrip("s").capitalize() + "s"
+        section = _extract_section(inventory_text, f"## {table_key}")
+        for line in section.split("\n"):
+            if signal_name in line and "| OK" in line:
+                return True, f"Signal '{signal_name}' has Status=OK in {table_key}"
+        return False, f"Signal '{signal_name}' not found with Status=OK in {table_key}"
+
+    # Auto-instrumentation configured check.
+    if "auto-instrumentation" in a and "configured" in a:
+        patterns = {
+            "flask": ["FlaskInstrumentor", "opentelemetry-instrumentation-flask", "opentelemetry.instrumentation.flask"],
+            "express": ["@opentelemetry/instrumentation-express", "ExpressInstrumentation", "instrumentation-express"],
+            "fastapi": ["FastAPIInstrumentor", "opentelemetry-instrumentation-fastapi", "opentelemetry.instrumentation.fastapi"],
+        }
+        for framework, pats in patterns.items():
+            if framework in a:
+                for pat in pats:
+                    for src in app_path.rglob("*"):
+                        if src.is_file() and src.suffix in (".py", ".js", ".ts", ".toml", ".txt", ".json") and src.stat().st_size < 100_000:
+                            try:
+                                if pat in src.read_text():
+                                    return True, f"Auto-instrumentation pattern '{pat}' found in {src.name}"
+                            except (UnicodeDecodeError, PermissionError):
+                                pass
+                return False, f"No auto-instrumentation for {framework} found"
+        return False, "No matching auto-instrumentation pattern found"
+
+    # Custom metric defined in app code.
+    if "custom metric" in a and "defined" in a:
+        metric_name_match = re.search(r"custom metric (\S+)", a)
+        if metric_name_match:
+            metric_name = metric_name_match.group(1)
+            for src in app_path.rglob("*"):
+                if src.is_file() and src.suffix in (".py", ".go", ".js", ".ts") and src.stat().st_size < 100_000:
+                    try:
+                        if metric_name in src.read_text():
+                            return True, f"Metric '{metric_name}' found in {src.name}"
+                    except (UnicodeDecodeError, PermissionError):
+                        pass
+            return False, f"Metric '{metric_name}' not found in app source"
+
+    # otelhttp / otelchi middleware wired.
+    if ("otelhttp" in a or "otelchi" in a) and ("middleware" in a or "wired" in a):
+        middleware_patterns = ["otelhttp", "otelchi", "WithRouteTag", "otel.Handler", "otel.NewHandler"]
+        for src in app_path.rglob("*.go"):
+            if src.stat().st_size < 100_000:
+                try:
+                    content = src.read_text()
+                    for pat in middleware_patterns:
+                        if pat in content:
+                            return True, f"Middleware pattern '{pat}' found in {src.name}"
+                except (UnicodeDecodeError, PermissionError):
+                    pass
+        return False, "No otelhttp/otelchi middleware found in Go source files"
+
+    # go.opentelemetry.io dependency check.
+    if "go.opentelemetry.io" in a and ("go.mod" in a or "dependencies" in a or "added" in a):
+        go_mod = app_path / "go.mod"
+        if go_mod.exists() and "go.opentelemetry.io" in go_mod.read_text():
+            return True, "go.opentelemetry.io found in go.mod"
+        return False, "go.opentelemetry.io not found in go.mod"
+
+    # Python/Flask language+framework detection.
+    if "python" in a and "language" in a:
+        if "python" in inv_lower:
+            return True, "Python listed as language"
+        return False, "Python not found as language"
+
+    if "flask" in a and "framework" in a:
+        if "flask" in inv_lower:
+            return True, "Flask listed as framework"
+        return False, "Flask not found as framework"
+
+    # SLI count (generic "at least N" pattern).
+    sli_count_match = re.match(r"sli definitions table has at least (\d+)", a)
+    if sli_count_match:
+        expected = int(sli_count_match.group(1))
+        sli_section = _extract_section(inventory_text, "## SLI Definitions")
+        rows = [l for l in sli_section.split("\n") if l.strip().startswith("|") and l.count("|") >= 4 and "---" not in l and "SLI" not in l]
+        if len(rows) >= expected:
+            return True, f"{len(rows)} SLI entries (>= {expected})"
+        return False, f"Only {len(rows)} SLI entries, expected at least {expected}"
+
+    # Spans with specific signal names (e.g., "kvstore.get", "kvstore.set").
+    if "custom span" in a and ("present" in a or "exist" in a or "found" in a):
+        spans_section = _extract_section(inventory_text, "## Spans")
+        # Extract signal names mentioned in parentheses in the assertion.
+        paren_match = re.search(r"\(([^)]+)\)", assertion)
+        if paren_match:
+            expected_names = [n.strip() for n in paren_match.group(1).split(",")]
+            found = []
+            missing = []
+            for name in expected_names:
+                if name.lower() in spans_section.lower():
+                    found.append(name)
+                else:
+                    missing.append(name)
+            if not missing:
+                return True, f"All custom spans found: {', '.join(found)}"
+            return False, f"Missing custom spans: {', '.join(missing)}"
+
+    # Persist-related metrics check.
+    if "persist" in a and "metric" in a:
+        metrics_section = _extract_section(inventory_text, "## Metrics")
+        if "persist" in metrics_section.lower():
+            return True, "Persist-related metrics found"
+        return False, "No persist-related metrics found"
 
     # Fallback: keyword search in inventory.
     keywords = [w for w in a.split() if len(w) > 4 and w.isalpha()]

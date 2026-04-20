@@ -7,7 +7,6 @@
 | splunk-audit | 97% | 100% | +-0.03 | 159s | 14,793 |
 | splunk-instrument | 71% | 71% | +0.00 | 365s | 28,848 |
 | splunk-observe | 60% | 60% | +0.00 | 546s | 52,945 |
-| splunk-provision | 62% | 71% | +-0.09 | 201s | 16,981 |
 | splunk-verify | 45% | 45% | +0.00 | 254s | 17,584 |
 
 ## Detail by Skill
@@ -155,58 +154,6 @@
 
 ---
 
-### splunk-provision
-
-#### Eval 1: flask-basic
-
-| | With Skill | Baseline |
-|---|---|---|
-| Pass rate | 3/6 (50%) | 4/6 (67%) |
-| Time | 12s | 144s |
-| Tokens | 501 | 9,180 |
-
-**Assertions (with skill):**
-
-- [FAIL] At least one .tf file is created in .observe/terraform/
-  - Evidence: No .tf files found in .observe/terraform/
-- [FAIL] Terraform files reference SignalFx or Splunk Observability provider
-  - Evidence: Could not verify assertion programmatically
-- [FAIL] A dashboard resource is defined with charts for HTTP latency, error rate, or throughput
-  - Evidence: Could not verify assertion programmatically
-- [PASS] Alert rule definitions are created in .observe/alerts/
-- [PASS] inventory.md Alerts section is populated with at least one alert entry
-- [PASS] inventory.md Dashboard Recommendations section is updated
-
-**Baseline failures:**
-
-- [FAIL] Terraform files reference SignalFx or Splunk Observability provider
-  - Evidence: Could not verify assertion programmatically
-- [FAIL] A dashboard resource is defined with charts for HTTP latency, error rate, or throughput
-  - Evidence: Could not verify assertion programmatically
-
-#### Eval 2: kvstore
-
-| | With Skill | Baseline |
-|---|---|---|
-| Pass rate | 3/4 (75%) | 3/4 (75%) |
-| Time | 391s | 429s |
-| Tokens | 33,461 | 30,054 |
-
-**Assertions (with skill):**
-
-- [FAIL] Terraform files are created in .observe/terraform/
-  - Evidence: Could not verify assertion programmatically
-- [PASS] Dashboard includes panels for KV store-specific metrics (store operations, evictions, or persist duration)
-- [PASS] Alert rules include at least one critical and one warning severity
-- [PASS] inventory.md Alerts section is populated
-
-**Baseline failures:**
-
-- [FAIL] Terraform files are created in .observe/terraform/
-  - Evidence: Could not verify assertion programmatically
-
----
-
 ### splunk-verify
 
 #### Eval 1: flask-basic
@@ -263,4 +210,4 @@
 
 ---
 
-*5 skills, 10 evals, 20 total runs.*
+*4 skills, 8 evals, 16 total runs.*

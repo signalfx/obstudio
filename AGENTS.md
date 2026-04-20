@@ -61,8 +61,7 @@ Verification. See any skill under `skills/` for the canonical format.
 | `/splunk-audit` | Analyze a codebase for observability gaps, produce `.observe/inventory.md` |
 | `/splunk-instrument` | Implement OTel instrumentation for signals identified by `/splunk-audit` |
 | `/splunk-verify` | Validate telemetry against the Observer collector |
-| `/splunk-provision` | Generate Terraform dashboards, detectors, and alert rules |
-| `/splunk-observe` | Composite orchestrator: audit -> instrument -> verify -> provision |
+| `/splunk-observe` | Composite orchestrator: audit -> instrument -> verify |
 
 ### Shared References
 
@@ -86,7 +85,6 @@ language is loaded -- never all at once. This keeps token usage minimal.
 ### Skill Contract
 
 All skills operate on the same `.observe/` directory:
-- `/splunk-audit` creates it (SLI definitions, signal tables, placeholders for terraform/alerts)
+- `/splunk-audit` creates it (SLI definitions, signal tables)
 - `/splunk-instrument` updates the Status column in the Spans, Metrics, and Logs tables
 - `/splunk-verify` updates the Verified column in the Spans, Metrics, and Logs tables
-- `/splunk-provision` populates `terraform/`, `alerts/`, and inventory sections 10-11

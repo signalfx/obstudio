@@ -49,7 +49,6 @@ Restart your editor/agent to activate.
   audit/SKILL.md        # /audit skill
   instrument/SKILL.md   # /instrument skill
   verify/SKILL.md       # /verify skill
-  provision/SKILL.md    # /provision skill
   observe/SKILL.md      # /observe composite orchestrator
   references/           # language guides and reference material
 ```
@@ -69,11 +68,10 @@ Once installed, open any project in your agent and use:
 
 | Command | What it does |
 |---------|-------------|
-| `/splunk-observe` | Full pipeline: audit -> instrument -> verify -> provision |
+| `/splunk-observe` | Full pipeline: audit -> instrument -> verify |
 | `/splunk-audit` | Analyze codebase for observability gaps |
 | `/splunk-instrument` | Add OpenTelemetry instrumentation |
 | `/splunk-verify` | Validate telemetry flows end-to-end |
-| `/splunk-provision` | Generate Terraform dashboards, detectors, and alerts |
 
 Or use natural language:
 
