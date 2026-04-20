@@ -116,7 +116,7 @@ skill-eval-all: ## Run evals for all skills and show reports
 	cd $(EVALS_DIR) && uv run python run_skill_eval.py --all
 
 skill-eval-report: ## Generate markdown report from latest eval results
-	cd $(EVALS_DIR) && uv run python generate_report.py -o ../tests/reports/$$(date +%Y-%m-%d)/REPORT.md
+	cd $(EVALS_DIR) && uv run python generate_report.py -o ../perf/$$(date +%Y-%m-%d)/REPORT.md
 	cd $(EVALS_DIR) && uv run python generate_report.py
 
 # --- Skills ---

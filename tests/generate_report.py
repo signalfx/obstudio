@@ -2,9 +2,9 @@
 """Generate a human-readable markdown report from skill eval benchmark JSONs.
 
 Usage:
-    uv run python generate_report.py                          # from latest workspace runs
-    uv run python generate_report.py --dir tests/reports/2026-04-20  # from saved reports
-    uv run python generate_report.py --output tests/reports/2026-04-20/REPORT.md
+    uv run python generate_report.py                              # from latest workspace runs
+    uv run python generate_report.py --dir ../perf/2026-04-20    # from saved reports
+    uv run python generate_report.py -o ../perf/2026-04-20/REPORT.md
 """
 
 from __future__ import annotations
