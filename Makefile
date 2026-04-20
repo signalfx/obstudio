@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet pytest eval-fixture ab-test ab-test-full release-local release list-skills clean
+.PHONY: help build build-client stage-skills dev run test test-extension test-client test-all tidy fmt vet pytest eval-fixture ab-test ab-test-full skill-eval skill-eval-all release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -90,6 +90,19 @@ ab-test: ## Run LLM smoke A/B tests via deepeval (requires AWS credentials for B
 
 ab-test-full: ## Run ALL LLM A/B tests including release-only tests
 	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short
+
+# --- Skill evals (LLM-based, requires claude CLI) ---
+
+SKILL ?=
+
+skill-eval: ## Run skill evals and show report (e.g. make skill-eval SKILL=splunk-audit)
+ifndef SKILL
+	$(error SKILL is required — e.g. make skill-eval SKILL=splunk-audit)
+endif
+	cd $(EVALS_DIR) && uv run python run_skill_eval.py --skill $(SKILL)
+
+skill-eval-all: ## Run evals for all skills and show reports
+	cd $(EVALS_DIR) && uv run python run_skill_eval.py --all
 
 # --- Skills ---
 

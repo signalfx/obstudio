@@ -1,0 +1,32 @@
+{
+  "skill_name": "splunk-instrument",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add OpenTelemetry instrumentation to this Flask app based on its inventory. The service is at examples/python/flask-basic/",
+      "app": "examples/python/flask-basic",
+      "expected_output": "OTel SDK installed, auto-instrumentation configured, custom metrics added, inventory Status columns updated to OK",
+      "expectations": [
+        "An otel_setup.py or similar OTel initialization file is created",
+        "opentelemetry packages are added to pyproject.toml or requirements.txt",
+        "Auto-instrumentation for Flask HTTP is configured",
+        "At least one custom metric (Counter, Histogram, or Gauge) is added in application code",
+        "inventory.md Status column is updated to OK for instrumented signals"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Instrument this Go key-value store service based on the observability inventory. The code is at examples/go/kvstore/",
+      "app": "examples/go/kvstore",
+      "expected_output": "OTel SDK initialized, otelhttp middleware added, custom spans and metrics for store operations",
+      "expectations": [
+        "go.opentelemetry.io dependencies are added to go.mod",
+        "An OTel SDK initialization function is created or added to main",
+        "otelhttp or otelchi middleware is wired into the HTTP server",
+        "Custom spans are added for store operations (get, set, delete, or search)",
+        "At least one custom metric instrument is created (Counter, Histogram, or Gauge)",
+        "inventory.md Status column is updated to OK for instrumented signals"
+      ]
+    }
+  ]
+}

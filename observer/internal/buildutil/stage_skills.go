@@ -43,6 +43,12 @@ func copyDir(src, dst string) error {
 			return err
 		}
 
+		// Skip evals directories — they are dev-only test fixtures
+		// and should not be embedded in the release binary.
+		if d.IsDir() && d.Name() == "evals" {
+			return fs.SkipDir
+		}
+
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err

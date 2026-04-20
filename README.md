@@ -195,6 +195,7 @@ obstudio/
 │   ├── splunk-provision/     #   /splunk-provision
 │   ├── splunk-observe/       #   /splunk-observe
 │   └── references/    #   Shared language guides and reference material
+├── tests/             # Skill tests and LLM-based eval runner
 ├── examples/          # Sample apps for skill evaluation, organized by language
 ├── docs/              # Design docs, PRD, and example prompts
 ├── .github/workflows/ # CI (GitHub Actions)
@@ -222,7 +223,8 @@ obstudio/
 | Go | 1.25+ | observer collector |
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
-| uv | latest | Running Python example apps |
+| uv | latest | Running Python example apps and tests |
+| claude | latest | Skill evals (`make skill-eval`) -- optional |
 
 ---
 
@@ -239,14 +241,35 @@ obstudio/
 | `make fmt` | Format Go source |
 | `make tidy` | Tidy Go modules |
 | `make list-skills` | List available skills |
+| `make pytest` | Run deterministic skill tests (no LLM calls) |
+| `make skill-eval SKILL=<name>` | Run LLM-based skill evals and show report |
+| `make skill-eval-all` | Run evals for all skills |
 | `make release-local` | Build release archives locally via GoReleaser |
 | `make clean` | Remove build artifacts |
+
+### Skill Evals
+
+Each skill has an `evals/` directory with LLM-based benchmarks that test
+skill effectiveness against example apps. Evals run the skill via
+`claude -p`, grade outputs against assertions, and compare with a
+baseline (same task without the skill).
+
+```bash
+make skill-eval SKILL=splunk-audit      # run evals for one skill
+make skill-eval SKILL=splunk-audit --id 1  # single eval case
+make skill-eval-all                     # all skills
+```
+
+Results are written to `skill-eval-workspace/` (gitignored) with timing,
+token usage, and pass rates. The `evals/` directories are dev-only and
+are excluded from the release binary.
 
 ### CI
 
 GitHub Actions runs on every push to `main` and `feature/**` branches:
 
 - **observer** -- `go vet`, `make build`, `make test`
+- **skill-tests** -- structural, semconv, and golden tests via `make pytest`
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
