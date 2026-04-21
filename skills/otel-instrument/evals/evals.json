@@ -129,6 +129,55 @@
           "Span status is set to ERROR and span.recordException is called on unhandled errors"
         ]
       }
+    },
+    {
+      "id": 4,
+      "prompt": "Add OpenTelemetry instrumentation to this Go key-value store service. The code is at examples/go/kvstore/",
+      "app": "examples/go/kvstore",
+      "expected_output": "OTel SDK initialized in cmd/kvstore-server, otelhttp middleware wraps the ServeMux, OTLP exporter configured",
+      "expectations": {
+        "dependencies": [
+          "go.opentelemetry.io/otel is added to go.mod",
+          "go.opentelemetry.io/otel/sdk is added to go.mod",
+          "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp or otlptracegrpc is added",
+          "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp is added to go.mod"
+        ],
+        "sdk_init": [
+          "OTel initialization is placed in a separate file or function, not inline in main()",
+          "TracerProvider is created with a Resource containing service.name",
+          "OTLPTraceExporter is configured",
+          "TracerProvider is registered globally via otel.SetTracerProvider()",
+          "TextMapPropagator is set via otel.SetTextMapPropagator()",
+          "Graceful shutdown is wired via defer in main() or signal handling"
+        ],
+        "auto_instrumentation": [
+          "otelhttp.NewHandler wraps the http.ServeMux returned by api.Handler()"
+        ],
+        "spans": [
+          "HTTP server spans are produced for routes: GET /kv/{key}, PUT /kv/{key}, DELETE /kv/{key}, GET /search?word=",
+          "Span names are low-cardinality (no key values embedded in span names)",
+          "http.request.method, http.route, http.response.status_code attributes are present",
+          "Span status is set to ERROR on 5xx responses (e.g. internal server error from persist failure)"
+        ],
+        "metrics": [
+          "http.server.request.duration histogram is produced by otelhttp middleware",
+          "http.server.active_requests gauge is produced by otelhttp middleware"
+        ],
+        "config": [
+          "OTEL_SERVICE_NAME is read from environment or set via resource attribute with value like kvstore",
+          "OTEL_EXPORTER_OTLP_ENDPOINT defaults to http://localhost:4318 or is env-driven",
+          "No hardcoded endpoints or tokens in source code"
+        ],
+        "error_handling": [
+          "Span status is set to ERROR and span.RecordError is called on store errors that result in 5xx",
+          "404 Not Found responses do not set span status to ERROR (expected client errors)"
+        ],
+        "structure": [
+          "OTel code does not break the existing multi-package layout (cmd/ vs kvstore/)",
+          "Existing store.go and http.go are minimally modified",
+          "SDK init lives in cmd/kvstore-server/ since that is the process entry point"
+        ]
+      }
     }
   ]
 }
