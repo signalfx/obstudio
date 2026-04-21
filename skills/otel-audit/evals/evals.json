@@ -1,0 +1,132 @@
+{
+  "skill_name": "otel-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Scan this Go service for observability gaps. The code is in examples/go/chi-basic/",
+      "app": "examples/go/chi-basic",
+      "expected_output": "Report identifying Go/chi with zero instrumentation and listing specific missing signals",
+      "expectations": {
+        "discovery": [
+          "Report identifies Go as the language",
+          "Report identifies chi (go-chi/chi/v5) as the HTTP framework",
+          "Report identifies main.go as the entry point",
+          "Report identifies 6 HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}"
+        ],
+        "coverage_gaps": [
+          "Report notes no OTel SDK initialization exists",
+          "Report notes no go.opentelemetry.io dependencies in go.mod",
+          "Report notes missing otelhttp or otelchi middleware for HTTP server spans",
+          "Report notes missing http.server.request.duration histogram (RED: Duration)",
+          "Report notes missing HTTP request rate visibility (RED: Rate)",
+          "Report notes missing error rate visibility via span status codes (RED: Errors)",
+          "Report notes no OTLP exporter is configured"
+        ],
+        "anti_patterns": [
+          "Report notes no anti-patterns (since there is no instrumentation to misconfigure)"
+        ],
+        "recommendation": [
+          "Report recommends running /otel-instrument",
+          "Report specifically mentions otelhttp or otelchi as the auto-instrumentation to add"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Assess the observability readiness of my Express app at examples/node/express-basic/",
+      "app": "examples/node/express-basic",
+      "expected_output": "Report identifying Node.js/Express with zero instrumentation and listing specific missing signals",
+      "expectations": {
+        "discovery": [
+          "Report identifies Node.js as the language",
+          "Report identifies Express as the HTTP framework from package.json",
+          "Report identifies app.js as the entry point",
+          "Report identifies 6 HTTP routes: GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, DELETE /tasks/:id"
+        ],
+        "coverage_gaps": [
+          "Report notes no OTel SDK initialization exists",
+          "Report notes no @opentelemetry/* packages in package.json",
+          "Report notes missing @opentelemetry/instrumentation-http for HTTP server spans",
+          "Report notes missing @opentelemetry/instrumentation-express for Express-specific spans",
+          "Report notes missing http.server.request.duration histogram (RED: Duration)",
+          "Report notes missing HTTP request rate visibility (RED: Rate)",
+          "Report notes missing error rate visibility via span status codes (RED: Errors)",
+          "Report notes no OTLP exporter is configured"
+        ],
+        "anti_patterns": [
+          "Report notes no anti-patterns (since there is no instrumentation to misconfigure)"
+        ],
+        "recommendation": [
+          "Report recommends running /otel-instrument",
+          "Report specifically mentions @opentelemetry/instrumentation-http and @opentelemetry/instrumentation-express as packages to add"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Analyze this Flask service for observability gaps. The code is at examples/python/flask-basic/",
+      "app": "examples/python/flask-basic",
+      "expected_output": "Report identifying Python/Flask with zero instrumentation and listing specific missing signals",
+      "expectations": {
+        "discovery": [
+          "Report identifies Python as the language",
+          "Report identifies Flask as the HTTP framework from pyproject.toml",
+          "Report identifies app.py as the entry point",
+          "Report identifies 6 HTTP routes: GET /health, GET /tasks, GET /tasks/<task_id>, POST /tasks, PATCH /tasks/<task_id>, DELETE /tasks/<task_id>"
+        ],
+        "coverage_gaps": [
+          "Report notes no OTel SDK initialization exists",
+          "Report notes no opentelemetry packages in pyproject.toml",
+          "Report notes missing opentelemetry-instrumentation-flask for HTTP server spans",
+          "Report notes missing http.server.request.duration histogram (RED: Duration)",
+          "Report notes missing HTTP request rate visibility (RED: Rate)",
+          "Report notes missing error rate visibility via span status codes (RED: Errors)",
+          "Report notes no OTLP exporter is configured"
+        ],
+        "anti_patterns": [
+          "Report notes no anti-patterns (since there is no instrumentation to misconfigure)"
+        ],
+        "recommendation": [
+          "Report recommends running /otel-instrument",
+          "Report specifically mentions opentelemetry-instrumentation-flask as the package to add"
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "Scan this Go key-value store service for observability gaps. The code is in examples/go/kvstore/",
+      "app": "examples/go/kvstore",
+      "expected_output": "Report identifying Go/stdlib ServeMux with zero instrumentation, multi-package structure, and listing specific missing signals including filesystem and background worker coverage",
+      "expectations": {
+        "discovery": [
+          "Report identifies Go as the language",
+          "Report identifies stdlib net/http (http.ServeMux) as the HTTP router (not chi or gorilla)",
+          "Report identifies cmd/kvstore-server/main.go as the entry point",
+          "Report identifies the multi-package structure: cmd/kvstore-server (entry point) and kvstore/ (library)",
+          "Report identifies HTTP routes: GET/PUT/DELETE /kv/{key} and GET /search?word=",
+          "Report identifies filesystem persistence in store.go (os.WriteFile, os.Remove, filepath.WalkDir)",
+          "Report identifies background goroutine: indexLoop for async word indexing"
+        ],
+        "coverage_gaps": [
+          "Report notes no OTel SDK initialization exists",
+          "Report notes no go.opentelemetry.io dependencies in go.mod",
+          "Report notes missing otelhttp middleware for HTTP server spans",
+          "Report notes missing http.server.request.duration histogram (RED: Duration)",
+          "Report notes missing HTTP request rate visibility (RED: Rate)",
+          "Report notes missing error rate visibility via span status codes (RED: Errors)",
+          "Report notes no OTLP exporter is configured",
+          "Report notes filesystem I/O (persistAsync, loadFromDisk) has no tracing coverage",
+          "Report notes LRU eviction events have no observability"
+        ],
+        "anti_patterns": [
+          "Report notes no anti-patterns (since there is no instrumentation to misconfigure)"
+        ],
+        "recommendation": [
+          "Report recommends running /otel-instrument",
+          "Report specifically mentions otelhttp as the auto-instrumentation to add for the ServeMux",
+          "Report suggests custom spans or metrics for filesystem persistence and eviction as optional enhancements"
+        ]
+      }
+    }
+  ]
+}

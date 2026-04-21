@@ -2,7 +2,7 @@
 
 ## What It Is
 
-An automated benchmarking system that measures whether our skills (splunk-audit, splunk-instrument, splunk-verify, splunk-provision, splunk-observe) actually improve Claude's output compared to Claude without any skill guidance.
+An automated benchmarking system that measures whether our skills (otel-audit, otel-instrument, otel-verify, otel-observe) actually improve Claude's output compared to Claude without any skill guidance.
 
 ## How It Works
 
@@ -15,7 +15,7 @@ Both runs execute against real example apps (flask-basic, chi-basic, kvstore, ex
 
 ## How Pass Rates Are Calculated
 
-Each eval has a list of **assertions** — concrete checks against the output. For example, a splunk-audit eval might assert:
+Each eval has a list of **assertions** — concrete checks against the output. For example, a otel-audit eval might assert:
 
 - `.observe/inventory.md` file is created
 - Inventory contains a Spans table
@@ -45,35 +45,31 @@ If an eval has 10 assertions and the skill run passes 9, that's 90%. The benchma
 
 | Skill | With Skill | Baseline | Delta | Avg Time | Avg Tokens |
 |-------|-----------|----------|-------|----------|------------|
-| splunk-audit | 97% | 100% | -3% | 159s | 14,793 |
-| splunk-instrument | 71% | 71% | 0% | 365s | 28,848 |
-| splunk-observe | 60% | 60% | 0% | 546s | 52,945 |
-| splunk-provision | 62% | 71% | -9% | 201s | 16,981 |
-| splunk-verify | 45% | 45% | 0% | 254s | 17,584 |
+| otel-audit | 97% | 100% | -3% | 159s | 14,793 |
+| otel-instrument | 71% | 71% | 0% | 365s | 28,848 |
+| otel-observe | 60% | 60% | 0% | 546s | 52,945 |
+| otel-verify | 45% | 45% | 0% | 254s | 17,584 |
 
 ## Analysis
 
-1. **splunk-audit** is the most mature — 97% pass rate, only missed 1 assertion on one eval.
+1. **otel-audit** is the most mature — 97% pass rate, only missed 1 assertion on one eval.
 
 2. **No skill outperforms baseline yet.** This doesn't mean skills are useless — it means our assertions test for things Claude can already do without guidance (create OTel files, add packages). The skills' real value (correct inventory format, SLI definitions, fault domain taxonomy, semconv compliance) needs more targeted assertions.
 
-3. **splunk-verify** scores lowest (45%) because it requires a running collector and service — assertions like "trace data is queried" and "metrics are checked" can't fully pass in a sandbox without infrastructure.
+3. **otel-verify** scores lowest (45%) because it requires a running collector and service — assertions like "trace data is queried" and "metrics are checked" can't fully pass in a sandbox without infrastructure.
 
-4. **splunk-provision** regressed with skill on flask-basic (3/6 vs 4/6 baseline) — the skill's structured workflow may have caused it to spend time on earlier steps rather than jumping straight to Terraform generation.
-
-5. **Token cost correlates with skill complexity** — splunk-observe (chains all 4 sub-skills) uses 53K tokens vs splunk-audit at 15K.
+4. **Token cost correlates with skill complexity** — otel-observe (chains all sub-skills) uses 53K tokens vs otel-audit at 15K.
 
 ## Next Steps
 
 - Add assertions that test skill-specific output quality (inventory format compliance, semconv naming, fault domain coverage)
-- Fix splunk-verify evals to mock or stub the collector dependency
-- Investigate splunk-provision flask-basic regression
+- Fix otel-verify evals to mock or stub the collector dependency
 - Re-run after skill improvements to track progress over time
 
 ## Running Evals
 
 ```bash
-make skill-eval SKILL=splunk-audit       # one skill
+make skill-eval SKILL=otel-audit       # one skill
 make skill-eval-all                      # all skills
 ```
 

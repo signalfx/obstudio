@@ -11,7 +11,7 @@ SKILLS_SRC := skills
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet test-deterministic eval-fixture eval-llm eval-llm-full skill-eval skill-eval-all skill-eval-report release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet skill-eval release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -82,42 +82,16 @@ release-local: release-prep ## Build release archives locally via GoReleaser (sn
 release: release-prep ## Build and publish a release via GoReleaser (requires GITHUB_TOKEN)
 	goreleaser release --clean
 
-# --- Tests ---
-
-EVALS_DIR  := tests
-APP        ?=
-
-test-deterministic: ## Run deterministic skill evals (CI-safe, no LLM calls)
-	cd $(EVALS_DIR) && uv run pytest -v --tb=short --ignore=test_llm.py
-
-eval-fixture: ## Run tests against an instrumented app (e.g. make eval-fixture APP=examples/python/flask-basic)
-ifndef APP
-	$(error APP is required — e.g. make eval-fixture APP=examples/python/flask-basic)
-endif
-	cd $(EVALS_DIR) && uv run pytest -v --tb=short --app=../$(APP)
-
-eval-llm: ## Run LLM smoke evals via deepeval (requires AWS credentials for Bedrock)
-	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short -m "not release"
-
-eval-llm-full: ## Run ALL LLM evals including release-only tests
-	cd $(EVALS_DIR) && uv run pytest test_llm.py -v --tb=short
-
-# --- Skill evals (LLM-based, requires claude CLI) ---
+# --- Skill evals ---
 
 SKILL ?=
 
-skill-eval: ## Run skill evals and show report (e.g. make skill-eval SKILL=splunk-audit)
+skill-eval: ## Run skill evals (e.g. make skill-eval SKILL=otel-instrument)
 ifndef SKILL
-	$(error SKILL is required — e.g. make skill-eval SKILL=splunk-audit)
+	$(error SKILL is required — e.g. make skill-eval SKILL=otel-instrument)
 endif
-	cd $(EVALS_DIR) && uv run python run_skill_eval.py --skill $(SKILL)
-
-skill-eval-all: ## Run evals for all skills and show reports
-	cd $(EVALS_DIR) && uv run python run_skill_eval.py --all
-
-skill-eval-report: ## Generate markdown report from latest eval results
-	cd $(EVALS_DIR) && uv run python generate_report.py -o ../perf/$$(date +%Y-%m-%d)/REPORT.md
-	cd $(EVALS_DIR) && uv run python generate_report.py
+	@echo "Evals for $(SKILL): $(SKILLS_SRC)/$(SKILL)/evals/evals.json"
+	@cat $(SKILLS_SRC)/$(SKILL)/evals/evals.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'{len(d[\"evals\"])} eval(s) defined')"
 
 # --- Skills ---
 
