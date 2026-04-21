@@ -29,7 +29,6 @@ is modified.
 - Checking what auto-instrumentation is already wired up
 - Identifying dependencies that lack matching OTel instrumentation
 - Quick health check of an existing OTel setup
-
 **When NOT to use:** If you want to add instrumentation, use `/otel-instrument`.
 
 ## Process
@@ -98,6 +97,50 @@ Present findings to the user in chat. Use this structure:
 ```
 
 If the user asks for a persistent report, write a brief `.observe/report.md` with the same content.
+
+### Step 4 -- Verify Telemetry (optional)
+
+After presenting the report, prompt the user:
+
+> Would you like me to verify telemetry is flowing? This requires the Observer
+> collector to be running locally.
+
+Then wait for the user's answer.
+
+- **If no**: done.
+- **If yes**: run the verification:
+
+1. **Check Observer availability:**
+   ```
+   curl -s http://localhost:3000/api/query/stats
+   ```
+   If this fails, tell the user the Observer is not reachable and how to start it.
+
+2. **Clear stale data:**
+   ```
+   curl -s -X DELETE http://localhost:3000/api/data
+   ```
+
+3. **Start the app** with fast-flush settings:
+   ```
+   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+   OTEL_SERVICE_NAME=<service-name>
+   OTEL_BSP_SCHEDULE_DELAY=100
+   OTEL_METRIC_EXPORT_INTERVAL=1000
+   ```
+
+4. **Exercise one happy-path endpoint** (e.g. `GET /health` or `GET /tasks`).
+
+5. **Wait 3 seconds** for export, then check:
+   ```
+   GET /api/query/traces?serviceName=<service-name>
+   ```
+
+6. **Report results:**
+   - Traces arrived: list service name, span count, root span name
+   - No traces: suggest troubleshooting (wrong endpoint, missing SDK init, exporter misconfigured)
+
+7. **Stop the app** after verification.
 
 ## Red Flags
 

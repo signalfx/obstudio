@@ -4,7 +4,9 @@ description: >-
   Add OpenTelemetry observability to applications using auto-instrumentation
   and optional custom spans/metrics.   Use when the user types /otel-instrument,
   asks to "add OTel", "add tracing", "add metrics", "implement observability",
-  "wire up telemetry", or says "instrument this service".
+  "wire up telemetry", "instrument this service", or asks to add a specific
+  custom signal like "add a metric to track queue depth", "add a span for
+  payment processing", "track error rate for X".
 metadata:
   author: otel-studio
   version: 0.1.0
@@ -39,6 +41,20 @@ Do not proceed until you can state all of these clearly:
 - `service.name`
 - environment dimension
 - incremental addition vs new scaffold
+
+### Fast Path: Targeted Custom Signal
+
+If the user is asking for a specific signal ("add a metric for queue depth",
+"track error rate on payments", "add a span for the indexing job") AND the
+preflight scan finds OTel SDK already initialized:
+
+1. Skip Steps 2-3 (dependencies and auto-instrumentation are already present).
+2. Go directly to Step 4 (Custom Instrumentation) with the user's request as context.
+3. Add only the requested signal — do not re-scaffold or re-wire existing setup.
+4. Proceed to Step 5 (build check).
+
+If the preflight scan finds no OTel SDK, tell the user auto-instrumentation
+needs to be set up first and continue with the full workflow (Steps 2-3).
 
 ### 2. Dependencies
 
@@ -91,7 +107,7 @@ After auto-instrumentation is wired up, prompt the user:
 
 Then wait for the user's answer.
 
-- **If no**: proceed to Step 5.
+- **If no**: proceed to the build check (Step 5).
 - **If yes**: analyze the codebase for high-value custom instrumentation points:
   - Error handling paths that catch and handle exceptions
   - Key business operations (payments, orders, user registration, etc.)
@@ -101,29 +117,15 @@ Then wait for the user's answer.
   - Suggest specific spans and metrics with names, attributes, and rationale
   - Apply after user approval
 
-### 5. Verify (Lightweight)
+### 5. Verify (Build Check)
 
-Confirm the instrumented app works:
+Confirm the instrumented app still builds and starts:
 
-1. **Build/compile check**: confirm the app compiles or starts without errors after instrumentation changes.
-2. **Observer check** (if available): if the Observer MCP server is running, verify the collector is reachable:
-   ```
-   curl -s http://localhost:3000/api/query/stats
-   ```
-   If reachable:
-   - Clear stale data: `curl -s -X DELETE http://localhost:3000/api/data`
-   - Start the app with fast-flush settings:
-     ```
-     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-     OTEL_SERVICE_NAME=<service-name>
-     OTEL_BSP_SCHEDULE_DELAY=100
-     OTEL_METRIC_EXPORT_INTERVAL=1000
-     ```
-   - Exercise one happy-path endpoint
-   - Wait 3 seconds for export
-   - Check `GET /api/query/traces?serviceName=<service-name>` for traces
-   - Report whether traces arrived
-3. **If Observer is not running**: just confirm the app starts and report what was instrumented.
+1. Run the language-appropriate build or compile step (e.g. `go build ./...`, `npm install`, `pip install -e .`).
+2. Start the app briefly to confirm it boots without import or initialization errors, then stop it.
+3. If either step fails, fix the issue before proceeding.
+
+To verify that telemetry is actually flowing to a collector, use `/otel-audit` with the Observer running.
 
 ### 6. Enable Debugging in VS Code
 
