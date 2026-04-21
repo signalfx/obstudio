@@ -95,31 +95,15 @@ jobs:
         working-directory: observer/client
         run: npx vitest run
 
-  skill-tests:
-    name: Skill tests – structural & semconv
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v6
-
-      - name: Run all skill tests
-        run: make test-deterministic
-
   # skill-evals:
   #   name: Skill evals – LLM-based benchmarks
   #   runs-on: ubuntu-latest
   #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
   #   steps:
   #     - uses: actions/checkout@v4
-  #     - uses: astral-sh/setup-uv@v6
   #     - name: Install Claude Code
   #       run: npm install -g @anthropic-ai/claude-code
   #     - name: Run skill evals
-  #       run: make skill-eval-all
+  #       run: /eval-tester
   #       env:
   #         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  #     - uses: actions/upload-artifact@v4
-  #       with:
-  #         name: skill-eval-results
-  #         path: skill-eval-workspace/

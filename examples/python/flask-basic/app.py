@@ -44,6 +44,7 @@ def update_task(task_id):
         return {"error": "not found"}, 404
     body = request.get_json(force=True)
     task["title"] = body.get("title", task["title"])
+    was_done = task["done"]
     task["done"] = body.get("done", task["done"])
     return jsonify(task)
 
