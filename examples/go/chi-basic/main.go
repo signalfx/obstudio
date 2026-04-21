@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Task struct {
@@ -24,7 +29,60 @@ var (
 	}
 )
 
+var (
+	meter        = otel.Meter("go-chi-basic")
+	tasksCreated metric.Int64Counter
+	tasksCompleted metric.Int64Counter
+	tasksDeleted metric.Int64Counter
+)
+
+func initMetrics() {
+	var err error
+	tasksCreated, err = meter.Int64Counter("tasks.created.count",
+		metric.WithDescription("Total tasks created"),
+		metric.WithUnit("{tasks}"))
+	if err != nil {
+		log.Printf("failed to create tasks.created.count: %v", err)
+	}
+
+	tasksCompleted, err = meter.Int64Counter("tasks.completed.count",
+		metric.WithDescription("Total tasks marked as done"),
+		metric.WithUnit("{tasks}"))
+	if err != nil {
+		log.Printf("failed to create tasks.completed.count: %v", err)
+	}
+
+	tasksDeleted, err = meter.Int64Counter("tasks.deleted.count",
+		metric.WithDescription("Total tasks deleted"),
+		metric.WithUnit("{tasks}"))
+	if err != nil {
+		log.Printf("failed to create tasks.deleted.count: %v", err)
+	}
+
+	_, err = meter.Int64ObservableGauge("tasks.active.count",
+		metric.WithDescription("Current number of active tasks"),
+		metric.WithUnit("{tasks}"),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			mu.Lock()
+			defer mu.Unlock()
+			o.Observe(int64(len(tasks)))
+			return nil
+		}))
+	if err != nil {
+		log.Printf("failed to create tasks.active.count: %v", err)
+	}
+}
+
 func main() {
+	ctx := context.Background()
+	shutdown, err := initOTel(ctx)
+	if err != nil {
+		log.Fatalf("failed to initialize telemetry: %v", err)
+	}
+	defer shutdown(ctx)
+
+	initMetrics()
+
 	r := chi.NewRouter()
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -47,6 +105,7 @@ func main() {
 				return
 			}
 		}
+		log.Printf("http.request.error route=/tasks/%d error.type=not_found", id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 
@@ -63,6 +122,7 @@ func main() {
 		nextID++
 		tasks = append(tasks, t)
 		mu.Unlock()
+		tasksCreated.Add(r.Context(), 1)
 		writeJSON(w, http.StatusCreated, t)
 	})
 
@@ -80,16 +140,21 @@ func main() {
 		defer mu.Unlock()
 		for i := range tasks {
 			if tasks[i].ID == id {
+				wasDone := tasks[i].Done
 				if body.Title != nil {
 					tasks[i].Title = *body.Title
 				}
 				if body.Done != nil {
 					tasks[i].Done = *body.Done
 				}
+				if !wasDone && tasks[i].Done {
+					tasksCompleted.Add(r.Context(), 1)
+				}
 				writeJSON(w, http.StatusOK, tasks[i])
 				return
 			}
 		}
+		log.Printf("http.request.error route=/tasks/%d error.type=not_found", id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 
@@ -100,14 +165,20 @@ func main() {
 		for i, t := range tasks {
 			if t.ID == id {
 				tasks = append(tasks[:i], tasks[i+1:]...)
+				tasksDeleted.Add(r.Context(), 1)
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 		}
+		log.Printf("http.request.error route=/tasks/%d error.type=not_found", id)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 
-	http.ListenAndServe(":8000", r)
+	handler := otelhttp.NewHandler(r, "go-chi-basic")
+	log.Printf("listening on :8000")
+	if err := http.ListenAndServe(":8000", handler); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

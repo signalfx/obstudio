@@ -30,6 +30,19 @@ instead.
 
 ---
 
+## Dependencies
+
+```bash
+go get go.opentelemetry.io/otel \
+  go.opentelemetry.io/otel/sdk \
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc \
+  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc \
+  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp \
+  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
+```
+
+---
+
 ## SDK Initialization
 
 Create a dedicated file for OTel setup that returns a shutdown function.
@@ -144,6 +157,31 @@ http.ListenAndServe(":8080", handler)
 For router-specific middleware (`otelmux`, `otelchi`, `otelgin`), wrap
 the router instead of individual handlers.
 
+### HTTP Client Instrumentation
+
+```go
+import "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+client := &http.Client{
+	Transport: otelhttp.NewTransport(http.DefaultTransport),
+}
+resp, err := client.Get("https://api.example.com/data")
+```
+
+### gRPC Instrumentation
+
+```go
+import "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+
+server := grpc.NewServer(
+	grpc.StatsHandler(otelgrpc.NewServerHandler()),
+)
+
+conn, _ := grpc.Dial(target,
+	grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+)
+```
+
 ---
 
 ## Custom Spans
@@ -248,6 +286,19 @@ orderDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(
 	attribute.String("order.type", "standard"),
 ))
 ```
+
+---
+
+## Error Handling
+
+APM backends identify errors via `otel.status_code = ERROR`:
+
+```go
+span.SetStatus(codes.Error, "payment gateway timeout")
+span.RecordError(err)
+```
+
+The `otelhttp` handler auto-sets ERROR on 5xx responses.
 
 ---
 

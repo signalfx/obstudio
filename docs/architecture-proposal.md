@@ -73,8 +73,7 @@ dependency on each other or on any host environment.
 
 Skills are markdown files that codify instrumentation and infrastructure
 expertise. An AI agent reads them to understand how to add OpenTelemetry to a
-codebase, which semantic conventions to follow, and how to generate Splunk O11y
-Cloud terraform.
+codebase and which semantic conventions to follow.
 
 ```
 skills/
@@ -86,7 +85,7 @@ skills/
 │       ├── java.md           # Java-specific guidance
 │       └── ...
 └── terraform/
-    └── SKILL.md              # Splunk O11y Cloud terraform
+    └── SKILL.md              # Terraform generation
 ```
 
 Skills are plain files. They require no runtime, no server, no binary. Any AI

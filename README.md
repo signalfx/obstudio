@@ -5,32 +5,28 @@ validate telemetry during development. Includes AI agent skills that
 audit codebases and add OpenTelemetry instrumentation automatically.
 
 ```
-  AUDIT           INSTRUMENT      VERIFY
- ┌──────┐        ┌──────┐       ┌──────┐
- │ Scan │  ───>  │ Code │ ───>  │ Test │
- │ Gaps │        │ OTel │       │  Run │
- └──────┘        └──────┘       └──────┘
-  /splunk-audit   /splunk-instrument  /splunk-verify
-
-                /splunk-observe (chains all three)
+  AUDIT            INSTRUMENT
+ ┌──────┐         ┌──────┐
+ │ Scan │  ───>   │ Code │
+ │ Gaps │         │ OTel │
+ └──────┘         └──────┘
+  /otel-audit      /otel-instrument
 ```
 
 ---
 
 ## Commands
 
-4 slash commands that map to the observability lifecycle. Each one
+2 slash commands that map to the observability lifecycle. Each one
 activates the right skill automatically.
 
 | What you're doing | Command | Key principle |
 |---|---|---|
-| Find observability gaps | `/splunk-audit` | Measure before you instrument |
-| Add OpenTelemetry code | `/splunk-instrument` | Auto + custom instrumentation |
-| Validate telemetry flows | `/splunk-verify` | Evidence over assumption |
-| Run the full pipeline | `/splunk-observe` | End-to-end in one command |
+| Find observability gaps | `/otel-audit` | Measure before you instrument |
+| Add OpenTelemetry code | `/otel-instrument` | Auto + custom instrumentation |
 
 Skills also activate with natural language -- "instrument this service
-with OpenTelemetry" triggers `/splunk-instrument`, and so on.
+with OpenTelemetry" triggers `/otel-instrument`, and so on.
 
 ---
 
@@ -75,15 +71,14 @@ issues, and surfaced through the dedicated validation workflow.
 In your AI coding agent, navigate to a service directory and run:
 
 ```
-/splunk-observe
+/otel-instrument
 ```
 
-Or use individual skills:
+Or scan for gaps first:
 
 ```
-/splunk-audit          # analyze gaps only
-/splunk-instrument     # add OTel code (requires .observe/inventory.md)
-/splunk-verify         # validate telemetry (requires instrumented code)
+/otel-audit              # analyze gaps only
+/otel-instrument         # add OTel code
 ```
 
 See [docs/examples.md](docs/examples.md) for more prompt examples.
@@ -106,7 +101,7 @@ Programmatic entry points:
 
 ---
 
-## All 4 Skills
+## Skills
 
 The commands above are the entry points. Each skill is a structured
 workflow with steps, verification gates, and red flags. They follow the
@@ -117,25 +112,13 @@ anatomy.
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-audit](skills/splunk-audit/SKILL.md) | Scan a codebase for observability gaps, produce `.observe/inventory.md` with SLI definitions, signal tables (Spans/Metrics/Logs), fault domains, and component mapping | Starting observability work on any service |
+| [otel-audit](skills/otel-audit/SKILL.md) | Scan a codebase for observability coverage gaps and report findings in chat | Starting observability work on any service |
 
 ### Build -- Add instrumentation
 
 | Skill | What It Does | Use When |
 |---|---|---|
-| [splunk-instrument](skills/splunk-instrument/SKILL.md) | Implement OTel auto-instrumentation libraries and custom spans/metrics for every signal gap in the inventory | You have an inventory and need to write the code |
-
-### Verify -- Prove it works
-
-| Skill | What It Does | Use When |
-|---|---|---|
-| [splunk-verify](skills/splunk-verify/SKILL.md) | Start the Observer collector, exercise service APIs, and check traces and metrics against the inventory | Instrumentation is done and you need evidence it works |
-
-### Orchestrate -- End-to-end
-
-| Skill | What It Does | Use When |
-|---|---|---|
-| [splunk-observe](skills/splunk-observe/SKILL.md) | Chain audit → instrument → verify in sequence | You want full observability in one command |
+| [otel-instrument](skills/otel-instrument/SKILL.md) | Add OTel auto-instrumentation and optional custom spans/metrics | You want to instrument a service with OpenTelemetry |
 
 ---
 
@@ -148,26 +131,10 @@ matching the detected language is loaded.
 | Reference | Covers |
 |---|---|
 | [languages/go.md](skills/references/languages/go.md) | Go OTel SDK, auto-instrumentation, custom spans/metrics |
+| [languages/java.md](skills/references/languages/java.md) | Java OTel agent, auto-instrumentation, custom spans/metrics |
 | [languages/node.md](skills/references/languages/node.md) | Node.js OTel SDK, Express/Fastify instrumentation |
 | [languages/python.md](skills/references/languages/python.md) | Python OTel SDK, Flask/FastAPI/Django instrumentation |
-| [fault-domain-patterns.md](skills/references/fault-domain-patterns.md) | Fault domain taxonomy and boundary detection |
-| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | SLI → OTel signal mapping (spans, metrics, logs) |
-| [observability-template.md](skills/references/observability-template.md) | `.observe/inventory.md` template and format spec |
-
----
-
-## Skill Contract
-
-All skills operate on the same `.observe/` directory:
-
-```
-.observe/
-└── inventory.md          # SLI definitions, signal tables (Spans/Metrics/Logs), components, fault domains
-```
-
-- `/splunk-audit` creates it (SLI definitions, signal tables)
-- `/splunk-instrument` updates the Status column in Spans, Metrics, and Logs tables
-- `/splunk-verify` updates the Verified column in Spans, Metrics, and Logs tables
+| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | Metric type reference, trace-derived metrics guidance |
 
 ---
 
@@ -175,15 +142,12 @@ All skills operate on the same `.observe/` directory:
 
 ```
 obstudio/
-├── observer/       # Primary collector, REST API, MCP server, and embedded web UI
+├── observer/          # Primary collector, REST API, MCP server, and embedded web UI
 ├── extension/         # VS Code extension that packages the collector
 ├── skills/            # AI agent skills (composable workflows)
-│   ├── splunk-audit/         #   /splunk-audit
-│   ├── splunk-instrument/    #   /splunk-instrument
-│   ├── splunk-verify/        #   /splunk-verify
-│   ├── splunk-observe/       #   /splunk-observe
+│   ├── otel-audit/           #   /otel-audit
+│   ├── otel-instrument/      #   /otel-instrument
 │   └── references/    #   Shared language guides and reference material
-├── tests/             # Skill tests and LLM-based eval runner
 ├── examples/          # Sample apps for skill evaluation, organized by language
 ├── docs/              # Design docs, PRD, and example prompts
 ├── .github/workflows/ # CI (GitHub Actions)
@@ -211,8 +175,7 @@ obstudio/
 | Go | 1.25+ | observer collector |
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
-| uv | latest | Running Python example apps and tests |
-| claude | latest | Skill evals (`make skill-eval`) -- optional |
+| uv | latest | Running Python example apps |
 
 ---
 
@@ -229,35 +192,24 @@ obstudio/
 | `make fmt` | Format Go source |
 | `make tidy` | Tidy Go modules |
 | `make list-skills` | List available skills |
-| `make test-deterministic` | Run deterministic skill tests (no LLM calls) |
-| `make skill-eval SKILL=<name>` | Run LLM-based skill evals and show report |
-| `make skill-eval-all` | Run evals for all skills |
+| `make skill-eval SKILL=<name>` | Run skill evals |
 | `make release-local` | Build release archives locally via GoReleaser |
 | `make clean` | Remove build artifacts |
 
 ### Skill Evals
 
-Each skill has an `evals/` directory with LLM-based benchmarks that test
-skill effectiveness against example apps. Evals run the skill via
-`claude -p`, grade outputs against assertions, and compare with a
-baseline (same task without the skill).
+Each skill has an `evals/` directory with evaluation cases that test
+skill effectiveness against example apps.
 
 ```bash
-make skill-eval SKILL=splunk-audit      # run evals for one skill
-make skill-eval SKILL=splunk-audit --id 1  # single eval case
-make skill-eval-all                     # all skills
+make skill-eval SKILL=otel-instrument
 ```
-
-Results are written to `skill-eval-workspace/` (gitignored) with timing,
-token usage, and pass rates. The `evals/` directories are dev-only and
-are excluded from the release binary.
 
 ### CI
 
 GitHub Actions runs on every push to `main` and `feature/**` branches:
 
 - **observer** -- `go vet`, `make build`, `make test`
-- **skill-tests** -- structural, semconv, and golden tests via `make test-deterministic`
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 

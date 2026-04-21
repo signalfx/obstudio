@@ -46,10 +46,8 @@ Restart your editor/agent to activate.
 ```
 ~/.cursor/skills/obstudio/
   obstudio              # binary (MCP server, auto-started by Cursor)
-  audit/SKILL.md        # /audit skill
-  instrument/SKILL.md   # /instrument skill
-  verify/SKILL.md       # /verify skill
-  observe/SKILL.md      # /observe composite orchestrator
+  audit/SKILL.md        # /otel-audit skill
+  instrument/SKILL.md   # /otel-instrument skill
   references/           # language guides and reference material
 ```
 
@@ -68,18 +66,14 @@ Once installed, open any project in your agent and use:
 
 | Command | What it does |
 |---------|-------------|
-| `/splunk-observe` | Full pipeline: audit -> instrument -> verify |
-| `/splunk-audit` | Analyze codebase for observability gaps |
-| `/splunk-instrument` | Add OpenTelemetry instrumentation |
-| `/splunk-verify` | Validate telemetry flows end-to-end |
+| `/otel-audit` | Analyze codebase for observability gaps |
+| `/otel-instrument` | Add OpenTelemetry instrumentation |
 
 Or use natural language:
 
 ```
 instrument this service with OpenTelemetry
 audit this service for observability gaps
-verify my instrumentation is working
-generate dashboards and alerts for this service
 ```
 
 ## Running the Full Observer

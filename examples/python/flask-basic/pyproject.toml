@@ -5,6 +5,10 @@ description = "Greenfield Flask task API -- demo app for obstudio skills"
 requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-flask",
 ]
 
 [project.scripts]

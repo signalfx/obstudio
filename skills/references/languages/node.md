@@ -32,6 +32,19 @@ because the framework instrumentations depend on HTTP spans being created first.
 
 ---
 
+## Dependencies
+
+```bash
+npm install @opentelemetry/sdk-node \
+  @opentelemetry/auto-instrumentations-node \
+  @opentelemetry/exporter-trace-otlp-grpc \
+  @opentelemetry/exporter-metrics-otlp-grpc \
+  @opentelemetry/resources \
+  @opentelemetry/semantic-conventions
+```
+
+---
+
 ## SDK Initialization
 
 Create a separate file for OTel setup. This file must be loaded before any
@@ -89,6 +102,14 @@ application entry point:
 ```typescript
 import './instrumentation';
 // ... rest of app
+```
+
+If the repo already uses `npm run start`, `npm run dev`, `tsx`, `ts-node`, or `nodemon`, add the preload there instead of creating a separate observability-only command path.
+
+If the project already runs in Docker:
+```dockerfile
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+CMD ["node", "--require", "./instrumentation.js", "app.js"]
 ```
 
 ---
@@ -161,6 +182,21 @@ orderDuration.record((performance.now() - start) / 1000, { 'order.type': 'standa
 
 ---
 
+## Error Handling
+
+APM backends identify errors by `otel.status_code = ERROR`. Always set error status:
+
+```typescript
+import { SpanStatusCode } from '@opentelemetry/api';
+
+span.setStatus({ code: SpanStatusCode.ERROR, message: 'Payment failed' });
+span.recordException(error);
+```
+
+Express/Fastify auto-instrumentation automatically sets ERROR on 5xx responses.
+
+---
+
 ## OTLP Export Configuration
 
 All configuration is via environment variables. Do not hardcode endpoints.
@@ -177,6 +213,19 @@ For local development with the Observer, run with:
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     OTEL_METRIC_EXPORT_INTERVAL=1000
     OTEL_BSP_SCHEDULE_DELAY=100
+
+---
+
+## Framework Notes
+
+### Express
+Auto-instrumented via `@opentelemetry/instrumentation-express` (included in auto-instrumentations-node). All middleware and route handlers produce spans.
+
+### Fastify
+Auto-instrumented via `@opentelemetry/instrumentation-fastify`. Hooks and handlers produce spans automatically.
+
+### Database Clients
+Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included in the auto-instrumentations package.
 
 ---
 

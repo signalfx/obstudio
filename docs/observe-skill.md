@@ -15,7 +15,7 @@ instrumentation, and iterate and improve instrumentation quickly.
 The Studio is a free, open-source product, marketed through our OpenTelemetry
 channels. It is a no-strings-attached tool that can be used by developers
 using any Observability backend. On top of that, developers get additional
-capabilities when they use it with Splunk Observability backend.
+capabilities when they use it with a supported observability backend.
 
 ### Components
 
@@ -24,12 +24,12 @@ capabilities when they use it with Splunk Observability backend.
 | **Instrumenter** | Agent skills to add OpenTelemetry instrumentation to any codebase | Markdown files consumed by AI agents |
 | **Telemetry Explorer** | Receive, store, and visualize OTLP telemetry in real time | Web UI on `localhost:3000` |
 | **Validator** | Check telemetry conformance to OTel standards via OTel Weaver | CLI mode and visual overlay in Explorer |
-| **Terraformer** | Generate Splunk O11y Cloud terraform (dashboards, detectors) | Agent skills (Splunk users only) |
+| **Terraformer** | Generate observability terraform (dashboards, detectors) | Agent skills |
 | **IDE Extension** | Package all components as a VS Code extension | VS Code Marketplace |
 
 ### Business Goals
 
-1. **Brand image**: Improve Splunk's reputation as a developer-friendly,
+1. **Brand image**: Improve the project's reputation as a developer-friendly,
    open-source-supporting company and increase brand awareness in the
    developer community.
 2. **Customer acquisition**: Create a new funnel via optional Terraformer
@@ -77,7 +77,7 @@ happened*. Together they form a closed loop:
 ### Skill Folder Structure
 
 ```
-skills/splunk-observe/
+skills/otel-observe/
   SKILL.md                      # Lean workflow: audit -> plan -> implement -> verify
   languages/
     node.md                     # Node.js-specific (loaded on-demand)
@@ -132,9 +132,9 @@ Endpoint: `http://localhost:3000/mcp` (Streamable HTTP, standard MCP).
 
 ---
 
-## 4. Unified `/splunk-observe` Skill
+## 4. Unified `/otel-observe` Skill
 
-The Instrumenter is delivered as a single unified skill (`skills/splunk-observe/`)
+The Instrumenter is delivered as a single unified skill (`skills/otel-observe/`)
 that combines observability audit and OpenTelemetry implementation into one
 flow. The agent can run the full audit or skip directly to instrumentation.
 
@@ -338,8 +338,8 @@ Writes MCP config and copies skills to the agent's expected location:
 
 ### Ships
 
-- Composable skills: `/splunk-audit`, `/splunk-instrument`, `/splunk-verify`,
-  and `/splunk-observe` orchestrator
+- Composable skills: `/otel-audit`, `/otel-instrument`, `/otel-verify`,
+  and `/otel-observe` orchestrator
 - Language guides for Node.js, Python, Go (in `skills/references/languages/`)
 - Reference material (fault-domain-patterns, signal-mapping-guide,
   observability-template) in `skills/references/`
