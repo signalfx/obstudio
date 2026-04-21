@@ -5,12 +5,12 @@ validate telemetry during development. Includes AI agent skills that
 audit codebases and add OpenTelemetry instrumentation automatically.
 
 ```
-  AUDIT            INSTRUMENT
- ┌──────┐         ┌──────┐
- │ Scan │  ───>   │ Code │
- │ Gaps │         │ OTel │
- └──────┘         └──────┘
-  /otel-audit      /otel-instrument
+  AUDIT              INSTRUMENT
+ ┌──────┐           ┌──────┐
+ │ Scan │           │ Code │
+ │ Gaps │           │ OTel │
+ └──────┘           └──────┘
+  /otel-audit        /otel-instrument
 ```
 
 ---

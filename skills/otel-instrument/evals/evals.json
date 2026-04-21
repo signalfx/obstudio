@@ -1,0 +1,134 @@
+{
+  "skill_name": "otel-instrument",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add OpenTelemetry instrumentation to this Flask app. The service is at examples/python/flask-basic/",
+      "app": "examples/python/flask-basic",
+      "expected_output": "OTel SDK installed, Flask auto-instrumentation configured, OTLP exporter wired",
+      "expectations": {
+        "dependencies": [
+          "opentelemetry-api is added to pyproject.toml or requirements.txt",
+          "opentelemetry-sdk is added to pyproject.toml or requirements.txt",
+          "opentelemetry-exporter-otlp or opentelemetry-exporter-otlp-proto-http is added",
+          "opentelemetry-instrumentation-flask is added"
+        ],
+        "sdk_init": [
+          "A separate OTel initialization file is created (not inline in app.py)",
+          "TracerProvider is configured with a Resource containing service.name",
+          "OTLPSpanExporter or OTLPTraceExporter is configured",
+          "SDK is initialized exactly once per process",
+          "TextMapPropagator is set (TraceContextTextMapPropagator or composite)"
+        ],
+        "auto_instrumentation": [
+          "FlaskInstrumentor().instrument_app(app) is called or equivalent auto-instrumentation is wired"
+        ],
+        "spans": [
+          "HTTP server spans are produced by auto-instrumentation for all routes: GET /health, GET /tasks, GET /tasks/<id>, POST /tasks, PATCH /tasks/<id>, DELETE /tasks/<id>",
+          "Span names follow OTel HTTP semconv: low-cardinality, e.g. GET /tasks/{task_id} not GET /tasks/42",
+          "http.request.method, http.route, http.response.status_code attributes are present on HTTP spans",
+          "Span status is set to ERROR on 5xx responses"
+        ],
+        "metrics": [
+          "http.server.request.duration histogram is produced by auto-instrumentation",
+          "http.server.active_requests gauge or up-down counter is produced by auto-instrumentation"
+        ],
+        "config": [
+          "OTEL_SERVICE_NAME is configurable via environment variable",
+          "OTEL_EXPORTER_OTLP_ENDPOINT defaults to http://localhost:4318 or is env-driven",
+          "No hardcoded endpoints or tokens in source code"
+        ],
+        "error_handling": [
+          "Span status is set to ERROR and recordException is called on unhandled exceptions"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Add OpenTelemetry to this Go chi service. The code is at examples/go/chi-basic/",
+      "app": "examples/go/chi-basic",
+      "expected_output": "OTel SDK initialized, otelhttp or otelchi middleware wired, OTLP exporter configured",
+      "expectations": {
+        "dependencies": [
+          "go.opentelemetry.io/otel is added to go.mod",
+          "go.opentelemetry.io/otel/sdk is added to go.mod",
+          "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp or otlptracegrpc is added",
+          "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp is added to go.mod"
+        ],
+        "sdk_init": [
+          "A separate OTel initialization file is created (e.g. otel.go), not inline in main()",
+          "TracerProvider is created with a Resource containing service.name",
+          "OTLPTraceExporter is configured",
+          "TracerProvider is registered globally via otel.SetTracerProvider()",
+          "TextMapPropagator is set via otel.SetTextMapPropagator()",
+          "Graceful shutdown is wired via defer or signal handling"
+        ],
+        "auto_instrumentation": [
+          "otelhttp.NewHandler wraps the chi router, or otelchi middleware is added to the router"
+        ],
+        "spans": [
+          "HTTP server spans are produced for all routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}",
+          "Span names are low-cardinality (route templates, not resolved paths)",
+          "http.request.method, http.route, http.response.status_code attributes are present",
+          "Span status is set to ERROR on 5xx responses"
+        ],
+        "metrics": [
+          "http.server.request.duration histogram is produced by otelhttp middleware",
+          "http.server.active_requests gauge is produced by otelhttp middleware"
+        ],
+        "config": [
+          "OTEL_SERVICE_NAME is read from environment or set via resource attribute",
+          "OTEL_EXPORTER_OTLP_ENDPOINT defaults to http://localhost:4318 or is env-driven",
+          "No hardcoded endpoints or tokens in source code"
+        ],
+        "error_handling": [
+          "Span status is set to ERROR and span.RecordError is called on panics or errors"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Add OpenTelemetry instrumentation to this Express app. The service is at examples/node/express-basic/",
+      "app": "examples/node/express-basic",
+      "expected_output": "OTel NodeSDK configured, HTTP+Express auto-instrumentation enabled, OTLP exporter wired",
+      "expectations": {
+        "dependencies": [
+          "@opentelemetry/sdk-node or @opentelemetry/sdk-trace-node is added to package.json",
+          "@opentelemetry/exporter-trace-otlp-http or @opentelemetry/exporter-trace-otlp-grpc is added",
+          "@opentelemetry/instrumentation-http is added to package.json",
+          "@opentelemetry/instrumentation-express is added to package.json"
+        ],
+        "sdk_init": [
+          "A separate instrumentation file is created (e.g. instrumentation.js or tracing.js)",
+          "NodeSDK or TracerProvider is configured with a Resource containing service.name",
+          "OTLPTraceExporter is configured",
+          "SDK is initialized exactly once, loaded before the app via --require or --import",
+          "Graceful shutdown is wired via process.on('SIGTERM') or similar"
+        ],
+        "auto_instrumentation": [
+          "HttpInstrumentation is registered in the SDK instrumentations array",
+          "ExpressInstrumentation is registered in the SDK instrumentations array"
+        ],
+        "spans": [
+          "HTTP server spans are produced for all routes: GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, DELETE /tasks/:id",
+          "Span names follow OTel HTTP semconv: low-cardinality route templates",
+          "http.request.method, http.route, http.response.status_code attributes are present",
+          "Span status is set to ERROR on 5xx responses"
+        ],
+        "metrics": [
+          "http.server.request.duration histogram is produced by auto-instrumentation",
+          "http.server.active_requests gauge is produced by auto-instrumentation"
+        ],
+        "config": [
+          "OTEL_SERVICE_NAME is configurable via environment variable",
+          "OTEL_EXPORTER_OTLP_ENDPOINT defaults to http://localhost:4318 or is env-driven",
+          "package.json dev script loads instrumentation file before app (--import or --require)",
+          "No hardcoded endpoints or tokens in source code"
+        ],
+        "error_handling": [
+          "Span status is set to ERROR and span.recordException is called on unhandled errors"
+        ]
+      }
+    }
+  ]
+}
