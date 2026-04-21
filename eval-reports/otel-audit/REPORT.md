@@ -149,4 +149,3 @@ The otel-audit skill scored 81% vs baseline 84%. This is counterintuitive but ex
 - `.workspace/otel-audit/iteration-1/eval-4-kvstore/with_skill/outputs/reasoning.md`
 - `.workspace/otel-audit/iteration-1/eval-4-kvstore/without_skill/outputs/session.md`
 - `.workspace/otel-audit/iteration-1/eval-4-kvstore/without_skill/outputs/reasoning.md`
-
