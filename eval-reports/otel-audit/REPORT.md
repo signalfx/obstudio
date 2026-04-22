@@ -1,151 +1,182 @@
-# otel-audit Benchmark -- Iteration 1
+# otel-audit Benchmark -- Iteration 2
 
-## Summary Table
+## Summary
 
+| Eval | App | With Skill | Baseline | Delta | Time (skill) | Tokens (skill) |
+|------|-----|-----------|----------|-------|------|--------|
+| 1 | chi-basic (Go) | 93% (13/14) | 86% (12/14) | +7% | 140s | 28.3K |
+| 2 | express-basic (Node) | **100%** (15/15) | 73% (11/15) | **+27%** | 106s | 24.3K |
+| 3 | flask-basic (Python) | 93% (13/14) | 86% (12/14) | +7% | 138s | 37.3K |
+| 4 | kvstore (Go) | 90% (18/20) | 90% (18/20) | +0% | 132s | 34.5K |
+| 5 | chi-partial (Go) | **100%** (18/18) | 78% (14/18) | **+22%** | 122s | 26.6K |
+| 6 | springboot (Java) | **100%** (13/13) | 85% (11/13) | **+15%** | 99s | 22.5K |
+| **Avg** | | **96%** | **83%** | **+13%** | **123s** | **28.9K** |
 
-| Eval    | App           | With Skill  | Baseline    | Delta    | Time (ws) | Tokens (ws) |
-| ------- | ------------- | ----------- | ----------- | -------- | --------- | ----------- |
-| 1       | chi-basic     | 86% (12/14) | 86% (12/14) | **0%**   | 105s      | 25.5K       |
-| 2       | express-basic | 80% (12/15) | 73% (11/15) | **+7%**  | 81s       | 22.2K       |
-| 3       | flask-basic   | 71% (10/14) | 86% (12/14) | **-15%** | 103s      | 31.1K       |
-| 4       | kvstore       | 85% (17/20) | 90% (18/20) | **-5%**  | 149s      | 36.4K       |
-| **Avg** |               | **81%**     | **84%**     | **-3%**  | **110s**  | **28.8K**   |
-
-
-Stddev: pass_rate +/-0.07 (ws), +/-0.08 (bl) | time +/-28s | tokens +/-6.0K
+Stddev: pass_rate ±0.04 (skill), ±0.06 (baseline) | time ±16s | tokens ±5.6K
 
 ## Key Findings
 
-### Surprising result: Baseline outperforms skill on aggregate
+1. **Three perfect scores with skill**: express-basic, chi-partial, and springboot all hit 100% with the skill. These are the evals where structured output format and specific package recommendations matter most.
 
-The otel-audit skill scored 81% vs baseline 84%. This is counterintuitive but explainable:
+2. **chi-partial is the most discriminating audit eval**: The +22% delta comes from the skill correctly flagging all 4 anti-patterns (hardcoded endpoint, high-cardinality span name, hot-path tracer, missing error recording) while the baseline missed the hardcoded endpoint and high-cardinality span name.
 
-1. **Route enumeration**: With_skill reports consistently fail to list individual HTTP routes (0/4 evals pass), while baseline passes 4/4. The skill's structured report template emphasizes gaps at the framework level rather than enumerating routes.
-2. **RED terminology**: With_skill fails RED-signal assertions in flask (0/3) where the report covers the concepts but doesn't use "RED: Duration/Rate/Errors" terminology.
-3. **Anti-patterns**: Both configurations fail this assertion consistently. With_skill reports identify real code-quality issues (which contradicts "no anti-patterns"), while baseline simply omits the section.
-4. **Structural advantage**: With_skill always passes "/otel-instrument recommendation" (+1 per eval), but this is offset by route enumeration failures (-1 per eval).
+3. **Baseline structurally can't pass 2 assertions**: "recommends /otel-instrument" and "notes no anti-patterns" require skill-specific knowledge/format. These account for most baseline failures on simple apps.
 
-### What the skill does well
-
-- Always recommends `/otel-instrument` (structural advantage)
-- Structured report format following SKILL.md template
-- Deep analysis of kvstore (filesystem persistence, background goroutines, LRU eviction)
-- Identifies specific auto-instrumentation packages to add
-
-### What baseline does well
-
-- Detailed route enumeration with HTTP methods
-- Explicit RED signal naming with metric names
-- More comprehensive gap counts (26 gaps in kvstore baseline vs 8 in with_skill)
+4. **kvstore is a dead heat**: Both scored 90%, both missed the same assertions (LRU eviction observability). The baseline was surprisingly thorough at deep codebase analysis.
 
 ## Assertion-Level Breakdown
 
-### Eval 1: chi-basic (Go/chi)
+### Eval 1: chi-basic (Go/chi -- zero instrumentation)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Go | PASS | PASS |
+| 2 | discovery | Identifies chi (go-chi/chi/v5) | PASS | PASS |
+| 3 | discovery | Identifies main.go entry point | **FAIL** | PASS |
+| 4 | discovery | Lists HTTP routes | PASS | PASS |
+| 5 | coverage | No OTel SDK initialization | PASS | PASS |
+| 6 | coverage | No go.opentelemetry.io deps | PASS | PASS |
+| 7 | coverage | Missing otelhttp middleware | PASS | PASS |
+| 8 | coverage | Missing Duration (RED) | PASS | PASS |
+| 9 | coverage | Missing Rate (RED) | PASS | PASS |
+| 10 | coverage | Missing Errors (RED) | PASS | PASS |
+| 11 | coverage | No OTLP exporter | PASS | PASS |
+| 12 | anti-pattern | No anti-patterns noted | PASS | **FAIL** |
+| 13 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 14 | recommendation | Mentions otelhttp/otelchi | PASS | PASS |
 
-| #   | Category  | Assertion                     | With Skill | Baseline |
-| --- | --------- | ----------------------------- | ---------- | -------- |
-| 1   | discovery | Go as language                | PASS       | PASS     |
-| 2   | discovery | chi (go-chi/chi/v5) framework | PASS       | PASS     |
-| 3   | discovery | main.go entry point           | PASS       | PASS     |
-| 4   | discovery | 6 HTTP routes                 | **FAIL**   | PASS     |
-| 5   | gaps      | No OTel SDK                   | PASS       | PASS     |
-| 6   | gaps      | No go.opentelemetry.io deps   | PASS       | PASS     |
-| 7   | gaps      | Missing otelhttp/otelchi      | PASS       | PASS     |
-| 8   | gaps      | Missing duration histogram    | PASS       | PASS     |
-| 9   | gaps      | Missing request rate          | PASS       | PASS     |
-| 10  | gaps      | Missing error rate            | PASS       | PASS     |
-| 11  | gaps      | No OTLP exporter              | PASS       | PASS     |
-| 12  | anti      | No anti-patterns              | **FAIL**   | **FAIL** |
-| 13  | rec       | Recommends /otel-instrument   | PASS       | **FAIL** |
-| 14  | rec       | Mentions otelhttp/otelchi     | PASS       | PASS     |
+### Eval 2: express-basic (Node/Express -- zero instrumentation)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Node.js | PASS | PASS |
+| 2 | discovery | Identifies Express | PASS | PASS |
+| 3 | discovery | Identifies app.js entry point | PASS | PASS |
+| 4 | discovery | Lists HTTP routes | PASS | PASS |
+| 5 | coverage | No OTel SDK initialization | PASS | PASS |
+| 6 | coverage | No @opentelemetry/* packages | PASS | PASS |
+| 7 | coverage | Missing instrumentation-http | PASS | **FAIL** |
+| 8 | coverage | Missing instrumentation-express | PASS | **FAIL** |
+| 9 | coverage | Missing Duration (RED) | PASS | PASS |
+| 10 | coverage | Missing Rate (RED) | PASS | PASS |
+| 11 | coverage | Missing Errors (RED) | PASS | PASS |
+| 12 | coverage | No OTLP exporter | PASS | PASS |
+| 13 | anti-pattern | No anti-patterns noted | PASS | **FAIL** |
+| 14 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 15 | recommendation | Mentions specific packages | PASS | PASS |
 
-### Eval 2: express-basic (Node.js/Express)
+### Eval 3: flask-basic (Python/Flask -- zero instrumentation)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Python | PASS | PASS |
+| 2 | discovery | Identifies Flask from pyproject.toml | PASS | PASS |
+| 3 | discovery | Identifies app.py entry point | PASS | PASS |
+| 4 | discovery | Lists HTTP routes | PASS | PASS |
+| 5 | coverage | No OTel SDK initialization | PASS | PASS |
+| 6 | coverage | No opentelemetry packages | PASS | PASS |
+| 7 | coverage | Missing flask instrumentation | PASS | PASS |
+| 8 | coverage | Missing Duration (RED) | PASS | PASS |
+| 9 | coverage | Missing Rate (RED) | PASS | PASS |
+| 10 | coverage | Missing Errors (RED) | PASS | PASS |
+| 11 | coverage | No OTLP exporter | PASS | PASS |
+| 12 | anti-pattern | No anti-patterns noted | **FAIL** | **FAIL** |
+| 13 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 14 | recommendation | Mentions flask instrumentation package | PASS | PASS |
 
-| #   | Category  | Assertion                        | With Skill | Baseline |
-| --- | --------- | -------------------------------- | ---------- | -------- |
-| 1   | discovery | Node.js as language              | PASS       | PASS     |
-| 2   | discovery | Express from package.json        | PASS       | PASS     |
-| 3   | discovery | app.js entry point               | PASS       | PASS     |
-| 4   | discovery | 6 HTTP routes                    | **FAIL**   | PASS     |
-| 5   | gaps      | No OTel SDK                      | PASS       | PASS     |
-| 6   | gaps      | No @opentelemetry/* packages     | PASS       | PASS     |
-| 7   | gaps      | Missing instrumentation-http     | PASS       | PASS     |
-| 8   | gaps      | Missing instrumentation-express  | PASS       | PASS     |
-| 9   | gaps      | Missing duration histogram (RED) | **FAIL**   | PASS     |
-| 10  | gaps      | Missing request rate (RED)       | **FAIL**   | PASS     |
-| 11  | gaps      | Missing error rate (RED)         | PASS       | **FAIL** |
-| 12  | gaps      | No OTLP exporter                 | PASS       | PASS     |
-| 13  | anti      | No anti-patterns                 | PASS       | **FAIL** |
-| 14  | rec       | Recommends /otel-instrument      | PASS       | **FAIL** |
-| 15  | rec       | Mentions specific packages       | PASS       | **FAIL** |
+### Eval 4: kvstore (Go/stdlib -- zero instrumentation, complex structure)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Go | PASS | PASS |
+| 2 | discovery | Identifies stdlib net/http | PASS | PASS |
+| 3 | discovery | Identifies cmd/kvstore-server/main.go | PASS | PASS |
+| 4 | discovery | Multi-package structure identified | PASS | PASS |
+| 5 | discovery | Lists HTTP routes | PASS | PASS |
+| 6 | discovery | Identifies filesystem persistence | PASS | PASS |
+| 7 | discovery | Identifies indexLoop background goroutine | PASS | PASS |
+| 8 | coverage | No OTel SDK initialization | PASS | PASS |
+| 9 | coverage | No go.opentelemetry.io deps | PASS | PASS |
+| 10 | coverage | Missing otelhttp middleware | PASS | PASS |
+| 11 | coverage | Missing Duration (RED) | PASS | PASS |
+| 12 | coverage | Missing Rate (RED) | PASS | PASS |
+| 13 | coverage | Missing Errors (RED) | PASS | PASS |
+| 14 | coverage | No OTLP exporter | PASS | PASS |
+| 15 | coverage | Filesystem I/O has no tracing | PASS | PASS |
+| 16 | coverage | LRU eviction has no observability | **FAIL** | PASS |
+| 17 | anti-pattern | No anti-patterns noted | PASS | **FAIL** |
+| 18 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 19 | recommendation | Mentions otelhttp for ServeMux | PASS | PASS |
+| 20 | recommendation | Custom spans for persistence/eviction | **FAIL** | PASS |
 
-### Eval 3: flask-basic (Python/Flask)
+### Eval 5: chi-partial (Go/chi -- partial instrumentation with anti-patterns)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Go | PASS | PASS |
+| 2 | discovery | Identifies chi (go-chi/chi/v5) | PASS | PASS |
+| 3 | discovery | Identifies main.go entry point | PASS | PASS |
+| 4 | discovery | Lists HTTP routes | PASS | PASS |
+| 5 | discovery | Existing TracerProvider identified | PASS | PASS |
+| 6 | discovery | otelhttp.NewHandler identified | PASS | PASS |
+| 7 | coverage | No MeterProvider configured | PASS | PASS |
+| 8 | coverage | Missing Duration due to MeterProvider | PASS | PASS |
+| 9 | coverage | Missing Rate due to MeterProvider | PASS | PASS |
+| 10 | coverage | No TextMapPropagator | PASS | PASS |
+| 11 | coverage | No graceful shutdown | PASS | PASS |
+| 12 | coverage | No service.name resource | PASS | PASS |
+| 13 | anti-pattern | Hardcoded OTLP endpoint flagged | PASS | **FAIL** |
+| 14 | anti-pattern | Hot-path tracer flagged | PASS | PASS |
+| 15 | anti-pattern | High-cardinality span name flagged | PASS | **FAIL** |
+| 16 | anti-pattern | Missing recordException flagged | PASS | PASS |
+| 17 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 18 | recommendation | Mentions MeterProvider for metrics | PASS | **FAIL** |
 
-| #   | Category  | Assertion                        | With Skill | Baseline |
-| --- | --------- | -------------------------------- | ---------- | -------- |
-| 1   | discovery | Python as language               | PASS       | PASS     |
-| 2   | discovery | Flask from pyproject.toml        | PASS       | PASS     |
-| 3   | discovery | app.py entry point               | PASS       | PASS     |
-| 4   | discovery | 6 HTTP routes                    | **FAIL**   | PASS     |
-| 5   | gaps      | No OTel SDK                      | PASS       | PASS     |
-| 6   | gaps      | No opentelemetry packages        | PASS       | PASS     |
-| 7   | gaps      | Missing instrumentation-flask    | PASS       | PASS     |
-| 8   | gaps      | Missing duration histogram (RED) | **FAIL**   | PASS     |
-| 9   | gaps      | Missing request rate (RED)       | **FAIL**   | PASS     |
-| 10  | gaps      | Missing error rate (RED)         | **FAIL**   | PASS     |
-| 11  | gaps      | No OTLP exporter                 | PASS       | PASS     |
-| 12  | anti      | No anti-patterns                 | PASS       | **FAIL** |
-| 13  | rec       | Recommends /otel-instrument      | PASS       | **FAIL** |
-| 14  | rec       | Mentions instrumentation-flask   | PASS       | PASS     |
+### Eval 6: springboot-basic (Java/Spring Boot -- zero instrumentation)
 
+| # | Category | Assertion | With Skill | Baseline |
+|---|----------|-----------|-----------|----------|
+| 1 | discovery | Identifies Java | PASS | PASS |
+| 2 | discovery | Identifies Spring Boot from pom.xml | PASS | PASS |
+| 3 | discovery | Identifies TasksApplication.java | PASS | PASS |
+| 4 | discovery | Lists HTTP routes | PASS | PASS |
+| 5 | coverage | No OTel SDK or Java agent | PASS | PASS |
+| 6 | coverage | No opentelemetry deps in pom.xml | PASS | PASS |
+| 7 | coverage | Missing Duration (RED) | PASS | PASS |
+| 8 | coverage | Missing Rate (RED) | PASS | PASS |
+| 9 | coverage | Missing Errors (RED) | PASS | PASS |
+| 10 | coverage | No OTLP exporter | PASS | PASS |
+| 11 | anti-pattern | No anti-patterns noted | PASS | **FAIL** |
+| 12 | recommendation | Recommends /otel-instrument | PASS | **FAIL** |
+| 13 | recommendation | Mentions Java agent (javaagent) | PASS | PASS |
 
-### Eval 4: kvstore (Go/stdlib)
+## Analyst Notes
 
+### Non-discriminating assertions
+- All "discovery" assertions (language, framework, routes) pass in both configs -- baseline Claude is good at codebase recognition
+- All RED signal gap assertions pass in both configs for zero-instrumentation apps
+- "No OTLP exporter" consistently passes in both
 
-| #   | Category  | Assertion                             | With Skill | Baseline |
-| --- | --------- | ------------------------------------- | ---------- | -------- |
-| 1   | discovery | Go as language                        | PASS       | PASS     |
-| 2   | discovery | stdlib net/http (ServeMux)            | PASS       | PASS     |
-| 3   | discovery | cmd/kvstore-server/main.go            | PASS       | PASS     |
-| 4   | discovery | Multi-package structure               | PASS       | PASS     |
-| 5   | discovery | HTTP routes                           | **FAIL**   | PASS     |
-| 6   | discovery | Filesystem persistence                | PASS       | PASS     |
-| 7   | discovery | indexLoop background goroutine        | PASS       | PASS     |
-| 8   | gaps      | No OTel SDK                           | PASS       | PASS     |
-| 9   | gaps      | No go.opentelemetry.io deps           | PASS       | PASS     |
-| 10  | gaps      | Missing otelhttp middleware           | PASS       | PASS     |
-| 11  | gaps      | Missing duration histogram            | PASS       | PASS     |
-| 12  | gaps      | Missing request rate                  | PASS       | PASS     |
-| 13  | gaps      | Missing error rate                    | PASS       | PASS     |
-| 14  | gaps      | No OTLP exporter                      | **FAIL**   | PASS     |
-| 15  | gaps      | Filesystem I/O no tracing             | PASS       | PASS     |
-| 16  | gaps      | LRU eviction no observability         | PASS       | PASS     |
-| 17  | anti      | No anti-patterns                      | **FAIL**   | **FAIL** |
-| 18  | rec       | Recommends /otel-instrument           | PASS       | **FAIL** |
-| 19  | rec       | Mentions otelhttp for ServeMux        | PASS       | PASS     |
-| 20  | rec       | Suggests custom spans for persistence | PASS       | PASS     |
+### Structurally-biased assertions
+- "Recommends /otel-instrument" fails in all 6 baseline runs (no skill awareness)
+- "No anti-patterns noted" fails in 4/6 baseline runs (no explicit template section)
+- These 2 assertions account for 10 of the 16 total baseline failures
 
+### Most discriminating assertion
+- chi-partial anti-pattern detection: "hardcoded endpoint" and "high-cardinality span name" fail in baseline but pass with skill. These are the assertions that truly test skill value.
 
-## Session & reasoning logs
+### Token/Time tradeoffs
+- With-skill runs use ~35% more tokens (28.9K vs 21.4K avg)
+- With-skill runs are actually 5% faster (123s vs 129s avg) despite reading more material
+- The skill's structured process may reduce exploration time
 
-- `.workspace/otel-audit/iteration-1/eval-1-chi-basic/with_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-1-chi-basic/with_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-1-chi-basic/without_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-1-chi-basic/without_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-2-express-basic/with_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-2-express-basic/with_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-2-express-basic/without_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-2-express-basic/without_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-3-flask-basic/with_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-3-flask-basic/with_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-3-flask-basic/without_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-3-flask-basic/without_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-4-kvstore/with_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-4-kvstore/with_skill/outputs/reasoning.md`
-- `.workspace/otel-audit/iteration-1/eval-4-kvstore/without_skill/outputs/session.md`
-- `.workspace/otel-audit/iteration-1/eval-4-kvstore/without_skill/outputs/reasoning.md`
+## Session & Reasoning Logs
+
+```
+.workspace/otel-audit/iteration-2/eval-1-chi-basic/{with,without}_skill/outputs/{session,reasoning}.md
+.workspace/otel-audit/iteration-2/eval-2-express-basic/{with,without}_skill/outputs/{session,reasoning}.md
+.workspace/otel-audit/iteration-2/eval-3-flask-basic/{with,without}_skill/outputs/{session,reasoning}.md
+.workspace/otel-audit/iteration-2/eval-4-kvstore/{with,without}_skill/outputs/{session,reasoning}.md
+.workspace/otel-audit/iteration-2/eval-5-chi-partial/{with,without}_skill/outputs/{session,reasoning}.md
+.workspace/otel-audit/iteration-2/eval-6-springboot-basic/{with,without}_skill/outputs/{session,reasoning}.md
+```

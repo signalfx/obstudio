@@ -34,7 +34,6 @@ with-skill and baseline runs in parallel so they finish together.
 Execute this task:
 
 Read the skill at: <skill-path>/SKILL.md
-Also read the language reference: skills/references/languages/<lang>.md
 
 Task: <eval prompt from evals.json>
 
