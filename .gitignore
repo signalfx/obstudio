@@ -27,6 +27,7 @@ examples/**/*.db
 examples/**/otel_setup.py
 examples/**/otel_*.py
 examples/**/go.sum
+examples/**/go-*
 
 # Skill eval workspaces
 .workspace/

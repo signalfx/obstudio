@@ -9,24 +9,103 @@ Language-specific instrumentation guidance for Go services.
 Use packages from `go.opentelemetry.io/contrib`. Only add instrumentations
 matching the frameworks and clients detected in the codebase.
 
-| Dependency | Auto-instrumentation Package | What It Covers |
-|------------|------------------------------|----------------|
-| `net/http` (stdlib) | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` | HTTP server/client spans with route, method, status |
-| `gorilla/mux` | `go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux` | Route-aware HTTP spans |
-| `go-chi/chi` | `go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi` | Route-aware HTTP spans |
-| `gin-gonic/gin` | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin` | Route-aware HTTP spans |
-| `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc` | gRPC client/server spans and metrics |
-| `database/sql` | `github.com/XSAM/otelsql` | SQL query spans with `db.statement` |
-| `go-redis/redis` | `github.com/redis/go-redis/extra/redisotel` | Redis command spans |
-| `runtime` | `go.opentelemetry.io/contrib/instrumentation/runtime` | Goroutine count, memory, GC metrics |
-| `host` | `go.opentelemetry.io/contrib/instrumentation/host` | CPU, memory, network host metrics |
-| `segmentio/kafka-go` | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | Kafka producer/consumer spans |
-| `aws-sdk-go-v2` | `go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws` | AWS service call spans |
 
-**Never use `go.opentelemetry.io/otel/semconv/*` packages directly.** These
+| Dependency               | Auto-instrumentation Package                                                              | Signals         | What It Covers                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
+| `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans, `http.server.request.duration`, `http.server.active_requests` |
+| `gorilla/mux`            | `go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux`              | spans only      | Route-aware HTTP spans                                                                  |
+| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`               | spans only      | Route-aware HTTP spans                                                                  |
+| `gin-gonic/gin`          | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`            | spans only      | Route-aware HTTP spans                                                                  |
+| `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc`             | spans + metrics | gRPC client/server spans and metrics                                                    |
+| `database/sql`           | `github.com/XSAM/otelsql`                                                                 | spans only      | SQL query spans with `db.statement`                                                     |
+| `go-redis/redis`         | `github.com/redis/go-redis/extra/redisotel`                                               | spans only      | Redis command spans                                                                     |
+| `runtime`                | `go.opentelemetry.io/contrib/instrumentation/runtime`                                     | metrics only    | Goroutine count, memory, GC metrics                                                     |
+| `host`                   | `go.opentelemetry.io/contrib/instrumentation/host`                                        | metrics only    | CPU, memory, network host metrics                                                       |
+| `segmentio/kafka-go`     | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | spans only      | Kafka producer/consumer spans                                                           |
+| `aws-sdk-go-v2`          | `go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws`        | spans only      | AWS service call spans                                                                  |
+
+
+**Never use `go.opentelemetry.io/otel/semconv/`* packages directly.** These
 versioned semconv modules can cause runtime conflicts when different
 dependencies pull in different schema versions. Use string attribute keys
 instead.
+
+---
+
+## Framework Selection Guide
+
+Framework-specific middleware packages (otelchi, otelgin, otelmux) only emit
+**spans** -- they do not register HTTP server metric instruments. To get full
+RED coverage (Rate via request counts, Errors via status codes, Duration via
+`http.server.request.duration`), wrap the outermost handler with
+`otelhttp.NewHandler`, which emits both spans and metrics.
+
+**Default rule:** always use `otelhttp.NewHandler` as the outermost wrapper.
+Add framework middleware inside only when you need route-pattern span names.
+
+### chi
+
+Preferred (spans + metrics):
+
+```go
+handler := otelhttp.NewHandler(r, "server")
+http.ListenAndServe(":8080", handler)
+```
+
+If you also need chi route patterns in span names, add `otelchi` as inner
+middleware:
+
+```go
+r.Use(otelchi.Middleware("server"))
+handler := otelhttp.NewHandler(r, "server")
+```
+
+### gin
+
+Preferred (spans + metrics):
+
+```go
+handler := otelhttp.NewHandler(ginEngine, "server")
+http.ListenAndServe(":8080", handler)
+```
+
+Combined with route-aware span names:
+
+```go
+ginEngine.Use(otelgin.Middleware("server"))
+handler := otelhttp.NewHandler(ginEngine, "server")
+```
+
+### gorilla/mux
+
+Preferred (spans + metrics):
+
+```go
+handler := otelhttp.NewHandler(router, "server")
+http.ListenAndServe(":8080", handler)
+```
+
+Combined with route-aware span names:
+
+```go
+router.Use(otelmux.Middleware("server"))
+handler := otelhttp.NewHandler(router, "server")
+```
+
+### Adding a new framework
+
+Follow this template:
+
+```
+### {framework-name}
+
+Preferred (spans + metrics):
+  handler := otelhttp.NewHandler({router}, "server")
+
+Combined with route-aware span names:
+  {router}.Use({framework-package}.Middleware("server"))
+  handler := otelhttp.NewHandler({router}, "server")
+```
 
 ---
 
@@ -154,8 +233,9 @@ handler := otelhttp.NewHandler(mux, "server",
 http.ListenAndServe(":8080", handler)
 ```
 
-For router-specific middleware (`otelmux`, `otelchi`, `otelgin`), wrap
-the router instead of individual handlers.
+For router-specific middleware (`otelmux`, `otelchi`, `otelgin`), see the
+Framework Selection Guide above. These packages emit spans only -- always
+use `otelhttp.NewHandler` as the outermost wrapper for HTTP server metrics.
 
 ### HTTP Client Instrumentation
 
@@ -307,19 +387,23 @@ The `otelhttp` handler auto-sets ERROR on 5xx responses.
 All configuration is via environment variables. Do not hardcode endpoints.
 The `otlptracehttp` and `otlpmetrichttp` exporters read these automatically.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
-| `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
-| `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
+
+| Variable                      | Default                 | Purpose                       |
+| ----------------------------- | ----------------------- | ----------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint            |
+| `OTEL_SERVICE_NAME`           | (must be set)           | Service identity in telemetry |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `60000`                 | Metric export interval (ms)   |
+| `OTEL_BSP_SCHEDULE_DELAY`     | `5000`                  | Span batch export delay (ms)  |
+
 
 For local development with the Observer:
 
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-    OTEL_METRIC_EXPORT_INTERVAL=1000 \
-    OTEL_BSP_SCHEDULE_DELAY=100 \
-    go run .
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_METRIC_EXPORT_INTERVAL=1000 \
+OTEL_BSP_SCHEDULE_DELAY=100 \
+go run .
+```
 
 ---
 
@@ -343,3 +427,4 @@ For local development with the Observer:
   so in-flight spans are flushed before metrics.
 - **`runtime.Start()`**: this registers goroutine count, memory, and GC
   metrics. Call it after the MeterProvider is set.
+

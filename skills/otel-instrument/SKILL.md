@@ -81,12 +81,14 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 
 #### Implementation Rules
 
+- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it.
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
 - Do not create spans for trivial helpers. Only span real diagnostic boundaries.
 - Set span status to ERROR and call recordException on failed operations.
+- When a framework-specific auto-instrumentation package only provides spans (not HTTP server metrics), wrap the outermost handler with `otelhttp.NewHandler` (Go) or equivalent to ensure `http.server.request.duration` and `http.server.active_requests` are emitted. Consult the Framework Selection Guide in the language reference for the correct wrapping pattern.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
 - For domains where OTel semantic conventions exist, emit required spans and metrics only, with required attributes only. Do not emit spans or metrics that are marked optional, do not include attributes that are marked optional. Do not invent custom spans, metrics or attributes in domains where OTel semantic conventions exist.
 - For custom attribute names use `{domain}.{noun}.{adjective}` format.

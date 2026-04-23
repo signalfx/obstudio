@@ -30,6 +30,10 @@ detected in the codebase. Only install what the project actually uses.
 registered before framework-specific instrumentations (Express, Fastify, etc.)
 because the framework instrumentations depend on HTTP spans being created first.
 
+**Note**: `http.server.active_requests` is experimental in the Node.js OTel SDK
+and may not be emitted by all versions. Do not treat its presence as a hard
+requirement when assessing instrumentation coverage.
+
 ---
 
 ## Dependencies
