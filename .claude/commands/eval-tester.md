@@ -107,11 +107,12 @@ Don't just wait. Review the assertions from `evals/evals.json` and update the
 `eval_metadata.json` files with the flattened assertions. Explain to the user
 what each assertion category checks.
 
-## 4. As runs complete, capture timing
+## 4. As runs complete, capture timing for BOTH runs
 
 When each subagent completes, you get `total_tokens` and `duration_ms` in the
-task notification. Save **immediately** to `timing.json` in the run directory —
-this data is not persisted elsewhere:
+task notification. Save **immediately** to `timing.json` in **each** run
+directory (both `with_skill/` and `without_skill/`) — this data is not
+persisted elsewhere:
 
 ```json
 {
@@ -217,15 +218,15 @@ Print a summary table:
 ```
 ## <skill-name> Benchmark — Iteration <N>
 
-| Eval | App | With Skill | Baseline | Delta | Time | Tokens |
-|------|-----|-----------|----------|-------|------|--------|
-| 1 | flask-basic | 85% | 35% | +50% | 42s | 3.8K |
-| 2 | chi-basic | 90% | 40% | +50% | 38s | 3.2K |
-| 3 | express-basic | 80% | 30% | +50% | 45s | 4.1K |
-| 4 | kvstore | 75% | 25% | +50% | 55s | 5.2K |
-| **Avg** | | **83%** | **33%** | **+50%** | **45s** | **4.1K** |
+| Eval | App | With Skill | Baseline | Delta | Time (skill) | Time (base) | Tokens (skill) | Tokens (base) |
+|------|-----|-----------|----------|-------|------|------|--------|--------|
+| 1 | flask-basic | 85% | 35% | +50% | 42s | 38s | 3.8K | 2.1K |
+| 2 | chi-basic | 90% | 40% | +50% | 38s | 35s | 3.2K | 1.9K |
+| 3 | express-basic | 80% | 30% | +50% | 45s | 40s | 4.1K | 2.3K |
+| 4 | kvstore | 75% | 25% | +50% | 55s | 48s | 5.2K | 3.0K |
+| **Avg** | | **83%** | **33%** | **+50%** | **45s** | **40s** | **4.1K** | **2.3K** |
 
-Stddev: pass_rate ±0.05 | time ±8s | tokens ±800
+Stddev: pass_rate ±0.05 (skill), ±0.10 (baseline) | time ±8s | tokens ±800
 ```
 
 Then assertion-level breakdown per eval:
