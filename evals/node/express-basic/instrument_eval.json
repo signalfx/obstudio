@@ -1,0 +1,63 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Express service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Express service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "package-sdk-node",
+      "description": "package.json includes the OTel Node SDK.",
+      "kind": "file_contains_all",
+      "path": "package.json",
+      "values": [
+        "@opentelemetry/sdk-node"
+      ]
+    },
+    {
+      "id": "package-http-express-instrumentation",
+      "description": "package.json includes HTTP and Express instrumentation packages.",
+      "kind": "file_contains_all",
+      "path": "package.json",
+      "values": [
+        "@opentelemetry/instrumentation-http",
+        "@opentelemetry/instrumentation-express"
+      ]
+    },
+    {
+      "id": "instrumentation-file",
+      "description": "A separate Node instrumentation file exists.",
+      "kind": "file_exists_any",
+      "paths": [
+        "instrumentation.js",
+        "tracing.js",
+        "otel.js"
+      ]
+    },
+    {
+      "id": "startup-preload",
+      "description": "package.json start script preloads instrumentation.",
+      "kind": "file_contains_any",
+      "path": "package.json",
+      "values": [
+        "--require",
+        "--import",
+        "instrumentation",
+        "tracing"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Loads instrumentation before app.js starts.",
+    "Configures NodeSDK with HTTP and Express auto-instrumentation.",
+    "Keeps service name and OTLP endpoint environment-driven.",
+    "Adds graceful SDK shutdown handling.",
+    "Does not rewrite the Express app structure unnecessarily."
+  ]
+}

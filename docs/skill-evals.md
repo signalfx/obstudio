@@ -1,76 +1,161 @@
-# Skill Eval Framework
+# Codex Skill Eval Framework
 
 ## What It Is
 
-An automated benchmarking system that measures whether our skills (otel-audit, otel-instrument, otel-verify, otel-observe) actually improve Claude's output compared to Claude without any skill guidance.
+The skill eval system tests `$otel-audit` and `$otel-instrument` with Codex. It
+follows the OpenAI eval pattern: run the agent, capture `codex exec --json`
+traces, grade deterministic behavior, and use schema-constrained qualitative
+grading where rules alone are too weak.
 
-## How It Works
+Each eval is:
 
-For each test case, the runner executes two passes:
-
-1. **With skill** — runs `claude -p` with the skill's SKILL.md + references loaded
-2. **Baseline (without skill)** — runs the same prompt with no skill context
-
-Both runs execute against real example apps (flask-basic, chi-basic, kvstore, express-basic, fastapi-celery) in isolated workspaces.
-
-## How Pass Rates Are Calculated
-
-Each eval has a list of **assertions** — concrete checks against the output. For example, a otel-audit eval might assert:
-
-- `.observe/inventory.md` file is created
-- Inventory contains a Spans table
-- Inventory contains a Metrics table
-- At least 5 span signals are defined
-- Fault domains are identified
-
-**Pass rate = assertions passed / total assertions**
-
-If an eval has 10 assertions and the skill run passes 9, that's 90%. The benchmark averages across all evals for a skill and reports the standard deviation.
-
-## What the Results Mean
-
-| Metric | Description |
-|--------|-------------|
-| **Pass rate** | % of assertions satisfied (higher = better) |
-| **Delta** | Skill pass rate minus baseline pass rate (positive = skill helps) |
-| **Time** | Wall-clock seconds per eval run |
-| **Tokens** | Total tokens consumed per run |
-
-**Interpreting delta:**
-- **Positive delta** — the skill is adding value over vanilla Claude
-- **Zero delta** — skill doesn't change the outcome (Claude already knows how)
-- **Negative delta** — skill is actually hurting (over-constraining or misdirecting)
-
-## First Run Results (2026-04-20)
-
-| Skill | With Skill | Baseline | Delta | Avg Time | Avg Tokens |
-|-------|-----------|----------|-------|----------|------------|
-| otel-audit | 97% | 100% | -3% | 159s | 14,793 |
-| otel-instrument | 71% | 71% | 0% | 365s | 28,848 |
-| otel-observe | 60% | 60% | 0% | 546s | 52,945 |
-| otel-verify | 45% | 45% | 0% | 254s | 17,584 |
-
-## Analysis
-
-1. **otel-audit** is the most mature — 97% pass rate, only missed 1 assertion on one eval.
-
-2. **No skill outperforms baseline yet.** This doesn't mean skills are useless — it means our assertions test for things Claude can already do without guidance (create OTel files, add packages). The skills' real value (correct inventory format, SLI definitions, fault domain taxonomy, semconv compliance) needs more targeted assertions.
-
-3. **otel-verify** scores lowest (45%) because it requires a running collector and service — assertions like "trace data is queried" and "metrics are checked" can't fully pass in a sandbox without infrastructure.
-
-4. **Token cost correlates with skill complexity** — otel-observe (chains all sub-skills) uses 53K tokens vs otel-audit at 15K.
-
-## Next Steps
-
-- Add assertions that test skill-specific output quality (inventory format compliance, semconv naming, fault domain coverage)
-- Fix otel-verify evals to mock or stub the collector dependency
-- Re-run after skill improvements to track progress over time
-
-## Running Evals
-
-```bash
-make skill-eval SKILL=otel-audit       # one skill
-make skill-eval-all                      # all skills
+```text
+prompt + fixture service -> pytest validation
+prompt + fixture service -> live Codex A/B trace + artifacts -> deterministic checks + qualitative checks -> report
 ```
 
-Results land in `skill-eval-workspace/<skill>/latest/`.
+## Layout
+
+Fixture apps and eval definitions live together:
+
+```text
+evals/
+  go/chi-basic/
+    audit_eval.json
+    instrument_eval.json
+    ...
+  node/express-basic/
+    audit_eval.json
+    instrument_eval.json
+  python/flask-basic/
+    audit_eval.json
+    instrument_eval.json
+
+pytest-codex-evals/
+  src/pytest_codex_evals/
+    schemas/
+  tests/
+```
+
+The eval definitions use JSON instead of CSV because these cases need more than
+prompt text: fixture metadata, prompt variants, deterministic checks, artifact
+paths, and qualitative checks. CSV is fine for a small prompt list, but JSON
+keeps each service eval self-contained and machine-validated.
+
+Each eval has a `prompts[]` array of task variants. The pytest plugin collects
+each `*_eval.json` file directly and expands every variant into its own pytest
+item. For each live case, the harness runs two sides:
+
+- `with_skill`: prefixes the task with `Use the $<skill> skill.`
+- `baseline`: runs the task as written, with no skill name and no repo skills visible
+
+## A/B Runs
+
+Each case runs twice with the same model and same copied fixture:
+
+| Side | Skill visibility | Prompt |
+|---|---|---|
+| `with_skill` | Temporary `.agents/skills` links are present | Explicitly invokes `$otel-audit` or `$otel-instrument` |
+| `baseline` | No repo skills are present | Same task intent without naming the skill |
+
+The execution workspaces are created outside the repository so the baseline
+cannot discover repo-scoped skills by walking up to the repo root. After each
+run, artifacts are copied back under `.workspace/codex-evals/`.
+
+## Grading
+
+Deterministic grading uses Python over files and JSONL traces:
+
+- final response text checks
+- expected file creation and manifest edits
+- command execution evidence from `codex exec --json`
+- command count and token usage from trace events
+- baseline contamination checks for accidental skill visibility
+
+Checks default to `with_skill`, keeping the A/B baseline simple. Baseline runs
+only need to prove run health and skill isolation unless a check explicitly sets
+`applies_to` to `baseline` or `both`.
+
+The harness also adds setup guards to every run:
+
+- `skills-loaded`: the `with_skill` side exposes repo skills under `.agents/skills/`.
+- `skills-not-loaded`: the `baseline` side does not expose repo skills or reference them in traces.
+
+Qualitative grading runs a second read-only Codex pass with the schema packaged
+by `pytest-codex-evals`. It uses the eval JSON's `qualitative_checks` and the
+judge model configured in `codex-evals*.toml`; the task-run model is configured
+as `[models].agent`.
+
+## Commands
+
+```bash
+make test-eval-harness
+make test-pytest-plugin
+make skill-eval-list
+make skill-eval SKILL=skills/otel-audit
+make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
+make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct
+make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
+make skill-eval-all
+```
+
+`skill-eval` validates JSON and fixture shape only. The live A/B command is:
+
+```bash
+cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-config codex-evals.ab.toml
+```
+
+The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
+Codex controls (`--skill`, `--codex-eval-config`, `--model`, `--no-qualitative`),
+JSON eval collection, validation, A/B execution, and reporting. Service
+selection is plain pytest path selection, prompt selection is plain `-k`
+filtering, and `--skill` points to a skill directory containing `SKILL.md`.
+
+Build and publish it with:
+
+```bash
+make build-pytest-plugin
+make publish-pytest-plugin
+```
+
+## Outputs
+
+Full artifacts are ignored by git:
+
+```text
+.workspace/codex-evals/<skill>/<run-id>/
+  benchmark.json
+  report.md
+  cases/<language>/<service>/<prompt-id>/
+    with_skill/
+      service/
+      trace.jsonl
+      last_message.md
+      deterministic_grade.json
+      qualitative_grade.json
+      summary.json
+    baseline/
+      service/
+      trace.jsonl
+      last_message.md
+      deterministic_grade.json
+      qualitative_grade.json
+      summary.json
+```
+
+The latest summary is copied to:
+
+```text
+eval-reports/<skill>/REPORT.md
+eval-reports/<skill>/benchmark.json
+```
+
+## Maintenance Rules
+
+- Add an eval when a skill behavior changes or a real failure is found.
+- Keep deterministic checks focused on behavior that can be proven from files,
+  traces, commands, and final output.
+- Use qualitative checks for style, semantic convention quality, and workflow
+  correctness.
+- Keep full traces out of git; commit only durable eval definitions, harness
+  code, and intentionally reviewed summary reports.

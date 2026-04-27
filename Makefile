@@ -8,13 +8,15 @@ LDFLAGS    := -ldflags "-X main.version=$(VERSION)"
 
 BUILD_DIR  := build
 SKILLS_SRC := skills
+EVALS_DIR  := evals
+PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet skill-eval release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
 # --- Client build ---
@@ -84,14 +86,32 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 
 # --- Skill evals ---
 
-SKILL ?=
+skill-eval: ## Validate skill eval JSONs (e.g. make skill-eval SKILL=skills/otel-instrument)
+	$(MAKE) -C $(EVALS_DIR) $@
 
-skill-eval: ## Run skill evals (e.g. make skill-eval SKILL=otel-instrument)
-ifndef SKILL
-	$(error SKILL is required — e.g. make skill-eval SKILL=otel-instrument)
-endif
-	@echo "Evals for $(SKILL): $(SKILLS_SRC)/$(SKILL)/evals/evals.json"
-	@cat $(SKILLS_SRC)/$(SKILL)/evals/evals.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'{len(d[\"evals\"])} eval(s) defined')"
+skill-eval-all: ## Validate all Codex skill eval JSONs
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-list: ## List discovered Codex skill evals
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-ab: ## Run live Codex A/B evals (e.g. make skill-eval-ab SKILL=skills/otel-instrument)
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-ab-all: ## Run all live Codex A/B evals
+	$(MAKE) -C $(EVALS_DIR) $@
+
+test-eval-harness: ## Run fast unit tests for the Codex eval harness
+	$(MAKE) -C $(EVALS_DIR) $@
+
+test-pytest-plugin: ## Run pytest plugin unit tests
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) test
+
+build-pytest-plugin: ## Build pytest plugin distribution artifacts
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) build
+
+publish-pytest-plugin: ## Publish pytest plugin distribution artifacts (requires uv publish credentials)
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) publish
 
 # --- Skills ---
 

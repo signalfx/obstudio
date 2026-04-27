@@ -1,0 +1,53 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Flask service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Flask service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "final-identifies-python",
+      "description": "Final report identifies Python.",
+      "kind": "final_contains_all",
+      "values": [
+        "Python"
+      ]
+    },
+    {
+      "id": "final-identifies-flask",
+      "description": "Final report identifies Flask.",
+      "kind": "final_contains_all",
+      "values": [
+        "Flask"
+      ]
+    },
+    {
+      "id": "final-notes-no-otel",
+      "description": "Final report notes missing OpenTelemetry instrumentation.",
+      "kind": "final_contains_all",
+      "values": [
+        "OpenTelemetry",
+        "missing"
+      ]
+    },
+    {
+      "id": "audit-read-only",
+      "description": "Audit run does not create a Python OTel setup file.",
+      "kind": "no_file_exists",
+      "path": "otel_setup.py"
+    }
+  ],
+  "qualitative_checks": [
+    "Identifies app.py and pyproject.toml as the relevant entrypoint and dependency files.",
+    "Enumerates the Flask task CRUD routes and health route.",
+    "Reports no opentelemetry packages and no SDK initialization.",
+    "Mentions opentelemetry-instrumentation-flask as the auto-instrumentation gap.",
+    "Calls out request duration, rate, errors, and OTLP exporter configuration."
+  ]
+}

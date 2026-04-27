@@ -1,0 +1,9 @@
+{
+  "skill": "otel-instrument",
+  "runs": [],
+  "summary": {
+    "case_count": 0,
+    "with_skill_avg": 0.0,
+    "baseline_guard_avg": 0.0
+  }
+}

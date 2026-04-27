@@ -1,0 +1,75 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Go chi service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Go chi service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "go-mod-otel",
+      "description": "go.mod includes OpenTelemetry dependencies.",
+      "kind": "file_contains_all",
+      "path": "go.mod",
+      "values": [
+        "go.opentelemetry.io/otel"
+      ]
+    },
+    {
+      "id": "go-mod-http-instrumentation",
+      "description": "go.mod includes Go HTTP auto-instrumentation.",
+      "kind": "file_contains_any",
+      "path": "go.mod",
+      "values": [
+        "otelhttp",
+        "otelchi"
+      ]
+    },
+    {
+      "id": "separate-init-file",
+      "description": "OTel initialization is placed in a separate Go file.",
+      "kind": "file_exists_any",
+      "paths": [
+        "otel.go",
+        "telemetry.go",
+        "tracing.go"
+      ]
+    },
+    {
+      "id": "main-wires-handler",
+      "description": "Application entry point wires OTel middleware or setup.",
+      "kind": "file_contains_any",
+      "path": "main.go",
+      "values": [
+        "otelhttp",
+        "otelchi",
+        "initTracer",
+        "setupOTel",
+        "InitOTel"
+      ]
+    },
+    {
+      "id": "final-mentions-verification",
+      "description": "Final response reports build or verification outcome.",
+      "kind": "final_contains_any",
+      "values": [
+        "go test",
+        "go build",
+        "verified",
+        "No .vscode/launch.json found"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Confirms target process, runtime shape, service.name source, and environment dimension before editing.",
+    "Initializes the SDK exactly once and sets tracer provider and text map propagator.",
+    "Uses route-aware, low-cardinality HTTP spans and preserves chi routing behavior.",
+    "Keeps OTLP endpoint and service name configurable through environment variables.",
+    "Does not introduce broad refactors or custom spans beyond the requested auto-instrumentation."
+  ]
+}

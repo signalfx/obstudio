@@ -5,6 +5,7 @@ This repository contains:
 - `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
 - `extension/` -- VS Code extension that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
+- `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing
 
 ## Prerequisites
 
@@ -13,7 +14,7 @@ This repository contains:
 | Go | 1.25+ | observer collector |
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
-| uv | latest | Python example apps |
+| uv | latest | Python eval harness and Python fixture apps |
 | goreleaser | latest | `make release-local` only (optional) |
 
 ## Build
@@ -88,11 +89,27 @@ cd extension && npm test # VS Code-hosted extension tests
 
 ## Skill Evals
 
-Each skill has an `evals/evals.json` file with evaluation cases that
-test skill effectiveness against example apps.
+Skill evals are JSON files collected by the reusable pytest plugin under
+`evals/`. Each service fixture owns its eval definitions:
+`evals/<language>/<service>/audit_eval.json` and
+`evals/<language>/<service>/instrument_eval.json`.
 
 ```sh
-make skill-eval SKILL=otel-instrument
+make skill-eval SKILL=skills/otel-instrument
+make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
+make skill-eval-ab SKILL=skills/otel-instrument CASE=go/kvstore
+make test-eval-harness
+make test-pytest-plugin
+```
+
+Live A/B settings, including the qualitative judge model, live in
+`evals/codex-evals.ab.toml`.
+
+The reusable pytest plugin is built and published alongside this repository:
+
+```sh
+make build-pytest-plugin
+make publish-pytest-plugin
 ```
 
 ## Pull Requests
@@ -131,6 +148,16 @@ which cross-compiles for linux/darwin/windows, creates a GitHub Release,
 and uploads zip archives.
 
 See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
+
+The pytest plugin is versioned in `pytest-codex-evals/pyproject.toml` and can be
+published from the same checkout when eval harness changes need a package
+release:
+
+```sh
+make test-pytest-plugin
+make build-pytest-plugin
+make publish-pytest-plugin
+```
 
 ## Quality Tooling
 

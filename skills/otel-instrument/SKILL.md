@@ -2,7 +2,7 @@
 name: otel-instrument
 description: >-
   Add OpenTelemetry observability to applications using auto-instrumentation
-  and optional custom spans/metrics.   Use when the user types /otel-instrument,
+  and optional custom spans/metrics.   Use when the user types $otel-instrument,
   asks to "add OTel", "add tracing", "add metrics", "implement observability",
   "wire up telemetry", "instrument this service", or asks to add a specific
   custom signal like "add a metric to track queue depth", "add a span for
@@ -125,7 +125,7 @@ Confirm the instrumented app still builds and starts:
 2. Start the app briefly to confirm it boots without import or initialization errors, then stop it.
 3. If either step fails, fix the issue before proceeding.
 
-To verify that telemetry is actually flowing to a collector, use `/otel-audit` with the Observer running.
+To verify that telemetry is actually flowing to a collector, use `$otel-audit` with the Observer running.
 
 ### 6. Enable Debugging in VS Code
 

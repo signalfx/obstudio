@@ -1,77 +1,104 @@
 # AGENTS.md
 
-Guidelines for AI agents working in this repo. Read `CONTRIBUTING.md` for the full dev process.
+Repo instructions for Codex agents. Keep changes small, evidence-based, and
+aligned with the existing project structure. Read `CONTRIBUTING.md` when you
+need the full development workflow.
 
-## Repo Layout
+## Project Map
 
-- `observer/` -- Observer: Go backend with OTLP receiver, REST API, MCP server, Web UI, and self-contained React client
-- `extension/` -- VS Code extension that packages the Observer
-- `skills/` -- agent skills (composable observability workflows)
-- `skills/references/` -- shared language guides and reference material (loaded on-demand by skills)
-- `skills/*/evals/` -- skill evaluation definitions (evals.json per skill)
-- `examples/` -- sample apps for testing and skill evaluation, organized by language
-- `docs/` -- design docs and examples
+- `observer/` -- Go collector, OTLP receiver, REST API, MCP server, and React UI.
+- `extension/` -- VS Code extension that packages the collector.
+- `skills/` -- canonical OpenTelemetry agent skill sources.
+- `.agents/skills/` -- repo-scoped Codex skill links for local use.
+- `skills/references/` -- shared language and signal references loaded on demand.
+- `evals/` -- fixture services and JSON eval cases collected by pytest.
+- `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing.
+- `eval-reports/` -- latest summarized eval reports.
+- `docs/` -- design docs and usage notes.
 
-## Code
+## Working Rules
 
-- Match existing style, patterns, and conventions. Read before writing.
-- Edit existing files; don't create new ones unless necessary.
-- No narration comments. Only document non-obvious intent.
-- Minimal, focused changes. No drive-by refactors.
-- Use `npm`. Respect lockfiles. Justify new dependencies.
+- Read surrounding code before editing.
+- Match existing style, patterns, and ownership boundaries.
+- Prefer editing existing files over adding new files.
+- Avoid drive-by refactors and narration comments.
+- Use `rg` for search.
+- Use `npm` for JavaScript work and respect lockfiles.
+- Use `uv` and `pytest` for the Python eval harness.
+- Never revert unrelated user changes.
 
 ## Testing
 
-- Every change must include tests for the new or changed functionality.
-- All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
+- Add or update tests when behavior changes.
+- Run the narrowest relevant test first, then broader tests when risk warrants it.
+- Treat flaky tests as bugs.
 
-### Skill Evals
+Common targets:
 
-Each skill has an `evals/evals.json` file defining evaluation cases:
+```bash
+make test
+make test-client
+make test-extension
+make test-eval-harness
+make test-pytest-plugin
+```
 
-- Each eval specifies a prompt, target app, expected output, and concrete expectations.
-- Expectations validate instrumentation output: SDK init files, dependency additions, and start-command wiring.
-- Example apps in `examples/` serve as test fixtures.
-- Run evals via `make skill-eval SKILL=otel-instrument`.
+## Skill Evals
 
-## PRs
+Skill evals follow the OpenAI eval-skill maintenance pattern: run real tasks,
+capture traces, grade deterministic outcomes, and use schema-constrained
+qualitative grading.
 
-- Accurate, concise descriptions (under one page). Commit message mirrors the description.
-- Include the agent plan. If too large, commit it as a design doc under `docs/`.
+Eval files live next to their fixture services:
 
-## Skills
+```text
+evals/<language>/<service>/audit_eval.json
+evals/<language>/<service>/instrument_eval.json
+```
 
-Skills follow the [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
-anatomy: frontmatter (`name`/`description`), Overview, When to Use, Process, Red Flags,
-Verification. See any skill under `skills/` for the canonical format.
+Each eval file contains a `prompts[]` array of task variants. `skill-eval`
+validates JSON and fixture shape; `skill-eval-ab` runs each variant as
+`with_skill` and `baseline`. `PROMPT=<id>` filters to one variant.
 
-### Available Skills
+Use these commands:
+
+```bash
+make skill-eval-list
+make skill-eval SKILL=skills/otel-audit
+make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
+make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct
+make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
+make skill-eval-all
+```
+
+`skill-eval-ab` runs A/B comparisons:
+
+- `with_skill`: copied fixture plus temporary `.agents/skills` entries.
+- `baseline`: same copied fixture with no repo skills visible.
+
+Outputs:
+
+- Full artifacts: `.workspace/codex-evals/<skill>/<run-id>/`
+- Latest summaries: `eval-reports/<skill>/REPORT.md` and `benchmark.json`
+
+## Skill Maintenance
+
+- Keep `skills/` as the source of truth.
+- Keep `.agents/skills/` as repo-local Codex discovery links only.
+- Add or update evals when skill instructions change or a real failure is found.
+- Keep deterministic checks tied to observable artifacts: files, final output,
+  commands, JSONL traces, and baseline contamination checks.
+- Keep A/B baseline checks simple; detailed artifact checks should default to
+  `with_skill` unless a baseline assertion is intentional.
+- Keep A/B skill-loading guards in the harness: `skills-loaded` for
+  `with_skill`, and `skills-not-loaded` for `baseline`.
+- Use qualitative checks for semantic convention quality, workflow correctness,
+  code minimality, and judgment-heavy requirements.
+- Load only the reference file needed for the detected language.
+
+## Available Skills
 
 | Skill | Purpose |
-|-------|---------|
-| `/otel-instrument` | Add OTel auto-instrumentation and optional custom spans/metrics to a service |
-| `/otel-audit` | Scan a codebase for observability coverage and report gaps (read-only) |
-
-### Shared References
-
-Language-specific guides and reference material live in `skills/references/`,
-shared across all skills:
-
-```
-skills/references/
-├── languages/
-│   ├── go.md
-│   ├── java.md
-│   ├── node.md
-│   └── python.md
-└── signal-mapping-guide.md
-```
-
-Skills load references on-demand. Only the file matching the detected
-language is loaded -- never all at once. This keeps token usage minimal.
-
-### Skill Design
-
-- `/otel-instrument` is the primary skill. It follows a linear workflow: preflight scan, auto-instrumentation, optional custom instrumentation, lightweight verification.
-- `/otel-audit` is a read-only companion that reports on current observability posture without modifying code.
-- Skills are independent -- neither requires the other to run first.
+|---|---|
+| `$otel-audit` | Read-only observability coverage scan |
+| `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |

@@ -1,0 +1,59 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Go key-value store service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Go key-value store service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "final-identifies-go",
+      "description": "Final report identifies Go as the language.",
+      "kind": "final_contains_all",
+      "values": [
+        "Go"
+      ]
+    },
+    {
+      "id": "final-identifies-servemux",
+      "description": "Final report identifies stdlib net/http or ServeMux.",
+      "kind": "final_contains_any",
+      "values": [
+        "ServeMux",
+        "net/http",
+        "stdlib"
+      ]
+    },
+    {
+      "id": "final-notes-persistence",
+      "description": "Final report notices filesystem persistence.",
+      "kind": "final_contains_any",
+      "values": [
+        "filesystem",
+        "persistence",
+        "disk",
+        "WriteFile"
+      ]
+    },
+    {
+      "id": "final-recommends-instrument",
+      "description": "Final report recommends the instrumentation skill.",
+      "kind": "final_contains_all",
+      "values": [
+        "$otel-instrument"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Identifies cmd/kvstore-server/main.go as the entry point and preserves the cmd/ plus library package boundary.",
+    "Identifies GET/PUT/DELETE /kv/{key} and GET /search?word= routes without embedding concrete key values.",
+    "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
+    "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
+    "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation."
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Go key-value store service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "go-mod-otel",
+      "description": "go.mod includes OpenTelemetry dependencies.",
+      "kind": "file_contains_all",
+      "path": "go.mod",
+      "values": [
+        "go.opentelemetry.io/otel"
+      ]
+    },
+    {
+      "id": "go-mod-otelhttp",
+      "description": "go.mod includes otelhttp for ServeMux instrumentation.",
+      "kind": "file_contains_all",
+      "path": "go.mod",
+      "values": [
+        "otelhttp"
+      ]
+    },
+    {
+      "id": "cmd-init-file",
+      "description": "OTel setup lives in the process entrypoint package.",
+      "kind": "file_exists_any",
+      "paths": [
+        "cmd/kvstore-server/otel.go",
+        "cmd/kvstore-server/telemetry.go",
+        "cmd/kvstore-server/tracing.go"
+      ]
+    },
+    {
+      "id": "handler-wrapped",
+      "description": "ServeMux or returned handler is wrapped with otelhttp.",
+      "kind": "file_contains_any",
+      "path": "cmd/kvstore-server/main.go",
+      "values": [
+        "otelhttp.NewHandler",
+        "otelhttp"
+      ]
+    },
+    {
+      "id": "launch-json-updated",
+      "description": "Existing VS Code launch configuration includes OTLP env vars.",
+      "kind": "file_contains_all",
+      "path": ".vscode/launch.json",
+      "values": [
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_BSP_SCHEDULE_DELAY",
+        "OTEL_METRIC_EXPORT_INTERVAL"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Instruments the executable server path under cmd/kvstore-server, not the library package on import.",
+    "Preserves the existing kvstore package APIs and avoids moving business logic.",
+    "Uses otelhttp.NewHandler for stdlib HTTP routing and keeps span names low-cardinality.",
+    "Reads service name and OTLP endpoint from environment or safe defaults.",
+    "Updates the existing .vscode/launch.json as required by the skill instructions."
+  ]
+}

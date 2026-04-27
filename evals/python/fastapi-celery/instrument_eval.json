@@ -1,0 +1,62 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the FastAPI and Celery service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "pyproject-otel-sdk",
+      "description": "pyproject.toml includes core OpenTelemetry packages.",
+      "kind": "file_contains_all",
+      "path": "pyproject.toml",
+      "values": [
+        "opentelemetry-api",
+        "opentelemetry-sdk"
+      ]
+    },
+    {
+      "id": "pyproject-fastapi-instrumentation",
+      "description": "pyproject.toml includes ASGI/FastAPI instrumentation.",
+      "kind": "file_contains_any",
+      "path": "pyproject.toml",
+      "values": [
+        "opentelemetry-instrumentation-fastapi",
+        "opentelemetry-instrumentation-asgi"
+      ]
+    },
+    {
+      "id": "otel-setup-file",
+      "description": "A separate Python OTel setup file exists.",
+      "kind": "file_exists_any",
+      "paths": [
+        "otel_setup.py",
+        "telemetry.py",
+        "tracing.py"
+      ]
+    },
+    {
+      "id": "compose-env-wired",
+      "description": "docker-compose includes OTLP environment wiring.",
+      "kind": "file_contains_any",
+      "path": "docker-compose.yml",
+      "values": [
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_SERVICE_NAME"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Instruments both the FastAPI web process and the Celery worker startup path.",
+    "Uses separate setup code and avoids SDK initialization on library import when inappropriate.",
+    "Preserves Docker/Compose as the existing runtime shape.",
+    "Keeps service name and deployment environment configurable per process.",
+    "Does not add custom spans or metrics beyond auto-instrumentation without approval."
+  ]
+}

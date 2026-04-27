@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["skill", "prompts"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "skill": { "type": "string" },
+    "language": { "type": "string" },
+    "service": { "type": "string" },
+    "prompts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "task"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "task": { "type": "string" }
+        }
+      }
+    },
+    "deterministic_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "final_contains_all",
+              "final_contains_any",
+              "file_exists",
+              "file_exists_any",
+              "no_file_exists",
+              "file_contains_all",
+              "file_contains_any",
+              "trace_command_contains"
+            ]
+          },
+          "path": { "type": "string" },
+          "paths": { "type": "array", "items": { "type": "string" } },
+          "values": { "type": "array", "items": { "type": "string" } },
+          "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
+        }
+      }
+    },
+    "qualitative_checks": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

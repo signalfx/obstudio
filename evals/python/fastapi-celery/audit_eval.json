@@ -1,0 +1,55 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the FastAPI and Celery service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the FastAPI and Celery service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "final-identifies-python",
+      "description": "Final report identifies Python.",
+      "kind": "final_contains_all",
+      "values": [
+        "Python"
+      ]
+    },
+    {
+      "id": "final-identifies-fastapi",
+      "description": "Final report identifies FastAPI.",
+      "kind": "final_contains_all",
+      "values": [
+        "FastAPI"
+      ]
+    },
+    {
+      "id": "final-identifies-celery",
+      "description": "Final report identifies Celery or worker behavior.",
+      "kind": "final_contains_any",
+      "values": [
+        "Celery",
+        "worker"
+      ]
+    },
+    {
+      "id": "final-recommends-instrument",
+      "description": "Final report recommends the instrumentation skill.",
+      "kind": "final_contains_all",
+      "values": [
+        "$otel-instrument"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Distinguishes the FastAPI web process from the Celery worker process.",
+    "Identifies pyproject.toml, app.py, worker.py, Dockerfile, and docker-compose.yml as relevant runtime surfaces.",
+    "Reports missing FastAPI, ASGI, HTTP client, and Celery instrumentation where applicable.",
+    "Calls out start-command and environment wiring gaps in docker-compose.",
+    "Does not collapse the worker and web service into a single invented entrypoint."
+  ]
+}

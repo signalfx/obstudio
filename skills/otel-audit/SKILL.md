@@ -3,11 +3,11 @@ name: otel-audit
 description: >-
   Scan a codebase for existing OpenTelemetry instrumentation and report
   on observability coverage gaps. Read-only -- does not modify code.
-  Use when the user types /otel-audit, asks about observability gaps,
+  Use when the user types $otel-audit, asks about observability gaps,
   wants to assess instrumentation coverage, says "what signals am I
   missing", "scan this service for observability", or asks about
   "observability readiness". Do NOT use for implementing code changes --
-  use /otel-instrument instead.
+  use $otel-instrument instead.
 metadata:
   author: otel-studio
   version: 0.1.0
@@ -29,7 +29,7 @@ is modified.
 - Checking what auto-instrumentation is already wired up
 - Identifying dependencies that lack matching OTel instrumentation
 - Quick health check of an existing OTel setup
-**When NOT to use:** If you want to add instrumentation, use `/otel-instrument`.
+**When NOT to use:** If you want to add instrumentation, use `$otel-instrument`.
 
 ## Process
 
@@ -92,8 +92,8 @@ Present findings to the user in chat. Use this structure:
 - {any issues found, or "None detected"}
 
 ### Recommendation
-- {one-line summary: "Run /otel-instrument to add auto-instrumentation for X, Y, Z"
-   or "Instrumentation looks complete -- consider /otel-instrument for custom business metrics"}
+- {one-line summary: "Run $otel-instrument to add auto-instrumentation for X, Y, Z"
+   or "Instrumentation looks complete -- consider $otel-instrument for custom business metrics"}
 ```
 
 If the user asks for a persistent report, write a brief `.observe/report.md` with the same content.

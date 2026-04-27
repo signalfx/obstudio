@@ -1,0 +1,40 @@
+{
+  "skill": "otel-audit",
+  "runs": [
+    {
+      "id": "go/chi-basic/audit/direct",
+      "base_id": "go/chi-basic/audit",
+      "case": "go/chi-basic",
+      "prompt_id": "direct",
+      "with_skill": {
+        "exit_code": 0,
+        "pass_rate": 0.7142857142857143,
+        "passed": 5,
+        "total": 7,
+        "command_count": 16,
+        "tokens": 129978,
+        "errors": [],
+        "trace_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/with_skill/trace.jsonl",
+        "final_message_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/with_skill/last_message.md",
+        "qualitative_grade_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/with_skill/qualitative_grade.json"
+      },
+      "baseline": {
+        "exit_code": 0,
+        "pass_rate": 1.0,
+        "passed": 3,
+        "total": 3,
+        "command_count": 14,
+        "tokens": 106493,
+        "errors": [],
+        "trace_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/baseline/trace.jsonl",
+        "final_message_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/baseline/last_message.md",
+        "qualitative_grade_path": "/Users/pavankri/Cisco/obstudio/.workspace/codex-evals/otel-audit/20260427T022358Z/cases/go/chi-basic/direct/baseline/qualitative_grade.json"
+      }
+    }
+  ],
+  "summary": {
+    "case_count": 1,
+    "with_skill_avg": 0.7142857142857143,
+    "baseline_guard_avg": 1.0
+  }
+}

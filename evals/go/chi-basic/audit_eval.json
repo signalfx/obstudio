@@ -1,0 +1,61 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "final-identifies-go",
+      "description": "Final report identifies Go as the language.",
+      "kind": "final_contains_all",
+      "values": [
+        "Go"
+      ]
+    },
+    {
+      "id": "final-identifies-chi",
+      "description": "Final report identifies chi as the HTTP framework.",
+      "kind": "final_contains_all",
+      "values": [
+        "chi"
+      ]
+    },
+    {
+      "id": "final-notes-no-otel",
+      "description": "Final report notes missing OpenTelemetry instrumentation.",
+      "kind": "final_contains_all",
+      "values": [
+        "OpenTelemetry",
+        "missing"
+      ]
+    },
+    {
+      "id": "final-recommends-instrument",
+      "description": "Final report recommends the instrumentation skill.",
+      "kind": "final_contains_all",
+      "values": [
+        "$otel-instrument"
+      ]
+    },
+    {
+      "id": "audit-read-only",
+      "description": "Audit run does not create a generated OTel setup file.",
+      "kind": "no_file_exists",
+      "path": "otel.go"
+    }
+  ],
+  "qualitative_checks": [
+    "Identifies main.go as the entry point.",
+    "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
+    "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
+    "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
+    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path."
+  ]
+}
