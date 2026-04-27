@@ -6,7 +6,7 @@
 |---|---|
 | Modes | validation |
 | Skill | otel-instrument |
-| Run ID | 20260427T213342562035Z |
+| Run ID | 20260427T220316486811Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Qualitative enabled | True |

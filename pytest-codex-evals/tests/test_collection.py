@@ -83,11 +83,12 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
 
     result.assert_outcomes(passed=2)
     latest_dir = pytester.path / "eval-reports" / "sample-skill"
-    assert (latest_dir / "VALIDATION_REPORT.md").is_file()
-    benchmark = json.loads((latest_dir / "validation-benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["mode"] == "validation"
-    assert benchmark["summary"]["case_count"] == 2
+    assert (latest_dir / "REPORT.md").is_file()
+    benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["metadata"]["mode"] == "validation"
+    assert benchmark["validation"]["summary"]["case_count"] == 2
     assert not (latest_dir / "AB_REPORT.md").exists()
+    assert not (latest_dir / "VALIDATION_REPORT.md").exists()
 
 
 def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
@@ -134,6 +135,6 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
 
     result.assert_outcomes(passed=2)
     latest_dir = pytester.path / "eval-reports" / "sample-skill"
-    benchmark = json.loads((latest_dir / "validation-benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["mode"] == "validation"
-    assert benchmark["summary"]["case_count"] == 2
+    benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["metadata"]["mode"] == "validation"
+    assert benchmark["validation"]["summary"]["case_count"] == 2

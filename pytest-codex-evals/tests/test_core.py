@@ -251,7 +251,6 @@ def test_ab_report_writes_mode_specific_and_legacy_paths(tmp_path: Path):
     assert benchmark["mode"] == "ab"
     assert benchmark["summary"]["eval_count"] == 1
     assert benchmark["evals"][0]["prompt_count"] == 1
-    assert (tmp_path / "eval-reports" / "sample-skill" / "AB_REPORT.md").is_file()
 
 
 def test_side_report_writes_with_skill_paths(tmp_path: Path):
@@ -287,7 +286,6 @@ def test_side_report_writes_with_skill_paths(tmp_path: Path):
     report = (run_root / "with_skill-report.md").read_text(encoding="utf-8")
     assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | 0 | 0.0s | - | - | - | - |" in report
     assert "deterministic:check FAIL" in report
-    assert (tmp_path / "eval-reports" / "sample-skill" / "WITH_SKILL_REPORT.md").is_file()
 
 
 def test_combined_report_has_validation_and_runtime_sections(tmp_path: Path):

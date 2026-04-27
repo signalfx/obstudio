@@ -62,13 +62,6 @@ def write_live_reports(
     shutil.copyfile(report_path, run_root / "report.md")
     shutil.copyfile(benchmark_path, run_root / "benchmark.json")
 
-    latest_dir = repo_root / "eval-reports" / skill
-    latest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(report_path, latest_dir / f"{prefix.upper()}_REPORT.md")
-    shutil.copyfile(benchmark_path, latest_dir / f"{prefix}-benchmark.json")
-    shutil.copyfile(report_path, latest_dir / "REPORT.md")
-    shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
-
 
 def write_validation_reports(
     repo_root: Path,
@@ -86,11 +79,6 @@ def write_validation_reports(
     report = render_validation_report(skill, benchmark)
     report_path = run_root / "validation-report.md"
     report_path.write_text(report, encoding="utf-8")
-
-    latest_dir = repo_root / "eval-reports" / skill
-    latest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(report_path, latest_dir / "VALIDATION_REPORT.md")
-    shutil.copyfile(benchmark_path, latest_dir / "validation-benchmark.json")
 
 
 def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:

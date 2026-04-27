@@ -126,10 +126,10 @@ Latest summaries are copied to `eval-reports/<skill>/`.
 
 | Mode | Run artifacts | Latest summary |
 |---|---|---|
-| Validation | `validation-report.md`, `validation-benchmark.json` | `VALIDATION_REPORT.md`, `validation-benchmark.json` |
-| With Skill | `with_skill-report.md`, `with_skill-benchmark.json` | `WITH_SKILL_REPORT.md`, `with_skill-benchmark.json` |
-| With Baseline | `with_baseline-report.md`, `with_baseline-benchmark.json` | `WITH_BASELINE_REPORT.md`, `with_baseline-benchmark.json` |
-| Live A/B | `ab-report.md`, `ab-benchmark.json` | `AB_REPORT.md`, `ab-benchmark.json` |
+| Validation | `validation-report.md`, `validation-benchmark.json` | `REPORT.md`, `benchmark.json` |
+| With Skill | `with_skill-report.md`, `with_skill-benchmark.json` | `REPORT.md`, `benchmark.json` |
+| With Baseline | `with_baseline-report.md`, `with_baseline-benchmark.json` | `REPORT.md`, `benchmark.json` |
+| Live A/B | `ab-report.md`, `ab-benchmark.json` | `REPORT.md`, `benchmark.json` |
 
 Each live run also writes file-level JSON under:
 
@@ -146,8 +146,9 @@ variants and include token usage plus elapsed time for with-skill and baseline
 sides. Baseline columns are `-` when the run mode did not execute a baseline
 side.
 
-For compatibility, live runs also write `report.md`, `benchmark.json`,
-`REPORT.md`, and `benchmark.json`.
+Only the canonical latest `REPORT.md` and `benchmark.json` are copied under
+`eval-reports/<skill>/`; mode-specific artifacts stay in the timestamped run
+directory.
 
 ## Fixture Apps
 

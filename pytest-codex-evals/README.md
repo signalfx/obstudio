@@ -214,8 +214,8 @@ Validation-only runs write:
 ```text
 .workspace/codex-evals/<skill>/<run-id>/validation-report.md
 .workspace/codex-evals/<skill>/<run-id>/validation-benchmark.json
-eval-reports/<skill>/VALIDATION_REPORT.md
-eval-reports/<skill>/validation-benchmark.json
+eval-reports/<skill>/REPORT.md
+eval-reports/<skill>/benchmark.json
 ```
 
 Live A/B runs write:
@@ -227,12 +227,12 @@ Live A/B runs write:
   eval.json
   with_skill.json
   with_baseline.json
-eval-reports/<skill>/AB_REPORT.md
-eval-reports/<skill>/ab-benchmark.json
+eval-reports/<skill>/REPORT.md
+eval-reports/<skill>/benchmark.json
 ```
 
 With-skill and with-baseline runs write analogous `with_skill-*` and
-`with_baseline-*` artifacts.
+`with_baseline-*` artifacts in the timestamped run directory.
 
 The canonical Markdown report includes environment metadata plus separate
 tables for validation, deterministic checks, qualitative checks, and runtime
@@ -240,9 +240,8 @@ checks. Live tables aggregate prompts by eval file and show with-skill and
 baseline token usage and elapsed time. Baseline columns are `-` when the
 selected run mode did not execute the baseline side.
 
-For compatibility, live runs also write `.workspace/.../report.md`,
-`.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and
-`eval-reports/<skill>/benchmark.json`.
+Only the canonical latest `REPORT.md` and `benchmark.json` are copied under
+`eval-reports/<skill>/`; mode-specific summaries remain in `.workspace`.
 
 ## Publish
 

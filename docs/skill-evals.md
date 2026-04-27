@@ -167,17 +167,6 @@ Live A/B runs also include:
       summary.json
 ```
 
-Latest validation summaries are copied to:
-
-```text
-eval-reports/<skill>/VALIDATION_REPORT.md
-eval-reports/<skill>/validation-benchmark.json
-eval-reports/<skill>/WITH_SKILL_REPORT.md
-eval-reports/<skill>/with_skill-benchmark.json
-eval-reports/<skill>/WITH_BASELINE_REPORT.md
-eval-reports/<skill>/with_baseline-benchmark.json
-```
-
 The canonical latest summary is copied to:
 
 ```text
@@ -185,9 +174,8 @@ eval-reports/<skill>/REPORT.md
 eval-reports/<skill>/benchmark.json
 ```
 
-Mode-specific live summaries are also copied as `WITH_SKILL_REPORT.md`,
-`WITH_BASELINE_REPORT.md`, or `AB_REPORT.md` with matching benchmark JSON.
-The canonical report has separate tables for validation, deterministic,
+Mode-specific summaries stay in the timestamped `.workspace` run directory.
+The canonical latest report has separate tables for validation, deterministic,
 qualitative, and runtime results; live tables include with-skill, baseline,
 token, and elapsed-time columns.
 
