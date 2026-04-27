@@ -14,8 +14,12 @@
     {
       "id": "pyproject-otel-sdk",
       "description": "pyproject.toml includes core OpenTelemetry packages.",
-      "kind": "file_contains_all",
-      "path": "pyproject.toml",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "python3",
+        "-c",
+        "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); deps='\\n'.join(p.get('project',{}).get('dependencies',[])); print(deps)"
+      ],
       "values": [
         "opentelemetry-api",
         "opentelemetry-sdk"
@@ -24,8 +28,12 @@
     {
       "id": "pyproject-fastapi-instrumentation",
       "description": "pyproject.toml includes ASGI/FastAPI instrumentation.",
-      "kind": "file_contains_any",
-      "path": "pyproject.toml",
+      "kind": "command_stdout_contains_any",
+      "command": [
+        "python3",
+        "-c",
+        "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); deps='\\n'.join(p.get('project',{}).get('dependencies',[])); print(deps)"
+      ],
       "values": [
         "opentelemetry-instrumentation-fastapi",
         "opentelemetry-instrumentation-asgi"

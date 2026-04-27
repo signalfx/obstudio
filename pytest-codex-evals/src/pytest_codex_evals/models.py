@@ -15,6 +15,10 @@ CheckKind = Literal[
     "file_contains_all",
     "file_contains_any",
     "trace_command_contains",
+    "command_succeeds",
+    "command_stdout_contains_all",
+    "command_stdout_contains_any",
+    "command_stdout_contains_none",
 ]
 
 
@@ -25,6 +29,9 @@ class DeterministicCheck(BaseModel):
     path: str | None = None
     paths: list[str] = Field(default_factory=list)
     values: list[str] = Field(default_factory=list)
+    command: list[str] = Field(default_factory=list)
+    cwd: str | None = None
+    timeout_seconds: int = 30
     applies_to: Literal["both", "with_skill", "baseline"] = "with_skill"
 
 
@@ -123,7 +130,12 @@ class SideResult(BaseModel):
     deterministic_grade: GradeResult
     qualitative_grade_path: str | None = None
     command_count: int = 0
+    duration_seconds: float = 0.0
+    agent_duration_seconds: float = 0.0
+    qualitative_duration_seconds: float = 0.0
     tokens: int = 0
+    agent_tokens: int = 0
+    qualitative_tokens: int = 0
     errors: list[str] = Field(default_factory=list)
 
 

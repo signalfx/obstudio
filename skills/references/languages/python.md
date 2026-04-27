@@ -33,13 +33,13 @@ detected in the codebase. Only install what the project actually uses.
 ## Dependencies
 
 ```bash
-pip install opentelemetry-distro opentelemetry-exporter-otlp
-opentelemetry-bootstrap -a install
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
 Or in `requirements.txt`:
 ```
-opentelemetry-distro
+opentelemetry-api
+opentelemetry-sdk
 opentelemetry-exporter-otlp
 opentelemetry-instrumentation-flask      # if Flask
 opentelemetry-instrumentation-fastapi    # if FastAPI
@@ -47,6 +47,11 @@ opentelemetry-instrumentation-django     # if Django
 opentelemetry-instrumentation-requests   # if using requests
 opentelemetry-instrumentation-sqlalchemy # if using SQLAlchemy
 ```
+
+Use `opentelemetry-distro` and `opentelemetry-bootstrap -a install` only as an
+additional convenience when the project explicitly wants broad CLI
+auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
+`opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
 
 ---
 
@@ -76,6 +81,9 @@ CMD ["opentelemetry-instrument", "--service_name", "my-service", "python", "app.
 
 Create a separate file for OTel setup. Call the setup function before
 creating the application object (Flask app, FastAPI app, etc.).
+For Python services, this explicit setup file is the default implementation
+path; a Makefile or Docker command that only wraps the process with
+`opentelemetry-instrument` is not enough by itself.
 
 **File**: `otel_setup.py`
 

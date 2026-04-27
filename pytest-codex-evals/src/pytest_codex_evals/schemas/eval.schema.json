@@ -40,12 +40,19 @@
               "no_file_exists",
               "file_contains_all",
               "file_contains_any",
-              "trace_command_contains"
+              "trace_command_contains",
+              "command_succeeds",
+              "command_stdout_contains_all",
+              "command_stdout_contains_any",
+              "command_stdout_contains_none"
             ]
           },
           "path": { "type": "string" },
           "paths": { "type": "array", "items": { "type": "string" } },
           "values": { "type": "array", "items": { "type": "string" } },
+          "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "cwd": { "type": "string" },
+          "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300, "default": 30 },
           "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
         }
       }

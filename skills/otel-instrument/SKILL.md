@@ -62,8 +62,8 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 | Language | Reference | Key packages |
 |----------|-----------|-------------|
-| Python   | `skills/references/languages/python.md` | `opentelemetry-distro`, `opentelemetry-exporter-otlp` |
-| Node.js  | `skills/references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node` |
+| Python   | `skills/references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, framework instrumentation packages |
+| Node.js  | `skills/references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/instrumentation-http`, detected framework instrumentation packages |
 | Java     | `skills/references/languages/java.md` | OTel Java agent (javaagent JAR) |
 | Go       | `skills/references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
 
@@ -78,6 +78,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
 - For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
+- For Python web services, do not satisfy implementation by only changing a Makefile, Docker command, or shell wrapper. Add an explicit setup module such as `otel_setup.py` and wire the app entry point to call it before framework instrumentation is activated.
+- For Java/Spring Boot, prefer the OpenTelemetry Java agent. The final response must state the service-name setting (`OTEL_SERVICE_NAME` or `otel.service.name`), OTLP endpoint setting (`OTEL_EXPORTER_OTLP_ENDPOINT` or `otel.exporter.otlp.endpoint`), and that the agent provides HTTP server spans plus request duration metrics.
 
 #### Implementation Rules
 
@@ -100,6 +102,30 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` or `getMeter` in hot paths.
 - Create metric instruments once during startup and reuse them. Do not create instruments in hot paths.
 - Metric instruments must be created with appropriate unit and description parameters.
+
+#### Language-Specific Musts
+
+Python:
+- Add explicit dependency entries for `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, and each detected framework/client instrumentation package.
+- Create a separate setup file such as `otel_setup.py`, `telemetry.py`, or `instrumentation.py`.
+- Configure `Resource.create({"service.name": ...})`, `TracerProvider`, `MeterProvider`, OTLP trace exporter, and OTLP metric exporter in that setup file.
+- Import and call the setup function from the app entry point before creating or instrumenting the app.
+- For Flask, call `FlaskInstrumentor().instrument_app(app)`.
+- For FastAPI, call `FastAPIInstrumentor.instrument_app(app)`.
+- For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
+- Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
+
+Node.js:
+- Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
+- Add the detected framework instrumentation explicitly, for example `@opentelemetry/instrumentation-express` for Express.
+- Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
+- In the final response, name the updated preload command (`--require` or `--import`) and the packages added.
+
+Java:
+- Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
+- Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
+- Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
+- In the final response, explicitly mention `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and `http.server.request.duration`.
 
 ### 4. Custom Instrumentation
 
@@ -146,6 +172,7 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 - In the final response, separate file changes from verified outcomes
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
+- Always include the service-name configuration, OTLP endpoint configuration, and which automatic spans/metrics are expected from the instrumentation.
 
 ## Credential Safety
 

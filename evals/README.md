@@ -17,7 +17,7 @@ modes: `eval-validation`, `eval-with-skill`, and `eval-with-baseline`.
 | With Skill | Codex with `.agents/skills/<skill>` visible | Skill-guided task behavior | With-skill report |
 | With Baseline | Codex with no repo skill visible | No-skill baseline behavior | With-baseline report |
 | A/B | Codex with both sides in one run | Skill lift over no-skill baseline | A/B report |
-| Deterministic Checks | Python checks over final text, files, and traces | Concrete pass/fail behavior | `deterministic_grade.json` |
+| Deterministic Checks | Python checks over final text, files, traces, and command output | Concrete pass/fail behavior | `deterministic_grade.json` |
 | Qualitative Checks | Schema-constrained judge pass | Semantic quality and workflow fit | `qualitative_grade.json` |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
@@ -52,6 +52,11 @@ qualitative checks:
 Baseline checks stay intentionally simple: run health plus `skills-not-loaded`.
 Detailed deterministic artifact checks default to the `with_skill` side, which
 also gets a `skills-loaded` guard.
+
+Use command-backed checks when an ecosystem tool can prove behavior more
+reliably than text search. Examples in this repo use `go list -mod=readonly -m
+all`, `npm pkg get`, `node -e`, and Python `tomllib` against the generated
+service workspace.
 
 ## Commands
 
@@ -125,8 +130,9 @@ Each live run also writes file-level JSON under:
 ```
 
 The Markdown report has one row per eval file, aggregates all prompt variants,
-and only tabulates failure cases. Baseline columns are `-` when the run mode did
-not execute a baseline side.
+includes token usage and elapsed time per side, and only tabulates failure
+cases. Baseline columns are `-` when the run mode did not execute a baseline
+side.
 
 For compatibility, live runs also write `report.md`, `benchmark.json`,
 `REPORT.md`, and `benchmark.json`.

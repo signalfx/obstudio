@@ -57,6 +57,23 @@ The plugin infers `id` and display labels from the file path when they are not
 provided. The `skill` value is matched to the directory name passed with
 `--skill`.
 
+Deterministic checks can assert final text, files, trace command evidence, or
+run local commands in the produced `service/` workspace. Command checks use an
+argv list, not a shell string, so they work well with ecosystem tools:
+
+```json
+{
+  "id": "go-module-has-otelhttp",
+  "description": "Go module graph includes otelhttp.",
+  "kind": "command_stdout_contains_all",
+  "command": ["go", "list", "-mod=readonly", "-m", "all"],
+  "values": ["go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"]
+}
+```
+
+Other command-backed kinds are `command_succeeds`,
+`command_stdout_contains_any`, and `command_stdout_contains_none`.
+
 ## Commands
 
 Validate evals without running Codex:
@@ -178,9 +195,9 @@ With-skill and with-baseline runs write analogous `with_skill-*` and
 `with_baseline-*` reports.
 
 The live Markdown report includes environment metadata, one row per eval file
-with prompts aggregated, and a failure-only table for deterministic and
-qualitative checks. Baseline columns are `-` when the selected run mode did not
-execute the baseline side.
+with prompts aggregated, token usage and elapsed time per side, and a
+failure-only table for deterministic and qualitative checks. Baseline columns
+are `-` when the selected run mode did not execute the baseline side.
 
 For compatibility, live runs also write `.workspace/.../report.md`,
 `.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and

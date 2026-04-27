@@ -173,7 +173,12 @@ def side_summary(side: SideResult | None) -> dict[str, Any] | None:
         },
         "qualitative": load_qualitative_grade(side),
         "command_count": side.command_count,
+        "duration_seconds": side.duration_seconds,
+        "agent_duration_seconds": side.agent_duration_seconds,
+        "qualitative_duration_seconds": side.qualitative_duration_seconds,
         "tokens": side.tokens,
+        "agent_tokens": side.agent_tokens,
+        "qualitative_tokens": side.qualitative_tokens,
         "errors": side.errors,
         "trace_path": side.trace_path,
         "final_message_path": side.final_message_path,
@@ -249,7 +254,12 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
             "average_score": average(scores) if scores else None,
         },
         "command_count": sum(side.command_count for side in sides),
+        "duration_seconds": round(sum(side.duration_seconds for side in sides), 3),
+        "agent_duration_seconds": round(sum(side.agent_duration_seconds for side in sides), 3),
+        "qualitative_duration_seconds": round(sum(side.qualitative_duration_seconds for side in sides), 3),
         "tokens": sum(side.tokens for side in sides),
+        "agent_tokens": sum(side.agent_tokens for side in sides),
+        "qualitative_tokens": sum(side.qualitative_tokens for side in sides),
         "error_count": sum(len(side.errors) for side in sides),
     }
 
@@ -333,20 +343,24 @@ def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
             "",
             "## Eval Summary",
             "",
-            "| Eval | Service | Prompts | With Skill Deterministic | With Skill Qualitative | With Baseline Deterministic | With Baseline Qualitative |",
-            "|---|---|---:|---:|---:|---:|---:|",
+            "| Eval | Service | Prompts | With Skill Deterministic | With Skill Qualitative | With Skill Tokens | With Skill Time | With Baseline Deterministic | With Baseline Qualitative | Baseline Tokens | Baseline Time |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for item in benchmark["evals"]:
         lines.append(
-            "| {eval_id} | {service} | {prompts} | {ws_det} | {ws_qual} | {base_det} | {base_qual} |".format(
+            "| {eval_id} | {service} | {prompts} | {ws_det} | {ws_qual} | {ws_tokens} | {ws_time} | {base_det} | {base_qual} | {base_tokens} | {base_time} |".format(
                 eval_id=markdown_cell(item["id"]),
                 service=markdown_cell(item["case"]),
                 prompts=item["prompt_count"],
                 ws_det=format_deterministic(item.get("with_skill")),
                 ws_qual=format_qualitative(item.get("with_skill")),
+                ws_tokens=format_tokens(item.get("with_skill")),
+                ws_time=format_duration(item.get("with_skill")),
                 base_det=format_deterministic(item.get("with_baseline")),
                 base_qual=format_qualitative(item.get("with_baseline")),
+                base_tokens=format_tokens(item.get("with_baseline")),
+                base_time=format_duration(item.get("with_baseline")),
             )
         )
 
@@ -527,6 +541,28 @@ def format_qualitative(side: dict[str, Any] | None) -> str:
     if score is None:
         return value
     return f"{value}, avg score {score:.0f}"
+
+
+def format_tokens(side: dict[str, Any] | None) -> str:
+    if side is None:
+        return "-"
+    tokens = int(side.get("tokens") or 0)
+    if tokens >= 1_000_000:
+        return f"{tokens / 1_000_000:.1f}M"
+    if tokens >= 1_000:
+        return f"{tokens / 1_000:.1f}K"
+    return str(tokens)
+
+
+def format_duration(side: dict[str, Any] | None) -> str:
+    if side is None:
+        return "-"
+    seconds = float(side.get("duration_seconds") or 0.0)
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f}h"
+    if seconds >= 60:
+        return f"{seconds / 60:.1f}m"
+    return f"{seconds:.1f}s"
 
 
 def format_count(passed: int, total: int) -> str:

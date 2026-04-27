@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from pytest_codex_evals.ab import side_prompt
@@ -76,6 +77,49 @@ def test_config_loads_with_skill_and_with_baseline_modes(tmp_path: Path):
 
     assert load_settings(skill_config).run_mode == "with_skill"
     assert load_settings(baseline_config).run_mode == "with_baseline"
+
+
+def test_command_backed_deterministic_check(tmp_path: Path):
+    service_dir = tmp_path / "service"
+    service_dir.mkdir()
+    (service_dir / "package.json").write_text(
+        json.dumps({"dependencies": {"@opentelemetry/sdk-node": "latest"}}),
+        encoding="utf-8",
+    )
+    case = EvalCase(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Scan the service.",
+        deterministic_checks=[
+            DeterministicCheck(
+                id="npm-pkg-dependency",
+                description="A command can read the dependency from package.json.",
+                kind="command_stdout_contains_all",
+                command=[
+                    sys.executable,
+                    "-c",
+                    "import json; print(json.load(open('package.json'))['dependencies']['@opentelemetry/sdk-node'])",
+                ],
+                values=["latest"],
+            )
+        ],
+    )
+
+    grade = grade_deterministic(case, tmp_path, "done", parse_trace(empty_trace(tmp_path)), "with_skill")
+
+    check = next(item for item in grade.checks if item.id == "npm-pkg-dependency")
+    assert check.passed
+    assert "package.json" in check.evidence
+
+
+def empty_trace(tmp_path: Path) -> Path:
+    path = tmp_path / "trace.jsonl"
+    path.write_text("", encoding="utf-8")
+    return path
 
 
 def test_deterministic_file_and_final_checks(tmp_path: Path):
@@ -208,6 +252,6 @@ def test_side_report_writes_with_skill_paths(tmp_path: Path):
     assert benchmark["evals"][0]["with_baseline"] is None
     assert benchmark["failures"][0]["result"] == "deterministic:check FAIL"
     report = (run_root / "with_skill-report.md").read_text(encoding="utf-8")
-    assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | - | - |" in report
+    assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | 0 | 0.0s | - | - | - | - |" in report
     assert "deterministic:check FAIL" in report
     assert (tmp_path / "eval-reports" / "sample-skill" / "WITH_SKILL_REPORT.md").is_file()

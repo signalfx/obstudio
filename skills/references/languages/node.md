@@ -40,12 +40,23 @@ requirement when assessing instrumentation coverage.
 
 ```bash
 npm install @opentelemetry/sdk-node \
-  @opentelemetry/auto-instrumentations-node \
-  @opentelemetry/exporter-trace-otlp-grpc \
-  @opentelemetry/exporter-metrics-otlp-grpc \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/exporter-metrics-otlp-http \
+  @opentelemetry/instrumentation-http \
   @opentelemetry/resources \
   @opentelemetry/semantic-conventions
 ```
+
+Add detected framework/client packages explicitly. For Express, also install:
+
+```bash
+npm install @opentelemetry/instrumentation-express
+```
+
+Do not rely on `@opentelemetry/auto-instrumentations-node` alone when the
+project uses a known framework such as Express, Fastify, Koa, NestJS, or a
+known client library. The manifest should name the matching instrumentation
+packages directly.
 
 ---
 
@@ -63,7 +74,8 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-// ... add detected framework/client instrumentations here
+import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+// ... add other detected framework/client instrumentations here
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -75,7 +87,8 @@ const sdk = new NodeSDK({
   }),
   instrumentations: [
     new HttpInstrumentation(),
-    // ... add detected instrumentations here
+    new ExpressInstrumentation(),
+    // ... add other detected instrumentations here
   ],
 });
 

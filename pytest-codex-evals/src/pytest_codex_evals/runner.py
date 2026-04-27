@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -92,6 +93,7 @@ def run_side(
     judge_model: str | None,
     qualitative: bool,
 ) -> SideResult:
+    side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
     trace_path = exec_dir / "trace.jsonl"
     final_path = exec_dir / "last_message.md"
@@ -112,23 +114,29 @@ def run_side(
         cmd.extend(["--model", model])
     cmd.append(prompt)
 
+    agent_start = time.monotonic()
     completed = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+    agent_duration_seconds = time.monotonic() - agent_start
     trace_path.write_text(completed.stdout, encoding="utf-8")
     stderr_path.write_text(completed.stderr, encoding="utf-8")
     if not final_path.exists():
         final_path.write_text("", encoding="utf-8")
 
     trace = parse_trace(trace_path)
+    agent_tokens = trace.usage.total_tokens
     final_message = final_path.read_text(encoding="utf-8", errors="replace")
     deterministic = grade_deterministic(case, exec_dir, final_message, trace, side)
     deterministic_path = exec_dir / "deterministic_grade.json"
     deterministic_path.write_text(deterministic.model_dump_json(indent=2), encoding="utf-8")
 
     qualitative_path: Path | None = None
+    qualitative_duration_seconds = 0.0
+    qualitative_tokens = 0
     errors: list[str] = []
     if completed.returncode != 0:
         errors.append(f"codex exec exited with {completed.returncode}")
     if qualitative:
+        qualitative_start = time.monotonic()
         try:
             qualitative_path = run_qualitative_grade(
                 case=case,
@@ -137,6 +145,14 @@ def run_side(
             )
         except Exception as exc:  # pragma: no cover - preserved in run artifacts
             errors.append(f"qualitative grading failed: {exc}")
+        finally:
+            qualitative_duration_seconds = time.monotonic() - qualitative_start
+            qualitative_trace_path = exec_dir / "qualitative_trace.jsonl"
+            if qualitative_trace_path.exists():
+                try:
+                    qualitative_tokens = parse_trace(qualitative_trace_path).usage.total_tokens
+                except Exception as exc:  # pragma: no cover - preserved in run artifacts
+                    errors.append(f"qualitative trace parsing failed: {exc}")
 
     if artifact_dir.exists():
         shutil.rmtree(artifact_dir)
@@ -154,7 +170,12 @@ def run_side(
         deterministic_grade=deterministic,
         qualitative_grade_path=str(artifact_qualitative_path) if qualitative_path else None,
         command_count=len(trace.commands),
-        tokens=trace.usage.total_tokens,
+        duration_seconds=round(time.monotonic() - side_start, 3),
+        agent_duration_seconds=round(agent_duration_seconds, 3),
+        qualitative_duration_seconds=round(qualitative_duration_seconds, 3),
+        tokens=agent_tokens + qualitative_tokens,
+        agent_tokens=agent_tokens,
+        qualitative_tokens=qualitative_tokens,
         errors=errors,
     )
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")

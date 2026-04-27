@@ -47,6 +47,11 @@ Scan the repository to determine language, framework, and existing instrumentati
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
 3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
 4. Load the matching language reference from `skills/references/languages/<detected>.md` to know what auto-instrumentation packages are available for the detected dependencies.
+5. Record exact evidence paths that should appear in the report:
+   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
+   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
+   - Route source: router/controller files such as `TaskController.java`, `app.py`, `app.js`, or `kvstore/http.go`.
+   - Runtime/startup files when present: `Dockerfile`, `docker-compose.yml`, `Makefile`, `package.json` scripts, launch configs, worker files.
 
 ### Step 2 -- Instrumentation Assessment
 
@@ -73,6 +78,13 @@ Check for existing OTel instrumentation and identify gaps.
 - Custom span names with variable segments (IDs, paths)
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`)
 
+For partially instrumented Go services, explicitly check and report:
+- hardcoded OTLP endpoints such as `collector.example.com`
+- `otel.Tracer(...)` or `otel.Meter(...)` calls inside request handlers or loops
+- high-cardinality span names such as `GetTask-{id}`
+- missing `otel.SetTextMapPropagator(...)`
+- missing `MeterProvider`, missing `service.name`, and missing provider shutdown/flush
+
 ### Step 3 -- Report
 
 Present findings to the user in chat. Use this structure:
@@ -82,8 +94,16 @@ Present findings to the user in chat. Use this structure:
 
 **Language:** {language}  |  **Framework:** {framework}
 
+### Evidence
+- Manifest: {path}
+- Entry point: {path}
+- Route source: {path(s)}
+- Runtime/startup files: {path(s) or "none detected"}
+
 ### Current Instrumentation
 - {what's already set up -- SDK init, auto-instrumentation packages, custom spans}
+- If no OTel packages or setup are found, include the phrase:
+  "OpenTelemetry instrumentation is missing."
 
 ### Routes
 - {METHOD} {path} -- list every detected HTTP route
@@ -91,8 +111,8 @@ Present findings to the user in chat. Use this structure:
 
 ### Coverage Gaps
 Frame each gap using RED signal terminology and map to concrete OTel signals:
-- **Rate:** {what is missing for request rate visibility, e.g. "no http.server.request.duration histogram -- request counts cannot be derived"}
-- **Errors:** {what is missing for error rate visibility, e.g. "no span status codes -- 5xx error rate not trackable"}
+- **Rate:** {what is missing for request rate visibility, e.g. "missing http.server.request.duration histogram -- request counts cannot be derived"}
+- **Errors:** {what is missing for error rate visibility, e.g. "missing span status codes -- 5xx error rate not trackable"}
 - **Duration:** {what is missing for latency visibility, e.g. "missing http.server.request.duration histogram -- no p50/p99 latency data"}
 - {other gaps: missing auto-instrumentation packages, missing exporter, missing context propagation, etc.}
 
@@ -103,6 +123,16 @@ Frame each gap using RED signal terminology and map to concrete OTel signals:
 - {one-line summary: "Run $otel-instrument to add auto-instrumentation for X, Y, Z"
    or "Instrumentation looks complete -- consider $otel-instrument for custom business metrics"}
 ```
+
+Report requirements:
+- If instrumentation is incomplete, always include the exact token `$otel-instrument` in the recommendation.
+- If OpenTelemetry is absent, include both words `OpenTelemetry` and `missing`.
+- Name the concrete files that support findings; do not only refer to "the service" or "./service".
+- For Node.js, mention `package.json` and the app entry point such as `app.js`.
+- For Python, mention `pyproject.toml` or `requirements.txt`, the app file such as `app.py`, and runtime files such as `Dockerfile` or `docker-compose.yml` when present.
+- For FastAPI/Celery services, mention the web app, worker file, Dockerfile, compose commands, FastAPI/ASGI coverage, Celery instrumentation, Redis instrumentation if Redis is present, and HTTP client instrumentation only when an HTTP client dependency is detected.
+- For Java/Spring Boot, mention the Spring Boot entry point such as `TasksApplication.java`, controller files such as `TaskController.java`, and the Java agent recommendation.
+- For Go multi-package services, name the process entry point such as `cmd/kvstore-server/main.go` and relevant library files. If filesystem persistence, background indexing, or LRU eviction exists, call those out explicitly.
 
 If the user asks for a persistent report, write a brief `.observe/report.md` with the same content.
 

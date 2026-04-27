@@ -14,8 +14,12 @@
     {
       "id": "pyproject-otel-sdk",
       "description": "pyproject.toml includes core OpenTelemetry packages.",
-      "kind": "file_contains_all",
-      "path": "pyproject.toml",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "python3",
+        "-c",
+        "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); deps='\\n'.join(p.get('project',{}).get('dependencies',[])); print(deps)"
+      ],
       "values": [
         "opentelemetry-api",
         "opentelemetry-sdk"
@@ -24,8 +28,12 @@
     {
       "id": "pyproject-flask-instrumentation",
       "description": "pyproject.toml includes Flask instrumentation.",
-      "kind": "file_contains_all",
-      "path": "pyproject.toml",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "python3",
+        "-c",
+        "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); deps='\\n'.join(p.get('project',{}).get('dependencies',[])); print(deps)"
+      ],
       "values": [
         "opentelemetry-instrumentation-flask"
       ]

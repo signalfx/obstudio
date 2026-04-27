@@ -14,8 +14,14 @@
     {
       "id": "go-mod-otel",
       "description": "go.mod includes OpenTelemetry dependencies.",
-      "kind": "file_contains_all",
-      "path": "go.mod",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "go",
+        "list",
+        "-mod=readonly",
+        "-m",
+        "all"
+      ],
       "values": [
         "go.opentelemetry.io/otel"
       ]
@@ -23,11 +29,17 @@
     {
       "id": "go-mod-http-instrumentation",
       "description": "go.mod includes Go HTTP auto-instrumentation.",
-      "kind": "file_contains_any",
-      "path": "go.mod",
+      "kind": "command_stdout_contains_any",
+      "command": [
+        "go",
+        "list",
+        "-mod=readonly",
+        "-m",
+        "all"
+      ],
       "values": [
-        "otelhttp",
-        "otelchi"
+        "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+        "github.com/riandyrn/otelchi"
       ]
     },
     {

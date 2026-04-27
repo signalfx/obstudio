@@ -56,6 +56,10 @@ The Java agent auto-instruments:
 - JDBC drivers
 
 No code changes needed for basic coverage.
+In final user-facing output, state that Spring MVC and the servlet container
+will emit HTTP server spans and request duration metrics through the agent.
+Also name the service identity and exporter settings, for example
+`OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 ---
 

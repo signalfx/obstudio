@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from .models import DeterministicCheck, GradeCheckResult, GradeResult, EvalCase
@@ -140,7 +141,69 @@ def run_check(
         missing = missing_values(haystack, check.values)
         return result(check, not missing, "Missing commands: " + ", ".join(missing) if missing else "Command evidence found")
 
+    if kind in {
+        "command_succeeds",
+        "command_stdout_contains_all",
+        "command_stdout_contains_any",
+        "command_stdout_contains_none",
+    }:
+        return run_command_check(check, service_dir)
+
     return result(check, False, f"Unknown check kind: {kind}")
+
+
+def run_command_check(check: DeterministicCheck, service_dir: Path) -> GradeCheckResult:
+    if not check.command:
+        return result(check, False, "Command check requires command")
+    cwd = service_dir / check.cwd if check.cwd else service_dir
+    if not cwd.exists():
+        return result(check, False, f"Command cwd missing: {cwd}")
+    try:
+        completed = subprocess.run(
+            check.command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=check.timeout_seconds,
+        )
+    except FileNotFoundError as exc:
+        return result(check, False, f"Command executable not found: {exc.filename}")
+    except subprocess.TimeoutExpired as exc:
+        return result(check, False, f"Command timed out after {exc.timeout}s: {command_label(check.command)}")
+
+    stdout = completed.stdout or ""
+    combined_output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+    evidence = command_evidence(check.command, completed.returncode, combined_output)
+    if check.kind == "command_succeeds":
+        return result(check, completed.returncode == 0, evidence)
+
+    if completed.returncode != 0:
+        return result(check, False, evidence)
+
+    if check.kind == "command_stdout_contains_all":
+        missing = missing_values(stdout, check.values)
+        return result(check, not missing, evidence if not missing else evidence + "; missing: " + ", ".join(missing))
+
+    if check.kind == "command_stdout_contains_any":
+        passed = any(contains(stdout, value) for value in check.values)
+        return result(check, passed, evidence if passed else evidence + "; none present: " + ", ".join(check.values))
+
+    if check.kind == "command_stdout_contains_none":
+        present = [value for value in check.values if contains(stdout, value)]
+        return result(check, not present, evidence if not present else evidence + "; unexpected: " + ", ".join(present))
+
+    return result(check, False, f"Unsupported command check kind: {check.kind}")
+
+
+def command_label(command: list[str]) -> str:
+    return " ".join(command)
+
+
+def command_evidence(command: list[str], returncode: int, output: str) -> str:
+    snippet = " ".join(output.split())[:500]
+    if snippet:
+        return f"{command_label(command)} exited {returncode}: {snippet}"
+    return f"{command_label(command)} exited {returncode}"
 
 
 def trace_contains_skill_reference(trace: TraceSummary, skill: str) -> bool:

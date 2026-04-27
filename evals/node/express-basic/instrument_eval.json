@@ -14,17 +14,26 @@
     {
       "id": "package-sdk-node",
       "description": "package.json includes the OTel Node SDK.",
-      "kind": "file_contains_all",
-      "path": "package.json",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "npm",
+        "pkg",
+        "get",
+        "dependencies.@opentelemetry/sdk-node"
+      ],
       "values": [
-        "@opentelemetry/sdk-node"
+        "\""
       ]
     },
     {
       "id": "package-http-express-instrumentation",
       "description": "package.json includes HTTP and Express instrumentation packages.",
-      "kind": "file_contains_all",
-      "path": "package.json",
+      "kind": "command_stdout_contains_all",
+      "command": [
+        "node",
+        "-e",
+        "const p=require('./package.json'); const d={...(p.dependencies||{}),...(p.devDependencies||{})}; console.log(Object.keys(d).sort().join('\\n'))"
+      ],
       "values": [
         "@opentelemetry/instrumentation-http",
         "@opentelemetry/instrumentation-express"
