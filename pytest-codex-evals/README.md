@@ -95,6 +95,21 @@ Run live Codex A/B:
 uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
 ```
 
+Parallelize cases with pytest-xdist:
+
+```bash
+uv run pytest -n 4 evals --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
+```
+
+The plugin writes per-worker result payloads and merges them into the same
+aggregate reports at session finish.
+
+Print per-item progress with:
+
+```bash
+uv run pytest -n 4 evals --codex-eval-progress --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
+```
+
 ## Config
 
 Default validation config:
@@ -151,6 +166,10 @@ Live A/B runs write:
 ```text
 .workspace/codex-evals/<skill>/<run-id>/ab-report.md
 .workspace/codex-evals/<skill>/<run-id>/ab-benchmark.json
+.workspace/codex-evals/<skill>/<run-id>/results/<group>/<item>/<eval>/
+  eval.json
+  with_skill.json
+  with_baseline.json
 eval-reports/<skill>/AB_REPORT.md
 eval-reports/<skill>/ab-benchmark.json
 ```
@@ -158,7 +177,12 @@ eval-reports/<skill>/ab-benchmark.json
 With-skill and with-baseline runs write analogous `with_skill-*` and
 `with_baseline-*` reports.
 
-For compatibility, live A/B runs also write `.workspace/.../report.md`,
+The live Markdown report includes environment metadata, one row per eval file
+with prompts aggregated, and a failure-only table for deterministic and
+qualitative checks. Baseline columns are `-` when the selected run mode did not
+execute the baseline side.
+
+For compatibility, live runs also write `.workspace/.../report.md`,
 `.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and
 `eval-reports/<skill>/benchmark.json`.
 

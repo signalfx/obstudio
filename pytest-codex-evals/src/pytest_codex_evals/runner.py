@@ -14,8 +14,12 @@ from .qualitative import run_qualitative_grade
 from .trace import parse_trace
 
 
-def new_run_root(repo_root: Path, skill: str) -> Path:
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+def new_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+def new_run_root(repo_root: Path, skill: str, run_id: str | None = None) -> Path:
+    run_id = run_id or new_run_id()
     return repo_root / ".workspace" / "codex-evals" / skill / run_id
 
 

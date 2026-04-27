@@ -1,0 +1,121 @@
+{
+  "mode": "validation",
+  "skill": "otel-audit",
+  "runs": [
+    {
+      "id": "go/chi-basic/audit/direct",
+      "base_id": "go/chi-basic/audit",
+      "case": "go/chi-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/go/chi-basic/audit_eval.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/chi-basic/audit/readiness-review",
+      "base_id": "go/chi-basic/audit",
+      "case": "go/chi-basic",
+      "prompt_id": "readiness-review",
+      "definition_path": "evals/go/chi-basic/audit_eval.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/kvstore/audit/direct",
+      "base_id": "go/kvstore/audit",
+      "case": "go/kvstore",
+      "prompt_id": "direct",
+      "definition_path": "evals/go/kvstore/audit_eval.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/kvstore/audit/readiness-review",
+      "base_id": "go/kvstore/audit",
+      "case": "go/kvstore",
+      "prompt_id": "readiness-review",
+      "definition_path": "evals/go/kvstore/audit_eval.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "node/express-basic/audit/direct",
+      "base_id": "node/express-basic/audit",
+      "case": "node/express-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/node/express-basic/audit_eval.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "node/express-basic/audit/readiness-review",
+      "base_id": "node/express-basic/audit",
+      "case": "node/express-basic",
+      "prompt_id": "readiness-review",
+      "definition_path": "evals/node/express-basic/audit_eval.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/fastapi-celery/audit/direct",
+      "base_id": "python/fastapi-celery/audit",
+      "case": "python/fastapi-celery",
+      "prompt_id": "direct",
+      "definition_path": "evals/python/fastapi-celery/audit_eval.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/fastapi-celery/audit/readiness-review",
+      "base_id": "python/fastapi-celery/audit",
+      "case": "python/fastapi-celery",
+      "prompt_id": "readiness-review",
+      "definition_path": "evals/python/fastapi-celery/audit_eval.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/flask-basic/audit/direct",
+      "base_id": "python/flask-basic/audit",
+      "case": "python/flask-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/python/flask-basic/audit_eval.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/flask-basic/audit/readiness-review",
+      "base_id": "python/flask-basic/audit",
+      "case": "python/flask-basic",
+      "prompt_id": "readiness-review",
+      "definition_path": "evals/python/flask-basic/audit_eval.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    }
+  ],
+  "summary": {
+    "case_count": 10,
+    "deterministic_check_count": 42,
+    "qualitative_check_count": 50
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "mode": "validation",
+  "skill": "otel-instrument",
+  "runs": [
+    {
+      "id": "go/chi-basic/instrument/direct",
+      "base_id": "go/chi-basic/instrument",
+      "case": "go/chi-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/go/chi-basic/instrument_eval.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/chi-basic/instrument/runtime-preserving",
+      "base_id": "go/chi-basic/instrument",
+      "case": "go/chi-basic",
+      "prompt_id": "runtime-preserving",
+      "definition_path": "evals/go/chi-basic/instrument_eval.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/kvstore/instrument/direct",
+      "base_id": "go/kvstore/instrument",
+      "case": "go/kvstore",
+      "prompt_id": "direct",
+      "definition_path": "evals/go/kvstore/instrument_eval.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "go/kvstore/instrument/runtime-preserving",
+      "base_id": "go/kvstore/instrument",
+      "case": "go/kvstore",
+      "prompt_id": "runtime-preserving",
+      "definition_path": "evals/go/kvstore/instrument_eval.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 5,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "node/express-basic/instrument/direct",
+      "base_id": "node/express-basic/instrument",
+      "case": "node/express-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/node/express-basic/instrument_eval.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "node/express-basic/instrument/runtime-preserving",
+      "base_id": "node/express-basic/instrument",
+      "case": "node/express-basic",
+      "prompt_id": "runtime-preserving",
+      "definition_path": "evals/node/express-basic/instrument_eval.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/fastapi-celery/instrument/direct",
+      "base_id": "python/fastapi-celery/instrument",
+      "case": "python/fastapi-celery",
+      "prompt_id": "direct",
+      "definition_path": "evals/python/fastapi-celery/instrument_eval.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/fastapi-celery/instrument/runtime-preserving",
+      "base_id": "python/fastapi-celery/instrument",
+      "case": "python/fastapi-celery",
+      "prompt_id": "runtime-preserving",
+      "definition_path": "evals/python/fastapi-celery/instrument_eval.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/flask-basic/instrument/direct",
+      "base_id": "python/flask-basic/instrument",
+      "case": "python/flask-basic",
+      "prompt_id": "direct",
+      "definition_path": "evals/python/flask-basic/instrument_eval.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    },
+    {
+      "id": "python/flask-basic/instrument/runtime-preserving",
+      "base_id": "python/flask-basic/instrument",
+      "case": "python/flask-basic",
+      "prompt_id": "runtime-preserving",
+      "definition_path": "evals/python/flask-basic/instrument_eval.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-instrument",
+      "deterministic_check_count": 4,
+      "qualitative_check_count": 5
+    }
+  ],
+  "summary": {
+    "case_count": 10,
+    "deterministic_check_count": 44,
+    "qualitative_check_count": 50
+  }
+}

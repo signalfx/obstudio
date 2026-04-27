@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "pytest-codex-evals",
   "pytest>=8.0.0",
+  "pytest-xdist>=3.6.0",
 ]
 
 [tool.uv.sources]

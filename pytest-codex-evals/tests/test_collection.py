@@ -124,3 +124,16 @@ def test_eval_json_files_do_not_require_fixture_files(pytester: pytest.Pytester)
     result = pytester.runpytest("evals/sample/no-fixture", "--skill", str(skill_dir))
 
     result.assert_outcomes(passed=1)
+
+
+def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+
+    result = pytester.runpytest("-n", "2", "--skill", str(skill_dir))
+
+    result.assert_outcomes(passed=2)
+    latest_dir = pytester.path / "eval-reports" / "sample-skill"
+    benchmark = json.loads((latest_dir / "validation-benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["mode"] == "validation"
+    assert benchmark["summary"]["case_count"] == 2

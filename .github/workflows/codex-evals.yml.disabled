@@ -1,0 +1,92 @@
+name: Codex Skill Evals
+
+# Disabled template. GitHub Actions ignores this file because it does not end
+# in .yml or .yaml. Rename to codex-evals.yml when eval CI is allowed to run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: "Skill directory, for example skills/otel-audit"
+        required: false
+        default: "skills/otel-audit"
+      case:
+        description: "Optional eval case path, for example go/chi-basic"
+        required: false
+        default: "go/chi-basic"
+      prompt:
+        description: "Optional pytest -k prompt filter, for example direct"
+        required: false
+        default: "direct"
+      model:
+        description: "Codex model for live A/B evals"
+        required: false
+        default: "gpt-5.2"
+
+jobs:
+  skill-evals:
+    name: Skill evals - validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run pytest plugin tests
+        run: make test-pytest-plugin
+
+      - name: Validate eval JSONs and reports
+        run: make skill-eval-all
+
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codex-eval-validation-reports
+          path: |
+            eval-reports/
+            .workspace/codex-evals/
+          if-no-files-found: ignore
+
+  skill-evals-live-ab:
+    name: Skill evals - live Codex A/B
+    runs-on: ubuntu-latest
+    needs: skill-evals
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # openai/codex-action bootstraps the Codex CLI and Responses API proxy.
+      # After this step, later shell steps in the same job can call `codex`.
+      - name: Bootstrap Codex CLI
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: "Print the Codex version and exit."
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+
+      - name: Run live Codex A/B evals
+        run: |
+          make skill-eval-ab-all \
+            SKILL="${{ github.event.inputs.skill }}" \
+            CASE="${{ github.event.inputs.case }}" \
+            PROMPT="${{ github.event.inputs.prompt }}" \
+            MODEL="${{ github.event.inputs.model }}"
+
+      - name: Upload live A/B reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codex-eval-live-ab-reports
+          path: |
+            eval-reports/
+            .workspace/codex-evals/
+          if-no-files-found: ignore

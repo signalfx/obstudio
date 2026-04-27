@@ -116,7 +116,8 @@ skill-eval-ab-all: ## Alias for eval-ab
 test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-all: eval-validation eval-ab ## Run validation and A/B modes
+eval-all: ## Run validation and A/B modes
+	@$(MAKE) -C $(EVALS_DIR) eval-all
 
 test-evals-all: eval-all ## Alias for eval-all
 

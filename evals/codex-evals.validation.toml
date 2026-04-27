@@ -1,0 +1,10 @@
+[run]
+mode = "validation"
+
+[qualitative]
+enabled = true
+
+[models]
+# Agent model can be set here or overridden with MODEL=... in Make.
+agent = "gpt-5.2"
+judge = "gpt-5.2"

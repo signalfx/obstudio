@@ -167,14 +167,19 @@ def test_ab_report_writes_mode_specific_and_legacy_paths(tmp_path: Path):
     assert (run_root / "ab-report.md").is_file()
     assert (run_root / "ab-benchmark.json").is_file()
     assert (run_root / "report.md").is_file()
+    assert (run_root / "results" / "sample" / "service" / "sample-skill" / "eval.json").is_file()
+    assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_skill.json").is_file()
+    assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
     benchmark = json.loads((run_root / "ab-benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["mode"] == "ab"
+    assert benchmark["summary"]["eval_count"] == 1
+    assert benchmark["evals"][0]["prompt_count"] == 1
     assert (tmp_path / "eval-reports" / "sample-skill" / "AB_REPORT.md").is_file()
 
 
 def test_side_report_writes_with_skill_paths(tmp_path: Path):
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
-    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=False, evidence="missing output")])
     side = SideResult(
         side="with_skill",
         exit_code=0,
@@ -196,6 +201,13 @@ def test_side_report_writes_with_skill_paths(tmp_path: Path):
 
     assert (run_root / "with_skill-report.md").is_file()
     assert (run_root / "with_skill-benchmark.json").is_file()
+    assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_skill.json").is_file()
+    assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
     benchmark = json.loads((run_root / "with_skill-benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["mode"] == "with_skill"
+    assert benchmark["evals"][0]["with_baseline"] is None
+    assert benchmark["failures"][0]["result"] == "deterministic:check FAIL"
+    report = (run_root / "with_skill-report.md").read_text(encoding="utf-8")
+    assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | - | - |" in report
+    assert "deterministic:check FAIL" in report
     assert (tmp_path / "eval-reports" / "sample-skill" / "WITH_SKILL_REPORT.md").is_file()
