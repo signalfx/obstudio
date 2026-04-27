@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,7 +19,10 @@ CheckKind = Literal[
     "command_stdout_contains_all",
     "command_stdout_contains_any",
     "command_stdout_contains_none",
+    "observer_docker_runtime",
 ]
+
+CheckCategory = Literal["deterministic", "runtime"]
 
 
 class DeterministicCheck(BaseModel):
@@ -32,6 +35,7 @@ class DeterministicCheck(BaseModel):
     command: list[str] = Field(default_factory=list)
     cwd: str | None = None
     timeout_seconds: int = 30
+    runtime: dict[str, Any] = Field(default_factory=dict)
     applies_to: Literal["both", "with_skill", "baseline"] = "with_skill"
 
 
@@ -102,6 +106,8 @@ class GradeCheckResult(BaseModel):
     description: str
     passed: bool
     evidence: str = ""
+    category: CheckCategory = "deterministic"
+    skipped: bool = False
 
 
 class GradeResult(BaseModel):
@@ -109,11 +115,11 @@ class GradeResult(BaseModel):
 
     @property
     def total(self) -> int:
-        return len(self.checks)
+        return sum(1 for check in self.checks if not check.skipped)
 
     @property
     def passed(self) -> int:
-        return sum(1 for check in self.checks if check.passed)
+        return sum(1 for check in self.checks if check.passed and not check.skipped)
 
     @property
     def pass_rate(self) -> float:
@@ -162,3 +168,4 @@ class ValidationResult(BaseModel):
     skill_path: str
     deterministic_check_count: int = 0
     qualitative_check_count: int = 0
+    runtime_check_count: int = 0

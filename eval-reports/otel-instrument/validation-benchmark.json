@@ -4,12 +4,13 @@
   "metadata": {
     "mode": "validation",
     "skill": "otel-instrument",
-    "run_id": "20260427T173318557615Z",
+    "run_id": "20260427T213342562035Z",
     "repo_root": "/Users/pavankri/Cisco/obstudio",
     "config_path": "/Users/pavankri/Cisco/obstudio/evals/codex-evals.validation.toml",
-    "agent_model": "gpt-5.2",
-    "judge_model": "gpt-5.2",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
     "qualitative_enabled": true,
+    "runtime_enabled": false,
     "workers": "1"
   },
   "evals": [
@@ -27,7 +28,8 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 5,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     },
     {
       "id": "go/chi-partial/instrument",
@@ -43,7 +45,8 @@
       "eval_dir": "evals/go/chi-partial",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 5,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     },
     {
       "id": "go/kvstore/instrument",
@@ -59,7 +62,8 @@
       "eval_dir": "evals/go/kvstore",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 5,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     },
     {
       "id": "java/springboot-basic/instrument",
@@ -75,7 +79,8 @@
       "eval_dir": "evals/java/springboot-basic",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 4,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     },
     {
       "id": "node/express-basic/instrument",
@@ -91,7 +96,8 @@
       "eval_dir": "evals/node/express-basic",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 4,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     },
     {
       "id": "python/fastapi-celery/instrument",
@@ -107,7 +113,8 @@
       "eval_dir": "evals/python/fastapi-celery",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 4,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 1
     },
     {
       "id": "python/flask-basic/instrument",
@@ -123,7 +130,8 @@
       "eval_dir": "evals/python/flask-basic",
       "skill_path": "skills/otel-instrument",
       "deterministic_check_count": 4,
-      "qualitative_check_count": 5
+      "qualitative_check_count": 5,
+      "runtime_check_count": 0
     }
   ],
   "summary": {
@@ -131,6 +139,7 @@
     "case_count": 14,
     "prompt_count": 14,
     "deterministic_check_count": 62,
-    "qualitative_check_count": 70
+    "qualitative_check_count": 70,
+    "runtime_check_count": 2
   }
 }

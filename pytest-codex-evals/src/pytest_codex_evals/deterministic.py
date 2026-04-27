@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from .models import DeterministicCheck, GradeCheckResult, GradeResult, EvalCase
+from .runtime import run_observer_docker_runtime
 from .trace import TraceSummary
 
 
@@ -13,6 +14,7 @@ def grade_deterministic(
     final_message: str,
     trace: TraceSummary,
     side: str,
+    runtime_enabled: bool = False,
 ) -> GradeResult:
     service_dir = run_dir / "service"
     results: list[GradeCheckResult] = []
@@ -43,7 +45,7 @@ def grade_deterministic(
     for check in case.deterministic_checks:
         if check.applies_to not in ("both", side):
             continue
-        results.append(run_check(check, service_dir, final_message, trace))
+        results.append(run_check(check, service_dir, final_message, trace, runtime_enabled))
 
     return GradeResult(checks=results)
 
@@ -98,6 +100,7 @@ def run_check(
     service_dir: Path,
     final_message: str,
     trace: TraceSummary,
+    runtime_enabled: bool = False,
 ) -> GradeCheckResult:
     kind = check.kind
     evidence = ""
@@ -148,6 +151,17 @@ def run_check(
         "command_stdout_contains_none",
     }:
         return run_command_check(check, service_dir)
+
+    if kind == "observer_docker_runtime":
+        if not runtime_enabled:
+            return result(
+                check,
+                True,
+                "Runtime check skipped; enable [runtime].enabled = true or pass --codex-runtime.",
+                category="runtime",
+                skipped=True,
+            )
+        return run_observer_docker_runtime(check, service_dir)
 
     return result(check, False, f"Unknown check kind: {kind}")
 
@@ -217,8 +231,21 @@ def trace_contains_skill_reference(trace: TraceSummary, skill: str) -> bool:
     return any(marker in text for marker in markers)
 
 
-def result(check: DeterministicCheck, passed: bool, evidence: str) -> GradeCheckResult:
-    return GradeCheckResult(id=check.id, description=check.description, passed=passed, evidence=evidence)
+def result(
+    check: DeterministicCheck,
+    passed: bool,
+    evidence: str,
+    category: str = "deterministic",
+    skipped: bool = False,
+) -> GradeCheckResult:
+    return GradeCheckResult(
+        id=check.id,
+        description=check.description,
+        passed=passed,
+        evidence=evidence,
+        category=category,  # type: ignore[arg-type]
+        skipped=skipped,
+    )
 
 
 def missing_values(text: str, values: list[str]) -> list[str]:

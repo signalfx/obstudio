@@ -33,6 +33,7 @@ def run_case(
     model: str | None = None,
     judge_model: str | None = None,
     qualitative: bool = True,
+    runtime: bool = False,
     sides: tuple[str, ...] = ("with_skill", "baseline"),
 ) -> CaseResult:
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
@@ -52,6 +53,7 @@ def run_case(
                 model=model,
                 judge_model=judge_model,
                 qualitative=qualitative,
+                runtime=runtime,
             )
         if "baseline" in sides:
             baseline = run_side(
@@ -65,6 +67,7 @@ def run_case(
                 model=model,
                 judge_model=judge_model,
                 qualitative=qualitative,
+                runtime=runtime,
             )
         return CaseResult(
             id=case.id,
@@ -92,6 +95,7 @@ def run_side(
     model: str | None,
     judge_model: str | None,
     qualitative: bool,
+    runtime: bool,
 ) -> SideResult:
     side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
@@ -125,7 +129,7 @@ def run_side(
     trace = parse_trace(trace_path)
     agent_tokens = trace.usage.total_tokens
     final_message = final_path.read_text(encoding="utf-8", errors="replace")
-    deterministic = grade_deterministic(case, exec_dir, final_message, trace, side)
+    deterministic = grade_deterministic(case, exec_dir, final_message, trace, side, runtime_enabled=runtime)
     deterministic_path = exec_dir / "deterministic_grade.json"
     deterministic_path.write_text(deterministic.model_dump_json(indent=2), encoding="utf-8")
 

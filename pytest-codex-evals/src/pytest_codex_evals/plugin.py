@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator
 
 from .config import CodexEvalSettings, load_settings
 from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant, ValidationResult
-from .report import write_ab_reports, write_side_reports, write_validation_reports
+from .report import write_ab_reports, write_combined_session_reports, write_side_reports, write_validation_reports
 from .runner import new_run_id, new_run_root, run_case
 from .schema_resources import load_schema
 
@@ -28,6 +28,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--skill", default="", help="Path to the skill directory to load and evaluate")
     group.addoption("--model", default="", help="Optional Codex model override")
     group.addoption("--no-qualitative", action="store_true", default=False, help="Skip schema-constrained qualitative grading")
+    group.addoption("--codex-runtime", action="store_true", default=False, help="Run Docker-backed runtime checks")
     group.addoption("--codex-eval-progress", action="store_true", default=False, help="Print per-item eval progress")
 
 
@@ -92,6 +93,7 @@ def write_grouped_reports(runs: list[dict[str, Any]]) -> None:
             write_side_reports(run["repo_root"], run["run_root"], run["skill"], run["mode"], results, metadata)
         elif run["mode"] == "validation":
             write_validation_reports(run["repo_root"], run["run_root"], run["skill"], results, metadata)
+    write_combined_session_reports(runs)
 
 
 def is_xdist_worker(config: pytest.Config) -> bool:
@@ -217,6 +219,7 @@ class CodexEvalItem(pytest.Item):
             model=agent_model(self.config),
             judge_model=judge_model(self.config),
             qualitative=qualitative_enabled(self.config),
+            runtime=runtime_enabled(self.config),
             sides=sides,
         )
         run["results"].append(result)
@@ -305,6 +308,10 @@ def qualitative_enabled(config: pytest.Config) -> bool:
     return settings(config).qualitative_enabled and not bool(config.getoption("--no-qualitative"))
 
 
+def runtime_enabled(config: pytest.Config) -> bool:
+    return settings(config).runtime_enabled or bool(config.getoption("--codex-runtime"))
+
+
 def agent_model(config: pytest.Config) -> str | None:
     return config.getoption("--model") or settings(config).agent_model
 
@@ -363,6 +370,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "agent_model": agent_model(config) or "",
         "judge_model": judge_model(config) or "",
         "qualitative_enabled": qualitative_enabled(config),
+        "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
     }
 
@@ -379,8 +387,9 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
         definition_path=str((case.definition_path or Path()).resolve()),
         fixture_dir=str((case.fixture_dir or Path()).resolve()),
         skill_path=str(resolved_skill_dir.resolve()),
-        deterministic_check_count=len(case.deterministic_checks),
+        deterministic_check_count=sum(1 for check in case.deterministic_checks if check.kind != "observer_docker_runtime"),
         qualitative_check_count=len(case.qualitative_checks),
+        runtime_check_count=sum(1 for check in case.deterministic_checks if check.kind == "observer_docker_runtime"),
     )
 
 

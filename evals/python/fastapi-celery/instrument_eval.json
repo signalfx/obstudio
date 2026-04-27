@@ -58,6 +58,71 @@
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "OTEL_SERVICE_NAME"
       ]
+    },
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits FastAPI traces to a running Observer.",
+      "kind": "observer_docker_runtime",
+      "timeout_seconds": 120,
+      "runtime": {
+        "observer": {
+          "base_url": "http://127.0.0.1:3000",
+          "clear": true
+        },
+        "compose_file": "docker-compose.yml",
+        "services": [
+          "redis",
+          "api",
+          "worker"
+        ],
+        "environment": {
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4318",
+          "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+          "OTEL_TRACES_EXPORTER": "otlp",
+          "OTEL_METRICS_EXPORTER": "otlp"
+        },
+        "health": {
+          "url": "http://127.0.0.1:8000/health",
+          "expect_status": 200,
+          "timeout_seconds": 60
+        },
+        "traffic": [
+          {
+            "method": "GET",
+            "url": "http://127.0.0.1:8000/health",
+            "expect_status": 200
+          },
+          {
+            "method": "POST",
+            "url": "http://127.0.0.1:8000/orders",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "product": "widget",
+              "quantity": 1
+            },
+            "expect_status": 201
+          }
+        ],
+        "settle_seconds": 5,
+        "expect": {
+          "traces": {
+            "contains_any": [
+              "GET /health",
+              "POST /orders",
+              "http"
+            ]
+          },
+          "metrics": {
+            "contains_any": [
+              "http",
+              "duration",
+              "request"
+            ]
+          }
+        }
+      }
     }
   ],
   "qualitative_checks": [

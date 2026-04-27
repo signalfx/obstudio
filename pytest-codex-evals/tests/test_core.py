@@ -8,7 +8,8 @@ from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
 from pytest_codex_evals.deterministic import grade_deterministic
 from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
-from pytest_codex_evals.report import write_ab_reports, write_side_reports
+from pytest_codex_evals.models import ValidationResult
+from pytest_codex_evals.report import write_ab_reports, write_combined_session_reports, write_side_reports
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -57,6 +58,9 @@ def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
         [models]
         agent = "gpt-5.2"
         judge = "gpt-5.4"
+
+        [runtime]
+        enabled = true
         """,
         encoding="utf-8",
     )
@@ -65,6 +69,7 @@ def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
 
     assert settings.run_mode == "ab"
     assert settings.qualitative_enabled is False
+    assert settings.runtime_enabled is True
     assert settings.agent_model == "gpt-5.2"
     assert settings.judge_model == "gpt-5.4"
 
@@ -114,6 +119,34 @@ def test_command_backed_deterministic_check(tmp_path: Path):
     check = next(item for item in grade.checks if item.id == "npm-pkg-dependency")
     assert check.passed
     assert "package.json" in check.evidence
+
+
+def test_runtime_check_is_skipped_until_enabled(tmp_path: Path):
+    (tmp_path / "service").mkdir()
+    case = EvalCase(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Exercise runtime telemetry.",
+        deterministic_checks=[
+            DeterministicCheck(
+                id="observer-runtime",
+                description="Runtime telemetry reaches Observer.",
+                kind="observer_docker_runtime",
+                runtime={"expect": {"traces": {"contains_any": ["sample-service"]}}},
+            )
+        ],
+    )
+
+    grade = grade_deterministic(case, tmp_path, "done", parse_trace(empty_trace(tmp_path)), "with_skill")
+
+    check = next(item for item in grade.checks if item.id == "observer-runtime")
+    assert check.category == "runtime"
+    assert check.skipped
+    assert grade.total == 2
 
 
 def empty_trace(tmp_path: Path) -> Path:
@@ -255,3 +288,69 @@ def test_side_report_writes_with_skill_paths(tmp_path: Path):
     assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | 0 | 0.0s | - | - | - | - |" in report
     assert "deterministic:check FAIL" in report
     assert (tmp_path / "eval-reports" / "sample-skill" / "WITH_SKILL_REPORT.md").is_file()
+
+
+def test_combined_report_has_validation_and_runtime_sections(tmp_path: Path):
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    deterministic = GradeCheckResult(id="file", description="file", passed=True)
+    runtime = GradeCheckResult(id="observer", description="observer", passed=True, category="runtime")
+    side = SideResult(
+        side="with_skill",
+        exit_code=0,
+        trace_path="trace.jsonl",
+        final_message_path="last_message.md",
+        deterministic_grade=GradeResult(checks=[deterministic, runtime]),
+        duration_seconds=12.3,
+        tokens=456,
+    )
+    case = CaseResult(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        with_skill=side,
+    )
+    validation = ValidationResult(
+        id=case.id,
+        base_id=case.base_id,
+        prompt_id=case.prompt_id,
+        skill=case.skill,
+        language=case.language,
+        service=case.service,
+        definition_path=str(tmp_path / "sample_eval.json"),
+        fixture_dir=str(tmp_path),
+        skill_path=str(tmp_path / "skills" / "sample-skill"),
+        deterministic_check_count=1,
+        qualitative_check_count=0,
+        runtime_check_count=1,
+    )
+
+    write_combined_session_reports(
+        [
+            {
+                "mode": "validation",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": {"mode": "validation", "run_id": "run", "skill": "sample-skill"},
+                "results": [validation],
+            },
+            {
+                "mode": "with_skill",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": {"mode": "with_skill", "run_id": "run", "skill": "sample-skill", "agent_model": "gpt-test"},
+                "results": [case],
+            },
+        ]
+    )
+
+    report = (run_root / "report.md").read_text(encoding="utf-8")
+    assert "## Validation" in report
+    assert "## Deterministic" in report
+    assert "## Qualitative" in report
+    assert "## Runtime" in report
+    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report

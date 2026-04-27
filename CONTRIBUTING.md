@@ -15,6 +15,7 @@ This repository contains:
 | Node.js | 20+ | observer client dev/test and VS Code extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
+| Docker | latest | Optional runtime eval checks |
 | goreleaser | latest | `make release-local` only (optional) |
 
 ## Build

@@ -19,6 +19,7 @@ modes: `eval-validation`, `eval-with-skill`, and `eval-with-baseline`.
 | A/B | Codex with both sides in one run | Skill lift over no-skill baseline | A/B report |
 | Deterministic Checks | Python checks over final text, files, traces, and command output | Concrete pass/fail behavior | `deterministic_grade.json` |
 | Qualitative Checks | Schema-constrained judge pass | Semantic quality and workflow fit | `qualitative_grade.json` |
+| Runtime Checks | Docker Python SDK plus Observer API queries | Live spans/metrics are emitted after traffic | Runtime section in `deterministic_grade.json` |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
 the referenced skill source exists. `eval-with-skill` and `eval-with-baseline`
@@ -58,6 +59,12 @@ reliably than text search. Examples in this repo use `go list -mod=readonly -m
 all`, `npm pkg get`, `node -e`, and Python `tomllib` against the generated
 service workspace.
 
+Runtime checks use the `observer_docker_runtime` check kind. They are skipped by
+default and run only when `[runtime].enabled = true` is set in the selected TOML
+config or `EVAL_RUNTIME=1` is passed to Make. These checks use the Docker Python
+SDK to start containers or a Compose file, send HTTP traffic, then query a
+running Observer at `http://127.0.0.1:3000` for trace and metric evidence.
+
 ## Commands
 
 | Target | Purpose |
@@ -76,6 +83,7 @@ Parallelize pytest items with `EVAL_WORKERS`:
 ```bash
 make eval-all SKILL=skills/otel-audit EVAL_WORKERS=4
 make eval-ab SKILL=skills/otel-instrument CASE=go/kvstore EVAL_WORKERS=2
+make eval-with-skill SKILL=skills/otel-instrument CASE=python/fastapi-celery EVAL_RUNTIME=1
 ```
 
 Each worker writes per-item result JSON under `.workspace/codex-evals/_worker-results/`;
@@ -104,8 +112,11 @@ Set the judge model with:
 
 ```toml
 [models]
-agent = "gpt-5.2"
-judge = "gpt-5.2"
+agent = "gpt-5.5"
+judge = "gpt-5.5"
+
+[runtime]
+enabled = false
 ```
 
 ## Reports
@@ -129,9 +140,10 @@ Each live run also writes file-level JSON under:
   with_baseline.json
 ```
 
-The Markdown report has one row per eval file, aggregates all prompt variants,
-includes token usage and elapsed time per side, and only tabulates failure
-cases. Baseline columns are `-` when the run mode did not execute a baseline
+The canonical Markdown report has one row per eval file in separate validation,
+deterministic, qualitative, and runtime tables. Live tables aggregate all prompt
+variants and include token usage plus elapsed time for with-skill and baseline
+sides. Baseline columns are `-` when the run mode did not execute a baseline
 side.
 
 For compatibility, live runs also write `report.md`, `benchmark.json`,

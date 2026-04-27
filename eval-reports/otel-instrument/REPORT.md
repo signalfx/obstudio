@@ -1,96 +1,61 @@
-# otel-instrument Codex A/B Eval Report
+# otel-instrument Codex Eval Report
 
-| Case | Prompt | With Skill Checks | Baseline Guards | Commands (ws/base) | Tokens (ws/base) |
-|---|---|---:|---:|---:|---:|
-| node/express-basic | direct | 83% (5/6) | 100% (3/3) | 32/28 | 406258/576348 |
-| node/express-basic | runtime-preserving | 100% (6/6) | 100% (3/3) | 68/40 | 1049010/733960 |
-| python/fastapi-celery | direct | 67% (4/6) | 100% (3/3) | 114/38 | 2112327/750818 |
-| python/fastapi-celery | runtime-preserving | 50% (3/6) | 100% (3/3) | 36/32 | 576932/744019 |
-| python/flask-basic | direct | 50% (3/6) | 100% (3/3) | 56/20 | 1130606/419010 |
-| python/flask-basic | runtime-preserving | 50% (3/6) | 100% (3/3) | 38/56 | 412180/1147299 |
+## Environment
 
-## Deterministic Checks
+| Field | Value |
+|---|---|
+| Modes | validation |
+| Skill | otel-instrument |
+| Run ID | 20260427T213342562035Z |
+| Agent model | gpt-5.5 |
+| Judge model | gpt-5.5 |
+| Qualitative enabled | True |
+| Runtime enabled | False |
+| Workers | 1 |
+| Config | /Users/pavankri/Cisco/obstudio/evals/codex-evals.validation.toml |
 
-### node/express-basic (direct)
+## Validation
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | package-sdk-node | PASS | All values present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-direct-w38bxgiv/with_skill/service/package.json |
-| with_skill | package-http-express-instrumentation | FAIL | Missing: @opentelemetry/instrumentation-http, @opentelemetry/instrumentation-express |
-| with_skill | instrumentation-file | PASS | Existing: /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-direct-w38bxgiv/with_skill/service/otel.js |
-| with_skill | startup-preload | PASS | At least one value present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-direct-w38bxgiv/with_skill/service/package.json |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |
+|---|---|---:|---|---:|---:|---:|
+| go/chi-basic/instrument | go/chi-basic | 2 | evals/go/chi-basic/instrument_eval.json | 5 | 5 | 0 |
+| go/chi-partial/instrument | go/chi-partial | 2 | evals/go/chi-partial/instrument_eval.json | 5 | 5 | 0 |
+| go/kvstore/instrument | go/kvstore | 2 | evals/go/kvstore/instrument_eval.json | 5 | 5 | 0 |
+| java/springboot-basic/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/instrument_eval.json | 4 | 5 | 0 |
+| node/express-basic/instrument | node/express-basic | 2 | evals/node/express-basic/instrument_eval.json | 4 | 5 | 0 |
+| python/fastapi-celery/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/instrument_eval.json | 4 | 5 | 1 |
+| python/flask-basic/instrument | python/flask-basic | 2 | evals/python/flask-basic/instrument_eval.json | 4 | 5 | 0 |
 
-### node/express-basic (runtime-preserving)
+## Deterministic
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | package-sdk-node | PASS | All values present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-runtime-preserving-aqp76zk_/with_skill/service/package.json |
-| with_skill | package-http-express-instrumentation | PASS | All values present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-runtime-preserving-aqp76zk_/with_skill/service/package.json |
-| with_skill | instrumentation-file | PASS | Existing: /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-runtime-preserving-aqp76zk_/with_skill/service/instrumentation.js |
-| with_skill | startup-preload | PASS | At least one value present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-node-express-basic-runtime-preserving-aqp76zk_/with_skill/service/package.json |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| - | - | - | 0 | - | - | - | - | - | - |
 
-### python/fastapi-celery (direct)
+### Deterministic Failures
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | pyproject-otel-sdk | FAIL | Missing: opentelemetry-api, opentelemetry-sdk |
-| with_skill | pyproject-fastapi-instrumentation | PASS | At least one value present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-python-fastapi-celery-direct-ae_ssu1l/with_skill/service/pyproject.toml |
-| with_skill | otel-setup-file | FAIL | No candidate files found |
-| with_skill | compose-env-wired | PASS | At least one value present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-python-fastapi-celery-direct-ae_ssu1l/with_skill/service/docker-compose.yml |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+No deterministic failures.
 
-### python/fastapi-celery (runtime-preserving)
+## Qualitative
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | pyproject-otel-sdk | FAIL | Missing: opentelemetry-api, opentelemetry-sdk |
-| with_skill | pyproject-fastapi-instrumentation | PASS | At least one value present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-python-fastapi-celery-runtime-preserving-dlecco1d/with_skill/service/pyproject.toml |
-| with_skill | otel-setup-file | FAIL | No candidate files found |
-| with_skill | compose-env-wired | FAIL | None present: OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| - | - | - | 0 | - | - | - | - | - | - |
 
-### python/flask-basic (direct)
+### Qualitative Failures
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | pyproject-otel-sdk | FAIL | Missing: opentelemetry-api |
-| with_skill | pyproject-flask-instrumentation | PASS | All values present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-python-flask-basic-direct-lnhzgv6d/with_skill/service/pyproject.toml |
-| with_skill | otel-setup-file | FAIL | No candidate files found |
-| with_skill | app-wires-instrumentation | FAIL | None present: otel_setup, setup_otel, FlaskInstrumentor, instrument_app |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+No qualitative failures.
 
-### python/flask-basic (runtime-preserving)
+## Runtime
 
-| Side | Check | Result | Evidence |
-|---|---|---|---|
-| with_skill | final-message-present | PASS | Final message present |
-| with_skill | skills-loaded | PASS | Loaded skills: otel-instrument |
-| with_skill | pyproject-otel-sdk | FAIL | Missing: opentelemetry-api, opentelemetry-sdk |
-| with_skill | pyproject-flask-instrumentation | PASS | All values present in /var/folders/j0/q4s1xtqn6kx48fbgtb30qhw00000gn/T/codex-eval-otel-instrument-python-flask-basic-runtime-preserving-1v0yz4n4/with_skill/service/pyproject.toml |
-| with_skill | otel-setup-file | FAIL | No candidate files found |
-| with_skill | app-wires-instrumentation | FAIL | None present: otel_setup, setup_otel, FlaskInstrumentor, instrument_app |
-| baseline | final-message-present | PASS | Final message present |
-| baseline | skills-not-loaded | PASS | No repo skill files present |
-| baseline | baseline-skill-isolation | PASS | No repo skill references found |
+| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| - | - | - | 0 | - | - | - | - | - | - |
+
+### Runtime Failures
+
+No runtime failures.
+
+## Result JSON
+
+File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.

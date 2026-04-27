@@ -99,6 +99,7 @@ obstudio/
 | Node.js | 20+ | React client and VS Code extension |
 | npm | latest | JavaScript package management |
 | uv | latest | Python eval harness and Python fixture apps |
+| Docker | latest | Optional runtime eval checks |
 
 ## Development Commands
 

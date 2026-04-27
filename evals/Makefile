@@ -6,6 +6,7 @@ CASE ?=
 PROMPT ?=
 MODEL ?=
 NO_QUALITATIVE ?=
+EVAL_RUNTIME ?=
 EVAL_WORKERS ?= 1
 EVAL_PROGRESS ?= 1
 EVAL_CONFIG ?= codex-evals.toml
@@ -22,10 +23,11 @@ EVAL_SKILL_FLAG = $(if $(SKILL),--skill "$(EVAL_SKILL_PATH)",)
 EVAL_WORKER_FLAGS = $(if $(filter 1,$(strip $(EVAL_WORKERS))),,-n $(EVAL_WORKERS))
 EVAL_PROGRESS_FLAG = $(if $(filter 1 true yes,$(strip $(EVAL_PROGRESS))),--codex-eval-progress,)
 EVAL_CAPTURE_FLAGS = $(if $(filter 1 true yes,$(strip $(EVAL_PROGRESS))),-s,)
-EVAL_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_CONFIG)"
+EVAL_RUNTIME_FLAG = $(if $(filter 1 true yes,$(strip $(EVAL_RUNTIME))),--codex-runtime,)
+EVAL_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
 EVAL_VALIDATION_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
-EVAL_BASELINE_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_BASELINE_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,)
-EVAL_AB_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_AB_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,)
+EVAL_BASELINE_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_BASELINE_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
+EVAL_AB_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_AB_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
 EVAL_LIST_FLAGS = $(EVAL_FLAGS)
 
 .PHONY: build test eval-validation eval-with-skill eval-with-baseline eval-ab eval-all skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-all

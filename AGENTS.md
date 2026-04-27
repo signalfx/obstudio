@@ -46,19 +46,10 @@ make test-pytest-plugin
 ## Skill Evals
 
 Skill evals follow the OpenAI eval-skill maintenance pattern: run real tasks,
-capture traces, grade deterministic outcomes, and use schema-constrained
-qualitative grading.
-
-Eval files live next to their fixture services:
-
-```text
-evals/<language>/<service>/audit_eval.json
-evals/<language>/<service>/instrument_eval.json
-```
-
-Each eval file contains a `prompts[]` array of task variants. `skill-eval`
-validates JSON and fixture shape; `skill-eval-ab` runs each variant as
-`with_skill` and `baseline`. `PROMPT=<id>` filters to one variant.
+capture traces, grade deterministic outcomes, use schema-constrained
+qualitative grading, and optionally run Docker/Observer runtime checks.
+Eval files live under `evals/`; see `evals/README.md` for the full command and
+reporting model.
 
 Use these commands:
 
@@ -67,14 +58,9 @@ make skill-eval-list
 make skill-eval SKILL=skills/otel-audit
 make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
 make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct
-make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
+make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.5 NO_QUALITATIVE=1
 make skill-eval-all
 ```
-
-`skill-eval-ab` runs A/B comparisons:
-
-- `with_skill`: copied fixture plus temporary `.agents/skills` entries.
-- `baseline`: same copied fixture with no repo skills visible.
 
 Outputs:
 
@@ -94,6 +80,8 @@ Outputs:
   `with_skill`, and `skills-not-loaded` for `baseline`.
 - Use qualitative checks for semantic convention quality, workflow correctness,
   code minimality, and judgment-heavy requirements.
+- Use runtime checks for end-to-end telemetry proof only when Docker and a
+  running Observer are expected.
 - Load only the reference file needed for the detected language.
 
 ## Available Skills

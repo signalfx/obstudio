@@ -11,7 +11,7 @@ Each eval is:
 
 ```text
 prompt + fixture service -> pytest validation
-prompt + fixture service -> live Codex A/B trace + artifacts -> deterministic checks + qualitative checks -> report
+prompt + fixture service -> live Codex trace + artifacts -> deterministic + qualitative + optional runtime checks -> report
 ```
 
 ## Layout
@@ -39,8 +39,9 @@ pytest-codex-evals/
 
 The eval definitions use JSON instead of CSV because these cases need more than
 prompt text: fixture metadata, prompt variants, deterministic checks, artifact
-paths, and qualitative checks. CSV is fine for a small prompt list, but JSON
-keeps each service eval self-contained and machine-validated.
+paths, qualitative checks, and optional runtime check config. CSV is fine for a
+small prompt list, but JSON keeps each service eval self-contained and
+machine-validated.
 
 Each eval has a `prompts[]` array of task variants. The pytest plugin collects
 each `*_eval.json` file directly and expands every variant into its own pytest
@@ -64,7 +65,7 @@ run, artifacts are copied back under `.workspace/codex-evals/`.
 
 ## Grading
 
-Deterministic grading uses Python over files and JSONL traces:
+Deterministic grading uses Python over files, JSONL traces, and command output:
 
 - final response text checks
 - expected file creation and manifest edits
@@ -75,6 +76,11 @@ Deterministic grading uses Python over files and JSONL traces:
 Checks default to `with_skill`, keeping the A/B baseline simple. Baseline runs
 only need to prove run health and skill isolation unless a check explicitly sets
 `applies_to` to `baseline` or `both`.
+
+Runtime checks use `observer_docker_runtime`. They are skipped by default and
+only run when `[runtime].enabled = true` or `--codex-runtime` is set. The check
+uses the Docker Python SDK to start containers or a Compose file, sends traffic,
+then queries a running Observer API for trace and metric evidence.
 
 The harness also adds setup guards to every run:
 
@@ -95,7 +101,8 @@ make skill-eval-list
 make eval-validation SKILL=skills/otel-audit
 make eval-with-skill SKILL=skills/otel-instrument CASE=go/kvstore
 make eval-with-baseline SKILL=skills/otel-instrument CASE=go/kvstore
-make eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
+make eval-ab SKILL=skills/otel-audit MODEL=gpt-5.5 NO_QUALITATIVE=1
+make eval-with-skill SKILL=skills/otel-instrument CASE=python/fastapi-celery EVAL_RUNTIME=1
 make eval-all SKILL=skills/otel-audit CASE=go/chi-basic PROMPT=direct
 ```
 
@@ -108,10 +115,11 @@ cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skil
 ```
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
-Codex controls (`--skill`, `--codex-eval-config`, `--model`, `--no-qualitative`),
-JSON eval collection, validation, side execution, A/B execution, and reporting. Service
-selection is plain pytest path selection, prompt selection is plain `-k`
-filtering, and `--skill` points to a skill directory containing `SKILL.md`.
+Codex controls (`--skill`, `--codex-eval-config`, `--model`,
+`--no-qualitative`, `--codex-runtime`), JSON eval collection, validation, side
+execution, A/B execution, and reporting. Service selection is plain pytest path
+selection, prompt selection is plain `-k` filtering, and `--skill` points to a
+skill directory containing `SKILL.md`.
 
 Build and publish it with:
 
@@ -126,6 +134,8 @@ Full artifacts are ignored by git:
 
 ```text
 .workspace/codex-evals/<skill>/<run-id>/
+  benchmark.json
+  report.md
   validation-benchmark.json
   validation-report.md
   with_skill-benchmark.json
@@ -168,20 +178,26 @@ eval-reports/<skill>/WITH_BASELINE_REPORT.md
 eval-reports/<skill>/with_baseline-benchmark.json
 ```
 
-Latest live A/B summaries are copied to:
+The canonical latest summary is copied to:
 
 ```text
-eval-reports/<skill>/AB_REPORT.md
-eval-reports/<skill>/ab-benchmark.json
 eval-reports/<skill>/REPORT.md
 eval-reports/<skill>/benchmark.json
 ```
+
+Mode-specific live summaries are also copied as `WITH_SKILL_REPORT.md`,
+`WITH_BASELINE_REPORT.md`, or `AB_REPORT.md` with matching benchmark JSON.
+The canonical report has separate tables for validation, deterministic,
+qualitative, and runtime results; live tables include with-skill, baseline,
+token, and elapsed-time columns.
 
 ## Maintenance Rules
 
 - Add an eval when a skill behavior changes or a real failure is found.
 - Keep deterministic checks focused on behavior that can be proven from files,
   traces, commands, and final output.
+- Use runtime checks only for end-to-end telemetry proof that needs Docker and a
+  running Observer.
 - Use qualitative checks for style, semantic convention quality, and workflow
   correctness.
 - Keep full traces out of git; commit only durable eval definitions, harness

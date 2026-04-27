@@ -2,7 +2,7 @@
 
 Pytest plugin for running Codex evals with JSONL traces, isolated workspaces,
 A/B sides, deterministic artifact checks, optional schema-constrained
-qualitative grading, and aggregate reports.
+qualitative grading, optional Docker runtime checks, and aggregate reports.
 
 ## What It Provides
 
@@ -10,9 +10,12 @@ qualitative grading, and aggregate reports.
 - One pytest item per `prompts[]` entry.
 - Fast validation by default: schema, eval directory, and skill path.
 - Optional live Codex A/B runs through TOML config.
-- Deterministic checks from final text, files, and JSONL traces.
+- Deterministic checks from final text, files, JSONL traces, and command output.
 - Schema-constrained qualitative grading with a configurable judge model.
-- Separate validation and live A/B aggregate reports.
+- Optional Docker-backed runtime checks that can exercise a service and verify
+  traces or metrics in an Observer-compatible API.
+- A single aggregate report with validation, deterministic, qualitative, and
+  runtime sections.
 
 ## Install
 
@@ -73,6 +76,38 @@ argv list, not a shell string, so they work well with ecosystem tools:
 
 Other command-backed kinds are `command_succeeds`,
 `command_stdout_contains_any`, and `command_stdout_contains_none`.
+
+Runtime checks are optional because they need Docker plus a running telemetry
+backend. The built-in `observer_docker_runtime` check uses the Docker Python SDK
+to start containers or a small Compose file, sends traffic, then queries an
+Observer-compatible API for traces and metrics:
+
+```json
+{
+  "id": "observer-runtime",
+  "description": "Service emits traces and metrics to Observer.",
+  "kind": "observer_docker_runtime",
+  "timeout_seconds": 120,
+  "runtime": {
+    "observer": { "base_url": "http://127.0.0.1:3000", "clear": true },
+    "compose_file": "docker-compose.yml",
+    "services": ["app"],
+    "environment": {
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4318",
+      "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
+    },
+    "health": { "url": "http://127.0.0.1:8080/health", "expect_status": 200 },
+    "traffic": [{ "method": "GET", "url": "http://127.0.0.1:8080/health", "expect_status": 200 }],
+    "expect": {
+      "traces": { "contains_any": ["GET /health", "http"] },
+      "metrics": { "contains_any": ["http", "duration"] }
+    }
+  }
+}
+```
+
+Runtime checks are skipped unless `[runtime].enabled = true` is set in the
+TOML config or `--codex-runtime` is passed.
 
 ## Commands
 
@@ -159,13 +194,18 @@ mode = "ab"
 [qualitative]
 enabled = true
 
+[runtime]
+enabled = false
+
 [models]
-agent = "gpt-5.2"
-judge = "gpt-5.2"
+agent = "gpt-5.5"
+judge = "gpt-5.5"
 ```
 
 `[models].agent` configures the task run, `--model` overrides it, and
 `[models].judge` configures the qualitative grading pass.
+`[runtime].enabled` controls Docker/Observer runtime checks; the command-line
+`--codex-runtime` flag can enable them for a single run.
 
 ## Outputs
 
@@ -192,12 +232,13 @@ eval-reports/<skill>/ab-benchmark.json
 ```
 
 With-skill and with-baseline runs write analogous `with_skill-*` and
-`with_baseline-*` reports.
+`with_baseline-*` artifacts.
 
-The live Markdown report includes environment metadata, one row per eval file
-with prompts aggregated, token usage and elapsed time per side, and a
-failure-only table for deterministic and qualitative checks. Baseline columns
-are `-` when the selected run mode did not execute the baseline side.
+The canonical Markdown report includes environment metadata plus separate
+tables for validation, deterministic checks, qualitative checks, and runtime
+checks. Live tables aggregate prompts by eval file and show with-skill and
+baseline token usage and elapsed time. Baseline columns are `-` when the
+selected run mode did not execute the baseline side.
 
 For compatibility, live runs also write `.workspace/.../report.md`,
 `.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and

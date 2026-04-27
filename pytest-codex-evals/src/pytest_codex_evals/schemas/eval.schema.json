@@ -44,7 +44,8 @@
               "command_succeeds",
               "command_stdout_contains_all",
               "command_stdout_contains_any",
-              "command_stdout_contains_none"
+              "command_stdout_contains_none",
+              "observer_docker_runtime"
             ]
           },
           "path": { "type": "string" },
@@ -53,6 +54,42 @@
           "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
           "cwd": { "type": "string" },
           "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300, "default": 30 },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "observer": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "base_url": { "type": "string" },
+                  "clear": { "type": "boolean" },
+                  "clear_path": { "type": "string" }
+                }
+              },
+              "compose_file": { "type": "string" },
+              "services": { "type": "array", "items": { "type": "string" } },
+              "containers": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+              "environment": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+              "health": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "object", "additionalProperties": true }
+                ]
+              },
+              "traffic": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "object", "additionalProperties": true }
+                  ]
+                }
+              },
+              "settle_seconds": { "type": "number", "minimum": 0 },
+              "expect": { "type": "object", "additionalProperties": true }
+            }
+          },
           "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
         }
       }

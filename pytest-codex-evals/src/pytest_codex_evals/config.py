@@ -10,6 +10,7 @@ from typing import Any
 class CodexEvalSettings:
     run_mode: str = "validation"
     qualitative_enabled: bool = True
+    runtime_enabled: bool = False
     agent_model: str | None = None
     judge_model: str | None = None
 
@@ -20,10 +21,12 @@ def load_settings(path: Path | None) -> CodexEvalSettings:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     run = table(data, "run")
     qualitative = table(data, "qualitative")
+    runtime = table(data, "runtime")
     models = table(data, "models")
     return CodexEvalSettings(
         run_mode=run_mode(run),
         qualitative_enabled=bool(qualitative.get("enabled", True)),
+        runtime_enabled=bool(runtime.get("enabled", False)),
         agent_model=optional_string(models.get("agent")),
         judge_model=optional_string(models.get("judge")),
     )
