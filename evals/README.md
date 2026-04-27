@@ -139,4 +139,6 @@ For compatibility, live runs also write `report.md`, `benchmark.json`,
 | `evals/python/fastapi-celery/` | FastAPI + Celery | `make dev` |
 | `evals/node/express-basic/` | Express | `npm run dev` |
 | `evals/go/chi-basic/` | Chi | `go run .` |
+| `evals/go/chi-partial/` | Chi with partial OTel | `go run .` |
 | `evals/go/kvstore/` | Chi + package tests | `make test` |
+| `evals/java/springboot-basic/` | Spring Boot | `mvn spring-boot:run` |

@@ -39,3 +39,4 @@ pytest-codex-evals/dist/
 .idea
 .deepeval/
 .npmrc
+.DS_Store

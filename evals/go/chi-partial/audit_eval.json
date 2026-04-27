@@ -1,0 +1,75 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the partially instrumented Go chi service in ./service for observability gaps and anti-patterns. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the partially instrumented Go chi service in ./service. Identify existing telemetry, missing coverage, anti-patterns, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "final-identifies-go",
+      "description": "Final report identifies Go as the language.",
+      "kind": "final_contains_all",
+      "values": [
+        "Go"
+      ]
+    },
+    {
+      "id": "final-identifies-chi",
+      "description": "Final report identifies chi as the HTTP framework.",
+      "kind": "final_contains_all",
+      "values": [
+        "chi"
+      ]
+    },
+    {
+      "id": "final-notes-existing-otel",
+      "description": "Final report identifies existing OpenTelemetry instrumentation.",
+      "kind": "final_contains_any",
+      "values": [
+        "otelhttp",
+        "TracerProvider",
+        "OpenTelemetry"
+      ]
+    },
+    {
+      "id": "final-flags-hardcoded-endpoint",
+      "description": "Final report flags the hardcoded collector endpoint.",
+      "kind": "final_contains_any",
+      "values": [
+        "collector.example.com",
+        "hardcoded"
+      ]
+    },
+    {
+      "id": "final-notes-missing-meter",
+      "description": "Final report notes missing metrics provider coverage.",
+      "kind": "final_contains_any",
+      "values": [
+        "MeterProvider",
+        "metrics",
+        "request duration"
+      ]
+    },
+    {
+      "id": "final-recommends-instrument",
+      "description": "Final report recommends the instrumentation skill.",
+      "kind": "final_contains_all",
+      "values": [
+        "$otel-instrument"
+      ]
+    }
+  ],
+  "qualitative_checks": [
+    "Identifies main.go as the entry point and chi as the router.",
+    "Recognizes existing tracing setup and otelhttp.NewHandler wrapping the router.",
+    "Flags the hardcoded OTLP endpoint and absence of environment-driven configuration.",
+    "Flags high-cardinality custom span naming and tracer creation inside a request handler.",
+    "Calls out missing MeterProvider, TextMapPropagator, service.name resource, and graceful shutdown."
+  ]
+}

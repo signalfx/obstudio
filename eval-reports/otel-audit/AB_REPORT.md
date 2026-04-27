@@ -156,4 +156,3 @@
 | baseline | final-message-present | PASS | Final message present |
 | baseline | skills-not-loaded | PASS | No repo skill files present |
 | baseline | baseline-skill-isolation | PASS | No repo skill references found |
-

@@ -45,7 +45,8 @@ Scan the repository to determine language, framework, and existing instrumentati
    - Rust: `Cargo.toml`
    - .NET: `*.csproj`, `*.sln`
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
-3. Load the matching language reference from `skills/references/languages/<detected>.md` to know what auto-instrumentation packages are available for the detected dependencies.
+3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
+4. Load the matching language reference from `skills/references/languages/<detected>.md` to know what auto-instrumentation packages are available for the detected dependencies.
 
 ### Step 2 -- Instrumentation Assessment
 
@@ -70,6 +71,7 @@ Check for existing OTel instrumentation and identify gaps.
 - High-cardinality attributes on metrics (user IDs, request IDs)
 - Missing `recordException` in error handling paths
 - Custom span names with variable segments (IDs, paths)
+- Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`)
 
 ### Step 3 -- Report
 
@@ -83,10 +85,16 @@ Present findings to the user in chat. Use this structure:
 ### Current Instrumentation
 - {what's already set up -- SDK init, auto-instrumentation packages, custom spans}
 
+### Routes
+- {METHOD} {path} -- list every detected HTTP route
+  e.g. GET /health, GET /tasks, POST /tasks, GET /tasks/{id}, PATCH /tasks/{id}, DELETE /tasks/{id}
+
 ### Coverage Gaps
-- {dependencies without matching auto-instrumentation}
-- {error paths missing recordException}
-- {other gaps}
+Frame each gap using RED signal terminology and map to concrete OTel signals:
+- **Rate:** {what is missing for request rate visibility, e.g. "no http.server.request.duration histogram -- request counts cannot be derived"}
+- **Errors:** {what is missing for error rate visibility, e.g. "no span status codes -- 5xx error rate not trackable"}
+- **Duration:** {what is missing for latency visibility, e.g. "missing http.server.request.duration histogram -- no p50/p99 latency data"}
+- {other gaps: missing auto-instrumentation packages, missing exporter, missing context propagation, etc.}
 
 ### Anti-Patterns
 - {any issues found, or "None detected"}
