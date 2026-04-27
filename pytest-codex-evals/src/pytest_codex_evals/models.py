@@ -134,8 +134,8 @@ class CaseResult(BaseModel):
     skill: str
     language: str
     service: str
-    with_skill: SideResult
-    baseline: SideResult
+    with_skill: SideResult | None = None
+    baseline: SideResult | None = None
 
 
 class ValidationResult(BaseModel):

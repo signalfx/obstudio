@@ -7,6 +7,26 @@ from pathlib import Path
 from .models import CaseResult, ValidationResult
 
 
+def write_side_reports(repo_root: Path, run_root: Path, skill: str, mode: str, results: list[CaseResult]) -> None:
+    label = "with_skill" if mode == "with_skill" else "with_baseline"
+    side_name = label
+    side_attr = "with_skill" if mode == "with_skill" else "baseline"
+
+    benchmark = build_side_benchmark(skill, label, side_attr, results)
+    benchmark_path = run_root / f"{label}-benchmark.json"
+    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
+    benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
+
+    report = render_side_report(skill, label, side_name, side_attr, results)
+    report_path = run_root / f"{label}-report.md"
+    report_path.write_text(report, encoding="utf-8")
+
+    latest_dir = repo_root / "eval-reports" / skill
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(report_path, latest_dir / f"{label.upper()}_REPORT.md")
+    shutil.copyfile(benchmark_path, latest_dir / f"{label}-benchmark.json")
+
+
 def write_ab_reports(repo_root: Path, run_root: Path, skill: str, results: list[CaseResult]) -> None:
     benchmark = build_benchmark(skill, results)
     benchmark_path = run_root / "ab-benchmark.json"
@@ -53,8 +73,8 @@ def build_benchmark(skill: str, results: list[CaseResult]) -> dict:
                 "base_id": result.base_id,
                 "case": f"{result.language}/{result.service}",
                 "prompt_id": result.prompt_id,
-                "with_skill": side_summary(result.with_skill),
-                "baseline": side_summary(result.baseline),
+                "with_skill": side_summary(required_side(result, "with_skill")),
+                "baseline": side_summary(required_side(result, "baseline")),
             }
         )
     return {
@@ -63,8 +83,8 @@ def build_benchmark(skill: str, results: list[CaseResult]) -> dict:
         "runs": rows,
         "summary": {
             "case_count": len(results),
-            "with_skill_avg": average([r.with_skill.deterministic_grade.pass_rate for r in results]),
-            "baseline_guard_avg": average([r.baseline.deterministic_grade.pass_rate for r in results]),
+            "with_skill_avg": average([required_side(r, "with_skill").deterministic_grade.pass_rate for r in results]),
+            "baseline_guard_avg": average([required_side(r, "baseline").deterministic_grade.pass_rate for r in results]),
         },
     }
 
@@ -98,8 +118,8 @@ def render_report(skill: str, results: list[CaseResult]) -> str:
         "|---|---|---:|---:|---:|---:|",
     ]
     for result in results:
-        ws = result.with_skill
-        base = result.baseline
+        ws = required_side(result, "with_skill")
+        base = required_side(result, "baseline")
         lines.append(
             "| {case} | {prompt} | {ws:.0%} ({wsp}/{wst}) | {base:.0%} ({bp}/{bt}) | {wc}/{bc} | {wt}/{btok} |".format(
                 case=f"{result.language}/{result.service}",
@@ -130,12 +150,72 @@ def render_case_checks(result: CaseResult) -> list[str]:
         "|---|---|---|---|",
     ]
     for side_name, side in (("with_skill", result.with_skill), ("baseline", result.baseline)):
+        if side is None:
+            continue
         for check in side.deterministic_grade.checks:
             status = "PASS" if check.passed else "FAIL"
             evidence = check.evidence.replace("\n", " ")[:240]
             lines.append(f"| {side_name} | {check.id} | {status} | {evidence} |")
     lines.append("")
     return lines
+
+
+def build_side_benchmark(skill: str, mode: str, side_attr: str, results: list[CaseResult]) -> dict:
+    rows = []
+    for result in results:
+        side = required_side(result, side_attr)
+        rows.append(
+            {
+                "id": result.id,
+                "base_id": result.base_id,
+                "case": f"{result.language}/{result.service}",
+                "prompt_id": result.prompt_id,
+                side_attr: side_summary(side),
+            }
+        )
+    return {
+        "mode": mode,
+        "skill": skill,
+        "runs": rows,
+        "summary": {
+            "case_count": len(results),
+            "pass_rate_avg": average([required_side(r, side_attr).deterministic_grade.pass_rate for r in results]),
+        },
+    }
+
+
+def render_side_report(skill: str, mode: str, side_name: str, side_attr: str, results: list[CaseResult]) -> str:
+    title = "With Skill" if mode == "with_skill" else "With Baseline"
+    lines = [
+        f"# {skill} Codex Eval Report - {title}",
+        "",
+        f"| Case | Prompt | {side_name} Checks | Commands | Tokens |",
+        "|---|---|---:|---:|---:|",
+    ]
+    for result in results:
+        side = required_side(result, side_attr)
+        lines.append(
+            "| {case} | {prompt} | {rate:.0%} ({passed}/{total}) | {commands} | {tokens} |".format(
+                case=f"{result.language}/{result.service}",
+                prompt=result.prompt_id,
+                rate=side.deterministic_grade.pass_rate,
+                passed=side.deterministic_grade.passed,
+                total=side.deterministic_grade.total,
+                commands=side.command_count,
+                tokens=side.tokens,
+            )
+        )
+    lines.extend(["", "## Deterministic Checks", ""])
+    for result in results:
+        lines.extend(render_case_checks(result))
+    return "\n".join(lines) + "\n"
+
+
+def required_side(result: CaseResult, side_attr: str):
+    side = getattr(result, side_attr)
+    if side is None:
+        raise ValueError(f"{result.id}: missing {side_attr} result")
+    return side
 
 
 def build_validation_benchmark(repo_root: Path, skill: str, results: list[ValidationResult]) -> dict:

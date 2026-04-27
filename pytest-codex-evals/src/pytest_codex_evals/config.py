@@ -8,7 +8,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class CodexEvalSettings:
-    live_ab: bool = False
+    run_mode: str = "validation"
     qualitative_enabled: bool = True
     agent_model: str | None = None
     judge_model: str | None = None
@@ -22,7 +22,7 @@ def load_settings(path: Path | None) -> CodexEvalSettings:
     qualitative = table(data, "qualitative")
     models = table(data, "models")
     return CodexEvalSettings(
-        live_ab=bool(run.get("live_ab", False)),
+        run_mode=run_mode(run),
         qualitative_enabled=bool(qualitative.get("enabled", True)),
         agent_model=optional_string(models.get("agent")),
         judge_model=optional_string(models.get("judge")),
@@ -43,3 +43,20 @@ def optional_string(value: Any) -> str | None:
         raise ValueError("model values must be strings")
     stripped = value.strip()
     return stripped or None
+
+
+def run_mode(run: dict[str, Any]) -> str:
+    value = run.get("mode")
+    if value is None:
+        return "ab" if bool(run.get("live_ab", False)) else "validation"
+    if not isinstance(value, str):
+        raise ValueError("[run].mode must be a string")
+    normalized = value.strip().lower().replace("-", "_")
+    aliases = {
+        "skill": "with_skill",
+        "baseline": "with_baseline",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {"validation", "with_skill", "with_baseline", "ab"}:
+        raise ValueError("[run].mode must be one of: validation, with_skill, with_baseline, ab")
+    return normalized

@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator
 
 from .config import CodexEvalSettings, load_settings
 from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant, ValidationResult
-from .report import write_ab_reports, write_validation_reports
+from .report import write_ab_reports, write_side_reports, write_validation_reports
 from .runner import new_run_root, run_case
 from .schema_resources import load_schema
 
@@ -46,13 +46,15 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             continue
         if run["mode"] == "ab":
             write_ab_reports(run["repo_root"], run["run_root"], run["skill"], results)
+        elif run["mode"] in {"with_skill", "with_baseline"}:
+            write_side_reports(run["repo_root"], run["run_root"], run["skill"], run["mode"], results)
         elif run["mode"] == "validation":
             write_validation_reports(run["repo_root"], run["run_root"], run["skill"], results)
 
 
 @pytest.fixture
 def codex_run_requested(pytestconfig: pytest.Config) -> bool:
-    return live_ab_enabled(pytestconfig)
+    return run_mode(pytestconfig) != "validation"
 
 
 @pytest.fixture
@@ -93,12 +95,15 @@ class CodexEvalItem(pytest.Item):
         skill_dir = selected_skill_dir(self.config)
         validate_case(self.case, repo_root, skill_dir)
 
-        if not live_ab_enabled(self.config):
-            run = session_run(self.config, repo_root, self.case.skill, "validation")
-            run["results"].append(validation_result(self.case, repo_root, skill_dir))
+        validation_run = session_run(self.config, repo_root, self.case.skill, "validation")
+        validation_run["results"].append(validation_result(self.case, repo_root, skill_dir))
+
+        mode = run_mode(self.config)
+        if mode == "validation":
             return
 
-        run = session_run(self.config, repo_root, self.case.skill, "ab")
+        sides = sides_for_mode(mode)
+        run = session_run(self.config, repo_root, self.case.skill, mode)
         result = run_case(
             repo_root=repo_root,
             run_root=run["run_root"],
@@ -107,6 +112,7 @@ class CodexEvalItem(pytest.Item):
             model=agent_model(self.config),
             judge_model=judge_model(self.config),
             qualitative=qualitative_enabled(self.config),
+            sides=sides,
         )
         run["results"].append(result)
         validate_live_result(result)
@@ -173,7 +179,21 @@ def selected_skill_dir(config: pytest.Config) -> Path | None:
 
 
 def live_ab_enabled(config: pytest.Config) -> bool:
-    return settings(config).live_ab
+    return run_mode(config) == "ab"
+
+
+def run_mode(config: pytest.Config) -> str:
+    return settings(config).run_mode
+
+
+def sides_for_mode(mode: str) -> tuple[str, ...]:
+    if mode == "with_skill":
+        return ("with_skill",)
+    if mode == "with_baseline":
+        return ("baseline",)
+    if mode == "ab":
+        return ("with_skill", "baseline")
+    raise ValueError(f"mode {mode} does not run Codex")
 
 
 def qualitative_enabled(config: pytest.Config) -> bool:
@@ -244,13 +264,15 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
 
 def validate_live_result(result: CaseResult) -> None:
     failures: list[str] = []
-    if result.with_skill.exit_code != 0:
+    if result.with_skill is not None and result.with_skill.exit_code != 0:
         failures.append(f"with_skill exited {result.with_skill.exit_code}")
-    if result.baseline.exit_code != 0:
+    if result.baseline is not None and result.baseline.exit_code != 0:
         failures.append(f"baseline exited {result.baseline.exit_code}")
-    if result.with_skill.deterministic_grade.total == 0:
+    if result.with_skill is not None and result.with_skill.deterministic_grade.total == 0:
         failures.append("with_skill produced no deterministic checks")
-    if result.baseline.deterministic_grade.total == 0:
+    if result.baseline is not None and result.baseline.deterministic_grade.total == 0:
         failures.append("baseline produced no deterministic checks")
+    if result.with_skill is None and result.baseline is None:
+        failures.append("no Codex side result was produced")
     if failures:
         raise AssertionError(f"{result.id}: " + "; ".join(failures))

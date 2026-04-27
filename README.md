@@ -122,92 +122,9 @@ obstudio/
 
 ## Skill Evals
 
-Skill evals are pytest-collected JSON files. Each fixture keeps its eval
-definitions next to the service code:
-
-```text
-evals/<language>/<service>/audit_eval.json
-evals/<language>/<service>/instrument_eval.json
-```
-
-Each eval defines `prompts[]` task variants. `skill-eval` validates those JSON
-files and fixtures quickly; `skill-eval-ab` runs live A/B comparisons for the
-selected tasks.
-
-Each eval JSON keeps the human-facing tasks at the top, then deterministic and
-qualitative checks:
-
-```json
-{
-  "skill": "otel-audit",
-  "prompts": [
-    {
-      "id": "direct",
-      "task": "Scan the service in ./service for observability gaps."
-    }
-  ],
-  "deterministic_checks": [],
-  "qualitative_checks": []
-}
-```
-
-The live A/B harness runs each case twice:
-
-| Side | Skill visibility |
-|---|---|
-| `with_skill` | Copied fixture plus temporary `.agents/skills` entries |
-| `baseline` | Same copied fixture with no repo skills visible |
-
-Baseline checks stay intentionally simple: run health plus `skills-not-loaded`.
-Detailed deterministic artifact checks default to the `with_skill` side, which
-also gets a `skills-loaded` guard.
-
-Common commands:
-
-| Target | Purpose |
-|---|---|
-| `make test-eval-harness` | Validate every eval JSON and fixture |
-| `make skill-eval-list SKILL=skills/otel-audit` | List collected eval items for a skill path |
-| `make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore` | Validate one fixture |
-| `make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct` | Validate one prompt variant |
-| `make skill-eval-ab SKILL=skills/otel-audit CASE=go/chi-basic PROMPT=direct` | Run live Codex A/B for one prompt |
-| `make skill-eval-all` | Validate all eval JSONs |
-
-Live A/B settings are configured in TOML:
-
-| File | Purpose |
-|---|---|
-| `evals/codex-evals.toml` | Default validation config |
-| `evals/codex-evals.ab.toml` | Live A/B config, including qualitative judge model |
-
-Set the judge model with:
-
-```toml
-[models]
-agent = "gpt-5.2"
-judge = "gpt-5.2"
-```
-
-Run artifacts are written under `.workspace/codex-evals/<skill>/<run-id>/`.
-Validation and live A/B reports are kept separate:
-
-| Mode | Run artifacts | Latest summary |
-|---|---|---|
-| Validation | `validation-report.md`, `validation-benchmark.json` | `eval-reports/<skill>/VALIDATION_REPORT.md`, `eval-reports/<skill>/validation-benchmark.json` |
-| Live A/B | `ab-report.md`, `ab-benchmark.json` | `eval-reports/<skill>/AB_REPORT.md`, `eval-reports/<skill>/ab-benchmark.json` |
-
-For compatibility, live A/B also writes `report.md`, `benchmark.json`,
-`eval-reports/<skill>/REPORT.md`, and `eval-reports/<skill>/benchmark.json`.
-
-## Eval Fixture Apps
-
-| App | Stack | Run |
-|---|---|---|
-| `evals/python/flask-basic/` | Flask | `make dev` |
-| `evals/python/fastapi-celery/` | FastAPI + Celery | `make dev` |
-| `evals/node/express-basic/` | Express | `npm run dev` |
-| `evals/go/chi-basic/` | Chi | `go run .` |
-| `evals/go/kvstore/` | Chi + package tests | `make test` |
+Skill eval definitions and fixture apps live under `evals/`. See
+[evals/README.md](evals/README.md) for eval modes, commands, configs, and
+report locations.
 
 ## CLI Reference
 

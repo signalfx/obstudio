@@ -1,5 +1,5 @@
 [run]
-live_ab = true
+mode = "ab"
 
 [qualitative]
 enabled = true

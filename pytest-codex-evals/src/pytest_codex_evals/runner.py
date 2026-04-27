@@ -28,34 +28,39 @@ def run_case(
     model: str | None = None,
     judge_model: str | None = None,
     qualitative: bool = True,
+    sides: tuple[str, ...] = ("with_skill", "baseline"),
 ) -> CaseResult:
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
     exec_case_root = Path(tempfile.mkdtemp(prefix=f"codex-eval-{case.skill}-{case.language}-{case.service}-{case.prompt_id}-"))
     try:
-        with_skill = run_side(
-            repo_root=repo_root,
-            case=case,
-            side="with_skill",
-            exec_dir=exec_case_root / "with_skill",
-            artifact_dir=case_root / "with_skill",
-            prompt=side_prompt(case, "with_skill"),
-            skill_dir=skill_dir,
-            model=model,
-            judge_model=judge_model,
-            qualitative=qualitative,
-        )
-        baseline = run_side(
-            repo_root=repo_root,
-            case=case,
-            side="baseline",
-            exec_dir=exec_case_root / "baseline",
-            artifact_dir=case_root / "baseline",
-            prompt=side_prompt(case, "baseline"),
-            skill_dir=skill_dir,
-            model=model,
-            judge_model=judge_model,
-            qualitative=qualitative,
-        )
+        with_skill = None
+        baseline = None
+        if "with_skill" in sides:
+            with_skill = run_side(
+                repo_root=repo_root,
+                case=case,
+                side="with_skill",
+                exec_dir=exec_case_root / "with_skill",
+                artifact_dir=case_root / "with_skill",
+                prompt=side_prompt(case, "with_skill"),
+                skill_dir=skill_dir,
+                model=model,
+                judge_model=judge_model,
+                qualitative=qualitative,
+            )
+        if "baseline" in sides:
+            baseline = run_side(
+                repo_root=repo_root,
+                case=case,
+                side="baseline",
+                exec_dir=exec_case_root / "baseline",
+                artifact_dir=case_root / "baseline",
+                prompt=side_prompt(case, "baseline"),
+                skill_dir=skill_dir,
+                model=model,
+                judge_model=judge_model,
+                qualitative=qualitative,
+            )
         return CaseResult(
             id=case.id,
             base_id=case.base_id,

@@ -89,21 +89,10 @@ cd extension && npm test # VS Code-hosted extension tests
 
 ## Skill Evals
 
-Skill evals are JSON files collected by the reusable pytest plugin under
-`evals/`. Each service fixture owns its eval definitions:
-`evals/<language>/<service>/audit_eval.json` and
-`evals/<language>/<service>/instrument_eval.json`.
-
-```sh
-make skill-eval SKILL=skills/otel-instrument
-make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
-make skill-eval-ab SKILL=skills/otel-instrument CASE=go/kvstore
-make test-eval-harness
-make test-pytest-plugin
-```
-
-Live A/B settings, including the qualitative judge model, live in
-`evals/codex-evals.ab.toml`.
+Skill eval definitions and fixture apps live under `evals/`. See
+[`evals/README.md`](evals/README.md) for eval modes, commands, configs, and
+report locations. Run `make test-eval-harness` for validation-only checks and
+`make test-pytest-plugin` for the reusable plugin tests.
 
 The reusable pytest plugin is built and published alongside this repository:
 

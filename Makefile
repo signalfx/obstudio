@@ -13,7 +13,7 @@ PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-with-skill eval-with-baseline eval-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness eval-all test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -86,23 +86,39 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 
 # --- Skill evals ---
 
-skill-eval: ## Validate skill eval JSONs (e.g. make skill-eval SKILL=skills/otel-instrument)
+eval-validation: ## Validate eval JSONs, eval directories, and skill sources
 	$(MAKE) -C $(EVALS_DIR) $@
 
-skill-eval-all: ## Validate all Codex skill eval JSONs
+eval-with-skill: ## Run Codex with the skill loaded, then grade checks
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-with-baseline: ## Run Codex baseline with no skill loaded, then grade checks
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-ab: ## Run Codex with_skill and with_baseline sides in one A/B comparison
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval: ## Alias for eval-with-skill
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-all: ## Alias for eval-with-skill
 	$(MAKE) -C $(EVALS_DIR) $@
 
 skill-eval-list: ## List discovered Codex skill evals
 	$(MAKE) -C $(EVALS_DIR) $@
 
-skill-eval-ab: ## Run live Codex A/B evals (e.g. make skill-eval-ab SKILL=skills/otel-instrument)
+skill-eval-ab: ## Alias for eval-ab
 	$(MAKE) -C $(EVALS_DIR) $@
 
-skill-eval-ab-all: ## Run all live Codex A/B evals
+skill-eval-ab-all: ## Alias for eval-ab
 	$(MAKE) -C $(EVALS_DIR) $@
 
 test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-all: eval-validation eval-ab ## Run validation and A/B modes
+
+test-evals-all: eval-all ## Alias for eval-all
 
 test-pytest-plugin: ## Run pytest plugin unit tests
 	$(MAKE) -C $(PYTEST_PLUGIN_DIR) test

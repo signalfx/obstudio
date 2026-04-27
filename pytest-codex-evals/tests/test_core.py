@@ -7,7 +7,7 @@ from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
 from pytest_codex_evals.deterministic import grade_deterministic
 from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
-from pytest_codex_evals.report import write_ab_reports
+from pytest_codex_evals.report import write_ab_reports, write_side_reports
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -62,10 +62,20 @@ def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
 
     settings = load_settings(config_path)
 
-    assert settings.live_ab is True
+    assert settings.run_mode == "ab"
     assert settings.qualitative_enabled is False
     assert settings.agent_model == "gpt-5.2"
     assert settings.judge_model == "gpt-5.4"
+
+
+def test_config_loads_with_skill_and_with_baseline_modes(tmp_path: Path):
+    skill_config = tmp_path / "codex-evals.toml"
+    skill_config.write_text("[run]\nmode = \"with_skill\"\n", encoding="utf-8")
+    baseline_config = tmp_path / "codex-evals.baseline.toml"
+    baseline_config.write_text("[run]\nmode = \"with-baseline\"\n", encoding="utf-8")
+
+    assert load_settings(skill_config).run_mode == "with_skill"
+    assert load_settings(baseline_config).run_mode == "with_baseline"
 
 
 def test_deterministic_file_and_final_checks(tmp_path: Path):
@@ -160,3 +170,32 @@ def test_ab_report_writes_mode_specific_and_legacy_paths(tmp_path: Path):
     benchmark = json.loads((run_root / "ab-benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["mode"] == "ab"
     assert (tmp_path / "eval-reports" / "sample-skill" / "AB_REPORT.md").is_file()
+
+
+def test_side_report_writes_with_skill_paths(tmp_path: Path):
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
+    side = SideResult(
+        side="with_skill",
+        exit_code=0,
+        trace_path="trace.jsonl",
+        final_message_path="last_message.md",
+        deterministic_grade=grade,
+    )
+    result = CaseResult(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        with_skill=side,
+    )
+
+    write_side_reports(tmp_path, run_root, "sample-skill", "with_skill", [result])
+
+    assert (run_root / "with_skill-report.md").is_file()
+    assert (run_root / "with_skill-benchmark.json").is_file()
+    benchmark = json.loads((run_root / "with_skill-benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["mode"] == "with_skill"
+    assert (tmp_path / "eval-reports" / "sample-skill" / "WITH_SKILL_REPORT.md").is_file()

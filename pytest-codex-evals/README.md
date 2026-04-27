@@ -62,7 +62,7 @@ provided. The `skill` value is matched to the directory name passed with
 Validate evals without running Codex:
 
 ```bash
-uv run pytest evals --skill skills/<skill-dir>
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.validation.toml
 ```
 
 List cases:
@@ -77,7 +77,19 @@ Select cases and prompts with normal pytest selection:
 uv run pytest evals/go/kvstore -k runtime-preserving --skill skills/<skill-dir>
 ```
 
-Run live Codex A/B only when explicitly configured:
+Run the loaded-skill side:
+
+```bash
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.toml
+```
+
+Run the no-skill baseline side:
+
+```bash
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.baseline.toml
+```
+
+Run live Codex A/B:
 
 ```bash
 uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
@@ -89,14 +101,28 @@ Default validation config:
 
 ```toml
 [run]
-live_ab = false
+mode = "validation"
+```
+
+With-skill config:
+
+```toml
+[run]
+mode = "with_skill"
+```
+
+With-baseline config:
+
+```toml
+[run]
+mode = "with_baseline"
 ```
 
 Live A/B config:
 
 ```toml
 [run]
-live_ab = true
+mode = "ab"
 
 [qualitative]
 enabled = true
@@ -128,6 +154,9 @@ Live A/B runs write:
 eval-reports/<skill>/AB_REPORT.md
 eval-reports/<skill>/ab-benchmark.json
 ```
+
+With-skill and with-baseline runs write analogous `with_skill-*` and
+`with_baseline-*` reports.
 
 For compatibility, live A/B runs also write `.workspace/.../report.md`,
 `.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and

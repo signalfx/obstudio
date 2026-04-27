@@ -92,14 +92,16 @@ as `[models].agent`.
 make test-eval-harness
 make test-pytest-plugin
 make skill-eval-list
-make skill-eval SKILL=skills/otel-audit
-make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
-make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct
-make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
-make skill-eval-all
+make eval-validation SKILL=skills/otel-audit
+make eval-with-skill SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-with-baseline SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-ab SKILL=skills/otel-audit MODEL=gpt-5.2 NO_QUALITATIVE=1
+make eval-all SKILL=skills/otel-audit CASE=go/chi-basic PROMPT=direct
 ```
 
-`skill-eval` validates JSON and fixture shape only. The live A/B command is:
+`eval-validation` validates JSON and fixture shape only. `eval-with-skill` and
+`eval-with-baseline` each run one Codex side and grade deterministic plus
+qualitative checks. The live A/B command is:
 
 ```bash
 cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-config codex-evals.ab.toml
@@ -107,7 +109,7 @@ cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skil
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
 Codex controls (`--skill`, `--codex-eval-config`, `--model`, `--no-qualitative`),
-JSON eval collection, validation, A/B execution, and reporting. Service
+JSON eval collection, validation, side execution, A/B execution, and reporting. Service
 selection is plain pytest path selection, prompt selection is plain `-k`
 filtering, and `--skill` points to a skill directory containing `SKILL.md`.
 
@@ -126,6 +128,10 @@ Full artifacts are ignored by git:
 .workspace/codex-evals/<skill>/<run-id>/
   validation-benchmark.json
   validation-report.md
+  with_skill-benchmark.json
+  with_skill-report.md
+  with_baseline-benchmark.json
+  with_baseline-report.md
 ```
 
 Live A/B runs also include:
@@ -156,6 +162,10 @@ Latest validation summaries are copied to:
 ```text
 eval-reports/<skill>/VALIDATION_REPORT.md
 eval-reports/<skill>/validation-benchmark.json
+eval-reports/<skill>/WITH_SKILL_REPORT.md
+eval-reports/<skill>/with_skill-benchmark.json
+eval-reports/<skill>/WITH_BASELINE_REPORT.md
+eval-reports/<skill>/with_baseline-benchmark.json
 ```
 
 Latest live A/B summaries are copied to:

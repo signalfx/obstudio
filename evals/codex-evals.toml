@@ -1,5 +1,5 @@
 [run]
-live_ab = false
+mode = "with_skill"
 
 [qualitative]
 enabled = true
