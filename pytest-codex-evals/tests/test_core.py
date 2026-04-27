@@ -6,7 +6,8 @@ from pathlib import Path
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
 from pytest_codex_evals.deterministic import grade_deterministic
-from pytest_codex_evals.models import DeterministicCheck, EvalCase
+from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
+from pytest_codex_evals.report import write_ab_reports
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -121,3 +122,41 @@ def test_baseline_checks_skill_absence(tmp_path: Path):
     check_ids = {check.id for check in grade.checks}
     assert "skills-not-loaded" in check_ids
     assert grade.pass_rate == 1.0
+
+
+def test_ab_report_writes_mode_specific_and_legacy_paths(tmp_path: Path):
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
+    side = SideResult(
+        side="with_skill",
+        exit_code=0,
+        trace_path="trace.jsonl",
+        final_message_path="last_message.md",
+        deterministic_grade=grade,
+    )
+    baseline = SideResult(
+        side="baseline",
+        exit_code=0,
+        trace_path="trace.jsonl",
+        final_message_path="last_message.md",
+        deterministic_grade=grade,
+    )
+    result = CaseResult(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        with_skill=side,
+        baseline=baseline,
+    )
+
+    write_ab_reports(tmp_path, run_root, "sample-skill", [result])
+
+    assert (run_root / "ab-report.md").is_file()
+    assert (run_root / "ab-benchmark.json").is_file()
+    assert (run_root / "report.md").is_file()
+    benchmark = json.loads((run_root / "ab-benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["mode"] == "ab"
+    assert (tmp_path / "eval-reports" / "sample-skill" / "AB_REPORT.md").is_file()

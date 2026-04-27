@@ -124,8 +124,16 @@ Full artifacts are ignored by git:
 
 ```text
 .workspace/codex-evals/<skill>/<run-id>/
-  benchmark.json
-  report.md
+  validation-benchmark.json
+  validation-report.md
+```
+
+Live A/B runs also include:
+
+```text
+.workspace/codex-evals/<skill>/<run-id>/
+  ab-benchmark.json
+  ab-report.md
   cases/<language>/<service>/<prompt-id>/
     with_skill/
       service/
@@ -143,9 +151,18 @@ Full artifacts are ignored by git:
       summary.json
 ```
 
-The latest summary is copied to:
+Latest validation summaries are copied to:
 
 ```text
+eval-reports/<skill>/VALIDATION_REPORT.md
+eval-reports/<skill>/validation-benchmark.json
+```
+
+Latest live A/B summaries are copied to:
+
+```text
+eval-reports/<skill>/AB_REPORT.md
+eval-reports/<skill>/ab-benchmark.json
 eval-reports/<skill>/REPORT.md
 eval-reports/<skill>/benchmark.json
 ```

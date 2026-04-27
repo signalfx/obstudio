@@ -136,3 +136,17 @@ class CaseResult(BaseModel):
     service: str
     with_skill: SideResult
     baseline: SideResult
+
+
+class ValidationResult(BaseModel):
+    id: str
+    base_id: str
+    prompt_id: str
+    skill: str
+    language: str
+    service: str
+    definition_path: str
+    fixture_dir: str
+    skill_path: str
+    deterministic_check_count: int = 0
+    qualitative_check_count: int = 0

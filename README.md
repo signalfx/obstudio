@@ -188,9 +188,16 @@ agent = "gpt-5.2"
 judge = "gpt-5.2"
 ```
 
-Full run artifacts are written under `.workspace/codex-evals/<skill>/<run-id>/`.
-Latest summaries are copied to `eval-reports/<skill>/REPORT.md` and
-`eval-reports/<skill>/benchmark.json`.
+Run artifacts are written under `.workspace/codex-evals/<skill>/<run-id>/`.
+Validation and live A/B reports are kept separate:
+
+| Mode | Run artifacts | Latest summary |
+|---|---|---|
+| Validation | `validation-report.md`, `validation-benchmark.json` | `eval-reports/<skill>/VALIDATION_REPORT.md`, `eval-reports/<skill>/validation-benchmark.json` |
+| Live A/B | `ab-report.md`, `ab-benchmark.json` | `eval-reports/<skill>/AB_REPORT.md`, `eval-reports/<skill>/ab-benchmark.json` |
+
+For compatibility, live A/B also writes `report.md`, `benchmark.json`,
+`eval-reports/<skill>/REPORT.md`, and `eval-reports/<skill>/benchmark.json`.
 
 ## Eval Fixture Apps
 

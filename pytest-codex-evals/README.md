@@ -8,11 +8,11 @@ qualitative grading, and aggregate reports.
 
 - Pytest collection for `*_eval.json` files.
 - One pytest item per `prompts[]` entry.
-- Fast validation by default: schema, fixture directory, and skill path.
+- Fast validation by default: schema, eval directory, and skill path.
 - Optional live Codex A/B runs through TOML config.
 - Deterministic checks from final text, files, and JSONL traces.
 - Schema-constrained qualitative grading with a configurable judge model.
-- Aggregate `report.md` and `benchmark.json` outputs.
+- Separate validation and live A/B aggregate reports.
 
 ## Install
 
@@ -28,11 +28,14 @@ pytest-codex-evals = { path = "../pytest-codex-evals", editable = true }
 
 ## Eval Files
 
-Put eval JSON files next to fixture services:
+Put eval JSON files anywhere pytest can collect them:
 
 ```text
-evals/<domain>/<fixture>/*_eval.json
+evals/<suite>/<case>/*_eval.json
 ```
+
+If a case needs local source files or other fixtures, place them beside the JSON.
+If it does not, the directory can contain only the eval JSON.
 
 Minimal shape:
 
@@ -42,7 +45,7 @@ Minimal shape:
   "prompts": [
     {
       "id": "direct",
-      "task": "Inspect ./service and report gaps."
+      "task": "Review the provided input and report gaps."
     }
   ],
   "deterministic_checks": [],
@@ -50,8 +53,9 @@ Minimal shape:
 }
 ```
 
-The plugin infers `id`, `language`, and `service` from the file path. The
-`skill` value is matched to the directory name passed with `--skill`.
+The plugin infers `id` and display labels from the file path when they are not
+provided. The `skill` value is matched to the directory name passed with
+`--skill`.
 
 ## Commands
 
@@ -67,7 +71,7 @@ List cases:
 uv run pytest evals --collect-only -q --skill skills/<skill-dir>
 ```
 
-Select fixtures and prompts with normal pytest selection:
+Select cases and prompts with normal pytest selection:
 
 ```bash
 uv run pytest evals/go/kvstore -k runtime-preserving --skill skills/<skill-dir>
@@ -104,6 +108,30 @@ judge = "gpt-5.2"
 
 `[models].agent` configures the task run, `--model` overrides it, and
 `[models].judge` configures the qualitative grading pass.
+
+## Outputs
+
+Validation-only runs write:
+
+```text
+.workspace/codex-evals/<skill>/<run-id>/validation-report.md
+.workspace/codex-evals/<skill>/<run-id>/validation-benchmark.json
+eval-reports/<skill>/VALIDATION_REPORT.md
+eval-reports/<skill>/validation-benchmark.json
+```
+
+Live A/B runs write:
+
+```text
+.workspace/codex-evals/<skill>/<run-id>/ab-report.md
+.workspace/codex-evals/<skill>/<run-id>/ab-benchmark.json
+eval-reports/<skill>/AB_REPORT.md
+eval-reports/<skill>/ab-benchmark.json
+```
+
+For compatibility, live A/B runs also write `.workspace/.../report.md`,
+`.workspace/.../benchmark.json`, `eval-reports/<skill>/REPORT.md`, and
+`eval-reports/<skill>/benchmark.json`.
 
 ## Publish
 

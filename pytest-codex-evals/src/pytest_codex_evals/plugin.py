@@ -8,8 +8,8 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from .config import CodexEvalSettings, load_settings
-from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant
-from .report import write_reports
+from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant, ValidationResult
+from .report import write_ab_reports, write_validation_reports
 from .runner import new_run_root, run_case
 from .schema_resources import load_schema
 
@@ -39,11 +39,15 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector):
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    runs: dict[tuple[str, str], dict[str, Any]] = getattr(session.config, RUNS_ATTR, {})
+    runs: dict[tuple[str, str, str], dict[str, Any]] = getattr(session.config, RUNS_ATTR, {})
     for run in runs.values():
         results = run["results"]
-        if results:
-            write_reports(run["repo_root"], run["run_root"], run["skill"], results)
+        if not results:
+            continue
+        if run["mode"] == "ab":
+            write_ab_reports(run["repo_root"], run["run_root"], run["skill"], results)
+        elif run["mode"] == "validation":
+            write_validation_reports(run["repo_root"], run["run_root"], run["skill"], results)
 
 
 @pytest.fixture
@@ -90,9 +94,11 @@ class CodexEvalItem(pytest.Item):
         validate_case(self.case, repo_root, skill_dir)
 
         if not live_ab_enabled(self.config):
+            run = session_run(self.config, repo_root, self.case.skill, "validation")
+            run["results"].append(validation_result(self.case, repo_root, skill_dir))
             return
 
-        run = session_run(self.config, repo_root, self.case.skill)
+        run = session_run(self.config, repo_root, self.case.skill, "ab")
         result = run_case(
             repo_root=repo_root,
             run_root=run["run_root"],
@@ -198,31 +204,42 @@ def config_path(config: pytest.Config) -> Path | None:
 
 def validate_case(case: EvalCase, repo_root: Path, skill_dir: Path | None = None) -> None:
     if case.fixture_dir is None or not case.fixture_dir.is_dir():
-        raise AssertionError(f"{case.id}: fixture directory is missing")
-    fixture_entries = [
-        path
-        for path in case.fixture_dir.iterdir()
-        if not path.name.endswith("_eval.json") and path.name not in {".observe", ".venv", "__pycache__"}
-    ]
-    if not fixture_entries:
-        raise AssertionError(f"{case.id}: fixture directory has no service files")
+        raise AssertionError(f"{case.id}: eval directory is missing")
 
     skill_file = (skill_dir or repo_root / "skills" / case.skill) / "SKILL.md"
     if not skill_file.is_file():
         raise AssertionError(f"{case.id}: missing skill source {skill_file}")
 
 
-def session_run(config: pytest.Config, repo_root: Path, skill: str) -> dict[str, Any]:
-    runs: dict[tuple[str, str], dict[str, Any]] = getattr(config, RUNS_ATTR)
-    key = (str(repo_root), skill)
+def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str) -> dict[str, Any]:
+    runs: dict[tuple[str, str, str], dict[str, Any]] = getattr(config, RUNS_ATTR)
+    key = (str(repo_root), skill, mode)
     if key not in runs:
         runs[key] = {
+            "mode": mode,
             "repo_root": repo_root,
             "run_root": new_run_root(repo_root, skill),
             "skill": skill,
             "results": [],
         }
     return runs[key]
+
+
+def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:
+    resolved_skill_dir = skill_dir or repo_root / "skills" / case.skill
+    return ValidationResult(
+        id=case.id,
+        base_id=case.base_id,
+        prompt_id=case.prompt_id,
+        skill=case.skill,
+        language=case.language,
+        service=case.service,
+        definition_path=str((case.definition_path or Path()).resolve()),
+        fixture_dir=str((case.fixture_dir or Path()).resolve()),
+        skill_path=str(resolved_skill_dir.resolve()),
+        deterministic_check_count=len(case.deterministic_checks),
+        qualitative_check_count=len(case.qualitative_checks),
+    )
 
 
 def validate_live_result(result: CaseResult) -> None:

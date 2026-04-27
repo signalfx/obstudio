@@ -82,6 +82,12 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     result = pytester.runpytest("--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
+    latest_dir = pytester.path / "eval-reports" / "sample-skill"
+    assert (latest_dir / "VALIDATION_REPORT.md").is_file()
+    benchmark = json.loads((latest_dir / "validation-benchmark.json").read_text(encoding="utf-8"))
+    assert benchmark["mode"] == "validation"
+    assert benchmark["summary"]["case_count"] == 2
+    assert not (latest_dir / "AB_REPORT.md").exists()
 
 
 def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
@@ -97,3 +103,24 @@ def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
             "1/2 tests collected*",
         ]
     )
+
+
+def test_eval_json_files_do_not_require_fixture_files(pytester: pytest.Pytester):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+    eval_dir = pytester.path / "evals" / "sample" / "no-fixture"
+    eval_dir.mkdir(parents=True)
+    (eval_dir / "sample_eval.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Classify the provided input."}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("evals/sample/no-fixture", "--skill", str(skill_dir))
+
+    result.assert_outcomes(passed=1)

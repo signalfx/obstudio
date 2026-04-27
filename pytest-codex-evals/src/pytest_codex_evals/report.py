@@ -4,22 +4,44 @@ import json
 import shutil
 from pathlib import Path
 
-from .models import CaseResult
+from .models import CaseResult, ValidationResult
 
 
-def write_reports(repo_root: Path, run_root: Path, skill: str, results: list[CaseResult]) -> None:
+def write_ab_reports(repo_root: Path, run_root: Path, skill: str, results: list[CaseResult]) -> None:
     benchmark = build_benchmark(skill, results)
-    benchmark_path = run_root / "benchmark.json"
+    benchmark_path = run_root / "ab-benchmark.json"
+    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
     benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
 
     report = render_report(skill, results)
-    report_path = run_root / "report.md"
+    report_path = run_root / "ab-report.md"
+    report_path.write_text(report, encoding="utf-8")
+
+    shutil.copyfile(report_path, run_root / "report.md")
+    shutil.copyfile(benchmark_path, run_root / "benchmark.json")
+
+    latest_dir = repo_root / "eval-reports" / skill
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(report_path, latest_dir / "AB_REPORT.md")
+    shutil.copyfile(benchmark_path, latest_dir / "ab-benchmark.json")
+    shutil.copyfile(report_path, latest_dir / "REPORT.md")
+    shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
+
+
+def write_validation_reports(repo_root: Path, run_root: Path, skill: str, results: list[ValidationResult]) -> None:
+    benchmark = build_validation_benchmark(repo_root, skill, results)
+    benchmark_path = run_root / "validation-benchmark.json"
+    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
+    benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
+
+    report = render_validation_report(repo_root, skill, results)
+    report_path = run_root / "validation-report.md"
     report_path.write_text(report, encoding="utf-8")
 
     latest_dir = repo_root / "eval-reports" / skill
     latest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(report_path, latest_dir / "REPORT.md")
-    shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
+    shutil.copyfile(report_path, latest_dir / "VALIDATION_REPORT.md")
+    shutil.copyfile(benchmark_path, latest_dir / "validation-benchmark.json")
 
 
 def build_benchmark(skill: str, results: list[CaseResult]) -> dict:
@@ -36,6 +58,7 @@ def build_benchmark(skill: str, results: list[CaseResult]) -> dict:
             }
         )
     return {
+        "mode": "ab",
         "skill": skill,
         "runs": rows,
         "summary": {
@@ -69,7 +92,7 @@ def average(values: list[float]) -> float:
 
 def render_report(skill: str, results: list[CaseResult]) -> str:
     lines = [
-        f"# {skill} Codex Eval Report",
+        f"# {skill} Codex A/B Eval Report",
         "",
         "| Case | Prompt | With Skill Checks | Baseline Guards | Commands (ws/base) | Tokens (ws/base) |",
         "|---|---|---:|---:|---:|---:|",
@@ -113,3 +136,62 @@ def render_case_checks(result: CaseResult) -> list[str]:
             lines.append(f"| {side_name} | {check.id} | {status} | {evidence} |")
     lines.append("")
     return lines
+
+
+def build_validation_benchmark(repo_root: Path, skill: str, results: list[ValidationResult]) -> dict:
+    rows = []
+    for result in results:
+        rows.append(
+            {
+                "id": result.id,
+                "base_id": result.base_id,
+                "case": f"{result.language}/{result.service}",
+                "prompt_id": result.prompt_id,
+                "definition_path": relative_to_repo(repo_root, result.definition_path),
+                "eval_dir": relative_to_repo(repo_root, result.fixture_dir),
+                "skill_path": relative_to_repo(repo_root, result.skill_path),
+                "deterministic_check_count": result.deterministic_check_count,
+                "qualitative_check_count": result.qualitative_check_count,
+            }
+        )
+    return {
+        "mode": "validation",
+        "skill": skill,
+        "runs": rows,
+        "summary": {
+            "case_count": len(results),
+            "deterministic_check_count": sum(result.deterministic_check_count for result in results),
+            "qualitative_check_count": sum(result.qualitative_check_count for result in results),
+        },
+    }
+
+
+def render_validation_report(repo_root: Path, skill: str, results: list[ValidationResult]) -> str:
+    lines = [
+        f"# {skill} Codex Eval Validation Report",
+        "",
+        "This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex A/B execution.",
+        "",
+        "| Case | Prompt | Eval File | Deterministic Checks | Qualitative Checks |",
+        "|---|---|---|---:|---:|",
+    ]
+    for result in results:
+        lines.append(
+            "| {case} | {prompt} | {path} | {det} | {qual} |".format(
+                case=f"{result.language}/{result.service}",
+                prompt=result.prompt_id,
+                path=relative_to_repo(repo_root, result.definition_path),
+                det=result.deterministic_check_count,
+                qual=result.qualitative_check_count,
+            )
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def relative_to_repo(repo_root: Path, path: str) -> str:
+    absolute = Path(path)
+    try:
+        return str(absolute.relative_to(repo_root))
+    except ValueError:
+        return str(absolute)
