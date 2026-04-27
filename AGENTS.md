@@ -81,7 +81,7 @@ Outputs:
 - Use qualitative checks for semantic convention quality, workflow correctness,
   code minimality, and judgment-heavy requirements.
 - Use runtime checks for end-to-end telemetry proof only when Docker and a
-  running Observer are expected.
+  managed Observer are expected.
 - Load only the reference file needed for the detected language.
 
 ## Available Skills

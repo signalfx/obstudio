@@ -67,16 +67,34 @@
       "runtime": {
         "observer": {
           "base_url": "http://127.0.0.1:3000",
-          "clear": true
+          "clear": true,
+          "managed": true,
+          "health_path": "/api/health",
+          "timeout_seconds": 60
         },
+        "source_copies": [
+          {
+            "from": "observer",
+            "to": ".codex-runtime/repo/observer"
+          },
+          {
+            "from": "skills",
+            "to": ".codex-runtime/repo/skills"
+          },
+          {
+            "from": "docs/examples.md",
+            "to": ".codex-runtime/repo/docs/examples.md"
+          }
+        ],
         "compose_file": "docker-compose.yml",
         "services": [
+          "observer",
           "redis",
           "api",
           "worker"
         ],
         "environment": {
-          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4318",
+          "OTEL_EXPORTER_OTLP_ENDPOINT": "http://observer:4318",
           "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
           "OTEL_TRACES_EXPORTER": "otlp",
           "OTEL_METRICS_EXPORTER": "otlp"

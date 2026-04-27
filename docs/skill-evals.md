@@ -79,8 +79,9 @@ only need to prove run health and skill isolation unless a check explicitly sets
 
 Runtime checks use `observer_docker_runtime`. They are skipped by default and
 only run when `[runtime].enabled = true` or `--codex-runtime` is set. The check
-uses the Docker Python SDK to start containers or a Compose file, sends traffic,
-then queries a running Observer API for trace and metric evidence.
+uses the Docker Python SDK to stage Observer source, build the Observer binary
+through Compose, start the app containers, send traffic, then query the managed
+Observer API for trace and metric evidence.
 
 The harness also adds setup guards to every run:
 
@@ -185,7 +186,7 @@ token, and elapsed-time columns.
 - Keep deterministic checks focused on behavior that can be proven from files,
   traces, commands, and final output.
 - Use runtime checks only for end-to-end telemetry proof that needs Docker and a
-  running Observer.
+  managed Observer.
 - Use qualitative checks for style, semantic convention quality, and workflow
   correctness.
 - Keep full traces out of git; commit only durable eval definitions, harness

@@ -15,6 +15,7 @@ def grade_deterministic(
     trace: TraceSummary,
     side: str,
     runtime_enabled: bool = False,
+    repo_root: Path | None = None,
 ) -> GradeResult:
     service_dir = run_dir / "service"
     results: list[GradeCheckResult] = []
@@ -45,7 +46,7 @@ def grade_deterministic(
     for check in case.deterministic_checks:
         if check.applies_to not in ("both", side):
             continue
-        results.append(run_check(check, service_dir, final_message, trace, runtime_enabled))
+        results.append(run_check(check, service_dir, final_message, trace, runtime_enabled, repo_root))
 
     return GradeResult(checks=results)
 
@@ -101,6 +102,7 @@ def run_check(
     final_message: str,
     trace: TraceSummary,
     runtime_enabled: bool = False,
+    repo_root: Path | None = None,
 ) -> GradeCheckResult:
     kind = check.kind
     evidence = ""
@@ -161,7 +163,7 @@ def run_check(
                 category="runtime",
                 skipped=True,
             )
-        return run_observer_docker_runtime(check, service_dir)
+        return run_observer_docker_runtime(check, service_dir, repo_root)
 
     return result(check, False, f"Unknown check kind: {kind}")
 

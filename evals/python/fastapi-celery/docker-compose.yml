@@ -1,4 +1,18 @@
 services:
+  observer:
+    build:
+      context: ./.codex-runtime/repo
+      dockerfile: observer/Dockerfile
+    ports:
+      - "3000:3000"
+      - "4318:4318"
+      - "4317:4317"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - OTLP_HTTP_PORT=4318
+      - OTLP_GRPC_PORT=4317
+
   redis:
     image: redis:7-alpine
     ports:

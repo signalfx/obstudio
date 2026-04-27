@@ -62,8 +62,10 @@ service workspace.
 Runtime checks use the `observer_docker_runtime` check kind. They are skipped by
 default and run only when `[runtime].enabled = true` is set in the selected TOML
 config or `EVAL_RUNTIME=1` is passed to Make. These checks use the Docker Python
-SDK to start containers or a Compose file, send HTTP traffic, then query a
-running Observer at `http://127.0.0.1:3000` for trace and metric evidence.
+SDK to stage the Observer source into the isolated runtime workspace, build the
+Observer binary through Compose, start the service containers, send HTTP
+traffic, then query Observer at `http://127.0.0.1:3000` for trace and metric
+evidence.
 
 ## Commands
 

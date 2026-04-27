@@ -10,6 +10,7 @@ from pytest_codex_evals.deterministic import grade_deterministic
 from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
 from pytest_codex_evals.models import ValidationResult
 from pytest_codex_evals.report import write_ab_reports, write_combined_session_reports, write_side_reports
+from pytest_codex_evals.runtime import cleanup_runtime_sources, prepare_runtime_sources
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -147,6 +148,28 @@ def test_runtime_check_is_skipped_until_enabled(tmp_path: Path):
     assert check.category == "runtime"
     assert check.skipped
     assert grade.total == 2
+
+
+def test_runtime_source_copies_are_staged_under_service_dir(tmp_path: Path):
+    repo_root = tmp_path / "repo"
+    observer = repo_root / "observer"
+    observer.mkdir(parents=True)
+    (observer / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (observer / "ignored.pyc").write_text("", encoding="utf-8")
+    service_dir = tmp_path / "service"
+    service_dir.mkdir()
+
+    staged = prepare_runtime_sources(
+        {"source_copies": [{"from": "observer", "to": ".codex-runtime/observer"}]},
+        service_dir,
+        repo_root,
+    )
+
+    assert staged == [service_dir / ".codex-runtime" / "observer"]
+    assert (staged[0] / "Dockerfile").is_file()
+    assert not (staged[0] / "ignored.pyc").exists()
+    cleanup_runtime_sources(staged)
+    assert not staged[0].exists()
 
 
 def empty_trace(tmp_path: Path) -> Path:

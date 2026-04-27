@@ -77,10 +77,12 @@ argv list, not a shell string, so they work well with ecosystem tools:
 Other command-backed kinds are `command_succeeds`,
 `command_stdout_contains_any`, and `command_stdout_contains_none`.
 
-Runtime checks are optional because they need Docker plus a running telemetry
-backend. The built-in `observer_docker_runtime` check uses the Docker Python SDK
-to start containers or a small Compose file, sends traffic, then queries an
-Observer-compatible API for traces and metrics:
+Runtime checks are optional because they need Docker and a telemetry backend.
+The built-in `observer_docker_runtime` check uses the Docker Python SDK to start
+containers or a small Compose file, sends traffic, then queries an
+Observer-compatible API for traces and metrics. A runtime can copy repo source
+into the isolated service workspace before Compose starts, which is useful when
+the telemetry backend should be built from the same checkout:
 
 ```json
 {
@@ -89,11 +91,20 @@ Observer-compatible API for traces and metrics:
   "kind": "observer_docker_runtime",
   "timeout_seconds": 120,
   "runtime": {
-    "observer": { "base_url": "http://127.0.0.1:3000", "clear": true },
+    "observer": {
+      "base_url": "http://127.0.0.1:3000",
+      "managed": true,
+      "health_path": "/api/health",
+      "clear": true
+    },
+    "source_copies": [
+      { "from": "observer", "to": ".codex-runtime/repo/observer" },
+      { "from": "skills", "to": ".codex-runtime/repo/skills" }
+    ],
     "compose_file": "docker-compose.yml",
-    "services": ["app"],
+    "services": ["observer", "app"],
     "environment": {
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4318",
+      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://observer:4318",
       "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
     },
     "health": { "url": "http://127.0.0.1:8080/health", "expect_status": 200 },

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import urllib.error
 import urllib.request
@@ -10,7 +11,7 @@ from typing import Any
 from .models import DeterministicCheck, GradeCheckResult
 
 
-def run_observer_docker_runtime(check: DeterministicCheck, service_dir: Path) -> GradeCheckResult:
+def run_observer_docker_runtime(check: DeterministicCheck, service_dir: Path, repo_root: Path | None = None) -> GradeCheckResult:
     try:
         import docker
     except ImportError as exc:
@@ -23,14 +24,20 @@ def run_observer_docker_runtime(check: DeterministicCheck, service_dir: Path) ->
     containers = []
     network = None
     client = None
+    prepared_sources: list[Path] = []
     try:
+        prepared_sources = prepare_runtime_sources(config, service_dir, repo_root)
         client = docker.from_env()
         client.ping()
         network_name = safe_name(f"codex-eval-{check.id}-{int(time.time() * 1000)}")
         network = client.networks.create(network_name, driver="bridge")
 
-        clear_observer(config)
+        if not observer_config(config).get("managed"):
+            clear_observer(config)
         containers = start_containers(client, network.name, config, service_dir, check.timeout_seconds)
+        wait_for_observer(config, check.timeout_seconds)
+        if observer_config(config).get("managed"):
+            clear_observer(config)
         wait_for_health(config, check.timeout_seconds)
         run_traffic(config, check.timeout_seconds)
         settle_seconds = float(config.get("settle_seconds", 2))
@@ -59,6 +66,7 @@ def run_observer_docker_runtime(check: DeterministicCheck, service_dir: Path) ->
                 client.close()
             except Exception:
                 pass
+        cleanup_runtime_sources(prepared_sources)
 
 
 def start_containers(client: Any, network_name: str, config: dict[str, Any], service_dir: Path, timeout: int) -> list[Any]:
@@ -82,6 +90,77 @@ def start_containers(client: Any, network_name: str, config: dict[str, Any], ser
     if containers:
         time.sleep(min(max(timeout, 1), 5))
     return containers
+
+
+def prepare_runtime_sources(config: dict[str, Any], service_dir: Path, repo_root: Path | None) -> list[Path]:
+    copies = config.get("source_copies") or []
+    if not isinstance(copies, list):
+        raise ValueError("runtime.source_copies must be a list")
+    if copies and repo_root is None:
+        raise ValueError("runtime.source_copies requires repo root context")
+
+    prepared = []
+    for item in copies:
+        if not isinstance(item, dict):
+            raise ValueError("runtime.source_copies entries must be objects")
+        source_value = item.get("from")
+        target_value = item.get("to")
+        if not source_value or not target_value:
+            raise ValueError("runtime.source_copies entries require from and to")
+        source = Path(str(source_value))
+        if not source.is_absolute():
+            source = (repo_root / source).resolve()  # type: ignore[operator]
+        target = service_dir / str(target_value)
+        if not is_relative_to(target.resolve(), service_dir.resolve()):
+            raise ValueError(f"runtime source copy target must stay under service dir: {target_value}")
+        if not source.exists():
+            raise ValueError(f"runtime source copy source not found: {source}")
+        if target.exists():
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            shutil.copytree(source, target, ignore=runtime_copy_ignore)
+        else:
+            shutil.copy2(source, target)
+        prepared.append(target)
+    return prepared
+
+
+def runtime_copy_ignore(directory: str, names: list[str]) -> set[str]:
+    ignored = {
+        ".git",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+        "dist",
+        "build",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+    return {name for name in names if name in ignored or name.endswith(".pyc")}
+
+
+def cleanup_runtime_sources(paths: list[Path]) -> None:
+    for path in reversed(paths):
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+
+def is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 def container_specs(config: dict[str, Any], service_dir: Path) -> list[dict[str, Any]]:
@@ -270,6 +349,27 @@ def wait_for_health(config: dict[str, Any], timeout: int) -> None:
             last_error = str(exc)
         time.sleep(1)
     raise TimeoutError(f"health check did not reach {expect_status}: {url}; last error: {last_error}")
+
+
+def wait_for_observer(config: dict[str, Any], timeout: int) -> None:
+    observer = observer_config(config)
+    if not observer.get("managed") and not observer.get("health_path"):
+        return
+    health_path = str(observer.get("health_path", "/api/health"))
+    url = observer_url(config, health_path)
+    expect_status = int(observer.get("expect_status", 200))
+    deadline = time.monotonic() + int(observer.get("timeout_seconds", timeout))
+    last_error = ""
+    while time.monotonic() < deadline:
+        try:
+            status, _ = request_text(url, timeout=5, return_status=True)
+            if status == expect_status:
+                return
+            last_error = f"status {status}"
+        except Exception as exc:
+            last_error = str(exc)
+        time.sleep(1)
+    raise TimeoutError(f"observer did not reach {expect_status}: {url}; last error: {last_error}")
 
 
 def run_traffic(config: dict[str, Any], timeout: int) -> None:

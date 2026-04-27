@@ -64,7 +64,23 @@
                 "properties": {
                   "base_url": { "type": "string" },
                   "clear": { "type": "boolean" },
-                  "clear_path": { "type": "string" }
+                  "clear_path": { "type": "string" },
+                  "managed": { "type": "boolean" },
+                  "health_path": { "type": "string" },
+                  "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+                  "expect_status": { "type": "integer", "minimum": 100, "maximum": 599 }
+                }
+              },
+              "source_copies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["from", "to"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": { "type": "string" },
+                    "to": { "type": "string" }
+                  }
                 }
               },
               "compose_file": { "type": "string" },

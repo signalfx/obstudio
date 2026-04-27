@@ -129,7 +129,7 @@ def run_side(
     trace = parse_trace(trace_path)
     agent_tokens = trace.usage.total_tokens
     final_message = final_path.read_text(encoding="utf-8", errors="replace")
-    deterministic = grade_deterministic(case, exec_dir, final_message, trace, side, runtime_enabled=runtime)
+    deterministic = grade_deterministic(case, exec_dir, final_message, trace, side, runtime_enabled=runtime, repo_root=repo_root)
     deterministic_path = exec_dir / "deterministic_grade.json"
     deterministic_path.write_text(deterministic.model_dump_json(indent=2), encoding="utf-8")
 
