@@ -21,15 +21,19 @@ Fixture apps and eval definitions live together:
 ```text
 evals/
   go/chi-basic/
-    audit_eval.json
-    instrument_eval.json
+    eval/
+      qual/
+        audit.json
+        instrument.json
     ...
   node/express-basic/
-    audit_eval.json
-    instrument_eval.json
+    eval/qual/
+      audit.json
+      instrument.json
   python/flask-basic/
-    audit_eval.json
-    instrument_eval.json
+    eval/qual/
+      audit.json
+      instrument.json
 
 pytest-codex-evals/
   src/pytest_codex_evals/
@@ -44,15 +48,15 @@ small prompt list, but JSON keeps each service eval self-contained and
 machine-validated.
 
 Each eval has a `prompts[]` array of task variants. The pytest plugin collects
-each `*_eval.json` file directly and expands every variant into its own pytest
-item. Live runs are selected by eval kind:
+JSON files under `eval/qual/`, `eval/runtime/`, and `eval/sanity/`, then expands
+every variant into its own pytest item. Live runs are selected by eval kind:
 
 - `sanity`: quick skill-loading and final-output guards.
 - `qualitative`: schema-constrained judge checks.
 - `runtime`: Docker/Observer trace and metric checks.
 
-Sanity evals use the dummy `evals/sanity/skill-smoke/` fixture by default so
-they do not spend time analyzing or modifying a real service.
+Sanity evals use the dummy `evals/sanity/skill-smoke/eval/sanity/` fixture by
+default so they do not spend time analyzing or modifying a real service.
 
 For each live case, the harness always runs `with_skill`. Passing `AB=1` adds
 the `baseline` side with no skill name and no repo skills visible.
@@ -85,10 +89,11 @@ only need to prove run health and skill isolation unless a check explicitly sets
 `applies_to` to `baseline` or `both`.
 
 Runtime checks use `observer_docker_runtime` and run through `eval-runtime`.
-The check stages Observer source, builds the Linux Observer binary from source
-before Docker starts, packages that binary through Compose, starts the app
-containers, sends traffic, then queries the managed Observer API for trace and
-metric evidence.
+The eval JSON only points at an eval-owned Compose file and declares telemetry
+expectations. Compose owns service topology, Observer startup, app startup, and
+a profiled `traffic` service that generates requests with tools such as `siege`.
+The harness runs Compose, invokes `traffic`, queries the managed Observer API
+for trace and metric evidence, then tears the stack down.
 
 The harness also adds setup guards to every run:
 
@@ -96,9 +101,9 @@ The harness also adds setup guards to every run:
 - `skills-not-loaded`: the `baseline` side does not expose repo skills or reference them in traces.
 
 Qualitative grading runs a second read-only Codex pass with the schema packaged
-by `pytest-codex-evals`. It uses the eval JSON's `qualitative_checks` and the
-judge model configured in `codex-evals*.toml`; the task-run model is configured
-as `[models].agent`.
+by `pytest-codex-evals`. It uses the eval JSON's `rubric` entries and the judge
+model configured in `codex-evals*.toml`; the task-run model is configured as
+`[models].agent`.
 
 ## Commands
 
@@ -122,7 +127,7 @@ make eval-all-ab SKILL=skills/otel-instrument
 with `AB=1`, `WITH=ab`, or the `*-ab` targets. The direct pytest form is:
 
 ```bash
-cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-kind qualitative --ab
+cd evals && uv run pytest '<language>/<service>/eval/qual' -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-kind qualitative --ab
 ```
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic

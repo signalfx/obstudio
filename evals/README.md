@@ -1,12 +1,18 @@
 # Skill Evals
 
 Skill evals are pytest-collected JSON files. Each fixture keeps its eval
-definitions next to the service code:
+definitions under a service-local `eval/` folder:
 
 ```text
-evals/<language>/<service>/audit_eval.json
-evals/<language>/<service>/instrument_eval.json
+evals/<language>/<service>/eval/qual/audit.json
+evals/<language>/<service>/eval/qual/instrument.json
+evals/<language>/<service>/eval/runtime/instrument.json
+evals/<language>/<service>/eval/sanity/audit.json
 ```
+
+Only create the kind folders a service actually needs. The make targets select
+these directories with global-style path patterns such as `*/*/eval/qual`,
+`*/*/eval/runtime`, and `*/*/eval/sanity`.
 
 Each eval defines `prompts[]` task variants. The harness separates the eval
 kind from the baseline decision:
@@ -23,15 +29,15 @@ kind from the baseline decision:
 | Validation | Pytest collection only | JSON shape, eval directory, skill source | Validation report |
 | Sanity | Codex with `.agents/skills/<skill>` visible | Skill loads and the task completes | Sanity report |
 | Qualitative | Codex task plus schema-constrained judge | Semantic quality and workflow fit | Qualitative report |
-| Runtime Checks | Docker Python SDK plus Observer API queries | Live spans/metrics are emitted after traffic | Runtime section in `deterministic_grade.json` |
+| Runtime Checks | Docker Compose plus Observer API queries | Live spans/metrics are emitted after traffic | Runtime report |
 | A/B | Adds the no-skill baseline side to sanity, qualitative, or runtime | Skill lift over baseline | Same report shape with baseline columns populated |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
 the referenced skill source exists. Live evals run the loaded-skill side by
 default. Pass `AB=1`, `WITH=ab`, or use the `*-ab` target to add the baseline.
 
-Each eval JSON keeps the human-facing tasks at the top, then deterministic and
-qualitative checks:
+Each eval JSON keeps the human-facing tasks at the top, then only the checks for
+that eval kind:
 
 ```json
 {
@@ -42,21 +48,21 @@ qualitative checks:
       "task": "Scan the service in ./service for observability gaps."
     }
   ],
-  "deterministic_checks": [],
-  "qualitative_checks": []
+  "rubric": []
 }
 ```
 
-Mode-specific JSON files are named by role:
+Mode-specific JSON files are grouped by role:
 
 ```text
-*_sanity_eval.json     # quick skill-loading checks
-*_runtime_eval.json    # Docker/Observer runtime checks
-*_eval.json            # qualitative and standard artifact checks
+eval/sanity/*.json     # quick skill-loading checks
+eval/runtime/*.json    # Docker/Observer runtime checks
+eval/qual/*.json       # schema-constrained qualitative checks
 ```
 
-The default sanity target is `evals/sanity/skill-smoke/`, a dummy fixture used
-only to prove that the selected skill loads and the prompt returns quickly.
+The default sanity pattern picks `evals/sanity/skill-smoke/eval/sanity/`, a
+dummy fixture used only to prove that the selected skill loads and the prompt
+returns quickly.
 
 ## A/B Sides
 
@@ -76,11 +82,13 @@ all`, `npm pkg get`, `node -e`, and Python `tomllib` against the generated
 service workspace.
 
 Runtime checks use the `observer_docker_runtime` check kind. `eval-runtime`
-enables them automatically. These checks use Python to stage Observer source
-into the isolated runtime workspace, build the Linux Observer binary from
-source before Docker starts, package that binary through Compose, start the
-service containers, send HTTP traffic, then query Observer at
-`http://127.0.0.1:3000` for trace and metric evidence.
+enables them automatically. The eval JSON points at a Compose file and declares
+the trace/metric expectations. The Compose file owns service topology, Observer
+startup, app startup, and a profiled `traffic` service that generates requests
+with tools such as `siege`. The harness runs Compose, invokes `traffic`, queries
+Observer at `http://127.0.0.1:3000`, then tears the stack down. Compose can use
+`${CODEX_EVAL_SERVICE_DIR}` when it must build the instrumented temp service
+workspace rather than the source fixture.
 
 ## Commands
 
@@ -109,6 +117,7 @@ make eval-all SKILL=skills/otel-audit EVAL_WORKERS=4
 make eval-all-ab SKILL=skills/otel-audit EVAL_WORKERS=4
 make eval-sanity SKILL=skills/otel-instrument WITH=ab
 make eval-runtime SKILL=skills/otel-instrument CASE=python/fastapi-celery
+make eval-qualitative SKILL=skills/otel-audit EVAL_PATTERN='go/*/eval/qual'
 ```
 
 Each worker writes per-item result JSON under `.workspace/codex-evals/_worker-results/`;
@@ -118,8 +127,8 @@ Progress logging is enabled by default for Make targets and prints item start
 and completion lines:
 
 ```text
-[codex-eval] START qualitative:ab go/chi-basic/audit_eval.json::otel-audit::go/chi-basic::direct
-[codex-eval] PASSED qualitative:ab go/chi-basic/audit_eval.json::otel-audit::go/chi-basic::direct (142.3s)
+[codex-eval] START qualitative:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct
+[codex-eval] PASSED qualitative:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct (142.3s)
 ```
 
 Disable it with `EVAL_PROGRESS=0`.

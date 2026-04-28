@@ -1,0 +1,20 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Fix and complete OpenTelemetry instrumentation for the partially instrumented Go chi service in ./service. Preserve existing route behavior."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Update the partially instrumented Go chi service in ./service so tracing and metrics are correctly configured, while preserving the existing runtime and startup command."
+    }
+  ],
+  "rubric": [
+    "Preserves the existing chi routes and otelhttp wrapping behavior.",
+    "Adds or fixes MeterProvider setup so HTTP server metrics can export.",
+    "Replaces hardcoded collector.example.com configuration with environment-driven OTLP settings.",
+    "Moves request hot-path tracer creation to a stable package-level or setup-time pattern.",
+    "Fixes high-cardinality span naming and records errors/status on failure paths."
+  ]
+}

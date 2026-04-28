@@ -13,6 +13,17 @@ SIDE_ATTRS = {
     "with_skill": "with_skill",
     "with_baseline": "baseline",
 }
+LIVE_SECTION_DEFINITIONS = {
+    "deterministic": ("Deterministic", "deterministic", "deterministic_failures"),
+    "qualitative": ("Qualitative", "qualitative", "qualitative_failures"),
+    "runtime": ("Runtime", "runtime", "runtime_failures"),
+}
+KIND_LIVE_SECTIONS = {
+    "sanity": ("deterministic",),
+    "qualitative": ("qualitative",),
+    "runtime": ("runtime",),
+    "validation": (),
+}
 
 
 def write_side_reports(
@@ -209,12 +220,19 @@ def render_combined_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines.extend(render_environment_table(benchmark["metadata"], "Modes"))
 
     lines.extend(render_validation_section(benchmark["validation"]))
-    lines.extend(render_live_section("Deterministic", benchmark["live"], "deterministic", benchmark["deterministic_failures"]))
-    lines.extend(render_live_section("Qualitative", benchmark["live"], "qualitative", benchmark["qualitative_failures"]))
-    lines.extend(render_live_section("Runtime", benchmark["live"], "runtime", benchmark["runtime_failures"]))
+    for section_key in live_section_keys(benchmark["metadata"]):
+        title, category, failures_key = LIVE_SECTION_DEFINITIONS[section_key]
+        lines.extend(render_live_section(title, benchmark["live"], category, benchmark[failures_key]))
     lines.extend(["", "## Result JSON", ""])
     lines.append("File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.")
     return "\n".join(lines) + "\n"
+
+
+def live_section_keys(metadata: dict[str, Any]) -> tuple[str, ...]:
+    kinds = eval_kind_values(metadata)
+    if len(kinds) == 1 and kinds[0] in KIND_LIVE_SECTIONS:
+        return KIND_LIVE_SECTIONS[kinds[0]]
+    return tuple(LIVE_SECTION_DEFINITIONS)
 
 
 def render_validation_section(validation: dict[str, Any]) -> list[str]:
@@ -739,8 +757,11 @@ def render_environment_table(metadata: dict[str, Any], mode_label: str) -> list[
 
 
 def metadata_has_eval_kind(metadata: dict[str, Any], expected: str) -> bool:
-    values = str(metadata.get("eval_kind") or "").replace(",", " ").split()
-    return expected in values
+    return expected in eval_kind_values(metadata)
+
+
+def eval_kind_values(metadata: dict[str, Any]) -> list[str]:
+    return [value.lower() for value in str(metadata.get("eval_kind") or "").replace(",", " ").split()]
 
 
 def truthy_metadata(value: Any) -> bool:
@@ -876,7 +897,10 @@ def average(values: list[int]) -> float | None:
 
 
 def eval_kind(base_id: str) -> str:
-    return safe_name(base_id.rsplit("/", 1)[-1] or "eval")
+    parts = [part for part in base_id.split("/") if part]
+    if len(parts) >= 4:
+        return safe_name("-".join(parts[2:]))
+    return safe_name(parts[-1] if parts else "eval")
 
 
 def safe_name(value: str) -> str:

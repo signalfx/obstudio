@@ -9,23 +9,27 @@ NO_QUALITATIVE ?=
 EVAL_RUNTIME ?=
 EVAL_WORKERS ?= 1
 EVAL_PROGRESS ?= 1
+EVAL_PATTERN ?=
 AB ?=
 WITH ?=
 EVAL_CONFIG ?= codex-evals.toml
 EVAL_VALIDATION_CONFIG ?= codex-evals.validation.toml
 EVAL_BASELINE_CONFIG ?= codex-evals.baseline.toml
 EVAL_AB_CONFIG ?= codex-evals.ab.toml
-SANITY_CASE ?= sanity/skill-smoke
-SANITY_FILTER ?= sanity
-RUNTIME_CASE ?= python/fastapi-celery
-RUNTIME_FILTER ?= runtime
+SANITY_PATTERN ?= */*/eval/sanity
+QUALITATIVE_PATTERN ?= */*/eval/qual
+RUNTIME_PATTERN ?= */*/eval/runtime
 
-EVAL_TARGET = $(if $(CASE),$(CASE),.)
+kind_target = $(if $(EVAL_PATTERN),$(EVAL_PATTERN),$(if $(CASE),$(if $(findstring /eval/,$(CASE)),$(CASE),$(CASE)/eval/$(1)),$(2)))
+
+EVAL_TARGET = $(if $(CASE),$(CASE),$(if $(EVAL_PATTERN),$(EVAL_PATTERN),.))
 EVAL_PROMPT_FILTER = $(if $(PROMPT),-k "$(PROMPT)",)
-EVAL_SANITY_TARGET = $(if $(CASE),$(CASE),$(SANITY_CASE))
-EVAL_SANITY_FILTER = $(if $(PROMPT),-k "$(PROMPT)",$(if $(SANITY_FILTER),-k "$(SANITY_FILTER)",))
-EVAL_RUNTIME_TARGET = $(if $(CASE),$(CASE),$(RUNTIME_CASE))
-EVAL_RUNTIME_FILTER = $(if $(PROMPT),-k "$(PROMPT)",$(if $(RUNTIME_FILTER),-k "$(RUNTIME_FILTER)",))
+EVAL_SANITY_TARGET = $(call kind_target,sanity,$(SANITY_PATTERN))
+EVAL_QUALITATIVE_TARGET = $(call kind_target,qual,$(QUALITATIVE_PATTERN))
+EVAL_RUNTIME_TARGET = $(call kind_target,runtime,$(RUNTIME_PATTERN))
+EVAL_SANITY_FILTER = $(if $(PROMPT),-k "$(PROMPT)",)
+EVAL_QUALITATIVE_FILTER = $(if $(PROMPT),-k "$(PROMPT)",)
+EVAL_RUNTIME_FILTER = $(if $(PROMPT),-k "$(PROMPT)",)
 EVAL_QUIET ?=
 EVAL_PYTEST_QUIET = $(if $(EVAL_QUIET),-qq,)
 EVAL_SKILL_PATH = $(if $(SKILL),$(if $(filter /%,$(SKILL)),$(SKILL),$(if $(wildcard $(SKILL)/SKILL.md),$(abspath $(SKILL)),$(abspath $(ROOT_DIR)/$(SKILL)))))
@@ -68,7 +72,7 @@ eval-sanity-ab: AB=1
 eval-sanity-ab: eval-sanity ## Run sanity checks with baseline
 
 eval-qualitative: ## Run schema-constrained qualitative grading; pass AB=1 or WITH=ab to include baseline
-	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind qualitative $(EVAL_PROGRESS_FLAG)
+	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_QUALITATIVE_TARGET) $(EVAL_QUALITATIVE_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind qualitative $(EVAL_PROGRESS_FLAG)
 
 eval-qualitative-ab: AB=1
 eval-qualitative-ab: eval-qualitative ## Run qualitative grading with baseline

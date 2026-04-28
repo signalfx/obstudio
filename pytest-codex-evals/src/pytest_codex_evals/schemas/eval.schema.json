@@ -21,7 +21,7 @@
         }
       }
     },
-    "deterministic_checks": {
+    "checks": {
       "type": "array",
       "items": {
         "type": "object",
@@ -56,71 +56,10 @@
           "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300, "default": 30 },
           "runtime": {
             "type": "object",
-            "additionalProperties": true,
+            "required": ["compose_file", "expect"],
+            "additionalProperties": false,
             "properties": {
-              "observer": {
-                "type": "object",
-                "additionalProperties": true,
-                "properties": {
-                  "base_url": { "type": "string" },
-                  "clear": { "type": "boolean" },
-                  "clear_path": { "type": "string" },
-                  "managed": { "type": "boolean" },
-                  "health_path": { "type": "string" },
-                  "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300 },
-                  "expect_status": { "type": "integer", "minimum": 100, "maximum": 599 }
-                }
-              },
-              "source_copies": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": ["from", "to"],
-                  "additionalProperties": false,
-                  "properties": {
-                    "from": { "type": "string" },
-                    "to": { "type": "string" }
-                  }
-                }
-              },
-              "prebuild": {
-                "type": "array",
-                "items": {
-                  "oneOf": [
-                    { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-                    {
-                      "type": "object",
-                      "required": ["command"],
-                      "additionalProperties": false,
-                      "properties": {
-                        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-                        "cwd": { "type": "string" },
-                        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600 },
-                        "env": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } }
-                      }
-                    }
-                  ]
-                }
-              },
               "compose_file": { "type": "string" },
-              "services": { "type": "array", "items": { "type": "string" } },
-              "containers": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-              "environment": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
-              "health": {
-                "oneOf": [
-                  { "type": "string" },
-                  { "type": "object", "additionalProperties": true }
-                ]
-              },
-              "traffic": {
-                "type": "array",
-                "items": {
-                  "oneOf": [
-                    { "type": "string" },
-                    { "type": "object", "additionalProperties": true }
-                  ]
-                }
-              },
               "settle_seconds": { "type": "number", "minimum": 0 },
               "expect": { "type": "object", "additionalProperties": true }
             }
@@ -129,9 +68,11 @@
         }
       }
     },
-    "qualitative_checks": {
+    "deterministic_checks": { "$ref": "#/properties/checks" },
+    "rubric": {
       "type": "array",
       "items": { "type": "string" }
-    }
+    },
+    "qualitative_checks": { "$ref": "#/properties/rubric" }
   }
 }

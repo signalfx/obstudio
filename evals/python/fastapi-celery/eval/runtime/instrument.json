@@ -1,0 +1,34 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing Docker Compose runtime. Add auto-instrumentation only."
+    }
+  ],
+  "checks": [
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits FastAPI traces to a running Observer.",
+      "kind": "observer_docker_runtime",
+      "timeout_seconds": 300,
+      "runtime": {
+        "compose_file": "docker-compose.yml",
+        "expect": {
+          "traces": {
+            "span_names": [
+              "GET /health",
+              "GET /orders",
+              "POST /orders"
+            ]
+          },
+          "metrics": {
+            "metric_names": [
+              "http.server.request.duration"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

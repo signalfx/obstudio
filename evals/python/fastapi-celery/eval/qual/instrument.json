@@ -1,0 +1,20 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the FastAPI and Celery service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "rubric": [
+    "Instruments both the FastAPI web process and the Celery worker startup path.",
+    "Uses separate setup code and avoids SDK initialization on library import when inappropriate.",
+    "Preserves Docker/Compose as the existing runtime shape.",
+    "Keeps service name and deployment environment configurable per process.",
+    "Does not add custom spans or metrics beyond auto-instrumentation without approval."
+  ]
+}

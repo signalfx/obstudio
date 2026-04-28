@@ -6,18 +6,17 @@ qualitative grading, optional Docker runtime checks, and aggregate reports.
 
 ## What It Provides
 
-- Pytest collection for `*_eval.json` files.
+- Pytest collection for eval JSON files.
 - One pytest item per `prompts[]` entry.
 - Fast validation by default: schema, eval directory, and skill path.
 - Live Codex runs by eval kind: sanity, qualitative, runtime, or legacy
-  standard artifact checks.
+  standard checks.
 - Optional A/B baseline side with `--ab`.
 - Deterministic checks from final text, files, JSONL traces, and command output.
 - Schema-constrained qualitative grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
   traces or metrics in an Observer-compatible API.
-- A single aggregate report with validation, deterministic, qualitative, and
-  runtime sections.
+- A kind-aware aggregate report with validation plus the relevant live section.
 
 ## Install
 
@@ -36,11 +35,18 @@ pytest-codex-evals = { path = "../pytest-codex-evals", editable = true }
 Put eval JSON files anywhere pytest can collect them:
 
 ```text
-evals/<suite>/<case>/*_eval.json
+evals/<suite>/<case>/eval/qual/<name>.json
+evals/<suite>/<case>/eval/runtime/<name>.json
+evals/<suite>/<case>/eval/sanity/<name>.json
 ```
 
-If a case needs local source files or other fixtures, place them beside the JSON.
-If it does not, the directory can contain only the eval JSON.
+The `eval/<kind>/` layout lets jobs select a global-style path pattern such as
+`*/*/eval/qual` or `services/*/eval/runtime`. The plugin also accepts legacy
+`*_eval.json` files for existing suites.
+
+If a case needs local source files or other fixtures, place them in the case
+directory above `eval/`. If it does not, the case directory can contain only the
+`eval/` folder.
 
 Minimal shape:
 
@@ -53,8 +59,8 @@ Minimal shape:
       "task": "Review the provided input and report gaps."
     }
   ],
-  "deterministic_checks": [],
-  "qualitative_checks": []
+  "checks": [],
+  "rubric": []
 }
 ```
 
@@ -80,11 +86,12 @@ Other command-backed kinds are `command_succeeds`,
 `command_stdout_contains_any`, and `command_stdout_contains_none`.
 
 Runtime checks are optional because they need Docker and a telemetry backend.
-The built-in `observer_docker_runtime` check uses the Docker Python SDK to start
-containers or a small Compose file, sends traffic, then queries an
-Observer-compatible API for traces and metrics. A runtime can copy repo source
-into the isolated service workspace before Compose starts, which is useful when
-the telemetry backend should be built from the same checkout:
+The built-in `observer_docker_runtime` check runs an eval-owned Docker Compose
+file, then queries an Observer-compatible API for traces and metrics. Keep
+service topology, build instructions, startup, and traffic generation in
+Compose. The eval JSON only points at the Compose file and declares telemetry
+expectations. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
+instrumented temp service workspace instead of the source fixture.
 
 ```json
 {
@@ -93,39 +100,19 @@ the telemetry backend should be built from the same checkout:
   "kind": "observer_docker_runtime",
   "timeout_seconds": 120,
   "runtime": {
-    "observer": {
-      "base_url": "http://127.0.0.1:3000",
-      "managed": true,
-      "health_path": "/api/health",
-      "clear": true
-    },
-    "source_copies": [
-      { "from": "observer", "to": ".codex-runtime/repo/observer" },
-      { "from": "skills", "to": ".codex-runtime/repo/skills" }
-    ],
-    "prebuild": [
-      { "command": ["go", "run", "./cmd/stage-skills"], "cwd": ".codex-runtime/repo/observer" },
-      {
-        "command": ["go", "build", "-trimpath", "-o", "bin/obstudio", "./cmd/obstudio"],
-        "cwd": ".codex-runtime/repo/observer",
-        "env": { "CGO_ENABLED": "0", "GOOS": "linux" }
-      }
-    ],
     "compose_file": "docker-compose.yml",
-    "services": ["observer", "app"],
-    "environment": {
-      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://observer:4318",
-      "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
-    },
-    "health": { "url": "http://127.0.0.1:8080/health", "expect_status": 200 },
-    "traffic": [{ "method": "GET", "url": "http://127.0.0.1:8080/health", "expect_status": 200 }],
     "expect": {
-      "traces": { "contains_any": ["GET /health", "http"] },
-      "metrics": { "contains_any": ["http", "duration"] }
+      "traces": { "span_names": ["GET /health"] },
+      "metrics": { "metric_names": ["http.server.request.duration"] }
     }
   }
 }
 ```
+
+The referenced Compose file should expose an `observer` service on
+`127.0.0.1:3000` and a profiled one-shot `traffic` service. The harness runs:
+`docker compose up -d --build`, `docker compose --profile traffic run --rm
+traffic`, then `docker compose down -v --remove-orphans`.
 
 Runtime checks run when `--codex-eval-kind runtime`, `[runtime].enabled = true`,
 or `--codex-runtime` is passed.

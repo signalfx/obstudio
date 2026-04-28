@@ -8,6 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from .config import CodexEvalSettings, load_settings
+from .eval_files import eval_file_layout, is_eval_file
 from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant, ValidationResult
 from .report import write_ab_reports, write_combined_session_reports, write_side_reports, write_validation_reports
 from .runner import new_run_id, new_run_root, run_case
@@ -59,7 +60,7 @@ def pytest_configure_node(node) -> None:
 
 
 def pytest_collect_file(file_path: Path, parent: pytest.Collector):
-    if file_path.name.endswith("_eval.json"):
+    if is_eval_file(file_path):
         return CodexEvalFile.from_parent(parent, path=file_path)
     return None
 
@@ -253,7 +254,7 @@ def load_eval_definition(path: Path) -> EvalDefinition:
     Draft202012Validator(load_schema("eval.schema.json")).validate(data)
     definition = EvalDefinition.model_validate(data)
     definition.definition_path = path
-    definition.fixture_dir = path.parent
+    definition.fixture_dir = eval_fixture_dir(path)
     return definition
 
 
@@ -269,31 +270,42 @@ def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path
         deterministic_checks=definition.deterministic_checks,
         qualitative_checks=definition.qualitative_checks,
         definition_path=path,
-        fixture_dir=path.parent,
+        fixture_dir=eval_fixture_dir(path),
     )
 
 
 def with_path_defaults(path: Path, data: dict[str, Any]) -> dict[str, Any]:
+    layout = eval_file_layout(path)
+    if layout is None:
+        return dict(data)
     normalized = dict(data)
-    kind = path.name.removesuffix("_eval.json")
-    service = path.parent.name
-    language = path.parent.parent.name
-    normalized.setdefault("language", language)
-    normalized.setdefault("service", service)
-    normalized.setdefault("id", f"{language}/{service}/{kind}")
+    normalized.setdefault("language", layout.language)
+    normalized.setdefault("service", layout.service)
+    normalized.setdefault("id", layout.default_id)
     return normalized
 
 
+def eval_fixture_dir(path: Path) -> Path:
+    layout = eval_file_layout(path)
+    if layout is None:
+        return path.parent
+    return layout.fixture_dir
+
+
 def definition_matches_eval_kind(definition: EvalDefinition, kind: str, path: Path) -> bool:
-    stem = path.name.removesuffix("_eval.json")
+    layout = eval_file_layout(path)
+    role = layout.role if layout else None
+    stem = layout.eval_name if layout else path.stem
     if kind in {"validation", "standard"}:
         return True
     if kind == "sanity":
-        return "sanity" in stem
+        return role == "sanity" or "sanity" in stem
     if kind == "runtime":
-        return "runtime" in stem or any(check.kind == "observer_docker_runtime" for check in definition.deterministic_checks)
+        return role == "runtime" or "runtime" in stem or any(check.kind == "observer_docker_runtime" for check in definition.deterministic_checks)
     if kind == "qualitative":
-        return "sanity" not in stem and "runtime" not in stem and bool(definition.qualitative_checks)
+        if role == "qualitative":
+            return True
+        return role is None and "sanity" not in stem and "runtime" not in stem and bool(definition.qualitative_checks)
     return True
 
 

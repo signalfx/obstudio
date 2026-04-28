@@ -1,0 +1,20 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Go key-value store service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "rubric": [
+    "Instruments the executable server path under cmd/kvstore-server, not the library package on import.",
+    "Preserves the existing kvstore package APIs and avoids moving business logic.",
+    "Uses otelhttp.NewHandler for stdlib HTTP routing and keeps span names low-cardinality.",
+    "Reads service name and OTLP endpoint from environment or safe defaults.",
+    "Updates the existing .vscode/launch.json as required by the skill instructions."
+  ]
+}

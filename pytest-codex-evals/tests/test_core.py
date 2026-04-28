@@ -10,7 +10,7 @@ from pytest_codex_evals.deterministic import grade_deterministic
 from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
 from pytest_codex_evals.models import ValidationResult
 from pytest_codex_evals.report import write_ab_reports, write_combined_session_reports, write_side_reports
-from pytest_codex_evals.runtime import cleanup_runtime_sources, prepare_runtime_sources, run_prebuild_commands
+from pytest_codex_evals.runtime import resolve_compose_file, runtime_env
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -226,52 +226,30 @@ def test_runtime_eval_kind_runs_only_runtime_checks(tmp_path: Path):
     assert "observer-runtime" in check_ids
 
 
-def test_runtime_source_copies_are_staged_under_service_dir(tmp_path: Path):
+def test_runtime_compose_file_resolves_relative_to_eval_json_dir(tmp_path: Path):
+    service_dir = tmp_path / "run" / "service"
+    eval_dir = tmp_path / "evals" / "sample" / "service" / "eval" / "runtime"
+    service_dir.mkdir(parents=True)
+    eval_dir.mkdir(parents=True)
+    compose = eval_dir / "docker-compose.yml"
+    compose.write_text("services: {}\n", encoding="utf-8")
+
+    resolved = resolve_compose_file({"compose_file": "docker-compose.yml", "expect": {}}, service_dir, eval_dir)
+
+    assert resolved == compose.resolve()
+
+
+def test_runtime_env_points_to_instrumented_service_copy(tmp_path: Path):
     repo_root = tmp_path / "repo"
-    observer = repo_root / "observer"
-    observer.mkdir(parents=True)
-    (observer / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
-    (observer / "ignored.pyc").write_text("", encoding="utf-8")
-    service_dir = tmp_path / "service"
-    service_dir.mkdir()
+    service_dir = tmp_path / "run" / "service"
+    repo_root.mkdir()
+    service_dir.mkdir(parents=True)
 
-    staged = prepare_runtime_sources(
-        {"source_copies": [{"from": "observer", "to": ".codex-runtime/observer"}]},
-        service_dir,
-        repo_root,
-    )
+    env = runtime_env(repo_root, service_dir, "codex-eval-sample")
 
-    assert staged == [service_dir / ".codex-runtime" / "observer"]
-    assert (staged[0] / "Dockerfile").is_file()
-    assert not (staged[0] / "ignored.pyc").exists()
-    cleanup_runtime_sources(staged)
-    assert not staged[0].exists()
-
-
-def test_runtime_prebuild_commands_run_in_service_workspace(tmp_path: Path):
-    service_dir = tmp_path / "service"
-    work_dir = service_dir / "build"
-    work_dir.mkdir(parents=True)
-
-    run_prebuild_commands(
-        {
-            "prebuild": [
-                {
-                    "command": [
-                        sys.executable,
-                        "-c",
-                        "import os, pathlib; pathlib.Path('out.txt').write_text(os.environ['SAMPLE_FLAG'])",
-                    ],
-                    "cwd": "build",
-                    "env": {"SAMPLE_FLAG": "ok"},
-                }
-            ]
-        },
-        service_dir,
-        30,
-    )
-
-    assert (work_dir / "out.txt").read_text(encoding="utf-8") == "ok"
+    assert env["CODEX_EVAL_REPO_ROOT"] == str(repo_root.resolve())
+    assert env["CODEX_EVAL_SERVICE_DIR"] == str(service_dir.resolve())
+    assert env["COMPOSE_PROJECT_NAME"] == "codex-eval-sample"
 
 
 def empty_trace(tmp_path: Path) -> Path:
@@ -413,16 +391,61 @@ def test_side_report_writes_with_skill_paths(tmp_path: Path):
     assert "deterministic:check FAIL" in report
 
 
-def test_combined_report_has_validation_and_runtime_sections(tmp_path: Path):
+def test_runtime_combined_report_shows_only_runtime_live_section(tmp_path: Path):
+    report = combined_report_for_kind(tmp_path, "runtime")
+
+    assert "## Validation" in report
+    assert "## Deterministic" not in report
+    assert "## Qualitative" not in report
+    assert "## Runtime" in report
+    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report
+
+
+def test_sanity_combined_report_shows_only_deterministic_live_section(tmp_path: Path):
+    report = combined_report_for_kind(tmp_path, "sanity")
+
+    assert "## Validation" in report
+    assert "## Deterministic" in report
+    assert "## Qualitative" not in report
+    assert "## Runtime" not in report
+    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report
+
+
+def test_qualitative_combined_report_shows_only_qualitative_live_section(tmp_path: Path):
+    report = combined_report_for_kind(tmp_path, "qualitative")
+
+    assert "## Validation" in report
+    assert "## Deterministic" not in report
+    assert "## Qualitative" in report
+    assert "## Runtime" not in report
+    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1), avg score 4 | 456 | 12.3s | - | - | - |" in report
+
+
+def test_standard_combined_report_keeps_all_live_sections(tmp_path: Path):
+    report = combined_report_for_kind(tmp_path, "standard")
+
+    assert "## Validation" in report
+    assert "## Deterministic" in report
+    assert "## Qualitative" in report
+    assert "## Runtime" in report
+
+
+def combined_report_for_kind(tmp_path: Path, eval_kind: str) -> str:
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     deterministic = GradeCheckResult(id="file", description="file", passed=True)
     runtime = GradeCheckResult(id="observer", description="observer", passed=True, category="runtime")
+    qualitative_path = tmp_path / "qualitative_grade.json"
+    qualitative_path.write_text(
+        json.dumps({"overall_pass": True, "score": 4, "checks": [{"id": "quality", "pass": True, "evidence": "ok"}]}),
+        encoding="utf-8",
+    )
     side = SideResult(
         side="with_skill",
         exit_code=0,
         trace_path="trace.jsonl",
         final_message_path="last_message.md",
         deterministic_grade=GradeResult(checks=[deterministic, runtime]),
+        qualitative_grade_path=str(qualitative_path),
         duration_seconds=12.3,
         tokens=456,
     )
@@ -457,7 +480,7 @@ def test_combined_report_has_validation_and_runtime_sections(tmp_path: Path):
                 "repo_root": tmp_path,
                 "run_root": run_root,
                 "skill": "sample-skill",
-                "metadata": {"mode": "validation", "run_id": "run", "skill": "sample-skill"},
+                "metadata": {"mode": "validation", "run_id": "run", "skill": "sample-skill", "eval_kind": eval_kind},
                 "results": [validation],
             },
             {
@@ -465,15 +488,18 @@ def test_combined_report_has_validation_and_runtime_sections(tmp_path: Path):
                 "repo_root": tmp_path,
                 "run_root": run_root,
                 "skill": "sample-skill",
-                "metadata": {"mode": "with_skill", "run_id": "run", "skill": "sample-skill", "agent_model": "gpt-test"},
+                "metadata": {
+                    "mode": "with_skill",
+                    "run_id": "run",
+                    "skill": "sample-skill",
+                    "agent_model": "gpt-test",
+                    "eval_kind": eval_kind,
+                    "qualitative_enabled": eval_kind == "qualitative",
+                    "runtime_enabled": eval_kind == "runtime",
+                },
                 "results": [case],
             },
         ]
     )
 
-    report = (run_root / "report.md").read_text(encoding="utf-8")
-    assert "## Validation" in report
-    assert "## Deterministic" in report
-    assert "## Qualitative" in report
-    assert "## Runtime" in report
-    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report
+    return (run_root / "report.md").read_text(encoding="utf-8")

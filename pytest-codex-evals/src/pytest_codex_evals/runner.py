@@ -208,7 +208,7 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
     shutil.copytree(
         case.fixture_dir,
         side_dir / "service",
-        ignore=shutil.ignore_patterns("*_eval.json", ".observe", ".venv", "__pycache__", "*.pyc", "uv.lock", "*.db"),
+        ignore=shutil.ignore_patterns("eval", "*_eval.json", ".observe", ".venv", "__pycache__", "*.pyc", "uv.lock", "*.db"),
     )
     if side == "with_skill":
         skills_dir = side_dir / ".agents" / "skills"

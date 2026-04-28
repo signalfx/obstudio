@@ -5,6 +5,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from .eval_files import eval_file_layout, iter_eval_files
 from .models import EvalCase, EvalDefinition
 from .schema_resources import load_schema
 
@@ -19,12 +20,14 @@ def discover_cases(
     schema = load_schema("eval.schema.json")
     validator = Draft202012Validator(schema)
     cases: list[EvalCase] = []
-    for path in sorted(eval_root.rglob("*_eval.json")):
+    for path in iter_eval_files(eval_root):
+        layout = eval_file_layout(path)
+        if layout is None:
+            continue
         data = json.loads(path.read_text(encoding="utf-8"))
-        kind = path.name.removesuffix("_eval.json")
-        data.setdefault("language", path.parent.parent.name)
-        data.setdefault("service", path.parent.name)
-        data.setdefault("id", f"{data['language']}/{data['service']}/{kind}")
+        data.setdefault("language", layout.language)
+        data.setdefault("service", layout.service)
+        data.setdefault("id", layout.default_id)
         validator.validate(data)
         definition = EvalDefinition.model_validate(data)
         if skill and definition.skill != skill:
@@ -46,7 +49,7 @@ def discover_cases(
                     deterministic_checks=definition.deterministic_checks,
                     qualitative_checks=definition.qualitative_checks,
                     definition_path=path,
-                    fixture_dir=path.parent,
+                    fixture_dir=layout.fixture_dir,
                 )
             )
     return cases

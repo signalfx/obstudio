@@ -30,7 +30,9 @@ def write_eval_repo(pytester: pytest.Pytester) -> None:
     service_dir = pytester.path / "evals" / "sample" / "service"
     service_dir.mkdir(parents=True)
     (service_dir / "app.py").write_text("print('hello')\n", encoding="utf-8")
-    (service_dir / "sample_eval.json").write_text(
+    eval_dir = service_dir / "eval" / "qual"
+    eval_dir.mkdir(parents=True)
+    (eval_dir / "sample.json").write_text(
         json.dumps(
             {
                 "skill": "sample-skill",
@@ -47,7 +49,9 @@ def write_eval_repo(pytester: pytest.Pytester) -> None:
     other_dir = pytester.path / "evals" / "sample" / "other"
     other_dir.mkdir(parents=True)
     (other_dir / "app.py").write_text("print('other')\n", encoding="utf-8")
-    (other_dir / "other_eval.json").write_text(
+    other_eval_dir = other_dir / "eval" / "qual"
+    other_eval_dir.mkdir(parents=True)
+    (other_eval_dir / "other.json").write_text(
         json.dumps(
             {
                 "skill": "other-skill",
@@ -68,8 +72,8 @@ def test_eval_json_files_collect_as_pytest_items(pytester: pytest.Pytester):
     result.assert_outcomes()
     result.stdout.fnmatch_lines(
         [
-            "evals/sample/service/sample_eval.json::sample-skill::sample/service::direct",
-            "evals/sample/service/sample_eval.json::sample-skill::sample/service::runtime-preserving",
+            "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::direct",
+            "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::runtime-preserving",
             "2 tests collected*",
         ]
     )
@@ -99,7 +103,7 @@ def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
     result.assert_outcomes()
     result.stdout.fnmatch_lines(
         [
-            "evals/sample/service/sample_eval.json::sample-skill::sample/service::runtime-preserving",
+            "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::runtime-preserving",
             "1/2 tests collected*",
         ]
     )
@@ -108,9 +112,9 @@ def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
 def test_eval_json_files_do_not_require_fixture_files(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"
-    eval_dir = pytester.path / "evals" / "sample" / "no-fixture"
+    eval_dir = pytester.path / "evals" / "sample" / "no-fixture" / "eval" / "qual"
     eval_dir.mkdir(parents=True)
-    (eval_dir / "sample_eval.json").write_text(
+    (eval_dir / "sample.json").write_text(
         json.dumps(
             {
                 "skill": "sample-skill",
@@ -143,7 +147,9 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"
     service_dir = pytester.path / "evals" / "sample" / "service"
-    (service_dir / "sample_sanity_eval.json").write_text(
+    sanity_dir = service_dir / "eval" / "sanity"
+    sanity_dir.mkdir(parents=True)
+    (sanity_dir / "sample.json").write_text(
         json.dumps(
             {
                 "skill": "sample-skill",
@@ -153,12 +159,14 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
         ),
         encoding="utf-8",
     )
-    (service_dir / "sample_runtime_eval.json").write_text(
+    runtime_dir = service_dir / "eval" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "sample.json").write_text(
         json.dumps(
             {
                 "skill": "sample-skill",
                 "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
-                "deterministic_checks": [
+                "checks": [
                     {
                         "id": "runtime",
                         "description": "Runtime check.",
@@ -173,12 +181,18 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
 
     sanity = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "sanity")
     sanity.assert_outcomes()
-    sanity.stdout.fnmatch_lines(["evals/sample/service/sample_sanity_eval.json::sample-skill::sample/service::direct", "1 test collected*"])
+    sanity.stdout.fnmatch_lines(["evals/sample/service/eval/sanity/sample.json::sample-skill::sample/service::direct", "1 test collected*"])
 
     qualitative = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "qualitative")
     qualitative.assert_outcomes()
-    qualitative.stdout.fnmatch_lines(["no tests collected*"])
+    qualitative.stdout.fnmatch_lines(
+        [
+            "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::direct",
+            "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::runtime-preserving",
+            "2 tests collected*",
+        ]
+    )
 
     runtime = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "runtime")
     runtime.assert_outcomes()
-    runtime.stdout.fnmatch_lines(["evals/sample/service/sample_runtime_eval.json::sample-skill::sample/service::runtime", "1 test collected*"])
+    runtime.stdout.fnmatch_lines(["evals/sample/service/eval/runtime/sample.json::sample-skill::sample/service::runtime", "1 test collected*"])

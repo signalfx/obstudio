@@ -49,7 +49,8 @@ def grade_deterministic(
             continue
         if check.applies_to not in ("both", side):
             continue
-        results.append(run_check(check, service_dir, final_message, trace, runtime_enabled, repo_root))
+        eval_dir = case.definition_path.parent if case.definition_path else None
+        results.append(run_check(check, service_dir, final_message, trace, runtime_enabled, repo_root, eval_dir))
 
     return GradeResult(checks=results)
 
@@ -116,6 +117,7 @@ def run_check(
     trace: TraceSummary,
     runtime_enabled: bool = False,
     repo_root: Path | None = None,
+    eval_dir: Path | None = None,
 ) -> GradeCheckResult:
     kind = check.kind
     evidence = ""
@@ -176,7 +178,7 @@ def run_check(
                 category="runtime",
                 skipped=True,
             )
-        return run_observer_docker_runtime(check, service_dir, repo_root)
+        return run_observer_docker_runtime(check, service_dir, repo_root, eval_dir)
 
     return result(check, False, f"Unknown check kind: {kind}")
 

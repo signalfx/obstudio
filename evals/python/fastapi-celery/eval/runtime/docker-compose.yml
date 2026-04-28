@@ -1,0 +1,61 @@
+services:
+  observer:
+    build:
+      context: ../../../../..
+      dockerfile: evals/python/fastapi-celery/eval/runtime/observer-runtime.Dockerfile
+    ports:
+      - "3000:3000"
+      - "4318:4318"
+      - "4317:4317"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - OTLP_HTTP_PORT=4318
+      - OTLP_GRPC_PORT=4317
+
+  redis:
+    image: redis:7-alpine
+
+  api:
+    build:
+      context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - OTEL_SERVICE_NAME=fastapi-celery-api
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_SEMCONV_STABILITY_OPT_IN=http
+    depends_on:
+      - observer
+      - redis
+
+  worker:
+    build:
+      context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
+      dockerfile: Dockerfile
+    command: uv run celery -A worker worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - OTEL_SERVICE_NAME=fastapi-celery-worker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_SEMCONV_STABILITY_OPT_IN=http
+    depends_on:
+      - observer
+      - redis
+
+  traffic:
+    profiles:
+      - traffic
+    build:
+      context: .
+      dockerfile: traffic.Dockerfile
+    depends_on:
+      - api

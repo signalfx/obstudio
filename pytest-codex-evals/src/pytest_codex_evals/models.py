@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 CheckKind = Literal[
@@ -45,15 +45,15 @@ class PromptVariant(BaseModel):
 
 
 class EvalDefinition(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     id: str
     skill: str
     language: str
     service: str
     prompts: list[PromptVariant]
-    deterministic_checks: list[DeterministicCheck] = Field(default_factory=list)
-    qualitative_checks: list[str] = Field(default_factory=list)
+    deterministic_checks: list[DeterministicCheck] = Field(default_factory=list, validation_alias=AliasChoices("checks", "deterministic_checks"))
+    qualitative_checks: list[str] = Field(default_factory=list, validation_alias=AliasChoices("rubric", "qualitative_checks"))
     definition_path: Path | None = None
     fixture_dir: Path | None = None
 
@@ -67,7 +67,7 @@ class EvalDefinition(BaseModel):
 
 
 class EvalCase(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     id: str
     base_id: str
