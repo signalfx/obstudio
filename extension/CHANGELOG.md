@@ -1,9 +1,10 @@
 # Change Log
 
-All notable changes to the "observability-studio" extension will be documented in this file.
+All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+## 0.0.1
 
-## [Unreleased]
-
-- Initial release
+- Start and manage a bundled local Observer backend from VS Code
+- Open the Observer UI in a VS Code webview
+- Expose stable local OTLP endpoints for development
+- Configure MCP integration for Codex, Claude Code, and Cursor

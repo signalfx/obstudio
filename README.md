@@ -146,6 +146,6 @@ report locations.
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development process and
 [AGENTS.md](AGENTS.md) for repo-specific AI agent guidelines.
 
-## License
+## Splunk Copyright Notice
 
 Apache License 2.0. See [LICENSE](LICENSE).

@@ -1,6 +1,6 @@
-# Observability Studio
+# Splunk Observability Studio
 
-Observability Studio is a VS Code extension for viewing OpenTelemetry data locally while you work.
+Splunk Observability Studio is a VS Code extension for viewing OpenTelemetry data locally while you work.
 
 When the extension activates, it starts a bundled observer binary, exposes OTLP receivers on localhost, and opens an embedded Observer UI inside VS Code.
 
@@ -15,7 +15,7 @@ When the extension activates, it starts a bundled observer binary, exposes OTLP 
 
 ## Commands
 
-- `Observability Studio: Open Observer` — opens the Observer webview panel.
+- `Splunk Observability Studio: Open Observer` — opens the Observer webview panel.
 
 ## How It Works
 

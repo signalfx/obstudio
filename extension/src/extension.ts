@@ -77,7 +77,7 @@ type ObserverProbeResult =
 	| { reason: string; status: 'mismatch' };
 
 export async function activate(context: vscode.ExtensionContext) {
-	observerOutputChannel = vscode.window.createOutputChannel('Observability Studio');
+	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
 	logObserverLifecycle('Extension activated.');
 
@@ -119,7 +119,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 		const message = getErrorMessage(error);
 		appendObserverOutputLine(`Observer startup failed: ${message}`);
-		void vscode.window.showErrorMessage(`Observability Studio could not start: ${message}`);
+		void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 	});
 
 	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
@@ -204,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			const message = getErrorMessage(error);
-			void vscode.window.showErrorMessage(`Observability Studio could not start: ${message}`);
+			void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 			refreshObserverPanel();
 		}
 	});
@@ -229,7 +229,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			const message = getErrorMessage(error);
-			void vscode.window.showErrorMessage(`Observability Studio could not start: ${message}`);
+			void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 			refreshObserverPanel();
 		}
 	});
@@ -442,7 +442,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				observerBaseUrl = undefined;
 				observerUsesSharedServer = false;
 				syncObserverUi();
-				void vscode.window.showErrorMessage(`Observability Studio failed to start observer: ${error.message}`);
+				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${error.message}`);
 			}
 		});
 
@@ -842,7 +842,7 @@ async function restartObserver(context: vscode.ExtensionContext): Promise<void> 
 			return;
 		}
 		const message = getErrorMessage(error);
-		void vscode.window.showErrorMessage(`Observability Studio could not start: ${message}`);
+		void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 		refreshObserverPanel();
 	}
 }
