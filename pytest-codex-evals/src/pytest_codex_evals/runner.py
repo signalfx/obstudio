@@ -34,6 +34,7 @@ def run_case(
     judge_model: str | None = None,
     qualitative: bool = True,
     runtime: bool = False,
+    eval_kind: str = "standard",
     sides: tuple[str, ...] = ("with_skill", "baseline"),
 ) -> CaseResult:
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
@@ -54,6 +55,7 @@ def run_case(
                 judge_model=judge_model,
                 qualitative=qualitative,
                 runtime=runtime,
+                eval_kind=eval_kind,
             )
         if "baseline" in sides:
             baseline = run_side(
@@ -68,6 +70,7 @@ def run_case(
                 judge_model=judge_model,
                 qualitative=qualitative,
                 runtime=runtime,
+                eval_kind=eval_kind,
             )
         return CaseResult(
             id=case.id,
@@ -96,6 +99,7 @@ def run_side(
     judge_model: str | None,
     qualitative: bool,
     runtime: bool,
+    eval_kind: str,
 ) -> SideResult:
     side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
@@ -129,7 +133,16 @@ def run_side(
     trace = parse_trace(trace_path)
     agent_tokens = trace.usage.total_tokens
     final_message = final_path.read_text(encoding="utf-8", errors="replace")
-    deterministic = grade_deterministic(case, exec_dir, final_message, trace, side, runtime_enabled=runtime, repo_root=repo_root)
+    deterministic = grade_deterministic(
+        case,
+        exec_dir,
+        final_message,
+        trace,
+        side,
+        runtime_enabled=runtime,
+        repo_root=repo_root,
+        eval_kind=eval_kind,
+    )
     deterministic_path = exec_dir / "deterministic_grade.json"
     deterministic_path.write_text(deterministic.model_dump_json(indent=2), encoding="utf-8")
 
@@ -139,7 +152,7 @@ def run_side(
     errors: list[str] = []
     if completed.returncode != 0:
         errors.append(f"codex exec exited with {completed.returncode}")
-    if qualitative:
+    if qualitative and case.qualitative_checks:
         qualitative_start = time.monotonic()
         try:
             qualitative_path = run_qualitative_grade(

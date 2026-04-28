@@ -115,6 +115,12 @@ obstudio/
 | `make vet` | Vet Go source |
 | `make tidy` | Tidy Go modules |
 | `make list-skills` | List repo skills |
+| `make eval-validation` | Validate eval JSONs without running Codex |
+| `make eval-sanity` | Run quick loaded-skill eval checks |
+| `make eval-qualitative` | Run schema-constrained qualitative eval checks |
+| `make eval-runtime` | Run Docker/Observer runtime eval checks |
+| `make eval-all` | Run validation, sanity, qualitative, and runtime evals |
+| `make eval-all-ab` | Run validation plus A/B sanity, qualitative, and runtime evals |
 | `make test-pytest-plugin` | Run reusable pytest plugin tests |
 | `make build-pytest-plugin` | Build pytest plugin distribution artifacts |
 | `make publish-pytest-plugin` | Publish pytest plugin artifacts with `uv publish` credentials |

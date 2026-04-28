@@ -55,17 +55,17 @@ Use these commands:
 
 ```bash
 make skill-eval-list
-make skill-eval SKILL=skills/otel-audit
-make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore
-make skill-eval SKILL=skills/otel-instrument CASE=go/kvstore PROMPT=direct
-make skill-eval-ab SKILL=skills/otel-audit MODEL=gpt-5.5 NO_QUALITATIVE=1
-make skill-eval-all
+make eval-validation SKILL=skills/otel-audit
+make eval-sanity SKILL=skills/otel-audit
+make eval-qualitative SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-runtime SKILL=skills/otel-instrument
+make eval-all-ab SKILL=skills/otel-audit MODEL=gpt-5.5
 ```
 
 Outputs:
 
 - Full artifacts: `.workspace/codex-evals/<skill>/<run-id>/`
-- Latest summaries: `eval-reports/<skill>/REPORT.md` and `benchmark.json`
+- Latest summaries: `eval-reports/<skill>/<kind>/report.md` and `benchmark.json`
 
 ## Skill Maintenance
 

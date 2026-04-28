@@ -45,10 +45,14 @@ machine-validated.
 
 Each eval has a `prompts[]` array of task variants. The pytest plugin collects
 each `*_eval.json` file directly and expands every variant into its own pytest
-item. For each live case, the harness runs two sides:
+item. Live runs are selected by eval kind:
 
-- `with_skill`: prefixes the task with `Use the $<skill> skill.`
-- `baseline`: runs the task as written, with no skill name and no repo skills visible
+- `sanity`: quick skill-loading and final-output guards.
+- `qualitative`: schema-constrained judge checks.
+- `runtime`: Docker/Observer trace and metric checks.
+
+For each live case, the harness always runs `with_skill`. Passing `AB=1` adds
+the `baseline` side with no skill name and no repo skills visible.
 
 ## A/B Runs
 
@@ -77,12 +81,11 @@ Checks default to `with_skill`, keeping the A/B baseline simple. Baseline runs
 only need to prove run health and skill isolation unless a check explicitly sets
 `applies_to` to `baseline` or `both`.
 
-Runtime checks use `observer_docker_runtime`. They are skipped by default and
-only run when `[runtime].enabled = true` or `--codex-runtime` is set. The check
-stages Observer source, builds the Linux Observer binary from source before
-Docker starts, packages that binary through Compose, starts the app containers,
-sends traffic, then queries the managed Observer API for trace and metric
-evidence.
+Runtime checks use `observer_docker_runtime` and run through `eval-runtime`.
+The check stages Observer source, builds the Linux Observer binary from source
+before Docker starts, packages that binary through Compose, starts the app
+containers, sends traffic, then queries the managed Observer API for trace and
+metric evidence.
 
 The harness also adds setup guards to every run:
 
@@ -101,27 +104,30 @@ make test-eval-harness
 make test-pytest-plugin
 make skill-eval-list
 make eval-validation SKILL=skills/otel-audit
-make eval-with-skill SKILL=skills/otel-instrument CASE=go/kvstore
-make eval-with-baseline SKILL=skills/otel-instrument CASE=go/kvstore
-make eval-ab SKILL=skills/otel-audit MODEL=gpt-5.5 NO_QUALITATIVE=1
-make eval-with-skill SKILL=skills/otel-instrument CASE=python/fastapi-celery EVAL_RUNTIME=1
-make eval-all SKILL=skills/otel-audit CASE=go/chi-basic PROMPT=direct
+make eval-sanity SKILL=skills/otel-audit
+make eval-sanity-ab SKILL=skills/otel-audit
+make eval-qualitative SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-qualitative-ab SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-runtime SKILL=skills/otel-instrument
+make eval-runtime-ab SKILL=skills/otel-instrument
+make eval-all SKILL=skills/otel-instrument
+make eval-all-ab SKILL=skills/otel-instrument
 ```
 
-`eval-validation` validates JSON and fixture shape only. `eval-with-skill` and
-`eval-with-baseline` each run one Codex side and grade deterministic plus
-qualitative checks. The live A/B command is:
+`eval-validation` validates JSON and fixture shape only. `eval-sanity`,
+`eval-qualitative`, and `eval-runtime` run the loaded-skill side. Add baseline
+with `AB=1`, `WITH=ab`, or the `*-ab` targets. The direct pytest form is:
 
 ```bash
-cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-config codex-evals.ab.toml
+cd evals && uv run pytest <language>/<service> -k "<prompt-id>" --skill "../skills/<skill-dir>" --codex-eval-kind qualitative --ab
 ```
 
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
 Codex controls (`--skill`, `--codex-eval-config`, `--model`,
-`--no-qualitative`, `--codex-runtime`), JSON eval collection, validation, side
-execution, A/B execution, and reporting. Service selection is plain pytest path
-selection, prompt selection is plain `-k` filtering, and `--skill` points to a
-skill directory containing `SKILL.md`.
+`--codex-eval-kind`, `--ab`, `--no-qualitative`, `--codex-runtime`), JSON eval
+collection, validation, side execution, A/B execution, and reporting. Service
+selection is plain pytest path selection, prompt selection is plain `-k`
+filtering, and `--skill` points to a skill directory containing `SKILL.md`.
 
 Build and publish it with:
 
@@ -169,11 +175,13 @@ Live A/B runs also include:
       summary.json
 ```
 
-The canonical latest summary is copied to:
+The latest summary is copied by eval kind:
 
 ```text
-eval-reports/<skill>/REPORT.md
-eval-reports/<skill>/benchmark.json
+eval-reports/<skill>/validation/report.md
+eval-reports/<skill>/sanity/report.md
+eval-reports/<skill>/qualitative/report.md
+eval-reports/<skill>/runtime/report.md
 ```
 
 Mode-specific summaries stay in the timestamped `.workspace` run directory.

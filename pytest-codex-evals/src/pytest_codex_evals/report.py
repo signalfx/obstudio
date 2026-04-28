@@ -112,9 +112,9 @@ def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:
         benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
         report_path.write_text(report, encoding="utf-8")
 
-        latest_dir = repo_root / "eval-reports" / skill
+        latest_dir = repo_root / "eval-reports" / skill / report_key(benchmark)
         latest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(report_path, latest_dir / "REPORT.md")
+        shutil.copyfile(report_path, latest_dir / "report.md")
         shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
 
 
@@ -184,11 +184,13 @@ def combined_metadata(
     live_metadata = [item.get("metadata", {}) for item in live]
     metadata_sources = live_metadata or [validation_metadata]
     modes = [item.get("mode", "validation") for item in live] or ["validation"]
+    eval_kinds = sorted({str(meta.get("eval_kind") or "-") for meta in metadata_sources if meta.get("eval_kind")}) or ["validation"]
     agent_models = sorted({str(meta.get("agent_model") or "-") for meta in metadata_sources if meta.get("agent_model")}) or ["-"]
     judge_models = sorted({str(meta.get("judge_model") or "-") for meta in metadata_sources if meta.get("judge_model")}) or ["-"]
     config_paths = sorted({str(meta.get("config_path") or "-") for meta in [validation_metadata, *live_metadata] if meta.get("config_path")}) or ["-"]
     return {
         "mode": ", ".join(modes),
+        "eval_kind": ", ".join(eval_kinds),
         "skill": skill,
         "run_id": run_root.name,
         "agent_model": ", ".join(agent_models),
@@ -211,6 +213,7 @@ def render_combined_report(skill: str, benchmark: dict[str, Any]) -> str:
     ]
     for label, key in (
         ("Modes", "mode"),
+        ("Eval kind", "eval_kind"),
         ("Skill", "skill"),
         ("Run ID", "run_id"),
         ("Agent model", "agent_model"),
@@ -580,6 +583,7 @@ def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
     ]
     for label, key in (
         ("Mode", "mode"),
+        ("Eval kind", "eval_kind"),
         ("Skill", "skill"),
         ("Run ID", "run_id"),
         ("Agent model", "agent_model"),
@@ -696,6 +700,7 @@ def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
     ]
     for label, key in (
         ("Mode", "mode"),
+        ("Eval kind", "eval_kind"),
         ("Skill", "skill"),
         ("Run ID", "run_id"),
         ("Config", "config_path"),
@@ -735,14 +740,29 @@ def report_metadata(
 ) -> dict[str, Any]:
     normalized = dict(metadata or {})
     normalized.setdefault("mode", mode)
+    normalized.setdefault("eval_kind", "validation" if mode == "validation" else "standard")
     normalized.setdefault("skill", skill)
     normalized.setdefault("run_id", run_root.name)
     normalized.setdefault("agent_model", "-")
     normalized.setdefault("judge_model", "-")
     normalized.setdefault("qualitative_enabled", "-")
+    normalized.setdefault("runtime_enabled", "-")
     normalized.setdefault("workers", "-")
     normalized.setdefault("config_path", "-")
     return normalized
+
+
+def report_key(benchmark: dict[str, Any]) -> str:
+    metadata = benchmark.get("metadata", {})
+    value = str(metadata.get("eval_kind") or "").strip().lower()
+    if value and "," not in value:
+        return safe_name(value)
+    mode = str(metadata.get("mode") or "validation").strip().lower()
+    if mode == "with_skill":
+        return "skill"
+    if mode == "with_baseline":
+        return "baseline"
+    return safe_name(mode or "validation")
 
 
 def grouped_case_results(results: list[CaseResult]) -> dict[str, list[CaseResult]]:

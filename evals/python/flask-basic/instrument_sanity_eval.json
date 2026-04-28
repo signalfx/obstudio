@@ -1,0 +1,13 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Flask service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Flask service in ./service with OpenTelemetry while preserving the existing runtime and startup command."
+    }
+  ]
+}

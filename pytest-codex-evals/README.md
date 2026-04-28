@@ -9,7 +9,9 @@ qualitative grading, optional Docker runtime checks, and aggregate reports.
 - Pytest collection for `*_eval.json` files.
 - One pytest item per `prompts[]` entry.
 - Fast validation by default: schema, eval directory, and skill path.
-- Optional live Codex A/B runs through TOML config.
+- Live Codex runs by eval kind: sanity, qualitative, runtime, or legacy
+  standard artifact checks.
+- Optional A/B baseline side with `--ab`.
 - Deterministic checks from final text, files, JSONL traces, and command output.
 - Schema-constrained qualitative grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
@@ -125,15 +127,15 @@ the telemetry backend should be built from the same checkout:
 }
 ```
 
-Runtime checks are skipped unless `[runtime].enabled = true` is set in the
-TOML config or `--codex-runtime` is passed.
+Runtime checks run when `--codex-eval-kind runtime`, `[runtime].enabled = true`,
+or `--codex-runtime` is passed.
 
 ## Commands
 
 Validate evals without running Codex:
 
 ```bash
-uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.validation.toml
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind validation
 ```
 
 List cases:
@@ -151,25 +153,21 @@ uv run pytest evals/go/kvstore -k runtime-preserving --skill skills/<skill-dir>
 Run the loaded-skill side:
 
 ```bash
-uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.toml
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind sanity
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind qualitative
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind runtime
 ```
 
-Run the no-skill baseline side:
+Add the no-skill baseline side:
 
 ```bash
-uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.baseline.toml
-```
-
-Run live Codex A/B:
-
-```bash
-uv run pytest evals --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind qualitative --ab
 ```
 
 Parallelize cases with pytest-xdist:
 
 ```bash
-uv run pytest -n 4 evals --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
+uv run pytest -n 4 evals --skill skills/<skill-dir> --codex-eval-kind qualitative --ab
 ```
 
 The plugin writes per-worker result payloads and merges them into the same
@@ -178,7 +176,7 @@ aggregate reports at session finish.
 Print per-item progress with:
 
 ```bash
-uv run pytest -n 4 evals --codex-eval-progress --skill skills/<skill-dir> --codex-eval-config codex-evals.ab.toml
+uv run pytest -n 4 evals --codex-eval-progress --skill skills/<skill-dir> --codex-eval-kind qualitative --ab
 ```
 
 ## Config
@@ -204,11 +202,12 @@ With-baseline config:
 mode = "with_baseline"
 ```
 
-Live A/B config:
+Live config:
 
 ```toml
 [run]
-mode = "ab"
+mode = "with_skill"
+eval_kind = "qualitative"
 
 [qualitative]
 enabled = true
@@ -223,8 +222,12 @@ judge = "gpt-5.5"
 
 `[models].agent` configures the task run, `--model` overrides it, and
 `[models].judge` configures the qualitative grading pass.
-`[runtime].enabled` controls Docker/Observer runtime checks; the command-line
-`--codex-runtime` flag can enable them for a single run.
+`[runtime].enabled` controls Docker/Observer runtime checks. CLI flags override
+the TOML mode for a single run:
+
+```bash
+uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind runtime --ab
+```
 
 ## Outputs
 
@@ -233,8 +236,8 @@ Validation-only runs write:
 ```text
 .workspace/codex-evals/<skill>/<run-id>/validation-report.md
 .workspace/codex-evals/<skill>/<run-id>/validation-benchmark.json
-eval-reports/<skill>/REPORT.md
-eval-reports/<skill>/benchmark.json
+eval-reports/<skill>/validation/report.md
+eval-reports/<skill>/validation/benchmark.json
 ```
 
 Live A/B runs write:
@@ -246,8 +249,8 @@ Live A/B runs write:
   eval.json
   with_skill.json
   with_baseline.json
-eval-reports/<skill>/REPORT.md
-eval-reports/<skill>/benchmark.json
+eval-reports/<skill>/<kind>/report.md
+eval-reports/<skill>/<kind>/benchmark.json
 ```
 
 With-skill and with-baseline runs write analogous `with_skill-*` and
@@ -259,8 +262,8 @@ checks. Live tables aggregate prompts by eval file and show with-skill and
 baseline token usage and elapsed time. Baseline columns are `-` when the
 selected run mode did not execute the baseline side.
 
-Only the canonical latest `REPORT.md` and `benchmark.json` are copied under
-`eval-reports/<skill>/`; mode-specific summaries remain in `.workspace`.
+Each eval kind has its own latest `report.md` and `benchmark.json` under
+`eval-reports/<skill>/<kind>/`; mode-specific summaries remain in `.workspace`.
 
 ## Publish
 

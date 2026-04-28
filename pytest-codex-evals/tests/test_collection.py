@@ -82,13 +82,12 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     result = pytester.runpytest("--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "sample-skill"
-    assert (latest_dir / "REPORT.md").is_file()
+    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
+    assert (latest_dir / "report.md").is_file()
     benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["metadata"]["mode"] == "validation"
+    assert benchmark["metadata"]["eval_kind"] == "validation"
     assert benchmark["validation"]["summary"]["case_count"] == 2
-    assert not (latest_dir / "AB_REPORT.md").exists()
-    assert not (latest_dir / "VALIDATION_REPORT.md").exists()
 
 
 def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
@@ -134,7 +133,52 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     result = pytester.runpytest("-n", "2", "--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "sample-skill"
+    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
     benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["metadata"]["mode"] == "validation"
     assert benchmark["validation"]["summary"]["case_count"] == 2
+
+
+def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+    service_dir = pytester.path / "evals" / "sample" / "service"
+    (service_dir / "sample_sanity_eval.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Load the skill and report status."}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (service_dir / "sample_runtime_eval.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+                "deterministic_checks": [
+                    {
+                        "id": "runtime",
+                        "description": "Runtime check.",
+                        "kind": "observer_docker_runtime",
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    sanity = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "sanity")
+    sanity.assert_outcomes()
+    sanity.stdout.fnmatch_lines(["evals/sample/service/sample_sanity_eval.json::sample-skill::sample/service::direct", "1 test collected*"])
+
+    qualitative = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "qualitative")
+    qualitative.assert_outcomes()
+    qualitative.stdout.fnmatch_lines(["no tests collected*"])
+
+    runtime = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "runtime")
+    runtime.assert_outcomes()
+    runtime.stdout.fnmatch_lines(["evals/sample/service/sample_runtime_eval.json::sample-skill::sample/service::runtime", "1 test collected*"])

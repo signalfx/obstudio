@@ -9,13 +9,23 @@ NO_QUALITATIVE ?=
 EVAL_RUNTIME ?=
 EVAL_WORKERS ?= 1
 EVAL_PROGRESS ?= 1
+AB ?=
+WITH ?=
 EVAL_CONFIG ?= codex-evals.toml
 EVAL_VALIDATION_CONFIG ?= codex-evals.validation.toml
 EVAL_BASELINE_CONFIG ?= codex-evals.baseline.toml
 EVAL_AB_CONFIG ?= codex-evals.ab.toml
+SANITY_CASE ?= python/flask-basic
+SANITY_FILTER ?= sanity
+RUNTIME_CASE ?= python/fastapi-celery
+RUNTIME_FILTER ?= runtime
 
 EVAL_TARGET = $(if $(CASE),$(CASE),.)
 EVAL_PROMPT_FILTER = $(if $(PROMPT),-k "$(PROMPT)",)
+EVAL_SANITY_TARGET = $(if $(CASE),$(CASE),$(SANITY_CASE))
+EVAL_SANITY_FILTER = $(if $(PROMPT),-k "$(PROMPT)",$(if $(SANITY_FILTER),-k "$(SANITY_FILTER)",))
+EVAL_RUNTIME_TARGET = $(if $(CASE),$(CASE),$(RUNTIME_CASE))
+EVAL_RUNTIME_FILTER = $(if $(PROMPT),-k "$(PROMPT)",$(if $(RUNTIME_FILTER),-k "$(RUNTIME_FILTER)",))
 EVAL_QUIET ?=
 EVAL_PYTEST_QUIET = $(if $(EVAL_QUIET),-qq,)
 EVAL_SKILL_PATH = $(if $(SKILL),$(if $(filter /%,$(SKILL)),$(SKILL),$(if $(wildcard $(SKILL)/SKILL.md),$(abspath $(SKILL)),$(abspath $(ROOT_DIR)/$(SKILL)))))
@@ -24,13 +34,15 @@ EVAL_WORKER_FLAGS = $(if $(filter 1,$(strip $(EVAL_WORKERS))),,-n $(EVAL_WORKERS
 EVAL_PROGRESS_FLAG = $(if $(filter 1 true yes,$(strip $(EVAL_PROGRESS))),--codex-eval-progress,)
 EVAL_CAPTURE_FLAGS = $(if $(filter 1 true yes,$(strip $(EVAL_PROGRESS))),-s,)
 EVAL_RUNTIME_FLAG = $(if $(filter 1 true yes,$(strip $(EVAL_RUNTIME))),--codex-runtime,)
+EVAL_AB_FLAG = $(if $(filter 1 true yes ab,$(strip $(AB) $(WITH))),--ab,)
 EVAL_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
+EVAL_KIND_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG) $(EVAL_AB_FLAG)
 EVAL_VALIDATION_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 EVAL_BASELINE_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_BASELINE_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
 EVAL_AB_FLAGS = $(EVAL_SKILL_FLAG) --codex-eval-config "$(EVAL_AB_CONFIG)" $(if $(MODEL),--model "$(MODEL)",) $(if $(NO_QUALITATIVE),--no-qualitative,) $(EVAL_RUNTIME_FLAG)
 EVAL_LIST_FLAGS = $(EVAL_FLAGS)
 
-.PHONY: build test eval-validation eval-with-skill eval-with-baseline eval-ab eval-all skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-all
+.PHONY: build test eval-validation eval-sanity eval-sanity-ab eval-qualitative eval-qualitative-ab eval-runtime eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-all
 
 build test:
 	@for dir in $(SUBDIRS); do \
@@ -49,6 +61,24 @@ eval-with-baseline: ## Run Codex baseline with no skill loaded, then grade basel
 eval-ab: ## Run Codex with_skill and with_baseline sides in one A/B comparison
 	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_AB_FLAGS) $(EVAL_PROGRESS_FLAG)
 
+eval-sanity: ## Run quick loaded-skill sanity checks; pass AB=1 or WITH=ab to include baseline
+	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_SANITY_TARGET) $(EVAL_SANITY_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind sanity $(EVAL_PROGRESS_FLAG)
+
+eval-sanity-ab: AB=1
+eval-sanity-ab: eval-sanity ## Run sanity checks with baseline
+
+eval-qualitative: ## Run schema-constrained qualitative grading; pass AB=1 or WITH=ab to include baseline
+	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_TARGET) $(EVAL_PROMPT_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind qualitative $(EVAL_PROGRESS_FLAG)
+
+eval-qualitative-ab: AB=1
+eval-qualitative-ab: eval-qualitative ## Run qualitative grading with baseline
+
+eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+	@uv run pytest $(EVAL_CAPTURE_FLAGS) $(EVAL_WORKER_FLAGS) $(EVAL_RUNTIME_TARGET) $(EVAL_RUNTIME_FILTER) $(EVAL_KIND_FLAGS) --codex-eval-kind runtime $(EVAL_PROGRESS_FLAG)
+
+eval-runtime-ab: AB=1
+eval-runtime-ab: eval-runtime ## Run runtime checks with baseline
+
 skill-eval: eval-with-skill ## Alias for eval-with-skill
 
 skill-eval-all: eval-with-skill ## Alias for eval-with-skill
@@ -63,11 +93,9 @@ skill-eval-ab-all: eval-ab ## Alias for eval-ab
 test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	@uv run pytest . --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 
-eval-all: ## Run validation and A/B modes
-	@printf "== Eval validation ==\n"
-	@$(MAKE) eval-validation EVAL_QUIET=1
-	@printf "validation passed\n"
-	@printf "\n== Live Codex A/B ==\n"
-	@$(MAKE) eval-ab
+eval-all: eval-validation eval-sanity eval-qualitative eval-runtime ## Run validation, sanity, qualitative, and runtime evals
+
+eval-all-ab: AB=1
+eval-all-ab: eval-all ## Run validation plus A/B sanity, qualitative, and runtime evals
 
 test-all: eval-all ## Alias for eval-all

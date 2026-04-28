@@ -69,6 +69,7 @@ def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
     settings = load_settings(config_path)
 
     assert settings.run_mode == "ab"
+    assert settings.eval_kind == "standard"
     assert settings.qualitative_enabled is False
     assert settings.runtime_enabled is True
     assert settings.agent_model == "gpt-5.2"
@@ -83,6 +84,16 @@ def test_config_loads_with_skill_and_with_baseline_modes(tmp_path: Path):
 
     assert load_settings(skill_config).run_mode == "with_skill"
     assert load_settings(baseline_config).run_mode == "with_baseline"
+
+
+def test_config_loads_eval_kind_aliases(tmp_path: Path):
+    config_path = tmp_path / "codex-evals.toml"
+    config_path.write_text("[run]\nmode = \"with_skill\"\neval_kind = \"deterministic\"\n", encoding="utf-8")
+
+    settings = load_settings(config_path)
+
+    assert settings.run_mode == "with_skill"
+    assert settings.eval_kind == "sanity"
 
 
 def test_command_backed_deterministic_check(tmp_path: Path):
@@ -148,6 +159,71 @@ def test_runtime_check_is_skipped_until_enabled(tmp_path: Path):
     assert check.category == "runtime"
     assert check.skipped
     assert grade.total == 2
+
+
+def test_sanity_eval_kind_runs_only_builtin_guards(tmp_path: Path):
+    (tmp_path / "service").mkdir()
+    skills_dir = tmp_path / ".agents" / "skills" / "sample-skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = EvalCase(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Load the skill.",
+        deterministic_checks=[
+            DeterministicCheck(
+                id="should-not-run",
+                description="This file check is not part of sanity mode.",
+                kind="file_exists",
+                path="missing.txt",
+            )
+        ],
+    )
+
+    grade = grade_deterministic(case, tmp_path, "done", parse_trace(empty_trace(tmp_path)), "with_skill", eval_kind="sanity")
+
+    assert {check.id for check in grade.checks} == {"final-message-present", "skills-loaded"}
+    assert grade.pass_rate == 1.0
+
+
+def test_runtime_eval_kind_runs_only_runtime_checks(tmp_path: Path):
+    (tmp_path / "service").mkdir()
+    skills_dir = tmp_path / ".agents" / "skills" / "sample-skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = EvalCase(
+        id="sample/service/sample-skill/runtime",
+        base_id="sample/service/sample-skill-runtime",
+        prompt_id="runtime",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Exercise runtime telemetry.",
+        deterministic_checks=[
+            DeterministicCheck(
+                id="should-not-run",
+                description="This file check is not part of runtime mode.",
+                kind="file_exists",
+                path="missing.txt",
+            ),
+            DeterministicCheck(
+                id="observer-runtime",
+                description="Runtime telemetry reaches Observer.",
+                kind="observer_docker_runtime",
+                runtime={"expect": {"traces": {"contains_any": ["sample-service"]}}},
+            ),
+        ],
+    )
+
+    grade = grade_deterministic(case, tmp_path, "done", parse_trace(empty_trace(tmp_path)), "with_skill", eval_kind="runtime")
+
+    check_ids = {check.id for check in grade.checks}
+    assert "should-not-run" not in check_ids
+    assert "observer-runtime" in check_ids
 
 
 def test_runtime_source_copies_are_staged_under_service_dir(tmp_path: Path):

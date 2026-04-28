@@ -16,6 +16,7 @@ def grade_deterministic(
     side: str,
     runtime_enabled: bool = False,
     repo_root: Path | None = None,
+    eval_kind: str = "standard",
 ) -> GradeResult:
     service_dir = run_dir / "service"
     results: list[GradeCheckResult] = []
@@ -44,11 +45,23 @@ def grade_deterministic(
         )
 
     for check in case.deterministic_checks:
+        if not check_matches_eval_kind(check, eval_kind):
+            continue
         if check.applies_to not in ("both", side):
             continue
         results.append(run_check(check, service_dir, final_message, trace, runtime_enabled, repo_root))
 
     return GradeResult(checks=results)
+
+
+def check_matches_eval_kind(check: DeterministicCheck, eval_kind: str) -> bool:
+    if eval_kind == "standard":
+        return True
+    if eval_kind == "runtime":
+        return check.kind == "observer_docker_runtime"
+    if eval_kind in {"sanity", "qualitative", "validation"}:
+        return False
+    return True
 
 
 def check_repo_skills_loaded(run_dir: Path, target_skill: str) -> GradeCheckResult:

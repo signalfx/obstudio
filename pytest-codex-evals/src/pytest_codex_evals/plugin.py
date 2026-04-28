@@ -25,6 +25,13 @@ PROGRESS_IS_WORKER = False
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("codex-evals")
     group.addoption("--codex-eval-config", default="codex-evals.toml", help="Path to codex eval TOML config")
+    group.addoption(
+        "--codex-eval-kind",
+        default="",
+        choices=("validation", "standard", "sanity", "qualitative", "runtime"),
+        help="Eval kind to run: validation, sanity, qualitative, runtime, or legacy standard",
+    )
+    group.addoption("--ab", action="store_true", default=False, help="Run loaded-skill and baseline sides")
     group.addoption("--skill", default="", help="Path to the skill directory to load and evaluate")
     group.addoption("--model", default="", help="Optional Codex model override")
     group.addoption("--no-qualitative", action="store_true", default=False, help="Skip schema-constrained qualitative grading")
@@ -38,7 +45,7 @@ def pytest_configure(config: pytest.Config) -> None:
     setattr(config, RUNS_ATTR, {})
     setattr(config, SETTINGS_ATTR, load_settings(config_path(config)))
     PROGRESS_ENABLED = bool(config.getoption("--codex-eval-progress"))
-    PROGRESS_MODE = settings(config).run_mode
+    PROGRESS_MODE = progress_label(config)
     PROGRESS_IS_WORKER = is_xdist_worker(config)
     if is_xdist_worker(config):
         run_id = config.workerinput.get("codex_eval_run_id") or new_run_id()
@@ -68,7 +75,11 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    runs: dict[tuple[str, str, str], dict[str, Any]] = getattr(session.config, RUNS_ATTR, {})
+    if exitstatus == pytest.ExitCode.NO_TESTS_COLLECTED and eval_kind(session.config) != "validation":
+        session.exitstatus = pytest.ExitCode.OK
+        return
+
+    runs: dict[tuple[str, str, str, str], dict[str, Any]] = getattr(session.config, RUNS_ATTR, {})
     if is_xdist_worker(session.config):
         write_worker_results(session.config, runs)
         return
@@ -104,7 +115,7 @@ def worker_results_root(repo_root: Path, config: pytest.Config) -> Path:
     return repo_root / ".workspace" / "codex-evals" / "_worker-results" / getattr(config, RUN_ID_ATTR)
 
 
-def write_worker_results(config: pytest.Config, runs: dict[tuple[str, str, str], dict[str, Any]]) -> None:
+def write_worker_results(config: pytest.Config, runs: dict[tuple[str, str, str, str], dict[str, Any]]) -> None:
     worker_id = config.workerinput.get("workerid", "worker")
     for index, run in enumerate(runs.values()):
         results = run["results"]
@@ -112,9 +123,10 @@ def write_worker_results(config: pytest.Config, runs: dict[tuple[str, str, str],
             continue
         root = worker_results_root(run["repo_root"], config)
         root.mkdir(parents=True, exist_ok=True)
-        path = root / f"{worker_id}-{index}-{safe_name(run['skill'])}-{run['mode']}.json"
+        path = root / f"{worker_id}-{index}-{safe_name(run['skill'])}-{run['eval_kind']}-{run['mode']}.json"
         payload = {
             "mode": run["mode"],
+            "eval_kind": run["eval_kind"],
             "repo_root": str(run["repo_root"]),
             "run_root": str(run["run_root"]),
             "skill": run["skill"],
@@ -137,10 +149,12 @@ def collect_worker_results(config: pytest.Config) -> list[dict[str, Any]]:
     for path in sorted(root.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         mode = payload["mode"]
-        key = (payload["repo_root"], payload["run_root"], payload["skill"], mode)
+        eval_kind_value = payload.get("eval_kind", "validation" if mode == "validation" else "standard")
+        key = (payload["repo_root"], payload["run_root"], payload["skill"], eval_kind_value, mode)
         if key not in grouped:
             grouped[key] = {
                 "mode": mode,
+                "eval_kind": eval_kind_value,
                 "repo_root": Path(payload["repo_root"]),
                 "run_root": Path(payload["run_root"]),
                 "skill": payload["skill"],
@@ -185,6 +199,8 @@ class CodexEvalFile(pytest.File):
         selected_skill = selected_skill_dir(self.config)
         if selected_skill and definition.skill != selected_skill.name:
             return
+        if not definition_matches_eval_kind(definition, eval_kind(self.config), self.path):
+            return
         for prompt in definition.prompts:
             case = case_from_definition(definition, prompt, self.path)
             name = f"{case.skill}::{case.case_key}::{case.prompt_id}"
@@ -201,16 +217,17 @@ class CodexEvalItem(pytest.Item):
         repo_root = infer_repo_root(self.case.definition_path or self.path)
         skill_dir = selected_skill_dir(self.config)
         mode = run_mode(self.config)
+        kind = eval_kind(self.config)
         validate_case(self.case, repo_root, skill_dir)
 
-        validation_run = session_run(self.config, repo_root, self.case.skill, "validation")
+        validation_run = session_run(self.config, repo_root, self.case.skill, "validation", "validation")
         validation_run["results"].append(validation_result(self.case, repo_root, skill_dir))
 
         if mode == "validation":
             return
 
         sides = sides_for_mode(mode)
-        run = session_run(self.config, repo_root, self.case.skill, mode)
+        run = session_run(self.config, repo_root, self.case.skill, mode, kind)
         result = run_case(
             repo_root=repo_root,
             run_root=run["run_root"],
@@ -220,6 +237,7 @@ class CodexEvalItem(pytest.Item):
             judge_model=judge_model(self.config),
             qualitative=qualitative_enabled(self.config),
             runtime=runtime_enabled(self.config),
+            eval_kind=kind,
             sides=sides,
         )
         run["results"].append(result)
@@ -266,6 +284,19 @@ def with_path_defaults(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def definition_matches_eval_kind(definition: EvalDefinition, kind: str, path: Path) -> bool:
+    stem = path.name.removesuffix("_eval.json")
+    if kind in {"validation", "standard"}:
+        return True
+    if kind == "sanity":
+        return "sanity" in stem
+    if kind == "runtime":
+        return "runtime" in stem or any(check.kind == "observer_docker_runtime" for check in definition.deterministic_checks)
+    if kind == "qualitative":
+        return "sanity" not in stem and "runtime" not in stem and bool(definition.qualitative_checks)
+    return True
+
+
 def infer_repo_root(start: Path) -> Path:
     current = start if start.is_dir() else start.parent
     for candidate in (current, *current.parents):
@@ -291,7 +322,22 @@ def live_ab_enabled(config: pytest.Config) -> bool:
 
 
 def run_mode(config: pytest.Config) -> str:
+    kind = eval_kind(config)
+    if kind == "validation":
+        return "validation"
+    if config.getoption("--codex-eval-kind") or config.getoption("--ab"):
+        return "ab" if bool(config.getoption("--ab")) else "with_skill"
     return settings(config).run_mode
+
+
+def eval_kind(config: pytest.Config) -> str:
+    value = config.getoption("--codex-eval-kind") or ""
+    if value:
+        return str(value)
+    configured = settings(config).eval_kind
+    if configured == "validation" and bool(config.getoption("--ab")):
+        return "standard"
+    return configured
 
 
 def sides_for_mode(mode: str) -> tuple[str, ...]:
@@ -305,11 +351,16 @@ def sides_for_mode(mode: str) -> tuple[str, ...]:
 
 
 def qualitative_enabled(config: pytest.Config) -> bool:
+    kind = eval_kind(config)
+    if kind == "qualitative":
+        return not bool(config.getoption("--no-qualitative"))
+    if kind in {"validation", "sanity", "runtime"}:
+        return False
     return settings(config).qualitative_enabled and not bool(config.getoption("--no-qualitative"))
 
 
 def runtime_enabled(config: pytest.Config) -> bool:
-    return settings(config).runtime_enabled or bool(config.getoption("--codex-runtime"))
+    return eval_kind(config) == "runtime" or settings(config).runtime_enabled or bool(config.getoption("--codex-runtime"))
 
 
 def agent_model(config: pytest.Config) -> str | None:
@@ -343,12 +394,13 @@ def validate_case(case: EvalCase, repo_root: Path, skill_dir: Path | None = None
         raise AssertionError(f"{case.id}: missing skill source {skill_file}")
 
 
-def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str) -> dict[str, Any]:
-    runs: dict[tuple[str, str, str], dict[str, Any]] = getattr(config, RUNS_ATTR)
-    key = (str(repo_root), skill, mode)
+def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str, kind: str) -> dict[str, Any]:
+    runs: dict[tuple[str, str, str, str], dict[str, Any]] = getattr(config, RUNS_ATTR)
+    key = (str(repo_root), skill, kind, mode)
     if key not in runs:
         runs[key] = {
             "mode": mode,
+            "eval_kind": kind,
             "repo_root": repo_root,
             "run_root": new_run_root(repo_root, skill, getattr(config, RUN_ID_ATTR, None)),
             "skill": skill,
@@ -363,16 +415,31 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
     workers = getattr(config.option, "numprocesses", None) or 1
     return {
         "mode": mode,
+        "eval_kind": eval_kind(config) if mode != "validation" else "validation",
+        "ab_enabled": mode == "ab",
         "skill": skill,
         "run_id": getattr(config, RUN_ID_ATTR, ""),
         "repo_root": str(repo_root),
-        "config_path": str(path) if path else "",
+        "config_path": display_path(path, repo_root) if path else "",
         "agent_model": agent_model(config) or "",
         "judge_model": judge_model(config) or "",
         "qualitative_enabled": qualitative_enabled(config),
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
     }
+
+
+def progress_label(config: pytest.Config) -> str:
+    kind = eval_kind(config)
+    mode = run_mode(config)
+    return kind if mode == "validation" else f"{kind}:{mode}"
+
+
+def display_path(path: Path, repo_root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path)
 
 
 def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:

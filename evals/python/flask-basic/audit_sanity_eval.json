@@ -1,0 +1,13 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Flask service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce a concise observability readiness review for the Flask service in ./service. Do not modify files."
+    }
+  ]
+}
