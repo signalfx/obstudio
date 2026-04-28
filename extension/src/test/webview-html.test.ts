@@ -37,7 +37,7 @@ describe('getObserverWebviewHtml', () => {
 describe('getObserverLoadingWebviewHtml', () => {
 	it('shows a starting message', () => {
 		const html = getObserverLoadingWebviewHtml();
-		assert.ok(html.includes('Observability Studio is starting'));
+		assert.ok(html.includes('Splunk Observability Studio is starting'));
 	});
 
 	it('does not contain an iframe', () => {
@@ -136,4 +136,3 @@ describe('getStatusBarUpdate', () => {
 		}
 	});
 });
-

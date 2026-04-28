@@ -1,7 +1,8 @@
 {
   "name": "observability-studio",
-  "displayName": "Observability Studio",
-  "description": "Observability Studio for OpenTelemetry",
+  "publisher": "Splunk",
+  "displayName": "Splunk Observability Studio",
+  "description": "Splunk Observability Studio for OpenTelemetry",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "repository": {
@@ -25,46 +26,46 @@
       {
         "command": "observability-studio.openObserver",
         "title": "Open Observer",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.statusMenu",
         "title": "Observer Status",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.startObserver",
         "title": "Start Observer",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.stopObserver",
         "title": "Stop Observer",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.restartObserver",
         "title": "Restart Observer",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.configureCodexMCP",
         "title": "Configure Codex MCP",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.configureClaudeCodeMCP",
         "title": "Configure Claude Code MCP",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.configureCursorMCP",
         "title": "Configure Cursor MCP",
-        "category": "Observability Studio"
+        "category": "Splunk Observability Studio"
       }
     ],
     "configuration": {
-      "title": "Observability Studio",
+      "title": "Splunk Observability Studio",
       "properties": {
         "observability-studio.sharedObserverUrl": {
           "type": "string",

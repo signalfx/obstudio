@@ -245,7 +245,7 @@ it('integration: package.json registers all commands', () => {
 	}
 });
 
-it('integration: contributed commands are grouped under Observability Studio', async () => {
+it('integration: contributed commands are grouped under Splunk Observability Studio', async () => {
 	const packageJsonPath = path.join(extensionRoot, 'package.json');
 	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as ExtensionPackage;
 	const commands = packageJson.contributes?.commands ?? [];
@@ -261,8 +261,8 @@ it('integration: contributed commands are grouped under Observability Studio', a
 		assert.ok(command, `command ${commandId} should be contributed`);
 		assert.equal(
 			command?.category,
-			'Observability Studio',
-			`command ${commandId} should be grouped under Observability Studio`,
+			'Splunk Observability Studio',
+			`command ${commandId} should be grouped under Splunk Observability Studio`,
 		);
 	}
 });
