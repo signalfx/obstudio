@@ -4,6 +4,9 @@ Local OpenTelemetry observability workspace -- receive, explore, and
 validate telemetry during development. Includes AI agent skills that
 audit codebases and add OpenTelemetry instrumentation automatically.
 
+Observability Studio is work in progress. If you have questions, feedback or found a 
+bug please [open an issue](https://github.com/signalfx/obstudio/issues).
+
 ```
   AUDIT              INSTRUMENT
  ┌──────┐           ┌──────┐
@@ -239,6 +242,8 @@ cadence.
 
 See [AGENTS.md](AGENTS.md) for AI agent guidelines.
 
-## License
+## Splunk Copyright Notice
 
 Apache License 2.0 -- see [LICENSE](LICENSE).
+
+Copyright 2026 Splunk Inc.
