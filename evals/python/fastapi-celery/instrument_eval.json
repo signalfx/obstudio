@@ -86,6 +86,33 @@
             "to": ".codex-runtime/repo/docs/examples.md"
           }
         ],
+        "prebuild": [
+          {
+            "command": [
+              "go",
+              "run",
+              "./cmd/stage-skills"
+            ],
+            "cwd": ".codex-runtime/repo/observer",
+            "timeout_seconds": 120
+          },
+          {
+            "command": [
+              "go",
+              "build",
+              "-trimpath",
+              "-o",
+              "bin/obstudio",
+              "./cmd/obstudio"
+            ],
+            "cwd": ".codex-runtime/repo/observer",
+            "timeout_seconds": 300,
+            "env": {
+              "CGO_ENABLED": "0",
+              "GOOS": "linux"
+            }
+          }
+        ],
         "compose_file": "docker-compose.yml",
         "services": [
           "observer",

@@ -10,7 +10,7 @@ from pytest_codex_evals.deterministic import grade_deterministic
 from pytest_codex_evals.models import CaseResult, DeterministicCheck, EvalCase, GradeCheckResult, GradeResult, SideResult
 from pytest_codex_evals.models import ValidationResult
 from pytest_codex_evals.report import write_ab_reports, write_combined_session_reports, write_side_reports
-from pytest_codex_evals.runtime import cleanup_runtime_sources, prepare_runtime_sources
+from pytest_codex_evals.runtime import cleanup_runtime_sources, prepare_runtime_sources, run_prebuild_commands
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -170,6 +170,32 @@ def test_runtime_source_copies_are_staged_under_service_dir(tmp_path: Path):
     assert not (staged[0] / "ignored.pyc").exists()
     cleanup_runtime_sources(staged)
     assert not staged[0].exists()
+
+
+def test_runtime_prebuild_commands_run_in_service_workspace(tmp_path: Path):
+    service_dir = tmp_path / "service"
+    work_dir = service_dir / "build"
+    work_dir.mkdir(parents=True)
+
+    run_prebuild_commands(
+        {
+            "prebuild": [
+                {
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "import os, pathlib; pathlib.Path('out.txt').write_text(os.environ['SAMPLE_FLAG'])",
+                    ],
+                    "cwd": "build",
+                    "env": {"SAMPLE_FLAG": "ok"},
+                }
+            ]
+        },
+        service_dir,
+        30,
+    )
+
+    assert (work_dir / "out.txt").read_text(encoding="utf-8") == "ok"
 
 
 def empty_trace(tmp_path: Path) -> Path:

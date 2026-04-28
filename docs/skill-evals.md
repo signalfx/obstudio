@@ -79,9 +79,10 @@ only need to prove run health and skill isolation unless a check explicitly sets
 
 Runtime checks use `observer_docker_runtime`. They are skipped by default and
 only run when `[runtime].enabled = true` or `--codex-runtime` is set. The check
-uses the Docker Python SDK to stage Observer source, build the Observer binary
-through Compose, start the app containers, send traffic, then query the managed
-Observer API for trace and metric evidence.
+stages Observer source, builds the Linux Observer binary from source before
+Docker starts, packages that binary through Compose, starts the app containers,
+sends traffic, then queries the managed Observer API for trace and metric
+evidence.
 
 The harness also adds setup guards to every run:
 

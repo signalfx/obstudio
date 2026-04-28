@@ -83,6 +83,25 @@
                   }
                 }
               },
+              "prebuild": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                    {
+                      "type": "object",
+                      "required": ["command"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                        "cwd": { "type": "string" },
+                        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+                        "env": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } }
+                      }
+                    }
+                  ]
+                }
+              },
               "compose_file": { "type": "string" },
               "services": { "type": "array", "items": { "type": "string" } },
               "containers": { "type": "array", "items": { "type": "object", "additionalProperties": true } },

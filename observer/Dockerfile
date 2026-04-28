@@ -1,19 +1,6 @@
-FROM golang:1.25-bookworm AS build
-
-WORKDIR /src
-COPY observer/go.mod observer/go.sum ./observer/
-WORKDIR /src/observer
-RUN go mod download
-
-WORKDIR /src
-COPY . .
-WORKDIR /src/observer
-RUN go run ./cmd/stage-skills
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/obstudio ./cmd/obstudio
-
 FROM debian:bookworm-slim
 
-COPY --from=build /out/obstudio /usr/local/bin/obstudio
+COPY observer/bin/obstudio /usr/local/bin/obstudio
 RUN useradd --system --uid 10001 --create-home obstudio
 
 ENV HOST=0.0.0.0

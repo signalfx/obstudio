@@ -101,6 +101,14 @@ the telemetry backend should be built from the same checkout:
       { "from": "observer", "to": ".codex-runtime/repo/observer" },
       { "from": "skills", "to": ".codex-runtime/repo/skills" }
     ],
+    "prebuild": [
+      { "command": ["go", "run", "./cmd/stage-skills"], "cwd": ".codex-runtime/repo/observer" },
+      {
+        "command": ["go", "build", "-trimpath", "-o", "bin/obstudio", "./cmd/obstudio"],
+        "cwd": ".codex-runtime/repo/observer",
+        "env": { "CGO_ENABLED": "0", "GOOS": "linux" }
+      }
+    ],
     "compose_file": "docker-compose.yml",
     "services": ["observer", "app"],
     "environment": {

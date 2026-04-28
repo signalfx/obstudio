@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +29,7 @@ def run_observer_docker_runtime(check: DeterministicCheck, service_dir: Path, re
     prepared_sources: list[Path] = []
     try:
         prepared_sources = prepare_runtime_sources(config, service_dir, repo_root)
+        run_prebuild_commands(config, service_dir, check.timeout_seconds)
         client = docker.from_env()
         client.ping()
         network_name = safe_name(f"codex-eval-{check.id}-{int(time.time() * 1000)}")
@@ -153,6 +156,46 @@ def cleanup_runtime_sources(paths: list[Path]) -> None:
                 path.unlink()
         except Exception:
             pass
+
+
+def run_prebuild_commands(config: dict[str, Any], service_dir: Path, default_timeout: int) -> None:
+    commands = config.get("prebuild") or []
+    if not isinstance(commands, list):
+        raise ValueError("runtime.prebuild must be a list")
+
+    for item in commands:
+        if isinstance(item, list):
+            command = [str(part) for part in item]
+            cwd = service_dir
+            env = None
+            timeout = default_timeout
+        elif isinstance(item, dict):
+            command_value = item.get("command")
+            if not isinstance(command_value, list) or not command_value:
+                raise ValueError("runtime.prebuild command entries require a non-empty command list")
+            command = [str(part) for part in command_value]
+            cwd = service_dir / str(item.get("cwd", "."))
+            if not is_relative_to(cwd.resolve(), service_dir.resolve()):
+                raise ValueError(f"runtime.prebuild cwd must stay under service dir: {item.get('cwd')}")
+            env = {**os.environ, **{str(key): str(value) for key, value in dict(item.get("env") or {}).items()}}
+            timeout = int(item.get("timeout_seconds", default_timeout))
+        else:
+            raise ValueError("runtime.prebuild entries must be command lists or objects")
+
+        if not cwd.exists():
+            raise ValueError(f"runtime.prebuild cwd missing: {cwd}")
+
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if completed.returncode != 0:
+            output = " ".join((completed.stdout + "\n" + completed.stderr).split())[:1000]
+            raise RuntimeError(f"prebuild command failed: {' '.join(command)} exited {completed.returncode}: {output}")
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
