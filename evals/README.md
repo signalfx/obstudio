@@ -151,13 +151,13 @@ Latest summaries are copied by eval kind.
 
 | Mode | Run artifacts | Latest summary |
 |---|---|---|
-| Validation | `validation-report.md`, `validation-benchmark.json` | `validation/report.md`, `validation/benchmark.json` |
-| Sanity | `with_skill-report.md`, `with_skill-benchmark.json` | `sanity/report.md`, `sanity/benchmark.json` |
-| Sanity A/B | `ab-report.md`, `ab-benchmark.json` | `sanity/report.md`, `sanity/benchmark.json` |
-| Qualitative | `with_skill-report.md`, `with_skill-benchmark.json` | `qualitative/report.md`, `qualitative/benchmark.json` |
-| Qualitative A/B | `ab-report.md`, `ab-benchmark.json` | `qualitative/report.md`, `qualitative/benchmark.json` |
-| Runtime | `with_skill-report.md`, `with_skill-benchmark.json` | `runtime/report.md`, `runtime/benchmark.json` |
-| Runtime A/B | `ab-report.md`, `ab-benchmark.json` | `runtime/report.md`, `runtime/benchmark.json` |
+| Validation | `validation-report.md`, `validation-benchmark.json` | `<skill>/validation/report.md`, `<skill>/validation/benchmark.json` |
+| Sanity | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
+| Sanity A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
+| Qualitative | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/qualitative/report.md`, `<skill>/qualitative/benchmark.json` |
+| Qualitative A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/qualitative/report.md`, `<skill>/qualitative/benchmark.json` |
+| Runtime | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
+| Runtime A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
 
 Each live run also writes file-level JSON under:
 

@@ -1,0 +1,1234 @@
+{
+  "skill": "otel-audit",
+  "metadata": {
+    "mode": "ab",
+    "eval_kind": "qualitative",
+    "skill": "otel-audit",
+    "run_id": "20260428T192421826689Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "qualitative_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "validation": {
+    "mode": "validation",
+    "skill": "otel-audit",
+    "metadata": {
+      "mode": "validation",
+      "eval_kind": "validation",
+      "ab_enabled": false,
+      "skill": "otel-audit",
+      "run_id": "20260428T192421826689Z",
+      "repo_root": "/Users/pavankri/Cisco/obstudio",
+      "config_path": "evals/codex-evals.toml",
+      "agent_model": "gpt-5.5",
+      "judge_model": "gpt-5.5",
+      "qualitative_enabled": true,
+      "runtime_enabled": false,
+      "workers": "1"
+    },
+    "evals": [
+      {
+        "id": "go/chi-basic/audit",
+        "case": "go/chi-basic",
+        "language": "go",
+        "service": "chi-basic",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/go/chi-basic/audit_eval.json",
+        "eval_dir": "evals/go/chi-basic",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 5,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "go/chi-partial/audit",
+        "case": "go/chi-partial",
+        "language": "go",
+        "service": "chi-partial",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/go/chi-partial/audit_eval.json",
+        "eval_dir": "evals/go/chi-partial",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 6,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "go/kvstore/audit",
+        "case": "go/kvstore",
+        "language": "go",
+        "service": "kvstore",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/go/kvstore/audit_eval.json",
+        "eval_dir": "evals/go/kvstore",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 4,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "java/springboot-basic/audit",
+        "case": "java/springboot-basic",
+        "language": "java",
+        "service": "springboot-basic",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/java/springboot-basic/audit_eval.json",
+        "eval_dir": "evals/java/springboot-basic",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 4,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "node/express-basic/audit",
+        "case": "node/express-basic",
+        "language": "node",
+        "service": "express-basic",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/node/express-basic/audit_eval.json",
+        "eval_dir": "evals/node/express-basic",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 4,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "python/fastapi-celery/audit",
+        "case": "python/fastapi-celery",
+        "language": "python",
+        "service": "fastapi-celery",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/python/fastapi-celery/audit_eval.json",
+        "eval_dir": "evals/python/fastapi-celery",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 4,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      },
+      {
+        "id": "python/flask-basic/audit",
+        "case": "python/flask-basic",
+        "language": "python",
+        "service": "flask-basic",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/python/flask-basic/audit_eval.json",
+        "eval_dir": "evals/python/flask-basic",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 4,
+        "qualitative_check_count": 5,
+        "runtime_check_count": 0
+      }
+    ],
+    "summary": {
+      "eval_count": 7,
+      "case_count": 14,
+      "prompt_count": 14,
+      "deterministic_check_count": 62,
+      "qualitative_check_count": 70,
+      "runtime_check_count": 0
+    }
+  },
+  "live": [
+    {
+      "mode": "ab",
+      "skill": "otel-audit",
+      "metadata": {
+        "mode": "ab",
+        "eval_kind": "qualitative",
+        "ab_enabled": true,
+        "skill": "otel-audit",
+        "run_id": "20260428T192421826689Z",
+        "repo_root": "/Users/pavankri/Cisco/obstudio",
+        "config_path": "evals/codex-evals.toml",
+        "agent_model": "gpt-5.5",
+        "judge_model": "gpt-5.5",
+        "qualitative_enabled": true,
+        "runtime_enabled": false,
+        "workers": "1"
+      },
+      "evals": [
+        {
+          "id": "go/chi-basic/audit",
+          "case": "go/chi-basic",
+          "language": "go",
+          "service": "chi-basic",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 12,
+              "total": 12,
+              "average_score": 100.0
+            },
+            "command_count": 40,
+            "duration_seconds": 167.698,
+            "agent_duration_seconds": 106.226,
+            "qualitative_duration_seconds": 61.425,
+            "tokens": 492980,
+            "agent_tokens": 334682,
+            "qualitative_tokens": 158298,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 5,
+              "total": 10,
+              "average_score": 59.0
+            },
+            "command_count": 26,
+            "duration_seconds": 196.516,
+            "agent_duration_seconds": 109.888,
+            "qualitative_duration_seconds": 86.603,
+            "tokens": 358396,
+            "agent_tokens": 198418,
+            "qualitative_tokens": 159978,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-basic/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-basic/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-basic/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "go/chi-partial/audit",
+          "case": "go/chi-partial",
+          "language": "go",
+          "service": "chi-partial",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 10,
+              "total": 10,
+              "average_score": 100.0
+            },
+            "command_count": 60,
+            "duration_seconds": 219.52,
+            "agent_duration_seconds": 151.82,
+            "qualitative_duration_seconds": 67.656,
+            "tokens": 548192,
+            "agent_tokens": 380651,
+            "qualitative_tokens": 167541,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 8,
+              "total": 10,
+              "average_score": 82.0
+            },
+            "command_count": 68,
+            "duration_seconds": 364.263,
+            "agent_duration_seconds": 220.761,
+            "qualitative_duration_seconds": 143.483,
+            "tokens": 941504,
+            "agent_tokens": 765732,
+            "qualitative_tokens": 175772,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-partial/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-partial/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/chi-partial/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "go/kvstore/audit",
+          "case": "go/kvstore",
+          "language": "go",
+          "service": "kvstore",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 10,
+              "total": 10,
+              "average_score": 98.0
+            },
+            "command_count": 92,
+            "duration_seconds": 248.113,
+            "agent_duration_seconds": 159.28,
+            "qualitative_duration_seconds": 88.759,
+            "tokens": 646356,
+            "agent_tokens": 413770,
+            "qualitative_tokens": 232586,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 5,
+              "total": 10,
+              "average_score": 55.0
+            },
+            "command_count": 64,
+            "duration_seconds": 248.875,
+            "agent_duration_seconds": 137.861,
+            "qualitative_duration_seconds": 110.98,
+            "tokens": 653189,
+            "agent_tokens": 424621,
+            "qualitative_tokens": 228568,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/kvstore/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/kvstore/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/go/kvstore/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "java/springboot-basic/audit",
+          "case": "java/springboot-basic",
+          "language": "java",
+          "service": "springboot-basic",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 14,
+              "total": 14,
+              "average_score": 100.0
+            },
+            "command_count": 76,
+            "duration_seconds": 223.616,
+            "agent_duration_seconds": 137.343,
+            "qualitative_duration_seconds": 86.213,
+            "tokens": 547745,
+            "agent_tokens": 358167,
+            "qualitative_tokens": 189578,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 9,
+              "total": 15,
+              "average_score": 62.5
+            },
+            "command_count": 46,
+            "duration_seconds": 238.564,
+            "agent_duration_seconds": 113.019,
+            "qualitative_duration_seconds": 125.493,
+            "tokens": 380482,
+            "agent_tokens": 217622,
+            "qualitative_tokens": 162860,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/java/springboot-basic/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/java/springboot-basic/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/java/springboot-basic/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "node/express-basic/audit",
+          "case": "node/express-basic",
+          "language": "node",
+          "service": "express-basic",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 10,
+              "total": 10,
+              "average_score": 52.5
+            },
+            "command_count": 50,
+            "duration_seconds": 231.337,
+            "agent_duration_seconds": 163.529,
+            "qualitative_duration_seconds": 67.762,
+            "tokens": 475404,
+            "agent_tokens": 313523,
+            "qualitative_tokens": 161881,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 7,
+              "total": 10,
+              "average_score": 41.5
+            },
+            "command_count": 24,
+            "duration_seconds": 174.547,
+            "agent_duration_seconds": 89.959,
+            "qualitative_duration_seconds": 84.567,
+            "tokens": 315356,
+            "agent_tokens": 156070,
+            "qualitative_tokens": 159286,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/node/express-basic/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/node/express-basic/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/node/express-basic/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "python/fastapi-celery/audit",
+          "case": "python/fastapi-celery",
+          "language": "python",
+          "service": "fastapi-celery",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 10,
+              "total": 10,
+              "average_score": 98.0
+            },
+            "command_count": 86,
+            "duration_seconds": 260.521,
+            "agent_duration_seconds": 151.803,
+            "qualitative_duration_seconds": 108.658,
+            "tokens": 589942,
+            "agent_tokens": 398052,
+            "qualitative_tokens": 191890,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 6,
+              "total": 10,
+              "average_score": 67.5
+            },
+            "command_count": 54,
+            "duration_seconds": 242.35,
+            "agent_duration_seconds": 131.824,
+            "qualitative_duration_seconds": 110.497,
+            "tokens": 540575,
+            "agent_tokens": 308591,
+            "qualitative_tokens": 231984,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/fastapi-celery/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/fastapi-celery/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/fastapi-celery/audit/with_baseline.json"
+          }
+        },
+        {
+          "id": "python/flask-basic/audit",
+          "case": "python/flask-basic",
+          "language": "python",
+          "service": "flask-basic",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 14,
+              "total": 14,
+              "average_score": 100.0
+            },
+            "command_count": 56,
+            "duration_seconds": 178.049,
+            "agent_duration_seconds": 111.099,
+            "qualitative_duration_seconds": 66.933,
+            "tokens": 459393,
+            "agent_tokens": 301369,
+            "qualitative_tokens": 158024,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": {
+              "passed": 5,
+              "total": 10,
+              "average_score": 31.0
+            },
+            "command_count": 34,
+            "duration_seconds": 171.527,
+            "agent_duration_seconds": 90.013,
+            "qualitative_duration_seconds": 81.494,
+            "tokens": 369160,
+            "agent_tokens": 209811,
+            "qualitative_tokens": 159349,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/flask-basic/audit/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/flask-basic/audit/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192421826689Z/results/python/flask-basic/audit/with_baseline.json"
+          }
+        }
+      ],
+      "failures": [
+        {
+          "service": "go/chi-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Final response mentions /health, but does not list GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, or DELETE /tasks/{id}."
+        },
+        {
+          "service": "go/chi-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "Mentions \"route-level tracing,\" \"status/duration metrics,\" and unobserved handler errors; does not mention request rate or OTLP."
+        },
+        {
+          "service": "go/chi-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-5 FAIL",
+          "evidence": "\"instrument routes with OpenTelemetry chi middleware\""
+        },
+        {
+          "service": "go/chi-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-1 FAIL",
+          "evidence": "Mentions chi router creation at main.go:28 and ListenAndServe at main.go:110, but never states that main.go is the entry point."
+        },
+        {
+          "service": "go/chi-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Lists `/health`, `/tasks`, `/tasks/{id}`, `POST /tasks`, `PATCH /tasks/{id}`, and `DELETE /tasks/{id}`."
+        },
+        {
+          "service": "go/chi-partial",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "Says span names like `GetTask-123` are bad cardinality; no separate finding says `otel.Tracer(\"task-service\")` is created inside `GET /tasks/{id}`."
+        },
+        {
+          "service": "go/chi-partial",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "Anti-Patterns section discusses GetTask-%d including task ID, but has no specific finding about tracer := otel.Tracer(\"task-service\") inside GET /tasks/{id}."
+        },
+        {
+          "service": "go/kvstore",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-1 FAIL",
+          "evidence": "Final response cites service/cmd/kvstore-server/main.go:32 only for the missing health/readiness endpoint."
+        },
+        {
+          "service": "go/kvstore",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Final response: \"route labels for `/kv/` and `/search`\"."
+        },
+        {
+          "service": "go/kvstore",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-3 FAIL",
+          "evidence": "Final response says \"No tracing or context propagation\" but does not mention OTel SDK initialization, dependencies, or exporter absence."
+        },
+        {
+          "service": "go/kvstore",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-5 FAIL",
+          "evidence": "Final response is organized as P1/P2/P3 findings rather than distinct coverage-gap and anti-pattern sections."
+        },
+        {
+          "service": "go/kvstore",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Final response only says routing starts in kvstore/http.go and discusses HTTP handlers generally; it never lists the required route templates."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-1 FAIL",
+          "evidence": "last_message.md never mentions TasksApplication.java, SpringApplication.run, main, or entry point."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "It mentions /health and create/update/delete paths, but omits explicit identification of GET /tasks and GET /tasks/{id} and does not enumerate TaskController routes."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "last_message.md does not mention RED, request rate, HTTP latency, or error-rate visibility together."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-5 FAIL",
+          "evidence": "Recommended first fixes are Actuator, metrics/tracing config, health/readiness/liveness, structured logging, and domain counters/timers; Java agent is only mentioned conditionally, not recommended."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-1 FAIL",
+          "evidence": "TasksApplication.java contains main() calling SpringApplication.run(TasksApplication.class, args), but last_message.md does not mention TasksApplication.java or the main entry point."
+        },
+        {
+          "service": "java/springboot-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "last_message.md lacks RED terminology and request-rate coverage; it only mentions no distributed tracing, framework-level timing, and no error instrumentation beyond HTTP statuses."
+        },
+        {
+          "service": "node/express-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "It references `/health` only indirectly through app context and mentions task create/update/delete paths, but does not list GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, and DELETE /tasks/:id."
+        },
+        {
+          "service": "node/express-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-3 FAIL",
+          "evidence": "It says dependencies only include Express and there is no request/response instrumentation, but does not name missing HTTP or Express OpenTelemetry instrumentation packages."
+        },
+        {
+          "service": "node/express-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "service/app.js defines GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, and DELETE /tasks/:id; last_message.md only says /health, /tasks, /tasks/:id, and write endpoints."
+        },
+        {
+          "service": "python/fastapi-celery",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-3 FAIL",
+          "evidence": "Final response says there are no OpenTelemetry packages and startup commands do not use opentelemetry-instrument, but it never mentions ASGI or HTTP client instrumentation."
+        },
+        {
+          "service": "python/fastapi-celery",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Final response references pyproject.toml, app.py, worker.py, and docker-compose.yml, but has no mention of service/Dockerfile or the image CMD."
+        },
+        {
+          "service": "python/fastapi-celery",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-3 FAIL",
+          "evidence": "Final response says there is no FastAPI request tracing and no Celery producer/consumer tracing, but it never mentions ASGI instrumentation or HTTP client instrumentation."
+        },
+        {
+          "service": "python/fastapi-celery",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "Final response says API and worker are not configured to export to the observer and recommends `OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318`, but does not discuss Dockerfile CMD or docker-compose worker command instrumentation."
+        },
+        {
+          "service": "python/flask-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "The response only explicitly names `/health`, `create_task`, and `update_task`; it omits a route list such as GET /tasks, GET /tasks/<id>, POST /tasks, PATCH /tasks/<id>, DELETE /tasks/<id>."
+        },
+        {
+          "service": "python/flask-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "No occurrence of `opentelemetry-instrumentation-flask`, `OpenTelemetry`, or `auto-instrumentation` appears in last_message.md."
+        },
+        {
+          "service": "python/flask-basic",
+          "side": "with_baseline",
+          "prompt": "direct",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-5 FAIL",
+          "evidence": "The response says \"latency\" and \"exception outcome\" and \"exporter setup\", but does not mention request rate or OTLP."
+        },
+        {
+          "service": "python/flask-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-2 FAIL",
+          "evidence": "Missing explicit list of GET /tasks, GET /tasks/<int:task_id>, POST /tasks, PATCH /tasks/<int:task_id>, and DELETE /tasks/<int:task_id>."
+        },
+        {
+          "service": "python/flask-basic",
+          "side": "with_baseline",
+          "prompt": "readiness-review",
+          "category": "qualitative",
+          "result": "qualitative:qualitative-4 FAIL",
+          "evidence": "It says \u201cNo Flask auto-instrumentation\u201d and recommends FlaskInstrumentor, but omits the exact package name."
+        }
+      ],
+      "summary": {
+        "eval_count": 7,
+        "case_count": 14,
+        "prompt_count": 14,
+        "failure_count": 30,
+        "with_skill": {
+          "prompt_count": 14,
+          "deterministic": {
+            "passed": 28,
+            "total": 28,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 0,
+            "skipped": 0
+          },
+          "qualitative": {
+            "passed": 80,
+            "total": 80,
+            "average_score": 92.64285714285714
+          },
+          "command_count": 460,
+          "duration_seconds": 1528.854,
+          "agent_duration_seconds": 981.1,
+          "qualitative_duration_seconds": 547.406,
+          "tokens": 3760012,
+          "agent_tokens": 2500214,
+          "qualitative_tokens": 1259798,
+          "error_count": 0
+        },
+        "with_baseline": {
+          "prompt_count": 14,
+          "deterministic": {
+            "passed": 42,
+            "total": 42,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 0,
+            "skipped": 0
+          },
+          "qualitative": {
+            "passed": 45,
+            "total": 75,
+            "average_score": 56.92857142857143
+          },
+          "command_count": 316,
+          "duration_seconds": 1636.642,
+          "agent_duration_seconds": 893.325,
+          "qualitative_duration_seconds": 743.117,
+          "tokens": 3558662,
+          "agent_tokens": 2280865,
+          "qualitative_tokens": 1277797,
+          "error_count": 0
+        }
+      }
+    }
+  ],
+  "deterministic_failures": [],
+  "qualitative_failures": [
+    {
+      "service": "go/chi-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Final response mentions /health, but does not list GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, or DELETE /tasks/{id}.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "Mentions \"route-level tracing,\" \"status/duration metrics,\" and unobserved handler errors; does not mention request rate or OTLP.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-5 FAIL",
+      "evidence": "\"instrument routes with OpenTelemetry chi middleware\"",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-1 FAIL",
+      "evidence": "Mentions chi router creation at main.go:28 and ListenAndServe at main.go:110, but never states that main.go is the entry point.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Lists `/health`, `/tasks`, `/tasks/{id}`, `POST /tasks`, `PATCH /tasks/{id}`, and `DELETE /tasks/{id}`.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "Says span names like `GetTask-123` are bad cardinality; no separate finding says `otel.Tracer(\"task-service\")` is created inside `GET /tasks/{id}`.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "Anti-Patterns section discusses GetTask-%d including task ID, but has no specific finding about tracer := otel.Tracer(\"task-service\") inside GET /tasks/{id}.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-1 FAIL",
+      "evidence": "Final response cites service/cmd/kvstore-server/main.go:32 only for the missing health/readiness endpoint.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Final response: \"route labels for `/kv/` and `/search`\".",
+      "mode": "ab"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-3 FAIL",
+      "evidence": "Final response says \"No tracing or context propagation\" but does not mention OTel SDK initialization, dependencies, or exporter absence.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-5 FAIL",
+      "evidence": "Final response is organized as P1/P2/P3 findings rather than distinct coverage-gap and anti-pattern sections.",
+      "mode": "ab"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Final response only says routing starts in kvstore/http.go and discusses HTTP handlers generally; it never lists the required route templates.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-1 FAIL",
+      "evidence": "last_message.md never mentions TasksApplication.java, SpringApplication.run, main, or entry point.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "It mentions /health and create/update/delete paths, but omits explicit identification of GET /tasks and GET /tasks/{id} and does not enumerate TaskController routes.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "last_message.md does not mention RED, request rate, HTTP latency, or error-rate visibility together.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-5 FAIL",
+      "evidence": "Recommended first fixes are Actuator, metrics/tracing config, health/readiness/liveness, structured logging, and domain counters/timers; Java agent is only mentioned conditionally, not recommended.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-1 FAIL",
+      "evidence": "TasksApplication.java contains main() calling SpringApplication.run(TasksApplication.class, args), but last_message.md does not mention TasksApplication.java or the main entry point.",
+      "mode": "ab"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "last_message.md lacks RED terminology and request-rate coverage; it only mentions no distributed tracing, framework-level timing, and no error instrumentation beyond HTTP statuses.",
+      "mode": "ab"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "It references `/health` only indirectly through app context and mentions task create/update/delete paths, but does not list GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, and DELETE /tasks/:id.",
+      "mode": "ab"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-3 FAIL",
+      "evidence": "It says dependencies only include Express and there is no request/response instrumentation, but does not name missing HTTP or Express OpenTelemetry instrumentation packages.",
+      "mode": "ab"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "service/app.js defines GET /health, GET /tasks, GET /tasks/:id, POST /tasks, PATCH /tasks/:id, and DELETE /tasks/:id; last_message.md only says /health, /tasks, /tasks/:id, and write endpoints.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-3 FAIL",
+      "evidence": "Final response says there are no OpenTelemetry packages and startup commands do not use opentelemetry-instrument, but it never mentions ASGI or HTTP client instrumentation.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Final response references pyproject.toml, app.py, worker.py, and docker-compose.yml, but has no mention of service/Dockerfile or the image CMD.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-3 FAIL",
+      "evidence": "Final response says there is no FastAPI request tracing and no Celery producer/consumer tracing, but it never mentions ASGI instrumentation or HTTP client instrumentation.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "Final response says API and worker are not configured to export to the observer and recommends `OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318`, but does not discuss Dockerfile CMD or docker-compose worker command instrumentation.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "The response only explicitly names `/health`, `create_task`, and `update_task`; it omits a route list such as GET /tasks, GET /tasks/<id>, POST /tasks, PATCH /tasks/<id>, DELETE /tasks/<id>.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "No occurrence of `opentelemetry-instrumentation-flask`, `OpenTelemetry`, or `auto-instrumentation` appears in last_message.md.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_baseline",
+      "prompt": "direct",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-5 FAIL",
+      "evidence": "The response says \"latency\" and \"exception outcome\" and \"exporter setup\", but does not mention request rate or OTLP.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-2 FAIL",
+      "evidence": "Missing explicit list of GET /tasks, GET /tasks/<int:task_id>, POST /tasks, PATCH /tasks/<int:task_id>, and DELETE /tasks/<int:task_id>.",
+      "mode": "ab"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_baseline",
+      "prompt": "readiness-review",
+      "category": "qualitative",
+      "result": "qualitative:qualitative-4 FAIL",
+      "evidence": "It says \u201cNo Flask auto-instrumentation\u201d and recommends FlaskInstrumentor, but omits the exact package name.",
+      "mode": "ab"
+    }
+  ],
+  "runtime_failures": []
+}

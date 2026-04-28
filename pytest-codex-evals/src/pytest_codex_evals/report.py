@@ -112,7 +112,7 @@ def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:
         benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
         report_path.write_text(report, encoding="utf-8")
 
-        latest_dir = repo_root / "eval-reports" / report_key(benchmark) / skill
+        latest_dir = repo_root / "eval-reports" / skill / report_key(benchmark)
         latest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(report_path, latest_dir / "report.md")
         shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")

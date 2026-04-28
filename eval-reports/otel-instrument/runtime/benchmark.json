@@ -1,0 +1,213 @@
+{
+  "skill": "otel-instrument",
+  "metadata": {
+    "mode": "ab",
+    "eval_kind": "runtime",
+    "skill": "otel-instrument",
+    "run_id": "20260428T195137546739Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "qualitative_enabled": false,
+    "runtime_enabled": true,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "validation": {
+    "mode": "validation",
+    "skill": "otel-instrument",
+    "metadata": {
+      "mode": "validation",
+      "eval_kind": "validation",
+      "ab_enabled": false,
+      "skill": "otel-instrument",
+      "run_id": "20260428T195137546739Z",
+      "repo_root": "/Users/pavankri/Cisco/obstudio",
+      "config_path": "evals/codex-evals.toml",
+      "agent_model": "gpt-5.5",
+      "judge_model": "gpt-5.5",
+      "qualitative_enabled": false,
+      "runtime_enabled": true,
+      "workers": "1"
+    },
+    "evals": [
+      {
+        "id": "python/fastapi-celery/instrument_runtime",
+        "case": "python/fastapi-celery",
+        "language": "python",
+        "service": "fastapi-celery",
+        "prompt_count": 1,
+        "prompts": [
+          "runtime-preserving"
+        ],
+        "definition_path": "evals/python/fastapi-celery/instrument_runtime_eval.json",
+        "eval_dir": "evals/python/fastapi-celery",
+        "skill_path": "skills/otel-instrument",
+        "deterministic_check_count": 0,
+        "qualitative_check_count": 0,
+        "runtime_check_count": 1
+      }
+    ],
+    "summary": {
+      "eval_count": 1,
+      "case_count": 1,
+      "prompt_count": 1,
+      "deterministic_check_count": 0,
+      "qualitative_check_count": 0,
+      "runtime_check_count": 1
+    }
+  },
+  "live": [
+    {
+      "mode": "ab",
+      "skill": "otel-instrument",
+      "metadata": {
+        "mode": "ab",
+        "eval_kind": "runtime",
+        "ab_enabled": true,
+        "skill": "otel-instrument",
+        "run_id": "20260428T195137546739Z",
+        "repo_root": "/Users/pavankri/Cisco/obstudio",
+        "config_path": "evals/codex-evals.toml",
+        "agent_model": "gpt-5.5",
+        "judge_model": "gpt-5.5",
+        "qualitative_enabled": false,
+        "runtime_enabled": true,
+        "workers": "1"
+      },
+      "evals": [
+        {
+          "id": "python/fastapi-celery/instrument_runtime",
+          "case": "python/fastapi-celery",
+          "language": "python",
+          "service": "fastapi-celery",
+          "prompt_count": 1,
+          "prompts": [
+            "runtime-preserving"
+          ],
+          "with_skill": {
+            "prompt_count": 1,
+            "deterministic": {
+              "passed": 2,
+              "total": 2,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 1,
+              "skipped": 0
+            },
+            "qualitative": null,
+            "command_count": 62,
+            "duration_seconds": 270.707,
+            "agent_duration_seconds": 215.163,
+            "qualitative_duration_seconds": 0.0,
+            "tokens": 634963,
+            "agent_tokens": 634963,
+            "qualitative_tokens": 0,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 1,
+            "deterministic": {
+              "passed": 3,
+              "total": 3,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": null,
+            "command_count": 26,
+            "duration_seconds": 107.456,
+            "agent_duration_seconds": 107.433,
+            "qualitative_duration_seconds": 0.0,
+            "tokens": 377547,
+            "agent_tokens": 377547,
+            "qualitative_tokens": 0,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-instrument/20260428T195137546739Z/results/python/fastapi-celery/instrument_runtime/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-instrument/20260428T195137546739Z/results/python/fastapi-celery/instrument_runtime/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-instrument/20260428T195137546739Z/results/python/fastapi-celery/instrument_runtime/with_baseline.json"
+          }
+        }
+      ],
+      "failures": [
+        {
+          "service": "python/fastapi-celery",
+          "side": "with_skill",
+          "prompt": "runtime-preserving",
+          "category": "runtime",
+          "result": "runtime:observer-runtime-telemetry FAIL",
+          "evidence": "Runtime check failed: traffic request POST http://127.0.0.1:8000/orders returned 500, expected 201; codex-eval-observer-1777406124332 logs: Observability Studio (collector) Telemetry Explorer: http://0.0.0.0:3000 OTLP/HTTP receiver: http://0.0.0.0:4318 OTLP/gRPC receiver: 0.0.0.0:4317 MCP endpoint: http://0.0.0.0:3000/mcp; codex-eval-redis-1777406124533 logs: 1:C 28 Apr 2026 19:55:24.706 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo 1:C 28 Apr 2026 19:55:24.706 * Redis version=7.4.8, bits=64, commit=00000000, modified=0, pid=1, just started 1:C 28 Apr 2026 19:55:24.706 # Warning: no config file specified, using the default config. In order to specify a; codex-eval-api-1777406142476 logs: File \"/app/.venv/lib/python3.12/site-packages/celery/app/base.py\", line 968, in send_task self.backend.on_task_call(P, task_id) File \"/app/.venv/lib/python3.12/site-packages/celery/backends/redis.py\", line 402, in on_task_call self.result_consumer.consume_from(task_id) File \"/app/.venv/lib/python3.1"
+        }
+      ],
+      "summary": {
+        "eval_count": 1,
+        "case_count": 1,
+        "prompt_count": 1,
+        "failure_count": 1,
+        "with_skill": {
+          "prompt_count": 1,
+          "deterministic": {
+            "passed": 2,
+            "total": 2,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 1,
+            "skipped": 0
+          },
+          "qualitative": null,
+          "command_count": 62,
+          "duration_seconds": 270.707,
+          "agent_duration_seconds": 215.163,
+          "qualitative_duration_seconds": 0.0,
+          "tokens": 634963,
+          "agent_tokens": 634963,
+          "qualitative_tokens": 0,
+          "error_count": 0
+        },
+        "with_baseline": {
+          "prompt_count": 1,
+          "deterministic": {
+            "passed": 3,
+            "total": 3,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 0,
+            "skipped": 0
+          },
+          "qualitative": null,
+          "command_count": 26,
+          "duration_seconds": 107.456,
+          "agent_duration_seconds": 107.433,
+          "qualitative_duration_seconds": 0.0,
+          "tokens": 377547,
+          "agent_tokens": 377547,
+          "qualitative_tokens": 0,
+          "error_count": 0
+        }
+      }
+    }
+  ],
+  "deterministic_failures": [],
+  "qualitative_failures": [],
+  "runtime_failures": [
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: traffic request POST http://127.0.0.1:8000/orders returned 500, expected 201; codex-eval-observer-1777406124332 logs: Observability Studio (collector) Telemetry Explorer: http://0.0.0.0:3000 OTLP/HTTP receiver: http://0.0.0.0:4318 OTLP/gRPC receiver: 0.0.0.0:4317 MCP endpoint: http://0.0.0.0:3000/mcp; codex-eval-redis-1777406124533 logs: 1:C 28 Apr 2026 19:55:24.706 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo 1:C 28 Apr 2026 19:55:24.706 * Redis version=7.4.8, bits=64, commit=00000000, modified=0, pid=1, just started 1:C 28 Apr 2026 19:55:24.706 # Warning: no config file specified, using the default config. In order to specify a; codex-eval-api-1777406142476 logs: File \"/app/.venv/lib/python3.12/site-packages/celery/app/base.py\", line 968, in send_task self.backend.on_task_call(P, task_id) File \"/app/.venv/lib/python3.12/site-packages/celery/backends/redis.py\", line 402, in on_task_call self.result_consumer.consume_from(task_id) File \"/app/.venv/lib/python3.1",
+      "mode": "ab"
+    }
+  ]
+}

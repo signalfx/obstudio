@@ -1,0 +1,196 @@
+{
+  "skill": "otel-audit",
+  "metadata": {
+    "mode": "ab",
+    "eval_kind": "sanity",
+    "skill": "otel-audit",
+    "run_id": "20260428T192400828790Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "qualitative_enabled": false,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "validation": {
+    "mode": "validation",
+    "skill": "otel-audit",
+    "metadata": {
+      "mode": "validation",
+      "eval_kind": "validation",
+      "ab_enabled": false,
+      "skill": "otel-audit",
+      "run_id": "20260428T192400828790Z",
+      "repo_root": "/Users/pavankri/Cisco/obstudio",
+      "config_path": "evals/codex-evals.toml",
+      "agent_model": "gpt-5.5",
+      "judge_model": "gpt-5.5",
+      "qualitative_enabled": false,
+      "runtime_enabled": false,
+      "workers": "1"
+    },
+    "evals": [
+      {
+        "id": "sanity/skill-smoke/audit_sanity",
+        "case": "sanity/skill-smoke",
+        "language": "sanity",
+        "service": "skill-smoke",
+        "prompt_count": 2,
+        "prompts": [
+          "direct",
+          "readiness-review"
+        ],
+        "definition_path": "evals/sanity/skill-smoke/audit_sanity_eval.json",
+        "eval_dir": "evals/sanity/skill-smoke",
+        "skill_path": "skills/otel-audit",
+        "deterministic_check_count": 0,
+        "qualitative_check_count": 0,
+        "runtime_check_count": 0
+      }
+    ],
+    "summary": {
+      "eval_count": 1,
+      "case_count": 2,
+      "prompt_count": 2,
+      "deterministic_check_count": 0,
+      "qualitative_check_count": 0,
+      "runtime_check_count": 0
+    }
+  },
+  "live": [
+    {
+      "mode": "ab",
+      "skill": "otel-audit",
+      "metadata": {
+        "mode": "ab",
+        "eval_kind": "sanity",
+        "ab_enabled": true,
+        "skill": "otel-audit",
+        "run_id": "20260428T192400828790Z",
+        "repo_root": "/Users/pavankri/Cisco/obstudio",
+        "config_path": "evals/codex-evals.toml",
+        "agent_model": "gpt-5.5",
+        "judge_model": "gpt-5.5",
+        "qualitative_enabled": false,
+        "runtime_enabled": false,
+        "workers": "1"
+      },
+      "evals": [
+        {
+          "id": "sanity/skill-smoke/audit_sanity",
+          "case": "sanity/skill-smoke",
+          "language": "sanity",
+          "service": "skill-smoke",
+          "prompt_count": 2,
+          "prompts": [
+            "direct",
+            "readiness-review"
+          ],
+          "with_skill": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 4,
+              "total": 4,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": null,
+            "command_count": 0,
+            "duration_seconds": 17.557,
+            "agent_duration_seconds": 17.536,
+            "qualitative_duration_seconds": 0.0,
+            "tokens": 53124,
+            "agent_tokens": 53124,
+            "qualitative_tokens": 0,
+            "error_count": 0
+          },
+          "with_baseline": {
+            "prompt_count": 2,
+            "deterministic": {
+              "passed": 6,
+              "total": 6,
+              "skipped": 0
+            },
+            "runtime": {
+              "passed": 0,
+              "total": 0,
+              "skipped": 0
+            },
+            "qualitative": null,
+            "command_count": 0,
+            "duration_seconds": 14.896,
+            "agent_duration_seconds": 14.886,
+            "qualitative_duration_seconds": 0.0,
+            "tokens": 48571,
+            "agent_tokens": 48571,
+            "qualitative_tokens": 0,
+            "error_count": 0
+          },
+          "result_paths": {
+            "eval": ".workspace/codex-evals/otel-audit/20260428T192400828790Z/results/sanity/skill-smoke/audit_sanity/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-audit/20260428T192400828790Z/results/sanity/skill-smoke/audit_sanity/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-audit/20260428T192400828790Z/results/sanity/skill-smoke/audit_sanity/with_baseline.json"
+          }
+        }
+      ],
+      "failures": [],
+      "summary": {
+        "eval_count": 1,
+        "case_count": 2,
+        "prompt_count": 2,
+        "failure_count": 0,
+        "with_skill": {
+          "prompt_count": 2,
+          "deterministic": {
+            "passed": 4,
+            "total": 4,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 0,
+            "skipped": 0
+          },
+          "qualitative": null,
+          "command_count": 0,
+          "duration_seconds": 17.557,
+          "agent_duration_seconds": 17.536,
+          "qualitative_duration_seconds": 0.0,
+          "tokens": 53124,
+          "agent_tokens": 53124,
+          "qualitative_tokens": 0,
+          "error_count": 0
+        },
+        "with_baseline": {
+          "prompt_count": 2,
+          "deterministic": {
+            "passed": 6,
+            "total": 6,
+            "skipped": 0
+          },
+          "runtime": {
+            "passed": 0,
+            "total": 0,
+            "skipped": 0
+          },
+          "qualitative": null,
+          "command_count": 0,
+          "duration_seconds": 14.896,
+          "agent_duration_seconds": 14.886,
+          "qualitative_duration_seconds": 0.0,
+          "tokens": 48571,
+          "agent_tokens": 48571,
+          "qualitative_tokens": 0,
+          "error_count": 0
+        }
+      }
+    }
+  ],
+  "deterministic_failures": [],
+  "qualitative_failures": [],
+  "runtime_failures": []
+}

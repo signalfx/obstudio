@@ -82,7 +82,7 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     result = pytester.runpytest("--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "validation" / "sample-skill"
+    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
     assert (latest_dir / "report.md").is_file()
     benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["metadata"]["mode"] == "validation"
@@ -133,7 +133,7 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     result = pytester.runpytest("-n", "2", "--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "validation" / "sample-skill"
+    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
     benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["metadata"]["mode"] == "validation"
     assert benchmark["validation"]["summary"]["case_count"] == 2
