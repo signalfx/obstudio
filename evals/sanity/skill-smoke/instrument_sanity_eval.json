@@ -1,0 +1,13 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-instrument skill loaded."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-instrument ready."
+    }
+  ]
+}

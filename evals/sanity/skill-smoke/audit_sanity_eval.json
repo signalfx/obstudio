@@ -1,0 +1,13 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-audit skill loaded."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-audit ready."
+    }
+  ]
+}

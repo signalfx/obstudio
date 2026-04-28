@@ -51,6 +51,9 @@ item. Live runs are selected by eval kind:
 - `qualitative`: schema-constrained judge checks.
 - `runtime`: Docker/Observer trace and metric checks.
 
+Sanity evals use the dummy `evals/sanity/skill-smoke/` fixture by default so
+they do not spend time analyzing or modifying a real service.
+
 For each live case, the harness always runs `with_skill`. Passing `AB=1` adds
 the `baseline` side with no skill name and no repo skills visible.
 

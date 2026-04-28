@@ -112,7 +112,7 @@ def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:
         benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
         report_path.write_text(report, encoding="utf-8")
 
-        latest_dir = repo_root / "eval-reports" / skill / report_key(benchmark)
+        latest_dir = repo_root / "eval-reports" / report_key(benchmark) / skill
         latest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(report_path, latest_dir / "report.md")
         shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
@@ -205,28 +205,8 @@ def combined_metadata(
 def render_combined_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines = [
         f"# {skill} Codex Eval Report",
-        "",
-        "## Environment",
-        "",
-        "| Field | Value |",
-        "|---|---|",
     ]
-    for label, key in (
-        ("Modes", "mode"),
-        ("Eval kind", "eval_kind"),
-        ("Skill", "skill"),
-        ("Run ID", "run_id"),
-        ("Agent model", "agent_model"),
-        ("Judge model", "judge_model"),
-        ("Qualitative enabled", "qualitative_enabled"),
-        ("Runtime enabled", "runtime_enabled"),
-        ("Workers", "workers"),
-        ("Config", "config_path"),
-    ):
-        value = benchmark["metadata"].get(key)
-        if key == "judge_model" and not benchmark["metadata"].get("qualitative_enabled"):
-            value = "-"
-        lines.append(f"| {label} | {markdown_cell(value)} |")
+    lines.extend(render_environment_table(benchmark["metadata"], "Modes"))
 
     lines.extend(render_validation_section(benchmark["validation"]))
     lines.extend(render_live_section("Deterministic", benchmark["live"], "deterministic", benchmark["deterministic_failures"]))
@@ -575,27 +555,8 @@ def collect_combined_failures(live_runs: list[dict[str, Any]], category: str) ->
 def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines = [
         f"# {skill} Codex Eval Report",
-        "",
-        "## Environment",
-        "",
-        "| Field | Value |",
-        "|---|---|",
     ]
-    for label, key in (
-        ("Mode", "mode"),
-        ("Eval kind", "eval_kind"),
-        ("Skill", "skill"),
-        ("Run ID", "run_id"),
-        ("Agent model", "agent_model"),
-        ("Judge model", "judge_model"),
-        ("Qualitative enabled", "qualitative_enabled"),
-        ("Workers", "workers"),
-        ("Config", "config_path"),
-    ):
-        value = benchmark["metadata"].get(key)
-        if key == "judge_model" and not benchmark["metadata"].get("qualitative_enabled"):
-            value = "-"
-        lines.append(f"| {label} | {markdown_cell(value)} |")
+    lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
 
     lines.extend(
         [
@@ -692,20 +653,8 @@ def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
         f"# {skill} Codex Eval Validation Report",
         "",
         "This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.",
-        "",
-        "## Environment",
-        "",
-        "| Field | Value |",
-        "|---|---|",
     ]
-    for label, key in (
-        ("Mode", "mode"),
-        ("Eval kind", "eval_kind"),
-        ("Skill", "skill"),
-        ("Run ID", "run_id"),
-        ("Config", "config_path"),
-    ):
-        lines.append(f"| {label} | {markdown_cell(benchmark['metadata'].get(key))} |")
+    lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
 
     lines.extend(
         [
@@ -750,6 +699,56 @@ def report_metadata(
     normalized.setdefault("workers", "-")
     normalized.setdefault("config_path", "-")
     return normalized
+
+
+def render_environment_table(metadata: dict[str, Any], mode_label: str) -> list[str]:
+    rows = [
+        (mode_label, "mode"),
+        ("Eval kind", "eval_kind"),
+        ("Skill", "skill"),
+        ("Run ID", "run_id"),
+    ]
+    if not metadata_has_eval_kind(metadata, "validation"):
+        rows.append(("Agent model", "agent_model"))
+    if metadata_has_eval_kind(metadata, "qualitative") or truthy_metadata(metadata.get("qualitative_enabled")):
+        rows.extend(
+            [
+                ("Judge model", "judge_model"),
+                ("Qualitative enabled", "qualitative_enabled"),
+            ]
+        )
+    if metadata_has_eval_kind(metadata, "runtime") or truthy_metadata(metadata.get("runtime_enabled")):
+        rows.append(("Runtime enabled", "runtime_enabled"))
+    rows.extend(
+        [
+            ("Workers", "workers"),
+            ("Config", "config_path"),
+        ]
+    )
+
+    lines = [
+        "",
+        "## Environment",
+        "",
+        "| Field | Value |",
+        "|---|---|",
+    ]
+    for label, key in rows:
+        lines.append(f"| {label} | {markdown_cell(metadata.get(key))} |")
+    return lines
+
+
+def metadata_has_eval_kind(metadata: dict[str, Any], expected: str) -> bool:
+    values = str(metadata.get("eval_kind") or "").replace(",", " ").split()
+    return expected in values
+
+
+def truthy_metadata(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def report_key(benchmark: dict[str, Any]) -> str:

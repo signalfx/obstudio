@@ -55,6 +55,9 @@ Mode-specific JSON files are named by role:
 *_eval.json            # qualitative and standard artifact checks
 ```
 
+The default sanity target is `evals/sanity/skill-smoke/`, a dummy fixture used
+only to prove that the selected skill loads and the prompt returns quickly.
+
 ## A/B Sides
 
 | Side | Skill visibility |
