@@ -5,6 +5,8 @@ node_modules/**
 src/**
 .gitignore
 .yarnrc
+.DS_Store
+**/.DS_Store
 build-observer.js
 esbuild.js
 vsc-extension-quickstart.md
@@ -13,3 +15,4 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+assets/observer-icon.svg

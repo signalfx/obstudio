@@ -72,7 +72,7 @@ export function getObserverLoadingWebviewHtml(): string {
 	</style>
 </head>
 <body>
-	<div>Observability Studio is starting…</div>
+	<div>Splunk Observability Studio is starting…</div>
 </body>
 </html>`;
 }
@@ -130,7 +130,7 @@ export function getObserverErrorWebviewHtml(errorMessage: string): string {
 		<div class="error-detail">${escaped}</div>
 		<p class="hint">
 			Use the Command Palette (Cmd+Shift+P) and run
-			<strong>Observability Studio: Restart Observer</strong> after
+			<strong>Splunk Observability Studio: Restart Observer</strong> after
 			freeing the port.
 		</p>
 	</div>
@@ -174,7 +174,7 @@ export function getObserverStoppedWebviewHtml(): string {
 		<div>Observer is stopped.</div>
 		<p class="hint">
 			Use the Command Palette (Cmd+Shift+P) and run
-			<strong>Observability Studio: Start Observer</strong> to start it again.
+			<strong>Splunk Observability Studio: Start Observer</strong> to start it again.
 		</p>
 	</div>
 </body>
