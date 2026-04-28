@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import CommandEvent, TraceUsage
+
+@dataclass
+class CommandEvent:
+    command: str
+    status: str = ""
+
+
+@dataclass
+class TraceUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
 
 class TraceSummary:

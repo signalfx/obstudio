@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .models import EvalCase
+from .definitions import EvalCase
 
 
 def side_prompt(case: EvalCase, side: str) -> str:

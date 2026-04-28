@@ -9,36 +9,63 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .models import DeterministicCheck, GradeCheckResult
+from pytest_codex_evals.definitions import GradeCheckResult, GradeResult, RuntimeCheck, RuntimeEvalCase
+from pytest_codex_evals.trace import TraceSummary
+
+from .shared import guard_checks
 
 
-def run_observer_docker_runtime(
-    check: DeterministicCheck,
+def grade_runtime(
+    case: RuntimeEvalCase,
+    run_dir: Path,
+    final_message: str,
+    trace: TraceSummary,
+    side: str,
+    *,
+    runtime_enabled: bool = False,
+    repo_root: Path | None = None,
+) -> GradeResult:
+    service_dir = run_dir / "service"
+    eval_dir = case.definition_path.parent if case.definition_path else None
+    results = guard_checks(run_dir, final_message, trace, side, case.skill)
+    for check in case.checks:
+        if check.applies_to not in ("both", side):
+            continue
+        if not runtime_enabled:
+            results.append(
+                runtime_result(
+                    check,
+                    True,
+                    "Runtime check skipped; enable [runtime].enabled = true or pass --codex-runtime.",
+                    skipped=True,
+                )
+            )
+            continue
+        results.append(run_observer_runtime(check, service_dir, repo_root, eval_dir))
+    return GradeResult(checks=results)
+
+
+def run_observer_runtime(
+    check: RuntimeCheck,
     service_dir: Path,
     repo_root: Path | None = None,
     eval_dir: Path | None = None,
 ) -> GradeCheckResult:
-    config = check.runtime
-    if not config:
-        return runtime_result(check, False, "Runtime check requires a runtime object")
-
     compose_file: Path | None = None
     project = safe_name(f"codex-eval-{check.id}-{int(time.time() * 1000)}")
     env = runtime_env(repo_root, service_dir, project)
     try:
-        compose_file = resolve_compose_file(config, service_dir, eval_dir)
+        compose_file = resolve_compose_file(check, service_dir, eval_dir)
         cwd = compose_file.parent
-
         run_process(compose_command(compose_file, project) + ["up", "-d", "--build"], cwd, env, check.timeout_seconds)
-        wait_for_observer(config, check.timeout_seconds)
-        clear_observer(config)
+        wait_for_observer(check.timeout_seconds)
+        clear_observer()
         run_process(compose_command(compose_file, project, profile="traffic") + ["run", "--rm", "traffic"], cwd, env, check.timeout_seconds)
 
-        settle_seconds = float(config.get("settle_seconds", 5))
-        if settle_seconds > 0:
-            time.sleep(settle_seconds)
+        if check.settle_seconds > 0:
+            time.sleep(check.settle_seconds)
 
-        passed, evidence = validate_observer_expectations(config)
+        passed, evidence = validate_observer_expectations(check.expect.model_dump(exclude_none=True))
         if not passed:
             evidence = evidence_with_compose_logs(evidence, compose_file, project, env)
         return runtime_result(check, passed, evidence)
@@ -61,16 +88,9 @@ def run_observer_docker_runtime(
                 pass
 
 
-def resolve_compose_file(config: dict[str, Any], service_dir: Path, eval_dir: Path | None = None) -> Path:
-    value = config.get("compose_file")
-    if not value:
-        raise ValueError("runtime.compose_file is required")
-    path = Path(str(value))
-    if path.is_absolute():
-        resolved = path
-    else:
-        base = eval_dir or service_dir
-        resolved = (base / path).resolve()
+def resolve_compose_file(check: RuntimeCheck, service_dir: Path, eval_dir: Path | None = None) -> Path:
+    path = Path(check.compose_file)
+    resolved = path if path.is_absolute() else ((eval_dir or service_dir) / path).resolve()
     if not resolved.is_file():
         raise ValueError(f"compose_file not found: {resolved}")
     return resolved
@@ -101,22 +121,13 @@ def run_process(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     try:
-        completed = subprocess.run(
-            command,
-            cwd=cwd,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        completed = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError as exc:
         raise RuntimeError(f"command executable not found: {exc.filename}") from exc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"command timed out after {exc.timeout}s: {' '.join(command)}") from exc
-
     if check and completed.returncode != 0:
-        output = command_output(completed)
-        raise RuntimeError(f"{' '.join(command)} exited {completed.returncode}: {output}")
+        raise RuntimeError(f"{' '.join(command)} exited {completed.returncode}: {command_output(completed)}")
     return completed
 
 
@@ -145,51 +156,44 @@ def compose_logs(compose_file: Path, project: str, env: dict[str, str]) -> str:
     return f"compose logs: {output}" if output else ""
 
 
-def clear_observer(config: dict[str, Any]) -> None:
-    observer = observer_config(config)
-    if observer.get("clear", True) is False:
-        return
-    request_text(observer_url(config, observer.get("clear_path", "/api/data")), method="DELETE", timeout=10, allow_404=True)
+def clear_observer() -> None:
+    request_text(observer_url("/api/data"), method="DELETE", timeout=10, allow_404=True)
 
 
-def wait_for_observer(config: dict[str, Any], timeout: int) -> None:
-    observer = observer_config(config)
-    health_path = str(observer.get("health_path", "/api/health"))
-    url = observer_url(config, health_path)
-    expect_status = int(observer.get("expect_status", 200))
-    deadline = time.monotonic() + int(observer.get("timeout_seconds", timeout))
+def wait_for_observer(timeout: int) -> None:
+    url = observer_url("/api/health")
+    deadline = time.monotonic() + timeout
     last_error = ""
     while time.monotonic() < deadline:
         try:
             status, _ = request_text(url, timeout=5, return_status=True)
-            if status == expect_status:
+            if status == 200:
                 return
             last_error = f"status {status}"
         except Exception as exc:
             last_error = str(exc)
         time.sleep(1)
-    raise TimeoutError(f"observer did not reach {expect_status}: {url}; last error: {last_error}")
+    raise TimeoutError(f"observer did not reach 200: {url}; last error: {last_error}")
 
 
-def validate_observer_expectations(config: dict[str, Any]) -> tuple[bool, str]:
-    expect = config.get("expect") or {}
+def validate_observer_expectations(expect: dict[str, Any]) -> tuple[bool, str]:
     if not expect:
-        return False, "runtime.expect is required"
+        return False, "runtime expect is required"
 
     evidence = []
     failures = []
     traces = expect.get("traces") or {}
     if traces:
-        text = request_json_text(observer_url(config, traces.get("path", "/api/query/traces")))
+        text = request_json_text(observer_url(traces.get("path", "/api/query/traces")))
         check_expected_text("traces", text, traces, evidence, failures)
 
     metrics = expect.get("metrics") or {}
     if metrics:
-        text = request_json_text(observer_url(config, metrics.get("path", "/api/query/metrics")))
+        text = request_json_text(observer_url(metrics.get("path", "/api/query/metrics")))
         check_expected_text("metrics", text, metrics, evidence, failures)
 
     if not traces and not metrics:
-        return False, "runtime.expect must include traces or metrics expectations"
+        return False, "runtime expect must include traces or metrics expectations"
     if failures:
         return False, "; ".join(failures)
     return True, "; ".join(evidence) if evidence else "Observer expectations passed"
@@ -212,18 +216,10 @@ def check_expected_text(scope: str, text: str, expect: dict[str, Any], evidence:
             evidence.append(f"{scope} matched one of {key}: {', '.join(values)}")
 
 
-def observer_config(config: dict[str, Any]) -> dict[str, Any]:
-    observer = config.get("observer") or {}
-    if not isinstance(observer, dict):
-        raise ValueError("runtime.observer must be an object")
-    return observer
-
-
-def observer_url(config: dict[str, Any], path: str) -> str:
-    base_url = str(observer_config(config).get("base_url", "http://127.0.0.1:3000")).rstrip("/")
+def observer_url(path: str) -> str:
     if path.startswith("http://") or path.startswith("https://"):
         return path
-    return base_url + "/" + path.lstrip("/")
+    return "http://127.0.0.1:3000/" + path.lstrip("/")
 
 
 def request_json_text(url: str) -> str:
@@ -258,13 +254,14 @@ def request_text(
         raise
 
 
-def runtime_result(check: DeterministicCheck, passed: bool, evidence: str) -> GradeCheckResult:
+def runtime_result(check: RuntimeCheck, passed: bool, evidence: str, skipped: bool = False) -> GradeCheckResult:
     return GradeCheckResult(
         id=check.id,
         description=check.description,
         passed=passed,
         evidence=evidence,
         category="runtime",
+        skipped=skipped,
     )
 
 

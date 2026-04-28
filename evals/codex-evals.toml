@@ -1,7 +1,7 @@
 [run]
 mode = "with_skill"
 
-[qualitative]
+[rubric]
 enabled = true
 
 [runtime]

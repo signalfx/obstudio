@@ -10,6 +10,11 @@
       "task": "Instrument the FastAPI and Celery service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Instruments both the FastAPI web process and the Celery worker startup path.",
     "Uses separate setup code and avoids SDK initialization on library import when inappropriate.",

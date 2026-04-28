@@ -10,6 +10,11 @@
       "task": "Produce an observability readiness review for the Flask service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Identifies app.py and pyproject.toml as the relevant entrypoint and dependency files.",
     "Enumerates the Flask task CRUD routes and health route.",

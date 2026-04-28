@@ -10,6 +10,11 @@
       "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving controller behavior. Prefer javaagent auto-instrumentation over programmatic SDK code."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Uses or recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path.",
     "Keeps Spring controller code minimal and does not replace auto-instrumentation with broad manual tracing.",

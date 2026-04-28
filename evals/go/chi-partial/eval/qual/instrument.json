@@ -10,6 +10,11 @@
       "task": "Update the partially instrumented Go chi service in ./service so tracing and metrics are correctly configured, while preserving the existing runtime and startup command."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Preserves the existing chi routes and otelhttp wrapping behavior.",
     "Adds or fixes MeterProvider setup so HTTP server metrics can export.",

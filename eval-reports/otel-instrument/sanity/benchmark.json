@@ -4,10 +4,10 @@
     "mode": "ab",
     "eval_kind": "sanity",
     "skill": "otel-instrument",
-    "run_id": "20260428T192400828790Z",
+    "run_id": "20260428T234104290071Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
-    "qualitative_enabled": false,
+    "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
     "config_path": "evals/codex-evals.toml"
@@ -20,18 +20,18 @@
       "eval_kind": "validation",
       "ab_enabled": false,
       "skill": "otel-instrument",
-      "run_id": "20260428T192400828790Z",
+      "run_id": "20260428T234104290071Z",
       "repo_root": "/Users/pavankri/Cisco/obstudio",
       "config_path": "evals/codex-evals.toml",
       "agent_model": "gpt-5.5",
       "judge_model": "gpt-5.5",
-      "qualitative_enabled": false,
+      "rubric_enabled": false,
       "runtime_enabled": false,
       "workers": "1"
     },
     "evals": [
       {
-        "id": "sanity/skill-smoke/instrument_sanity",
+        "id": "sanity/skill-smoke/sanity/instrument",
         "case": "sanity/skill-smoke",
         "language": "sanity",
         "service": "skill-smoke",
@@ -40,11 +40,11 @@
           "direct",
           "runtime-preserving"
         ],
-        "definition_path": "evals/sanity/skill-smoke/instrument_sanity_eval.json",
+        "definition_path": "evals/sanity/skill-smoke/eval/sanity/instrument.json",
         "eval_dir": "evals/sanity/skill-smoke",
         "skill_path": "skills/otel-instrument",
-        "deterministic_check_count": 0,
-        "qualitative_check_count": 0,
+        "sanity_check_count": 0,
+        "rubric_check_count": 0,
         "runtime_check_count": 0
       }
     ],
@@ -52,8 +52,8 @@
       "eval_count": 1,
       "case_count": 2,
       "prompt_count": 2,
-      "deterministic_check_count": 0,
-      "qualitative_check_count": 0,
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
       "runtime_check_count": 0
     }
   },
@@ -66,18 +66,18 @@
         "eval_kind": "sanity",
         "ab_enabled": true,
         "skill": "otel-instrument",
-        "run_id": "20260428T192400828790Z",
+        "run_id": "20260428T234104290071Z",
         "repo_root": "/Users/pavankri/Cisco/obstudio",
         "config_path": "evals/codex-evals.toml",
         "agent_model": "gpt-5.5",
         "judge_model": "gpt-5.5",
-        "qualitative_enabled": false,
+        "rubric_enabled": false,
         "runtime_enabled": false,
         "workers": "1"
       },
       "evals": [
         {
-          "id": "sanity/skill-smoke/instrument_sanity",
+          "id": "sanity/skill-smoke/sanity/instrument",
           "case": "sanity/skill-smoke",
           "language": "sanity",
           "service": "skill-smoke",
@@ -88,7 +88,7 @@
           ],
           "with_skill": {
             "prompt_count": 2,
-            "deterministic": {
+            "sanity": {
               "passed": 4,
               "total": 4,
               "skipped": 0
@@ -98,19 +98,19 @@
               "total": 0,
               "skipped": 0
             },
-            "qualitative": null,
+            "rubric": null,
             "command_count": 0,
-            "duration_seconds": 22.014,
-            "agent_duration_seconds": 21.991,
-            "qualitative_duration_seconds": 0.0,
-            "tokens": 54485,
-            "agent_tokens": 54485,
-            "qualitative_tokens": 0,
+            "duration_seconds": 19.199,
+            "agent_duration_seconds": 19.181,
+            "rubric_duration_seconds": 0.0,
+            "tokens": 54585,
+            "agent_tokens": 54585,
+            "rubric_tokens": 0,
             "error_count": 0
           },
           "with_baseline": {
             "prompt_count": 2,
-            "deterministic": {
+            "sanity": {
               "passed": 6,
               "total": 6,
               "skipped": 0
@@ -120,20 +120,20 @@
               "total": 0,
               "skipped": 0
             },
-            "qualitative": null,
+            "rubric": null,
             "command_count": 0,
-            "duration_seconds": 15.272,
-            "agent_duration_seconds": 15.261,
-            "qualitative_duration_seconds": 0.0,
-            "tokens": 48557,
-            "agent_tokens": 48557,
-            "qualitative_tokens": 0,
+            "duration_seconds": 13.365,
+            "agent_duration_seconds": 13.351,
+            "rubric_duration_seconds": 0.0,
+            "tokens": 48568,
+            "agent_tokens": 48568,
+            "rubric_tokens": 0,
             "error_count": 0
           },
           "result_paths": {
-            "eval": ".workspace/codex-evals/otel-instrument/20260428T192400828790Z/results/sanity/skill-smoke/instrument_sanity/eval.json",
-            "with_skill": ".workspace/codex-evals/otel-instrument/20260428T192400828790Z/results/sanity/skill-smoke/instrument_sanity/with_skill.json",
-            "with_baseline": ".workspace/codex-evals/otel-instrument/20260428T192400828790Z/results/sanity/skill-smoke/instrument_sanity/with_baseline.json"
+            "eval": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
+            "with_skill": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
+            "with_baseline": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
           }
         }
       ],
@@ -145,7 +145,7 @@
         "failure_count": 0,
         "with_skill": {
           "prompt_count": 2,
-          "deterministic": {
+          "sanity": {
             "passed": 4,
             "total": 4,
             "skipped": 0
@@ -155,19 +155,19 @@
             "total": 0,
             "skipped": 0
           },
-          "qualitative": null,
+          "rubric": null,
           "command_count": 0,
-          "duration_seconds": 22.014,
-          "agent_duration_seconds": 21.991,
-          "qualitative_duration_seconds": 0.0,
-          "tokens": 54485,
-          "agent_tokens": 54485,
-          "qualitative_tokens": 0,
+          "duration_seconds": 19.199,
+          "agent_duration_seconds": 19.181,
+          "rubric_duration_seconds": 0.0,
+          "tokens": 54585,
+          "agent_tokens": 54585,
+          "rubric_tokens": 0,
           "error_count": 0
         },
         "with_baseline": {
           "prompt_count": 2,
-          "deterministic": {
+          "sanity": {
             "passed": 6,
             "total": 6,
             "skipped": 0
@@ -177,20 +177,20 @@
             "total": 0,
             "skipped": 0
           },
-          "qualitative": null,
+          "rubric": null,
           "command_count": 0,
-          "duration_seconds": 15.272,
-          "agent_duration_seconds": 15.261,
-          "qualitative_duration_seconds": 0.0,
-          "tokens": 48557,
-          "agent_tokens": 48557,
-          "qualitative_tokens": 0,
+          "duration_seconds": 13.365,
+          "agent_duration_seconds": 13.351,
+          "rubric_duration_seconds": 0.0,
+          "tokens": 48568,
+          "agent_tokens": 48568,
+          "rubric_tokens": 0,
           "error_count": 0
         }
       }
     }
   ],
-  "deterministic_failures": [],
-  "qualitative_failures": [],
+  "sanity_failures": [],
+  "rubric_failures": [],
   "runtime_failures": []
 }

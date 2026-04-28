@@ -5,14 +5,24 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator
 
 from .config import CodexEvalSettings, load_settings
 from .eval_files import eval_file_layout, is_eval_file
-from .models import CaseResult, EvalCase, EvalDefinition, PromptVariant, ValidationResult
+from .definitions import (
+    CaseResult,
+    EvalCase,
+    PromptVariant,
+    RubricEvalCase,
+    RubricEvalDefinition,
+    RuntimeEvalCase,
+    RuntimeEvalDefinition,
+    SanityEvalCase,
+    SanityEvalDefinition,
+    ValidationResult,
+)
 from .report import write_ab_reports, write_combined_session_reports, write_side_reports, write_validation_reports
 from .runner import new_run_id, new_run_root, run_case
-from .schema_resources import load_schema
+from .schema_resources import schema_validator
 
 
 RUNS_ATTR = "_codex_eval_runs"
@@ -29,13 +39,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--codex-eval-kind",
         default="",
-        choices=("validation", "standard", "sanity", "qualitative", "runtime"),
-        help="Eval kind to run: validation, sanity, qualitative, runtime, or legacy standard",
+        choices=("validation", "standard", "sanity", "rubric", "runtime"),
+        help="Eval kind to run: validation, sanity, rubric, runtime, or standard",
     )
     group.addoption("--ab", action="store_true", default=False, help="Run loaded-skill and baseline sides")
     group.addoption("--skill", default="", help="Path to the skill directory to load and evaluate")
     group.addoption("--model", default="", help="Optional Codex model override")
-    group.addoption("--no-qualitative", action="store_true", default=False, help="Skip schema-constrained qualitative grading")
+    group.addoption("--no-rubric", action="store_true", default=False, help="Skip schema-constrained rubric grading")
     group.addoption("--codex-runtime", action="store_true", default=False, help="Run Docker-backed runtime checks")
     group.addoption("--codex-eval-progress", action="store_true", default=False, help="Print per-item eval progress")
 
@@ -190,8 +200,8 @@ def codex_model(pytestconfig: pytest.Config) -> str | None:
 
 
 @pytest.fixture
-def codex_qualitative(pytestconfig: pytest.Config) -> bool:
-    return qualitative_enabled(pytestconfig)
+def codex_rubric(pytestconfig: pytest.Config) -> bool:
+    return rubric_enabled(pytestconfig)
 
 
 class CodexEvalFile(pytest.File):
@@ -236,7 +246,7 @@ class CodexEvalItem(pytest.Item):
             skill_dir=skill_dir,
             model=agent_model(self.config),
             judge_model=judge_model(self.config),
-            qualitative=qualitative_enabled(self.config),
+            rubric=rubric_enabled(self.config),
             runtime=runtime_enabled(self.config),
             eval_kind=kind,
             sides=sides,
@@ -251,27 +261,33 @@ class CodexEvalItem(pytest.Item):
 def load_eval_definition(path: Path) -> EvalDefinition:
     data = json.loads(path.read_text(encoding="utf-8"))
     data = with_path_defaults(path, data)
-    Draft202012Validator(load_schema("eval.schema.json")).validate(data)
-    definition = EvalDefinition.model_validate(data)
+    role = eval_role(path)
+    schema_validator(schema_name_for_role(role)).validate(data)
+    definition = definition_model_for_role(role).model_validate(data)
     definition.definition_path = path
     definition.fixture_dir = eval_fixture_dir(path)
     return definition
 
 
 def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path: Path) -> EvalCase:
-    return EvalCase(
-        id=f"{definition.id}/{prompt.id}",
-        base_id=definition.id,
-        prompt_id=prompt.id,
-        skill=definition.skill,
-        language=definition.language,
-        service=definition.service,
-        task=prompt.task,
-        deterministic_checks=definition.deterministic_checks,
-        qualitative_checks=definition.qualitative_checks,
-        definition_path=path,
-        fixture_dir=eval_fixture_dir(path),
-    )
+    common = {
+        "id": f"{definition.id}/{prompt.id}",
+        "base_id": definition.id,
+        "prompt_id": prompt.id,
+        "skill": definition.skill,
+        "language": definition.language,
+        "service": definition.service,
+        "task": prompt.task,
+        "definition_path": path,
+        "fixture_dir": eval_fixture_dir(path),
+    }
+    if isinstance(definition, SanityEvalDefinition):
+        return SanityEvalCase(**common, checks=definition.checks)
+    if isinstance(definition, RubricEvalDefinition):
+        return RubricEvalCase(**common, rubric=definition.rubric, judge_prompt=definition.judge_prompt, judge_inputs=definition.judge_inputs)
+    if isinstance(definition, RuntimeEvalDefinition):
+        return RuntimeEvalCase(**common, checks=definition.checks)
+    raise TypeError(f"unsupported eval definition: {type(definition).__name__}")
 
 
 def with_path_defaults(path: Path, data: dict[str, Any]) -> dict[str, Any]:
@@ -294,19 +310,40 @@ def eval_fixture_dir(path: Path) -> Path:
 
 def definition_matches_eval_kind(definition: EvalDefinition, kind: str, path: Path) -> bool:
     layout = eval_file_layout(path)
-    role = layout.role if layout else None
-    stem = layout.eval_name if layout else path.stem
+    role = layout.role if layout else definition.kind
     if kind in {"validation", "standard"}:
         return True
-    if kind == "sanity":
-        return role == "sanity" or "sanity" in stem
-    if kind == "runtime":
-        return role == "runtime" or "runtime" in stem or any(check.kind == "observer_docker_runtime" for check in definition.deterministic_checks)
-    if kind == "qualitative":
-        if role == "qualitative":
-            return True
-        return role is None and "sanity" not in stem and "runtime" not in stem and bool(definition.qualitative_checks)
-    return True
+    return role == kind
+
+
+EvalDefinition = SanityEvalDefinition | RubricEvalDefinition | RuntimeEvalDefinition
+
+
+def eval_role(path: Path) -> str:
+    layout = eval_file_layout(path)
+    if layout is None or layout.role is None:
+        raise pytest.UsageError(f"eval files must live under eval/sanity, eval/qual, or eval/runtime: {path}")
+    return layout.role
+
+
+def schema_name_for_role(role: str) -> str:
+    if role == "sanity":
+        return "sanity.schema.json"
+    if role == "rubric":
+        return "rubric.schema.json"
+    if role == "runtime":
+        return "runtime.schema.json"
+    raise pytest.UsageError(f"unknown eval role: {role}")
+
+
+def definition_model_for_role(role: str):
+    if role == "sanity":
+        return SanityEvalDefinition
+    if role == "rubric":
+        return RubricEvalDefinition
+    if role == "runtime":
+        return RuntimeEvalDefinition
+    raise pytest.UsageError(f"unknown eval role: {role}")
 
 
 def infer_repo_root(start: Path) -> Path:
@@ -345,11 +382,15 @@ def run_mode(config: pytest.Config) -> str:
 def eval_kind(config: pytest.Config) -> str:
     value = config.getoption("--codex-eval-kind") or ""
     if value:
-        return str(value)
+        return normalize_eval_kind(str(value))
     configured = settings(config).eval_kind
     if configured == "validation" and bool(config.getoption("--ab")):
         return "standard"
-    return configured
+    return normalize_eval_kind(configured)
+
+
+def normalize_eval_kind(value: str) -> str:
+    return value
 
 
 def sides_for_mode(mode: str) -> tuple[str, ...]:
@@ -362,13 +403,13 @@ def sides_for_mode(mode: str) -> tuple[str, ...]:
     raise ValueError(f"mode {mode} does not run Codex")
 
 
-def qualitative_enabled(config: pytest.Config) -> bool:
+def rubric_enabled(config: pytest.Config) -> bool:
     kind = eval_kind(config)
-    if kind == "qualitative":
-        return not bool(config.getoption("--no-qualitative"))
+    if kind == "rubric":
+        return not bool(config.getoption("--no-rubric"))
     if kind in {"validation", "sanity", "runtime"}:
         return False
-    return settings(config).qualitative_enabled and not bool(config.getoption("--no-qualitative"))
+    return settings(config).rubric_enabled and not bool(config.getoption("--no-rubric"))
 
 
 def runtime_enabled(config: pytest.Config) -> bool:
@@ -435,7 +476,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "config_path": display_path(path, repo_root) if path else "",
         "agent_model": agent_model(config) or "",
         "judge_model": judge_model(config) or "",
-        "qualitative_enabled": qualitative_enabled(config),
+        "rubric_enabled": rubric_enabled(config),
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
     }
@@ -456,6 +497,9 @@ def display_path(path: Path, repo_root: Path) -> str:
 
 def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:
     resolved_skill_dir = skill_dir or repo_root / "skills" / case.skill
+    sanity_count = len(case.checks) if isinstance(case, SanityEvalCase) else 0
+    rubric_count = len(case.rubric) if isinstance(case, RubricEvalCase) else 0
+    runtime_count = len(case.checks) if isinstance(case, RuntimeEvalCase) else 0
     return ValidationResult(
         id=case.id,
         base_id=case.base_id,
@@ -466,9 +510,10 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
         definition_path=str((case.definition_path or Path()).resolve()),
         fixture_dir=str((case.fixture_dir or Path()).resolve()),
         skill_path=str(resolved_skill_dir.resolve()),
-        deterministic_check_count=sum(1 for check in case.deterministic_checks if check.kind != "observer_docker_runtime"),
-        qualitative_check_count=len(case.qualitative_checks),
-        runtime_check_count=sum(1 for check in case.deterministic_checks if check.kind == "observer_docker_runtime"),
+        eval_kind=case.kind,
+        sanity_check_count=sanity_count,
+        rubric_check_count=rubric_count,
+        runtime_check_count=runtime_count,
     )
 
 
@@ -478,10 +523,10 @@ def validate_live_result(result: CaseResult) -> None:
         failures.append(f"with_skill exited {result.with_skill.exit_code}")
     if result.baseline is not None and result.baseline.exit_code != 0:
         failures.append(f"baseline exited {result.baseline.exit_code}")
-    if result.with_skill is not None and result.with_skill.deterministic_grade.total == 0:
-        failures.append("with_skill produced no deterministic checks")
-    if result.baseline is not None and result.baseline.deterministic_grade.total == 0:
-        failures.append("baseline produced no deterministic checks")
+    if result.with_skill is not None and result.with_skill.grade.total == 0:
+        failures.append("with_skill produced no checks")
+    if result.baseline is not None and result.baseline.grade.total == 0:
+        failures.append("baseline produced no checks")
     if result.with_skill is None and result.baseline is None:
         failures.append("no Codex side result was produced")
     if failures:

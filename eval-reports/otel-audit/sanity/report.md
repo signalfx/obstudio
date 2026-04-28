@@ -7,46 +7,26 @@
 | Modes | ab |
 | Eval kind | sanity |
 | Skill | otel-audit |
-| Run ID | 20260428T192400828790Z |
+| Run ID | 20260428T234104290071Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
 
 ## Validation
 
-| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |
+| Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| sanity/skill-smoke/audit_sanity | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/audit_sanity_eval.json | 0 | 0 | 0 |
+| sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/audit.json | 0 | 0 | 0 |
 
-## Deterministic
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | sanity/skill-smoke/audit_sanity | sanity/skill-smoke | 2 | 100% (4/4) | 53.1K | 17.6s | 100% (6/6) | 48.6K | 14.9s |
-
-### Deterministic Failures
-
-No deterministic failures.
-
-## Qualitative
+## Sanity Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | sanity/skill-smoke/audit_sanity | sanity/skill-smoke | 2 | - | 53.1K | 17.6s | - | 48.6K | 14.9s |
+| ab | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | 100% (4/4) | 53.2K | 13.7s | 100% (6/6) | 48.6K | 15.6s |
 
-### Qualitative Failures
+## Sanity Failures
 
-No qualitative failures.
-
-## Runtime
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | sanity/skill-smoke/audit_sanity | sanity/skill-smoke | 2 | - | 53.1K | 17.6s | - | 48.6K | 14.9s |
-
-### Runtime Failures
-
-No runtime failures.
+No sanity failures.
 
 ## Result JSON
 

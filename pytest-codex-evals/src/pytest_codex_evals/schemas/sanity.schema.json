@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sanity.schema.json",
+  "type": "object",
+  "required": ["skill", "prompts"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "skill": { "type": "string" },
+    "language": { "type": "string" },
+    "service": { "type": "string" },
+    "prompts": { "$ref": "common.schema.json#/$defs/prompts" },
+    "checks": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "common.schema.json#/$defs/sanityCheck" }
+    }
+  }
+}

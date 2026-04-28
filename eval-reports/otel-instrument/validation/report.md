@@ -7,53 +7,16 @@
 | Modes | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260428T192359575799Z |
+| Run ID | 20260428T234224181132Z |
+| Runtime enabled | True |
 | Workers | 1 |
-| Config | evals/codex-evals.validation.toml |
+| Config | evals/codex-evals.toml |
 
 ## Validation
 
-| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |
+| Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/instrument | go/chi-basic | 2 | evals/go/chi-basic/instrument_eval.json | 5 | 5 | 0 |
-| go/chi-partial/instrument | go/chi-partial | 2 | evals/go/chi-partial/instrument_eval.json | 5 | 5 | 0 |
-| go/kvstore/instrument | go/kvstore | 2 | evals/go/kvstore/instrument_eval.json | 5 | 5 | 0 |
-| java/springboot-basic/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/instrument_eval.json | 4 | 5 | 0 |
-| node/express-basic/instrument | node/express-basic | 2 | evals/node/express-basic/instrument_eval.json | 4 | 5 | 0 |
-| python/fastapi-celery/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/instrument_eval.json | 4 | 5 | 0 |
-| python/fastapi-celery/instrument_runtime | python/fastapi-celery | 1 | evals/python/fastapi-celery/instrument_runtime_eval.json | 0 | 0 | 1 |
-| python/flask-basic/instrument | python/flask-basic | 2 | evals/python/flask-basic/instrument_eval.json | 4 | 5 | 0 |
-| sanity/skill-smoke/instrument_sanity | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/instrument_sanity_eval.json | 0 | 0 | 0 |
-
-## Deterministic
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| - | - | - | 0 | - | - | - | - | - | - |
-
-### Deterministic Failures
-
-No deterministic failures.
-
-## Qualitative
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| - | - | - | 0 | - | - | - | - | - | - |
-
-### Qualitative Failures
-
-No qualitative failures.
-
-## Runtime
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| - | - | - | 0 | - | - | - | - | - | - |
-
-### Runtime Failures
-
-No runtime failures.
+| python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
 
 ## Result JSON
 

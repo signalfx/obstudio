@@ -1,42 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
-
-
-CheckKind = Literal[
-    "final_contains_all",
-    "final_contains_any",
-    "file_exists",
-    "file_exists_any",
-    "no_file_exists",
-    "file_contains_all",
-    "file_contains_any",
-    "trace_command_contains",
-    "command_succeeds",
-    "command_stdout_contains_all",
-    "command_stdout_contains_any",
-    "command_stdout_contains_none",
-    "observer_docker_runtime",
-]
-
-CheckCategory = Literal["deterministic", "runtime"]
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class DeterministicCheck(BaseModel):
-    id: str
-    description: str
-    kind: CheckKind
-    path: str | None = None
-    paths: list[str] = Field(default_factory=list)
-    values: list[str] = Field(default_factory=list)
-    command: list[str] = Field(default_factory=list)
-    cwd: str | None = None
-    timeout_seconds: int = 30
-    runtime: dict[str, Any] = Field(default_factory=dict)
-    applies_to: Literal["both", "with_skill", "baseline"] = "with_skill"
+EvalRole = Literal["sanity", "rubric", "runtime"]
+CheckCategory = Literal["sanity", "runtime"]
 
 
 class PromptVariant(BaseModel):
@@ -44,18 +15,20 @@ class PromptVariant(BaseModel):
     task: str
 
 
-class EvalDefinition(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+class BaseEvalDefinition(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str
     skill: str
     language: str
     service: str
     prompts: list[PromptVariant]
-    deterministic_checks: list[DeterministicCheck] = Field(default_factory=list, validation_alias=AliasChoices("checks", "deterministic_checks"))
-    qualitative_checks: list[str] = Field(default_factory=list, validation_alias=AliasChoices("rubric", "qualitative_checks"))
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+
+    @property
+    def kind(self) -> EvalRole:
+        raise NotImplementedError
 
     @property
     def case_key(self) -> str:
@@ -66,8 +39,8 @@ class EvalDefinition(BaseModel):
         return self.case_key
 
 
-class EvalCase(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+class BaseEvalCase(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str
     base_id: str
@@ -76,10 +49,12 @@ class EvalCase(BaseModel):
     language: str
     service: str
     task: str
-    deterministic_checks: list[DeterministicCheck] = Field(default_factory=list)
-    qualitative_checks: list[str] = Field(default_factory=list)
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+
+    @property
+    def kind(self) -> EvalRole:
+        raise NotImplementedError
 
     @property
     def case_key(self) -> str:
@@ -90,23 +65,12 @@ class EvalCase(BaseModel):
         return self.case_key
 
 
-class CommandEvent(BaseModel):
-    command: str
-    status: str = ""
-
-
-class TraceUsage(BaseModel):
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
-
-
 class GradeCheckResult(BaseModel):
     id: str
     description: str
     passed: bool
     evidence: str = ""
-    category: CheckCategory = "deterministic"
+    category: CheckCategory = "sanity"
     skipped: bool = False
 
 
@@ -133,15 +97,16 @@ class SideResult(BaseModel):
     exit_code: int
     trace_path: str
     final_message_path: str
-    deterministic_grade: GradeResult
-    qualitative_grade_path: str | None = None
+    grade: GradeResult
+    rubric_grade_path: str | None = None
+    rubric_trace_path: str | None = None
     command_count: int = 0
     duration_seconds: float = 0.0
     agent_duration_seconds: float = 0.0
-    qualitative_duration_seconds: float = 0.0
+    rubric_duration_seconds: float = 0.0
     tokens: int = 0
     agent_tokens: int = 0
-    qualitative_tokens: int = 0
+    rubric_tokens: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
@@ -166,6 +131,7 @@ class ValidationResult(BaseModel):
     definition_path: str
     fixture_dir: str
     skill_path: str
-    deterministic_check_count: int = 0
-    qualitative_check_count: int = 0
+    eval_kind: EvalRole
+    sanity_check_count: int = 0
+    rubric_check_count: int = 0
     runtime_check_count: int = 0

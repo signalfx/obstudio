@@ -46,8 +46,8 @@ make test-pytest-plugin
 ## Skill Evals
 
 Skill evals follow the OpenAI eval-skill maintenance pattern: run real tasks,
-capture traces, grade deterministic outcomes, use schema-constrained
-qualitative grading, and optionally run Docker/Observer runtime checks.
+grade quick sanity checks, use schema-constrained rubric grading, and
+optionally run Docker/Observer runtime checks.
 Eval files live under `evals/`; see `evals/README.md` for the full command and
 reporting model.
 
@@ -57,7 +57,7 @@ Use these commands:
 make skill-eval-list
 make eval-validation SKILL=skills/otel-audit
 make eval-sanity SKILL=skills/otel-audit
-make eval-qualitative SKILL=skills/otel-instrument CASE=go/kvstore
+make eval-rubric SKILL=skills/otel-instrument CASE=go/kvstore
 make eval-runtime SKILL=skills/otel-instrument
 make eval-all-ab SKILL=skills/otel-audit MODEL=gpt-5.5
 ```
@@ -72,13 +72,13 @@ Outputs:
 - Keep `skills/` as the source of truth.
 - Keep `.agents/skills/` as repo-local Codex discovery links only.
 - Add or update evals when skill instructions change or a real failure is found.
-- Keep deterministic checks tied to observable artifacts: files, final output,
-  commands, JSONL traces, and baseline contamination checks.
+- Keep sanity checks quick and tied to observable artifacts: files, final output,
+  commands, and skill-loading guards.
 - Keep A/B baseline checks simple; detailed artifact checks should default to
   `with_skill` unless a baseline assertion is intentional.
 - Keep A/B skill-loading guards in the harness: `skills-loaded` for
   `with_skill`, and `skills-not-loaded` for `baseline`.
-- Use qualitative checks for semantic convention quality, workflow correctness,
+- Use rubric checks for semantic convention quality, workflow correctness,
   code minimality, and judgment-heavy requirements.
 - Use runtime checks for end-to-end telemetry proof only when Docker and a
   managed Observer are expected.

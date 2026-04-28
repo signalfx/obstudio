@@ -10,23 +10,20 @@
     {
       "id": "observer-runtime-telemetry",
       "description": "Docker runtime emits FastAPI traces to a running Observer.",
-      "kind": "observer_docker_runtime",
+      "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
-      "runtime": {
-        "compose_file": "docker-compose.yml",
-        "expect": {
-          "traces": {
-            "span_names": [
-              "GET /health",
-              "GET /orders",
-              "POST /orders"
-            ]
-          },
-          "metrics": {
-            "metric_names": [
-              "http.server.request.duration"
-            ]
-          }
+      "expect": {
+        "traces": {
+          "span_names": [
+            "GET /health",
+            "GET /orders",
+            "POST /orders"
+          ]
+        },
+        "metrics": {
+          "metric_names": [
+            "http.server.request.duration"
+          ]
         }
       }
     }

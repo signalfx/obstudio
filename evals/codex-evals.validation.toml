@@ -1,7 +1,7 @@
 [run]
 mode = "validation"
 
-[qualitative]
+[rubric]
 enabled = true
 
 [runtime]

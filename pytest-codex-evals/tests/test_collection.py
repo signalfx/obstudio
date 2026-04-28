@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from jsonschema.exceptions import ValidationError
+
+from pytest_codex_evals.schema_resources import schema_validator
 
 
 pytest_plugins = ("pytester",)
@@ -40,6 +43,7 @@ def write_eval_repo(pytester: pytest.Pytester) -> None:
                     {"id": "direct", "task": "Scan the service."},
                     {"id": "runtime-preserving", "task": "Keep the runtime shape."},
                 ],
+                "rubric": ["The answer cites concrete evidence."],
             },
             indent=2,
         ),
@@ -56,6 +60,7 @@ def write_eval_repo(pytester: pytest.Pytester) -> None:
             {
                 "skill": "other-skill",
                 "prompts": [{"id": "direct", "task": "Scan the other service."}],
+                "rubric": ["The answer cites concrete evidence."],
             },
             indent=2,
         ),
@@ -119,6 +124,7 @@ def test_eval_json_files_do_not_require_fixture_files(pytester: pytest.Pytester)
             {
                 "skill": "sample-skill",
                 "prompts": [{"id": "direct", "task": "Classify the provided input."}],
+                "rubric": ["The answer classifies the input."],
             },
             indent=2,
         ),
@@ -170,7 +176,8 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
                     {
                         "id": "runtime",
                         "description": "Runtime check.",
-                        "kind": "observer_docker_runtime",
+                        "compose_file": "docker-compose.yml",
+                        "expect": {"traces": {"contains_any": ["sample-service"]}},
                     }
                 ],
             },
@@ -183,9 +190,9 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
     sanity.assert_outcomes()
     sanity.stdout.fnmatch_lines(["evals/sample/service/eval/sanity/sample.json::sample-skill::sample/service::direct", "1 test collected*"])
 
-    qualitative = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "qualitative")
-    qualitative.assert_outcomes()
-    qualitative.stdout.fnmatch_lines(
+    rubric = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "rubric")
+    rubric.assert_outcomes()
+    rubric.stdout.fnmatch_lines(
         [
             "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::direct",
             "evals/sample/service/eval/qual/sample.json::sample-skill::sample/service::runtime-preserving",
@@ -196,3 +203,37 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
     runtime = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "runtime")
     runtime.assert_outcomes()
     runtime.stdout.fnmatch_lines(["evals/sample/service/eval/runtime/sample.json::sample-skill::sample/service::runtime", "1 test collected*"])
+
+
+def test_role_schemas_reject_cross_role_fields():
+    rubric_payload = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "direct", "task": "Scan."}],
+        "rubric": ["Grade quality."],
+        "checks": [],
+    }
+    runtime_payload = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "direct", "task": "Run."}],
+        "checks": [{"id": "runtime", "description": "Run", "compose_file": "docker-compose.yml", "expect": {"traces": {"contains_any": ["svc"]}}}],
+        "rubric": ["Not allowed."],
+    }
+    runtime_with_kind = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "direct", "task": "Run."}],
+        "checks": [{"id": "runtime", "description": "Run", "kind": "old_runtime_kind", "runtime": {"compose_file": "docker-compose.yml"}}],
+    }
+    sanity_payload = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "direct", "task": "Check."}],
+        "rubric": ["Not allowed."],
+    }
+
+    with pytest.raises(ValidationError):
+        schema_validator("rubric.schema.json").validate(rubric_payload)
+    with pytest.raises(ValidationError):
+        schema_validator("runtime.schema.json").validate(runtime_payload)
+    with pytest.raises(ValidationError):
+        schema_validator("runtime.schema.json").validate(runtime_with_kind)
+    with pytest.raises(ValidationError):
+        schema_validator("sanity.schema.json").validate(sanity_payload)

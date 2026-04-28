@@ -13,7 +13,7 @@ PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-sanity eval-sanity-ab eval-qualitative eval-qualitative-ab eval-runtime eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-sanity eval-sanity-ab eval-rubric eval-rubric-ab eval-runtime eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -95,10 +95,10 @@ eval-sanity: ## Run quick loaded-skill sanity checks; pass AB=1 or WITH=ab to in
 eval-sanity-ab: ## Run sanity checks with baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-qualitative: ## Run schema-constrained qualitative grading; pass AB=1 or WITH=ab to include baseline
+eval-rubric: ## Run schema-constrained rubric grading; pass AB=1 or WITH=ab to include baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-qualitative-ab: ## Run qualitative grading with baseline
+eval-rubric-ab: ## Run rubric grading with baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
@@ -134,10 +134,10 @@ skill-eval-ab-all: ## Alias for eval-ab
 test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	$(MAKE) -C $(EVALS_DIR) $@
 
-eval-all: ## Run validation, sanity, qualitative, and runtime evals
+eval-all: ## Run validation, sanity, rubric, and runtime evals
 	@$(MAKE) -C $(EVALS_DIR) eval-all
 
-eval-all-ab: ## Run validation plus A/B sanity, qualitative, and runtime evals
+eval-all-ab: ## Run validation plus A/B sanity, rubric, and runtime evals
 	@$(MAKE) -C $(EVALS_DIR) eval-all-ab
 
 test-evals-all: eval-all ## Alias for eval-all

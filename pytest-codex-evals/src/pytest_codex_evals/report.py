@@ -5,7 +5,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .models import CaseResult, GradeCheckResult, SideResult, ValidationResult
+from .definitions import CaseResult, GradeCheckResult, SideResult, ValidationResult
+from .reports import ReportTemplate, template_for_kind
 
 
 LIVE_MODES = {"with_skill", "with_baseline", "ab"}
@@ -14,13 +15,13 @@ SIDE_ATTRS = {
     "with_baseline": "baseline",
 }
 LIVE_SECTION_DEFINITIONS = {
-    "deterministic": ("Deterministic", "deterministic", "deterministic_failures"),
-    "qualitative": ("Qualitative", "qualitative", "qualitative_failures"),
-    "runtime": ("Runtime", "runtime", "runtime_failures"),
+    "sanity": (template_for_kind("sanity"), "sanity_failures"),
+    "rubric": (template_for_kind("rubric"), "rubric_failures"),
+    "runtime": (template_for_kind("runtime"), "runtime_failures"),
 }
 KIND_LIVE_SECTIONS = {
-    "sanity": ("deterministic",),
-    "qualitative": ("qualitative",),
+    "sanity": ("sanity",),
+    "rubric": ("rubric",),
     "runtime": ("runtime",),
     "validation": (),
 }
@@ -162,8 +163,8 @@ def build_combined_benchmark(
         "metadata": metadata,
         "validation": validation,
         "live": live,
-        "deterministic_failures": collect_combined_failures(live, "deterministic"),
-        "qualitative_failures": collect_combined_failures(live, "qualitative"),
+        "sanity_failures": collect_combined_failures(live, "sanity"),
+        "rubric_failures": collect_combined_failures(live, "rubric"),
         "runtime_failures": collect_combined_failures(live, "runtime"),
     }
 
@@ -206,7 +207,7 @@ def combined_metadata(
         "run_id": run_root.name,
         "agent_model": ", ".join(agent_models),
         "judge_model": ", ".join(judge_models),
-        "qualitative_enabled": any(bool(meta.get("qualitative_enabled")) for meta in metadata_sources),
+        "rubric_enabled": any(bool(meta.get("rubric_enabled")) for meta in metadata_sources),
         "runtime_enabled": any(bool(meta.get("runtime_enabled")) for meta in metadata_sources),
         "workers": ", ".join(sorted({str(meta.get("workers") or "-") for meta in metadata_sources if meta.get("workers")})) or "-",
         "config_path": ", ".join(config_paths),
@@ -221,8 +222,8 @@ def render_combined_report(skill: str, benchmark: dict[str, Any]) -> str:
 
     lines.extend(render_validation_section(benchmark["validation"]))
     for section_key in live_section_keys(benchmark["metadata"]):
-        title, category, failures_key = LIVE_SECTION_DEFINITIONS[section_key]
-        lines.extend(render_live_section(title, benchmark["live"], category, benchmark[failures_key]))
+        template, failures_key = LIVE_SECTION_DEFINITIONS[section_key]
+        lines.extend(render_live_section(template, benchmark["live"], benchmark[failures_key]))
     lines.extend(["", "## Result JSON", ""])
     lines.append("File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.")
     return "\n".join(lines) + "\n"
@@ -240,7 +241,7 @@ def render_validation_section(validation: dict[str, Any]) -> list[str]:
         "",
         "## Validation",
         "",
-        "| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |",
+        "| Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |",
         "|---|---|---:|---|---:|---:|---:|",
     ]
     evals = validation.get("evals", [])
@@ -254,18 +255,19 @@ def render_validation_section(validation: dict[str, Any]) -> list[str]:
                 service=markdown_cell(item["case"]),
                 prompts=item["prompt_count"],
                 path=markdown_cell(item["definition_path"]),
-                det=item["deterministic_check_count"],
-                qual=item["qualitative_check_count"],
+                det=item["sanity_check_count"],
+                qual=item["rubric_check_count"],
                 runtime=item.get("runtime_check_count", 0),
             )
         )
     return lines
 
 
-def render_live_section(title: str, live_runs: list[dict[str, Any]], category: str, failures: list[dict[str, str]]) -> list[str]:
+def render_live_section(template: ReportTemplate, live_runs: list[dict[str, Any]], failures: list[dict[str, str]]) -> list[str]:
+    category = template.category
     lines = [
         "",
-        f"## {title}",
+        f"## {template.summary_title}",
         "",
         "| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -292,9 +294,9 @@ def render_live_section(title: str, live_runs: list[dict[str, Any]], category: s
     else:
         lines.append("| - | - | - | 0 | - | - | - | - | - | - |")
 
-    lines.extend(["", f"### {title} Failures", ""])
+    lines.extend(["", f"## {template.failure_title}", ""])
     if not failures:
-        lines.append(f"No {title.lower()} failures.")
+        lines.append(template.empty_failures)
     else:
         lines.extend(["| Mode | Service | Side | Prompt | Result | Evidence |", "|---|---|---|---|---|---|"])
         for failure in failures:
@@ -308,6 +310,9 @@ def render_live_section(title: str, live_runs: list[dict[str, Any]], category: s
                     evidence=markdown_cell(truncate(failure["evidence"], 320)),
                 )
             )
+    if template.evidence_title:
+        lines.extend(["", f"## {template.evidence_title}", ""])
+        lines.append("Runtime failure evidence includes the relevant Docker Compose log tail in the failure table.")
     return lines
 
 
@@ -383,20 +388,21 @@ def side_summary(side: SideResult | None) -> dict[str, Any] | None:
         return None
     return {
         "exit_code": side.exit_code,
-        "deterministic": check_summary(side, "deterministic"),
+        "sanity": check_summary(side, "sanity"),
         "runtime": check_summary(side, "runtime"),
-        "qualitative": load_qualitative_grade(side),
+        "rubric": load_rubric_grade(side),
         "command_count": side.command_count,
         "duration_seconds": side.duration_seconds,
         "agent_duration_seconds": side.agent_duration_seconds,
-        "qualitative_duration_seconds": side.qualitative_duration_seconds,
+        "rubric_duration_seconds": side.rubric_duration_seconds,
         "tokens": side.tokens,
         "agent_tokens": side.agent_tokens,
-        "qualitative_tokens": side.qualitative_tokens,
+        "rubric_tokens": side.rubric_tokens,
         "errors": side.errors,
         "trace_path": side.trace_path,
         "final_message_path": side.final_message_path,
-        "qualitative_grade_path": side.qualitative_grade_path,
+        "rubric_grade_path": side.rubric_grade_path,
+        "rubric_trace_path": side.rubric_trace_path,
     }
 
 
@@ -415,7 +421,7 @@ def check_summary(side: SideResult, category: str) -> dict[str, Any]:
 
 
 def checks_for_category(side: SideResult, category: str) -> list[GradeCheckResult]:
-    return [check for check in side.deterministic_grade.checks if check.category == category]
+    return [check for check in side.grade.checks if check.category == category]
 
 
 def aggregate_check_category(sides: list[SideResult], category: str) -> dict[str, Any]:
@@ -477,28 +483,28 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
     if not sides:
         return None
 
-    qualitative = [grade for side in sides if (grade := load_qualitative_grade(side)) is not None]
-    qualitative_total = sum(int(grade["total"]) for grade in qualitative)
-    qualitative_passed = sum(int(grade["passed"]) for grade in qualitative)
-    scores = [int(grade["score"]) for grade in qualitative if isinstance(grade.get("score"), int)]
+    rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
+    rubric_total = sum(int(grade["total"]) for grade in rubric)
+    rubric_passed = sum(int(grade["passed"]) for grade in rubric)
+    scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int)]
     return {
         "prompt_count": len(sides),
-        "deterministic": aggregate_check_category(sides, "deterministic"),
+        "sanity": aggregate_check_category(sides, "sanity"),
         "runtime": aggregate_check_category(sides, "runtime"),
-        "qualitative": None
-        if not qualitative
+        "rubric": None
+        if not rubric
         else {
-            "passed": qualitative_passed,
-            "total": qualitative_total,
+            "passed": rubric_passed,
+            "total": rubric_total,
             "average_score": average(scores) if scores else None,
         },
         "command_count": sum(side.command_count for side in sides),
         "duration_seconds": round(sum(side.duration_seconds for side in sides), 3),
         "agent_duration_seconds": round(sum(side.agent_duration_seconds for side in sides), 3),
-        "qualitative_duration_seconds": round(sum(side.qualitative_duration_seconds for side in sides), 3),
+        "rubric_duration_seconds": round(sum(side.rubric_duration_seconds for side in sides), 3),
         "tokens": sum(side.tokens for side in sides),
         "agent_tokens": sum(side.agent_tokens for side in sides),
-        "qualitative_tokens": sum(side.qualitative_tokens for side in sides),
+        "rubric_tokens": sum(side.rubric_tokens for side in sides),
         "error_count": sum(len(side.errors) for side in sides),
     }
 
@@ -511,7 +517,7 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
             side = side_for_key(result, side_key)
             if side is None:
                 continue
-            for check in side.deterministic_grade.checks:
+            for check in side.grade.checks:
                 if check.passed or check.skipped:
                     continue
                 category = check.category
@@ -525,33 +531,33 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                         "evidence": check.evidence,
                     }
                 )
-            qualitative = load_qualitative_grade(side)
-            if qualitative is None:
+            rubric = load_rubric_grade(side)
+            if rubric is None:
                 continue
-            qualitative_failures = 0
-            for check in qualitative.get("checks", []):
+            rubric_failures = 0
+            for check in rubric.get("checks", []):
                 if bool(check.get("pass")):
                     continue
-                qualitative_failures += 1
+                rubric_failures += 1
                 failures.append(
                     {
                         "service": service,
                         "side": side_key,
                         "prompt": result.prompt_id,
-                        "category": "qualitative",
-                        "result": f"qualitative:{check.get('id', 'check')} FAIL",
+                        "category": "rubric",
+                        "result": f"rubric:{check.get('id', 'check')} FAIL",
                         "evidence": str(check.get("evidence") or check.get("notes") or ""),
                     }
                 )
-            if not qualitative_failures and qualitative.get("overall_pass") is False:
+            if not rubric_failures and rubric.get("overall_pass") is False:
                 failures.append(
                     {
                         "service": service,
                         "side": side_key,
                         "prompt": result.prompt_id,
-                        "category": "qualitative",
-                        "result": "qualitative:overall FAIL",
-                        "evidence": str(qualitative.get("notes") or "overall qualitative grade failed"),
+                        "category": "rubric",
+                        "result": "rubric:overall FAIL",
+                        "evidence": str(rubric.get("notes") or "overall rubric grade failed"),
                     }
                 )
     return failures
@@ -581,7 +587,7 @@ def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
             "",
             "## Eval Summary",
             "",
-            "| Eval | Service | Prompts | With Skill Deterministic | With Skill Qualitative | With Skill Tokens | With Skill Time | With Baseline Deterministic | With Baseline Qualitative | Baseline Tokens | Baseline Time |",
+            "| Eval | Service | Prompts | With Skill Sanity | With Skill Rubric | With Skill Tokens | With Skill Time | With Baseline Sanity | With Baseline Rubric | Baseline Tokens | Baseline Time |",
             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
@@ -591,12 +597,12 @@ def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
                 eval_id=markdown_cell(item["id"]),
                 service=markdown_cell(item["case"]),
                 prompts=item["prompt_count"],
-                ws_det=format_deterministic(item.get("with_skill")),
-                ws_qual=format_qualitative(item.get("with_skill")),
+                ws_det=format_sanity(item.get("with_skill")),
+                ws_qual=format_rubric(item.get("with_skill")),
                 ws_tokens=format_tokens(item.get("with_skill")),
                 ws_time=format_duration(item.get("with_skill")),
-                base_det=format_deterministic(item.get("with_baseline")),
-                base_qual=format_qualitative(item.get("with_baseline")),
+                base_det=format_sanity(item.get("with_baseline")),
+                base_qual=format_rubric(item.get("with_baseline")),
                 base_tokens=format_tokens(item.get("with_baseline")),
                 base_time=format_duration(item.get("with_baseline")),
             )
@@ -605,7 +611,7 @@ def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
     lines.extend(["", "## Failure Cases", ""])
     failures = benchmark["failures"]
     if not failures:
-        lines.append("No deterministic or qualitative failures.")
+        lines.append("No sanity or rubric failures.")
     else:
         lines.extend(["| Service | Side | Prompt | Result | Evidence |", "|---|---|---|---|---|"])
         for failure in failures:
@@ -644,8 +650,8 @@ def build_validation_benchmark(
                 "definition_path": relative_to_repo(repo_root, first.definition_path),
                 "eval_dir": relative_to_repo(repo_root, first.fixture_dir),
                 "skill_path": relative_to_repo(repo_root, first.skill_path),
-                "deterministic_check_count": first.deterministic_check_count,
-                "qualitative_check_count": first.qualitative_check_count,
+                "sanity_check_count": first.sanity_check_count,
+                "rubric_check_count": first.rubric_check_count,
                 "runtime_check_count": first.runtime_check_count,
             }
         )
@@ -659,8 +665,8 @@ def build_validation_benchmark(
             "eval_count": len(evals),
             "case_count": len(results),
             "prompt_count": len(results),
-            "deterministic_check_count": sum(result.deterministic_check_count for result in results),
-            "qualitative_check_count": sum(result.qualitative_check_count for result in results),
+            "sanity_check_count": sum(result.sanity_check_count for result in results),
+            "rubric_check_count": sum(result.rubric_check_count for result in results),
             "runtime_check_count": sum(result.runtime_check_count for result in results),
         },
     }
@@ -679,7 +685,7 @@ def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
             "",
             "## Eval Summary",
             "",
-            "| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |",
+            "| Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |",
             "|---|---|---:|---|---:|---:|---:|",
         ]
     )
@@ -690,8 +696,8 @@ def render_validation_report(skill: str, benchmark: dict[str, Any]) -> str:
                 service=markdown_cell(item["case"]),
                 prompts=item["prompt_count"],
                 path=markdown_cell(item["definition_path"]),
-                det=item["deterministic_check_count"],
-                qual=item["qualitative_check_count"],
+                det=item["sanity_check_count"],
+                qual=item["rubric_check_count"],
                 runtime=item.get("runtime_check_count", 0),
             )
         )
@@ -712,7 +718,7 @@ def report_metadata(
     normalized.setdefault("run_id", run_root.name)
     normalized.setdefault("agent_model", "-")
     normalized.setdefault("judge_model", "-")
-    normalized.setdefault("qualitative_enabled", "-")
+    normalized.setdefault("rubric_enabled", "-")
     normalized.setdefault("runtime_enabled", "-")
     normalized.setdefault("workers", "-")
     normalized.setdefault("config_path", "-")
@@ -728,11 +734,11 @@ def render_environment_table(metadata: dict[str, Any], mode_label: str) -> list[
     ]
     if not metadata_has_eval_kind(metadata, "validation"):
         rows.append(("Agent model", "agent_model"))
-    if metadata_has_eval_kind(metadata, "qualitative") or truthy_metadata(metadata.get("qualitative_enabled")):
+    if metadata_has_eval_kind(metadata, "rubric") or truthy_metadata(metadata.get("rubric_enabled")):
         rows.extend(
             [
                 ("Judge model", "judge_model"),
-                ("Qualitative enabled", "qualitative_enabled"),
+                ("Rubric enabled", "rubric_enabled"),
             ]
         )
     if metadata_has_eval_kind(metadata, "runtime") or truthy_metadata(metadata.get("runtime_enabled")):
@@ -803,10 +809,10 @@ def side_for_key(result: CaseResult, side_key: str) -> SideResult | None:
     return getattr(result, SIDE_ATTRS[side_key])
 
 
-def load_qualitative_grade(side: SideResult) -> dict[str, Any] | None:
-    if not side.qualitative_grade_path:
+def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
+    if not side.rubric_grade_path:
         return None
-    path = Path(side.qualitative_grade_path)
+    path = Path(side.rubric_grade_path)
     if not path.is_file():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -818,23 +824,23 @@ def load_qualitative_grade(side: SideResult) -> dict[str, Any] | None:
         "passed": passed,
         "total": len(checks),
         "checks": checks,
-        "path": side.qualitative_grade_path,
+        "path": side.rubric_grade_path,
     }
     return normalized
 
 
-def format_deterministic(side: dict[str, Any] | None) -> str:
+def format_sanity(side: dict[str, Any] | None) -> str:
     if side is None:
         return "-"
-    deterministic = side["deterministic"]
-    return format_count(int(deterministic["passed"]), int(deterministic["total"]))
+    sanity = side["sanity"]
+    return format_count(int(sanity["passed"]), int(sanity["total"]))
 
 
 def format_category(side: dict[str, Any] | None, category: str) -> str:
     if side is None:
         return "-"
-    if category == "qualitative":
-        return format_qualitative(side)
+    if category == "rubric":
+        return format_rubric(side)
     data = side.get(category)
     if not data:
         return "-"
@@ -851,12 +857,12 @@ def format_category(side: dict[str, Any] | None, category: str) -> str:
     return value
 
 
-def format_qualitative(side: dict[str, Any] | None) -> str:
-    if side is None or side.get("qualitative") is None:
+def format_rubric(side: dict[str, Any] | None) -> str:
+    if side is None or side.get("rubric") is None:
         return "-"
-    qualitative = side["qualitative"]
-    value = format_count(int(qualitative["passed"]), int(qualitative["total"]))
-    score = qualitative.get("average_score")
+    rubric = side["rubric"]
+    value = format_count(int(rubric["passed"]), int(rubric["total"]))
+    score = rubric.get("average_score")
     if score is None:
         return value
     return f"{value}, avg score {score:.0f}"

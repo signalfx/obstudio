@@ -38,7 +38,7 @@ jobs:
         run: make test-pytest-plugin
 
       - name: Validate eval JSONs and reports
-        run: make skill-eval-all
+        run: make eval-validation SKILL="${{ github.event.inputs.skill }}" CASE="${{ github.event.inputs.case }}" PROMPT="${{ github.event.inputs.prompt }}"
 
       - name: Upload validation reports
         uses: actions/upload-artifact@v4
@@ -75,7 +75,7 @@ jobs:
 
       - name: Run live Codex A/B evals
         run: |
-          make skill-eval-ab-all \
+          make eval-all-ab \
             SKILL="${{ github.event.inputs.skill }}" \
             CASE="${{ github.event.inputs.case }}" \
             PROMPT="${{ github.event.inputs.prompt }}" \

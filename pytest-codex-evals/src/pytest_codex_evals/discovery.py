@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
-
-from .eval_files import eval_file_layout, iter_eval_files
-from .models import EvalCase, EvalDefinition
-from .schema_resources import load_schema
+from .definitions import EvalCase
+from .eval_files import iter_eval_files
+from .plugin import case_from_definition, load_eval_definition
 
 
 def discover_cases(
@@ -17,19 +14,9 @@ def discover_cases(
     prompt_id: str | None = None,
 ) -> list[EvalCase]:
     eval_root = repo_root / "evals" if (repo_root / "evals").is_dir() else repo_root
-    schema = load_schema("eval.schema.json")
-    validator = Draft202012Validator(schema)
     cases: list[EvalCase] = []
     for path in iter_eval_files(eval_root):
-        layout = eval_file_layout(path)
-        if layout is None:
-            continue
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data.setdefault("language", layout.language)
-        data.setdefault("service", layout.service)
-        data.setdefault("id", layout.default_id)
-        validator.validate(data)
-        definition = EvalDefinition.model_validate(data)
+        definition = load_eval_definition(path)
         if skill and definition.skill != skill:
             continue
         if case_id and definition.case_key != case_id:
@@ -37,19 +24,5 @@ def discover_cases(
         for prompt in definition.prompts:
             if prompt_id and prompt.id != prompt_id:
                 continue
-            cases.append(
-                EvalCase(
-                    id=f"{definition.id}/{prompt.id}",
-                    base_id=definition.id,
-                    prompt_id=prompt.id,
-                    skill=definition.skill,
-                    language=definition.language,
-                    service=definition.service,
-                    task=prompt.task,
-                    deterministic_checks=definition.deterministic_checks,
-                    qualitative_checks=definition.qualitative_checks,
-                    definition_path=path,
-                    fixture_dir=layout.fixture_dir,
-                )
-            )
+            cases.append(case_from_definition(definition, prompt, path))
     return cases

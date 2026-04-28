@@ -10,6 +10,11 @@
       "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Instruments the executable server path under cmd/kvstore-server, not the library package on import.",
     "Preserves the existing kvstore package APIs and avoids moving business logic.",

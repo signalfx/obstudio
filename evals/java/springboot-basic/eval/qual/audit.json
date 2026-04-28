@@ -10,6 +10,11 @@
       "task": "Produce an observability readiness review for the Java Spring Boot service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
     }
   ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
   "rubric": [
     "Identifies TasksApplication.java as the process entry point.",
     "Identifies TaskController routes for health and task CRUD operations.",

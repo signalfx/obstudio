@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ab import side_prompt
-from .deterministic import grade_deterministic
-from .models import CaseResult, EvalCase, SideResult
-from .qualitative import run_qualitative_grade
+from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
+from .graders import grade_side
+from .graders.rubric import run_rubric_grade
 from .trace import parse_trace
 
 
@@ -32,7 +32,7 @@ def run_case(
     skill_dir: Path | None = None,
     model: str | None = None,
     judge_model: str | None = None,
-    qualitative: bool = True,
+    rubric: bool = True,
     runtime: bool = False,
     eval_kind: str = "standard",
     sides: tuple[str, ...] = ("with_skill", "baseline"),
@@ -53,7 +53,7 @@ def run_case(
                 skill_dir=skill_dir,
                 model=model,
                 judge_model=judge_model,
-                qualitative=qualitative,
+                rubric=rubric,
                 runtime=runtime,
                 eval_kind=eval_kind,
             )
@@ -68,7 +68,7 @@ def run_case(
                 skill_dir=skill_dir,
                 model=model,
                 judge_model=judge_model,
-                qualitative=qualitative,
+                rubric=rubric,
                 runtime=runtime,
                 eval_kind=eval_kind,
             )
@@ -97,7 +97,7 @@ def run_side(
     skill_dir: Path | None,
     model: str | None,
     judge_model: str | None,
-    qualitative: bool,
+    rubric: bool,
     runtime: bool,
     eval_kind: str,
 ) -> SideResult:
@@ -133,43 +133,42 @@ def run_side(
     trace = parse_trace(trace_path)
     agent_tokens = trace.usage.total_tokens
     final_message = final_path.read_text(encoding="utf-8", errors="replace")
-    deterministic = grade_deterministic(
-        case,
-        exec_dir,
-        final_message,
-        trace,
-        side,
+    grade = grade_side(
+        case=case,
+        run_dir=exec_dir,
+        final_message=final_message,
+        trace=trace,
+        side=side,
         runtime_enabled=runtime,
         repo_root=repo_root,
-        eval_kind=eval_kind,
     )
-    deterministic_path = exec_dir / "deterministic_grade.json"
-    deterministic_path.write_text(deterministic.model_dump_json(indent=2), encoding="utf-8")
+    grade_path = exec_dir / "grade.json"
+    grade_path.write_text(grade.model_dump_json(indent=2), encoding="utf-8")
 
-    qualitative_path: Path | None = None
-    qualitative_duration_seconds = 0.0
-    qualitative_tokens = 0
+    rubric_path: Path | None = None
+    rubric_duration_seconds = 0.0
+    rubric_tokens = 0
     errors: list[str] = []
     if completed.returncode != 0:
         errors.append(f"codex exec exited with {completed.returncode}")
-    if qualitative and case.qualitative_checks:
-        qualitative_start = time.monotonic()
+    if rubric and isinstance(case, RubricEvalCase) and case.rubric:
+        rubric_start = time.monotonic()
         try:
-            qualitative_path = run_qualitative_grade(
+            rubric_path = run_rubric_grade(
                 case=case,
                 side_dir=exec_dir,
                 model=judge_model or model,
             )
         except Exception as exc:  # pragma: no cover - preserved in run artifacts
-            errors.append(f"qualitative grading failed: {exc}")
+            errors.append(f"rubric grading failed: {exc}")
         finally:
-            qualitative_duration_seconds = time.monotonic() - qualitative_start
-            qualitative_trace_path = exec_dir / "qualitative_trace.jsonl"
-            if qualitative_trace_path.exists():
+            rubric_duration_seconds = time.monotonic() - rubric_start
+            rubric_trace_path = exec_dir / "rubric_trace.jsonl"
+            if rubric_trace_path.exists():
                 try:
-                    qualitative_tokens = parse_trace(qualitative_trace_path).usage.total_tokens
+                    rubric_tokens = parse_trace(rubric_trace_path).usage.total_tokens
                 except Exception as exc:  # pragma: no cover - preserved in run artifacts
-                    errors.append(f"qualitative trace parsing failed: {exc}")
+                    errors.append(f"rubric trace parsing failed: {exc}")
 
     if artifact_dir.exists():
         shutil.rmtree(artifact_dir)
@@ -177,22 +176,24 @@ def run_side(
 
     artifact_trace_path = artifact_dir / "trace.jsonl"
     artifact_final_path = artifact_dir / "last_message.md"
-    artifact_qualitative_path = artifact_dir / "qualitative_grade.json"
+    artifact_rubric_path = artifact_dir / "rubric_grade.json"
+    artifact_rubric_trace_path = artifact_dir / "rubric_trace.jsonl"
 
     result = SideResult(
         side=side,
         exit_code=completed.returncode,
         trace_path=str(artifact_trace_path),
         final_message_path=str(artifact_final_path),
-        deterministic_grade=deterministic,
-        qualitative_grade_path=str(artifact_qualitative_path) if qualitative_path else None,
+        grade=grade,
+        rubric_grade_path=str(artifact_rubric_path) if rubric_path else None,
+        rubric_trace_path=str(artifact_rubric_trace_path) if rubric_path else None,
         command_count=len(trace.commands),
         duration_seconds=round(time.monotonic() - side_start, 3),
         agent_duration_seconds=round(agent_duration_seconds, 3),
-        qualitative_duration_seconds=round(qualitative_duration_seconds, 3),
-        tokens=agent_tokens + qualitative_tokens,
+        rubric_duration_seconds=round(rubric_duration_seconds, 3),
+        tokens=agent_tokens + rubric_tokens,
         agent_tokens=agent_tokens,
-        qualitative_tokens=qualitative_tokens,
+        rubric_tokens=rubric_tokens,
         errors=errors,
     )
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")

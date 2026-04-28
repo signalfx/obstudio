@@ -5,16 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "pytest-codex-evals"
 version = "0.1.0"
-description = "Pytest plugin for Codex evals with JSONL traces, A/B runs, deterministic, qualitative, and Docker runtime checks"
+description = "Pytest plugin for Codex evals with sanity, rubric, runtime, and A/B checks"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "docker>=7.1.0",
   "jsonschema>=4.23.0",
   "pydantic>=2.7.0",
   "pytest>=8.0.0",
   "pytest-xdist>=3.6.0",
-  "PyYAML>=6.0.0",
+  "referencing>=0.35.0",
 ]
 
 [project.entry-points.pytest11]
@@ -25,6 +24,7 @@ codex-eval-harness = "pytest_codex_evals.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pytest_codex_evals"]
+artifacts = ["src/pytest_codex_evals/schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

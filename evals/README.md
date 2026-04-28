@@ -20,7 +20,7 @@ kind from the baseline decision:
 - `validation` validates JSON and skill source availability without Codex.
 - `sanity` runs quick loaded-skill guards such as final output and skill
   visibility.
-- `qualitative` runs the task and a schema-constrained judge pass.
+- `rubric` runs the task and a schema-constrained judge pass.
 - `runtime` runs Docker/Observer telemetry checks.
 - `AB=1` adds the no-skill baseline side to any live eval kind.
 
@@ -28,9 +28,9 @@ kind from the baseline decision:
 |---|---|---|---|
 | Validation | Pytest collection only | JSON shape, eval directory, skill source | Validation report |
 | Sanity | Codex with `.agents/skills/<skill>` visible | Skill loads and the task completes | Sanity report |
-| Qualitative | Codex task plus schema-constrained judge | Semantic quality and workflow fit | Qualitative report |
+| Rubric | Codex task plus schema-constrained judge | Semantic quality and workflow fit | Rubric report |
 | Runtime Checks | Docker Compose plus Observer API queries | Live spans/metrics are emitted after traffic | Runtime report |
-| A/B | Adds the no-skill baseline side to sanity, qualitative, or runtime | Skill lift over baseline | Same report shape with baseline columns populated |
+| A/B | Adds the no-skill baseline side to sanity, rubric, or runtime | Skill lift over baseline | Same report shape with baseline columns populated |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
 the referenced skill source exists. Live evals run the loaded-skill side by
@@ -48,7 +48,9 @@ that eval kind:
       "task": "Scan the service in ./service for observability gaps."
     }
   ],
-  "rubric": []
+  "rubric": [
+    "Identifies the relevant entrypoint and current telemetry state."
+  ]
 }
 ```
 
@@ -57,12 +59,15 @@ Mode-specific JSON files are grouped by role:
 ```text
 eval/sanity/*.json     # quick skill-loading checks
 eval/runtime/*.json    # Docker/Observer runtime checks
-eval/qual/*.json       # schema-constrained qualitative checks
+eval/qual/*.json       # schema-constrained rubric checks
 ```
 
 The default sanity pattern picks `evals/sanity/skill-smoke/eval/sanity/`, a
 dummy fixture used only to prove that the selected skill loads and the prompt
 returns quickly.
+
+Rubric evals may set `judge_inputs` or `judge_prompt` when the judge should
+inspect artifacts other than a service directory.
 
 ## A/B Sides
 
@@ -73,7 +78,7 @@ returns quickly.
 
 Baseline checks stay intentionally simple: final output, `skills-not-loaded`,
 and baseline contamination checks.
-Detailed deterministic artifact checks default to the `with_skill` side, which
+Detailed sanity artifact checks default to the `with_skill` side, which
 also gets a `skills-loaded` guard.
 
 Use command-backed checks when an ecosystem tool can prove behavior more
@@ -81,14 +86,14 @@ reliably than text search. Examples in this repo use `go list -mod=readonly -m
 all`, `npm pkg get`, `node -e`, and Python `tomllib` against the generated
 service workspace.
 
-Runtime checks use the `observer_docker_runtime` check kind. `eval-runtime`
-enables them automatically. The eval JSON points at a Compose file and declares
-the trace/metric expectations. The Compose file owns service topology, Observer
-startup, app startup, and a profiled `traffic` service that generates requests
-with tools such as `siege`. The harness runs Compose, invokes `traffic`, queries
-Observer at `http://127.0.0.1:3000`, then tears the stack down. Compose can use
-`${CODEX_EVAL_SERVICE_DIR}` when it must build the instrumented temp service
-workspace rather than the source fixture.
+Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
+`eval-runtime` enables them automatically. The eval JSON points at a Compose
+file and declares trace/metric expectations. The Compose file owns service
+topology, Observer startup, app startup, and a profiled `traffic` service that
+generates requests with tools such as `siege`. The harness runs Compose,
+invokes `traffic`, queries Observer at `http://127.0.0.1:3000`, then tears the
+stack down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
+instrumented temp service workspace rather than the source fixture.
 
 ## Commands
 
@@ -99,12 +104,12 @@ workspace rather than the source fixture.
 | `make eval-validation SKILL=skills/otel-audit` | Validate eval JSONs without running Codex |
 | `make eval-sanity SKILL=skills/otel-audit` | Run quick loaded-skill sanity checks |
 | `make eval-sanity-ab SKILL=skills/otel-audit` | Run sanity checks with baseline |
-| `make eval-qualitative SKILL=skills/otel-instrument CASE=go/kvstore` | Run qualitative judge checks |
-| `make eval-qualitative-ab SKILL=skills/otel-instrument CASE=go/kvstore` | Run qualitative judge checks with baseline |
+| `make eval-rubric SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric judge checks |
+| `make eval-rubric-ab SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric judge checks with baseline |
 | `make eval-runtime SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks |
 | `make eval-runtime-ab SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks with baseline |
-| `make eval-all SKILL=skills/otel-audit` | Run validation, sanity, qualitative, and runtime |
-| `make eval-all-ab SKILL=skills/otel-audit` | Run validation plus A/B sanity, qualitative, and runtime |
+| `make eval-all SKILL=skills/otel-audit` | Run validation, sanity, rubric, and runtime |
+| `make eval-all-ab SKILL=skills/otel-audit` | Run validation plus A/B sanity, rubric, and runtime |
 | `make eval-with-skill SKILL=skills/otel-instrument CASE=go/kvstore` | Run only the loaded-skill side |
 | `make eval-with-baseline SKILL=skills/otel-instrument CASE=go/kvstore` | Run only the no-skill baseline side |
 | `make eval-ab SKILL=skills/otel-audit CASE=go/chi-basic PROMPT=direct` | Run both sides in one A/B comparison |
@@ -117,7 +122,7 @@ make eval-all SKILL=skills/otel-audit EVAL_WORKERS=4
 make eval-all-ab SKILL=skills/otel-audit EVAL_WORKERS=4
 make eval-sanity SKILL=skills/otel-instrument WITH=ab
 make eval-runtime SKILL=skills/otel-instrument CASE=python/fastapi-celery
-make eval-qualitative SKILL=skills/otel-audit EVAL_PATTERN='go/*/eval/qual'
+make eval-rubric SKILL=skills/otel-audit EVAL_PATTERN='go/*/eval/qual'
 ```
 
 Each worker writes per-item result JSON under `.workspace/codex-evals/_worker-results/`;
@@ -127,8 +132,8 @@ Progress logging is enabled by default for Make targets and prints item start
 and completion lines:
 
 ```text
-[codex-eval] START qualitative:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct
-[codex-eval] PASSED qualitative:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct (142.3s)
+[codex-eval] START rubric:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct
+[codex-eval] PASSED rubric:ab go/chi-basic/eval/qual/audit.json::otel-audit::go/chi-basic::direct (142.3s)
 ```
 
 Disable it with `EVAL_PROGRESS=0`.
@@ -163,8 +168,8 @@ Latest summaries are copied by eval kind.
 | Validation | `validation-report.md`, `validation-benchmark.json` | `<skill>/validation/report.md`, `<skill>/validation/benchmark.json` |
 | Sanity | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
 | Sanity A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
-| Qualitative | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/qualitative/report.md`, `<skill>/qualitative/benchmark.json` |
-| Qualitative A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/qualitative/report.md`, `<skill>/qualitative/benchmark.json` |
+| Rubric | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/rubric/report.md`, `<skill>/rubric/benchmark.json` |
+| Rubric A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/rubric/report.md`, `<skill>/rubric/benchmark.json` |
 | Runtime | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
 | Runtime A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
 
@@ -177,11 +182,11 @@ Each live run also writes file-level JSON under:
   with_baseline.json
 ```
 
-The canonical Markdown report has one row per eval file in separate validation,
-deterministic, qualitative, and runtime tables. Live tables aggregate all prompt
-variants and include token usage plus elapsed time for with-skill and baseline
-sides. Baseline columns are `-` when the run mode did not execute a baseline
-side.
+The canonical Markdown report has validation plus the section for the selected
+eval type: Sanity Summary, Rubric Summary, or Runtime Summary. Live tables
+aggregate all prompt variants and include token usage plus elapsed time for
+with-skill and baseline sides. Baseline columns are `-` when the run mode did
+not execute a baseline side.
 
 Each kind has its own latest `report.md` and `benchmark.json` under
 `eval-reports/<skill>/<kind>/`; mode-specific artifacts stay in the timestamped
