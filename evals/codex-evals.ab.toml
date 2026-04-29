@@ -1,0 +1,13 @@
+[run]
+mode = "ab"
+
+[rubric]
+enabled = true
+
+[runtime]
+enabled = false
+
+[models]
+# Agent model can be set here or overridden with MODEL=... in Make.
+agent = "gpt-5.5"
+judge = "gpt-5.5"

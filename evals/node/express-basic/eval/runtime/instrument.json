@@ -1,0 +1,37 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Express service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; ensure HTTP server spans and request-duration metrics export during short runtime checks; do not add custom business spans."
+    }
+  ],
+  "checks": [
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits Express HTTP server traces and duration metrics to Observer.",
+      "compose_file": "docker-compose.yml",
+      "timeout_seconds": 300,
+      "expect": {
+        "traces": {
+          "service_names": [
+            "node-express-basic"
+          ],
+          "trace_detail_contains_all": [
+            "http.request.method",
+            "GET",
+            "POST",
+            "/health",
+            "/tasks"
+          ]
+        },
+        "metrics": {
+          "contains_any": [
+            "http.server.request.duration",
+            "http.server.duration"
+          ]
+        }
+      }
+    }
+  ]
+}

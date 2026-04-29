@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Go chi service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Go chi service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Confirms target process, runtime shape, service.name source, and environment dimension before editing.",
+    "Initializes the SDK exactly once and sets tracer provider and text map propagator.",
+    "Uses route-aware, low-cardinality HTTP spans and preserves chi routing behavior.",
+    "Keeps OTLP endpoint and service name configurable through environment variables.",
+    "Does not introduce broad refactors or custom spans beyond the requested auto-instrumentation."
+  ]
+}

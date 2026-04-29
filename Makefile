@@ -8,13 +8,15 @@ LDFLAGS    := -ldflags "-X main.version=$(VERSION)"
 
 BUILD_DIR  := build
 SKILLS_SRC := skills
+EVALS_DIR  := evals
+PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet skill-eval release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
 # --- Client build ---
@@ -84,14 +86,82 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 
 # --- Skill evals ---
 
-SKILL ?=
+eval-validation: ## Validate eval JSONs, eval directories, and skill sources
+	$(MAKE) -C $(EVALS_DIR) $@
 
-skill-eval: ## Run skill evals (e.g. make skill-eval SKILL=otel-instrument)
-ifndef SKILL
-	$(error SKILL is required — e.g. make skill-eval SKILL=otel-instrument)
-endif
-	@echo "Evals for $(SKILL): $(SKILLS_SRC)/$(SKILL)/evals/evals.json"
-	@cat $(SKILLS_SRC)/$(SKILL)/evals/evals.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'{len(d[\"evals\"])} eval(s) defined')"
+eval-validation-test eval-validation-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-sanity: ## Run quick loaded-skill sanity checks; pass AB=1 or WITH=ab to include baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-sanity-test eval-sanity-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-sanity-ab: ## Run sanity checks with baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-rubric: ## Run schema-constrained rubric grading; pass AB=1 or WITH=ab to include baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-rubric-test eval-rubric-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-rubric-ab: ## Run rubric grading with baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-runtime-test eval-runtime-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-runtime-ab: ## Run runtime checks with baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-with-skill: ## Run Codex with the skill loaded, then grade checks
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-with-baseline: ## Run Codex baseline with no skill loaded, then grade checks
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-ab: ## Run Codex with_skill and with_baseline sides in one A/B comparison
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval: ## Alias for eval-with-skill
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-all: ## Alias for eval-with-skill
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-list: ## List discovered Codex skill evals
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-ab: ## Alias for eval-ab
+	$(MAKE) -C $(EVALS_DIR) $@
+
+skill-eval-ab-all: ## Alias for eval-ab
+	$(MAKE) -C $(EVALS_DIR) $@
+
+test-eval-harness: ## Run fast unit tests for the Codex eval harness
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-all: ## Run validation, sanity, rubric, and runtime evals
+	@$(MAKE) -C $(EVALS_DIR) eval-all
+
+eval-all-ab: ## Run validation plus A/B sanity, rubric, and runtime evals
+	@$(MAKE) -C $(EVALS_DIR) eval-all-ab
+
+test-evals-all: eval-all ## Alias for eval-all
+
+test-pytest-plugin: ## Run pytest plugin unit tests
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) test
+
+build-pytest-plugin: ## Build pytest plugin distribution artifacts
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) build
+
+publish-pytest-plugin: ## Publish pytest plugin distribution artifacts (requires uv publish credentials)
+	$(MAKE) -C $(PYTEST_PLUGIN_DIR) publish
 
 # --- Skills ---
 

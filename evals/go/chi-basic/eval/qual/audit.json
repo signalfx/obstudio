@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies main.go as the entry point.",
+    "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
+    "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
+    "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
+    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path."
+  ]
+}

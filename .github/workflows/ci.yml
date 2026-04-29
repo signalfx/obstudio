@@ -5,6 +5,7 @@ on:
     branches: [main, feature/**]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -94,16 +95,3 @@ jobs:
       - name: Run tests
         working-directory: observer/client
         run: npx vitest run
-
-  # skill-evals:
-  #   name: Skill evals – LLM-based benchmarks
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install Claude Code
-  #       run: npm install -g @anthropic-ai/claude-code
-  #     - name: Run skill evals
-  #       run: /eval-tester
-  #       env:
-  #         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rubric.schema.json",
+  "type": "object",
+  "required": ["skill", "prompts", "rubric"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "skill": { "type": "string" },
+    "language": { "type": "string" },
+    "service": { "type": "string" },
+    "prompts": { "$ref": "common.schema.json#/$defs/prompts" },
+    "rubric": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "judge_prompt": { "type": "string", "minLength": 1 },
+    "judge_inputs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": []
+    }
+  }
+}

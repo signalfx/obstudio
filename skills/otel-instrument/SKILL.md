@@ -2,7 +2,7 @@
 name: otel-instrument
 description: >-
   Add OpenTelemetry observability to applications using auto-instrumentation
-  and optional custom spans/metrics.   Use when the user types /otel-instrument,
+  and optional custom spans/metrics.   Use when the user types $otel-instrument,
   asks to "add OTel", "add tracing", "add metrics", "implement observability",
   "wire up telemetry", "instrument this service", or asks to add a specific
   custom signal like "add a metric to track queue depth", "add a span for
@@ -62,10 +62,10 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 | Language | Reference | Key packages |
 |----------|-----------|-------------|
-| Python   | `skills/references/languages/python.md` | `opentelemetry-distro`, `opentelemetry-exporter-otlp` |
-| Node.js  | `skills/references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node` |
-| Java     | `skills/references/languages/java.md` | OTel Java agent (javaagent JAR) |
-| Go       | `skills/references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
+| Python   | `../references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, framework instrumentation packages |
+| Node.js  | `../references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/instrumentation-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/sdk-metrics`, detected framework instrumentation packages |
+| Java     | `../references/languages/java.md` | OTel Java agent (javaagent JAR) |
+| Go       | `../references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
 
 ### 3. Instrument
 
@@ -78,6 +78,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
 - For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
+- For Python web services, do not satisfy implementation by only changing a Makefile, Docker command, or shell wrapper. Add an explicit setup module such as `otel_setup.py` and wire the app entry point to call it before framework instrumentation is activated.
+- For Java/Spring Boot, prefer the OpenTelemetry Java agent. The final response must state the service-name setting (`OTEL_SERVICE_NAME` or `otel.service.name`), OTLP endpoint setting (`OTEL_EXPORTER_OTLP_ENDPOINT` or `otel.exporter.otlp.endpoint`), and that the agent provides HTTP server spans plus request duration metrics.
 
 #### Implementation Rules
 
@@ -89,6 +91,8 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Do not create spans for trivial helpers. Only span real diagnostic boundaries.
 - Set span status to ERROR and call recordException on failed operations.
 - When a framework-specific auto-instrumentation package only provides spans (not HTTP server metrics), wrap the outermost handler with `otelhttp.NewHandler` (Go) or equivalent to ensure `http.server.request.duration` and `http.server.active_requests` are emitted. Consult the Framework Selection Guide in the language reference for the correct wrapping pattern.
+- HTTP server instrumentation must produce request-duration metrics as well as spans. Accept the current stable metric `http.server.request.duration` and the older `http.server.duration` name where SDK versions differ.
+- For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
 - For domains where OTel semantic conventions exist, emit required spans and metrics only, with required attributes only. Do not emit spans or metrics that are marked optional, do not include attributes that are marked optional. Do not invent custom spans, metrics or attributes in domains where OTel semantic conventions exist.
 - For custom attribute names use `{domain}.{noun}.{adjective}` format.
@@ -100,6 +104,38 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` or `getMeter` in hot paths.
 - Create metric instruments once during startup and reuse them. Do not create instruments in hot paths.
 - Metric instruments must be created with appropriate unit and description parameters.
+
+#### Language-Specific Musts
+
+Python:
+- Add explicit dependency entries for `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, and each detected framework/client instrumentation package.
+- Create a separate setup file such as `otel_setup.py`, `telemetry.py`, or `instrumentation.py`.
+- Configure `Resource.create({"service.name": ...})`, `TracerProvider`, `MeterProvider`, OTLP trace exporter, and OTLP metric exporter in that setup file.
+- Import and call the setup function from the app entry point before creating or instrumenting the app.
+- For Flask, call `FlaskInstrumentor().instrument_app(app)`.
+- For FastAPI, call `FastAPIInstrumentor.instrument_app(app)`.
+- For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
+- Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
+
+Node.js:
+- Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
+- Add the detected framework instrumentation explicitly, for example `@opentelemetry/instrumentation-express` for Express.
+- Add `@opentelemetry/exporter-metrics-otlp-http` and `@opentelemetry/sdk-metrics` when wiring SDK-based metrics.
+- Configure `PeriodicExportingMetricReader` with `exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)` and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)` so HTTP duration metrics export during short runtime checks.
+- Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
+- Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
+- In the final response, name the updated preload command (`--require` or `--import`), the packages added, and that HTTP server spans plus request-duration metrics are expected.
+
+Go:
+- For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.
+- Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
+- In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
+
+Java:
+- Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
+- Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
+- Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
+- In the final response, explicitly mention `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and `http.server.request.duration`.
 
 ### 4. Custom Instrumentation
 
@@ -119,15 +155,23 @@ Then wait for the user's answer.
   - Suggest specific spans and metrics with names, attributes, and rationale
   - Apply after user approval
 
-### 5. Verify (Build Check)
+### 5. Verify (Optional Build Check)
 
-Confirm the instrumented app still builds and starts:
+Verification is optional. Do not run install, build, test, startup,
+Docker/Compose, curl, siege, Observer, or telemetry validation commands unless
+the user asks for verification or approves it after being asked.
 
-1. Run the language-appropriate build or compile step (e.g. `go build ./...`, `npm install`, `pip install -e .`).
-2. Start the app briefly to confirm it boots without import or initialization errors, then stop it.
-3. If either step fails, fix the issue before proceeding.
-
-To verify that telemetry is actually flowing to a collector, use `/otel-audit` with the Observer running.
+1. If the user explicitly says not to verify, skip verification.
+2. If the user says verification is handled by an eval harness or another
+   system, skip verification.
+3. If the user already said exactly what check to run, run only that check.
+4. If the user asked you to verify but did not say what to run, ask what build,
+   test, startup, or runtime check they want.
+5. If the user did not mention verification, ask: `Would you like me to run a
+   build/start check?`
+6. Run verification only after the user says yes and the check to run is clear.
+7. If verification fails, fix issues caused by the instrumentation and report
+   anything outside scope.
 
 ### 6. Enable Debugging in VS Code
 
@@ -146,6 +190,7 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 
 - In the final response, separate file changes from verified outcomes
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
+- Always include the service-name configuration, OTLP endpoint configuration, and which automatic spans/metrics are expected from the instrumentation.
 
 ## Credential Safety
 

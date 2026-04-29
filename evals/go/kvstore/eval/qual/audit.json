@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Go key-value store service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Go key-value store service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies cmd/kvstore-server/main.go as the entry point and preserves the cmd/ plus library package boundary.",
+    "Identifies GET/PUT/DELETE /kv/{key} and GET /search?word= routes without embedding concrete key values.",
+    "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
+    "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
+    "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation."
+  ]
+}

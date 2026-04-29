@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "$defs": {
+    "prompts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "task"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "task": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "sanityCheck": {
+      "type": "object",
+      "required": ["id", "description", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "final_contains_all",
+            "final_contains_any",
+            "file_exists",
+            "file_exists_any",
+            "no_file_exists",
+            "file_contains_all",
+            "file_contains_any",
+            "command_succeeds",
+            "command_stdout_contains_all",
+            "command_stdout_contains_any",
+            "command_stdout_contains_none"
+          ]
+        },
+        "path": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "values": { "type": "array", "items": { "type": "string" } },
+        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "cwd": { "type": "string" },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 300, "default": 30 },
+        "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
+      }
+    },
+    "runtimeCheck": {
+      "type": "object",
+      "required": ["id", "description", "compose_file", "expect"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "compose_file": { "type": "string" },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 900, "default": 300 },
+        "settle_seconds": { "type": "number", "minimum": 0, "default": 5 },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "traces": { "$ref": "#/$defs/observerExpectation" },
+            "metrics": { "$ref": "#/$defs/observerExpectation" }
+          },
+          "anyOf": [
+            { "required": ["traces"] },
+            { "required": ["metrics"] }
+          ]
+        },
+        "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
+      }
+    },
+    "observerExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "contains_all": { "type": "array", "items": { "type": "string" } },
+        "contains_any": { "type": "array", "items": { "type": "string" } },
+        "service_names": { "type": "array", "items": { "type": "string" } },
+        "span_names": { "type": "array", "items": { "type": "string" } },
+        "metric_names": { "type": "array", "items": { "type": "string" } },
+        "trace_detail_contains_all": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

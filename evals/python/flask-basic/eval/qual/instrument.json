@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Flask service in ./service. Assume no custom business spans are requested."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Flask service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Initializes the SDK once in a separate file.",
+    "Uses Resource service.name and env-driven OTLP endpoint configuration.",
+    "Calls FlaskInstrumentor().instrument_app(app) or an equivalent setup before serving requests.",
+    "Records exceptions or sets error status where custom error handling exists.",
+    "Keeps the Flask app behavior and routes intact."
+  ]
+}

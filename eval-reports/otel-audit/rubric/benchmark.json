@@ -1,0 +1,281 @@
+{
+  "schema_version": 1,
+  "kind": "rubric",
+  "mode": "with_skill",
+  "skill": "otel-audit",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "rubric",
+    "skill": "otel-audit",
+    "run_id": "20260429T171547534589Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "summary": {
+    "eval_count": 7,
+    "prompt_count": 14,
+    "failure_count": 0,
+    "with_skill": {
+      "prompt_count": 14,
+      "command_count": 356,
+      "duration_seconds": 1446.885,
+      "agent_duration_seconds": 890.841,
+      "tokens": 3281459,
+      "agent_tokens": 2140881,
+      "error_count": 0,
+      "rubric": {
+        "passed": 72,
+        "total": 72,
+        "average_score": 59.285714285714285
+      },
+      "rubric_tokens": 1140578,
+      "rubric_duration_seconds": 555.767
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "go/chi-basic/qual/audit",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 40,
+        "duration_seconds": 175.709,
+        "agent_duration_seconds": 106.43,
+        "tokens": 437813,
+        "agent_tokens": 282678,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 52.5
+        },
+        "rubric_tokens": 155135,
+        "rubric_duration_seconds": 69.247
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-basic/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/chi-partial/qual/audit",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 34,
+        "duration_seconds": 239.268,
+        "agent_duration_seconds": 154.997,
+        "tokens": 442513,
+        "agent_tokens": 274702,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 167811,
+        "rubric_duration_seconds": 84.239
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-partial/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-partial/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/chi-partial/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/kvstore/qual/audit",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 74,
+        "duration_seconds": 266.348,
+        "agent_duration_seconds": 183.307,
+        "tokens": 834910,
+        "agent_tokens": 641335,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 52.5
+        },
+        "rubric_tokens": 193575,
+        "rubric_duration_seconds": 82.983
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/kvstore/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/kvstore/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/go/kvstore/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/springboot-basic/qual/audit",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 50,
+        "duration_seconds": 198.685,
+        "agent_duration_seconds": 123.268,
+        "tokens": 397285,
+        "agent_tokens": 244270,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 5.0
+        },
+        "rubric_tokens": 153015,
+        "rubric_duration_seconds": 75.356
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/java/springboot-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/java/springboot-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/java/springboot-basic/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "node/express-basic/qual/audit",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 44,
+        "duration_seconds": 161.623,
+        "agent_duration_seconds": 94.752,
+        "tokens": 398683,
+        "agent_tokens": 242626,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 52.5
+        },
+        "rubric_tokens": 156057,
+        "rubric_duration_seconds": 66.842
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/node/express-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/node/express-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/node/express-basic/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/fastapi-celery/qual/audit",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 76,
+        "duration_seconds": 211.617,
+        "agent_duration_seconds": 138.448,
+        "tokens": 405973,
+        "agent_tokens": 252213,
+        "error_count": 0,
+        "rubric": {
+          "passed": 12,
+          "total": 12,
+          "average_score": 52.5
+        },
+        "rubric_tokens": 153760,
+        "rubric_duration_seconds": 73.133
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/fastapi-celery/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/fastapi-celery/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/fastapi-celery/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/flask-basic/qual/audit",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 38,
+        "duration_seconds": 193.635,
+        "agent_duration_seconds": 89.639,
+        "tokens": 364282,
+        "agent_tokens": 203057,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 161225,
+        "rubric_duration_seconds": 103.967
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/flask-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/flask-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T171547534589Z/results/python/flask-basic/qual-audit/with_baseline.json"
+      }
+    }
+  ],
+  "failures": []
+}

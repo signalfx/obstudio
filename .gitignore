@@ -1,13 +1,16 @@
 node_modules/
 dist/
+**/dist/
 build/
 
 __pycache__/
+**/__pycache__/
 *.pyc
 .venv/
 *.egg-info/
 uv.lock
 !tests/uv.lock
+!pytest-codex-evals/uv.lock
 *.db
 .pytest_cache/
 
@@ -18,22 +21,22 @@ observer/cmd/obstudio/_skills/
 observer/internal/web/static/assets/
 observer/client/public/assets/
 
-# Example apps -- track baselines, ignore generated artifacts
-examples/**/.observe/
-examples/**/.venv/
-examples/**/__pycache__/
-examples/**/uv.lock
-examples/**/*.db
-examples/**/otel_setup.py
-examples/**/otel_*.py
-examples/**/go.sum
-examples/**/go-*
+# Eval fixture apps -- track baselines, ignore generated artifacts
+evals/**/.observe/
+evals/**/.venv/
+evals/**/__pycache__/
+evals/**/uv.lock
+!evals/uv.lock
+evals/**/*.db
+evals/**/otel_setup.py
+evals/**/otel_*.py
+evals/**/go.sum
 
 # Skill eval workspaces
 .workspace/
-skill-eval-workspace/
-otel-audit-workspace/
+pytest-codex-evals/dist/
 
 .idea
 .deepeval/
 .npmrc
+.DS_Store

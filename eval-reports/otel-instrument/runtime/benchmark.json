@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "kind": "runtime",
+  "mode": "with_skill",
+  "skill": "otel-instrument",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "runtime",
+    "skill": "otel-instrument",
+    "run_id": "20260429T185105710232Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": false,
+    "runtime_enabled": true,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "summary": {
+    "eval_count": 6,
+    "prompt_count": 6,
+    "failure_count": 1,
+    "with_skill": {
+      "prompt_count": 6,
+      "command_count": 372,
+      "duration_seconds": 1342.533,
+      "agent_duration_seconds": 1269.821,
+      "tokens": 4903539,
+      "agent_tokens": 4903539,
+      "error_count": 0,
+      "checks": {
+        "passed": 5,
+        "total": 6,
+        "skipped": 0
+      }
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "go/chi-basic/runtime/instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 96,
+        "duration_seconds": 295.841,
+        "agent_duration_seconds": 279.752,
+        "tokens": 2054813,
+        "agent_tokens": 2054813,
+        "error_count": 0,
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-basic/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/chi-partial/runtime/instrument",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 52,
+        "duration_seconds": 230.993,
+        "agent_duration_seconds": 226.963,
+        "tokens": 759710,
+        "agent_tokens": 759710,
+        "error_count": 0,
+        "checks": {
+          "passed": 0,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-partial/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-partial/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/chi-partial/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/kvstore/runtime/instrument",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 108,
+        "duration_seconds": 278.283,
+        "agent_duration_seconds": 261.498,
+        "tokens": 963484,
+        "agent_tokens": 963484,
+        "error_count": 0,
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/kvstore/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/kvstore/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/go/kvstore/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "node/express-basic/runtime/instrument",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 34,
+        "duration_seconds": 192.364,
+        "agent_duration_seconds": 183.464,
+        "tokens": 442457,
+        "agent_tokens": 442457,
+        "error_count": 0,
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/node/express-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/node/express-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/node/express-basic/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/fastapi-celery/runtime/instrument",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 52,
+        "duration_seconds": 206.043,
+        "agent_duration_seconds": 191.482,
+        "tokens": 479443,
+        "agent_tokens": 479443,
+        "error_count": 0,
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/fastapi-celery/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/fastapi-celery/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/fastapi-celery/runtime-instrument/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/flask-basic/runtime/instrument",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 30,
+        "duration_seconds": 139.009,
+        "agent_duration_seconds": 126.662,
+        "tokens": 203632,
+        "agent_tokens": 203632,
+        "error_count": 0,
+        "checks": {
+          "passed": 1,
+          "total": 1,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/flask-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/flask-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T185105710232Z/results/python/flask-basic/runtime-instrument/with_baseline.json"
+      }
+    }
+  ],
+  "failures": [
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-4a2e0520ac72 -f /Users/pavankri/Cisco/obstudio/evals/go/chi-partial/eval/runtime/docker-compose.yml up -d --build exited 1: #1 [internal] load local bake definitions #1 reading from stdin 1.17kB done #1 DONE 0.0s #2 [app internal] load build definition from App.Dockerfile #2 DONE 0.0s #3 [observer internal] load build definition from observer.Dockerfile #3 transferring dockerfile: 810B done #3 DONE 0.0s #2 [app internal] load build definition from App.Dockerfile #2 transferring dockerfile: 299B done #2 DONE 0.0s #4 [observer internal] load metadata for docker.io/library/debian:bookworm-slim #4 DONE 0.5s #5 [app internal] load metadata for docker.io/library/golang:1.25-bookworm #5 DONE 0.5s #6 [app internal] load .dockerignore #6 transferring context: 2B done #6 DONE 0.0s #7 [observer internal] load .dockerignore #7 transferring context: 2B done #7 DONE 0.0s #8 [app build 1/5] FROM docker.io/library/golang:1.25-bookworm@sha256:298734aec230b5f3e8cee450ce6d7eccc39f1797ba548ee90d57e9803030c6c3 #8 resolve docker.io/library/golang:1.25-bookworm@sha256:298734aec230b5f3e8cee450ce6d7eccc39f1797ba548ee90d57e9803030c6c3 0.0s done #8 DONE 0.0s #9 [observer stage-1 1/2] FROM docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 #9 resolve docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 0.0s done #9 DONE 0.0s #10 [app internal] load build context #10 transferring context: 7.78kB done #10 DONE 0.0s #11 [app build 2/5] WORKDIR /app #11 CACHED #12 [observer internal] load build context #12 transferring context: 8.36kB 0.0s done #12 DONE 0.0s #13 [observer build 5/8] COPY docs/examples.md ./docs/examples.md #13 CACHED #14 [observer stage-1 2/4] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates lsof && rm -rf /var/lib/apt/lists/* #14 CACHED #15 [observer build 8/8] RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/obstudio ./cmd/obstudio #15 CACHED #16 [observer build 3/8] COPY observer ./observer #16 CACHED #17 [observer build 4/8] COPY skills ./skill",
+      "mode": "with_skill"
+    }
+  ]
+}

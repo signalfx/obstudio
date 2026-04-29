@@ -1,0 +1,68 @@
+# Disabled template. GitLab ignores this file unless it is explicitly included
+# from .gitlab-ci.yml. Enable only after eval CI is approved to run.
+
+stages:
+  - test
+  - eval
+
+variables:
+  UV_NO_CONFIG: "1"
+  UV_DEFAULT_INDEX: "https://pypi.org/simple"
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.uv-cache"
+  MODEL: "gpt-5.2"
+  SKILL: ""
+  CASE: ""
+  PROMPT: ""
+  NO_RUBRIC: ""
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .uv-cache/
+    - evals/.venv/
+    - pytest-codex-evals/.venv/
+
+pytest-codex-evals:
+  stage: test
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  script:
+    - make test-pytest-plugin
+
+skill-evals-validation:
+  stage: eval
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  script:
+    - make eval-validation SKILL="$SKILL" CASE="$CASE" PROMPT="$PROMPT"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - eval-reports/
+      - .workspace/codex-evals/
+
+# GitLab CI cannot use the GitHub-only openai/codex-action directly.
+# This manual job installs the Codex CLI and runs the same live A/B harness.
+# Configure OPENAI_API_KEY as a protected/masked GitLab CI variable before use.
+skill-evals-live-ab:
+  stage: eval
+  image: node:22-bookworm
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+    - when: never
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl make python3 python3-venv
+    - npm install -g @openai/codex
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - test -n "$OPENAI_API_KEY" || (echo "OPENAI_API_KEY GitLab CI variable is required for live Codex A/B evals" && exit 1)
+  script:
+    - codex --version
+    - make eval-all-ab SKILL="$SKILL" CASE="$CASE" PROMPT="$PROMPT" MODEL="$MODEL" NO_RUBRIC="$NO_RUBRIC"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - eval-reports/
+      - .workspace/codex-evals/

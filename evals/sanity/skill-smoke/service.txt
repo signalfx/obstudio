@@ -1,0 +1,4 @@
+This is a dummy fixture for skill-loading sanity evals.
+
+The sanity eval kind should verify that Codex can load the target skill and
+return a short response. It should not inspect or modify a real service.

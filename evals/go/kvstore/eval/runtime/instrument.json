@@ -1,0 +1,30 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "checks": [
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits Go key-value store traces and HTTP duration metrics to Observer.",
+      "compose_file": "docker-compose.yml",
+      "timeout_seconds": 300,
+      "expect": {
+        "traces": {
+          "span_names": [
+            "server"
+          ]
+        },
+        "metrics": {
+          "contains_any": [
+            "http.server.request.duration",
+            "http.server.duration"
+          ]
+        }
+      }
+    }
+  ]
+}

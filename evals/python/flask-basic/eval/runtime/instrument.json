@@ -1,0 +1,32 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Flask service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+    }
+  ],
+  "checks": [
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits Flask traces and HTTP duration metrics to Observer.",
+      "compose_file": "docker-compose.yml",
+      "timeout_seconds": 300,
+      "expect": {
+        "traces": {
+          "span_names": [
+            "GET /health",
+            "GET /tasks",
+            "POST /tasks"
+          ]
+        },
+        "metrics": {
+          "contains_any": [
+            "http.server.request.duration",
+            "http.server.duration"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Express service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Express service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.js and package.json as the relevant startup and dependency surfaces.",
+    "Enumerates the Express routes for health and task CRUD.",
+    "Reports missing HTTP and Express auto-instrumentation packages.",
+    "Calls out missing request duration, request rate, error visibility, and OTLP exporter configuration.",
+    "Avoids suggesting unrelated frameworks or package managers."
+  ]
+}

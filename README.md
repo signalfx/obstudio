@@ -1,58 +1,38 @@
 # Observability Studio
 
-Local OpenTelemetry observability workspace -- receive, explore, and
-validate telemetry during development. Includes AI agent skills that
-audit codebases and add OpenTelemetry instrumentation automatically.
+Observability Studio is a local OpenTelemetry workspace for receiving,
+exploring, and validating telemetry while developing services. It includes a
+Go collector, REST API, MCP server, React UI, and repo-scoped agent skills for
+auditing and adding OpenTelemetry instrumentation.
 
-Observability Studio is work in progress. If you have questions, feedback or found a 
-bug please [open an issue](https://github.com/signalfx/obstudio/issues).
+## Core Skills
 
-```
-  AUDIT              INSTRUMENT
- ┌──────┐           ┌──────┐
- │ Scan │           │ Code │
- │ Gaps │           │ OTel │
- └──────┘           └──────┘
-  /otel-audit        /otel-instrument
-```
+| Skill | Purpose |
+|---|---|
+| `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
+| `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 
----
-
-## Commands
-
-2 slash commands that map to the observability lifecycle. Each one
-activates the right skill automatically.
-
-| What you're doing | Command | Key principle |
-|---|---|---|
-| Find observability gaps | `/otel-audit` | Measure before you instrument |
-| Add OpenTelemetry code | `/otel-instrument` | Auto + custom instrumentation |
-
-Skills also activate with natural language -- "instrument this service
-with OpenTelemetry" triggers `/otel-instrument`, and so on.
-
----
+The canonical skill sources live under `skills/`. Codex discovers repo-local
+entries through `.agents/skills/`, which points at those source directories.
 
 ## Quick Start
 
-### Install from Release
+### Install From Release
 
 Download the latest zip for your platform from
-[Releases](https://github.com/signalfx/obstudio/releases/latest), then:
+[Releases](https://github.com/signalfx/obstudio/releases/latest), then install
+the skills and MCP config for your agent:
 
 ```bash
 unzip obstudio_*_darwin_arm64.zip
-./obstudio install --target=cursor
+./obstudio install --target=codex
 ```
 
-This copies skills and references to `~/.cursor/skills/obstudio/` and
-configures `~/.cursor/mcp.json` to auto-start the MCP server.
-
-### Build from Source
+### Build From Source
 
 ```bash
-make build    # compile the Go binary (skills embedded)
-make run      # start the collector
+make build
+make run
 ```
 
 The collector starts on:
@@ -64,186 +44,109 @@ The collector starts on:
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
-When telemetry is flowing, open the Telemetry Explorer and use the
-**Validation** tab to run semantic validation against the current
-in-memory snapshot. Validation findings are retained, grouped into
-issues, and surfaced through the dedicated validation workflow.
+## Using The Skills
 
-### Use the Skills
+From a service directory, invoke the relevant skill in Codex:
 
-In your AI coding agent, navigate to a service directory and run:
-
-```
-/otel-instrument
+```text
+$otel-audit
+$otel-instrument
 ```
 
-Or scan for gaps first:
+Use `$otel-audit` to understand what is missing before editing. Use
+`$otel-instrument` when you are ready to add SDK setup, auto-instrumentation,
+and targeted custom signals.
 
-```
-/otel-audit              # analyze gaps only
-/otel-instrument         # add OTel code
-```
+## Validation
 
-See [docs/examples.md](docs/examples.md) for more prompt examples.
+Validation is available through the Explorer UI, REST API, and MCP.
 
-### Run Validation
-
-Validation is available through the Explorer UI, the REST API, and MCP.
-
-1. Start `obstudio`
-2. Send traces, metrics, and logs to the OTLP receiver
-3. Open the **Validation** tab and run validation
-4. Use the findings to jump back to the affected telemetry rows
-
-Programmatic entry points:
+1. Start `obstudio`.
+2. Send traces, metrics, and logs to the OTLP receiver.
+3. Open the **Validation** tab and run validation.
+4. Use the findings to inspect affected telemetry rows.
 
 | Surface | Entry points |
 |---|---|
 | REST | `/api/query/validation/summary`, `/api/query/validation/latest`, `/api/validation/run`, `/api/validation/refresh` |
 | MCP | `observer_validation_status`, `observer_validation_analyze`, `observer_validation_refresh` |
 
----
-
-## Skills
-
-The commands above are the entry points. Each skill is a structured
-workflow with steps, verification gates, and red flags. They follow the
-[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
-anatomy.
-
-### Analyze -- Understand what's missing
-
-| Skill | What It Does | Use When |
-|---|---|---|
-| [otel-audit](skills/otel-audit/SKILL.md) | Scan a codebase for observability coverage gaps and report findings in chat | Starting observability work on any service |
-
-### Build -- Add instrumentation
-
-| Skill | What It Does | Use When |
-|---|---|---|
-| [otel-instrument](skills/otel-instrument/SKILL.md) | Add OTel auto-instrumentation and optional custom spans/metrics | You want to instrument a service with OpenTelemetry |
-
----
-
-## Shared References
-
-Language guides and reference material live in `skills/references/`.
-Skills load them on-demand to minimize token usage -- only the file
-matching the detected language is loaded.
-
-| Reference | Covers |
-|---|---|
-| [languages/go.md](skills/references/languages/go.md) | Go OTel SDK, auto-instrumentation, custom spans/metrics |
-| [languages/java.md](skills/references/languages/java.md) | Java OTel agent, auto-instrumentation, custom spans/metrics |
-| [languages/node.md](skills/references/languages/node.md) | Node.js OTel SDK, Express/Fastify instrumentation |
-| [languages/python.md](skills/references/languages/python.md) | Python OTel SDK, Flask/FastAPI/Django instrumentation |
-| [signal-mapping-guide.md](skills/references/signal-mapping-guide.md) | Metric type reference, trace-derived metrics guidance |
-
----
-
 ## Repository Layout
 
-```
+```text
 obstudio/
-├── observer/          # Primary collector, REST API, MCP server, and embedded web UI
+├── observer/          # Go collector, REST API, MCP server, and embedded web UI
 ├── extension/         # VS Code extension that packages the collector
-├── skills/            # AI agent skills (composable workflows)
-│   ├── otel-audit/           #   /otel-audit
-│   ├── otel-instrument/      #   /otel-instrument
-│   └── references/    #   Shared language guides and reference material
-├── examples/          # Sample apps for skill evaluation, organized by language
-├── docs/              # Design docs, PRD, and example prompts
-├── .github/workflows/ # CI (GitHub Actions)
-├── Makefile           # Go build, test, release
-├── AGENTS.md          # Guidelines for AI agents
-└── CONTRIBUTING.md    # Dev process, PR workflow, releases
+├── skills/            # Canonical agent skill sources
+│   ├── otel-audit/
+│   ├── otel-instrument/
+│   └── references/    # Shared language guides and signal references
+├── .agents/skills/    # Repo-scoped Codex skill entries
+├── evals/             # Fixture services and JSON eval cases
+├── pytest-codex-evals/# Reusable pytest plugin for Codex eval harnessing
+├── eval-reports/      # Latest summarized eval reports
+├── docs/              # Design docs and usage examples
+├── Makefile
+├── AGENTS.md
+└── CONTRIBUTING.md
 ```
-
----
-
-## CLI Reference
-
-| Command | Description |
-|---|---|
-| `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
-| `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
-| `obstudio --version` | Print version |
-
----
 
 ## Prerequisites
 
 | Tool | Version | Purpose |
 |---|---|---|
-| Go | 1.25+ | observer collector |
-| Node.js | 20+ | observer client dev/test and VS Code extension |
-| npm | latest | Package management |
-| uv | latest | Running Python example apps |
+| Go | 1.25+ | Collector and CLI |
+| Node.js | 20+ | React client and VS Code extension |
+| npm | latest | JavaScript package management |
+| uv | latest | Python eval harness and Python fixture apps |
+| Docker | latest | Optional runtime eval checks |
 
----
-
-## Development
-
-### Make Targets
+## Development Commands
 
 | Target | Description |
 |---|---|
-| `make build` | Build the `obstudio` binary (skills embedded) |
+| `make build` | Build the `obstudio` binary with embedded skills and client assets |
 | `make run` | Build and start the collector |
-| `make test` | Run all Go tests |
-| `make vet` | Vet Go source |
+| `make test` | Run Go tests |
+| `make test-client` | Run React client tests |
+| `make test-extension` | Run extension tests |
+| `make test-all` | Run Go, client, and extension tests |
 | `make fmt` | Format Go source |
+| `make vet` | Vet Go source |
 | `make tidy` | Tidy Go modules |
-| `make list-skills` | List available skills |
-| `make skill-eval SKILL=<name>` | Run skill evals |
-| `make release-local` | Build release archives locally via GoReleaser |
+| `make list-skills` | List repo skills |
+| `make eval-validation` | Validate eval JSONs without running Codex |
+| `make eval-sanity` | Run quick loaded-skill eval checks |
+| `make eval-rubric` | Run schema-constrained rubric eval checks |
+| `make eval-runtime` | Run Docker/Observer runtime eval checks |
+| `make -C evals eval-*-test` / `make -C evals eval-*-report` | Split eval execution from report rendering |
+| `make eval-all` | Run validation, sanity, rubric, and runtime evals |
+| `make eval-all-ab` | Run validation plus A/B sanity, rubric, and runtime evals |
+| `make test-pytest-plugin` | Run reusable pytest plugin tests |
+| `make build-pytest-plugin` | Build pytest plugin distribution artifacts |
+| `make publish-pytest-plugin` | Publish pytest plugin artifacts with `uv publish` credentials |
+| `make release-local` | Build local release archives |
 | `make clean` | Remove build artifacts |
 
-### Skill Evals
+## Skill Evals
 
-Each skill has an `evals/` directory with evaluation cases that test
-skill effectiveness against example apps.
+Skill eval definitions and fixture apps live under `evals/`. See
+[evals/README.md](evals/README.md) for eval modes, commands, configs, and
+report locations.
 
-```bash
-make skill-eval SKILL=otel-instrument
-```
+## CLI Reference
 
-### CI
-
-GitHub Actions runs on every push to `main` and `feature/**` branches:
-
-- **observer** -- `go vet`, `make build`, `make test`
-
-See [.github/workflows/ci.yml](.github/workflows/ci.yml).
-
-### Example Apps
-
-The `examples/` directory contains sample apps organized by language.
-
-| App | Stack | Run |
-|---|---|---|
-| `examples/python/flask-basic/` | Flask (in-memory) | `make dev` |
-| `examples/python/fastapi-celery/` | FastAPI + Celery | `make dev` |
-| `examples/node/express-basic/` | Express (in-memory) | `npm run dev` |
-| `examples/go/chi-basic/` | Chi (in-memory) | `go run .` |
-
-```bash
-cd examples/python/flask-basic
-make dev          # starts on :8000
-```
-
----
+| Command | Description |
+|---|---|
+| `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
+| `obstudio install --target=<agent>` | Install skills and configure MCP for a supported agent |
+| `obstudio --version` | Print version |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development process
-including PR workflow, review policy, testing requirements, and release
-cadence.
-
-See [AGENTS.md](AGENTS.md) for AI agent guidelines.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development process and
+[AGENTS.md](AGENTS.md) for repo-specific AI agent guidelines.
 
 ## Splunk Copyright Notice
 
-Apache License 2.0 -- see [LICENSE](LICENSE).
-
-Copyright 2026 Splunk Inc.
+Apache License 2.0. See [LICENSE](LICENSE).
