@@ -4,7 +4,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -123,10 +125,13 @@ def run_side(
     cmd.append(prompt)
 
     agent_start = time.monotonic()
-    completed = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+    completed = run_streamed_command(
+        cmd,
+        stdout_path=trace_path,
+        stderr_path=stderr_path,
+        timeout=1200,
+    )
     agent_duration_seconds = time.monotonic() - agent_start
-    trace_path.write_text(completed.stdout, encoding="utf-8")
-    stderr_path.write_text(completed.stderr, encoding="utf-8")
     if not final_path.exists():
         final_path.write_text("", encoding="utf-8")
 
@@ -229,3 +234,81 @@ def create_skill_link(target: Path, link: Path) -> None:
         os.symlink(target, link, target_is_directory=True)
     except OSError:
         shutil.copytree(target, link)
+
+
+@dataclass
+class StreamedCommandResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+def run_streamed_command(
+    cmd: list[str],
+    *,
+    stdout_path: Path,
+    stderr_path: Path,
+    timeout: int,
+) -> StreamedCommandResult:
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=codex_subprocess_env(),
+        text=True,
+        bufsize=1,
+    )
+
+    stdout_thread = threading.Thread(
+        target=pump_stream,
+        args=(process.stdout, stdout_path, stdout_chunks),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=pump_stream,
+        args=(process.stderr, stderr_path, stderr_chunks),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        raise
+    stdout_thread.join()
+    stderr_thread.join()
+    return StreamedCommandResult(
+        returncode=returncode,
+        stdout="".join(stdout_chunks),
+        stderr="".join(stderr_chunks),
+    )
+
+
+def pump_stream(pipe, output_path: Path, chunks: list[str]) -> None:
+    if pipe is None:
+        output_path.write_text("", encoding="utf-8")
+        return
+    with output_path.open("w", encoding="utf-8") as output:
+        for line in pipe:
+            chunks.append(line)
+            output.write(line)
+            output.flush()
+
+
+def codex_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    clean_package_config = env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
+    if clean_package_config in {"1", "true", "yes", "on"}:
+        default_index = env.get("UV_DEFAULT_INDEX") or env.get("PIP_INDEX_URL") or "https://pypi.org/simple"
+        env["UV_NO_CONFIG"] = "1"
+        env["UV_DEFAULT_INDEX"] = default_index
+        env["PIP_CONFIG_FILE"] = os.devnull
+        env["PIP_INDEX_URL"] = default_index
+        env.pop("PIP_EXTRA_INDEX_URL", None)
+    return env

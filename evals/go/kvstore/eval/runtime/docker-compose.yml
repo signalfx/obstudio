@@ -1,0 +1,38 @@
+services:
+  observer:
+    build:
+      context: ../../../../..
+      dockerfile: evals/runtime/observer.Dockerfile
+    ports:
+      - "3000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - OTLP_HTTP_PORT=4318
+      - OTLP_GRPC_PORT=4317
+
+  app:
+    build:
+      context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
+      dockerfile: ${CODEX_EVAL_REPO_ROOT:?CODEX_EVAL_REPO_ROOT is required}/evals/go/kvstore/eval/runtime/App.Dockerfile
+    environment:
+      - OTEL_SERVICE_NAME=go-kvstore
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_METRIC_EXPORT_INTERVAL=1000
+      - OTEL_METRIC_EXPORT_TIMEOUT=500
+      - OTEL_BSP_SCHEDULE_DELAY=100
+      - OTEL_SEMCONV_STABILITY_OPT_IN=http
+    depends_on:
+      - observer
+
+  traffic:
+    profiles:
+      - traffic
+    build:
+      context: .
+      dockerfile: ../../../../runtime/traffic.Dockerfile
+    depends_on:
+      - app

@@ -91,9 +91,12 @@ Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
 file and declares trace/metric expectations. The Compose file owns service
 topology, Observer startup, app startup, and a profiled `traffic` service that
 generates requests with tools such as `siege`. The harness runs Compose,
-invokes `traffic`, queries Observer at `http://127.0.0.1:3000`, then tears the
-stack down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
-instrumented temp service workspace rather than the source fixture.
+discovers the Observer host port with `docker compose port observer 3000`,
+invokes `traffic`, queries that isolated Observer instance, then tears the stack
+down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
+instrumented temp service workspace rather than the source fixture. Shared
+runtime image definitions live in `evals/runtime/`; service-specific runtime
+files stay beside each eval under `eval/runtime/`.
 
 ## Commands
 
@@ -102,11 +105,19 @@ instrumented temp service workspace rather than the source fixture.
 | `make test-eval-harness` | Validate every eval JSON and fixture |
 | `make skill-eval-list SKILL=skills/otel-audit` | List collected eval items for a skill path |
 | `make eval-validation SKILL=skills/otel-audit` | Validate eval JSONs without running Codex |
+| `make eval-validation-test SKILL=skills/otel-audit` | Validate evals and write raw JSON only |
+| `make eval-validation-report SKILL=skills/otel-audit` | Render the latest validation Markdown and benchmark |
 | `make eval-sanity SKILL=skills/otel-audit` | Run quick loaded-skill sanity checks |
+| `make eval-sanity-test SKILL=skills/otel-audit` | Run sanity checks and write raw JSON only |
+| `make eval-sanity-report SKILL=skills/otel-audit` | Render the latest sanity Markdown and benchmark |
 | `make eval-sanity-ab SKILL=skills/otel-audit` | Run sanity checks with baseline |
 | `make eval-rubric SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric judge checks |
+| `make eval-rubric-test SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric checks and write raw JSON only |
+| `make eval-rubric-report SKILL=skills/otel-instrument` | Render the latest rubric Markdown and benchmark |
 | `make eval-rubric-ab SKILL=skills/otel-instrument CASE=go/kvstore` | Run rubric judge checks with baseline |
 | `make eval-runtime SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks |
+| `make eval-runtime-test SKILL=skills/otel-instrument` | Run runtime checks and write raw JSON only |
+| `make eval-runtime-report SKILL=skills/otel-instrument` | Render the latest runtime Markdown and benchmark |
 | `make eval-runtime-ab SKILL=skills/otel-instrument` | Run Docker/Observer runtime checks with baseline |
 | `make eval-all SKILL=skills/otel-audit` | Run validation, sanity, rubric, and runtime |
 | `make eval-all-ab SKILL=skills/otel-audit` | Run validation plus A/B sanity, rubric, and runtime |
@@ -126,7 +137,8 @@ make eval-rubric SKILL=skills/otel-audit EVAL_PATTERN='go/*/eval/qual'
 ```
 
 Each worker writes per-item result JSON under `.workspace/codex-evals/_worker-results/`;
-the controller merges those into the normal latest reports.
+the controller merges those into raw run JSON. Report targets then render
+Markdown and benchmark files from the merged JSON.
 
 Progress logging is enabled by default for Make targets and prints item start
 and completion lines:
@@ -161,36 +173,44 @@ enabled = false
 ## Reports
 
 Run artifacts are written under `.workspace/codex-evals/<skill>/<run-id>/`.
-Latest summaries are copied by eval kind.
-
-| Mode | Run artifacts | Latest summary |
-|---|---|---|
-| Validation | `validation-report.md`, `validation-benchmark.json` | `<skill>/validation/report.md`, `<skill>/validation/benchmark.json` |
-| Sanity | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
-| Sanity A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/sanity/report.md`, `<skill>/sanity/benchmark.json` |
-| Rubric | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/rubric/report.md`, `<skill>/rubric/benchmark.json` |
-| Rubric A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/rubric/report.md`, `<skill>/rubric/benchmark.json` |
-| Runtime | `with_skill-report.md`, `with_skill-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
-| Runtime A/B | `ab-report.md`, `ab-benchmark.json` | `<skill>/runtime/report.md`, `<skill>/runtime/benchmark.json` |
-
-Each live run also writes file-level JSON under:
+Pytest writes raw JSON; report targets parse that JSON and create Markdown plus
+role-specific benchmarks.
 
 ```text
-.workspace/codex-evals/<skill>/<run-id>/results/<language>/<service>/<eval>/
-  eval.json
-  with_skill.json
-  with_baseline.json
+.workspace/codex-evals/<skill>/<run-id>/
+  run.json
+  runs/
+    validation.json
+    sanity-with_skill.json
+    sanity-ab.json
+    rubric-with_skill.json
+    runtime-with_skill.json
+  results/<language>/<service>/<eval>/
+    eval.json
+    with_skill.json
+    with_baseline.json
+  <kind>/
+    report.md
+    benchmark.json
 ```
 
-The canonical Markdown report has validation plus the section for the selected
-eval type: Sanity Summary, Rubric Summary, or Runtime Summary. Live tables
-aggregate all prompt variants and include token usage plus elapsed time for
-with-skill and baseline sides. Baseline columns are `-` when the run mode did
-not execute a baseline side.
+Latest summaries are copied by eval kind:
 
-Each kind has its own latest `report.md` and `benchmark.json` under
-`eval-reports/<skill>/<kind>/`; mode-specific artifacts stay in the timestamped
-run directory.
+```text
+eval-reports/<skill>/validation/report.md
+eval-reports/<skill>/validation/benchmark.json
+eval-reports/<skill>/sanity/report.md
+eval-reports/<skill>/sanity/benchmark.json
+eval-reports/<skill>/rubric/report.md
+eval-reports/<skill>/rubric/benchmark.json
+eval-reports/<skill>/runtime/report.md
+eval-reports/<skill>/runtime/benchmark.json
+```
+
+Each `benchmark.json` is kind-specific. Sanity contains sanity checks only,
+rubric contains judge/rubric fields only, and runtime contains runtime check
+fields only. Baseline columns are `-` when the run mode did not execute a
+baseline side.
 
 ## Fixture Apps
 

@@ -46,7 +46,7 @@ Scan the repository to determine language, framework, and existing instrumentati
    - .NET: `*.csproj`, `*.sln`
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
 3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
-4. Load the matching language reference from `skills/references/languages/<detected>.md` to know what auto-instrumentation packages are available for the detected dependencies.
+4. Load the matching language reference from `../references/languages/<detected>.md` to know what auto-instrumentation packages are available for the detected dependencies.
 5. Record exact evidence paths that should appear in the report:
    - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
    - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.

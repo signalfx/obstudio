@@ -1,17 +1,19 @@
-# otel-audit Codex Eval Report
+# otel-audit Codex Eval Validation Report
+
+This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.
 
 ## Environment
 
 | Field | Value |
 |---|---|
-| Modes | validation |
+| Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20260428T234352619204Z |
+| Run ID | 20260429T161229087446Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
-## Validation
+## Eval Summary
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
@@ -23,7 +25,3 @@
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 5 | 0 |
 | sanity/skill-smoke/sanity/audit | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/audit.json | 0 | 0 | 0 |
-
-## Result JSON
-
-File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.

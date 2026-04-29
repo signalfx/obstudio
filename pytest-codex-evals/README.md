@@ -15,7 +15,7 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
 - Schema-constrained rubric grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
   traces or metrics in an Observer-compatible API.
-- A kind-aware aggregate report with validation plus the relevant live section.
+- Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
 ## Install
 
@@ -225,39 +225,37 @@ uv run pytest evals --skill skills/<skill-dir> --codex-eval-kind runtime --ab
 
 ## Outputs
 
-Validation-only runs write:
+Pytest runs write raw JSON only:
 
 ```text
-.workspace/codex-evals/<skill>/<run-id>/validation-report.md
-.workspace/codex-evals/<skill>/<run-id>/validation-benchmark.json
-eval-reports/<skill>/validation/report.md
-eval-reports/<skill>/validation/benchmark.json
+.workspace/codex-evals/<skill>/<run-id>/
+  run.json
+  runs/
+    validation.json
+    sanity-with_skill.json
+    sanity-ab.json
+    rubric-with_skill.json
+    runtime-with_skill.json
+  results/<group>/<item>/<eval>/
+    eval.json
+    with_skill.json
+    with_baseline.json
 ```
 
-Live A/B runs write:
+Reports are rendered separately from those raw files:
 
-```text
-.workspace/codex-evals/<skill>/<run-id>/ab-report.md
-.workspace/codex-evals/<skill>/<run-id>/ab-benchmark.json
-.workspace/codex-evals/<skill>/<run-id>/results/<group>/<item>/<eval>/
-  eval.json
-  with_skill.json
-  with_baseline.json
-eval-reports/<skill>/<kind>/report.md
-eval-reports/<skill>/<kind>/benchmark.json
+```bash
+uv run codex-eval-harness report --repo-root . --skill <skill-id> --kind sanity
 ```
 
-With-skill and with-baseline runs write analogous `with_skill-*` and
-`with_baseline-*` artifacts in the timestamped run directory.
+The report step writes `<kind>/report.md` and `<kind>/benchmark.json` in the
+timestamped run directory and copies the latest summary to
+`eval-reports/<skill>/<kind>/`.
 
-The canonical Markdown report includes environment metadata plus validation and
-the selected eval type's predefined template: Sanity Summary, Rubric Summary,
-or Runtime Summary. Live tables aggregate prompts by eval file and show
-with-skill and baseline token usage and elapsed time. Baseline columns are `-`
-when the selected run mode did not execute the baseline side.
-
-Each eval kind has its own latest `report.md` and `benchmark.json` under
-`eval-reports/<skill>/<kind>/`; mode-specific summaries remain in `.workspace`.
+Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
+check fields, rubric reports contain only rubric judge fields, and runtime
+reports contain only runtime check fields. Baseline columns are empty when a
+baseline side was not run.
 
 ## Publish
 

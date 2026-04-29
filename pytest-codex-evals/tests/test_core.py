@@ -21,9 +21,17 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
-from pytest_codex_evals.graders.runtime import grade_runtime, resolve_compose_file, runtime_env
+from pytest_codex_evals.graders.runtime import (
+    grade_runtime,
+    observer_base_url_from_port_output,
+    observer_url,
+    resolve_compose_file,
+    runtime_env,
+)
 from pytest_codex_evals.graders.sanity import grade_sanity
-from pytest_codex_evals.report import write_ab_reports, write_combined_session_reports, write_side_reports
+from pytest_codex_evals.cli import main as cli_main
+from pytest_codex_evals.report import render_reports_for_run_root, write_session_results
+from pytest_codex_evals.runner import run_streamed_command
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -48,6 +56,31 @@ def test_trace_parser_extracts_commands_and_tokens(tmp_path: Path):
     trace = parse_trace(trace_path)
     assert [command.command for command in trace.commands] == ["npm install"]
     assert trace.usage.total_tokens == 7
+
+
+def test_command_runner_records_output_without_terminal_echo(tmp_path: Path, capfd):
+    trace_path = tmp_path / "trace.jsonl"
+    stderr_path = tmp_path / "stderr.txt"
+
+    result = run_streamed_command(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print('trace line'); print('error line', file=sys.stderr)",
+        ],
+        stdout_path=trace_path,
+        stderr_path=stderr_path,
+        timeout=10,
+    )
+    captured = capfd.readouterr()
+
+    assert result.returncode == 0
+    assert result.stdout == "trace line\n"
+    assert result.stderr == "error line\n"
+    assert trace_path.read_text(encoding="utf-8") == "trace line\n"
+    assert stderr_path.read_text(encoding="utf-8") == "error line\n"
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
@@ -170,6 +203,12 @@ def test_runtime_env_points_to_instrumented_service_copy(tmp_path: Path):
     assert env["COMPOSE_PROJECT_NAME"] == "codex-eval-sample"
 
 
+def test_runtime_observer_url_uses_discovered_compose_port():
+    assert observer_base_url_from_port_output("0.0.0.0:49153\n") == "http://127.0.0.1:49153"
+    assert observer_base_url_from_port_output("[::]:49154\n") == "http://127.0.0.1:49154"
+    assert observer_url("http://127.0.0.1:49153", "/api/health") == "http://127.0.0.1:49153/api/health"
+
+
 def test_sanity_file_and_final_checks(tmp_path: Path):
     service = tmp_path / "service"
     service.mkdir()
@@ -236,51 +275,109 @@ def test_rubric_prompt_can_be_overridden_without_service_assumptions():
     assert "./service" not in prompt
 
 
-def test_ab_report_writes_mode_specific_and_legacy_paths(tmp_path: Path):
+def test_session_result_writer_writes_raw_json_without_markdown(tmp_path: Path):
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
     side = side_result("with_skill", grade)
     baseline = side_result("baseline", grade)
     result = case_result(side, baseline)
 
-    write_ab_reports(tmp_path, run_root, "sample-skill", [result])
+    write_session_results(
+        [
+            {
+                "mode": "ab",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": {"mode": "ab", "eval_kind": "sanity", "run_id": "run", "skill": "sample-skill"},
+                "results": [result],
+            }
+        ]
+    )
 
-    assert (run_root / "ab-report.md").is_file()
-    assert (run_root / "ab-benchmark.json").is_file()
-    assert (run_root / "report.md").is_file()
+    assert (run_root / "runs" / "sanity-ab.json").is_file()
+    assert (run_root / "run.json").is_file()
+    assert not (run_root / "report.md").exists()
+    assert not (run_root / "benchmark.json").exists()
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "eval.json").is_file()
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_skill.json").is_file()
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
-    benchmark = json.loads((run_root / "ab-benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["mode"] == "ab"
-    assert benchmark["summary"]["eval_count"] == 1
-    assert benchmark["evals"][0]["prompt_count"] == 1
 
 
-def test_side_report_writes_with_skill_paths(tmp_path: Path):
+def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=False, evidence="missing output")])
     result = case_result(side_result("with_skill", grade), None)
 
-    write_side_reports(tmp_path, run_root, "sample-skill", "with_skill", [result])
+    write_session_results(
+        [
+            {
+                "mode": "with_skill",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": {
+                    "mode": "with_skill",
+                    "eval_kind": "sanity",
+                    "run_id": "run",
+                    "skill": "sample-skill",
+                    "agent_model": "gpt-test",
+                },
+                "results": [result],
+            }
+        ]
+    )
+    report_path, benchmark_path = render_reports_for_run_root(run_root, "sanity")
 
-    assert (run_root / "with_skill-report.md").is_file()
-    assert (run_root / "with_skill-benchmark.json").is_file()
+    assert report_path == run_root / "sanity" / "report.md"
+    assert benchmark_path == run_root / "sanity" / "benchmark.json"
+    assert (tmp_path / "eval-reports" / "sample-skill" / "sanity" / "report.md").is_file()
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_skill.json").is_file()
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
-    benchmark = json.loads((run_root / "with_skill-benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["mode"] == "with_skill"
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    assert benchmark["kind"] == "sanity"
     assert benchmark["evals"][0]["with_baseline"] is None
+    assert set(benchmark["evals"][0]["with_skill"]) >= {"checks", "tokens", "duration_seconds"}
+    assert "rubric" not in benchmark["evals"][0]["with_skill"]
+    assert "runtime" not in benchmark["evals"][0]["with_skill"]
     assert benchmark["failures"][0]["result"] == "sanity:check FAIL"
-    report = (run_root / "with_skill-report.md").read_text(encoding="utf-8")
-    assert "| sample/service/sample-skill | sample/service | 1 | 0% (0/1) | - | 0 | 0.0s | - | - | - | - |" in report
+    report = report_path.read_text(encoding="utf-8")
+    assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 0% (0/1) | 0 | 0.0s | - | - | - |" in report
     assert "sanity:check FAIL" in report
 
 
-def test_runtime_combined_report_uses_runtime_template_only(tmp_path: Path):
-    report = combined_report_for_kind(tmp_path, "runtime")
+def test_cli_report_renders_latest_run(tmp_path: Path):
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
+    result = case_result(side_result("with_skill", grade), None)
+    write_session_results(
+        [
+            {
+                "mode": "with_skill",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": {"mode": "with_skill", "eval_kind": "sanity", "run_id": "run", "skill": "sample-skill"},
+                "results": [result],
+            }
+        ]
+    )
 
-    assert "## Validation" in report
+    assert cli_main(["report", "--repo-root", str(tmp_path), "--skill", "sample-skill", "--kind", "sanity"]) == 0
+
+    assert (tmp_path / "eval-reports" / "sample-skill" / "sanity" / "report.md").is_file()
+    assert (tmp_path / "eval-reports" / "sample-skill" / "sanity" / "benchmark.json").is_file()
+
+
+def test_runtime_report_uses_runtime_template_only(tmp_path: Path):
+    report = report_for_kind(tmp_path, "runtime")
+
+    assert "| sample/service/sample-skill | sample/service | 1 |" in report
+    assert "Sanity Checks" not in report
+    assert "Rubric Checks" not in report
     assert "## Sanity Summary" not in report
     assert "## Rubric Summary" not in report
     assert "## Runtime Summary" in report
@@ -289,10 +386,11 @@ def test_runtime_combined_report_uses_runtime_template_only(tmp_path: Path):
     assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report
 
 
-def test_sanity_combined_report_uses_sanity_template_only(tmp_path: Path):
-    report = combined_report_for_kind(tmp_path, "sanity")
+def test_sanity_report_uses_sanity_template_only(tmp_path: Path):
+    report = report_for_kind(tmp_path, "sanity")
 
-    assert "## Validation" in report
+    assert "Rubric Checks" not in report
+    assert "Runtime Checks" not in report
     assert "## Sanity Summary" in report
     assert "## Sanity Failures" in report
     assert "## Rubric Summary" not in report
@@ -300,10 +398,11 @@ def test_sanity_combined_report_uses_sanity_template_only(tmp_path: Path):
     assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1) | 456 | 12.3s | - | - | - |" in report
 
 
-def test_rubric_combined_report_uses_rubric_template_only(tmp_path: Path):
-    report = combined_report_for_kind(tmp_path, "rubric")
+def test_rubric_report_uses_rubric_template_only(tmp_path: Path):
+    report = report_for_kind(tmp_path, "rubric")
 
-    assert "## Validation" in report
+    assert "Sanity Checks" not in report
+    assert "Runtime Checks" not in report
     assert "## Sanity Summary" not in report
     assert "## Rubric Summary" in report
     assert "## Rubric Failures" in report
@@ -311,16 +410,7 @@ def test_rubric_combined_report_uses_rubric_template_only(tmp_path: Path):
     assert "| with_skill | sample/service/sample-skill | sample/service | 1 | 100% (1/1), avg score 4 | 456 | 12.3s | - | - | - |" in report
 
 
-def test_standard_combined_report_keeps_all_live_sections(tmp_path: Path):
-    report = combined_report_for_kind(tmp_path, "standard")
-
-    assert "## Validation" in report
-    assert "## Sanity Summary" in report
-    assert "## Rubric Summary" in report
-    assert "## Runtime Summary" in report
-
-
-def combined_report_for_kind(tmp_path: Path, eval_kind: str) -> str:
+def report_for_kind(tmp_path: Path, eval_kind: str) -> str:
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     sanity = GradeCheckResult(id="file", description="file", passed=True)
     runtime = GradeCheckResult(id="observer", description="observer", passed=True, category="runtime")
@@ -337,34 +427,12 @@ def combined_report_for_kind(tmp_path: Path, eval_kind: str) -> str:
         tokens=456,
     )
     case = case_result(side, None)
-    validation = ValidationResult(
-        id=case.id,
-        base_id=case.base_id,
-        prompt_id=case.prompt_id,
-        skill=case.skill,
-        language=case.language,
-        service=case.service,
-        definition_path=str(tmp_path / "sample.json"),
-        fixture_dir=str(tmp_path),
-        skill_path=str(tmp_path / "skills" / "sample-skill"),
-        eval_kind=eval_kind if eval_kind in {"sanity", "rubric", "runtime"} else "sanity",
-        sanity_check_count=1,
-        rubric_check_count=1,
-        runtime_check_count=1,
-    )
 
-    write_combined_session_reports(
+    write_session_results(
         [
             {
-                "mode": "validation",
-                "repo_root": tmp_path,
-                "run_root": run_root,
-                "skill": "sample-skill",
-                "metadata": {"mode": "validation", "run_id": "run", "skill": "sample-skill", "eval_kind": eval_kind},
-                "results": [validation],
-            },
-            {
                 "mode": "with_skill",
+                "eval_kind": eval_kind,
                 "repo_root": tmp_path,
                 "run_root": run_root,
                 "skill": "sample-skill",
@@ -381,8 +449,9 @@ def combined_report_for_kind(tmp_path: Path, eval_kind: str) -> str:
             },
         ]
     )
+    report_path, _ = render_reports_for_run_root(run_root, eval_kind)
 
-    return (run_root / "report.md").read_text(encoding="utf-8")
+    return report_path.read_text(encoding="utf-8")
 
 
 def sanity_case(**overrides) -> SanityEvalCase:

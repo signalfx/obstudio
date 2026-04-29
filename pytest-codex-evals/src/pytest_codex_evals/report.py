@@ -14,86 +14,10 @@ SIDE_ATTRS = {
     "with_skill": "with_skill",
     "with_baseline": "baseline",
 }
-LIVE_SECTION_DEFINITIONS = {
-    "sanity": (template_for_kind("sanity"), "sanity_failures"),
-    "rubric": (template_for_kind("rubric"), "rubric_failures"),
-    "runtime": (template_for_kind("runtime"), "runtime_failures"),
-}
-KIND_LIVE_SECTIONS = {
-    "sanity": ("sanity",),
-    "rubric": ("rubric",),
-    "runtime": ("runtime",),
-    "validation": (),
-}
+RAW_RUNS_DIR = "runs"
 
 
-def write_side_reports(
-    repo_root: Path,
-    run_root: Path,
-    skill: str,
-    mode: str,
-    results: list[CaseResult],
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    write_live_reports(repo_root, run_root, skill, mode, results, metadata)
-
-
-def write_ab_reports(
-    repo_root: Path,
-    run_root: Path,
-    skill: str,
-    results: list[CaseResult],
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    write_live_reports(repo_root, run_root, skill, "ab", results, metadata)
-
-
-def write_live_reports(
-    repo_root: Path,
-    run_root: Path,
-    skill: str,
-    mode: str,
-    results: list[CaseResult],
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    if mode not in LIVE_MODES:
-        raise ValueError(f"{mode} is not a live report mode")
-
-    normalized_metadata = report_metadata(skill, mode, run_root, metadata)
-    result_paths = write_live_result_jsons(repo_root, run_root, mode, results)
-    benchmark = build_live_benchmark(skill, mode, results, normalized_metadata, result_paths)
-    report = render_live_report(skill, benchmark)
-
-    prefix = mode
-    benchmark_path = run_root / f"{prefix}-benchmark.json"
-    report_path = run_root / f"{prefix}-report.md"
-    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
-    benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
-    report_path.write_text(report, encoding="utf-8")
-
-    shutil.copyfile(report_path, run_root / "report.md")
-    shutil.copyfile(benchmark_path, run_root / "benchmark.json")
-
-
-def write_validation_reports(
-    repo_root: Path,
-    run_root: Path,
-    skill: str,
-    results: list[ValidationResult],
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    normalized_metadata = report_metadata(skill, "validation", run_root, metadata)
-    benchmark = build_validation_benchmark(repo_root, skill, results, normalized_metadata)
-    benchmark_path = run_root / "validation-benchmark.json"
-    benchmark_path.parent.mkdir(parents=True, exist_ok=True)
-    benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
-
-    report = render_validation_report(skill, benchmark)
-    report_path = run_root / "validation-report.md"
-    report_path.write_text(report, encoding="utf-8")
-
-
-def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:
+def write_session_results(runs: list[dict[str, Any]]) -> None:
     grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for run in runs:
         if not run.get("results"):
@@ -106,103 +30,273 @@ def write_combined_session_reports(runs: list[dict[str, Any]]) -> None:
         repo_root = first["repo_root"]
         run_root = first["run_root"]
         skill = first["skill"]
-        validation_results: list[ValidationResult] = []
-        validation_metadata: dict[str, Any] = {}
-        live_runs: list[dict[str, Any]] = []
-        for run in run_group:
-            if run["mode"] == "validation":
-                validation_results.extend(run["results"])
-                validation_metadata = run.get("metadata", validation_metadata)
-            elif run["mode"] in LIVE_MODES:
-                live_runs.append(run)
-
-        benchmark = build_combined_benchmark(repo_root, run_root, skill, validation_results, validation_metadata, live_runs)
-        report = render_combined_report(skill, benchmark)
-        benchmark_path = run_root / "benchmark.json"
-        report_path = run_root / "report.md"
-        benchmark_path.parent.mkdir(parents=True, exist_ok=True)
-        benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
-        report_path.write_text(report, encoding="utf-8")
-
-        latest_dir = repo_root / "eval-reports" / skill / report_key(benchmark)
-        latest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(report_path, latest_dir / "report.md")
-        shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
+        run_files = []
+        for run in sorted(run_group, key=lambda item: (item["eval_kind"], item["mode"])):
+            path = write_raw_run_result(
+                repo_root=run["repo_root"],
+                run_root=run["run_root"],
+                skill=run["skill"],
+                mode=run["mode"],
+                eval_kind=run["eval_kind"],
+                results=run["results"],
+                metadata=run.get("metadata", {}),
+            )
+            run_files.append(relative_to_run_root(run_root, path))
+        write_run_manifest(repo_root, run_root, skill, run_files)
 
 
-def build_combined_benchmark(
+def write_raw_run_result(
+    *,
     repo_root: Path,
     run_root: Path,
     skill: str,
-    validation_results: list[ValidationResult],
-    validation_metadata: dict[str, Any],
-    live_runs: list[dict[str, Any]],
+    mode: str,
+    eval_kind: str,
+    results: list[ValidationResult] | list[CaseResult],
+    metadata: dict[str, Any] | None = None,
+) -> Path:
+    result_paths: dict[str, dict[str, str]] = {}
+    if mode in LIVE_MODES:
+        result_paths = write_live_result_jsons(repo_root, run_root, mode, results)  # type: ignore[arg-type]
+
+    payload = {
+        "schema_version": 1,
+        "mode": mode,
+        "eval_kind": eval_kind,
+        "repo_root": str(repo_root),
+        "run_root": str(run_root),
+        "skill": skill,
+        "metadata": report_metadata(skill, mode, run_root, metadata),
+        "result_paths": result_paths,
+        "results": [result.model_dump(mode="json") for result in results],
+    }
+    path = raw_run_path(run_root, eval_kind, mode)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def raw_run_path(run_root: Path, eval_kind: str, mode: str) -> Path:
+    name = "validation.json" if mode == "validation" else f"{safe_name(eval_kind)}-{safe_name(mode)}.json"
+    return run_root / RAW_RUNS_DIR / name
+
+
+def write_run_manifest(repo_root: Path, run_root: Path, skill: str, run_files: list[str]) -> None:
+    manifest = {
+        "schema_version": 1,
+        "repo_root": str(repo_root),
+        "run_root": str(run_root),
+        "run_id": run_root.name,
+        "skill": skill,
+        "runs": run_files,
+    }
+    run_root.mkdir(parents=True, exist_ok=True)
+    (run_root / "run.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def render_reports_for_run_root(
+    run_root: Path,
+    kind: str,
+    *,
+    skill: str | None = None,
+    output_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    payloads = load_raw_run_payloads(run_root)
+    if skill:
+        payloads = [payload for payload in payloads if payload.get("skill") == skill]
+    if not payloads:
+        raise ValueError(f"no raw eval results found in {run_root}")
+
+    repo_root = Path(str(payloads[0]["repo_root"]))
+    resolved_skill = skill or str(payloads[0]["skill"])
+    if kind == "validation":
+        benchmark = validation_benchmark_from_payloads(repo_root, run_root, resolved_skill, payloads)
+        report = render_validation_report(resolved_skill, benchmark)
+    else:
+        benchmark = kind_benchmark_from_payloads(repo_root, run_root, resolved_skill, kind, payloads)
+        report = render_kind_report(resolved_skill, benchmark)
+    return write_report_outputs(repo_root, run_root, resolved_skill, kind, benchmark, report, output_dir)
+
+
+def load_raw_run_payloads(run_root: Path) -> list[dict[str, Any]]:
+    manifest_path = run_root / "run.json"
+    payload_paths: list[Path]
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        payload_paths = [run_root / path for path in manifest.get("runs", [])]
+    else:
+        payload_paths = sorted((run_root / RAW_RUNS_DIR).glob("*.json"))
+    payloads = [json.loads(path.read_text(encoding="utf-8")) for path in payload_paths if path.is_file()]
+    return payloads
+
+
+def validation_benchmark_from_payloads(
+    repo_root: Path,
+    run_root: Path,
+    skill: str,
+    payloads: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if not validation_metadata:
-        validation_metadata = next((run.get("metadata", {}) for run in live_runs if run.get("metadata")), {})
-    if not validation_metadata:
-        validation_metadata = {"mode": "validation", "skill": skill, "run_id": run_root.name, "repo_root": str(repo_root)}
-    validation = build_validation_benchmark(repo_root, skill, validation_results, report_metadata(skill, "validation", run_root, validation_metadata))
+    validation_payloads = [payload for payload in payloads if payload.get("mode") == "validation"]
+    if not validation_payloads:
+        raise ValueError(f"no validation results found in {run_root}")
+    results: list[ValidationResult] = []
+    metadata: dict[str, Any] = {}
+    for payload in validation_payloads:
+        metadata = payload.get("metadata", metadata)
+        results.extend(ValidationResult.model_validate(item) for item in payload.get("results", []))
+    return build_validation_benchmark(repo_root, skill, results, report_metadata(skill, "validation", run_root, metadata))
 
-    live = []
-    for run in sorted(live_runs, key=lambda item: item["mode"]):
-        result_paths = collect_existing_result_paths(repo_root, run["run_root"], run["results"])
-        live.append(
-            build_live_benchmark(
-                skill,
-                run["mode"],
-                run["results"],
-                report_metadata(skill, run["mode"], run["run_root"], run.get("metadata")),
-                result_paths,
-            )
-        )
 
-    metadata = combined_metadata(skill, run_root, validation_metadata, live)
+def kind_benchmark_from_payloads(
+    repo_root: Path,
+    run_root: Path,
+    skill: str,
+    kind: str,
+    payloads: list[dict[str, Any]],
+) -> dict[str, Any]:
+    live_payloads = [
+        payload
+        for payload in payloads
+        if payload.get("mode") in LIVE_MODES and normalize_kind(str(payload.get("eval_kind", ""))) == kind
+    ]
+    if not live_payloads:
+        raise ValueError(f"no {kind} live results found in {run_root}")
+    return build_kind_benchmark(repo_root, run_root, skill, kind, live_payloads)
+
+
+def build_kind_benchmark(
+    repo_root: Path,
+    run_root: Path,
+    skill: str,
+    kind: str,
+    live_payloads: list[dict[str, Any]],
+) -> dict[str, Any]:
+    evals = []
+    failures = []
+    metadata_sources = []
+    for payload in sorted(live_payloads, key=lambda item: str(item.get("mode", ""))):
+        mode = str(payload["mode"])
+        metadata_sources.append(payload.get("metadata", {}))
+        results = [CaseResult.model_validate(item) for item in payload.get("results", [])]
+        result_paths = payload.get("result_paths", {})
+        for base_id, group in grouped_case_results(results).items():
+            item = aggregate_kind_case_group(kind, group)
+            item["mode"] = mode
+            item["result_paths"] = result_paths.get(base_id, {})
+            evals.append(item)
+        failures.extend(collect_kind_failures(results, kind, mode))
+
+    metadata = kind_report_metadata(skill, run_root, kind, metadata_sources)
     return {
+        "schema_version": 1,
+        "kind": kind,
+        "mode": metadata["mode"],
         "skill": skill,
         "metadata": metadata,
-        "validation": validation,
-        "live": live,
-        "sanity_failures": collect_combined_failures(live, "sanity"),
-        "rubric_failures": collect_combined_failures(live, "rubric"),
-        "runtime_failures": collect_combined_failures(live, "runtime"),
+        "summary": {
+            "eval_count": len(evals),
+            "prompt_count": sum(int(item["prompt_count"]) for item in evals),
+            "failure_count": len(failures),
+            "with_skill": aggregate_kind_evals(evals, "with_skill", kind),
+            "with_baseline": aggregate_kind_evals(evals, "with_baseline", kind),
+        },
+        "evals": evals,
+        "failures": failures,
     }
 
 
-def collect_existing_result_paths(
-    repo_root: Path,
-    run_root: Path,
-    results: list[CaseResult],
-) -> dict[str, dict[str, str]]:
-    paths: dict[str, dict[str, str]] = {}
-    for base_id, group in grouped_case_results(results).items():
-        first = group[0]
-        eval_dir = run_root / "results" / first.language / first.service / eval_kind(base_id)
-        side_paths: dict[str, str] = {}
-        for name in ("eval", "with_skill", "with_baseline"):
-            path = eval_dir / f"{name}.json"
-            if path.is_file():
-                side_paths[name] = relative_to_repo(repo_root, path)
-        paths[base_id] = side_paths
-    return paths
+def aggregate_kind_case_group(kind: str, group: list[CaseResult]) -> dict[str, Any]:
+    first = group[0]
+    return {
+        "id": first.base_id,
+        "case": f"{first.language}/{first.service}",
+        "language": first.language,
+        "service": first.service,
+        "prompt_count": len(group),
+        "prompts": [result.prompt_id for result in group],
+        "with_skill": aggregate_kind_side(kind, group, "with_skill"),
+        "with_baseline": aggregate_kind_side(kind, group, "with_baseline"),
+    }
 
 
-def combined_metadata(
-    skill: str,
-    run_root: Path,
-    validation_metadata: dict[str, Any],
-    live: list[dict[str, Any]],
-) -> dict[str, Any]:
-    live_metadata = [item.get("metadata", {}) for item in live]
-    metadata_sources = live_metadata or [validation_metadata]
-    modes = [item.get("mode", "validation") for item in live] or ["validation"]
-    eval_kinds = sorted({str(meta.get("eval_kind") or "-") for meta in metadata_sources if meta.get("eval_kind")}) or ["validation"]
+def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> dict[str, Any] | None:
+    sides = [side for result in results if (side := side_for_key(result, side_key)) is not None]
+    if not sides:
+        return None
+    summary: dict[str, Any] = {
+        "prompt_count": len(sides),
+        "command_count": sum(side.command_count for side in sides),
+        "duration_seconds": round(sum(side.duration_seconds for side in sides), 3),
+        "agent_duration_seconds": round(sum(side.agent_duration_seconds for side in sides), 3),
+        "tokens": sum(side.tokens for side in sides),
+        "agent_tokens": sum(side.agent_tokens for side in sides),
+        "error_count": sum(len(side.errors) for side in sides),
+    }
+    if kind == "rubric":
+        rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
+        rubric_total = sum(int(grade["total"]) for grade in rubric)
+        rubric_passed = sum(int(grade["passed"]) for grade in rubric)
+        scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int)]
+        summary["rubric"] = None if not rubric else {"passed": rubric_passed, "total": rubric_total, "average_score": average(scores) if scores else None}
+        summary["rubric_tokens"] = sum(side.rubric_tokens for side in sides)
+        summary["rubric_duration_seconds"] = round(sum(side.rubric_duration_seconds for side in sides), 3)
+    else:
+        summary["checks"] = aggregate_check_category(sides, kind)
+    return summary
+
+
+def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) -> dict[str, Any] | None:
+    sides = [item[side_key] for item in evals if item.get(side_key) is not None]
+    if not sides:
+        return None
+    summary: dict[str, Any] = {
+        "prompt_count": sum(int(side["prompt_count"]) for side in sides),
+        "command_count": sum(int(side["command_count"]) for side in sides),
+        "duration_seconds": round(sum(float(side["duration_seconds"]) for side in sides), 3),
+        "agent_duration_seconds": round(sum(float(side["agent_duration_seconds"]) for side in sides), 3),
+        "tokens": sum(int(side["tokens"]) for side in sides),
+        "agent_tokens": sum(int(side["agent_tokens"]) for side in sides),
+        "error_count": sum(int(side["error_count"]) for side in sides),
+    }
+    if kind == "rubric":
+        rubric_summaries = [side["rubric"] for side in sides if side.get("rubric") is not None]
+        scores = [float(rubric["average_score"]) for rubric in rubric_summaries if rubric.get("average_score") is not None]
+        summary["rubric"] = None if not rubric_summaries else {
+            "passed": sum(int(rubric["passed"]) for rubric in rubric_summaries),
+            "total": sum(int(rubric["total"]) for rubric in rubric_summaries),
+            "average_score": average(scores) if scores else None,
+        }
+        summary["rubric_tokens"] = sum(int(side.get("rubric_tokens") or 0) for side in sides)
+        summary["rubric_duration_seconds"] = round(sum(float(side.get("rubric_duration_seconds") or 0.0) for side in sides), 3)
+    else:
+        checks = [side["checks"] for side in sides]
+        summary["checks"] = {
+            "passed": sum(int(item["passed"]) for item in checks),
+            "total": sum(int(item["total"]) for item in checks),
+            "skipped": sum(int(item["skipped"]) for item in checks),
+        }
+    return summary
+
+
+def collect_kind_failures(results: list[CaseResult], kind: str, mode: str) -> list[dict[str, str]]:
+    failures = []
+    for failure in collect_failures(results):
+        if failure.get("category") != kind:
+            continue
+        with_mode = dict(failure)
+        with_mode["mode"] = mode
+        failures.append(with_mode)
+    return failures
+
+
+def kind_report_metadata(skill: str, run_root: Path, kind: str, metadata_sources: list[dict[str, Any]]) -> dict[str, Any]:
+    modes = sorted({str(meta.get("mode") or "-") for meta in metadata_sources if meta.get("mode")}) or ["-"]
     agent_models = sorted({str(meta.get("agent_model") or "-") for meta in metadata_sources if meta.get("agent_model")}) or ["-"]
     judge_models = sorted({str(meta.get("judge_model") or "-") for meta in metadata_sources if meta.get("judge_model")}) or ["-"]
-    config_paths = sorted({str(meta.get("config_path") or "-") for meta in [validation_metadata, *live_metadata] if meta.get("config_path")}) or ["-"]
+    config_paths = sorted({str(meta.get("config_path") or "-") for meta in metadata_sources if meta.get("config_path")}) or ["-"]
     return {
         "mode": ", ".join(modes),
-        "eval_kind": ", ".join(eval_kinds),
+        "eval_kind": kind,
         "skill": skill,
         "run_id": run_root.name,
         "agent_model": ", ".join(agent_models),
@@ -214,57 +308,22 @@ def combined_metadata(
     }
 
 
-def render_combined_report(skill: str, benchmark: dict[str, Any]) -> str:
-    lines = [
-        f"# {skill} Codex Eval Report",
-    ]
-    lines.extend(render_environment_table(benchmark["metadata"], "Modes"))
-
-    lines.extend(render_validation_section(benchmark["validation"]))
-    for section_key in live_section_keys(benchmark["metadata"]):
-        template, failures_key = LIVE_SECTION_DEFINITIONS[section_key]
-        lines.extend(render_live_section(template, benchmark["live"], benchmark[failures_key]))
+def render_kind_report(skill: str, benchmark: dict[str, Any]) -> str:
+    kind = str(benchmark["kind"])
+    template = template_for_kind(kind)
+    lines = [f"# {skill} {template.summary_title.replace(' Summary', '')} Codex Eval Report"]
+    lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
+    lines.extend(render_kind_summary_section(template, benchmark["evals"]))
+    lines.extend(render_kind_failure_section(template, benchmark["failures"]))
+    if template.evidence_title:
+        lines.extend(["", f"## {template.evidence_title}", ""])
+        lines.append("Runtime failure evidence includes the relevant Docker Compose log tail in the failure table.")
     lines.extend(["", "## Result JSON", ""])
     lines.append("File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.")
     return "\n".join(lines) + "\n"
 
 
-def live_section_keys(metadata: dict[str, Any]) -> tuple[str, ...]:
-    kinds = eval_kind_values(metadata)
-    if len(kinds) == 1 and kinds[0] in KIND_LIVE_SECTIONS:
-        return KIND_LIVE_SECTIONS[kinds[0]]
-    return tuple(LIVE_SECTION_DEFINITIONS)
-
-
-def render_validation_section(validation: dict[str, Any]) -> list[str]:
-    lines = [
-        "",
-        "## Validation",
-        "",
-        "| Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |",
-        "|---|---|---:|---|---:|---:|---:|",
-    ]
-    evals = validation.get("evals", [])
-    if not evals:
-        lines.append("| - | - | 0 | - | 0 | 0 | 0 |")
-        return lines
-    for item in evals:
-        lines.append(
-            "| {eval_id} | {service} | {prompts} | {path} | {det} | {qual} | {runtime} |".format(
-                eval_id=markdown_cell(item["id"]),
-                service=markdown_cell(item["case"]),
-                prompts=item["prompt_count"],
-                path=markdown_cell(item["definition_path"]),
-                det=item["sanity_check_count"],
-                qual=item["rubric_check_count"],
-                runtime=item.get("runtime_check_count", 0),
-            )
-        )
-    return lines
-
-
-def render_live_section(template: ReportTemplate, live_runs: list[dict[str, Any]], failures: list[dict[str, str]]) -> list[str]:
-    category = template.category
+def render_kind_summary_section(template: ReportTemplate, evals: list[dict[str, Any]]) -> list[str]:
     lines = [
         "",
         f"## {template.summary_title}",
@@ -272,48 +331,94 @@ def render_live_section(template: ReportTemplate, live_runs: list[dict[str, Any]
         "| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    rows = []
-    for live in live_runs:
-        for item in live.get("evals", []):
-            rows.append(
-                "| {mode} | {eval_id} | {service} | {prompts} | {ws} | {ws_tokens} | {ws_time} | {base} | {base_tokens} | {base_time} |".format(
-                    mode=markdown_cell(live["mode"]),
-                    eval_id=markdown_cell(item["id"]),
-                    service=markdown_cell(item["case"]),
-                    prompts=item["prompt_count"],
-                    ws=format_category(item.get("with_skill"), category),
-                    ws_tokens=format_tokens(item.get("with_skill")),
-                    ws_time=format_duration(item.get("with_skill")),
-                    base=format_category(item.get("with_baseline"), category),
-                    base_tokens=format_tokens(item.get("with_baseline")),
-                    base_time=format_duration(item.get("with_baseline")),
-                )
-            )
-    if rows:
-        lines.extend(rows)
-    else:
+    if not evals:
         lines.append("| - | - | - | 0 | - | - | - | - | - | - |")
+        return lines
+    for item in evals:
+        lines.append(
+            "| {mode} | {eval_id} | {service} | {prompts} | {ws} | {ws_tokens} | {ws_time} | {base} | {base_tokens} | {base_time} |".format(
+                mode=markdown_cell(item["mode"]),
+                eval_id=markdown_cell(item["id"]),
+                service=markdown_cell(item["case"]),
+                prompts=item["prompt_count"],
+                ws=format_kind_side(item.get("with_skill"), template.category),
+                ws_tokens=format_tokens(item.get("with_skill")),
+                ws_time=format_duration(item.get("with_skill")),
+                base=format_kind_side(item.get("with_baseline"), template.category),
+                base_tokens=format_tokens(item.get("with_baseline")),
+                base_time=format_duration(item.get("with_baseline")),
+            )
+        )
+    return lines
 
-    lines.extend(["", f"## {template.failure_title}", ""])
+
+def render_kind_failure_section(template: ReportTemplate, failures: list[dict[str, str]]) -> list[str]:
+    lines = ["", f"## {template.failure_title}", ""]
     if not failures:
         lines.append(template.empty_failures)
-    else:
-        lines.extend(["| Mode | Service | Side | Prompt | Result | Evidence |", "|---|---|---|---|---|---|"])
-        for failure in failures:
-            lines.append(
-                "| {mode} | {service} | {side} | {prompt} | {result} | {evidence} |".format(
-                    mode=markdown_cell(failure.get("mode")),
-                    service=markdown_cell(failure["service"]),
-                    side=markdown_cell(failure["side"]),
-                    prompt=markdown_cell(failure["prompt"]),
-                    result=markdown_cell(failure["result"]),
-                    evidence=markdown_cell(truncate(failure["evidence"], 320)),
-                )
+        return lines
+    lines.extend(["| Mode | Service | Side | Prompt | Result | Evidence |", "|---|---|---|---|---|---|"])
+    for failure in failures:
+        lines.append(
+            "| {mode} | {service} | {side} | {prompt} | {result} | {evidence} |".format(
+                mode=markdown_cell(failure.get("mode")),
+                service=markdown_cell(failure["service"]),
+                side=markdown_cell(failure["side"]),
+                prompt=markdown_cell(failure["prompt"]),
+                result=markdown_cell(failure["result"]),
+                evidence=markdown_cell(truncate(failure["evidence"], 320)),
             )
-    if template.evidence_title:
-        lines.extend(["", f"## {template.evidence_title}", ""])
-        lines.append("Runtime failure evidence includes the relevant Docker Compose log tail in the failure table.")
+        )
     return lines
+
+
+def write_report_outputs(
+    repo_root: Path,
+    run_root: Path,
+    skill: str,
+    kind: str,
+    benchmark: dict[str, Any],
+    report: str,
+    output_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    report_dir = run_root / kind
+    report_dir.mkdir(parents=True, exist_ok=True)
+    benchmark_path = report_dir / "benchmark.json"
+    report_path = report_dir / "report.md"
+    benchmark_path.write_text(json.dumps(benchmark, indent=2), encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8")
+
+    latest_root = output_dir or repo_root / "eval-reports"
+    latest_dir = latest_root / skill / kind
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(report_path, latest_dir / "report.md")
+    shutil.copyfile(benchmark_path, latest_dir / "benchmark.json")
+    return report_path, benchmark_path
+
+
+def format_kind_side(side: dict[str, Any] | None, kind: str) -> str:
+    if side is None:
+        return "-"
+    if kind == "rubric":
+        return format_rubric(side)
+    data = side.get("checks")
+    if not data:
+        return "-"
+    total = int(data["total"])
+    passed = int(data["passed"])
+    skipped = int(data.get("skipped") or 0)
+    if total == 0 and skipped == 0:
+        return "-"
+    if total == 0 and skipped:
+        return f"{skipped} skipped"
+    value = format_count(passed, total)
+    if skipped:
+        return f"{value}, {skipped} skipped"
+    return value
+
+
+def normalize_kind(value: str) -> str:
+    return value.strip().lower().replace("-", "_")
 
 
 def write_live_result_jsons(
@@ -433,37 +538,6 @@ def aggregate_check_category(sides: list[SideResult], category: str) -> dict[str
     }
 
 
-def build_live_benchmark(
-    skill: str,
-    mode: str,
-    results: list[CaseResult],
-    metadata: dict[str, Any],
-    result_paths: dict[str, dict[str, str]],
-) -> dict[str, Any]:
-    evals = []
-    for base_id, group in grouped_case_results(results).items():
-        aggregate = aggregate_case_group(group)
-        aggregate["result_paths"] = result_paths.get(base_id, {})
-        evals.append(aggregate)
-
-    failures = collect_failures(results)
-    return {
-        "mode": mode,
-        "skill": skill,
-        "metadata": metadata,
-        "evals": evals,
-        "failures": failures,
-        "summary": {
-            "eval_count": len(evals),
-            "case_count": len(results),
-            "prompt_count": len(results),
-            "failure_count": len(failures),
-            "with_skill": aggregate_side(results, "with_skill"),
-            "with_baseline": aggregate_side(results, "with_baseline"),
-        },
-    }
-
-
 def aggregate_case_group(group: list[CaseResult]) -> dict[str, Any]:
     first = group[0]
     return {
@@ -561,73 +635,6 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                     }
                 )
     return failures
-
-
-def collect_combined_failures(live_runs: list[dict[str, Any]], category: str) -> list[dict[str, str]]:
-    failures: list[dict[str, str]] = []
-    for live in live_runs:
-        mode = live.get("mode", "")
-        for failure in live.get("failures", []):
-            if failure.get("category") != category:
-                continue
-            with_mode = dict(failure)
-            with_mode["mode"] = str(mode)
-            failures.append(with_mode)
-    return failures
-
-
-def render_live_report(skill: str, benchmark: dict[str, Any]) -> str:
-    lines = [
-        f"# {skill} Codex Eval Report",
-    ]
-    lines.extend(render_environment_table(benchmark["metadata"], "Mode"))
-
-    lines.extend(
-        [
-            "",
-            "## Eval Summary",
-            "",
-            "| Eval | Service | Prompts | With Skill Sanity | With Skill Rubric | With Skill Tokens | With Skill Time | With Baseline Sanity | With Baseline Rubric | Baseline Tokens | Baseline Time |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
-        ]
-    )
-    for item in benchmark["evals"]:
-        lines.append(
-            "| {eval_id} | {service} | {prompts} | {ws_det} | {ws_qual} | {ws_tokens} | {ws_time} | {base_det} | {base_qual} | {base_tokens} | {base_time} |".format(
-                eval_id=markdown_cell(item["id"]),
-                service=markdown_cell(item["case"]),
-                prompts=item["prompt_count"],
-                ws_det=format_sanity(item.get("with_skill")),
-                ws_qual=format_rubric(item.get("with_skill")),
-                ws_tokens=format_tokens(item.get("with_skill")),
-                ws_time=format_duration(item.get("with_skill")),
-                base_det=format_sanity(item.get("with_baseline")),
-                base_qual=format_rubric(item.get("with_baseline")),
-                base_tokens=format_tokens(item.get("with_baseline")),
-                base_time=format_duration(item.get("with_baseline")),
-            )
-        )
-
-    lines.extend(["", "## Failure Cases", ""])
-    failures = benchmark["failures"]
-    if not failures:
-        lines.append("No sanity or rubric failures.")
-    else:
-        lines.extend(["| Service | Side | Prompt | Result | Evidence |", "|---|---|---|---|---|"])
-        for failure in failures:
-            lines.append(
-                "| {service} | {side} | {prompt} | {result} | {evidence} |".format(
-                    service=markdown_cell(failure["service"]),
-                    side=markdown_cell(failure["side"]),
-                    prompt=markdown_cell(failure["prompt"]),
-                    result=markdown_cell(failure["result"]),
-                    evidence=markdown_cell(truncate(failure["evidence"], 320)),
-                )
-            )
-
-    lines.extend(["", "## Result JSON", ""])
-    lines.append("File-level JSON results are stored under `results/<language>/<service>/<eval>/` in this run directory.")
-    return "\n".join(lines) + "\n"
 
 
 def build_validation_benchmark(
@@ -778,19 +785,6 @@ def truthy_metadata(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def report_key(benchmark: dict[str, Any]) -> str:
-    metadata = benchmark.get("metadata", {})
-    value = str(metadata.get("eval_kind") or "").strip().lower()
-    if value and "," not in value:
-        return safe_name(value)
-    mode = str(metadata.get("mode") or "validation").strip().lower()
-    if mode == "with_skill":
-        return "skill"
-    if mode == "with_baseline":
-        return "baseline"
-    return safe_name(mode or "validation")
-
-
 def grouped_case_results(results: list[CaseResult]) -> dict[str, list[CaseResult]]:
     grouped: dict[str, list[CaseResult]] = {}
     for result in sorted(results, key=lambda item: (item.language, item.service, item.base_id, item.prompt_id)):
@@ -827,34 +821,6 @@ def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
         "path": side.rubric_grade_path,
     }
     return normalized
-
-
-def format_sanity(side: dict[str, Any] | None) -> str:
-    if side is None:
-        return "-"
-    sanity = side["sanity"]
-    return format_count(int(sanity["passed"]), int(sanity["total"]))
-
-
-def format_category(side: dict[str, Any] | None, category: str) -> str:
-    if side is None:
-        return "-"
-    if category == "rubric":
-        return format_rubric(side)
-    data = side.get(category)
-    if not data:
-        return "-"
-    total = int(data["total"])
-    passed = int(data["passed"])
-    skipped = int(data.get("skipped") or 0)
-    if total == 0 and skipped == 0:
-        return "-"
-    if total == 0 and skipped:
-        return f"{skipped} skipped"
-    value = format_count(passed, total)
-    if skipped:
-        return f"{value}, {skipped} skipped"
-    return value
 
 
 def format_rubric(side: dict[str, Any] | None) -> str:
@@ -896,7 +862,7 @@ def format_count(passed: int, total: int) -> str:
     return f"{passed / total:.0%} ({passed}/{total})"
 
 
-def average(values: list[int]) -> float | None:
+def average(values: list[int] | list[float]) -> float | None:
     if not values:
         return None
     return sum(values) / len(values)
@@ -930,5 +896,13 @@ def relative_to_repo(repo_root: Path, path: str | Path) -> str:
     absolute = Path(path)
     try:
         return str(absolute.relative_to(repo_root))
+    except ValueError:
+        return str(absolute)
+
+
+def relative_to_run_root(run_root: Path, path: str | Path) -> str:
+    absolute = Path(path)
+    try:
+        return str(absolute.relative_to(run_root))
     except ValueError:
         return str(absolute)

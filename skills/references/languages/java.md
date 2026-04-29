@@ -38,6 +38,8 @@ COPY my-app.jar /opt/app.jar
 ENV JAVA_TOOL_OPTIONS="-javaagent:/opt/agent.jar"
 ENV OTEL_SERVICE_NAME=my-service
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+ENV OTEL_METRIC_EXPORT_INTERVAL=1000
+ENV OTEL_METRIC_EXPORT_TIMEOUT=500
 
 CMD ["java", "-jar", "/opt/app.jar"]
 ```
@@ -167,6 +169,7 @@ Spring MVC auto-instrumentation sets ERROR on unhandled exceptions and 5xx respo
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
+| `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with the Observer:
@@ -174,6 +177,7 @@ For local development with the Observer:
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 OTEL_METRIC_EXPORT_INTERVAL=1000 \
+OTEL_METRIC_EXPORT_TIMEOUT=500 \
 OTEL_BSP_SCHEDULE_DELAY=100 \
 java -javaagent:./opentelemetry-javaagent.jar -jar my-app.jar
 ```
@@ -197,4 +201,7 @@ Use the `-javaagent` JVM flag in the `bootRun` task or application config.
 - **Agent vs SDK**: The javaagent approach requires no code changes for basic coverage. Only add the OTel API dependency when you need custom spans or metrics.
 - **`JAVA_TOOL_OPTIONS`**: This env var is the cleanest way to inject the agent in containerized or service-managed environments.
 - **Spring Boot**: The agent covers Spring MVC, WebFlux, Data, RestTemplate, WebClient, Kafka, and RabbitMQ automatically. No additional setup needed.
+- **Metric export interval and timeout**: For local runtime checks, set both
+  `OTEL_METRIC_EXPORT_INTERVAL=1000` and `OTEL_METRIC_EXPORT_TIMEOUT=500` so
+  HTTP duration metrics flush promptly.
 - **Version management**: When using the Java agent, do not also add OTel SDK dependencies -- the agent bundles its own SDK. Only add `opentelemetry-api` for custom instrumentation.

@@ -2,11 +2,9 @@ services:
   observer:
     build:
       context: ../../../../..
-      dockerfile: evals/python/fastapi-celery/eval/runtime/observer-runtime.Dockerfile
+      dockerfile: evals/runtime/observer.Dockerfile
     ports:
-      - "3000:3000"
-      - "4318:4318"
-      - "4317:4317"
+      - "3000"
     environment:
       - HOST=0.0.0.0
       - PORT=3000
@@ -16,12 +14,10 @@ services:
   redis:
     image: redis:7-alpine
 
-  api:
+  app:
     build:
       context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+      dockerfile: ${CODEX_EVAL_REPO_ROOT:?CODEX_EVAL_REPO_ROOT is required}/evals/python/fastapi-celery/eval/runtime/App.Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379/0
       - OTEL_SERVICE_NAME=fastapi-celery-api
@@ -29,6 +25,9 @@ services:
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_METRIC_EXPORT_INTERVAL=1000
+      - OTEL_METRIC_EXPORT_TIMEOUT=500
+      - OTEL_BSP_SCHEDULE_DELAY=100
       - OTEL_SEMCONV_STABILITY_OPT_IN=http
     depends_on:
       - observer
@@ -37,7 +36,7 @@ services:
   worker:
     build:
       context: ${CODEX_EVAL_SERVICE_DIR:?CODEX_EVAL_SERVICE_DIR is required}
-      dockerfile: Dockerfile
+      dockerfile: ${CODEX_EVAL_REPO_ROOT:?CODEX_EVAL_REPO_ROOT is required}/evals/python/fastapi-celery/eval/runtime/App.Dockerfile
     command: uv run celery -A worker worker --loglevel=info
     environment:
       - REDIS_URL=redis://redis:6379/0
@@ -46,6 +45,9 @@ services:
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_METRIC_EXPORT_INTERVAL=1000
+      - OTEL_METRIC_EXPORT_TIMEOUT=500
+      - OTEL_BSP_SCHEDULE_DELAY=100
       - OTEL_SEMCONV_STABILITY_OPT_IN=http
     depends_on:
       - observer
@@ -56,6 +58,6 @@ services:
       - traffic
     build:
       context: .
-      dockerfile: traffic.Dockerfile
+      dockerfile: ../../../../runtime/traffic.Dockerfile
     depends_on:
-      - api
+      - app

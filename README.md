@@ -119,6 +119,7 @@ obstudio/
 | `make eval-sanity` | Run quick loaded-skill eval checks |
 | `make eval-rubric` | Run schema-constrained rubric eval checks |
 | `make eval-runtime` | Run Docker/Observer runtime eval checks |
+| `make -C evals eval-*-test` / `make -C evals eval-*-report` | Split eval execution from report rendering |
 | `make eval-all` | Run validation, sanity, rubric, and runtime evals |
 | `make eval-all-ab` | Run validation plus A/B sanity, rubric, and runtime evals |
 | `make test-pytest-plugin` | Run reusable pytest plugin tests |

@@ -1,0 +1,30 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "runtime-preserving",
+      "task": "Update the partially instrumented Go chi service in ./service so tracing and metrics are correctly configured, while preserving the existing runtime and startup command."
+    }
+  ],
+  "checks": [
+    {
+      "id": "observer-runtime-telemetry",
+      "description": "Docker runtime emits repaired Go chi traces and HTTP duration metrics to Observer.",
+      "compose_file": "docker-compose.yml",
+      "timeout_seconds": 300,
+      "expect": {
+        "traces": {
+          "span_names": [
+            "server"
+          ]
+        },
+        "metrics": {
+          "contains_any": [
+            "http.server.request.duration",
+            "http.server.duration"
+          ]
+        }
+      }
+    }
+  ]
+}

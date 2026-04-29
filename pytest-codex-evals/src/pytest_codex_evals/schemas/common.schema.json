@@ -81,7 +81,8 @@
         "contains_any": { "type": "array", "items": { "type": "string" } },
         "service_names": { "type": "array", "items": { "type": "string" } },
         "span_names": { "type": "array", "items": { "type": "string" } },
-        "metric_names": { "type": "array", "items": { "type": "string" } }
+        "metric_names": { "type": "array", "items": { "type": "string" } },
+        "trace_detail_contains_all": { "type": "array", "items": { "type": "string" } }
       }
     }
   }

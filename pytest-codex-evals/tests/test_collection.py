@@ -91,12 +91,13 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     result = pytester.runpytest("--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
-    assert (latest_dir / "report.md").is_file()
-    benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["metadata"]["mode"] == "validation"
-    assert benchmark["metadata"]["eval_kind"] == "validation"
-    assert benchmark["validation"]["summary"]["case_count"] == 2
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["mode"] == "validation"
+    assert payload["metadata"]["eval_kind"] == "validation"
+    assert len(payload["results"]) == 2
+    assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
 
 
 def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
@@ -143,10 +144,11 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     result = pytester.runpytest("-n", "2", "--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
-    latest_dir = pytester.path / "eval-reports" / "sample-skill" / "validation"
-    benchmark = json.loads((latest_dir / "benchmark.json").read_text(encoding="utf-8"))
-    assert benchmark["metadata"]["mode"] == "validation"
-    assert benchmark["validation"]["summary"]["case_count"] == 2
+    raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    assert len(raw_runs) == 1
+    payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["mode"] == "validation"
+    assert len(payload["results"]) == 2
 
 
 def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):

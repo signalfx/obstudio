@@ -1,183 +1,164 @@
 {
+  "mode": "validation",
   "skill": "otel-audit",
   "metadata": {
     "mode": "validation",
     "eval_kind": "validation",
+    "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260428T234352619204Z",
+    "run_id": "20260429T161229087446Z",
+    "repo_root": "/Users/pavankri/Cisco/obstudio",
+    "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
     "runtime_enabled": false,
-    "workers": "1",
-    "config_path": "evals/codex-evals.validation.toml"
+    "workers": "1"
   },
-  "validation": {
-    "mode": "validation",
-    "skill": "otel-audit",
-    "metadata": {
-      "mode": "validation",
-      "eval_kind": "validation",
-      "ab_enabled": false,
-      "skill": "otel-audit",
-      "run_id": "20260428T234352619204Z",
-      "repo_root": "/Users/pavankri/Cisco/obstudio",
-      "config_path": "evals/codex-evals.validation.toml",
-      "agent_model": "gpt-5.5",
-      "judge_model": "gpt-5.5",
-      "rubric_enabled": false,
-      "runtime_enabled": false,
-      "workers": "1"
-    },
-    "evals": [
-      {
-        "id": "go/chi-basic/qual/audit",
-        "case": "go/chi-basic",
-        "language": "go",
-        "service": "chi-basic",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
-        "eval_dir": "evals/go/chi-basic",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "go/chi-partial/qual/audit",
-        "case": "go/chi-partial",
-        "language": "go",
-        "service": "chi-partial",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
-        "eval_dir": "evals/go/chi-partial",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "go/kvstore/qual/audit",
-        "case": "go/kvstore",
-        "language": "go",
-        "service": "kvstore",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/go/kvstore/eval/qual/audit.json",
-        "eval_dir": "evals/go/kvstore",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "java/springboot-basic/qual/audit",
-        "case": "java/springboot-basic",
-        "language": "java",
-        "service": "springboot-basic",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
-        "eval_dir": "evals/java/springboot-basic",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "node/express-basic/qual/audit",
-        "case": "node/express-basic",
-        "language": "node",
-        "service": "express-basic",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/node/express-basic/eval/qual/audit.json",
-        "eval_dir": "evals/node/express-basic",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "python/fastapi-celery/qual/audit",
-        "case": "python/fastapi-celery",
-        "language": "python",
-        "service": "fastapi-celery",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
-        "eval_dir": "evals/python/fastapi-celery",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "python/flask-basic/qual/audit",
-        "case": "python/flask-basic",
-        "language": "python",
-        "service": "flask-basic",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
-        "eval_dir": "evals/python/flask-basic",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 5,
-        "runtime_check_count": 0
-      },
-      {
-        "id": "sanity/skill-smoke/sanity/audit",
-        "case": "sanity/skill-smoke",
-        "language": "sanity",
-        "service": "skill-smoke",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "readiness-review"
-        ],
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
-        "eval_dir": "evals/sanity/skill-smoke",
-        "skill_path": "skills/otel-audit",
-        "sanity_check_count": 0,
-        "rubric_check_count": 0,
-        "runtime_check_count": 0
-      }
-    ],
-    "summary": {
-      "eval_count": 8,
-      "case_count": 16,
-      "prompt_count": 16,
+  "evals": [
+    {
+      "id": "go/chi-basic/qual/audit",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 70,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-partial/qual/audit",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+      "eval_dir": "evals/go/chi-partial",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/kvstore/qual/audit",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/springboot-basic/qual/audit",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/audit",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/fastapi-celery/qual/audit",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/flask-basic/qual/audit",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/audit",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
       "runtime_check_count": 0
     }
-  },
-  "live": [],
-  "sanity_failures": [],
-  "rubric_failures": [],
-  "runtime_failures": []
+  ],
+  "summary": {
+    "eval_count": 8,
+    "case_count": 16,
+    "prompt_count": 16,
+    "sanity_check_count": 0,
+    "rubric_check_count": 70,
+    "runtime_check_count": 0
+  }
 }

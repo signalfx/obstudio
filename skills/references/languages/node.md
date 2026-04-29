@@ -42,6 +42,7 @@ requirement when assessing instrumentation coverage.
 npm install @opentelemetry/sdk-node \
   @opentelemetry/exporter-trace-otlp-http \
   @opentelemetry/exporter-metrics-otlp-http \
+  @opentelemetry/sdk-metrics \
   @opentelemetry/instrumentation-http \
   @opentelemetry/resources \
   @opentelemetry/semantic-conventions
@@ -84,6 +85,8 @@ const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter(),
+    exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
+    exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
   }),
   instrumentations: [
     new HttpInstrumentation(),
@@ -96,6 +99,13 @@ sdk.start();
 
 process.on('SIGTERM', () => sdk.shutdown());
 ```
+
+The explicit `exportIntervalMillis` and `exportTimeoutMillis` are required for
+local and eval runs. Do not rely on metric reader defaults; they can be too slow
+for short-lived runtime checks, causing valid HTTP metrics to never reach the
+collector before the process stops. Keep the timeout less than or equal to the
+interval; the Node SDK rejects configurations such as interval `1000` ms with
+the default timeout `30000` ms.
 
 ### Loading the SDK
 
@@ -223,13 +233,22 @@ All configuration is via environment variables. Do not hardcode endpoints.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
+| `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with the Observer, run with:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     OTEL_METRIC_EXPORT_INTERVAL=1000
+    OTEL_METRIC_EXPORT_TIMEOUT=500
     OTEL_BSP_SCHEDULE_DELAY=100
+
+When creating `PeriodicExportingMetricReader`, pass
+`exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)`
+and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`.
+This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
+`http.server.request.duration` when stable HTTP semantic conventions are
+enabled, export promptly to Observer.
 
 ---
 
@@ -257,6 +276,14 @@ Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included
   OTel setup exists, extend its instrumentation array.
 - **Graceful shutdown**: Always hook `SIGTERM` to `sdk.shutdown()` to flush
   pending telemetry.
+- **Metric reader option**: Use the `NodeSDK` option `metricReader` exactly as
+  shown above. Do not write `metricReaders` unless the installed SDK version
+  documents that option; older versions ignore it and fall back to env-based
+  reader setup.
+- **Metric export interval and timeout**: Always set `exportIntervalMillis` and
+  `exportTimeoutMillis` on `PeriodicExportingMetricReader`. Environment
+  variables alone are not enough when constructing the reader manually, and the
+  timeout must be less than or equal to the interval.
 - **Avoid `@opentelemetry/auto-instrumentations-node`**: This meta-package
   installs every instrumentation. Only install what the project uses to
   minimize dependency surface.

@@ -20,7 +20,7 @@ from .definitions import (
     SanityEvalDefinition,
     ValidationResult,
 )
-from .report import write_ab_reports, write_combined_session_reports, write_side_reports, write_validation_reports
+from .report import write_session_results
 from .runner import new_run_id, new_run_root, run_case
 from .schema_resources import schema_validator
 
@@ -97,25 +97,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
     worker_runs = collect_worker_results(session.config)
     if worker_runs:
-        write_grouped_reports(worker_runs)
+        write_grouped_results(worker_runs)
         return
 
-    write_grouped_reports(list(runs.values()))
+    write_grouped_results(list(runs.values()))
 
 
-def write_grouped_reports(runs: list[dict[str, Any]]) -> None:
-    for run in runs:
-        results = run["results"]
-        if not results:
-            continue
-        metadata = run.get("metadata")
-        if run["mode"] == "ab":
-            write_ab_reports(run["repo_root"], run["run_root"], run["skill"], results, metadata)
-        elif run["mode"] in {"with_skill", "with_baseline"}:
-            write_side_reports(run["repo_root"], run["run_root"], run["skill"], run["mode"], results, metadata)
-        elif run["mode"] == "validation":
-            write_validation_reports(run["repo_root"], run["run_root"], run["skill"], results, metadata)
-    write_combined_session_reports(runs)
+def write_grouped_results(runs: list[dict[str, Any]]) -> None:
+    write_session_results(runs)
 
 
 def is_xdist_worker(config: pytest.Config) -> bool:

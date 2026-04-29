@@ -1,55 +1,38 @@
-# otel-instrument Codex Eval Report
+# otel-instrument Runtime Codex Eval Report
 
 ## Environment
 
 | Field | Value |
 |---|---|
-| Modes | ab |
+| Mode | with_skill |
 | Eval kind | runtime |
 | Skill | otel-instrument |
-| Run ID | 20260428T195137546739Z |
+| Run ID | 20260429T185105710232Z |
 | Agent model | gpt-5.5 |
 | Runtime enabled | True |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
 
-## Validation
-
-| Eval | Service | Prompts | Eval File | Deterministic Checks | Qualitative Checks | Runtime Checks |
-|---|---|---:|---|---:|---:|---:|
-| python/fastapi-celery/instrument_runtime | python/fastapi-celery | 1 | evals/python/fastapi-celery/instrument_runtime_eval.json | 0 | 0 | 1 |
-
-## Deterministic
+## Runtime Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | python/fastapi-celery/instrument_runtime | python/fastapi-celery | 1 | 100% (2/2) | 635.0K | 4.5m | 100% (3/3) | 377.5K | 1.8m |
+| with_skill | go/chi-basic/runtime/instrument | go/chi-basic | 1 | 100% (1/1) | 2.1M | 4.9m | - | - | - |
+| with_skill | go/chi-partial/runtime/instrument | go/chi-partial | 1 | 0% (0/1) | 759.7K | 3.8m | - | - | - |
+| with_skill | go/kvstore/runtime/instrument | go/kvstore | 1 | 100% (1/1) | 963.5K | 4.6m | - | - | - |
+| with_skill | node/express-basic/runtime/instrument | node/express-basic | 1 | 100% (1/1) | 442.5K | 3.2m | - | - | - |
+| with_skill | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | 100% (1/1) | 479.4K | 3.4m | - | - | - |
+| with_skill | python/flask-basic/runtime/instrument | python/flask-basic | 1 | 100% (1/1) | 203.6K | 2.3m | - | - | - |
 
-### Deterministic Failures
-
-No deterministic failures.
-
-## Qualitative
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | python/fastapi-celery/instrument_runtime | python/fastapi-celery | 1 | - | 635.0K | 4.5m | - | 377.5K | 1.8m |
-
-### Qualitative Failures
-
-No qualitative failures.
-
-## Runtime
-
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| ab | python/fastapi-celery/instrument_runtime | python/fastapi-celery | 1 | 0% (0/1) | 635.0K | 4.5m | - | 377.5K | 1.8m |
-
-### Runtime Failures
+## Runtime Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| ab | python/fastapi-celery | with_skill | runtime-preserving | runtime:observer-runtime-telemetry FAIL | Runtime check failed: traffic request POST http://127.0.0.1:8000/orders returned 500, expected 201; codex-eval-observer-1777406124332 logs: Observability Studio (collector) Telemetry Explorer: http://0.0.0.0:3000 OTLP/HTTP receiver: http://0.0.0.0:4318 OTLP/gRPC receiver: 0.0.0.0:4317 MCP endpoint: http://0.0.0.0:30... |
+| with_skill | go/chi-partial | with_skill | runtime-preserving | runtime:observer-runtime-telemetry FAIL | Runtime check failed: docker compose -p codex-eval-4a2e0520ac72 -f /Users/pavankri/Cisco/obstudio/evals/go/chi-partial/eval/runtime/docker-compose.yml up -d --build exited 1: #1 [internal] load local bake definitions #1 reading from stdin 1.17kB done #1 DONE 0.0s #2 [app internal] load build definition from App.Dock... |
+
+## Compose Evidence
+
+Runtime failure evidence includes the relevant Docker Compose log tail in the failure table.
 
 ## Result JSON
 

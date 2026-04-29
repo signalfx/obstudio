@@ -11,6 +11,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/obstudio ./cmd/obstudio
 
 FROM debian:bookworm-slim
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates lsof \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /out/obstudio /usr/local/bin/obstudio
 RUN useradd --system --uid 10001 --create-home obstudio
 

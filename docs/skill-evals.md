@@ -135,9 +135,17 @@ cd evals && uv run pytest '<language>/<service>/eval/qual' -k "<prompt-id>" --sk
 The reusable pytest plugin lives in `pytest-codex-evals/`. It owns the generic
 Codex controls (`--skill`, `--codex-eval-config`, `--model`,
 `--codex-eval-kind`, `--ab`, `--no-rubric`, `--codex-runtime`), JSON eval
-collection, validation, side execution, A/B execution, and reporting. Service
+collection, validation, side execution, and A/B execution. Service
 selection is plain pytest path selection, prompt selection is plain `-k`
 filtering, and `--skill` points to a skill directory containing `SKILL.md`.
+Markdown reports are rendered as a separate step from the raw JSON written by
+pytest:
+
+```bash
+cd evals
+uv run pytest go/kvstore/eval/qual --skill ../skills/otel-instrument --codex-eval-kind rubric
+uv run codex-eval-harness report --repo-root .. --skill ../skills/otel-instrument --kind rubric
+```
 
 Build and publish it with:
 
@@ -152,22 +160,12 @@ Full artifacts are ignored by git:
 
 ```text
 .workspace/codex-evals/<skill>/<run-id>/
-  benchmark.json
-  report.md
-  validation-benchmark.json
-  validation-report.md
-  with_skill-benchmark.json
-  with_skill-report.md
-  with_baseline-benchmark.json
-  with_baseline-report.md
-```
-
-Live A/B runs also include:
-
-```text
-.workspace/codex-evals/<skill>/<run-id>/
-  ab-benchmark.json
-  ab-report.md
+  run.json
+  runs/
+    validation.json
+    sanity-with_skill.json
+    rubric-ab.json
+    runtime-with_skill.json
   cases/<language>/<service>/<prompt-id>/
     with_skill/
       service/
@@ -183,9 +181,18 @@ Live A/B runs also include:
       grade.json
       rubric_grade.json
       summary.json
+  results/<language>/<service>/<eval>/
+    eval.json
+    with_skill.json
+    with_baseline.json
+  <kind>/
+    benchmark.json
+    report.md
 ```
 
-The latest summary is copied by eval kind:
+Pytest creates `run.json`, `runs/*.json`, `cases/`, and `results/`. The
+`codex-eval-harness report` step creates `<kind>/benchmark.json`,
+`<kind>/report.md`, and the latest summary copies:
 
 ```text
 eval-reports/<skill>/validation/report.md
@@ -194,10 +201,10 @@ eval-reports/<skill>/rubric/report.md
 eval-reports/<skill>/runtime/report.md
 ```
 
-Mode-specific summaries stay in the timestamped `.workspace` run directory.
-The canonical latest report has validation plus the section for the selected
-eval type: Sanity Summary, Rubric Summary, or Runtime Summary. Live tables
-include with-skill, baseline, token, and elapsed-time columns.
+`benchmark.json` is role-specific: sanity reports contain only sanity check
+data, rubric reports contain only rubric judge data, and runtime reports contain
+only runtime check data. Baseline columns are `-` when the run mode did not
+execute a baseline side.
 
 ## Maintenance Rules
 

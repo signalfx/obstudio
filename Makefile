@@ -13,7 +13,7 @@ PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-sanity eval-sanity-ab eval-rubric eval-rubric-ab eval-runtime eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -89,7 +89,13 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 eval-validation: ## Validate eval JSONs, eval directories, and skill sources
 	$(MAKE) -C $(EVALS_DIR) $@
 
+eval-validation-test eval-validation-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
 eval-sanity: ## Run quick loaded-skill sanity checks; pass AB=1 or WITH=ab to include baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-sanity-test eval-sanity-report:
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-sanity-ab: ## Run sanity checks with baseline
@@ -98,10 +104,16 @@ eval-sanity-ab: ## Run sanity checks with baseline
 eval-rubric: ## Run schema-constrained rubric grading; pass AB=1 or WITH=ab to include baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
+eval-rubric-test eval-rubric-report:
+	$(MAKE) -C $(EVALS_DIR) $@
+
 eval-rubric-ab: ## Run rubric grading with baseline
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-runtime: ## Run Docker/Observer runtime checks; pass AB=1 or WITH=ab to include baseline
+	$(MAKE) -C $(EVALS_DIR) $@
+
+eval-runtime-test eval-runtime-report:
 	$(MAKE) -C $(EVALS_DIR) $@
 
 eval-runtime-ab: ## Run runtime checks with baseline

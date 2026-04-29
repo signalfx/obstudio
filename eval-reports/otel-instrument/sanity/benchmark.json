@@ -1,10 +1,13 @@
 {
+  "schema_version": 1,
+  "kind": "sanity",
+  "mode": "with_skill",
   "skill": "otel-instrument",
   "metadata": {
-    "mode": "ab",
+    "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-instrument",
-    "run_id": "20260428T234104290071Z",
+    "run_id": "20260429T165922300205Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -12,185 +15,59 @@
     "workers": "1",
     "config_path": "evals/codex-evals.toml"
   },
-  "validation": {
-    "mode": "validation",
-    "skill": "otel-instrument",
-    "metadata": {
-      "mode": "validation",
-      "eval_kind": "validation",
-      "ab_enabled": false,
-      "skill": "otel-instrument",
-      "run_id": "20260428T234104290071Z",
-      "repo_root": "/Users/pavankri/Cisco/obstudio",
-      "config_path": "evals/codex-evals.toml",
-      "agent_model": "gpt-5.5",
-      "judge_model": "gpt-5.5",
-      "rubric_enabled": false,
-      "runtime_enabled": false,
-      "workers": "1"
-    },
-    "evals": [
-      {
-        "id": "sanity/skill-smoke/sanity/instrument",
-        "case": "sanity/skill-smoke",
-        "language": "sanity",
-        "service": "skill-smoke",
-        "prompt_count": 2,
-        "prompts": [
-          "direct",
-          "runtime-preserving"
-        ],
-        "definition_path": "evals/sanity/skill-smoke/eval/sanity/instrument.json",
-        "eval_dir": "evals/sanity/skill-smoke",
-        "skill_path": "skills/otel-instrument",
-        "sanity_check_count": 0,
-        "rubric_check_count": 0,
-        "runtime_check_count": 0
-      }
-    ],
-    "summary": {
-      "eval_count": 1,
-      "case_count": 2,
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 2,
+    "failure_count": 0,
+    "with_skill": {
       "prompt_count": 2,
-      "sanity_check_count": 0,
-      "rubric_check_count": 0,
-      "runtime_check_count": 0
-    }
+      "command_count": 0,
+      "duration_seconds": 13.299,
+      "agent_duration_seconds": 13.272,
+      "tokens": 52311,
+      "agent_tokens": 52311,
+      "error_count": 0,
+      "checks": {
+        "passed": 4,
+        "total": 4,
+        "skipped": 0
+      }
+    },
+    "with_baseline": null
   },
-  "live": [
+  "evals": [
     {
-      "mode": "ab",
-      "skill": "otel-instrument",
-      "metadata": {
-        "mode": "ab",
-        "eval_kind": "sanity",
-        "ab_enabled": true,
-        "skill": "otel-instrument",
-        "run_id": "20260428T234104290071Z",
-        "repo_root": "/Users/pavankri/Cisco/obstudio",
-        "config_path": "evals/codex-evals.toml",
-        "agent_model": "gpt-5.5",
-        "judge_model": "gpt-5.5",
-        "rubric_enabled": false,
-        "runtime_enabled": false,
-        "workers": "1"
-      },
-      "evals": [
-        {
-          "id": "sanity/skill-smoke/sanity/instrument",
-          "case": "sanity/skill-smoke",
-          "language": "sanity",
-          "service": "skill-smoke",
-          "prompt_count": 2,
-          "prompts": [
-            "direct",
-            "runtime-preserving"
-          ],
-          "with_skill": {
-            "prompt_count": 2,
-            "sanity": {
-              "passed": 4,
-              "total": 4,
-              "skipped": 0
-            },
-            "runtime": {
-              "passed": 0,
-              "total": 0,
-              "skipped": 0
-            },
-            "rubric": null,
-            "command_count": 0,
-            "duration_seconds": 19.199,
-            "agent_duration_seconds": 19.181,
-            "rubric_duration_seconds": 0.0,
-            "tokens": 54585,
-            "agent_tokens": 54585,
-            "rubric_tokens": 0,
-            "error_count": 0
-          },
-          "with_baseline": {
-            "prompt_count": 2,
-            "sanity": {
-              "passed": 6,
-              "total": 6,
-              "skipped": 0
-            },
-            "runtime": {
-              "passed": 0,
-              "total": 0,
-              "skipped": 0
-            },
-            "rubric": null,
-            "command_count": 0,
-            "duration_seconds": 13.365,
-            "agent_duration_seconds": 13.351,
-            "rubric_duration_seconds": 0.0,
-            "tokens": 48568,
-            "agent_tokens": 48568,
-            "rubric_tokens": 0,
-            "error_count": 0
-          },
-          "result_paths": {
-            "eval": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
-            "with_skill": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
-            "with_baseline": ".workspace/codex-evals/otel-instrument/20260428T234104290071Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
-          }
-        }
+      "id": "sanity/skill-smoke/sanity/instrument",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
       ],
-      "failures": [],
-      "summary": {
-        "eval_count": 1,
-        "case_count": 2,
+      "with_skill": {
         "prompt_count": 2,
-        "failure_count": 0,
-        "with_skill": {
-          "prompt_count": 2,
-          "sanity": {
-            "passed": 4,
-            "total": 4,
-            "skipped": 0
-          },
-          "runtime": {
-            "passed": 0,
-            "total": 0,
-            "skipped": 0
-          },
-          "rubric": null,
-          "command_count": 0,
-          "duration_seconds": 19.199,
-          "agent_duration_seconds": 19.181,
-          "rubric_duration_seconds": 0.0,
-          "tokens": 54585,
-          "agent_tokens": 54585,
-          "rubric_tokens": 0,
-          "error_count": 0
-        },
-        "with_baseline": {
-          "prompt_count": 2,
-          "sanity": {
-            "passed": 6,
-            "total": 6,
-            "skipped": 0
-          },
-          "runtime": {
-            "passed": 0,
-            "total": 0,
-            "skipped": 0
-          },
-          "rubric": null,
-          "command_count": 0,
-          "duration_seconds": 13.365,
-          "agent_duration_seconds": 13.351,
-          "rubric_duration_seconds": 0.0,
-          "tokens": 48568,
-          "agent_tokens": 48568,
-          "rubric_tokens": 0,
-          "error_count": 0
+        "command_count": 0,
+        "duration_seconds": 13.299,
+        "agent_duration_seconds": 13.272,
+        "tokens": 52311,
+        "agent_tokens": 52311,
+        "error_count": 0,
+        "checks": {
+          "passed": 4,
+          "total": 4,
+          "skipped": 0
         }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260429T165922300205Z/results/sanity/skill-smoke/sanity-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260429T165922300205Z/results/sanity/skill-smoke/sanity-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260429T165922300205Z/results/sanity/skill-smoke/sanity-instrument/with_baseline.json"
       }
     }
   ],
-  "sanity_failures": [],
-  "rubric_failures": [],
-  "runtime_failures": []
+  "failures": []
 }

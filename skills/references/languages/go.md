@@ -135,9 +135,12 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -178,7 +181,11 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 	}
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
+			metricExporter,
+			sdkmetric.WithInterval(metricExportInterval()),
+			sdkmetric.WithTimeout(metricExportTimeout()),
+		)),
 		sdkmetric.WithResource(res),
 	)
 	otel.SetMeterProvider(mp)
@@ -202,7 +209,32 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
+
+func metricExportInterval() time.Duration {
+	if v := os.Getenv("OTEL_METRIC_EXPORT_INTERVAL"); v != "" {
+		millis, err := strconv.Atoi(v)
+		if err == nil && millis > 0 {
+			return time.Duration(millis) * time.Millisecond
+		}
+	}
+	return time.Second
+}
+
+func metricExportTimeout() time.Duration {
+	if v := os.Getenv("OTEL_METRIC_EXPORT_TIMEOUT"); v != "" {
+		millis, err := strconv.Atoi(v)
+		if err == nil && millis > 0 {
+			return time.Duration(millis) * time.Millisecond
+		}
+	}
+	return 500 * time.Millisecond
+}
 ```
+
+The explicit `sdkmetric.WithInterval` and `sdkmetric.WithTimeout` are required
+for local and eval runs. Do not rely on metric reader defaults; they can be too
+slow for short-lived runtime checks, causing valid HTTP metrics to never reach
+the collector before the process stops.
 
 ### Using in main()
 
@@ -393,6 +425,7 @@ The `otlptracehttp` and `otlpmetrichttp` exporters read these automatically.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint            |
 | `OTEL_SERVICE_NAME`           | (must be set)           | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000`                 | Metric export interval (ms)   |
+| `OTEL_METRIC_EXPORT_TIMEOUT`  | `30000`                 | Metric export timeout (ms)    |
 | `OTEL_BSP_SCHEDULE_DELAY`     | `5000`                  | Span batch export delay (ms)  |
 
 
@@ -401,9 +434,17 @@ For local development with the Observer:
 ```
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 OTEL_METRIC_EXPORT_INTERVAL=1000 \
+OTEL_METRIC_EXPORT_TIMEOUT=500 \
 OTEL_BSP_SCHEDULE_DELAY=100 \
 go run .
 ```
+
+When creating `sdkmetric.NewPeriodicReader`, pass
+`sdkmetric.WithInterval(metricExportInterval())` and
+`sdkmetric.WithTimeout(metricExportTimeout())`, where the helper functions read
+`OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT`. This makes HTTP
+metrics from `otelhttp`, including `http.server.request.duration` or the older
+`http.server.duration` name, export promptly to Observer.
 
 ---
 
@@ -423,8 +464,10 @@ go run .
   lightweight handle. It is safe and idiomatic to call at package level.
 - **Singleton providers**: `otel.SetTracerProvider` and `otel.SetMeterProvider`
   must only be called once. If existing OTel setup exists, extend it.
+- **Metric export interval and timeout**: Always set `sdkmetric.WithInterval`
+  and `sdkmetric.WithTimeout` on `sdkmetric.NewPeriodicReader`. Environment
+  variables alone are not enough when constructing the reader manually.
 - **Shutdown order**: shut down the TracerProvider before the MeterProvider
   so in-flight spans are flushed before metrics.
 - **`runtime.Start()`**: this registers goroutine count, memory, and GC
   metrics. Call it after the MeterProvider is set.
-

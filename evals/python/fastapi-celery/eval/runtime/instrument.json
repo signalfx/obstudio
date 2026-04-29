@@ -21,8 +21,9 @@
           ]
         },
         "metrics": {
-          "metric_names": [
-            "http.server.request.duration"
+          "contains_any": [
+            "http.server.request.duration",
+            "http.server.duration"
           ]
         }
       }

@@ -6,6 +6,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -52,20 +53,21 @@ def run_observer_runtime(
     eval_dir: Path | None = None,
 ) -> GradeCheckResult:
     compose_file: Path | None = None
-    project = safe_name(f"codex-eval-{check.id}-{int(time.time() * 1000)}")
+    project = safe_name(f"codex-eval-{uuid.uuid4().hex[:12]}")
     env = runtime_env(repo_root, service_dir, project)
     try:
         compose_file = resolve_compose_file(check, service_dir, eval_dir)
         cwd = compose_file.parent
         run_process(compose_command(compose_file, project) + ["up", "-d", "--build"], cwd, env, check.timeout_seconds)
-        wait_for_observer(check.timeout_seconds)
-        clear_observer()
+        observer_base_url = discover_observer_base_url(compose_file, project, env)
+        wait_for_observer(observer_base_url, check.timeout_seconds)
+        clear_observer(observer_base_url)
         run_process(compose_command(compose_file, project, profile="traffic") + ["run", "--rm", "traffic"], cwd, env, check.timeout_seconds)
 
         if check.settle_seconds > 0:
             time.sleep(check.settle_seconds)
 
-        passed, evidence = validate_observer_expectations(check.expect.model_dump(exclude_none=True))
+        passed, evidence = validate_observer_expectations(check.expect.model_dump(exclude_none=True), observer_base_url)
         if not passed:
             evidence = evidence_with_compose_logs(evidence, compose_file, project, env)
         return runtime_result(check, passed, evidence)
@@ -156,12 +158,35 @@ def compose_logs(compose_file: Path, project: str, env: dict[str, str]) -> str:
     return f"compose logs: {output}" if output else ""
 
 
-def clear_observer() -> None:
-    request_text(observer_url("/api/data"), method="DELETE", timeout=10, allow_404=True)
+def discover_observer_base_url(compose_file: Path, project: str, env: dict[str, str]) -> str:
+    completed = run_process(
+        compose_command(compose_file, project) + ["port", "observer", "3000"],
+        compose_file.parent,
+        env,
+        timeout=30,
+    )
+    return observer_base_url_from_port_output(completed.stdout)
 
 
-def wait_for_observer(timeout: int) -> None:
-    url = observer_url("/api/health")
+def observer_base_url_from_port_output(output: str) -> str:
+    line = next((item.strip() for item in output.splitlines() if item.strip()), "")
+    if not line:
+        raise RuntimeError("docker compose port observer 3000 returned no output")
+    host, separator, port = line.rpartition(":")
+    if not separator or not port:
+        raise RuntimeError(f"could not parse observer port output: {line}")
+    host = host.strip("[]")
+    if host in {"", "0.0.0.0", "::"}:
+        host = "127.0.0.1"
+    return f"http://{host}:{port}"
+
+
+def clear_observer(base_url: str) -> None:
+    request_text(observer_url(base_url, "/api/data"), method="DELETE", timeout=10, allow_404=True)
+
+
+def wait_for_observer(base_url: str, timeout: int) -> None:
+    url = observer_url(base_url, "/api/health")
     deadline = time.monotonic() + timeout
     last_error = ""
     while time.monotonic() < deadline:
@@ -176,7 +201,7 @@ def wait_for_observer(timeout: int) -> None:
     raise TimeoutError(f"observer did not reach 200: {url}; last error: {last_error}")
 
 
-def validate_observer_expectations(expect: dict[str, Any]) -> tuple[bool, str]:
+def validate_observer_expectations(expect: dict[str, Any], base_url: str) -> tuple[bool, str]:
     if not expect:
         return False, "runtime expect is required"
 
@@ -184,12 +209,13 @@ def validate_observer_expectations(expect: dict[str, Any]) -> tuple[bool, str]:
     failures = []
     traces = expect.get("traces") or {}
     if traces:
-        text = request_json_text(observer_url(traces.get("path", "/api/query/traces")))
+        text = request_json_text(observer_url(base_url, traces.get("path", "/api/query/traces")))
         check_expected_text("traces", text, traces, evidence, failures)
+        check_trace_detail_expectations(base_url, text, traces, evidence, failures)
 
     metrics = expect.get("metrics") or {}
     if metrics:
-        text = request_json_text(observer_url(metrics.get("path", "/api/query/metrics")))
+        text = request_json_text(observer_url(base_url, metrics.get("path", "/api/query/metrics")))
         check_expected_text("metrics", text, metrics, evidence, failures)
 
     if not traces and not metrics:
@@ -216,10 +242,40 @@ def check_expected_text(scope: str, text: str, expect: dict[str, Any], evidence:
             evidence.append(f"{scope} matched one of {key}: {', '.join(values)}")
 
 
-def observer_url(path: str) -> str:
+def check_trace_detail_expectations(base_url: str, traces_text: str, expect: dict[str, Any], evidence: list[str], failures: list[str]) -> None:
+    values = [str(value) for value in expect.get("trace_detail_contains_all", [])]
+    if not values:
+        return
+    try:
+        summaries = json.loads(traces_text)
+    except json.JSONDecodeError:
+        failures.append("traces detail unavailable: trace summary response was not JSON")
+        return
+    if not isinstance(summaries, list) or not summaries:
+        failures.append("traces detail unavailable: no trace summaries returned")
+        return
+
+    detail_texts: list[str] = []
+    for summary in summaries[:20]:
+        if not isinstance(summary, dict):
+            continue
+        trace_id = str(summary.get("traceId") or "")
+        if not trace_id:
+            continue
+        detail_texts.append(request_json_text(observer_url(base_url, f"/api/query/traces/{trace_id}")))
+
+    combined = "\n".join(detail_texts)
+    missing = [value for value in values if value.lower() not in combined.lower()]
+    if missing:
+        failures.append(f"traces missing trace_detail_contains_all: {', '.join(missing)}")
+    else:
+        evidence.append(f"traces matched trace_detail_contains_all: {', '.join(values)}")
+
+
+def observer_url(base_url: str, path: str) -> str:
     if path.startswith("http://") or path.startswith("https://"):
         return path
-    return "http://127.0.0.1:3000/" + path.lstrip("/")
+    return base_url.rstrip("/") + "/" + path.lstrip("/")
 
 
 def request_json_text(url: str) -> str:

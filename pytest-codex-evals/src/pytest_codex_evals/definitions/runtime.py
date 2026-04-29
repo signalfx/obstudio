@@ -14,6 +14,7 @@ class ObserverExpectation(BaseModel):
     service_names: list[str] = Field(default_factory=list)
     span_names: list[str] = Field(default_factory=list)
     metric_names: list[str] = Field(default_factory=list)
+    trace_detail_contains_all: list[str] = Field(default_factory=list)
 
 
 class RuntimeExpectations(BaseModel):
