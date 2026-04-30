@@ -8,9 +8,9 @@ from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
 from pytest_codex_evals.definitions import (
     CaseResult,
+    EndpointExpectation,
     GradeCheckResult,
     GradeResult,
-    ObserverExpectation,
     RubricEvalCase,
     RuntimeCheck,
     RuntimeEvalCase,
@@ -21,17 +21,17 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
+from pytest_codex_evals.backends import run_streamed_command
 from pytest_codex_evals.graders.runtime import (
+    base_url_from_port_output,
     grade_runtime,
-    observer_base_url_from_port_output,
-    observer_url,
     resolve_compose_file,
     runtime_env,
+    service_url,
 )
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
 from pytest_codex_evals.report import render_reports_for_run_root, write_session_results
-from pytest_codex_evals.runner import run_streamed_command
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -133,6 +133,45 @@ def test_config_loads_eval_kind(tmp_path: Path):
     assert settings.eval_kind == "sanity"
 
 
+def test_config_loads_agent_backend_settings(tmp_path: Path):
+    config_path = tmp_path / "codex-evals.toml"
+    config_path.write_text(
+        """
+        [run]
+        mode = "with_skill"
+
+        [agent]
+        backend = "cursor"
+        command = "/usr/local/bin/cursor"
+        extra_args = ["--verbose"]
+        timeout = 600
+        judge_timeout = 300
+        """,
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path)
+
+    assert settings.agent_backend == "cursor"
+    assert settings.agent_command == "/usr/local/bin/cursor"
+    assert settings.agent_extra_args == ("--verbose",)
+    assert settings.agent_timeout == 600
+    assert settings.judge_timeout == 300
+
+
+def test_config_defaults_agent_backend_to_codex(tmp_path: Path):
+    config_path = tmp_path / "codex-evals.toml"
+    config_path.write_text("[run]\nmode = \"with_skill\"\n", encoding="utf-8")
+
+    settings = load_settings(config_path)
+
+    assert settings.agent_backend == "codex"
+    assert settings.agent_command is None
+    assert settings.agent_extra_args == ()
+    assert settings.agent_timeout == 1200
+    assert settings.judge_timeout == 900
+
+
 def test_command_backed_sanity_check(tmp_path: Path):
     service_dir = tmp_path / "service"
     service_dir.mkdir()
@@ -204,9 +243,9 @@ def test_runtime_env_points_to_instrumented_service_copy(tmp_path: Path):
 
 
 def test_runtime_observer_url_uses_discovered_compose_port():
-    assert observer_base_url_from_port_output("0.0.0.0:49153\n") == "http://127.0.0.1:49153"
-    assert observer_base_url_from_port_output("[::]:49154\n") == "http://127.0.0.1:49154"
-    assert observer_url("http://127.0.0.1:49153", "/api/health") == "http://127.0.0.1:49153/api/health"
+    assert base_url_from_port_output("0.0.0.0:49153\n") == "http://127.0.0.1:49153"
+    assert base_url_from_port_output("[::]:49154\n") == "http://127.0.0.1:49154"
+    assert service_url("http://127.0.0.1:49153", "/api/health") == "http://127.0.0.1:49153/api/health"
 
 
 def test_sanity_file_and_final_checks(tmp_path: Path):
@@ -488,7 +527,15 @@ def runtime_check() -> RuntimeCheck:
         id="observer-runtime",
         description="Runtime telemetry reaches Observer.",
         compose_file="docker-compose.yml",
-        expect=RuntimeExpectations(traces=ObserverExpectation(contains_any=["sample-service"])),
+        expect=RuntimeExpectations(
+            endpoints=[
+                EndpointExpectation(
+                    id="traces",
+                    url="/api/query/traces",
+                    contains_any=["sample-service"],
+                )
+            ]
+        ),
     )
 
 
@@ -515,6 +562,55 @@ def case_result(with_skill: SideResult | None, baseline: SideResult | None) -> C
         with_skill=with_skill,
         baseline=baseline,
     )
+
+
+def test_backend_registry_creates_backends():
+    from pytest_codex_evals.backends import create_backend, CodexBackend, CursorBackend, ClaudeBackend
+
+    codex = create_backend("codex")
+    assert isinstance(codex, CodexBackend)
+    assert codex.name == "codex"
+
+    cursor = create_backend("cursor", command="/usr/bin/cursor")
+    assert isinstance(cursor, CursorBackend)
+    assert cursor.name == "cursor"
+    assert cursor.command == "/usr/bin/cursor"
+
+    claude = create_backend("claude", extra_args=["--verbose"])
+    assert isinstance(claude, ClaudeBackend)
+    assert claude.name == "claude"
+    assert claude.extra_args == ["--verbose"]
+
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="unknown agent backend"):
+        create_backend("unsupported")
+
+
+def test_runtime_expectations_generic_endpoints():
+    from pytest_codex_evals.definitions.runtime import EndpointExpectation
+
+    expectations = RuntimeExpectations(
+        service_name="my-api",
+        service_port=8080,
+        health_path="/health",
+        clear_path=None,
+        endpoints=[
+            EndpointExpectation(
+                id="users",
+                url="/api/users",
+                contains_all=["admin"],
+                field_checks={"roles": ["admin", "editor"]},
+            )
+        ],
+    )
+
+    assert expectations.service_name == "my-api"
+    assert expectations.service_port == 8080
+    assert expectations.health_path == "/health"
+    assert expectations.clear_path is None
+    assert len(expectations.endpoints) == 1
+    assert expectations.endpoints[0].id == "users"
+    assert expectations.endpoints[0].url == "/api/users"
 
 
 def write_loaded_skill(root: Path, skill: str) -> None:

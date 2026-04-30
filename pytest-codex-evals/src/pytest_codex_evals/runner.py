@@ -2,19 +2,16 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import tempfile
-import threading
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .ab import side_prompt
+from .backends import AgentBackend, CodexBackend
 from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
-from .trace import parse_trace
 
 
 def new_run_id() -> str:
@@ -38,7 +35,10 @@ def run_case(
     runtime: bool = False,
     eval_kind: str = "standard",
     sides: tuple[str, ...] = ("with_skill", "baseline"),
+    backend: AgentBackend | None = None,
 ) -> CaseResult:
+    if backend is None:
+        backend = CodexBackend()
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
     exec_case_root = Path(tempfile.mkdtemp(prefix=f"codex-eval-{case.skill}-{case.language}-{case.service}-{case.prompt_id}-"))
     try:
@@ -58,6 +58,7 @@ def run_case(
                 rubric=rubric,
                 runtime=runtime,
                 eval_kind=eval_kind,
+                backend=backend,
             )
         if "baseline" in sides:
             baseline = run_side(
@@ -73,6 +74,7 @@ def run_case(
                 rubric=rubric,
                 runtime=runtime,
                 eval_kind=eval_kind,
+                backend=backend,
             )
         return CaseResult(
             id=case.id,
@@ -102,42 +104,22 @@ def run_side(
     rubric: bool,
     runtime: bool,
     eval_kind: str,
+    backend: AgentBackend,
 ) -> SideResult:
     side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
-    trace_path = exec_dir / "trace.jsonl"
-    final_path = exec_dir / "last_message.md"
-    stderr_path = exec_dir / "stderr.txt"
-
-    cmd = [
-        "codex",
-        "exec",
-        "--json",
-        "--full-auto",
-        "--skip-git-repo-check",
-        "--cd",
-        str(exec_dir),
-        "--output-last-message",
-        str(final_path),
-    ]
-    if model:
-        cmd.extend(["--model", model])
-    cmd.append(prompt)
 
     agent_start = time.monotonic()
-    completed = run_streamed_command(
-        cmd,
-        stdout_path=trace_path,
-        stderr_path=stderr_path,
-        timeout=1200,
+    agent_result = backend.run_agent(
+        prompt=prompt,
+        exec_dir=exec_dir,
+        model=model,
     )
     agent_duration_seconds = time.monotonic() - agent_start
-    if not final_path.exists():
-        final_path.write_text("", encoding="utf-8")
 
-    trace = parse_trace(trace_path)
+    trace = backend.parse_trace(agent_result.trace_path)
     agent_tokens = trace.usage.total_tokens
-    final_message = final_path.read_text(encoding="utf-8", errors="replace")
+    final_message = agent_result.final_message_path.read_text(encoding="utf-8", errors="replace")
     grade = grade_side(
         case=case,
         run_dir=exec_dir,
@@ -154,8 +136,8 @@ def run_side(
     rubric_duration_seconds = 0.0
     rubric_tokens = 0
     errors: list[str] = []
-    if completed.returncode != 0:
-        errors.append(f"codex exec exited with {completed.returncode}")
+    if agent_result.returncode != 0:
+        errors.append(f"{backend.name} exited with {agent_result.returncode}")
     if rubric and isinstance(case, RubricEvalCase) and case.rubric:
         rubric_start = time.monotonic()
         try:
@@ -163,6 +145,7 @@ def run_side(
                 case=case,
                 side_dir=exec_dir,
                 model=judge_model or model,
+                backend=backend,
             )
         except Exception as exc:  # pragma: no cover - preserved in run artifacts
             errors.append(f"rubric grading failed: {exc}")
@@ -171,7 +154,7 @@ def run_side(
             rubric_trace_path = exec_dir / "rubric_trace.jsonl"
             if rubric_trace_path.exists():
                 try:
-                    rubric_tokens = parse_trace(rubric_trace_path).usage.total_tokens
+                    rubric_tokens = backend.parse_trace(rubric_trace_path).usage.total_tokens
                 except Exception as exc:  # pragma: no cover - preserved in run artifacts
                     errors.append(f"rubric trace parsing failed: {exc}")
 
@@ -186,7 +169,7 @@ def run_side(
 
     result = SideResult(
         side=side,
-        exit_code=completed.returncode,
+        exit_code=agent_result.returncode,
         trace_path=str(artifact_trace_path),
         final_message_path=str(artifact_final_path),
         grade=grade,
@@ -234,81 +217,3 @@ def create_skill_link(target: Path, link: Path) -> None:
         os.symlink(target, link, target_is_directory=True)
     except OSError:
         shutil.copytree(target, link)
-
-
-@dataclass
-class StreamedCommandResult:
-    returncode: int
-    stdout: str
-    stderr: str
-
-
-def run_streamed_command(
-    cmd: list[str],
-    *,
-    stdout_path: Path,
-    stderr_path: Path,
-    timeout: int,
-) -> StreamedCommandResult:
-    stdout_chunks: list[str] = []
-    stderr_chunks: list[str] = []
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=codex_subprocess_env(),
-        text=True,
-        bufsize=1,
-    )
-
-    stdout_thread = threading.Thread(
-        target=pump_stream,
-        args=(process.stdout, stdout_path, stdout_chunks),
-        daemon=True,
-    )
-    stderr_thread = threading.Thread(
-        target=pump_stream,
-        args=(process.stderr, stderr_path, stderr_chunks),
-        daemon=True,
-    )
-    stdout_thread.start()
-    stderr_thread.start()
-    try:
-        returncode = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        stdout_thread.join(timeout=5)
-        stderr_thread.join(timeout=5)
-        raise
-    stdout_thread.join()
-    stderr_thread.join()
-    return StreamedCommandResult(
-        returncode=returncode,
-        stdout="".join(stdout_chunks),
-        stderr="".join(stderr_chunks),
-    )
-
-
-def pump_stream(pipe, output_path: Path, chunks: list[str]) -> None:
-    if pipe is None:
-        output_path.write_text("", encoding="utf-8")
-        return
-    with output_path.open("w", encoding="utf-8") as output:
-        for line in pipe:
-            chunks.append(line)
-            output.write(line)
-            output.flush()
-
-
-def codex_subprocess_env() -> dict[str, str]:
-    env = os.environ.copy()
-    clean_package_config = env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
-    if clean_package_config in {"1", "true", "yes", "on"}:
-        default_index = env.get("UV_DEFAULT_INDEX") or env.get("PIP_INDEX_URL") or "https://pypi.org/simple"
-        env["UV_NO_CONFIG"] = "1"
-        env["UV_DEFAULT_INDEX"] = default_index
-        env["PIP_CONFIG_FILE"] = os.devnull
-        env["PIP_INDEX_URL"] = default_index
-        env.pop("PIP_EXTRA_INDEX_URL", None)
-    return env

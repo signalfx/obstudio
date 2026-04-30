@@ -39,7 +39,7 @@ The installer:
 2. Copies the binary alongside the skills (stable path for MCP)
 3. Configures the agent's MCP config to auto-start `obstudio`
 
-Restart your editor/agent to activate.
+Restart your agent to activate.
 
 ### What Gets Installed
 

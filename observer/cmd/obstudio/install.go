@@ -179,11 +179,11 @@ func runInstall(target, sharedURL string) error {
 	}
 
 	if resolvedSharedURL == "" {
-		fmt.Println("\nDone. Restart your editor to activate the MCP server.")
+		fmt.Printf("\nDone. Restart %s to activate the MCP server.\n", target)
 		return nil
 	}
 
-	fmt.Println("\nDone. Start the shared obstudio server before opening your agent:")
+	fmt.Printf("\nDone. Start the shared obstudio server before using %s:\n", target)
 	fmt.Println("  obstudio")
 	return nil
 }

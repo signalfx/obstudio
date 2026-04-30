@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from .backends import AgentBackend, create_backend
 from .config import CodexEvalSettings, load_settings
 from .eval_files import eval_file_layout, is_eval_file
 from .definitions import (
@@ -28,6 +29,7 @@ from .schema_resources import schema_validator
 RUNS_ATTR = "_codex_eval_runs"
 SETTINGS_ATTR = "_codex_eval_settings"
 RUN_ID_ATTR = "_codex_eval_run_id"
+BACKEND_ATTR = "_codex_eval_backend"
 PROGRESS_ENABLED = False
 PROGRESS_MODE = "validation"
 PROGRESS_IS_WORKER = False
@@ -48,6 +50,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--no-rubric", action="store_true", default=False, help="Skip schema-constrained rubric grading")
     group.addoption("--codex-runtime", action="store_true", default=False, help="Run Docker-backed runtime checks")
     group.addoption("--codex-eval-progress", action="store_true", default=False, help="Print per-item eval progress")
+    group.addoption("--agent-backend", default="", help="Agent backend: codex, cursor, or claude (default: from config or codex)")
+    group.addoption("--agent-command", default="", help="Override the agent CLI binary path")
+    group.addoption("--agent-timeout", type=int, default=0, help="Agent execution timeout in seconds (0 = use config default)")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -55,6 +60,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "codex_live: runs Codex subprocess evals")
     setattr(config, RUNS_ATTR, {})
     setattr(config, SETTINGS_ATTR, load_settings(config_path(config)))
+    setattr(config, BACKEND_ATTR, _create_backend(config))
     PROGRESS_ENABLED = bool(config.getoption("--codex-eval-progress"))
     PROGRESS_MODE = progress_label(config)
     PROGRESS_IS_WORKER = is_xdist_worker(config)
@@ -239,6 +245,7 @@ class CodexEvalItem(pytest.Item):
             runtime=runtime_enabled(self.config),
             eval_kind=kind,
             sides=sides,
+            backend=get_backend(self.config),
         )
         run["results"].append(result)
         validate_live_result(result)
@@ -413,6 +420,10 @@ def judge_model(config: pytest.Config) -> str | None:
     return settings(config).judge_model
 
 
+def get_backend(config: pytest.Config) -> AgentBackend:
+    return getattr(config, BACKEND_ATTR)
+
+
 def settings(config: pytest.Config) -> CodexEvalSettings:
     return getattr(config, SETTINGS_ATTR)
 
@@ -455,6 +466,7 @@ def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str, k
 def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) -> dict[str, Any]:
     path = config_path(config)
     workers = getattr(config.option, "numprocesses", None) or 1
+    backend = get_backend(config)
     return {
         "mode": mode,
         "eval_kind": eval_kind(config) if mode != "validation" else "validation",
@@ -465,6 +477,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "config_path": display_path(path, repo_root) if path else "",
         "agent_model": agent_model(config) or "",
         "judge_model": judge_model(config) or "",
+        "agent_backend": backend.name,
         "rubric_enabled": rubric_enabled(config),
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
@@ -504,6 +517,16 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
         rubric_check_count=rubric_count,
         runtime_check_count=runtime_count,
     )
+
+
+def _create_backend(config: pytest.Config) -> AgentBackend:
+    s = settings(config)
+    cli_backend = config.getoption("--agent-backend") or ""
+    cli_command = config.getoption("--agent-command") or ""
+    backend_name = cli_backend or s.agent_backend
+    command = cli_command or s.agent_command or None
+    extra_args = list(s.agent_extra_args) if s.agent_extra_args else None
+    return create_backend(name=backend_name, command=command, extra_args=extra_args)
 
 
 def validate_live_result(result: CaseResult) -> None:

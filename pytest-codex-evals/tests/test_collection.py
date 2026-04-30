@@ -179,7 +179,7 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
                         "id": "runtime",
                         "description": "Runtime check.",
                         "compose_file": "docker-compose.yml",
-                        "expect": {"traces": {"contains_any": ["sample-service"]}},
+                        "expect": {"endpoints": [{"id": "traces", "url": "/api/query/traces", "contains_any": ["sample-service"]}]},
                     }
                 ],
             },
@@ -217,7 +217,7 @@ def test_role_schemas_reject_cross_role_fields():
     runtime_payload = {
         "skill": "sample-skill",
         "prompts": [{"id": "direct", "task": "Run."}],
-        "checks": [{"id": "runtime", "description": "Run", "compose_file": "docker-compose.yml", "expect": {"traces": {"contains_any": ["svc"]}}}],
+        "checks": [{"id": "runtime", "description": "Run", "compose_file": "docker-compose.yml", "expect": {"endpoints": [{"id": "traces", "url": "/api/query/traces", "contains_any": ["svc"]}]}}],
         "rubric": ["Not allowed."],
     }
     runtime_with_kind = {
