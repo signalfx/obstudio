@@ -59,30 +59,43 @@
         "settle_seconds": { "type": "number", "minimum": 0, "default": 5 },
         "expect": {
           "type": "object",
-          "additionalProperties": false,
+          "required": ["endpoints"],
           "properties": {
-            "traces": { "$ref": "#/$defs/observerExpectation" },
-            "metrics": { "$ref": "#/$defs/observerExpectation" }
-          },
-          "anyOf": [
-            { "required": ["traces"] },
-            { "required": ["metrics"] }
-          ]
+            "service_name": { "type": "string", "default": "observer" },
+            "service_port": { "type": "integer", "default": 3000 },
+            "health_path": { "type": "string", "default": "/api/health" },
+            "clear_path": { "type": ["string", "null"], "default": "/api/data" },
+            "clear_method": { "type": "string", "default": "DELETE" },
+            "endpoints": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/endpointExpectation" }
+            }
+          }
         },
         "applies_to": { "type": "string", "enum": ["both", "with_skill", "baseline"], "default": "with_skill" }
       }
     },
-    "observerExpectation": {
+    "endpointExpectation": {
       "type": "object",
+      "required": ["id"],
       "additionalProperties": false,
       "properties": {
-        "path": { "type": "string" },
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "method": { "type": "string", "default": "GET" },
         "contains_all": { "type": "array", "items": { "type": "string" } },
         "contains_any": { "type": "array", "items": { "type": "string" } },
-        "service_names": { "type": "array", "items": { "type": "string" } },
-        "span_names": { "type": "array", "items": { "type": "string" } },
-        "metric_names": { "type": "array", "items": { "type": "string" } },
-        "trace_detail_contains_all": { "type": "array", "items": { "type": "string" } }
+        "field_checks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "detail_path_template": { "type": "string" },
+        "detail_id_field": { "type": "string" },
+        "detail_contains_all": { "type": "array", "items": { "type": "string" } }
       }
     }
   }

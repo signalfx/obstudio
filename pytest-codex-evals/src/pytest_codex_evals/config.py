@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,11 @@ class CodexEvalSettings:
     runtime_enabled: bool = False
     agent_model: str | None = None
     judge_model: str | None = None
+    agent_backend: str = "codex"
+    agent_command: str | None = None
+    agent_extra_args: tuple[str, ...] = ()
+    agent_timeout: int = 1200
+    judge_timeout: int = 900
 
 
 def load_settings(path: Path | None) -> CodexEvalSettings:
@@ -24,6 +29,7 @@ def load_settings(path: Path | None) -> CodexEvalSettings:
     rubric = table(data, "rubric")
     runtime = table(data, "runtime")
     models = table(data, "models")
+    agent = table(data, "agent")
     return CodexEvalSettings(
         run_mode=run_mode(run),
         eval_kind=eval_kind(run),
@@ -31,6 +37,11 @@ def load_settings(path: Path | None) -> CodexEvalSettings:
         runtime_enabled=bool(runtime.get("enabled", False)),
         agent_model=optional_string(models.get("agent")),
         judge_model=optional_string(models.get("judge")),
+        agent_backend=agent_backend(agent),
+        agent_command=optional_string(agent.get("command")),
+        agent_extra_args=agent_extra_args(agent),
+        agent_timeout=int(agent.get("timeout", 1200)),
+        judge_timeout=int(agent.get("judge_timeout", 900)),
     )
 
 
@@ -82,3 +93,20 @@ def eval_kind(run: dict[str, Any]) -> str:
     if normalized not in {"validation", "standard", "sanity", "rubric", "runtime"}:
         raise ValueError("[run].eval_kind must be one of: validation, standard, sanity, rubric, runtime")
     return normalized
+
+
+def agent_backend(agent: dict[str, Any]) -> str:
+    value = agent.get("backend", "codex")
+    if not isinstance(value, str):
+        raise ValueError("[agent].backend must be a string")
+    normalized = value.strip().lower()
+    if normalized not in {"codex", "cursor", "claude"}:
+        raise ValueError("[agent].backend must be one of: codex, cursor, claude")
+    return normalized
+
+
+def agent_extra_args(agent: dict[str, Any]) -> tuple[str, ...]:
+    value = agent.get("extra_args", [])
+    if not isinstance(value, list):
+        raise ValueError("[agent].extra_args must be a list of strings")
+    return tuple(str(arg) for arg in value)

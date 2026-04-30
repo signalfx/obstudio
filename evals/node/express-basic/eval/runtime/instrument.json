@@ -13,24 +13,32 @@
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {
-        "traces": {
-          "service_names": [
-            "node-express-basic"
-          ],
-          "trace_detail_contains_all": [
-            "http.request.method",
-            "GET",
-            "POST",
-            "/health",
-            "/tasks"
-          ]
-        },
-        "metrics": {
-          "contains_any": [
-            "http.server.request.duration",
-            "http.server.duration"
-          ]
-        }
+        "endpoints": [
+          {
+            "id": "traces",
+            "url": "/api/query/traces",
+            "field_checks": {
+              "service_names": ["node-express-basic"]
+            },
+            "detail_path_template": "/api/query/traces/{id}",
+            "detail_id_field": "traceId",
+            "detail_contains_all": [
+              "http.request.method",
+              "GET",
+              "POST",
+              "/health",
+              "/tasks"
+            ]
+          },
+          {
+            "id": "metrics",
+            "url": "/api/query/metrics",
+            "contains_any": [
+              "http.server.request.duration",
+              "http.server.duration"
+            ]
+          }
+        ]
       }
     }
   ]

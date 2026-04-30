@@ -13,19 +13,23 @@
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {
-        "traces": {
-          "span_names": [
-            "GET /health",
-            "GET /tasks",
-            "POST /tasks"
-          ]
-        },
-        "metrics": {
-          "contains_any": [
-            "http.server.request.duration",
-            "http.server.duration"
-          ]
-        }
+        "endpoints": [
+          {
+            "id": "traces",
+            "url": "/api/query/traces",
+            "field_checks": {
+              "span_names": ["GET /health", "GET /tasks", "POST /tasks"]
+            }
+          },
+          {
+            "id": "metrics",
+            "url": "/api/query/metrics",
+            "contains_any": [
+              "http.server.request.duration",
+              "http.server.duration"
+            ]
+          }
+        ]
       }
     }
   ]

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+from pytest_codex_evals.backends import AgentBackend, CodexBackend
 from pytest_codex_evals.definitions import RubricEvalCase
 from pytest_codex_evals.schema_resources import schema_path as packaged_schema_path
 
@@ -16,11 +16,14 @@ def run_rubric_grade(
     side_dir: Path,
     schema_path: Path | None = None,
     model: str | None,
+    backend: AgentBackend | None = None,
 ) -> Path:
+    if backend is None:
+        backend = CodexBackend()
     if schema_path is None:
         with packaged_schema_path("rubric_grade.schema.json") as path:
-            return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=path, model=model)
-    return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=schema_path, model=model)
+            return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=path, model=model, backend=backend)
+    return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=schema_path, model=model, backend=backend)
 
 
 def _run_rubric_grade(
@@ -29,48 +32,15 @@ def _run_rubric_grade(
     side_dir: Path,
     schema_path: Path,
     model: str | None,
+    backend: AgentBackend,
 ) -> Path:
-    output_path = side_dir / "rubric_grade.json"
-    trace_path = side_dir / "rubric_trace.jsonl"
-    cmd = [
-        "codex",
-        "exec",
-        "--json",
-        "--sandbox",
-        "read-only",
-        "--skip-git-repo-check",
-        "--cd",
-        str(side_dir),
-        "--output-schema",
-        str(schema_path),
-        "--output-last-message",
-        str(output_path),
-    ]
-    if model:
-        cmd.extend(["--model", model])
-    cmd.append(rubric_prompt(case))
-    completed = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
-    trace_path.write_text(completed.stdout, encoding="utf-8")
-    (side_dir / "rubric_stderr.txt").write_text(completed.stderr, encoding="utf-8")
-    if completed.returncode != 0 and not output_path.exists():
-        output_path.write_text(
-            json.dumps(
-                {
-                    "overall_pass": False,
-                    "score": 0,
-                    "checks": [
-                        {
-                            "id": "rubric-run",
-                            "pass": False,
-                            "notes": f"Codex rubric grader exited with {completed.returncode}",
-                            "evidence": completed.stderr[-1000:],
-                        }
-                    ],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    result = backend.run_judge(
+        prompt=rubric_prompt(case),
+        exec_dir=side_dir,
+        model=model,
+        schema_path=schema_path,
+    )
+    output_path = result.final_message_path
     validate_rubric_output(output_path, schema_path)
     return output_path
 

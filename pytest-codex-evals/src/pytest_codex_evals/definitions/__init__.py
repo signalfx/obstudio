@@ -11,7 +11,7 @@ from .base import (
     ValidationResult,
 )
 from .rubric import RubricEvalCase, RubricEvalDefinition
-from .runtime import ObserverExpectation, RuntimeCheck, RuntimeEvalCase, RuntimeEvalDefinition, RuntimeExpectations
+from .runtime import EndpointExpectation, RuntimeCheck, RuntimeEvalCase, RuntimeEvalDefinition, RuntimeExpectations
 from .sanity import SanityCheck, SanityEvalCase, SanityEvalDefinition
 
 EvalDefinition = SanityEvalDefinition | RubricEvalDefinition | RuntimeEvalDefinition
@@ -24,10 +24,11 @@ __all__ = [
     "CheckCategory",
     "EvalCase",
     "EvalDefinition",
+    "EndpointExpectation",
     "EvalRole",
     "GradeCheckResult",
     "GradeResult",
-    "ObserverExpectation",
+
     "PromptVariant",
     "RubricEvalCase",
     "RubricEvalDefinition",
