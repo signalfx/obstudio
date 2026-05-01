@@ -8,16 +8,6 @@ import test, { describe, it } from 'node:test';
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const repoRoot = path.resolve(extensionRoot, '..');
 
-/** Resolve the locally-installed vsce binary. Fails if not found. */
-function vsceCommand(): string {
-	const localBin = path.join(extensionRoot, 'node_modules', '.bin', 'vsce');
-	assert.ok(
-		fs.existsSync(localBin),
-		'@vscode/vsce must be installed locally (run npm install)'
-	);
-	return localBin;
-}
-
 interface TestContext {
 	vsixFile?: string;
 }
@@ -45,14 +35,14 @@ function cleanup(context: TestContext): void {
 	}
 }
 
-/** Build VSIX once and return its path. Fails if vsce is not installed locally. */
-function buildVsix(): string {
-	const vsce = vsceCommand();
-	const output = execSync(`"${vsce}" package --no-dependencies`, {
+/** Build VSIX once and return its path. Fails if @vscode/vsce is not installed locally. */
+function buildVsix(env: NodeJS.ProcessEnv = process.env): string {
+	const output = execSync('node build-vsix.js --no-dependencies', {
 		cwd: extensionRoot,
 		stdio: 'pipe',
 		timeout: 120_000,
 		encoding: 'utf-8',
+		env,
 	});
 
 	const vsixMatch = output.match(/(\S+\.vsix)/);
@@ -111,6 +101,42 @@ it('integration: VSIX packages successfully', { timeout: 120_000 }, async () => 
 		// Verify it's a valid file with some size
 		const stats = fs.statSync(vsixFile);
 		assert.ok(stats.size > 0, 'VSIX file should have content');
+	} finally {
+		cleanup(context);
+	}
+});
+
+it('integration: VSIX manifest version can be derived from release metadata', { timeout: 120_000 }, async () => {
+	const context: TestContext = {};
+
+	try {
+		const sourcePackageJson = JSON.parse(
+			fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
+		) as { version: string };
+		assert.equal(sourcePackageJson.version, '0.0.1');
+
+		const vsixFile = buildVsix({
+			...process.env,
+			OBSTUDIO_EXTENSION_VERSION: 'v1.2.3',
+		});
+		context.vsixFile = vsixFile;
+
+		const packagedManifest = execSync(
+			`unzip -p "${vsixFile}" extension/package.json`,
+			{ stdio: 'pipe', encoding: 'utf-8' },
+		);
+		const packagedPackageJson = JSON.parse(packagedManifest) as { version: string };
+
+		assert.equal(packagedPackageJson.version, '1.2.3');
+
+		const sourcePackageJsonAfterBuild = JSON.parse(
+			fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf-8'),
+		) as { version: string };
+		assert.equal(
+			sourcePackageJsonAfterBuild.version,
+			'0.0.1',
+			'build-vsix.js should not mutate the checked-in package.json version',
+		);
 	} finally {
 		cleanup(context);
 	}

@@ -77,7 +77,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "build:vsix": "npx @vscode/vsce package",
+    "build:vsix": "node build-vsix.js",
     "compile": "npm run check-types && npm run lint && node build-observer.js && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
@@ -88,7 +88,7 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js",
+    "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:host": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
