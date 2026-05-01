@@ -12,8 +12,9 @@ EVALS_DIR  := evals
 PYTEST_PLUGIN_DIR := pytest-codex-evals
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
+RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -36,6 +37,11 @@ dev: ## Watch client files and rebuild on changes (hot reload)
 bundle-weaver: ## Fetch the local Weaver validator runtime into build output
 	@mkdir -p $(BUILD_DIR)
 	cd $(GO_DIR) && $(GO) run ./cmd/fetch-weaver -output $(ABS_BUILD)
+
+stage-release-weaver: ## Fetch Weaver runtimes for all release targets
+	rm -rf "$(RELEASE_WEAVER_DIR)"
+	mkdir -p "$(RELEASE_WEAVER_DIR)"
+	cd $(GO_DIR) && $(GO) run ./cmd/fetch-weaver -all -output "$(RELEASE_WEAVER_DIR)"
 
 build: stage-skills build-client bundle-weaver ## Build obstudio binary (client + skills embedded)
 	@mkdir -p $(BUILD_DIR)
@@ -76,7 +82,7 @@ vet: stage-skills ## Vet Go source
 
 # --- Release ---
 
-release-prep: stage-skills build-client ## Prepare assets for GoReleaser (skills + client)
+release-prep: stage-skills build-client stage-release-weaver ## Prepare assets for GoReleaser (skills + client + validator runtimes)
 
 release-local: release-prep ## Build release archives locally via GoReleaser (snapshot, no publish)
 	goreleaser release --snapshot --clean
@@ -176,4 +182,4 @@ list-skills: ## List available skills in this repo
 # --- Clean ---
 
 clean: ## Remove build artifacts
-	rm -rf "$(BUILD_DIR)" dist $(GO_DIR)/cmd/obstudio/_skills $(GO_DIR)/internal/web/static/assets $(GO_DIR)/client/public/assets
+	rm -rf "$(BUILD_DIR)" .release dist $(GO_DIR)/cmd/obstudio/_skills $(GO_DIR)/internal/web/static/assets $(GO_DIR)/client/public/assets

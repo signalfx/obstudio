@@ -28,6 +28,10 @@ unzip obstudio_*_darwin_arm64.zip
 ./obstudio install --target=codex
 ```
 
+After unzipping the release, run `obstudio install` from that extracted
+directory without moving the files. The installer expects `weaver` to be next
+to `obstudio`.
+
 ### Build From Source
 
 ```bash
@@ -70,6 +74,10 @@ Validation is available through the Explorer UI, REST API, and MCP.
 |---|---|
 | REST | `/api/query/validation/summary`, `/api/query/validation/latest`, `/api/validation/run`, `/api/validation/refresh` |
 | MCP | `observer_validation_status`, `observer_validation_analyze`, `observer_validation_refresh` |
+
+If you move `obstudio` manually instead of using `obstudio install`, keep
+the bundled `weaver` runtime beside it or make `weaver` available on
+`PATH`.
 
 ## Repository Layout
 

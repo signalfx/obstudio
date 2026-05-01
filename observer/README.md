@@ -27,6 +27,10 @@ Ports 4317 and 4318 must be free. If the VS Code extension or another
 collector is already running, either stop it first or override with
 environment variables (`PORT`, `OTLP_HTTP_PORT`, `OTLP_GRPC_PORT`).
 
+Validation uses the bundled `weaver` runtime that `make build` places
+next to `build/obstudio`. If you move the binary manually, keep `weaver`
+beside it or make `weaver` available on `PATH`.
+
 ## Architecture
 
 ```

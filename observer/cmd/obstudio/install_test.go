@@ -39,6 +39,134 @@ func TestCodexTargetUsesConfigTOML(t *testing.T) {
 	}
 }
 
+func TestCopySiblingWeaverRuntimeCopiesBundledRuntime(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+	weaverPath := filepath.Join(sourceDir, "weaver")
+
+	if err := os.WriteFile(exePath, []byte("obstudio"), 0o755); err != nil {
+		t.Fatalf("write obstudio: %v", err)
+	}
+	if err := os.WriteFile(weaverPath, []byte("weaver-runtime"), 0o755); err != nil {
+		t.Fatalf("write weaver: %v", err)
+	}
+
+	copied, err := copySiblingWeaverRuntime(exePath, destDir)
+	if err != nil {
+		t.Fatalf("copySiblingWeaverRuntime returned error: %v", err)
+	}
+	if !copied {
+		t.Fatal("expected Weaver runtime to be copied")
+	}
+
+	data, err := os.ReadFile(filepath.Join(destDir, "weaver"))
+	if err != nil {
+		t.Fatalf("read copied weaver: %v", err)
+	}
+	if string(data) != "weaver-runtime" {
+		t.Fatalf("unexpected copied weaver contents: %q", string(data))
+	}
+}
+
+func TestCopySiblingWeaverRuntimeIsOptional(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+	if err := os.WriteFile(exePath, []byte("obstudio"), 0o755); err != nil {
+		t.Fatalf("write obstudio: %v", err)
+	}
+
+	copied, err := copySiblingWeaverRuntime(exePath, destDir)
+	if err != nil {
+		t.Fatalf("copySiblingWeaverRuntime returned error: %v", err)
+	}
+	if copied {
+		t.Fatal("expected no Weaver runtime copy when none is bundled")
+	}
+}
+
+func TestEnsureInstallWeaverRuntimeUsesPATHFallback(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	pathDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+	weaverPath := filepath.Join(pathDir, "weaver")
+
+	if err := os.WriteFile(exePath, []byte("obstudio"), 0o755); err != nil {
+		t.Fatalf("write obstudio: %v", err)
+	}
+	if err := os.WriteFile(weaverPath, []byte("external-weaver"), 0o755); err != nil {
+		t.Fatalf("write weaver on PATH: %v", err)
+	}
+	t.Setenv("PATH", pathDir)
+	t.Setenv("WEAVER_PATH", "")
+
+	installed, external, err := ensureInstallWeaverRuntime(exePath, destDir, true)
+	if err != nil {
+		t.Fatalf("ensureInstallWeaverRuntime returned error: %v", err)
+	}
+	if installed {
+		t.Fatal("expected PATH fallback instead of local copy")
+	}
+	if external != weaverPath {
+		t.Fatalf("expected PATH weaver %q, got %q", weaverPath, external)
+	}
+}
+
+func TestEnsureInstallWeaverRuntimeFailsWhenLocalValidationWouldBeBroken(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+
+	if err := os.WriteFile(exePath, []byte("obstudio"), 0o755); err != nil {
+		t.Fatalf("write obstudio: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("WEAVER_PATH", "")
+
+	installed, external, err := ensureInstallWeaverRuntime(exePath, destDir, true)
+	if err == nil {
+		t.Fatal("expected ensureInstallWeaverRuntime to fail without a local or external runtime")
+	}
+	if installed {
+		t.Fatal("expected no local weaver installation")
+	}
+	if external != "" {
+		t.Fatalf("expected no external weaver runtime, got %q", external)
+	}
+	if !strings.Contains(err.Error(), "Weaver runtime not found beside obstudio or on PATH") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEnsureInstallWeaverRuntimeAllowsSharedModeWithoutLocalRuntime(t *testing.T) {
+	sourceDir := t.TempDir()
+	destDir := t.TempDir()
+	exePath := filepath.Join(sourceDir, "obstudio")
+
+	if err := os.WriteFile(exePath, []byte("obstudio"), 0o755); err != nil {
+		t.Fatalf("write obstudio: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("WEAVER_PATH", "")
+
+	installed, external, err := ensureInstallWeaverRuntime(exePath, destDir, false)
+	if err != nil {
+		t.Fatalf("ensureInstallWeaverRuntime returned error: %v", err)
+	}
+	if installed {
+		t.Fatal("expected no local weaver installation")
+	}
+	if external != "" {
+		t.Fatalf("expected no external weaver runtime, got %q", external)
+	}
+}
+
 func TestUpsertJSONMCPServerPreservesExistingEntries(t *testing.T) {
 	t.Parallel()
 
