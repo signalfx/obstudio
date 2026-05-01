@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Splunk Observability Studio for OpenTelemetry",
+  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "repository": {
