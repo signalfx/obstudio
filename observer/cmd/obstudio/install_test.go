@@ -481,3 +481,164 @@ func TestCopyFileWrapsSourcePathErrors(t *testing.T) {
 		t.Fatalf("expected missing source path in error, got %v", err)
 	}
 }
+
+func TestCreateSkillSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests are not reliable on Windows without elevated privileges")
+	}
+	t.Parallel()
+
+	skillsRoot := t.TempDir()
+	obstudioDir := filepath.Join(skillsRoot, "obstudio")
+
+	// Skill dir with SKILL.md -- should get a symlink.
+	if err := os.MkdirAll(filepath.Join(obstudioDir, "otel-audit"), 0o755); err != nil {
+		t.Fatalf("mkdir otel-audit: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(obstudioDir, "otel-audit", "SKILL.md"), []byte("audit"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	// References dir (no SKILL.md) -- should NOT get a symlink.
+	if err := os.MkdirAll(filepath.Join(obstudioDir, "references", "languages"), 0o755); err != nil {
+		t.Fatalf("mkdir references: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(obstudioDir, "references", "languages", "go.md"), []byte("go ref"), 0o644); err != nil {
+		t.Fatalf("write go.md: %v", err)
+	}
+
+	// Regular dir without SKILL.md -- should NOT get a symlink.
+	if err := os.MkdirAll(filepath.Join(obstudioDir, "internal"), 0o755); err != nil {
+		t.Fatalf("mkdir internal: %v", err)
+	}
+
+	// Regular file -- should NOT get a symlink.
+	if err := os.WriteFile(filepath.Join(obstudioDir, "obstudio"), []byte("bin"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+
+	if err := createSkillSymlinks(skillsRoot, obstudioDir); err != nil {
+		t.Fatalf("createSkillSymlinks: %v", err)
+	}
+
+	// otel-audit symlink should exist and point to obstudio/otel-audit.
+	link := filepath.Join(skillsRoot, "otel-audit")
+	dest, err := os.Readlink(link)
+	if err != nil {
+		t.Fatalf("readlink otel-audit: %v", err)
+	}
+	if dest != filepath.Join("obstudio", "otel-audit") {
+		t.Fatalf("otel-audit symlink target = %q, want %q", dest, filepath.Join("obstudio", "otel-audit"))
+	}
+
+	// references dir should NOT have a top-level symlink (inlined per-skill at build time).
+	if info, err := os.Lstat(filepath.Join(skillsRoot, "references")); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("unexpected top-level references symlink")
+	}
+
+	// internal dir should NOT have a symlink.
+	if _, err := os.Lstat(filepath.Join(skillsRoot, "internal")); !os.IsNotExist(err) {
+		t.Fatalf("expected no symlink for internal dir, got err=%v", err)
+	}
+
+	// Binary file should NOT have a symlink.
+	info, err := os.Lstat(filepath.Join(skillsRoot, "obstudio"))
+	if err != nil {
+		if !os.IsNotExist(err) && info != nil && info.Mode()&os.ModeSymlink != 0 {
+			t.Fatalf("unexpected symlink for obstudio binary")
+		}
+	}
+}
+
+func TestRemoveSkillSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests are not reliable on Windows without elevated privileges")
+	}
+	t.Parallel()
+
+	skillsRoot := t.TempDir()
+	obstudioDir := filepath.Join(skillsRoot, "obstudio")
+	if err := os.MkdirAll(obstudioDir, 0o755); err != nil {
+		t.Fatalf("mkdir obstudio: %v", err)
+	}
+
+	// Obstudio-managed symlink -- should be removed.
+	obstudioLink := filepath.Join(skillsRoot, "otel-audit")
+	if err := os.Symlink(filepath.Join("obstudio", "otel-audit"), obstudioLink); err != nil {
+		t.Fatalf("create obstudio symlink: %v", err)
+	}
+
+	// User-owned symlink pointing elsewhere -- should be preserved.
+	userTarget := t.TempDir()
+	userLink := filepath.Join(skillsRoot, "my-skill")
+	if err := os.Symlink(userTarget, userLink); err != nil {
+		t.Fatalf("create user symlink: %v", err)
+	}
+
+	// Regular directory -- should be preserved.
+	regularDir := filepath.Join(skillsRoot, "regular-dir")
+	if err := os.Mkdir(regularDir, 0o755); err != nil {
+		t.Fatalf("mkdir regular-dir: %v", err)
+	}
+
+	removeSkillSymlinks(skillsRoot, obstudioDir)
+
+	if _, err := os.Lstat(obstudioLink); !os.IsNotExist(err) {
+		t.Fatalf("expected obstudio symlink to be removed, got err=%v", err)
+	}
+	if _, err := os.Lstat(userLink); err != nil {
+		t.Fatalf("expected user symlink to be preserved, got err=%v", err)
+	}
+	if _, err := os.Stat(regularDir); err != nil {
+		t.Fatalf("expected regular dir to be preserved, got err=%v", err)
+	}
+}
+
+func TestReinstallCleansStaleSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests are not reliable on Windows without elevated privileges")
+	}
+	t.Parallel()
+
+	skillsRoot := t.TempDir()
+	obstudioDir := filepath.Join(skillsRoot, "obstudio")
+
+	// Simulate first install: create obstudio dir with a skill.
+	if err := os.MkdirAll(filepath.Join(obstudioDir, "old-skill"), 0o755); err != nil {
+		t.Fatalf("mkdir old-skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(obstudioDir, "old-skill", "SKILL.md"), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write old SKILL.md: %v", err)
+	}
+	if err := createSkillSymlinks(skillsRoot, obstudioDir); err != nil {
+		t.Fatalf("first createSkillSymlinks: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(skillsRoot, "old-skill")); err != nil {
+		t.Fatalf("expected old-skill symlink after first install: %v", err)
+	}
+
+	// Simulate reinstall: remove symlinks, remove dir, create new dir with different skill.
+	removeSkillSymlinks(skillsRoot, obstudioDir)
+	if err := os.RemoveAll(obstudioDir); err != nil {
+		t.Fatalf("remove obstudio dir: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(obstudioDir, "new-skill"), 0o755); err != nil {
+		t.Fatalf("mkdir new-skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(obstudioDir, "new-skill", "SKILL.md"), []byte("new"), 0o644); err != nil {
+		t.Fatalf("write new SKILL.md: %v", err)
+	}
+	if err := createSkillSymlinks(skillsRoot, obstudioDir); err != nil {
+		t.Fatalf("second createSkillSymlinks: %v", err)
+	}
+
+	// old-skill symlink should be gone.
+	if _, err := os.Lstat(filepath.Join(skillsRoot, "old-skill")); !os.IsNotExist(err) {
+		t.Fatalf("expected old-skill symlink to be removed after reinstall, got err=%v", err)
+	}
+	// new-skill symlink should exist.
+	if _, err := os.Lstat(filepath.Join(skillsRoot, "new-skill")); err != nil {
+		t.Fatalf("expected new-skill symlink after reinstall: %v", err)
+	}
+}
