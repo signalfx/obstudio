@@ -62,10 +62,10 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 | Language | Reference | Key packages |
 |----------|-----------|-------------|
-| Python   | `../references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, framework instrumentation packages |
-| Node.js  | `../references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/instrumentation-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/sdk-metrics`, detected framework instrumentation packages |
-| Java     | `../references/languages/java.md` | OTel Java agent (javaagent JAR) |
-| Go       | `../references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
+| Python   | `./references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, framework instrumentation packages |
+| Node.js  | `./references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/instrumentation-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/sdk-metrics`, detected framework instrumentation packages |
+| Java     | `./references/languages/java.md` | OTel Java agent (javaagent JAR) |
+| Go       | `./references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
 
 ### 3. Instrument
 

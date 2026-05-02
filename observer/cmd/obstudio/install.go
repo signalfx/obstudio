@@ -134,8 +134,11 @@ func runInstall(target, sharedURL string) error {
 
 	home := userHome()
 	destDir := t.skillsDir(home)
+	skillsRoot := filepath.Dir(destDir)
 
 	fmt.Printf("Installing obstudio to %s\n", destDir)
+
+	removeSkillSymlinks(skillsRoot, destDir)
 
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("failed to clean destination: %w", err)
@@ -150,6 +153,11 @@ func runInstall(target, sharedURL string) error {
 		return fmt.Errorf("failed to extract skills: %w", err)
 	}
 	fmt.Println("  Skills installed (includes references).")
+
+	if err := createSkillSymlinks(skillsRoot, destDir); err != nil {
+		return fmt.Errorf("failed to create skill symlinks: %w", err)
+	}
+	fmt.Println("  Skill symlinks created for agent discovery.")
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -552,6 +560,60 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("write %q: %w", dst, err)
 	}
 	return nil
+}
+
+// createSkillSymlinks creates relative symlinks in skillsRoot for each skill
+// directory (contains SKILL.md) found inside obstudioDir. This makes skills
+// discoverable by agents that expect each skill as a direct child of the
+// skills root. References are inlined per-skill at build time, so no
+// top-level references symlink is needed.
+func createSkillSymlinks(skillsRoot, obstudioDir string) error {
+	obstudioName := filepath.Base(obstudioDir)
+	entries, err := os.ReadDir(obstudioDir)
+	if err != nil {
+		return fmt.Errorf("read obstudio dir: %w", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if _, statErr := os.Stat(filepath.Join(obstudioDir, name, "SKILL.md")); statErr != nil {
+			continue
+		}
+		link := filepath.Join(skillsRoot, name)
+		target := filepath.Join(obstudioName, name)
+		_ = os.Remove(link)
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("symlink %s -> %s: %w", link, target, err)
+		}
+	}
+	return nil
+}
+
+// removeSkillSymlinks removes symlinks in skillsRoot whose targets point into
+// obstudioDir. Other entries are left untouched.
+func removeSkillSymlinks(skillsRoot, obstudioDir string) {
+	obstudioName := filepath.Base(obstudioDir)
+	prefix := obstudioName + string(filepath.Separator)
+
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		link := filepath.Join(skillsRoot, e.Name())
+		dest, err := os.Readlink(link)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(dest, prefix) || dest == obstudioName {
+			_ = os.Remove(link)
+		}
+	}
 }
 
 func userHome() string {

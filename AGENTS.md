@@ -10,7 +10,7 @@ need the full development workflow.
 - `extension/` -- VS Code extension that packages the collector.
 - `skills/` -- canonical OpenTelemetry agent skill sources.
 - `.agents/skills/` -- repo-scoped Codex skill links for local use.
-- `skills/references/` -- shared language and signal references loaded on demand.
+- `skills/otel-instrument/references/` -- language and signal references loaded by otel-instrument.
 - `evals/` -- fixture services and JSON eval cases collected by pytest.
 - `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing.
 - `eval-reports/` -- latest summarized eval reports.
