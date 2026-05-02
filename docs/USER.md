@@ -18,15 +18,14 @@ curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_
 unzip obstudio_linux_amd64.zip
 ```
 
-Install skills and configure the MCP server:
+After unzipping the release, change into the directory created by `unzip` and
+run the installer:
 
 ```bash
 ./obstudio install --target=cursor
 ```
 
-After unzipping the release, run `obstudio install` from that extracted
-directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`.
+This installs the included skills and configures the MCP server.
 
 ### Supported Targets
 
@@ -37,9 +36,9 @@ to `obstudio`.
 | `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
 
 The installer:
-1. Extracts skills and references from the binary to the agent's skill directory
-2. Copies `obstudio` and the bundled `weaver` runtime alongside the skills (stable path for MCP)
-3. Configures the agent's MCP config to auto-start `obstudio`
+1. Installs the included skills for your agent
+2. Sets up `obstudio` for local use
+3. Updates your agent's MCP config
 
 Restart your agent to activate.
 
@@ -47,11 +46,11 @@ Restart your agent to activate.
 
 ```
 ~/.cursor/skills/obstudio/
-  obstudio              # binary (MCP server, auto-started by Cursor)
-  weaver                # validator runtime used by the Validation tab and APIs
-  audit/SKILL.md        # /otel-audit skill
-  instrument/SKILL.md   # /otel-instrument skill
-  references/           # language guides and reference material
+  obstudio
+  weaver
+  audit/SKILL.md
+  instrument/SKILL.md
+  references/
 ```
 
 ## CLI Reference

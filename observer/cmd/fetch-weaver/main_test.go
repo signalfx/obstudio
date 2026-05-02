@@ -175,3 +175,32 @@ func TestReleaseMatrixMatchesWeaverSupportedTargets(t *testing.T) {
 		t.Fatalf("release matrix %v does not match Weaver-supported targets %v", publishedKeys, supported)
 	}
 }
+
+func TestReleaseArchivesWrapContentsInDirectory(t *testing.T) {
+	t.Parallel()
+
+	type archiveConfig struct {
+		WrapInDirectory bool `yaml:"wrap_in_directory"`
+	}
+	type goreleaserConfig struct {
+		Archives []archiveConfig `yaml:"archives"`
+	}
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("read goreleaser config: %v", err)
+	}
+
+	var config goreleaserConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal goreleaser config: %v", err)
+	}
+	if len(config.Archives) == 0 {
+		t.Fatal("expected at least one archive config")
+	}
+	for _, archive := range config.Archives {
+		if !archive.WrapInDirectory {
+			t.Fatal("expected release archives to wrap contents in a top-level directory")
+		}
+	}
+}

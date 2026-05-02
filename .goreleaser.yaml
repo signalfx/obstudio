@@ -24,6 +24,7 @@ builds:
 archives:
   - formats:
       - zip
+    wrap_in_directory: true
     files:
       - src: .release/weaver/{{ .Os }}-{{ .Arch }}/weaver*
         strip_parent: true
