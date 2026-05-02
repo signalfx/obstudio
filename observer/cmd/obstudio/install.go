@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -165,6 +166,15 @@ func runInstall(target, sharedURL string) error {
 		return fmt.Errorf("failed to set binary permissions: %w", err)
 	}
 	fmt.Println("  Binary installed.")
+	weaverInstalled, externalWeaver, err := ensureInstallWeaverRuntime(exePath, destDir, resolvedSharedURL == "")
+	if err != nil {
+		return fmt.Errorf("failed to install Weaver runtime: %w", err)
+	}
+	if weaverInstalled {
+		fmt.Println("  Weaver runtime installed.")
+	} else if externalWeaver != "" && resolvedSharedURL == "" {
+		fmt.Printf("  Weaver runtime resolved via %s.\n", externalWeaver)
+	}
 
 	mcpFile := t.mcpConfig.path()
 	if err := configureMCP(t.mcpConfig, installedBinary, resolvedSharedURL); err != nil {
@@ -186,6 +196,73 @@ func runInstall(target, sharedURL string) error {
 	fmt.Printf("\nDone. Start the shared obstudio server before using %s:\n", target)
 	fmt.Println("  obstudio")
 	return nil
+}
+
+func ensureInstallWeaverRuntime(exePath, destDir string, requireLocalRuntime bool) (bool, string, error) {
+	installed, err := copySiblingWeaverRuntime(exePath, destDir)
+	if err != nil {
+		return false, "", err
+	}
+	if installed {
+		return true, filepath.Join(destDir, installedWeaverName(exePath)), nil
+	}
+	if external := externalWeaverRuntime(); external != "" {
+		return false, external, nil
+	}
+	if requireLocalRuntime {
+		return false, "", errors.New("Weaver runtime not found beside obstudio or on PATH; validation requires the bundled weaver binary from the release archive")
+	}
+	return false, "", nil
+}
+
+func installedWeaverName(exePath string) string {
+	if filepath.Ext(exePath) == ".exe" {
+		return "weaver.exe"
+	}
+	return "weaver"
+}
+
+func externalWeaverRuntime() string {
+	if custom := strings.TrimSpace(os.Getenv("WEAVER_PATH")); custom != "" {
+		if _, err := os.Stat(custom); err == nil {
+			return custom
+		}
+	}
+	if resolved, err := exec.LookPath("weaver"); err == nil {
+		return resolved
+	}
+	return ""
+}
+
+func copySiblingWeaverRuntime(exePath, destDir string) (bool, error) {
+	candidates := []string{filepath.Join(filepath.Dir(exePath), "weaver")}
+	if filepath.Ext(exePath) == ".exe" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exePath), "weaver.exe"))
+	}
+
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if info.IsDir() {
+			continue
+		}
+
+		destPath := filepath.Join(destDir, filepath.Base(candidate))
+		if err := copyFile(candidate, destPath); err != nil {
+			return false, err
+		}
+		if err := os.Chmod(destPath, 0o755); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func detectSharedObserverURL(healthURL string, client *http.Client) (string, bool) {

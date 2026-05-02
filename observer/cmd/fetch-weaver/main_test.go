@@ -3,8 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 func TestFindTarget(t *testing.T) {
@@ -108,5 +112,66 @@ func TestFetchTargetUsesCachedBinaryFromOverride(t *testing.T) {
 	}
 	if string(data) != "cached-weaver" {
 		t.Fatalf("unexpected output contents: %q", string(data))
+	}
+}
+
+func TestReleaseMatrixMatchesWeaverSupportedTargets(t *testing.T) {
+	t.Parallel()
+
+	type ignoreTarget struct {
+		Goos   string `yaml:"goos"`
+		Goarch string `yaml:"goarch"`
+	}
+	type buildConfig struct {
+		Goos   []string       `yaml:"goos"`
+		Goarch []string       `yaml:"goarch"`
+		Ignore []ignoreTarget `yaml:"ignore"`
+	}
+	type goreleaserConfig struct {
+		Builds []buildConfig `yaml:"builds"`
+	}
+
+	configPath := filepath.Join("..", "..", "..", ".goreleaser.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read goreleaser config: %v", err)
+	}
+
+	var config goreleaserConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal goreleaser config: %v", err)
+	}
+
+	published := map[string]struct{}{}
+	for _, build := range config.Builds {
+		ignored := map[string]struct{}{}
+		for _, target := range build.Ignore {
+			ignored[target.Goos+"/"+target.Goarch] = struct{}{}
+		}
+		for _, goos := range build.Goos {
+			for _, goarch := range build.Goarch {
+				key := goos + "/" + goarch
+				if _, skip := ignored[key]; skip {
+					continue
+				}
+				published[key] = struct{}{}
+			}
+		}
+	}
+
+	supported := make([]string, 0, len(supportedTargets))
+	for _, target := range supportedTargets {
+		supported = append(supported, target.goos+"/"+target.goarch)
+	}
+	slices.Sort(supported)
+
+	publishedKeys := make([]string, 0, len(published))
+	for key := range published {
+		publishedKeys = append(publishedKeys, key)
+	}
+	slices.Sort(publishedKeys)
+
+	if !reflect.DeepEqual(publishedKeys, supported) {
+		t.Fatalf("release matrix %v does not match Weaver-supported targets %v", publishedKeys, supported)
 	}
 }

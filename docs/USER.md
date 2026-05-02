@@ -24,7 +24,9 @@ Install skills and configure the MCP server:
 ./obstudio install --target=cursor
 ```
 
-Skills are embedded in the binary -- a single file is all you need.
+After unzipping the release, run `obstudio install` from that extracted
+directory without moving the files. The installer expects `weaver` to be next
+to `obstudio`.
 
 ### Supported Targets
 
@@ -36,7 +38,7 @@ Skills are embedded in the binary -- a single file is all you need.
 
 The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
-2. Copies the binary alongside the skills (stable path for MCP)
+2. Copies `obstudio` and the bundled `weaver` runtime alongside the skills (stable path for MCP)
 3. Configures the agent's MCP config to auto-start `obstudio`
 
 Restart your agent to activate.
@@ -46,6 +48,7 @@ Restart your agent to activate.
 ```
 ~/.cursor/skills/obstudio/
   obstudio              # binary (MCP server, auto-started by Cursor)
+  weaver                # validator runtime used by the Validation tab and APIs
   audit/SKILL.md        # /otel-audit skill
   instrument/SKILL.md   # /otel-instrument skill
   references/           # language guides and reference material
@@ -116,6 +119,10 @@ Use `observer_validation_analyze` for most questions about missing
 telemetry or semantic convention issues. Use
 `observer_validation_refresh` only when you explicitly want to rerun
 validation against the current snapshot.
+
+If you move `obstudio` manually instead of using `obstudio install`, keep
+the bundled `weaver` runtime beside it or ensure `weaver` is available on
+`PATH`.
 
 ## Environment Variables
 

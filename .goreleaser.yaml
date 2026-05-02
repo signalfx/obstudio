@@ -13,6 +13,11 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -20,6 +25,8 @@ archives:
   - formats:
       - zip
     files:
+      - src: .release/weaver/{{ .Os }}-{{ .Arch }}/weaver*
+        strip_parent: true
       - docs/USER.md
       - docs/examples.md
 
