@@ -25,12 +25,14 @@ the skills and MCP config for your agent:
 
 ```bash
 unzip obstudio_*_darwin_arm64.zip
-./obstudio install --target=codex
+./obstudio install --target=<agent>
 ```
 
 After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`.
+to `obstudio`. It stores the managed bundle under `~/.<agent>/skills/obstudio/`
+and creates top-level discoverable skill entries such as `otel-audit` and
+`otel-instrument` in the agent skills root.
 
 ### Build From Source
 
@@ -47,6 +49,10 @@ The collector starts on:
 | OTLP/HTTP | http://localhost:4318 |
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
+
+Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
+and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
+and `4317`, matching the VS Code extension.
 
 ## Using The Skills
 

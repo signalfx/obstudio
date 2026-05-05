@@ -50,17 +50,17 @@
       },
       {
         "command": "observability-studio.configureCodexMCP",
-        "title": "Configure Codex MCP",
+        "title": "Enable Codex Integration",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.configureClaudeCodeMCP",
-        "title": "Configure Claude Code MCP",
+        "title": "Enable Claude Code Integration",
         "category": "Splunk Observability Studio"
       },
       {
         "command": "observability-studio.configureCursorMCP",
-        "title": "Configure Cursor MCP",
+        "title": "Enable Cursor Integration",
         "category": "Splunk Observability Studio"
       }
     ],
@@ -70,7 +70,14 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts `obstudio` on the fixed shared endpoint `http://127.0.0.1:3000`."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`."
+        },
+        "observability-studio.managedObserverPort": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1,
+          "maximum": 65535,
+          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
         }
       }
     }

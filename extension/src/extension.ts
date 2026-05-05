@@ -1,7 +1,10 @@
 import * as cp from 'node:child_process';
+import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
 	buildObserverHealthUrl,
@@ -40,16 +43,19 @@ let observerStartupPromise: Promise<void> | undefined;
 let observerStopPromise: Promise<void> | undefined;
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
+let agentIntegrationPromptPromise: Promise<void> | undefined;
+let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
+const managedObserverPortSetting = 'managedObserverPort';
 const managedObserverHost = '127.0.0.1';
-const managedObserverPort = 3000;
-const managedObserverBaseUrl = `http://${managedObserverHost}:${managedObserverPort}`;
+const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
+const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
@@ -67,6 +73,21 @@ type InternalRuntimeState = {
 	validatorSummaryUrl?: string;
 };
 
+type AgentIntegrationTarget = 'claude-code' | 'codex' | 'cursor';
+
+type AgentIntegrationConfigFormat = 'json' | 'toml';
+
+type AgentIntegrationSpec = {
+	configFormat: AgentIntegrationConfigFormat;
+	configPath: (home: string) => string;
+	detectPaths: (home: string) => string[];
+	label: string;
+	skillsSentinelPath: (home: string) => string;
+	target: AgentIntegrationTarget;
+};
+
+type AgentIntegrationConfigState = 'different' | 'matching' | 'missing';
+
 type ObserverProbeOptions = {
 	requireStableOtlp: boolean;
 };
@@ -75,6 +96,33 @@ type ObserverProbeResult =
 	| { health: ObserverHealth; status: 'ready' }
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
+
+const agentIntegrationSpecs: AgentIntegrationSpec[] = [
+	{
+		target: 'codex',
+		label: 'Codex',
+		configFormat: 'toml',
+		configPath: (home) => path.join(home, '.codex', 'config.toml'),
+		detectPaths: (home) => [path.join(home, '.codex')],
+		skillsSentinelPath: (home) => path.join(home, '.codex', 'skills', 'otel-instrument', 'SKILL.md'),
+	},
+	{
+		target: 'claude-code',
+		label: 'Claude Code',
+		configFormat: 'json',
+		configPath: (home) => path.join(home, '.claude.json'),
+		detectPaths: (home) => [path.join(home, '.claude'), path.join(home, '.claude.json')],
+		skillsSentinelPath: (home) => path.join(home, '.claude', 'skills', 'otel-instrument', 'SKILL.md'),
+	},
+	{
+		target: 'cursor',
+		label: 'Cursor',
+		configFormat: 'json',
+		configPath: (home) => path.join(home, '.cursor', 'mcp.json'),
+		detectPaths: (home) => [path.join(home, '.cursor')],
+		skillsSentinelPath: (home) => path.join(home, '.cursor', 'skills', 'otel-instrument', 'SKILL.md'),
+	},
+];
 
 export async function activate(context: vscode.ExtensionContext) {
 	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
@@ -91,6 +139,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				try {
 					await ensureObserverRunning(context);
 					refreshObserverPanel();
+					void maybeOfferDetectedAgentIntegrations(context);
 				} catch {
 					refreshObserverPanel();
 				}
@@ -98,7 +147,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-		if (!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)) {
+		if (
+			!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)
+			&& !event.affectsConfiguration(`observability-studio.${managedObserverPortSetting}`)
+		) {
 			return;
 		}
 		void restartObserver(context);
@@ -121,6 +173,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		appendObserverOutputLine(`Observer startup failed: ${message}`);
 		void vscode.window.showErrorMessage(`Splunk Observability Studio could not start: ${message}`);
 	});
+	void ensureObserverRunning(context)
+		.then(() => maybeOfferDetectedAgentIntegrations(context))
+		.catch((error) => {
+			if (isObserverLifecycleCancelled(error)) {
+				return;
+			}
+			logObserverLifecycle(`Skipping automatic agent integration prompt: ${getErrorMessage(error)}`);
+		});
 
 	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
 		openObserverPanel(context);
@@ -138,7 +198,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				{
 					placeHolder: observerUsesSharedServer
 						? `Observer is reusing ${observerBaseUrl ?? 'a shared backend'}`
-						: `Observer is running on port ${observerLifecycleState.port ?? '?'}`,
+						: `Observer is running at ${observerBaseUrl ?? `http://${managedObserverHost}:${observerLifecycleState.port ?? '?'}`}`,
 				},
 			);
 			if (pick?.id === 'open') {
@@ -198,6 +258,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		try {
 			await ensureObserverRunning(context);
 			refreshObserverPanel();
+			void maybeOfferDetectedAgentIntegrations(context);
 		} catch (error) {
 			if (isObserverLifecycleCancelled(error)) {
 				refreshObserverPanel();
@@ -223,6 +284,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		try {
 			await ensureObserverRunning(context);
 			refreshObserverPanel();
+			void maybeOfferDetectedAgentIntegrations(context);
 		} catch (error) {
 			if (isObserverLifecycleCancelled(error)) {
 				refreshObserverPanel();
@@ -244,6 +306,30 @@ export async function activate(context: vscode.ExtensionContext) {
 	const configureCursorDisposable = vscode.commands.registerCommand(
 		'observability-studio.configureCursorMCP',
 		() => configureAgentMCP(context, 'cursor', 'Cursor'),
+	);
+	const internalConfigureDetectedAgentsDisposable = vscode.commands.registerCommand(
+		'observability-studio.internal.configureDetectedAgentIntegrations',
+		() => configureDetectedAgentIntegrations(context),
+	);
+	const internalGetAgentIntegrationPromptsDisposable = vscode.commands.registerCommand(
+		'observability-studio.internal.getAgentIntegrationPrompts',
+		() => recentAgentIntegrationPrompts.map((item) => ({ ...item })),
+	);
+	const internalClearAgentIntegrationPromptsDisposable = vscode.commands.registerCommand(
+		'observability-studio.internal.clearAgentIntegrationPrompts',
+		() => {
+			recentAgentIntegrationPrompts = [];
+		},
+	);
+	const internalResetAgentIntegrationPromptStateDisposable = vscode.commands.registerCommand(
+		'observability-studio.internal.resetAgentIntegrationPromptState',
+		async () => {
+			agentIntegrationPromptPromise = undefined;
+			recentAgentIntegrationPrompts = [];
+			for (const spec of agentIntegrationSpecs) {
+				await context.globalState.update(integrationPromptDismissalKey(spec.target), undefined);
+			}
+		},
 	);
 	const internalStateDisposable = vscode.commands.registerCommand(
 		'observability-studio.internal.getRuntimeState',
@@ -267,6 +353,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(configureCodexDisposable);
 	context.subscriptions.push(configureClaudeDisposable);
 	context.subscriptions.push(configureCursorDisposable);
+	context.subscriptions.push(internalConfigureDetectedAgentsDisposable);
+	context.subscriptions.push(internalGetAgentIntegrationPromptsDisposable);
+	context.subscriptions.push(internalClearAgentIntegrationPromptsDisposable);
+	context.subscriptions.push(internalResetAgentIntegrationPromptStateDisposable);
 	context.subscriptions.push(internalStateDisposable);
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
@@ -355,6 +445,8 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
+		const managedPort = getConfiguredManagedObserverPort();
+		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
 		const existingObserver = await probeObserver(managedObserverBaseUrl, 500, { requireStableOtlp: true });
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
@@ -362,7 +454,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			observerUsesSharedServer = true;
 			observerBaseUrl = managedObserverBaseUrl;
 			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedObserverPort)) {
+			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
 				syncObserverUi();
 			}
 			return;
@@ -371,12 +463,22 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (existingObserver.status === 'mismatch') {
 			throw new Error(
 				`Cannot use ${managedObserverBaseUrl}: ${existingObserver.reason}. ` +
-				`Stop the conflicting service or configure observability-studio.${sharedObserverUrlSetting}.`,
+				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
+				`or observability-studio.${sharedObserverUrlSetting}.`,
 			);
 		}
 
 		const backend = resolveBackend(context.extensionPath);
-		const observerPort = await ensurePortAvailable(managedObserverPort);
+		let observerPort: number;
+		try {
+			observerPort = await ensurePortAvailable(managedPort);
+		} catch (error) {
+			throw new Error(
+				`Cannot use ${managedObserverBaseUrl}: ${getErrorMessage(error)} ` +
+				`Configure observability-studio.${managedObserverPortSetting} or ` +
+				`observability-studio.${sharedObserverUrlSetting}.`,
+			);
+		}
 		logObserverLifecycle(`Run ${runId}: reserved UI port ${observerPort}.`);
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
@@ -592,6 +694,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 	try {
 		await ensureObserverRunning(context);
 		refreshObserverPanel();
+		void maybeOfferDetectedAgentIntegrations(context);
 	} catch {
 		refreshObserverPanel();
 	}
@@ -836,6 +939,7 @@ async function restartObserver(context: vscode.ExtensionContext): Promise<void> 
 	try {
 		await ensureObserverRunning(context);
 		refreshObserverPanel();
+		void maybeOfferDetectedAgentIntegrations(context);
 	} catch (error) {
 		if (isObserverLifecycleCancelled(error)) {
 			refreshObserverPanel();
@@ -887,6 +991,25 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+function buildManagedObserverBaseUrl(port: number): string {
+	return `http://${managedObserverHost}:${port}`;
+}
+
+function getConfiguredManagedObserverPort(): number {
+	const configured = vscode.workspace.getConfiguration('observability-studio').get<number>(managedObserverPortSetting);
+	if (typeof configured === 'number' && Number.isInteger(configured) && configured > 0 && configured <= 65_535) {
+		if (configured === observerOtlpHttpPort || configured === observerOtlpGrpcPort) {
+			const signal = configured === observerOtlpHttpPort ? 'OTLP/HTTP' : 'OTLP/gRPC';
+			throw new Error(
+				`observability-studio.${managedObserverPortSetting} cannot use port ${configured}; ` +
+				`${signal} already uses that port.`,
+			);
+		}
+		return configured;
+	}
+	return defaultManagedObserverPort;
+}
+
 function appendObserverOutput(text: string): void {
 	if (observerOutputChannel === undefined) {
 		return;
@@ -920,10 +1043,189 @@ function getConfiguredSharedObserverUrl(): string | undefined {
 	return normalizeObserverBaseUrl(trimmed);
 }
 
+function getDetectedAgentIntegrations(): AgentIntegrationSpec[] {
+	const home = os.homedir();
+	return agentIntegrationSpecs.filter((spec) => spec.detectPaths(home).some((candidate) => fs.existsSync(candidate)));
+}
+
+function integrationPromptDismissalKey(target: AgentIntegrationTarget): string {
+	return `${agentIntegrationPromptDismissedPrefix}${target}`;
+}
+
+function formatAgentLabelList(labels: string[]): string {
+	if (labels.length === 0) {
+		return '';
+	}
+	if (labels.length === 1) {
+		return labels[0];
+	}
+	if (labels.length === 2) {
+		return `${labels[0]} and ${labels[1]}`;
+	}
+	return `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
+}
+
+function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: string): AgentIntegrationConfigState {
+	const configPath = spec.configPath(os.homedir());
+	if (!fs.existsSync(configPath)) {
+		return 'missing';
+	}
+
+	try {
+		if (spec.configFormat === 'json') {
+			const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+				mcpServers?: Record<string, { type?: string; url?: string }>;
+			};
+			const server = config.mcpServers?.obstudio;
+			if (server === undefined) {
+				return 'missing';
+			}
+			return server.type === 'http' && server.url === mcpUrl ? 'matching' : 'different';
+		}
+
+		const content = fs.readFileSync(configPath, 'utf8');
+		const section = getCodexObstudioSection(content);
+		if (section === undefined) {
+			return 'missing';
+		}
+		return section.includes(`url = "${mcpUrl}"`) ? 'matching' : 'different';
+	} catch {
+		return 'different';
+	}
+}
+
+function getCodexObstudioSection(content: string): string | undefined {
+	const lines = content.split(/\r?\n/);
+	let section: string[] | undefined;
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+			if (trimmed === '[mcp_servers.obstudio]') {
+				section = [line];
+				continue;
+			}
+			if (section !== undefined) {
+				break;
+			}
+		}
+		if (section !== undefined) {
+			section.push(line);
+		}
+	}
+	return section?.join('\n');
+}
+
+function hasInstalledAgentSkills(spec: AgentIntegrationSpec): boolean {
+	return fs.existsSync(spec.skillsSentinelPath(os.homedir()));
+}
+
+function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string): boolean {
+	return getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching' || !hasInstalledAgentSkills(spec);
+}
+
+async function configureDetectedAgentIntegrations(
+	context: vscode.ExtensionContext,
+	specs = getDetectedAgentIntegrations(),
+	showSuccessMessage = true,
+	forceAll = false,
+): Promise<string[]> {
+	await ensureObserverRunning(context);
+	if (observerBaseUrl === undefined) {
+		throw new Error('Observer URL is not available.');
+	}
+
+	const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
+	const configured: string[] = [];
+	for (const spec of specs) {
+		if (!forceAll && !needsAgentIntegrationUpdate(spec, mcpUrl)) {
+			continue;
+		}
+
+		await configureAgentMCP(context, spec.target, spec.label, false);
+		configured.push(spec.label);
+	}
+
+	if (showSuccessMessage && configured.length > 0) {
+		const labelList = formatAgentLabelList(configured);
+		const noun = configured.length === 1 ? 'integration' : 'integrations';
+		void vscode.window.showInformationMessage(
+			`${labelList} ${noun} enabled. Restart ${labelList} to load the bundled skills.`,
+		);
+	}
+	return configured;
+}
+
+async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionContext): Promise<void> {
+	if (agentIntegrationPromptPromise !== undefined) {
+		return agentIntegrationPromptPromise;
+	}
+
+	const promptPromise = (async () => {
+		if (observerBaseUrl === undefined) {
+			return;
+		}
+
+		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
+		const shownSpecs = getDetectedAgentIntegrations().filter((spec) => {
+			const dismissed = context.globalState.get<boolean>(integrationPromptDismissalKey(spec.target)) === true;
+			if (!dismissed) {
+				return true;
+			}
+			return getAgentIntegrationConfigState(spec, mcpUrl) !== 'missing';
+		});
+		if (shownSpecs.length === 0) {
+			return;
+		}
+		const needsUpdate = shownSpecs.some((spec) => needsAgentIntegrationUpdate(spec, mcpUrl));
+		if (!needsUpdate) {
+			return;
+		}
+
+		const labels = shownSpecs.map((spec) => spec.label);
+		const labelList = formatAgentLabelList(labels);
+		const promptMessage = shownSpecs.length === 1
+			? `Enable ${labels[0]} integration for Splunk Observability Studio?`
+			: 'Enable detected agent integrations for Splunk Observability Studio?';
+		const promptDetail = shownSpecs.length === 1
+			? `Install bundled skills and configure ${labels[0]} to use the local Observer at ${mcpUrl}.`
+			: `Install bundled skills and configure ${labelList} to use the local Observer at ${mcpUrl}.`;
+		recentAgentIntegrationPrompts = [...recentAgentIntegrationPrompts.slice(-9), {
+			detail: promptDetail,
+			message: promptMessage,
+		}];
+		const choice = await vscode.window.showInformationMessage(
+			promptMessage,
+			{ detail: promptDetail },
+			'Enable',
+			'Not Now',
+		);
+		if (choice === 'Enable') {
+			await configureDetectedAgentIntegrations(context, shownSpecs, true, true);
+			return;
+		}
+		if (choice === 'Not Now') {
+			for (const spec of shownSpecs) {
+				await context.globalState.update(integrationPromptDismissalKey(spec.target), true);
+			}
+			logObserverLifecycle(`${labelList} integration prompt dismissed.`);
+		}
+	})().catch((error) => {
+		appendObserverOutputLine(`Automatic agent integration check failed: ${getErrorMessage(error)}`);
+	}).finally(() => {
+		if (agentIntegrationPromptPromise === promptPromise) {
+			agentIntegrationPromptPromise = undefined;
+		}
+	});
+
+	agentIntegrationPromptPromise = promptPromise;
+	return promptPromise;
+}
+
 async function configureAgentMCP(
 	context: vscode.ExtensionContext,
-	target: 'claude-code' | 'codex' | 'cursor',
+	target: AgentIntegrationTarget,
 	label: string,
+	showSuccessMessage = true,
 ): Promise<void> {
 	if (observerOutputChannel === undefined) {
 		throw new Error('Observer output channel is not initialized.');
@@ -937,12 +1239,17 @@ async function configureAgentMCP(
 
 		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
 		const backend = resolveBackend(context.extensionPath);
-		observerOutputChannel.appendLine(`Configuring ${label} MCP for ${mcpUrl}`);
+		observerOutputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
 		await execFile(backend.command, ['install', '--target', target, '--shared-url', mcpUrl], backend.cwd);
-		observerOutputChannel.appendLine(`${label} MCP configured for ${mcpUrl}`);
-		void vscode.window.showInformationMessage(`${label} MCP configured for ${mcpUrl}`);
+		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
+		observerOutputChannel.appendLine(`${label} integration enabled for ${mcpUrl}`);
+		if (showSuccessMessage) {
+			void vscode.window.showInformationMessage(
+				`${label} integration enabled. Restart ${label} to load the bundled skills.`,
+			);
+		}
 	} catch (error) {
-		const message = `${label} MCP configuration failed: ${getErrorMessage(error)}`;
+		const message = `${label} integration failed: ${getErrorMessage(error)}`;
 		observerOutputChannel.appendLine(message);
 		void vscode.window.showErrorMessage(message);
 		throw error;
