@@ -1,6 +1,5 @@
 ---
-
-## name: otel-audit
+name: otel-audit
 description: >-
   Scan a codebase for existing OpenTelemetry instrumentation and report
   on observability coverage gaps. Read-only -- does not modify code.
@@ -13,6 +12,7 @@ metadata:
   author: otel-studio
   version: 0.6.0
   category: observability
+---
 
 # Audit -- Observability Coverage Scan
 

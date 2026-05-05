@@ -52,13 +52,14 @@ The severity levels are meant to be easy to read:
 ## Features
 
 - Reuses a healthy shared observer at `http://127.0.0.1:3000` or starts a bundled local observer automatically on activation.
+- Detects local Codex, Claude Code, and Cursor installs and offers a one-time prompt to enable integration.
 - Exposes stable OTLP endpoints for local applications:
   - OTLP/HTTP on `127.0.0.1:4318`
   - OTLP/gRPC on `127.0.0.1:4317`
 - Opens the Telemetry Explorer in a VS Code webview panel.
 - Keeps a status bar entry available so you can reopen the explorer quickly.
 - Includes commands for starting, stopping, restarting, and reusing the shared observer runtime.
-- Includes helper commands to configure MCP clients against the shared observer endpoint.
+- Includes helper commands to enable agent integrations against the shared observer endpoint.
 
 ## Commands
 
@@ -67,9 +68,9 @@ The severity levels are meant to be easy to read:
 - `Splunk Observability Studio: Start Observer` — starts the shared observer runtime.
 - `Splunk Observability Studio: Stop Observer` — stops the shared observer runtime.
 - `Splunk Observability Studio: Restart Observer` — restarts the shared observer runtime.
-- `Splunk Observability Studio: Configure Codex MCP` — writes Codex MCP settings for the shared observer.
-- `Splunk Observability Studio: Configure Claude Code MCP` — writes Claude Code MCP settings for the shared observer.
-- `Splunk Observability Studio: Configure Cursor MCP` — writes Cursor MCP settings for the shared observer.
+- `Splunk Observability Studio: Enable Codex Integration` — installs bundled skills and writes Codex MCP settings for the shared observer.
+- `Splunk Observability Studio: Enable Claude Code Integration` — installs bundled skills and writes Claude Code MCP settings for the shared observer.
+- `Splunk Observability Studio: Enable Cursor Integration` — installs bundled skills and writes Cursor MCP settings for the shared observer.
 
 ## How It Works
 
@@ -79,9 +80,10 @@ At startup, the extension:
 
 1. Uses `observability-studio.sharedObserverUrl` when it is configured.
 2. Otherwise reuses a healthy observer already serving `http://127.0.0.1:3000` when one is available.
-3. If no shared observer is already running, verifies that `3000`, `4317`, and `4318` are available.
-4. Launches the bundled observer binary on the fixed local endpoint `http://127.0.0.1:3000`.
-5. Connects the VS Code webview to the Observer UI via an iframe.
+3. If no shared observer is already running, verifies that `managedObserverPort`, `4317`, and `4318` are available.
+4. Launches the bundled observer binary on the managed local endpoint `http://127.0.0.1:<managedObserverPort>`.
+5. When a supported agent home is detected, offers a one-time prompt to install bundled skills and point that agent at the shared Observer MCP endpoint.
+6. Connects the VS Code webview to the Observer UI via an iframe.
 
 If the managed endpoint or either OTLP port is already in use by an incompatible service, the extension reports a startup error.
 
@@ -105,4 +107,4 @@ From the `extension` directory:
 
 ## Known Limitations
 
-- The managed local observer expects `127.0.0.1:3000`, `127.0.0.1:4318`, and `127.0.0.1:4317` to be free unless you point the extension at an existing shared observer with `observability-studio.sharedObserverUrl`.
+- The managed local observer expects `127.0.0.1:<managedObserverPort>`, `127.0.0.1:4318`, and `127.0.0.1:4317` to be free unless you point the extension at an existing shared observer with `observability-studio.sharedObserverUrl`.

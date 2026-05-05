@@ -642,3 +642,124 @@ func TestReinstallCleansStaleSymlinks(t *testing.T) {
 		t.Fatalf("expected new-skill symlink after reinstall: %v", err)
 	}
 }
+
+func TestDetectSharedObserverURLFromStateFile(t *testing.T) {
+	t.Parallel()
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind":       "obstudio",
+			"apiVersion": "v1",
+			"endpoints": map[string]string{
+				"mcp": server.URL + "/mcp",
+			},
+		})
+	}))
+	defer server.Close()
+
+	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
+	err := writeSharedObserverState(statePath, sharedObserverState{
+		HealthURL: server.URL,
+		MCPURL:    server.URL + "/mcp",
+		PID:       42,
+	})
+	if err != nil {
+		t.Fatalf("writeSharedObserverState returned error: %v", err)
+	}
+
+	detected, ok := detectSharedObserverURLFromStateFile(statePath, server.Client())
+	if !ok {
+		t.Fatal("expected state-file discovery to succeed")
+	}
+	if want := server.URL + "/mcp"; detected != want {
+		t.Fatalf("detectSharedObserverURLFromStateFile = %q, want %q", detected, want)
+	}
+}
+
+func TestClearSharedObserverStateIfOwned(t *testing.T) {
+	t.Parallel()
+
+	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
+	state := sharedObserverState{
+		BaseURL:   "http://127.0.0.1:41234",
+		HealthURL: "http://127.0.0.1:41234/api/health",
+		MCPURL:    "http://127.0.0.1:41234/mcp",
+		PID:       4242,
+	}
+	if err := writeSharedObserverState(statePath, state); err != nil {
+		t.Fatalf("writeSharedObserverState returned error: %v", err)
+	}
+
+	if err := clearSharedObserverStateIfOwned(statePath, state); err != nil {
+		t.Fatalf("clearSharedObserverStateIfOwned returned error: %v", err)
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("expected owned state file to be removed, got err=%v", err)
+	}
+}
+
+func TestClearSharedObserverStateIfOwnedLeavesNewerStateAlone(t *testing.T) {
+	t.Parallel()
+
+	statePath := filepath.Join(t.TempDir(), "shared-observer.json")
+	owned := sharedObserverState{
+		BaseURL:   "http://127.0.0.1:41234",
+		HealthURL: "http://127.0.0.1:41234/api/health",
+		MCPURL:    "http://127.0.0.1:41234/mcp",
+		PID:       4242,
+	}
+	newer := sharedObserverState{
+		BaseURL:   "http://127.0.0.1:42345",
+		HealthURL: "http://127.0.0.1:42345/api/health",
+		MCPURL:    "http://127.0.0.1:42345/mcp",
+		PID:       5252,
+	}
+	if err := writeSharedObserverState(statePath, newer); err != nil {
+		t.Fatalf("writeSharedObserverState returned error: %v", err)
+	}
+
+	if err := clearSharedObserverStateIfOwned(statePath, owned); err != nil {
+		t.Fatalf("clearSharedObserverStateIfOwned returned error: %v", err)
+	}
+
+	got, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("readSharedObserverState returned error: %v", err)
+	}
+	if got.PID != newer.PID || got.MCPURL != newer.MCPURL {
+		t.Fatalf("shared observer state was unexpectedly removed or replaced: %#v", got)
+	}
+}
+
+func TestValidateRunConfigRejectsOverlappingPorts(t *testing.T) {
+	t.Parallel()
+
+	err := validateRunConfig(runConfig{
+		host:             "127.0.0.1",
+		observerHTTPPort: "4318",
+		otlpHTTPPort:     "4318",
+		otlpGRPCPort:     "4317",
+	})
+	if err == nil {
+		t.Fatal("expected validateRunConfig to reject overlapping listener ports")
+	}
+	if !strings.Contains(err.Error(), "--otlp-http-port cannot use port 4318") {
+		t.Fatalf("unexpected overlap error: %v", err)
+	}
+}
+
+func TestBuildSharedObserverStateNormalizesWildcardHost(t *testing.T) {
+	t.Parallel()
+
+	state := buildSharedObserverState("0.0.0.0", "41234")
+	if state.BaseURL != "http://127.0.0.1:41234" {
+		t.Fatalf("BaseURL = %q, want %q", state.BaseURL, "http://127.0.0.1:41234")
+	}
+	if state.HealthURL != "http://127.0.0.1:41234/api/health" {
+		t.Fatalf("HealthURL = %q, want %q", state.HealthURL, "http://127.0.0.1:41234/api/health")
+	}
+	if state.MCPURL != "http://127.0.0.1:41234/mcp" {
+		t.Fatalf("MCPURL = %q, want %q", state.MCPURL, "http://127.0.0.1:41234/mcp")
+	}
+}
