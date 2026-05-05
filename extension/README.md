@@ -72,6 +72,19 @@ The severity levels are meant to be easy to read:
 - `Splunk Observability Studio: Enable Claude Code Integration` — installs bundled skills and writes Claude Code MCP settings for the shared observer.
 - `Splunk Observability Studio: Enable Cursor Integration` — installs bundled skills and writes Cursor MCP settings for the shared observer.
 
+## Configuration
+
+To run the extension-managed Observer on a different local UI/MCP port, set:
+
+```json
+{
+  "observability-studio.managedObserverPort": 41234
+}
+```
+
+This is the extension equivalent of `obstudio --observer-http-port 41234`.
+The extension-managed OTLP receiver ports stay fixed at `4318` and `4317`.
+
 ## How It Works
 
 The extension packages a pre-built observer binary (Go) into the extension bundle under `dist/observer/obstudio`. The binary embeds its own web UI via Go's `//go:embed` directive.

@@ -50,6 +50,10 @@ The collector starts on:
 | OTLP/gRPC | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
+Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
+and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
+and `4317`, matching the VS Code extension.
+
 ## Using The Skills
 
 From a service directory, invoke the relevant skill in Codex:

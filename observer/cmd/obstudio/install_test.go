@@ -39,6 +39,23 @@ func TestCodexTargetUsesConfigTOML(t *testing.T) {
 	}
 }
 
+func TestRootCommandOnlyExposesObserverHTTPPortOverride(t *testing.T) {
+	t.Parallel()
+
+	var config runConfig
+	root := newRootCmd(&config)
+
+	if root.Flags().Lookup("observer-http-port") == nil {
+		t.Fatal("expected --observer-http-port flag to be registered")
+	}
+	if root.Flags().Lookup("otlp-http-port") != nil {
+		t.Fatal("did not expect --otlp-http-port to be exposed")
+	}
+	if root.Flags().Lookup("otlp-grpc-port") != nil {
+		t.Fatal("did not expect --otlp-grpc-port to be exposed")
+	}
+}
+
 func TestCopySiblingWeaverRuntimeCopiesBundledRuntime(t *testing.T) {
 	t.Parallel()
 
@@ -732,7 +749,7 @@ func TestClearSharedObserverStateIfOwnedLeavesNewerStateAlone(t *testing.T) {
 	}
 }
 
-func TestValidateRunConfigRejectsOverlappingPorts(t *testing.T) {
+func TestValidateRunConfigRejectsObserverPortOverlappingFixedListeners(t *testing.T) {
 	t.Parallel()
 
 	err := validateRunConfig(runConfig{

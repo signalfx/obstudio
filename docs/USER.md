@@ -99,6 +99,9 @@ To override the Observer UI, REST API, and MCP HTTP port explicitly:
 obstudio --observer-http-port 41234
 ```
 
+The OTLP receiver ports stay fixed at `4318` and `4317`, matching the VS Code
+extension.
+
 When a standalone Observer is already running, `obstudio install --target=<agent>`
 auto-detects its current HTTP MCP endpoint from local runtime state, including
 nondefault `--observer-http-port` values. Use `--shared-url` only when you want
@@ -147,8 +150,6 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 |----------|---------|-------------|
 | `HOST` | `127.0.0.1` | Bind address for all servers |
 | `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
-| `OTLP_HTTP_PORT` | `4318` | OTLP/HTTP receiver port |
-| `OTLP_GRPC_PORT` | `4317` | OTLP/gRPC receiver port |
 
 ## Example Prompts
 

@@ -34,12 +34,20 @@ type runConfig struct {
 
 func main() {
 	var config runConfig
+	root := newRootCmd(&config)
+
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func newRootCmd(config *runConfig) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "obstudio",
 		Short:   "Observability Studio -- local OTel collector, MCP server, and skill installer",
 		Version: version,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolved := resolveRunConfig(config)
+			resolved := resolveRunConfig(*config)
 			if err := validateRunConfig(resolved); err != nil {
 				return err
 			}
@@ -51,14 +59,9 @@ func main() {
 
 	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP receivers")
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
-	root.Flags().StringVar(&config.otlpHTTPPort, "otlp-http-port", "", "OTLP/HTTP receiver port")
-	root.Flags().StringVar(&config.otlpGRPCPort, "otlp-grpc-port", "", "OTLP/gRPC receiver port")
 
 	root.AddCommand(newInstallCmd())
-
-	if err := root.Execute(); err != nil {
-		os.Exit(1)
-	}
+	return root
 }
 
 func run(config runConfig) {
