@@ -50,8 +50,8 @@ Restart your agent to activate.
 ~/.cursor/skills/obstudio/
   obstudio              # binary (MCP server, auto-started by Cursor)
   weaver                # validator runtime used by the Validation tab and APIs
-  otel-audit/SKILL.md   # /otel-audit skill source
-  otel-instrument/SKILL.md # /otel-instrument skill source
+  otel-audit/SKILL.md   # bundled /otel-audit skill file
+  otel-instrument/SKILL.md # bundled /otel-instrument skill file
   references/           # language guides and reference material
 
 ~/.cursor/skills/

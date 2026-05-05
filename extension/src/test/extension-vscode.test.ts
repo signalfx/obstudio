@@ -708,7 +708,7 @@ suite('VS Code Host', () => {
 			for (const snapshot of originalSnapshots) {
 				restoreSnapshot(snapshot);
 			}
-			fs.rmSync(tempHome, { force: true, recursive: true });
+			cleanupTempDir(tempHome);
 		}
 	});
 
