@@ -5,6 +5,7 @@ import { TimeSeriesChart } from "./TimeSeriesChart";
 import { useMetricTimeSeries, type MetricSeries } from "./useMetricTimeSeries";
 import type { MetricGroup } from "../api/types";
 import { DetailPanel, ResizablePanel } from "../layout";
+import { KVTable } from "../components/KVTable";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 interface MetricsTabProps {
@@ -391,40 +392,23 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
 
                     <div className="series-detail__section">
                       <div className="series-detail__section-title">Dimensions</div>
-                      <div className="series-detail__tags">
-                        {selectedAttributes.length > 0 ? (
-                          selectedAttributes.map(([key, value]) => (
-                            <span key={key} className="series-detail__dim-tag">
-                              <span className="series-detail__dim-key">{key}:</span>
-                              {String(value)}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="series-detail__tag">(no dimensions)</span>
-                        )}
-                      </div>
+                      {selectedAttributes.length > 0 ? (
+                        <KVTable rows={selectedAttributes.map(([key, value]) => ({ key, value: String(value) }))} />
+                      ) : (
+                        <span className="series-detail__tag">(no dimensions)</span>
+                      )}
                     </div>
 
                     {selectedResourceAttributes.length > 0 ? (
                       <div className="series-detail__section">
                         <div className="series-detail__section-title">Resource</div>
-                        <div className="series-detail__tags">
-                          {selectedResourceAttributes.map(([key, value]) => (
-                            <span key={key} className="series-detail__resource-tag">
-                              <span className="series-detail__dim-key">{key}:</span>
-                              {String(value)}
-                            </span>
-                          ))}
-                        </div>
+                        <KVTable rows={selectedResourceAttributes.map(([key, value]) => ({ key, value: String(value) }))} />
                       </div>
                     ) : null}
 
                     <div className="series-detail__section">
                       <div className="series-detail__section-title">Scope</div>
-                      <div className="series-detail__scope-line">
-                        {selectedDetail.scope.name}
-                        {selectedDetail.scope.version ? ` v${selectedDetail.scope.version}` : ""}
-                      </div>
+                      <KVTable rows={[{ key: "name", value: `${selectedDetail.scope.name}${selectedDetail.scope.version ? ` v${selectedDetail.scope.version}` : ""}` }]} />
                     </div>
                   </div>
                 ) : null}

@@ -4,6 +4,7 @@ import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types"
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { CopyTextButton, DetailPanel, ResizablePanel } from "../layout";
+import { KVTable } from "../components/KVTable";
 import { TraceWaterfall } from "./TraceWaterfall";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
@@ -368,13 +369,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
               onClose={() => selectTrace(null)}
             >
               <div className="trace-detail__summary">
-                <div className="span-details__detail-row">
-                  <span className="span-details__detail-label">Trace ID</span>
-                  <span className="span-details__detail-value">
-                    <span title={traceDetail.traceId}>{traceDetail.traceId}</span>
-                    <CopyTextButton text={traceDetail.traceId} label="Trace ID" />
-                  </span>
-                </div>
+                <KVTable rows={[{ key: "Trace ID", value: <span title={traceDetail.traceId}>{traceDetail.traceId}</span>, action: <CopyTextButton text={traceDetail.traceId} label="Trace ID" /> }]} />
               </div>
               <TraceWaterfall
                 spans={traceDetail.spans}

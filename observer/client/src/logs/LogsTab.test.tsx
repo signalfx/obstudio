@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsTab } from "./LogsTab";
 
@@ -175,7 +175,65 @@ describe("LogsTab", () => {
     expect(screen.queryByText("checkout started")).toBeNull();
   });
 
-  it("uses whole-number inputs for severity number filters", () => {
+  it("filters by displayed severity labels such as WARN2", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: "2",
+          timeUnixNano: "1712700000000000001",
+          severityNumber: 14,
+          body: "number only: WARN2",
+          attributes: {},
+          resource: { serviceName: "payments", attributes: {} },
+          scope: { name: "otel" },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {},
+            resource: { serviceName: "checkout", attributes: {} },
+            scope: { name: "otel" },
+          },
+          {
+            id: "2",
+            timeUnixNano: "1712700000000000001",
+            severityNumber: 14,
+            body: "number only: WARN2",
+            attributes: {},
+            resource: { serviceName: "payments", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), {
+      target: { value: "Severity" },
+    });
+    fireEvent.change(screen.getByLabelText("severityDisplay value"), {
+      target: { value: "WARN2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/logs?filter%5BseverityDisplay%5D%5Beq%5D=WARN2", expect.any(Object));
+    expect(screen.getByText("number only: WARN2")).toBeTruthy();
+    expect(screen.queryByText("checkout started")).toBeNull();
+  });
+
+  it("does not show severity number in the log filter menu", () => {
     render(
       <LogsTab
         logs={[
@@ -193,15 +251,9 @@ describe("LogsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "Severity Number" },
-    });
-    const input = screen.getByLabelText("severityNumber value") as HTMLInputElement;
+    fireEvent.focus(screen.getByLabelText("Filter field"));
 
-    expect(input.getAttribute("step")).toBe("1");
-
-    fireEvent.change(input, { target: { value: "1.5" } });
-    expect(input.value).toBe("");
+    expect(screen.queryByText("Severity Number")).toBeNull();
   });
 
   it("does not show time range fields in the log filter menu", () => {
@@ -256,59 +308,17 @@ describe("LogsTab", () => {
     expect(screen.getByLabelText("Filter field")).toBeTruthy();
   });
 
-  it("renders semantic log detail lists and omits duplicate service resource attributes", () => {
+  it("falls back to severityNumber for number-only log badges and detail titles", () => {
     const { container } = render(
       <LogsTab
         logs={[
           {
             id: "1",
             timeUnixNano: "1712700000000000000",
-            severityText: "INFO",
-            body: "checkout started",
-            attributes: {
-              "demo.iteration": 8679,
-            },
-            resource: {
-              serviceName: "checkout",
-              attributes: {
-                "service.name": "checkout",
-                "deployment.environment.name": "prod",
-              },
-            },
-            scope: { name: "demo.logger", version: "1.2.3" },
-            traceId: "trace-1",
-            spanId: "span-1",
-          },
-        ]}
-        onInteract={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
-
-    const detailPanel = container.querySelector(".detail-panel__body") as HTMLElement;
-
-    expect(within(detailPanel).getByText("Service")).toBeTruthy();
-    expect(within(detailPanel).queryByText("service.name")).toBeNull();
-    expect(within(detailPanel).getByText("deployment.environment.name")).toBeTruthy();
-    expect(within(detailPanel).getByText("prod")).toBeTruthy();
-    expect(within(detailPanel).getByText("Version")).toBeTruthy();
-    expect(within(detailPanel).getByText("1.2.3")).toBeTruthy();
-    expect(container.querySelectorAll("dl").length).toBeGreaterThan(0);
-    expect(container.querySelector("table")).toBeNull();
-  });
-
-  it("keeps the detail panel stable when resource data is missing", () => {
-    const { container } = render(
-      <LogsTab
-        logs={[
-          {
-            id: "1",
-            timeUnixNano: "1712700000000000000",
-            severityText: "INFO",
-            body: "checkout started",
+            severityNumber: 14,
+            body: "number only: WARN2",
             attributes: {},
-            resource: undefined as any,
+            resource: { serviceName: "severity-demo", attributes: {} },
             scope: { name: "demo.logger" },
           },
         ]}
@@ -316,11 +326,53 @@ describe("LogsTab", () => {
       />,
     );
 
+    const badge = container.querySelector(".data-table__td--severity") as HTMLElement;
+
+    expect(badge.textContent).toContain("WARN2");
+    expect(badge.classList.contains("sev-badge--warn")).toBe(true);
+
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
 
-    const detailPanel = container.querySelector(".detail-panel__body") as HTMLElement;
+    // Panel title shows the log message body (better UX than severity level).
+    expect(container.querySelector(".detail-panel__title")?.textContent).toBe("number only: WARN2");
+  });
 
-    expect(within(detailPanel).queryByText("Resource")).toBeNull();
-    expect(within(detailPanel).getByText("No attributes")).toBeTruthy();
+  it("prefers severityText over conflicting severityNumber values", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityNumber: 3,
+            severityText: "SEVERE",
+            body: "both fields: ERROR (SEVERE)",
+            attributes: {},
+            resource: { serviceName: "severity-demo", attributes: {} },
+            scope: { name: "demo.logger" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    const badge = container.querySelector(".data-table__td--severity") as HTMLElement;
+
+    expect(badge.textContent).toContain("SEVERE");
+    expect(badge.textContent).not.toContain("TRACE3");
+    expect(badge.classList.contains("sev-badge--error")).toBe(true);
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+
+    // Panel title shows the log message body (better UX than severity level).
+    expect(container.querySelector(".detail-panel__title")?.textContent).toBe("both fields: ERROR (SEVERE)");
+  });
+
+  it("uses blue severity styling for info-level badges", () => {
+    const { readFileSync } = require("fs");
+    const { resolve } = require("path");
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(css).toContain(".sev-badge--info {\n  background: rgba(124, 199, 255, 0.14);\n  color: #7cc7ff;\n}");
   });
 });

@@ -55,6 +55,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [, forceRelativeTimeRefresh] = useState(0);
   const signalFilteredIssues = useMemo(
     () => filterValidationIssues(issues, { ...filters, signalType: "" }),
     [issues, filters],
@@ -106,6 +107,20 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     }
   }, [summary?.status]);
 
+  useEffect(() => {
+    const shouldRefreshTimestamps = isMeaningfulTimestamp(summary?.lastRunCompletedAt)
+      || isMeaningfulTimestamp(summary?.lastRunStartedAt);
+    if (!shouldRefreshTimestamps) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      forceRelativeTimeRefresh((tick) => tick + 1);
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [summary?.lastRunCompletedAt, summary?.lastRunStartedAt]);
+
   const selectedIssue = useMemo(
     () => filteredIssues.find((issue) => issue.key === selectedKey) ?? null,
     [filteredIssues, selectedKey],
@@ -146,7 +161,14 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
         <div className="findings-tab__header-meta">
           {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}
           {showResultState && completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
-          {completedAt ? <span className="findings-tab__header-timestamp">Validated {formatTimestamp(completedAt)}</span> : null}
+          {completedAt ? (
+            <span
+              className="findings-tab__header-timestamp"
+              title={new Date(completedAt).toLocaleString()}
+            >
+              Validated {formatTimestamp(completedAt)}
+            </span>
+          ) : null}
         </div>
         <div className="panel-toolbar__meta">
           <button
@@ -156,6 +178,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
               void triggerValidation();
             }}
             disabled={isRunning || isSubmitting || !summary?.enabled}
+            title={summary?.enabled === false ? "Validator is not available — weaver binary may be missing" : undefined}
           >
             {isRunning || isSubmitting ? "Running..." : actionLabel}
           </button>
@@ -163,7 +186,12 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
       </div>
 
       <div className="findings-tab__filters">
-        <select className="validation-panel__select" value={filters.severity} onChange={(event) => setFilters((current) => ({ ...current, severity: event.target.value }))}>
+        <select
+          aria-label="Filter by severity"
+          className="validation-panel__select"
+          value={filters.severity}
+          onChange={(event) => setFilters((current) => ({ ...current, severity: event.target.value }))}
+        >
           <option value="">All severities</option>
           <option value="violation">Violation</option>
           <option value="improvement">Improvement</option>
@@ -227,9 +255,9 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                   <div className="data-table__head findings-tab__head">
                     <span className="data-table__th">{activeSignalDefinition.issueLabel}</span>
                     <span className="data-table__th">Rule</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Violations">Viol.</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Improvements">Impr.</span>
-                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Information">Info</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Violations" style={{ textDecoration: "underline dotted", cursor: "help" }}>Viol.</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Improvements" style={{ textDecoration: "underline dotted", cursor: "help" }}>Impr.</span>
+                    <span className="data-table__th data-table__th--numeric findings-tab__th-count" title="Information" style={{ textDecoration: "underline dotted", cursor: "help" }}>Info</span>
                   </div>
                   <div className="findings-tab__list">
                     {filteredIssues.map((issue) => {
@@ -253,9 +281,9 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                             <div className="findings-tab__item-grid">
                               <span className="findings-tab__item-title explorer-row__primary">{row.issue}</span>
                               <span className="findings-tab__item-rule explorer-row__secondary">{row.rule}</span>
-                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.violation)}</span>
-                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.improvement)}</span>
-                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.information)}</span>
+                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.violation === 0 ? "is-zero" : ""}`}>{totals.violation > 0 ? totals.violation : ""}</span>
+                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.improvement === 0 ? "is-zero" : ""}`}>{totals.improvement > 0 ? totals.improvement : ""}</span>
+                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.information === 0 ? "is-zero" : ""}`}>{totals.information > 0 ? totals.information : ""}</span>
                             </div>
                           </button>
                         </article>
@@ -394,27 +422,6 @@ function issueSeverityTotals(issue: ValidationIssue, variants: IssueVariant[]): 
   };
 }
 
-function formatSignalTabAriaLabel(label: string, count: number): string {
-  if (count <= 0) {
-    return label;
-  }
-  return `${label}, ${count} ${count === 1 ? "issue" : "issues"}`;
-}
-
-function formatIssueCountCell(count: number): string {
-  return count > 0 ? String(count) : "";
-}
-
-function formatIssueRowAriaLabel(issue: string, rule: string, totals: SeverityTotals): string {
-  const countSummary = [
-    totals.violation > 0 ? `${totals.violation} ${totals.violation === 1 ? "violation" : "violations"}` : null,
-    totals.improvement > 0 ? `${totals.improvement} ${totals.improvement === 1 ? "improvement" : "improvements"}` : null,
-    totals.information > 0 ? `${totals.information} ${totals.information === 1 ? "information finding" : "information findings"}` : null,
-  ].filter(Boolean).join(", ");
-
-  return [issue, rule === "—" ? null : rule, countSummary || null].filter(Boolean).join(", ");
-}
-
 function sampleLogBodies(findings: ValidationFinding[]): string[] {
   const samples = new Set<string>();
   for (const finding of findings) {
@@ -496,14 +503,36 @@ function formatLogSample(value: string | undefined): string {
   return match?.[1] ?? trimmed;
 }
 
+/** Formats a timestamp as a relative string (e.g. "2 minutes ago") with full ISO in title. */
 function formatTimestamp(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  const diffMs = Date.now() - parsed.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  if (diffSeconds < 60) return "just now";
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} ${diffMinutes === 1 ? "minute" : "minutes"} ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  return parsed.toLocaleDateString();
 }
 
 function isMeaningfulTimestamp(value: string | undefined): value is string {
   return Boolean(value && value !== "0001-01-01T00:00:00Z");
+}
+
+function formatSignalTabAriaLabel(label: string, count: number): string {
+  if (count <= 0) return label;
+  return `${label}, ${count} ${count === 1 ? "issue" : "issues"}`;
+}
+
+function formatIssueRowAriaLabel(issue: string, rule: string, totals: SeverityTotals): string {
+  const parts: string[] = [issue, rule];
+  const counts: string[] = [];
+  if (totals.violation > 0) counts.push(`${totals.violation} ${totals.violation === 1 ? "violation" : "violations"}`);
+  if (totals.improvement > 0) counts.push(`${totals.improvement} ${totals.improvement === 1 ? "improvement" : "improvements"}`);
+  if (totals.information > 0) counts.push(`${totals.information} information ${totals.information === 1 ? "finding" : "findings"}`);
+  return [...parts, ...counts].join(", ");
 }
 
 function IssueDetailPanel({ issue, onClose }: { issue: ValidationIssue; onClose: () => void }): React.ReactElement {

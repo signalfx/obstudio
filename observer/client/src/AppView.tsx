@@ -71,8 +71,12 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             </button>
             {/* Pending updates badge */}
             {paused && hasNewUpdates ? (
-              <button className="pending-badge" onClick={resume} title="Click to apply updates and resume">
-                new updates available
+              <button
+                className="pending-badge"
+                onClick={resume}
+                title="New updates available — click to resume live view"
+              >
+                updates available — resume
               </button>
             ) : null}
             {state.error !== null ? (
@@ -111,7 +115,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
               </div>
             ) : null}
             {state.stats.serviceNames?.length ? (
-              <div className="summary-card" title={state.stats.serviceNames.join(", ")}>
+              <div className="summary-card summary-card--wide" title={state.stats.serviceNames.join(", ")}>
                 <p className="summary-card__label">Services</p>
                 <p className="summary-card__value">{state.stats.serviceNames.length}</p>
                 <p className="summary-card__services">

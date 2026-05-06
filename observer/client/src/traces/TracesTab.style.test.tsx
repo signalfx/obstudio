@@ -295,7 +295,7 @@ describe("TracesTab row layout", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: 220px 240px 140px 96px 88px 56px 1fr;\n}");
-    expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 34px;\n}");
+    expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 38px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
     expect(css).toContain(".filter-builder {\n  position: relative;\n  display: flex;\n  flex: 0 1 auto;");
     expect(css).toContain("width: min(100%, 760px);");
