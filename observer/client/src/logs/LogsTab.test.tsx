@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LogsTab } from "./LogsTab";
 
@@ -254,5 +254,73 @@ describe("LogsTab", () => {
     expect(screen.queryByText("Validation")).toBeNull();
     expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
     expect(screen.getByLabelText("Filter field")).toBeTruthy();
+  });
+
+  it("renders semantic log detail lists and omits duplicate service resource attributes", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {
+              "demo.iteration": 8679,
+            },
+            resource: {
+              serviceName: "checkout",
+              attributes: {
+                "service.name": "checkout",
+                "deployment.environment.name": "prod",
+              },
+            },
+            scope: { name: "demo.logger", version: "1.2.3" },
+            traceId: "trace-1",
+            spanId: "span-1",
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+
+    const detailPanel = container.querySelector(".detail-panel__body") as HTMLElement;
+
+    expect(within(detailPanel).getByText("Service")).toBeTruthy();
+    expect(within(detailPanel).queryByText("service.name")).toBeNull();
+    expect(within(detailPanel).getByText("deployment.environment.name")).toBeTruthy();
+    expect(within(detailPanel).getByText("prod")).toBeTruthy();
+    expect(within(detailPanel).getByText("Version")).toBeTruthy();
+    expect(within(detailPanel).getByText("1.2.3")).toBeTruthy();
+    expect(container.querySelectorAll("dl").length).toBeGreaterThan(0);
+    expect(container.querySelector("table")).toBeNull();
+  });
+
+  it("keeps the detail panel stable when resource data is missing", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: {},
+            resource: undefined as any,
+            scope: { name: "demo.logger" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+
+    const detailPanel = container.querySelector(".detail-panel__body") as HTMLElement;
+
+    expect(within(detailPanel).queryByText("Resource")).toBeNull();
+    expect(within(detailPanel).getByText("No attributes")).toBeTruthy();
   });
 });
