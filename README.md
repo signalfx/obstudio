@@ -25,6 +25,7 @@ the skills and MCP config for your agent:
 
 ```bash
 unzip obstudio_*_darwin_arm64.zip
+cd obstudio_*_darwin_arm64
 ./obstudio install --target=<agent>
 ```
 

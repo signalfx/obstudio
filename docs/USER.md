@@ -18,15 +18,15 @@ curl -LO https://github.com/signalfx/obstudio/releases/latest/download/obstudio_
 unzip obstudio_linux_amd64.zip
 ```
 
-Install skills and configure the MCP server:
+After unzipping the release, change into the directory created by `unzip` and
+run the installer:
 
 ```bash
+cd obstudio_<version>_<os>_<arch>
 ./obstudio install --target=<agent>
 ```
 
-After unzipping the release, run `obstudio install` from that extracted
-directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`.
+This installs the included skills and configures the MCP server.
 
 ### Supported Targets
 

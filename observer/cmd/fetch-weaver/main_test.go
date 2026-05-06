@@ -175,3 +175,66 @@ func TestReleaseMatrixMatchesWeaverSupportedTargets(t *testing.T) {
 		t.Fatalf("release matrix %v does not match Weaver-supported targets %v", publishedKeys, supported)
 	}
 }
+
+func TestReleaseArchivesWrapContentsInDirectory(t *testing.T) {
+	t.Parallel()
+
+	type archiveConfig struct {
+		Formats         []string `yaml:"formats"`
+		NameTemplate    string   `yaml:"name_template"`
+		WrapInDirectory bool     `yaml:"wrap_in_directory"`
+	}
+	type goreleaserConfig struct {
+		Archives []archiveConfig `yaml:"archives"`
+	}
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("read goreleaser config: %v", err)
+	}
+
+	var config goreleaserConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal goreleaser config: %v", err)
+	}
+	if len(config.Archives) == 0 {
+		t.Fatal("expected at least one archive config")
+	}
+	for i, archive := range config.Archives {
+		if !archive.WrapInDirectory {
+			t.Fatalf("archive[%d] formats=%v name_template=%q must set wrap_in_directory: true", i, archive.Formats, archive.NameTemplate)
+		}
+	}
+}
+
+func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{name: "README", path: filepath.Join("..", "..", "..", "README.md")},
+		{name: "USER guide", path: filepath.Join("..", "..", "..", "docs", "USER.md")},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tc.path, err)
+			}
+
+			content := string(data)
+			if !strings.Contains(content, "cd obstudio_") {
+				t.Fatalf("%s should show changing into the extracted release directory before running the installer", tc.path)
+			}
+			if !strings.Contains(content, "./obstudio install --target=<agent>") {
+				t.Fatalf("%s should show the generic install command", tc.path)
+			}
+		})
+	}
+}
