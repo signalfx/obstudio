@@ -207,6 +207,20 @@ func TestReleaseArchivesWrapContentsInDirectory(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkspaceIsGitIgnored(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, ".release/") {
+		t.Fatal(".gitignore must ignore .release/ so release-prep does not leave the repository in a dirty state")
+	}
+}
+
 func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
 	t.Parallel()
 
