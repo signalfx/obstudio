@@ -142,6 +142,28 @@ it('integration: VSIX manifest version can be derived from release metadata', { 
 	}
 });
 
+it('integration: VSIX manifest version normalizes repo dev release tags', { timeout: 120_000 }, async () => {
+	const context: TestContext = {};
+
+	try {
+		const vsixFile = buildVsix({
+			...process.env,
+			OBSTUDIO_EXTENSION_VERSION: 'v0.0.6-dev',
+		});
+		context.vsixFile = vsixFile;
+
+		const packagedManifest = execSync(
+			`unzip -p "${vsixFile}" extension/package.json`,
+			{ stdio: 'pipe', encoding: 'utf-8' },
+		);
+		const packagedPackageJson = JSON.parse(packagedManifest) as { version: string };
+
+		assert.equal(packagedPackageJson.version, '0.0.6');
+	} finally {
+		cleanup(context);
+	}
+});
+
 it('integration: VSIX contains observer binary', { timeout: 120_000 }, async () => {
 	const context: TestContext = {};
 

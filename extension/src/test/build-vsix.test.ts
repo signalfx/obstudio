@@ -17,9 +17,11 @@ const {
 	}) => string | null;
 };
 
-test('normalizeReleaseVersion strips tag prefixes', () => {
+test('normalizeReleaseVersion strips tag prefixes and dev suffixes', () => {
 	assert.equal(normalizeReleaseVersion('v1.2.3'), '1.2.3');
 	assert.equal(normalizeReleaseVersion('refs/tags/v2.3.4'), '2.3.4');
+	assert.equal(normalizeReleaseVersion('v3.4.5-dev'), '3.4.5');
+	assert.equal(normalizeReleaseVersion('refs/tags/v4.5.6-dev'), '4.5.6');
 });
 
 test('normalizeReleaseVersion rejects invalid values', () => {
@@ -57,10 +59,29 @@ test('resolveReleaseVersion uses GitHub tag metadata when available', () => {
 	}), '4.5.6');
 });
 
+test('resolveReleaseVersion normalizes repo prerelease tags from GitHub metadata', () => {
+	assert.equal(resolveReleaseVersion({
+		env: {
+			GITHUB_REF_TYPE: 'tag',
+			GITHUB_REF_NAME: 'v4.5.6-dev',
+		},
+		getExactTag: () => {
+			throw new Error('git fallback should not be called');
+		},
+	}), '4.5.6');
+});
+
 test('resolveReleaseVersion falls back to the exact git tag', () => {
 	assert.equal(resolveReleaseVersion({
 		env: {},
 		getExactTag: () => 'v5.6.7',
+	}), '5.6.7');
+});
+
+test('resolveReleaseVersion normalizes repo prerelease tags from the exact git tag', () => {
+	assert.equal(resolveReleaseVersion({
+		env: {},
+		getExactTag: () => 'v5.6.7-dev',
 	}), '5.6.7');
 });
 

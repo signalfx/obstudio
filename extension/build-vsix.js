@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const MARKETPLACE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const DEV_TAG_VERSION_PATTERN = /^((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))-dev$/;
 
 function normalizeReleaseVersion(rawVersion) {
 	const trimmed = String(rawVersion ?? "").trim();
@@ -14,9 +15,13 @@ function normalizeReleaseVersion(rawVersion) {
 		? trimmed.slice("refs/tags/".length)
 		: trimmed;
 	const normalized = withoutRefPrefix.replace(/^v/i, "");
+	const devTagMatch = normalized.match(DEV_TAG_VERSION_PATTERN);
+	if (devTagMatch) {
+		return devTagMatch[1];
+	}
 	if (!MARKETPLACE_VERSION_PATTERN.test(normalized)) {
 		throw new Error(
-			`Release version "${trimmed}" must be a stable major.minor.patch version for VS Code Marketplace`
+			`Release version "${trimmed}" must resolve to a stable major.minor.patch version for VS Code Marketplace packaging`
 		);
 	}
 
