@@ -106,6 +106,8 @@ describe("FindingsTab", () => {
     // Signal tabs show issue counts
     expect(metricsTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
     expect(spansTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 1 issue");
+    expect(spansTab.getAttribute("aria-label")).toBe("Spans, 1 issue");
 
     const head = view.container.querySelector(".findings-tab__head");
     expect(head).toBeTruthy();
@@ -122,6 +124,7 @@ describe("FindingsTab", () => {
     expect(within(rowButton as HTMLElement).getByText("unit_mismatch +2 more")).toBeTruthy();
     const counts = Array.from((rowButton as HTMLElement).querySelectorAll(".findings-tab__item-count")).map((node) => node.textContent?.trim());
     expect(counts).toEqual(["1", "1", "1"]);
+    expect((rowButton as HTMLElement).getAttribute("aria-label")).toBe("http.server.duration, unit_mismatch +2 more, 1 violation, 1 improvement, 1 information finding");
     expect((rowButton as HTMLElement).querySelector(".findings-tab__item-title")?.classList.contains("explorer-row__primary")).toBe(true);
     expect((rowButton as HTMLElement).querySelector(".findings-tab__item-rule")?.classList.contains("explorer-row__secondary")).toBe(true);
     expect((rowButton as HTMLElement).querySelector(".findings-tab__item-rule")?.classList.contains("mono")).toBe(false);
@@ -255,14 +258,20 @@ describe("FindingsTab", () => {
     const metricsTab = within(tablist).getByRole("tab", { name: /^Metrics/ });
     const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
 
-    expect(metricsTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("0");
+    expect(metricsTab.querySelector(".findings-tab__signal-count")).toBeNull();
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics");
     expect(spansTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
+    expect(spansTab.getAttribute("aria-label")).toBe("Spans, 1 issue");
     expect(spansTab.getAttribute("aria-selected")).toBe("true");
     expect(view.queryByText("No metrics validation issues match the current filters.")).toBeNull();
 
     const master = view.container.querySelector(".findings-tab__master");
     expect(master?.classList.contains("findings-tab__master--span")).toBe(true);
-    expect(within(master as HTMLElement).getByText("POST /orders")).toBeTruthy();
+    const rowButton = within(master as HTMLElement).getByText("POST /orders").closest("button");
+    expect(rowButton).toBeTruthy();
+    const rowCounts = Array.from((rowButton as HTMLElement).querySelectorAll(".findings-tab__item-count")).map((node) => node.textContent?.trim());
+    expect(rowCounts).toEqual(["", "", "1"]);
+    expect((rowButton as HTMLElement).getAttribute("aria-label")).toBe("POST /orders, missing_http_method, 1 information finding");
   });
 
   it("auto-selects the first non-empty tab when results arrive before any explicit tab choice", () => {
@@ -320,7 +329,8 @@ describe("FindingsTab", () => {
     const tablist = view.getByRole("tablist", { name: "Validation signals" });
     const resourcesTab = within(tablist).getByRole("tab", { name: /^Resources/ });
 
-    expect(resourcesTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("0");
+    expect(resourcesTab.querySelector(".findings-tab__signal-count")).toBeNull();
+    expect(resourcesTab.getAttribute("aria-label")).toBe("Resources");
 
     fireEvent.click(resourcesTab);
 

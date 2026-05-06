@@ -22,7 +22,8 @@ After unzipping the release, change into the directory created by `unzip` and
 run the installer:
 
 ```bash
-./obstudio install --target=cursor
+cd obstudio_<version>_<os>_<arch>
+./obstudio install --target=<agent>
 ```
 
 This installs the included skills and configures the MCP server.
@@ -32,13 +33,14 @@ This installs the included skills and configures the MCP server.
 | Target | Skills directory | MCP config |
 |--------|-----------------|------------|
 | `cursor` | `~/.cursor/skills/obstudio/` | `~/.cursor/mcp.json` |
-| `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude/settings.json` |
+| `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude.json` |
 | `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
 
 The installer:
-1. Installs the included skills for your agent
-2. Sets up `obstudio` for local use
-3. Updates your agent's MCP config
+1. Extracts skills and references from the binary to the agent's skill directory
+2. Copies `obstudio` and the bundled `weaver` runtime alongside the skills (stable path for MCP)
+3. Creates top-level discoverable skill entries in the agent skills root
+4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
 
 Restart your agent to activate.
 
@@ -46,11 +48,15 @@ Restart your agent to activate.
 
 ```
 ~/.cursor/skills/obstudio/
-  obstudio
-  weaver
-  audit/SKILL.md
-  instrument/SKILL.md
-  references/
+  obstudio              # binary (MCP server, auto-started by Cursor)
+  weaver                # validator runtime used by the Validation tab and APIs
+  otel-audit/SKILL.md   # bundled /otel-audit skill file
+  otel-instrument/SKILL.md # bundled /otel-instrument skill file
+  references/           # language guides and reference material
+
+~/.cursor/skills/
+  otel-audit -> obstudio/otel-audit
+  otel-instrument -> obstudio/otel-instrument
 ```
 
 ## CLI Reference
@@ -59,6 +65,7 @@ Restart your agent to activate.
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
+| `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
 
@@ -85,6 +92,20 @@ For the complete experience (Web UI, OTLP receiver, HTTP MCP endpoint):
 ```bash
 obstudio
 ```
+
+To override the Observer UI, REST API, and MCP HTTP port explicitly:
+
+```bash
+obstudio --observer-http-port 41234
+```
+
+The OTLP receiver ports stay fixed at `4318` and `4317`, matching the VS Code
+extension.
+
+When a standalone Observer is already running, `obstudio install --target=<agent>`
+auto-detects its current HTTP MCP endpoint from local runtime state, including
+nondefault `--observer-http-port` values. Use `--shared-url` only when you want
+to point an agent at a different already-running Observer explicitly.
 
 | Service | URL |
 |---------|-----|
@@ -128,9 +149,7 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST` | `127.0.0.1` | Bind address for all servers |
-| `PORT` | `3000` | Web UI and MCP HTTP port |
-| `OTLP_HTTP_PORT` | `4318` | OTLP/HTTP receiver port |
-| `OTLP_GRPC_PORT` | `4317` | OTLP/gRPC receiver port |
+| `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
 
 ## Example Prompts
 

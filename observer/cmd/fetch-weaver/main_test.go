@@ -180,7 +180,9 @@ func TestReleaseArchivesWrapContentsInDirectory(t *testing.T) {
 	t.Parallel()
 
 	type archiveConfig struct {
-		WrapInDirectory bool `yaml:"wrap_in_directory"`
+		Formats         []string `yaml:"formats"`
+		NameTemplate    string   `yaml:"name_template"`
+		WrapInDirectory bool     `yaml:"wrap_in_directory"`
 	}
 	type goreleaserConfig struct {
 		Archives []archiveConfig `yaml:"archives"`
@@ -198,9 +200,41 @@ func TestReleaseArchivesWrapContentsInDirectory(t *testing.T) {
 	if len(config.Archives) == 0 {
 		t.Fatal("expected at least one archive config")
 	}
-	for _, archive := range config.Archives {
+	for i, archive := range config.Archives {
 		if !archive.WrapInDirectory {
-			t.Fatal("expected release archives to wrap contents in a top-level directory")
+			t.Fatalf("archive[%d] formats=%v name_template=%q must set wrap_in_directory: true", i, archive.Formats, archive.NameTemplate)
 		}
+	}
+}
+
+func TestInstallGuidesChangeIntoExtractedArchiveDirectory(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{name: "README", path: filepath.Join("..", "..", "..", "README.md")},
+		{name: "USER guide", path: filepath.Join("..", "..", "..", "docs", "USER.md")},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(tc.path)
+			if err != nil {
+				t.Fatalf("read %s: %v", tc.path, err)
+			}
+
+			content := string(data)
+			if !strings.Contains(content, "cd obstudio_") {
+				t.Fatalf("%s should show changing into the extracted release directory before running the installer", tc.path)
+			}
+			if !strings.Contains(content, "./obstudio install --target=<agent>") {
+				t.Fatalf("%s should show the generic install command", tc.path)
+			}
+		})
 	}
 }

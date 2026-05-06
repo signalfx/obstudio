@@ -129,41 +129,45 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "metrics"}
+            aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {state.stats?.metricNameCount ? <span className="tab-button__count">{state.stats.metricNameCount}</span> : null}
+            {state.stats?.metricNameCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.metricNameCount}</span> : null}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "traces"}
+            aria-label={formatTabAriaLabel("Traces", state.stats?.traceCount, "trace", "traces")}
             className={activeTab === "traces" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("traces")}
           >
             Traces
-            {state.stats?.traceCount ? <span className="tab-button__count">{state.stats.traceCount}</span> : null}
+            {state.stats?.traceCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.traceCount}</span> : null}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "logs"}
+            aria-label={formatTabAriaLabel("Logs", state.stats?.logCount, "log", "logs")}
             className={activeTab === "logs" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("logs")}
           >
             Logs
-            {state.stats?.logCount ? <span className="tab-button__count">{state.stats.logCount}</span> : null}
+            {state.stats?.logCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.logCount}</span> : null}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "validation"}
+            aria-label={formatTabAriaLabel("Validation", validationIssues.length, "issue", "issues")}
             className={activeTab === "validation" ? "tab-button is-active" : "tab-button"}
             onClick={() => switchTab("validation")}
           >
             Validation
-            {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn">{validationIssues.length}</span> : null}
+            {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn" aria-hidden="true">{validationIssues.length}</span> : null}
           </button>
         </div>
 
@@ -212,4 +216,11 @@ function initialTabFromLocation(): AppTab {
     default:
       return "metrics";
   }
+}
+
+function formatTabAriaLabel(label: string, count: number | undefined, singular: string, plural: string): string {
+  if (!count || count <= 0) {
+    return label;
+  }
+  return `${label}, ${count} ${count === 1 ? singular : plural}`;
 }

@@ -31,6 +31,9 @@ const (
 	defaultSharedObserverMCPURL  = defaultSharedObserverBaseURL + "/mcp"
 	defaultSharedObserverHealth  = defaultSharedObserverBaseURL + "/api/health"
 	sharedObserverHealthTimeout  = 750 * time.Millisecond
+
+	sharedObserverStateDirName  = ".obstudio"
+	sharedObserverStateFileName = "shared-observer.json"
 )
 
 type mcpConfigTarget struct {
@@ -53,6 +56,14 @@ type sharedObserverHealth struct {
 	APIVersion string            `json:"apiVersion"`
 	Endpoints  map[string]string `json:"endpoints"`
 	Kind       string            `json:"kind"`
+}
+
+type sharedObserverState struct {
+	BaseURL   string    `json:"baseUrl,omitempty"`
+	HealthURL string    `json:"healthUrl,omitempty"`
+	MCPURL    string    `json:"mcpUrl,omitempty"`
+	PID       int       `json:"pid,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt,omitempty"`
 }
 
 var targets = map[string]agentTarget{
@@ -115,7 +126,7 @@ func runInstall(target, sharedURL string) error {
 	resolvedSharedURL := sharedURL
 	autodetectedSharedURL := false
 	if resolvedSharedURL == "" {
-		if detectedURL, ok := detectSharedObserverURL(defaultSharedObserverHealth, http.DefaultClient); ok {
+		if detectedURL, ok := detectConfiguredSharedObserverURL(http.DefaultClient); ok {
 			resolvedSharedURL = detectedURL
 			autodetectedSharedURL = true
 		}
@@ -134,8 +145,11 @@ func runInstall(target, sharedURL string) error {
 
 	home := userHome()
 	destDir := t.skillsDir(home)
+	skillsRoot := filepath.Dir(destDir)
 
 	fmt.Printf("Installing obstudio to %s\n", destDir)
+
+	removeSkillSymlinks(skillsRoot, destDir)
 
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("failed to clean destination: %w", err)
@@ -150,6 +164,11 @@ func runInstall(target, sharedURL string) error {
 		return fmt.Errorf("failed to extract skills: %w", err)
 	}
 	fmt.Println("  Skills installed (includes references).")
+
+	if err := createSkillSymlinks(skillsRoot, destDir); err != nil {
+		return fmt.Errorf("failed to create skill symlinks: %w", err)
+	}
+	fmt.Println("  Skill symlinks created for agent discovery.")
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -196,6 +215,13 @@ func runInstall(target, sharedURL string) error {
 	fmt.Printf("\nDone. Start the shared obstudio server before using %s:\n", target)
 	fmt.Println("  obstudio")
 	return nil
+}
+
+func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {
+	if detectedURL, ok := detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client); ok {
+		return detectedURL, true
+	}
+	return detectSharedObserverURL(defaultSharedObserverHealth, client)
 }
 
 func ensureInstallWeaverRuntime(exePath, destDir string, requireLocalRuntime bool) (bool, string, error) {
@@ -294,6 +320,69 @@ func detectSharedObserverURL(healthURL string, client *http.Client) (string, boo
 		return mcpURL, true
 	}
 	return defaultSharedObserverMCPURL, true
+}
+
+func detectSharedObserverURLFromStateFile(statePath string, client *http.Client) (string, bool) {
+	state, err := readSharedObserverState(statePath)
+	if err != nil {
+		return "", false
+	}
+
+	healthURL := strings.TrimSpace(state.HealthURL)
+	if healthURL == "" {
+		return "", false
+	}
+	return detectSharedObserverURL(healthURL, client)
+}
+
+func sharedObserverStatePath() string {
+	return filepath.Join(userHome(), sharedObserverStateDirName, sharedObserverStateFileName)
+}
+
+func readSharedObserverState(statePath string) (sharedObserverState, error) {
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		return sharedObserverState{}, err
+	}
+
+	var state sharedObserverState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return sharedObserverState{}, fmt.Errorf("parse shared observer state %q: %w", statePath, err)
+	}
+	return state, nil
+}
+
+func writeSharedObserverState(statePath string, state sharedObserverState) error {
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		return fmt.Errorf("create parent directory for %q: %w", statePath, err)
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal shared observer state %q: %w", statePath, err)
+	}
+	if err := os.WriteFile(statePath, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write shared observer state %q: %w", statePath, err)
+	}
+	return nil
+}
+
+func clearSharedObserverStateIfOwned(statePath string, state sharedObserverState) error {
+	current, err := readSharedObserverState(statePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	if current.PID != state.PID || current.MCPURL != state.MCPURL || current.HealthURL != state.HealthURL {
+		return nil
+	}
+	if err := os.Remove(statePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
@@ -552,6 +641,60 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("write %q: %w", dst, err)
 	}
 	return nil
+}
+
+// createSkillSymlinks creates relative symlinks in skillsRoot for each skill
+// directory (contains SKILL.md) found inside obstudioDir. This makes skills
+// discoverable by agents that expect each skill as a direct child of the
+// skills root. References are inlined per-skill at build time, so no
+// top-level references symlink is needed.
+func createSkillSymlinks(skillsRoot, obstudioDir string) error {
+	obstudioName := filepath.Base(obstudioDir)
+	entries, err := os.ReadDir(obstudioDir)
+	if err != nil {
+		return fmt.Errorf("read obstudio dir: %w", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if _, statErr := os.Stat(filepath.Join(obstudioDir, name, "SKILL.md")); statErr != nil {
+			continue
+		}
+		link := filepath.Join(skillsRoot, name)
+		target := filepath.Join(obstudioName, name)
+		_ = os.Remove(link)
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("symlink %s -> %s: %w", link, target, err)
+		}
+	}
+	return nil
+}
+
+// removeSkillSymlinks removes symlinks in skillsRoot whose targets point into
+// obstudioDir. Other entries are left untouched.
+func removeSkillSymlinks(skillsRoot, obstudioDir string) {
+	obstudioName := filepath.Base(obstudioDir)
+	prefix := obstudioName + string(filepath.Separator)
+
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		link := filepath.Join(skillsRoot, e.Name())
+		dest, err := os.Readlink(link)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(dest, prefix) || dest == obstudioName {
+			_ = os.Remove(link)
+		}
+	}
 }
 
 func userHome() string {

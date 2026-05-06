@@ -178,12 +178,16 @@ describe("AppView validation tab", () => {
 
     expect(metricsTab.textContent).toContain("Metrics");
     expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metric names");
     expect(tracesTab.textContent).toContain("Traces");
     expect(tracesTab.querySelector(".tab-button__count")?.textContent).toBe("2");
+    expect(tracesTab.getAttribute("aria-label")).toBe("Traces, 2 traces");
     expect(logsTab.textContent).toContain("Logs");
     expect(logsTab.querySelector(".tab-button__count")?.textContent).toBe("5");
+    expect(logsTab.getAttribute("aria-label")).toBe("Logs, 5 logs");
     expect(validationTab.textContent).toContain("Validation");
     expect(validationTab.querySelector(".tab-button__count")?.textContent).toBe("1");
+    expect(validationTab.getAttribute("aria-label")).toBe("Validation, 1 issue");
     expect(container.querySelector(".tab-button__glyph")).toBeNull();
   });
 

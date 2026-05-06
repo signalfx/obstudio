@@ -11,6 +11,14 @@ interface LogsTabProps {
 }
 
 type DetailTab = "overview" | "json";
+interface LogDetailItem {
+  key: string;
+  label: string;
+  value: React.ReactNode;
+  copyText?: string;
+  monospace?: boolean;
+}
+
 const LOG_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "payments" },
   {
@@ -283,75 +291,67 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                   {selectedLog.traceId ? (
                     <div className="log-detail__section">
                       <h4 className="log-detail__heading">Trace Correlation</h4>
-                      <div className="span-details__detail-row">
-                        <span className="span-details__detail-label">Trace ID</span>
-                        <span className="span-details__detail-value">
-                          <span title={selectedLog.traceId}>{selectedLog.traceId}</span>
-                          <CopyTextButton text={selectedLog.traceId} label="Trace ID" />
-                        </span>
-                      </div>
-                      {selectedLog.spanId ? (
-                        <div className="span-details__detail-row">
-                          <span className="span-details__detail-label">Span ID</span>
-                          <span className="span-details__detail-value">
-                            <span title={selectedLog.spanId}>{selectedLog.spanId}</span>
-                            <CopyTextButton text={selectedLog.spanId} label="Span ID" />
-                          </span>
-                        </div>
-                      ) : null}
+                      <LogDetailList
+                        items={[
+                          {
+                            key: "trace-id",
+                            label: "Trace ID",
+                            value: <span title={selectedLog.traceId}>{selectedLog.traceId}</span>,
+                            copyText: selectedLog.traceId,
+                            monospace: true,
+                          },
+                          ...(selectedLog.spanId ? [{
+                            key: "span-id",
+                            label: "Span ID",
+                            value: <span title={selectedLog.spanId}>{selectedLog.spanId}</span>,
+                            copyText: selectedLog.spanId,
+                            monospace: true,
+                          }] : []),
+                        ]}
+                      />
                     </div>
                   ) : null}
 
-                  {selectedLog.resource ? (
+                  {selectedLog.resource?.serviceName || resourceAttributeEntries(selectedLog.resource).length > 0 ? (
                     <div className="log-detail__section">
                       <h4 className="log-detail__heading">Resource</h4>
-                      {selectedLog.resource.serviceName ? (
-                        <div className="span-details__detail-row">
-                          <span className="span-details__detail-label">Service</span>
-                          <span className="span-details__detail-value">{selectedLog.resource.serviceName}</span>
-                        </div>
-                      ) : null}
-                      {Object.keys(selectedLog.resource?.attributes ?? {}).length > 0 ? (
-                        <table className="log-detail__attrs">
-                          <tbody>
-                            {Object.entries(selectedLog.resource?.attributes ?? {}).map(([k, v]) => (
-                              <tr key={k}>
-                                <td className="log-detail__attr-key">{k}</td>
-                                <td className="log-detail__attr-val">{String(v)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ) : null}
+                      <LogDetailList
+                        items={selectedLog.resource?.serviceName ? [{
+                          key: "service",
+                          label: "Service",
+                          value: selectedLog.resource.serviceName,
+                        }] : []}
+                      />
+                      <LogAttributeList entries={resourceAttributeEntries(selectedLog.resource)} />
                     </div>
                   ) : null}
 
                   {selectedLog.scope?.name ? (
                     <div className="log-detail__section">
                       <h4 className="log-detail__heading">Scope</h4>
-                      <div className="span-details__detail-row">
-                        <span className="span-details__detail-label">Name</span>
-                        <span className="span-details__detail-value">
-                          {selectedLog.scope.name}
-                          {selectedLog.scope.version ? ` v${selectedLog.scope.version}` : ""}
-                        </span>
-                      </div>
+                      <LogDetailList
+                        items={[
+                          {
+                            key: "scope-name",
+                            label: "Name",
+                            value: selectedLog.scope.name,
+                            monospace: true,
+                          },
+                          ...(selectedLog.scope.version ? [{
+                            key: "scope-version",
+                            label: "Version",
+                            value: selectedLog.scope.version,
+                            monospace: true,
+                          }] : []),
+                        ]}
+                      />
                     </div>
                   ) : null}
 
                   <div className="log-detail__section">
                     <h4 className="log-detail__heading">Attributes</h4>
                     {Object.keys(selectedLog.attributes ?? {}).length > 0 ? (
-                      <table className="log-detail__attrs">
-                        <tbody>
-                          {Object.entries(selectedLog.attributes ?? {}).map(([k, v]) => (
-                            <tr key={k}>
-                              <td className="log-detail__attr-key">{k}</td>
-                              <td className="log-detail__attr-val">{String(v)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <LogAttributeList entries={attributeEntries(selectedLog.attributes)} />
                     ) : (
                       <p className="log-detail__empty">No attributes</p>
                     )}
@@ -377,4 +377,55 @@ function formatTimestamp(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return "--";
   return d.toISOString().slice(11, 23);
+}
+
+function LogDetailList({ items }: { items: LogDetailItem[] }): React.ReactElement | null {
+  if (items.length === 0) return null;
+  return (
+    <dl className="log-detail__detail-list">
+      {items.map((item) => (
+        <div key={item.key} className="log-detail__detail-row">
+          <dt>{item.label}</dt>
+          <dd className={item.monospace ? "log-detail__detail-value log-detail__detail-value--mono" : "log-detail__detail-value"}>
+            {item.value}
+            {item.copyText ? <CopyTextButton text={item.copyText} label={item.label} /> : null}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function LogAttributeList({ entries }: { entries: Array<[string, string]> }): React.ReactElement | null {
+  if (entries.length === 0) return null;
+  return (
+    <dl className="log-detail__attrs">
+      {entries.map(([key, value]) => (
+        <div key={key} className="log-detail__attr-row">
+          <dt className="log-detail__attr-key">{key}</dt>
+          <dd className="log-detail__attr-val">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function resourceAttributeEntries(resource: LogRecord["resource"] | null | undefined): Array<[string, string]> {
+  return attributeEntries(resource?.attributes).filter(([key]) => !(key === "service.name" && resource?.serviceName));
+}
+
+function attributeEntries(attributes: Record<string, unknown> | null | undefined): Array<[string, string]> {
+  return Object.entries(attributes ?? {}).map(([key, value]) => [key, formatDetailValue(value)]);
+}
+
+function formatDetailValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null || value === undefined) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
