@@ -401,20 +401,22 @@ func metricGroupFilterFromRequest(r *http.Request) store.MetricGroupFilter {
 func logRecordFilterFromRequest(r *http.Request) store.LogRecordFilter {
 	q := r.URL.Query()
 	filter := store.LogRecordFilter{
-		ServiceName:         queryEqString(q, "serviceName", "serviceName"),
-		ExcludeServiceName:  queryNeqString(q, "serviceName"),
-		SeverityText:        queryEqString(q, "severityText", "severityText"),
-		ExcludeSeverityText: queryNeqString(q, "severityText"),
-		BodyContains:        firstNonEmpty(q.Get("filter[bodyContains][eq]"), q.Get("filter[bodyContains]"), q.Get("body")),
-		ExcludeBodyContains: q.Get("filter[bodyContains][neq]"),
-		TraceID:             queryEqString(q, "traceId", "traceId"),
-		ExcludeTraceID:      queryNeqString(q, "traceId"),
-		SpanID:              queryEqString(q, "spanId", "spanId"),
-		ExcludeSpanID:       queryNeqString(q, "spanId"),
-		ScopeName:           queryEqString(q, "scopeName", "scopeName"),
-		ExcludeScopeName:    queryNeqString(q, "scopeName"),
-		Query:               q.Get("query"),
-		Limit:               queryInt(r, "limit", 100),
+		ServiceName:            queryEqString(q, "serviceName", "serviceName"),
+		ExcludeServiceName:     queryNeqString(q, "serviceName"),
+		SeverityDisplay:        queryEqString(q, "severityDisplay", "severityDisplay"),
+		ExcludeSeverityDisplay: queryNeqString(q, "severityDisplay"),
+		SeverityText:           queryEqString(q, "severityText", "severityText"),
+		ExcludeSeverityText:    queryNeqString(q, "severityText"),
+		BodyContains:           firstNonEmpty(q.Get("filter[bodyContains][eq]"), q.Get("filter[bodyContains]"), q.Get("body")),
+		ExcludeBodyContains:    q.Get("filter[bodyContains][neq]"),
+		TraceID:                queryEqString(q, "traceId", "traceId"),
+		ExcludeTraceID:         queryNeqString(q, "traceId"),
+		SpanID:                 queryEqString(q, "spanId", "spanId"),
+		ExcludeSpanID:          queryNeqString(q, "spanId"),
+		ScopeName:              queryEqString(q, "scopeName", "scopeName"),
+		ExcludeScopeName:       queryNeqString(q, "scopeName"),
+		Query:                  q.Get("query"),
+		Limit:                  queryInt(r, "limit", 100),
 	}
 	if n, ok := queryOptionalIntValues(q.Get("filter[severityNumber][eq]"), q.Get("filter[severityNumber]")); ok {
 		severity := int32(n)

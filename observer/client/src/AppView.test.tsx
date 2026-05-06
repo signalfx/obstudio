@@ -3,12 +3,27 @@
 import React from "react";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MetricGroup, ValidationFinding, ValidationSummary } from "./api/types";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
+
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 36,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        key: index,
+        start: index * 36,
+        end: (index + 1) * 36,
+        size: 36,
+      })),
+    measureElement: () => undefined,
+  }),
+}));
 
 function makeFinding(overrides: Partial<ValidationFinding>): ValidationFinding {
   return {
@@ -91,8 +106,72 @@ function makeMetric(name: string): MetricGroup {
   };
 }
 
+function makeTraceSummary(): TraceSummary {
+  return {
+    traceId: "trace-1",
+    rootSpanName: "GET /orders",
+    serviceName: "checkout",
+    spanCount: 1,
+    durationMs: 12.3,
+    status: "ok",
+  };
+}
+
+function makeTraceDetail(): TraceDetail {
+  return {
+    traceId: "trace-1",
+    rootSpanName: "GET /orders",
+    serviceName: "checkout",
+    spanCount: 1,
+    durationMs: 12.3,
+    status: "ok",
+    spans: [
+      {
+        traceId: "trace-1",
+        spanId: "span-1",
+        name: "GET /orders",
+        kind: "SERVER",
+        startTimeUnixNano: "2026-04-09T00:00:00Z",
+        endTimeUnixNano: "2026-04-09T00:00:00.012Z",
+        durationMs: 12.3,
+        status: { code: "OK", message: "" },
+        attributes: {},
+        events: [],
+        links: [],
+        resource: { serviceName: "checkout", attributes: {} },
+        scope: { name: "otel", version: "1.0.0" },
+      },
+    ],
+  };
+}
+
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    value: 400,
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    value: 1200,
+  });
+  HTMLElement.prototype.getBoundingClientRect = () =>
+    ({
+      width: 1200,
+      height: 400,
+      top: 0,
+      left: 0,
+      right: 1200,
+      bottom: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+});
+
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
   window.history.replaceState({}, "", "/");
 });
 
@@ -206,5 +285,34 @@ describe("AppView validation tab", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(css).toContain(".title-bar__meta {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}");
+  });
+
+  it("closes keyboard help without clearing the selected trace", async () => {
+    window.history.replaceState({}, "", "/?tab=traces");
+    const telemetry = makeTelemetryHandle([]);
+    telemetry.state.traces = [makeTraceSummary()];
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => makeTraceDetail(),
+    }));
+
+    const { container } = render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /get \/orders/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    expect(screen.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeTruthy();
+
+    act(() => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+    expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
   });
 });

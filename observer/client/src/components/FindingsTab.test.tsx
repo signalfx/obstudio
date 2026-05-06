@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ValidationFinding, ValidationSummary } from "../api/types";
 import { buildValidationIssues } from "../validation/utils";
 import { FindingsTab } from "./FindingsTab";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 function makeFinding(overrides: Partial<ValidationFinding>): ValidationFinding {
@@ -149,6 +150,31 @@ describe("FindingsTab", () => {
 
     expect(view.queryByText(/Validated /)).toBeNull();
     expect(view.getByText("Validation has not been run yet. Run validation to analyze the current telemetry snapshot.")).toBeTruthy();
+  });
+
+  it("refreshes relative validation timestamps as time passes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-09T00:01:45Z"));
+
+    const summary: ValidationSummary = {
+      ...makeSummary(),
+      lastRunCompletedAt: "2026-04-09T00:01:30Z",
+    };
+
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([makeFinding({})])}
+        summary={summary}
+      />,
+    );
+
+    expect(view.getByText("Validated just now")).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(45_000);
+    });
+
+    expect(view.getByText("Validated 1 minute ago")).toBeTruthy();
   });
 
   it("switches tabs and uses signal-specific fields for spans, logs, and resources", () => {

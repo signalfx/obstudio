@@ -138,26 +138,28 @@ type LogRecord struct {
 // LogRecordFilter narrows log queries using explicit fields, optional time
 // bounds, and a legacy free-text substring query over the summary columns.
 type LogRecordFilter struct {
-	ServiceName           string
-	ExcludeServiceName    string
-	SeverityNumber        *int32
-	ExcludeSeverityNumber *int32
-	SeverityText          string
-	ExcludeSeverityText   string
-	BodyContains          string
-	ExcludeBodyContains   string
-	TraceID               string
-	ExcludeTraceID        string
-	SpanID                string
-	ExcludeSpanID         string
-	ScopeName             string
-	ExcludeScopeName      string
-	TimeAfter             *time.Time
-	TimeBefore            *time.Time
-	TimeFrom              *time.Time
-	TimeTo                *time.Time
-	Query                 string
-	Limit                 int
+	ServiceName            string
+	ExcludeServiceName     string
+	SeverityDisplay        string
+	ExcludeSeverityDisplay string
+	SeverityNumber         *int32
+	ExcludeSeverityNumber  *int32
+	SeverityText           string
+	ExcludeSeverityText    string
+	BodyContains           string
+	ExcludeBodyContains    string
+	TraceID                string
+	ExcludeTraceID         string
+	SpanID                 string
+	ExcludeSpanID          string
+	ScopeName              string
+	ExcludeScopeName       string
+	TimeAfter              *time.Time
+	TimeBefore             *time.Time
+	TimeFrom               *time.Time
+	TimeTo                 *time.Time
+	Query                  string
+	Limit                  int
 }
 
 // TraceSummary represents a summary of a single trace.
@@ -918,6 +920,8 @@ func (s *Store) QueryLogRecordFieldValues(field, prefix string, filter LogRecord
 		switch field {
 		case "serviceName":
 			return record.Resource.ServiceName
+		case "severityDisplay":
+			return displayLogSeverity(record)
 		case "scopeName":
 			return record.Scope.Name
 		default:
@@ -1456,6 +1460,13 @@ func matchesLogRecordFilter(record LogRecord, filter LogRecordFilter) bool {
 	if filter.ExcludeServiceName != "" && strings.EqualFold(record.Resource.ServiceName, filter.ExcludeServiceName) {
 		return false
 	}
+	displaySeverity := displayLogSeverity(record)
+	if filter.SeverityDisplay != "" && !strings.EqualFold(displaySeverity, filter.SeverityDisplay) {
+		return false
+	}
+	if filter.ExcludeSeverityDisplay != "" && strings.EqualFold(displaySeverity, filter.ExcludeSeverityDisplay) {
+		return false
+	}
 	if filter.SeverityNumber != nil && record.SeverityNumber != *filter.SeverityNumber {
 		return false
 	}
@@ -1506,6 +1517,7 @@ func matchesLogRecordFilter(record LogRecord, filter LogRecordFilter) bool {
 	}
 	if filter.Query != "" {
 		haystack := strings.ToLower(strings.Join([]string{
+			displaySeverity,
 			record.SeverityText,
 			record.Body,
 			record.Resource.ServiceName,
@@ -1585,6 +1597,9 @@ func clearLogRecordFieldFilter(filter LogRecordFilter, field string) LogRecordFi
 	case "serviceName":
 		filter.ServiceName = ""
 		filter.ExcludeServiceName = ""
+	case "severityDisplay":
+		filter.SeverityDisplay = ""
+		filter.ExcludeSeverityDisplay = ""
 	case "severityNumber":
 		filter.SeverityNumber = nil
 		filter.ExcludeSeverityNumber = nil
@@ -1605,6 +1620,68 @@ func clearLogRecordFieldFilter(filter LogRecordFilter, field string) LogRecordFi
 		filter.ExcludeScopeName = ""
 	}
 	return filter
+}
+
+func displayLogSeverity(record LogRecord) string {
+	if text := strings.TrimSpace(record.SeverityText); text != "" {
+		return text
+	}
+	return logSeverityNumberLabel(record.SeverityNumber)
+}
+
+func logSeverityNumberLabel(severityNumber int32) string {
+	switch severityNumber {
+	case 1:
+		return "TRACE"
+	case 2:
+		return "TRACE2"
+	case 3:
+		return "TRACE3"
+	case 4:
+		return "TRACE4"
+	case 5:
+		return "DEBUG"
+	case 6:
+		return "DEBUG2"
+	case 7:
+		return "DEBUG3"
+	case 8:
+		return "DEBUG4"
+	case 9:
+		return "INFO"
+	case 10:
+		return "INFO2"
+	case 11:
+		return "INFO3"
+	case 12:
+		return "INFO4"
+	case 13:
+		return "WARN"
+	case 14:
+		return "WARN2"
+	case 15:
+		return "WARN3"
+	case 16:
+		return "WARN4"
+	case 17:
+		return "ERROR"
+	case 18:
+		return "ERROR2"
+	case 19:
+		return "ERROR3"
+	case 20:
+		return "ERROR4"
+	case 21:
+		return "FATAL"
+	case 22:
+		return "FATAL2"
+	case 23:
+		return "FATAL3"
+	case 24:
+		return "FATAL4"
+	default:
+		return ""
+	}
 }
 
 func collectSuggestionValues[T any](limit int, prefix string, values []T, project func(T) string) []string {

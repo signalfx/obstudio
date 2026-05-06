@@ -1703,6 +1703,32 @@ func TestQueryLogRecordsFiltered_FilterByQueryAndSummaryFields(t *testing.T) {
 	}
 }
 
+func TestQueryLogRecordsFiltered_FilterByDisplayedSeverity(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	log1 := newTestLog("warn from number", now)
+	log1.SeverityText = ""
+	log1.SeverityNumber = 14
+
+	log2 := newTestLog("error from text", now.Add(100*time.Millisecond))
+	log2.SeverityText = "SEVERE"
+	log2.SeverityNumber = 3
+
+	s.AddLogsForConnection("conn-1", []LogRecord{log1, log2})
+
+	results := s.QueryLogRecordsFiltered(LogRecordFilter{
+		SeverityDisplay: "warn2",
+		Limit:           10,
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 displayed-severity result, got %d", len(results))
+	}
+	if results[0].Body != "warn from number" {
+		t.Fatalf("expected warn from number, got %s", results[0].Body)
+	}
+}
+
 func TestQueryLogRecordsFiltered_EmptyReturnsEmptySlice(t *testing.T) {
 	s := New()
 	results := s.QueryLogRecordsFiltered(LogRecordFilter{Limit: 10})
@@ -1719,24 +1745,31 @@ func TestQueryLogRecordFieldValues(t *testing.T) {
 	now := time.Now()
 	s.AddLogsForConnection("", []LogRecord{
 		{
-			ID:        "1",
-			Timestamp: now,
-			Body:      "checkout started",
-			Resource:  Resource{ServiceName: "checkout", Attributes: map[string]any{}},
-			Scope:     Scope{Name: "checkout.logger"},
+			ID:             "1",
+			Timestamp:      now,
+			SeverityNumber: 14,
+			Body:           "checkout started",
+			Resource:       Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:          Scope{Name: "checkout.logger"},
 		},
 		{
-			ID:        "2",
-			Timestamp: now.Add(time.Second),
-			Body:      "payment failed",
-			Resource:  Resource{ServiceName: "payments", Attributes: map[string]any{}},
-			Scope:     Scope{Name: "payments.logger"},
+			ID:           "2",
+			Timestamp:    now.Add(time.Second),
+			SeverityText: "SEVERE",
+			Body:         "payment failed",
+			Resource:     Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:        Scope{Name: "payments.logger"},
 		},
 	})
 
 	values := s.QueryLogRecordFieldValues("scopeName", "pay", LogRecordFilter{}, 10)
 	if len(values) != 1 || values[0] != "payments.logger" {
 		t.Fatalf("expected [payments.logger], got %v", values)
+	}
+
+	displayValues := s.QueryLogRecordFieldValues("severityDisplay", "war", LogRecordFilter{}, 10)
+	if len(displayValues) != 1 || displayValues[0] != "WARN2" {
+		t.Fatalf("expected [WARN2], got %v", displayValues)
 	}
 }
 

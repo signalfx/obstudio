@@ -1613,6 +1613,52 @@ func TestQueryLogsWithNegatedServerSideFilters(t *testing.T) {
 	}
 }
 
+func TestQueryLogsWithDisplayedSeverityFilter(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+
+	log1 := store.LogRecord{
+		Timestamp:      now,
+		Body:           "warn from number",
+		SeverityNumber: 14,
+		Resource:       store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+		Scope:          store.Scope{Name: "test-scope"},
+		Attributes:     map[string]any{},
+	}
+	log2 := store.LogRecord{
+		Timestamp:      now.Add(100 * time.Millisecond),
+		Body:           "error from text",
+		SeverityNumber: 3,
+		SeverityText:   "SEVERE",
+		Resource:       store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
+		Scope:          store.Scope{Name: "test-scope"},
+		Attributes:     map[string]any{},
+	}
+	s.AddLogsForConnection("", []store.LogRecord{log1, log2})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	query := url.Values{
+		"filter[severityDisplay]": {"WARN2"},
+	}
+	resp := mustGet(t, server.URL+"/api/query/logs?"+query.Encode())
+	defer resp.Body.Close()
+
+	var logs []store.LogRecord
+	if err := json.NewDecoder(resp.Body).Decode(&logs); err != nil {
+		t.Fatalf("decode logs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 displayed-severity log, got %d", len(logs))
+	}
+	if logs[0].Body != "warn from number" {
+		t.Fatalf("expected warn from number, got %s", logs[0].Body)
+	}
+}
+
 func TestQueryLogFilterValues(t *testing.T) {
 	s := store.New()
 	now := time.Now()
@@ -1648,6 +1694,46 @@ func TestQueryLogFilterValues(t *testing.T) {
 	}
 	if len(values) != 1 || values[0] != "payments.logger" {
 		t.Fatalf("expected [payments.logger], got %v", values)
+	}
+}
+
+func TestQueryLogFilterValuesForDisplayedSeverity(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+	s.AddLogsForConnection("", []store.LogRecord{
+		{
+			Timestamp:      now,
+			Body:           "warn from number",
+			SeverityNumber: 14,
+			Resource:       store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+			Scope:          store.Scope{Name: "checkout.logger"},
+			Attributes:     map[string]any{},
+		},
+		{
+			Timestamp:      now.Add(time.Second),
+			Body:           "error from text",
+			SeverityText:   "SEVERE",
+			SeverityNumber: 3,
+			Resource:       store.Resource{ServiceName: "payments", Attributes: map[string]any{}},
+			Scope:          store.Scope{Name: "payments.logger"},
+			Attributes:     map[string]any{},
+		},
+	})
+
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/query/logs/filter-values?field=severityDisplay&prefix=war")
+	defer resp.Body.Close()
+
+	var values []string
+	if err := json.NewDecoder(resp.Body).Decode(&values); err != nil {
+		t.Fatalf("decode values: %v", err)
+	}
+	if len(values) != 1 || values[0] != "WARN2" {
+		t.Fatalf("expected [WARN2], got %v", values)
 	}
 }
 

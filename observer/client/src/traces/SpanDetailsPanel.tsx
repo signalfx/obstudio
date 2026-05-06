@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { Span, ValidationFinding } from "../api/types";
 import { CopyTextButton } from "../layout";
+import { KVTable } from "../components/KVTable";
 
 interface SpanDetailsPanelProps {
   span: Span;
@@ -9,9 +10,16 @@ interface SpanDetailsPanelProps {
 
 type TabId = "info" | "attributes" | "events" | "links";
 
+function nanoToMs(ts: string): number {
+  if (/^\d+$/.test(ts)) {
+    return Number(BigInt(ts) / BigInt(1_000_000));
+  }
+  return new Date(ts).getTime();
+}
+
 function relativeTime(eventNano: string, spanStartNano: string): string {
-  const eventMs = new Date(eventNano).getTime();
-  const spanMs = new Date(spanStartNano).getTime();
+  const eventMs = nanoToMs(eventNano);
+  const spanMs = nanoToMs(spanStartNano);
   const diff = eventMs - spanMs;
   if (isNaN(diff)) return "";
   if (diff < 1) return "+0ms";
@@ -87,67 +95,17 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
                   ))}
                 </div>
               ) : null}
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Kind</span>
-                <span className="span-details__detail-value">{span.kind}</span>
-              </div>
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Status</span>
-                <span className="span-details__detail-value">
-                  {span.status.code}
-                  {span.status.message ? `: ${span.status.message}` : ""}
-                </span>
-              </div>
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Trace ID</span>
-                <span className="span-details__detail-value">
-                  <span title={span.traceId}>{span.traceId}</span>
-                  <CopyTextButton text={span.traceId} label="Trace ID" />
-                </span>
-              </div>
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Span ID</span>
-                <span className="span-details__detail-value">
-                  <span title={span.spanId}>{span.spanId}</span>
-                  <CopyTextButton text={span.spanId} label="Span ID" />
-                </span>
-              </div>
-              {span.parentSpanId ? (
-                <div className="span-details__detail-row">
-                  <span className="span-details__detail-label">Parent</span>
-                  <span className="span-details__detail-value">
-                    <span title={span.parentSpanId}>{span.parentSpanId}</span>
-                    <CopyTextButton text={span.parentSpanId} label="Parent span ID" />
-                  </span>
-                </div>
-              ) : null}
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Start</span>
-                <span className="span-details__detail-value">
-                  {formatNanoTimestamp(span.startTimeUnixNano)}
-                </span>
-              </div>
-              <div className="span-details__detail-row">
-                <span className="span-details__detail-label">Duration</span>
-                <span className="span-details__detail-value">
-                  {formatDuration(span.durationMs)}
-                </span>
-              </div>
-              {span.resource?.serviceName ? (
-                <div className="span-details__detail-row">
-                  <span className="span-details__detail-label">Service</span>
-                  <span className="span-details__detail-value">{span.resource.serviceName}</span>
-                </div>
-              ) : null}
-              {span.scope?.name ? (
-                <div className="span-details__detail-row">
-                  <span className="span-details__detail-label">Scope</span>
-                  <span className="span-details__detail-value">
-                    {span.scope.name}
-                    {span.scope.version ? ` v${span.scope.version}` : ""}
-                  </span>
-                </div>
-              ) : null}
+              <KVTable rows={[
+                { key: "Kind", value: span.kind },
+                { key: "Status", value: <span style={{ color: span.status.code === "ERROR" ? "var(--red, #f48771)" : span.status.code === "OK" ? "var(--green, #7ec699)" : "var(--orange)" }}>{span.status.code}{span.status.message ? `: ${span.status.message}` : ""}</span> },
+                { key: "Trace ID", value: <span title={span.traceId}>{span.traceId}</span>, action: <CopyTextButton text={span.traceId} label="Trace ID" /> },
+                { key: "Span ID", value: <span title={span.spanId}>{span.spanId}</span>, action: <CopyTextButton text={span.spanId} label="Span ID" /> },
+                ...(span.parentSpanId ? [{ key: "Parent", value: <span title={span.parentSpanId}>{span.parentSpanId}</span>, action: <CopyTextButton text={span.parentSpanId} label="Parent span ID" /> }] : []),
+                { key: "Start", value: formatNanoTimestamp(span.startTimeUnixNano) },
+                { key: "Duration", value: formatDuration(span.durationMs) },
+                ...(span.resource?.serviceName ? [{ key: "Service", value: span.resource.serviceName }] : []),
+                ...(span.scope?.name ? [{ key: "Scope", value: `${span.scope.name}${span.scope.version ? ` v${span.scope.version}` : ""}` }] : []),
+              ]} />
             </div>
           </div>
         ) : null}
@@ -166,12 +124,9 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
                 />
               ) : null}
               {attrCount > 0 ? (
-                filteredAttributes.length > 0 ? filteredAttributes.map(([k, v]) => (
-                  <div key={k} className="span-details__attr-row">
-                    <span className="span-details__attr-key">{k}</span>
-                    <span className="span-details__attr-value">{String(v)}</span>
-                  </div>
-                )) : <p className="span-details__empty">No attributes match the current filter</p>
+                filteredAttributes.length > 0 ? (
+                  <KVTable rows={filteredAttributes.map(([k, v]) => ({ key: k, value: formatAttrValue(v) }))} />
+                ) : <p className="span-details__empty">No attributes match the current filter</p>
               ) : (
                 <p className="span-details__empty">No attributes</p>
               )}
@@ -191,12 +146,7 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
                     </span>
                     {Object.keys(e.attributes ?? {}).length > 0 ? (
                       <div className="span-details__event-attrs">
-                        {Object.entries(e.attributes ?? {}).map(([k, v]) => (
-                          <div key={k} className="span-details__attr-row">
-                            <span className="span-details__attr-key">{k}</span>
-                            <span className="span-details__attr-value">{String(v)}</span>
-                          </div>
-                        ))}
+                        <KVTable rows={Object.entries(e.attributes ?? {}).map(([k, v]) => ({ key: k, value: formatAttrValue(v) }))} />
                       </div>
                     ) : null}
                   </div>
@@ -213,23 +163,12 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
             <div className="span-details__section-body">
               {linkCount > 0 ? (
                 (span.links ?? []).map((link, i) => (
-                  <div key={link.traceId + '-' + link.spanId} className="span-details__link">
-                    <span className="span-details__link-label">
-                      Trace: {link.traceId.slice(0, 16)}
-                    </span>
-                    <span className="span-details__link-label">
-                      Span: {link.spanId}
-                    </span>
-                    {Object.keys(link.attributes ?? {}).length > 0 ? (
-                      <div className="span-details__event-attrs">
-                        {Object.entries(link.attributes ?? {}).map(([k, v]) => (
-                          <div key={k} className="span-details__attr-row">
-                            <span className="span-details__attr-key">{k}</span>
-                            <span className="span-details__attr-value">{String(v)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
+                  <div key={link.traceId + '-' + link.spanId + '-' + i} className="span-details__link">
+                    <KVTable rows={[
+                      { key: "Trace ID", value: link.traceId },
+                      { key: "Span ID", value: link.spanId },
+                      ...Object.entries(link.attributes ?? {}).map(([k, v]) => ({ key: k, value: formatAttrValue(v) })),
+                    ]} />
                   </div>
                 ))
               ) : (
@@ -266,4 +205,11 @@ function attributeMatchesFilter(key: string, value: unknown, filter: string): bo
 
 function normalizeFilterText(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function formatAttrValue(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v);
 }
