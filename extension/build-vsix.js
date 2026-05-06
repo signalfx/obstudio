@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const MARKETPLACE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const DEV_TAG_VERSION_PATTERN = /^((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))-dev$/;
+const SUFFIXED_TAG_VERSION_PATTERN = /^((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))(?:$|[^\d].*)/;
 
 function normalizeReleaseVersion(rawVersion) {
 	const trimmed = String(rawVersion ?? "").trim();
@@ -15,9 +15,9 @@ function normalizeReleaseVersion(rawVersion) {
 		? trimmed.slice("refs/tags/".length)
 		: trimmed;
 	const normalized = withoutRefPrefix.replace(/^v/i, "");
-	const devTagMatch = normalized.match(DEV_TAG_VERSION_PATTERN);
-	if (devTagMatch) {
-		return devTagMatch[1];
+	const suffixedTagMatch = normalized.match(SUFFIXED_TAG_VERSION_PATTERN);
+	if (suffixedTagMatch) {
+		return suffixedTagMatch[1];
 	}
 	if (!MARKETPLACE_VERSION_PATTERN.test(normalized)) {
 		throw new Error(

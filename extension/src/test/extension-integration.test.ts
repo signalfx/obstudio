@@ -142,13 +142,13 @@ it('integration: VSIX manifest version can be derived from release metadata', { 
 	}
 });
 
-it('integration: VSIX manifest version normalizes repo dev release tags', { timeout: 120_000 }, async () => {
+it('integration: VSIX manifest version normalizes suffixed release tags', { timeout: 120_000 }, async () => {
 	const context: TestContext = {};
 
 	try {
 		const vsixFile = buildVsix({
 			...process.env,
-			OBSTUDIO_EXTENSION_VERSION: 'v0.0.6-dev',
+			OBSTUDIO_EXTENSION_VERSION: 'v0.0.6-test',
 		});
 		context.vsixFile = vsixFile;
 
