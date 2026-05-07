@@ -70,6 +70,9 @@ type InternalRuntimeState = {
 	panelHtml?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
+	statusBarCommand?: string;
+	statusBarPresent: boolean;
+	statusBarText?: string;
 	validatorSummaryUrl?: string;
 };
 
@@ -156,9 +159,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		void restartObserver(context);
 	}));
 
-	// Status bar item reflects observer state and toggles the panel.
+	// Status bar item reflects observer state and opens the observer menu.
 	observerStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	observerStatusBarItem.command = 'observability-studio.openObserver';
 	updateStatusBar('starting');
 	observerStatusBarItem.show();
 	logObserverLifecycle('Status bar item created.');
@@ -339,6 +341,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			panelHtml: observerPanel?.webview.html,
 			panelVisible: observerPanel !== undefined,
 			sharedMode: observerUsesSharedServer,
+			statusBarCommand: getStatusBarCommandId(observerStatusBarItem),
+			statusBarPresent: observerStatusBarItem !== undefined,
+			statusBarText: observerStatusBarItem?.text,
 			validatorSummaryUrl: observerBaseUrl === undefined
 				? undefined
 				: buildObserverValidatorSummaryUrl(observerBaseUrl),
@@ -1280,4 +1285,12 @@ function updateStatusBar(state: 'starting' | 'running' | 'stopped' | 'error'): v
 	observerStatusBarItem.text = update.text;
 	observerStatusBarItem.tooltip = update.tooltip;
 	observerStatusBarItem.command = update.command;
+}
+
+function getStatusBarCommandId(item: vscode.StatusBarItem | undefined): string | undefined {
+	const command = item?.command;
+	if (typeof command === 'string') {
+		return command;
+	}
+	return command?.command;
 }

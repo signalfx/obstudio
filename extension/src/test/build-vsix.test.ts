@@ -4,10 +4,14 @@ import test from 'node:test';
 const {
 	buildVsceArgs,
 	normalizeReleaseVersion,
+	MARKETPLACE_BASE_CONTENT_URL,
+	MARKETPLACE_BASE_IMAGES_URL,
 	releaseTagFromEnvironment,
 	resolveReleaseVersion,
 } = require('../../build-vsix.js') as {
 	buildVsceArgs: (options?: { releaseVersion?: string | null; extraArgs?: string[] }) => string[];
+	MARKETPLACE_BASE_CONTENT_URL: string;
+	MARKETPLACE_BASE_IMAGES_URL: string;
 	normalizeReleaseVersion: (value: string) => string;
 	releaseTagFromEnvironment: (env?: NodeJS.ProcessEnv) => string;
 	resolveReleaseVersion: (options?: {
@@ -98,10 +102,27 @@ test('resolveReleaseVersion returns null when there is no release tag', () => {
 test('buildVsceArgs adds release-version flags only when needed', () => {
 	assert.deepEqual(
 		buildVsceArgs({ releaseVersion: '1.2.3', extraArgs: ['--no-dependencies'] }),
-		['package', '1.2.3', '--no-git-tag-version', '--no-update-package-json', '--no-dependencies'],
+		[
+			'package',
+			'1.2.3',
+			'--baseContentUrl',
+			MARKETPLACE_BASE_CONTENT_URL,
+			'--baseImagesUrl',
+			MARKETPLACE_BASE_IMAGES_URL,
+			'--no-git-tag-version',
+			'--no-update-package-json',
+			'--no-dependencies',
+		],
 	);
 	assert.deepEqual(
 		buildVsceArgs({ releaseVersion: null, extraArgs: ['--no-dependencies'] }),
-		['package', '--no-dependencies'],
+		[
+			'package',
+			'--baseContentUrl',
+			MARKETPLACE_BASE_CONTENT_URL,
+			'--baseImagesUrl',
+			MARKETPLACE_BASE_IMAGES_URL,
+			'--no-dependencies',
+		],
 	);
 });

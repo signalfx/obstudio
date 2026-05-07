@@ -14,6 +14,9 @@ type RuntimeState = {
 	panelHtml?: string;
 	panelVisible: boolean;
 	sharedMode: boolean;
+	statusBarCommand?: string;
+	statusBarPresent: boolean;
+	statusBarText?: string;
 	validatorSummaryUrl?: string;
 };
 
@@ -457,6 +460,27 @@ suite('VS Code Host', () => {
 			isRetryableSharedObserverStartupFailure('shared observer failed to start: connect ECONNREFUSED 127.0.0.1:36715'),
 			false,
 		);
+	});
+
+	test('fresh activation shows the Observer status bar item and wires it to the status menu', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+
+		const state = await waitFor(
+			() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+			(value) => Boolean(
+				value
+				&& value.statusBarPresent
+				&& value.statusBarCommand === 'observability-studio.statusMenu'
+				&& value.statusBarText?.includes('Observer'),
+			),
+			20_000,
+		);
+
+		assert.equal(state.statusBarPresent, true);
+		assert.equal(state.statusBarCommand, 'observability-studio.statusMenu');
+		assert.match(state.statusBarText ?? '', /Observer/);
 	});
 
 	test('managed observer uses the configured port across restarts', async function () {

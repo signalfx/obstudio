@@ -4,6 +4,10 @@ const path = require("node:path");
 
 const MARKETPLACE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SUFFIXED_TAG_VERSION_PATTERN = /^((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))(?:$|[^\d].*)/;
+const REPOSITORY_ROOT_URL = "https://github.com/signalfx/obstudio";
+const EXTENSION_SUBDIRECTORY = "extension";
+const MARKETPLACE_BASE_CONTENT_URL = `${REPOSITORY_ROOT_URL}/blob/main/${EXTENSION_SUBDIRECTORY}`;
+const MARKETPLACE_BASE_IMAGES_URL = `${REPOSITORY_ROOT_URL}/raw/main/${EXTENSION_SUBDIRECTORY}`;
 
 function normalizeReleaseVersion(rawVersion) {
 	const trimmed = String(rawVersion ?? "").trim();
@@ -81,9 +85,16 @@ function vsceCommand(extensionRoot = __dirname) {
 }
 
 function buildVsceArgs({ releaseVersion = null, extraArgs = [] } = {}) {
-	const args = ["package"];
+	const args = [
+		"package",
+		"--baseContentUrl",
+		MARKETPLACE_BASE_CONTENT_URL,
+		"--baseImagesUrl",
+		MARKETPLACE_BASE_IMAGES_URL,
+	];
 	if (releaseVersion) {
-		args.push(releaseVersion, "--no-git-tag-version", "--no-update-package-json");
+		args.splice(1, 0, releaseVersion);
+		args.push("--no-git-tag-version", "--no-update-package-json");
 	}
 	return args.concat(extraArgs);
 }
@@ -136,6 +147,8 @@ if (require.main === module) {
 module.exports = {
 	buildVsceArgs,
 	gitExactTag,
+	MARKETPLACE_BASE_CONTENT_URL,
+	MARKETPLACE_BASE_IMAGES_URL,
 	normalizeReleaseVersion,
 	packageVsix,
 	releaseTagFromEnvironment,

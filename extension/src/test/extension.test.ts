@@ -69,6 +69,40 @@ test('package metadata declares an extension icon that exists', () => {
 	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
 });
 
+test('package metadata declares marketplace categories, tags, and resource links', () => {
+	const packageJSONPath = path.join(extensionRoot, 'package.json');
+	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
+		bugs?: { url?: string };
+		categories?: string[];
+		galleryBanner?: { color?: string; theme?: string };
+		homepage?: string;
+		keywords?: string[];
+		repository?: { directory?: string; type?: string; url?: string };
+	};
+
+	assert.deepEqual(packageJSON.categories, ['Visualization', 'Debuggers', 'Testing', 'Other']);
+	assert.deepEqual(packageJSON.galleryBanner, { color: '#111827', theme: 'dark' });
+	assert.equal(packageJSON.homepage, 'https://github.com/signalfx/obstudio/tree/main/extension');
+	assert.equal(packageJSON.bugs?.url, 'https://github.com/signalfx/obstudio/issues');
+	assert.deepEqual(packageJSON.repository, {
+		directory: 'extension',
+		type: 'git',
+		url: 'git+https://github.com/signalfx/obstudio.git',
+	});
+	assert.ok(Array.isArray(packageJSON.keywords));
+	assert.ok(packageJSON.keywords!.includes('opentelemetry'));
+	assert.ok(packageJSON.keywords!.includes('observability'));
+	assert.ok(packageJSON.keywords!.includes('validation'));
+	assert.ok(packageJSON.keywords!.includes('debugger'));
+	assert.ok(packageJSON.keywords!.includes('debugging'));
+	assert.ok(packageJSON.keywords!.includes('devtools'));
+	assert.ok(packageJSON.keywords!.includes('developer-tools'));
+	assert.ok(packageJSON.keywords!.includes('code-analysis'));
+	assert.ok(packageJSON.keywords!.includes('mcp'));
+	assert.ok(packageJSON.keywords!.includes('codex'));
+	assert.ok(packageJSON.keywords!.length <= 30, `expected <= 30 keywords, got ${packageJSON.keywords!.length}`);
+});
+
 test('bundled observer icon uses a high-resolution PNG source', () => {
 	const iconPath = path.join(extensionRoot, 'assets', 'observer-icon.png');
 	const buffer = fs.readFileSync(iconPath);
