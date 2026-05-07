@@ -2,13 +2,19 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as http from 'node:http';
+import * as net from 'node:net';
+import * as os from 'node:os';
 import { execSync, execFileSync, spawn } from 'node:child_process';
 import test, { describe, it } from 'node:test';
+import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
+import { currentVsCodeTarget } from '../startup-errors';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const repoRoot = path.resolve(extensionRoot, '..');
+const nodeExecutable = process.execPath;
 
 interface TestContext {
+	ownsVsix?: boolean;
 	vsixFile?: string;
 }
 
@@ -26,6 +32,9 @@ type ExtensionPackage = {
 };
 
 function cleanup(context: TestContext): void {
+	if (context.ownsVsix === false) {
+		return;
+	}
 	if (context.vsixFile && fs.existsSync(context.vsixFile)) {
 		try {
 			fs.unlinkSync(context.vsixFile);
@@ -37,7 +46,11 @@ function cleanup(context: TestContext): void {
 
 /** Build VSIX once and return its path. Fails if @vscode/vsce is not installed locally. */
 function buildVsix(env: NodeJS.ProcessEnv = process.env): string {
-	const output = execSync('node build-vsix.js --no-dependencies', {
+	return buildVsixWithArgs([], env);
+}
+
+function buildVsixWithArgs(extraArgs: string[], env: NodeJS.ProcessEnv = process.env): string {
+	const output = execFileSync(nodeExecutable, ['build-vsix.js', '--no-dependencies', ...extraArgs], {
 		cwd: extensionRoot,
 		stdio: 'pipe',
 		timeout: 120_000,
@@ -50,13 +63,197 @@ function buildVsix(env: NodeJS.ProcessEnv = process.env): string {
 	return path.join(extensionRoot, vsixMatch[1]);
 }
 
+function resolvePrebuiltVsixFile(env: NodeJS.ProcessEnv = process.env): string | undefined {
+	const directPath = env.OBSTUDIO_PREBUILT_VSIX?.trim();
+	if (directPath) {
+		const candidate = path.isAbsolute(directPath)
+			? directPath
+			: path.resolve(extensionRoot, directPath);
+		assert.ok(fs.existsSync(candidate), `expected prebuilt VSIX at ${candidate}`);
+		return candidate;
+	}
+
+	const vsixDir = env.OBSTUDIO_PREBUILT_VSIX_DIR?.trim();
+	if (!vsixDir) {
+		return undefined;
+	}
+	const resolvedDir = path.isAbsolute(vsixDir)
+		? vsixDir
+		: path.resolve(extensionRoot, vsixDir);
+	assert.ok(fs.existsSync(resolvedDir), `expected prebuilt VSIX directory at ${resolvedDir}`);
+	const vsixFiles = fs.readdirSync(resolvedDir)
+		.filter((value) => value.endsWith('.vsix'))
+		.sort();
+	assert.equal(
+		vsixFiles.length,
+		1,
+		`expected exactly one prebuilt VSIX in ${resolvedDir}, found: ${vsixFiles.join(', ') || '(none)'}`,
+	);
+	return path.join(resolvedDir, vsixFiles[0]);
+}
+
+function currentVsixTarget(): string | undefined {
+	const target = currentVsCodeTarget();
+	return new Set(['darwin-arm64', 'darwin-x64', 'linux-x64', 'win32-x64']).has(target)
+		? target
+		: undefined;
+}
+
+function getPackagedObserverBinaryName(): string {
+	return process.platform === 'win32' ? 'obstudio.exe' : 'obstudio';
+}
+
+function getPackagedWeaverBinaryName(): string {
+	return process.platform === 'win32' ? 'weaver.exe' : 'weaver';
+}
+
+function findInstalledExtensionDir(extensionsDir: string): string {
+	const names = fs.readdirSync(extensionsDir);
+	const match = names.find((value) => value.startsWith('splunk.observability-studio-'));
+	assert.ok(match, `expected installed extension under ${extensionsDir}`);
+	return path.join(extensionsDir, match!);
+}
+
+async function getAvailablePort(): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (address === null || typeof address === 'string') {
+				server.close(() => reject(new Error('Unable to allocate a test port.')));
+				return;
+			}
+			server.close((error) => {
+				if (error) {
+					reject(error);
+					return;
+				}
+				resolve(address.port);
+			});
+		});
+	});
+}
+
+async function terminateChild(child: ReturnType<typeof spawn>): Promise<void> {
+	if (child.exitCode !== null || child.killed) {
+		return;
+	}
+	child.kill();
+	await Promise.race([
+		new Promise<void>((resolve) => child.once('exit', () => resolve())),
+		new Promise<void>((resolve) => {
+			setTimeout(() => {
+				if (child.exitCode === null && !child.killed) {
+					child.kill('SIGKILL');
+				}
+				resolve();
+			}, 2_000);
+		}),
+	]);
+}
+
+async function waitFor<T>(
+	load: () => Promise<T>,
+	ready: (value: T) => boolean,
+	timeoutMs: number,
+): Promise<T> {
+	const deadline = Date.now() + timeoutMs;
+	let lastValue: T | undefined;
+	let lastError: unknown;
+
+	while (Date.now() < deadline) {
+		try {
+			lastValue = await load();
+			if (ready(lastValue)) {
+				return lastValue;
+			}
+			lastError = undefined;
+		} catch (error) {
+			lastError = error;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 200));
+	}
+
+	if (lastValue !== undefined) {
+		return lastValue;
+	}
+	if (lastError instanceof Error) {
+		throw lastError;
+	}
+	throw new Error('Timed out waiting for condition');
+}
+
+async function waitForHttpOrExit(url: string, child: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	let lastError: unknown;
+
+	while (Date.now() < deadline) {
+		if (child.exitCode !== null || child.killed) {
+			throw new Error(`Observer exited before becoming ready at ${url}.`);
+		}
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				http.get(url, (response) => {
+					response.resume();
+					resolve();
+				}).on('error', reject);
+			});
+			return;
+		} catch (error) {
+			lastError = error;
+			await new Promise((resolve) => setTimeout(resolve, 200));
+		}
+	}
+
+	if (child.exitCode !== null || child.killed) {
+		throw new Error(`Observer exited before becoming ready at ${url}.`);
+	}
+	if (lastError instanceof Error) {
+		throw lastError;
+	}
+	throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function requestJson(url: string, options: {
+	body?: Buffer | string;
+	headers?: Record<string, string>;
+	method: 'DELETE' | 'GET' | 'POST';
+}): Promise<{ body: any; statusCode: number }> {
+	return new Promise((resolve, reject) => {
+		const request = http.request(url, {
+			method: options.method,
+			headers: options.headers,
+		}, (response) => {
+			let raw = '';
+			response.setEncoding('utf8');
+			response.on('data', (chunk) => {
+				raw += chunk;
+			});
+			response.on('end', () => {
+				const body = raw.length === 0 ? undefined : JSON.parse(raw);
+				resolve({
+					body,
+					statusCode: response.statusCode ?? 0,
+				});
+			});
+		});
+		request.on('error', reject);
+		if (options.body !== undefined) {
+			request.write(options.body);
+		}
+		request.end();
+	});
+}
+
 it('integration: buildObserverGo produces a binary', { timeout: 120_000 }, async (t) => {
 	const buildObserverPath = path.join(extensionRoot, 'build-observer.js');
 	assert.ok(fs.existsSync(buildObserverPath), 'build-observer.js should exist');
 
 	try {
 		// Run the build-observer.js script
-		execFileSync('node', [buildObserverPath], {
+		execFileSync(nodeExecutable, [buildObserverPath], {
 			cwd: extensionRoot,
 			stdio: 'pipe',
 			timeout: 120_000,
@@ -65,7 +262,7 @@ it('integration: buildObserverGo produces a binary', { timeout: 120_000 }, async
 		// Verify the binary was created
 		const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
 		assert.ok(fs.existsSync(binaryPath), `Binary should exist at ${binaryPath}`);
-		const weaverPath = path.join(extensionRoot, 'dist', 'observer', 'weaver');
+		const weaverPath = path.join(extensionRoot, 'dist', 'observer', getPackagedWeaverBinaryName());
 		assert.ok(fs.existsSync(weaverPath), `Weaver runtime should exist at ${weaverPath}`);
 
 		// Verify it's executable
@@ -182,8 +379,8 @@ it('integration: VSIX contains observer binary', { timeout: 120_000 }, async () 
 			'VSIX should contain extension/dist/observer/obstudio binary'
 		);
 		assert.ok(
-			unzipOutput.includes('extension/dist/observer/weaver'),
-			'VSIX should contain extension/dist/observer/weaver runtime'
+			unzipOutput.includes(`extension/dist/observer/${getPackagedWeaverBinaryName()}`),
+			`VSIX should contain extension/dist/observer/${getPackagedWeaverBinaryName()} runtime`
 		);
 	} finally {
 		cleanup(context);
@@ -332,7 +529,7 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 
 	const buildObserverPath = path.join(extensionRoot, 'build-observer.js');
 	try {
-		execFileSync('node', [buildObserverPath], {
+		execFileSync(nodeExecutable, [buildObserverPath], {
 			cwd: extensionRoot,
 			stdio: 'pipe',
 			timeout: 120_000,
@@ -405,7 +602,7 @@ it('integration: packaged binary enables validator when bundled weaver is presen
 	const binaryPath = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
 	const buildObserverPath = path.join(extensionRoot, 'build-observer.js');
 	try {
-		execFileSync('node', [buildObserverPath], {
+		execFileSync(nodeExecutable, [buildObserverPath], {
 			cwd: extensionRoot,
 			stdio: 'pipe',
 			timeout: 120_000,
@@ -471,5 +668,190 @@ it('integration: packaged binary enables validator when bundled weaver is presen
 		assert.notEqual(summary.message, 'Validator unavailable', 'packaged binary should not report validator unavailable');
 	} finally {
 		child.kill();
+	}
+});
+
+it('integration: installed VSIX smoke test starts the packaged observer and accepts OTLP traces', { timeout: 240_000 }, async (t) => {
+	const target = currentVsixTarget();
+	if (!target) {
+		t.skip(`unsupported platform for VSIX smoke test: ${process.platform}/${process.arch}`);
+		return;
+	}
+
+	const context: TestContext = {};
+	let tempRoot = '';
+	let child: ReturnType<typeof spawn> | undefined;
+
+	try {
+		const prebuiltVsixFile = resolvePrebuiltVsixFile();
+		if (prebuiltVsixFile) {
+			context.ownsVsix = false;
+			context.vsixFile = prebuiltVsixFile;
+		} else {
+			try {
+				const vsixFile = buildVsixWithArgs(['--target', target]);
+				context.ownsVsix = true;
+				context.vsixFile = vsixFile;
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				if (
+					errorMessage.includes('go: command not found') ||
+					errorMessage.includes("'go' is not recognized")
+				) {
+					t.skip('Go toolchain not installed');
+					return;
+				}
+				throw error;
+			}
+		}
+
+		tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-vsix-install-'));
+		const extensionsDir = path.join(tempRoot, 'extensions');
+		const userDataDir = path.join(tempRoot, 'user-data');
+		fs.mkdirSync(extensionsDir, { recursive: true });
+		fs.mkdirSync(userDataDir, { recursive: true });
+
+		const vscodeExecutablePath = await downloadAndUnzipVSCode();
+		const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
+		execFileSync(
+			cli,
+			[
+				...cliArgs,
+				'--install-extension',
+				context.vsixFile!,
+				'--extensions-dir',
+				extensionsDir,
+				'--user-data-dir',
+				userDataDir,
+				'--force',
+			],
+			{
+				encoding: 'utf-8',
+				shell: process.platform === 'win32',
+				stdio: 'pipe',
+				timeout: 120_000,
+			},
+		);
+
+		const installedExtensionDir = findInstalledExtensionDir(extensionsDir);
+		const binaryPath = path.join(
+			installedExtensionDir,
+			'dist',
+			'observer',
+			getPackagedObserverBinaryName(),
+		);
+		assert.ok(fs.existsSync(binaryPath), `installed observer binary should exist at ${binaryPath}`);
+		const weaverPath = path.join(
+			installedExtensionDir,
+			'dist',
+			'observer',
+			getPackagedWeaverBinaryName(),
+		);
+		assert.ok(fs.existsSync(weaverPath), `installed weaver runtime should exist at ${weaverPath}`);
+
+		const port = await getAvailablePort();
+		const otlpGrpcPort = await getAvailablePort();
+		const otlpHttpPort = await getAvailablePort();
+		const baseUrl = `http://127.0.0.1:${port}`;
+		const otlpHttpUrl = `http://127.0.0.1:${otlpHttpPort}`;
+
+		child = spawn(binaryPath, [], {
+			env: {
+				...process.env,
+				PORT: String(port),
+				OTLP_GRPC_PORT: String(otlpGrpcPort),
+				OTLP_HTTP_PORT: String(otlpHttpPort),
+			},
+			stdio: 'pipe',
+		});
+
+		await waitForHttpOrExit(`${baseUrl}/api/health`, child, 10_000);
+
+		const health = await requestJson(`${baseUrl}/api/health`, { method: 'GET' });
+		assert.equal(health.statusCode, 200);
+		assert.equal(health.body.kind, 'obstudio');
+		assert.equal(health.body.endpoints.otlpHttp, otlpHttpUrl);
+		assert.equal(health.body.endpoints.otlpGrpc, `127.0.0.1:${otlpGrpcPort}`);
+
+		const clearResponse = await requestJson(`${baseUrl}/api/data`, { method: 'DELETE' });
+		assert.equal(clearResponse.statusCode, 200);
+
+		const tracePayload = JSON.stringify({
+			resourceSpans: [
+				{
+					resource: {
+						attributes: [
+							{
+								key: 'service.name',
+								value: {
+									stringValue: 'vsix-smoke-test',
+								},
+							},
+						],
+					},
+					scopeSpans: [
+						{
+							scope: {
+								name: 'vsix-smoke',
+							},
+							spans: [
+								{
+									traceId: '0af7651916cd43dd8448eb211c80319c',
+									spanId: 'b7ad6b7169203331',
+									name: 'installed-vsix-span',
+									kind: 1,
+									startTimeUnixNano: 1000000000000000000,
+									endTimeUnixNano: 1000000001000000000,
+									status: {
+										code: 0,
+									},
+									attributes: [],
+								},
+							],
+						},
+					],
+				},
+			],
+		});
+		const ingest = await requestJson(`${otlpHttpUrl}/v1/traces`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: tracePayload,
+		});
+		assert.equal(ingest.statusCode, 200);
+
+		const stats = await waitFor(
+			async () => {
+				const response = await requestJson(`${baseUrl}/api/query/stats`, { method: 'GET' });
+				assert.equal(response.statusCode, 200);
+				return response.body as {
+					spanCount?: number;
+					traceCount?: number;
+				};
+			},
+			(value) => value.spanCount === 1 && value.traceCount === 1,
+			10_000,
+		);
+		assert.equal(stats.spanCount, 1);
+		assert.equal(stats.traceCount, 1);
+
+		const traces = await requestJson(`${baseUrl}/api/query/traces?limit=5`, { method: 'GET' });
+		assert.equal(traces.statusCode, 200);
+		assert.ok(Array.isArray(traces.body), 'trace query should return an array');
+		assert.ok(
+			traces.body.some((trace: { serviceName?: string; traceId?: string }) =>
+				trace.traceId === '0af7651916cd43dd8448eb211c80319c' || trace.serviceName === 'vsix-smoke-test'),
+			'installed VSIX should expose the ingested OTLP trace through the REST query API',
+		);
+	} finally {
+		if (child) {
+			await terminateChild(child);
+		}
+		if (tempRoot) {
+			fs.rmSync(tempRoot, { force: true, recursive: true });
+		}
+		cleanup(context);
 	}
 });

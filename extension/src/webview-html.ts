@@ -1,6 +1,8 @@
 // Pure functions for generating webview HTML and escaping content.
 // Extracted from extension.ts so they can be unit-tested without VS Code APIs.
 
+import { getObserverStartupHint } from './startup-errors';
+
 export function escapeHtml(text: string): string {
 	return text
 		.replace(/&/g, '&amp;')
@@ -77,8 +79,12 @@ export function getObserverLoadingWebviewHtml(): string {
 </html>`;
 }
 
-export function getObserverErrorWebviewHtml(errorMessage: string): string {
+export function getObserverErrorWebviewHtml(
+	errorMessage: string,
+	startupHint: string = getObserverStartupHint('generic'),
+): string {
 	const escaped = escapeHtml(errorMessage);
+	const hint = escapeHtml(startupHint);
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -129,9 +135,7 @@ export function getObserverErrorWebviewHtml(errorMessage: string): string {
 		<h2>Observer could not start</h2>
 		<div class="error-detail">${escaped}</div>
 		<p class="hint">
-			Use the Command Palette (Cmd+Shift+P) and run
-			<strong>Splunk Observability Studio: Restart Observer</strong> after
-			freeing the port.
+			${hint}
 		</p>
 	</div>
 </body>

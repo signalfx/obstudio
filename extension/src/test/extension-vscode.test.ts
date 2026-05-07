@@ -607,7 +607,10 @@ suite('VS Code Host', () => {
 					return typeof value.panelHtml === 'string'
 						&& value.panelHtml.includes('Observer could not start')
 						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
-						&& value.panelHtml.includes('observability-studio.managedObserverPort');
+						&& value.panelHtml.includes('not Splunk Observability Studio')
+						&& value.panelHtml.includes('observability-studio.managedObserverPort')
+						&& !value.panelHtml.includes('/api/health')
+						&& value.panelHtml.includes('after freeing the conflicting port');
 				},
 				20_000,
 			);
@@ -649,6 +652,42 @@ suite('VS Code Host', () => {
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
+	test('configured shared observer hides raw health probe details when it is unreachable', async function () {
+		this.timeout(45_000);
+
+		await getExtension();
+		const unreachablePort = await getAvailablePort();
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const sharedMcpUrl = `http://127.0.0.1:${unreachablePort}/mcp`;
+
+		try {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const failedState = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => {
+					if (!value || value.observerPort !== undefined || value.observerUrl !== undefined) {
+						return false;
+					}
+					return typeof value.panelHtml === 'string'
+						&& value.panelHtml.includes('Observer could not start')
+						&& value.panelHtml.includes(`http://127.0.0.1:${unreachablePort}`)
+						&& value.panelHtml.includes('could not reach the configured shared observer')
+						&& value.panelHtml.includes('observability-studio.sharedObserverUrl')
+						&& !value.panelHtml.includes('/api/health')
+						&& !value.panelHtml.includes('ECONNREFUSED');
+				},
+				30_000,
+			);
+			assert.equal(failedState.sharedMode, false);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 		}
 	});
 

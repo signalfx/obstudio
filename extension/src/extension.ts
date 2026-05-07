@@ -32,6 +32,16 @@ import {
 	getStatusBarUpdate,
 	getErrorMessage,
 } from './webview-html';
+import {
+	describeObserverStartupFailure,
+	formatObserverProbeMismatchMessage,
+	formatObserverProbeUnavailableMessage,
+	formatPortConflictMessage,
+	getObserverProbeMismatchHint,
+	getObserverProbeUnavailableHint,
+	getObserverStartupHint,
+	type ObserverPortRole,
+} from './startup-errors';
 
 // Extension-global observer state. The extension hosts one local observer process
 // and optionally one WebView panel that embeds its UI.
@@ -99,6 +109,16 @@ type ObserverProbeResult =
 	| { health: ObserverHealth; status: 'ready' }
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
+
+type PortReservation = {
+	port: number;
+	role: ObserverPortRole;
+	settingName?: string;
+};
+
+type StartupHintCarrier = {
+	startupHint?: string;
+};
 
 const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 	{
@@ -466,30 +486,48 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		}
 
 		if (existingObserver.status === 'mismatch') {
-			throw new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${existingObserver.reason}. ` +
+			appendObserverOutputLine(`Observer health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
+			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match observer health: ${existingObserver.reason}`);
+			const wrappedError = new Error(
+				`Cannot use ${managedObserverBaseUrl}: ${formatObserverProbeMismatchMessage(managedObserverBaseUrl, 'managed-reuse')} ` +
 				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
 				`or observability-studio.${sharedObserverUrlSetting}.`,
 			);
+			Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint('managed-reuse') });
+			throw wrappedError;
 		}
 
 		const backend = resolveBackend(context.extensionPath);
 		let observerPort: number;
 		try {
-			observerPort = await ensurePortAvailable(managedPort);
+			observerPort = await ensurePortAvailable({
+				port: managedPort,
+				role: 'Observer UI',
+				settingName: managedObserverPortSetting,
+			});
 		} catch (error) {
-			throw new Error(
+			const wrappedError = new Error(
 				`Cannot use ${managedObserverBaseUrl}: ${getErrorMessage(error)} ` +
 				`Configure observability-studio.${managedObserverPortSetting} or ` +
 				`observability-studio.${sharedObserverUrlSetting}.`,
 			);
+			if (typeof error === 'object' && error !== null && typeof (error as StartupHintCarrier).startupHint === 'string') {
+				Object.assign(wrappedError, { startupHint: (error as StartupHintCarrier).startupHint });
+			}
+			throw wrappedError;
 		}
 		logObserverLifecycle(`Run ${runId}: reserved UI port ${observerPort}.`);
 		assertObserverRunCurrent(observerLifecycleState, runId);
 
-		const otlpHttpPort = await ensurePortAvailable(observerOtlpHttpPort);
+		const otlpHttpPort = await ensurePortAvailable({
+			port: observerOtlpHttpPort,
+			role: 'OTLP/HTTP',
+		});
 		assertObserverRunCurrent(observerLifecycleState, runId);
-		const otlpGrpcPort = await ensurePortAvailable(observerOtlpGrpcPort);
+		const otlpGrpcPort = await ensurePortAvailable({
+			port: observerOtlpGrpcPort,
+			role: 'OTLP/gRPC',
+		});
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
@@ -499,20 +537,31 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
 
-		startedProcess = cp.spawn(backend.command, backend.args, {
-			cwd: backend.cwd,
-			env: {
-				...process.env,
-				...backend.env,
-				HOST: managedObserverHost,
-				OTLP_HOST: managedObserverHost,
-				OTLP_PORT: String(otlpHttpPort),
-				OTLP_HTTP_PORT: String(otlpHttpPort),
-				OTLP_GRPC_PORT: String(otlpGrpcPort),
-				PORT: String(observerPort),
-			},
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
+		try {
+			startedProcess = cp.spawn(backend.command, backend.args, {
+				cwd: backend.cwd,
+				env: {
+					...process.env,
+					...backend.env,
+					HOST: managedObserverHost,
+					OTLP_HOST: managedObserverHost,
+					OTLP_PORT: String(otlpHttpPort),
+					OTLP_HTTP_PORT: String(otlpHttpPort),
+					OTLP_GRPC_PORT: String(otlpGrpcPort),
+					PORT: String(observerPort),
+				},
+				stdio: ['ignore', 'pipe', 'pipe'],
+			});
+		} catch (error) {
+			const startupFailure = describeObserverStartupFailure(error as NodeJS.ErrnoException, {
+				arch: process.arch,
+				binaryPath: backend.command,
+				platform: process.platform,
+			});
+			const wrappedError = new Error(startupFailure.message);
+			Object.assign(wrappedError, { startupHint: startupFailure.hint });
+			throw wrappedError;
+		}
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: spawned observer PID ${startedProcess.pid ?? 'unknown'}.`);
 
@@ -540,16 +589,22 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		});
 
 		startedProcess.on('error', (error) => {
-			appendObserverOutputLine(`Failed to start observer: ${error.message}`);
-			logObserverLifecycle(`Run ${runId}: observer process error: ${error.message}`);
+			const startupFailure = describeObserverStartupFailure(error, {
+				arch: process.arch,
+				binaryPath: backend.command,
+				platform: process.platform,
+			});
+			const startupMessage = startupFailure.message;
+			appendObserverOutputLine(`Failed to start observer: ${startupMessage}`);
+			logObserverLifecycle(`Run ${runId}: observer process error: ${startupMessage}`);
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
-			if (failObserverStart(observerLifecycleState, runId, error.message)) {
+			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
 				observerBaseUrl = undefined;
 				observerUsesSharedServer = false;
 				syncObserverUi();
-				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${error.message}`);
+				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${startupMessage}`);
 			}
 		});
 
@@ -579,10 +634,17 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			observerProcess = undefined;
 		}
 		terminateObserverProcess(startedProcess, 'SIGTERM');
-		if (failObserverStart(observerLifecycleState, runId, getErrorMessage(error))) {
+		const startupMessage = getErrorMessage(error);
+		const startupHint = typeof error === 'object'
+			&& error !== null
+			&& 'startupHint' in error
+			&& typeof (error as { startupHint?: unknown }).startupHint === 'string'
+			? (error as { startupHint: string }).startupHint
+			: getObserverStartupHint('generic');
+		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint)) {
 			observerBaseUrl = undefined;
 			observerUsesSharedServer = false;
-			logObserverLifecycle(`Run ${runId}: startup failed: ${getErrorMessage(error)}`);
+			logObserverLifecycle(`Run ${runId}: startup failed: ${startupMessage}`);
 			syncObserverUi();
 		}
 		throw error;
@@ -733,7 +795,7 @@ function refreshObserverPanel(): void {
 		return;
 	}
 
-	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
+	const renderKey = `${observerLifecycleState.status}:${observerLifecycleState.port ?? 'none'}:${observerLifecycleState.startupError ?? 'none'}:${observerLifecycleState.startupHint ?? 'none'}:${observerBaseUrl ?? 'none'}:${observerUsesSharedServer ? 'shared' : 'local'}`;
 	if (renderKey !== lastObserverPanelRenderKey) {
 		logObserverLifecycle(`Rendering observer panel state ${renderKey}.`);
 		lastObserverPanelRenderKey = renderKey;
@@ -748,6 +810,7 @@ function refreshObserverPanel(): void {
 		case 'error':
 			observerPanel.webview.html = getObserverErrorWebviewHtml(
 				observerLifecycleState.startupError ?? 'Observer could not start.',
+				observerLifecycleState.startupHint ?? getObserverStartupHint('generic'),
 			);
 			return;
 		case 'starting':
@@ -763,29 +826,32 @@ function refreshObserverPanel(): void {
 // Port helpers
 // ---------------------------------------------------------------------------
 
-async function ensurePortAvailable(port: number): Promise<number> {
+async function ensurePortAvailable(reservation: PortReservation): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const server = net.createServer();
 		server.once('error', (error: NodeJS.ErrnoException) => {
 			if (error.code === 'EADDRINUSE') {
-				void identifyPortOwner(port).then((owner) => {
-					const detail = owner
-						? `Port ${port} is already in use by "${owner}".`
-						: `Port ${port} is already in use.`;
+				void identifyPortOwner(reservation.port).then((owner) => {
+					const detail = formatPortConflictMessage({
+						owner,
+						port: reservation.port,
+						role: reservation.role,
+						settingName: reservation.settingName,
+					});
 					logObserverLifecycle(detail);
-					reject(new Error(
-						`${detail} Stop the other process or run: kill $(lsof -ti :${port})`
-					));
+					const error = new Error(detail);
+					Object.assign(error, { startupHint: getObserverStartupHint('port-conflict') });
+					reject(error);
 				});
 				return;
 			}
-			logObserverLifecycle(`Port check failed for ${port}: ${error.message}`);
+			logObserverLifecycle(`Port check failed for ${reservation.role} port ${reservation.port}: ${error.message}`);
 			reject(error);
 		});
-		server.listen(port, '127.0.0.1', () => {
+		server.listen(reservation.port, '127.0.0.1', () => {
 			server.close((error) => {
 				if (error) { reject(error); return; }
-				resolve(port);
+				resolve(reservation.port);
 			});
 		});
 	});
@@ -822,8 +888,14 @@ async function waitForObserverReady(
 		switch (probe.status) {
 			case 'ready':
 				return;
-			case 'mismatch':
-				throw new Error(probe.reason);
+			case 'mismatch': {
+				appendObserverOutputLine(`Observer health probe mismatch at ${baseUrl}: ${probe.reason}`);
+				logObserverLifecycle(`Run ${runId}: observer health probe mismatch at ${baseUrl}: ${probe.reason}`);
+				const mismatchContext = observerUsesSharedServer ? 'shared-reuse' : 'startup-reuse';
+				const wrappedError = new Error(formatObserverProbeMismatchMessage(baseUrl, mismatchContext));
+				Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint(mismatchContext) });
+				throw wrappedError;
+			}
 			case 'unavailable':
 				lastError = probe.error;
 				if (!observerUsesSharedServer && observerProcess === undefined) {
@@ -834,9 +906,19 @@ async function waitForObserverReady(
 	}
 
 	if (lastError !== undefined) {
-		logObserverLifecycle(`Run ${runId}: readiness check timed out for ${baseUrl}: ${getErrorMessage(lastError)}`);
+		const rawProbeDetail = getErrorMessage(lastError);
+		appendObserverOutputLine(`Observer health probe unavailable at ${baseUrl}: ${rawProbeDetail}`);
+		logObserverLifecycle(`Run ${runId}: observer readiness failed for ${baseUrl}: ${rawProbeDetail}`);
+		const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
+		const wrappedError = new Error(formatObserverProbeUnavailableMessage(baseUrl, unavailableContext));
+		Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
+		throw wrappedError;
 	}
-	throw lastError ?? new Error(`Observer did not become ready in time at ${baseUrl}.`);
+	const unavailableContext = observerUsesSharedServer ? 'shared-reuse' : 'startup';
+	logObserverLifecycle(`Run ${runId}: observer readiness ended without a probe result at ${baseUrl}.`);
+	const wrappedError = new Error(formatObserverProbeUnavailableMessage(baseUrl, unavailableContext));
+	Object.assign(wrappedError, { startupHint: getObserverProbeUnavailableHint(unavailableContext) });
+	throw wrappedError;
 }
 
 async function probeObserver(

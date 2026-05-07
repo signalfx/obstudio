@@ -2,23 +2,44 @@ import * as assert from 'node:assert/strict';
 import test from 'node:test';
 
 const {
+	buildObserverEnvironment,
 	buildVsceArgs,
 	normalizeReleaseVersion,
 	MARKETPLACE_BASE_CONTENT_URL,
 	MARKETPLACE_BASE_IMAGES_URL,
+	parseVsceTarget,
 	releaseTagFromEnvironment,
 	resolveReleaseVersion,
+	resolveVsceTarget,
+	vsceExecOptions,
 } = require('../../build-vsix.js') as {
+	buildObserverEnvironment: (env?: NodeJS.ProcessEnv, target?: string | null) => NodeJS.ProcessEnv;
 	buildVsceArgs: (options?: { releaseVersion?: string | null; extraArgs?: string[] }) => string[];
 	MARKETPLACE_BASE_CONTENT_URL: string;
 	MARKETPLACE_BASE_IMAGES_URL: string;
 	normalizeReleaseVersion: (value: string) => string;
+	parseVsceTarget: (extraArgs?: string[]) => string | null;
 	releaseTagFromEnvironment: (env?: NodeJS.ProcessEnv) => string;
 	resolveReleaseVersion: (options?: {
 		env?: NodeJS.ProcessEnv;
 		repoRoot?: string;
 		getExactTag?: (repoRoot?: string) => string;
 	}) => string | null;
+	resolveVsceTarget: (target?: string | null) => null | {
+		binaryName: string;
+		goarch: string;
+		goos: string;
+	};
+	vsceExecOptions: (options?: {
+		cwd?: string;
+		env?: NodeJS.ProcessEnv;
+	}) => {
+		cwd?: string;
+		encoding: string;
+		env?: NodeJS.ProcessEnv;
+		shell: boolean;
+		stdio: [string, string, string];
+	};
 };
 
 test('normalizeReleaseVersion strips tag prefixes and extracts the stable core from suffixed tags', () => {
@@ -97,6 +118,51 @@ test('resolveReleaseVersion returns null when there is no release tag', () => {
 		env: {},
 		getExactTag: () => '',
 	}), null);
+});
+
+test('parseVsceTarget extracts the explicit target argument', () => {
+	assert.equal(parseVsceTarget(['--target', 'darwin-arm64', '--no-dependencies']), 'darwin-arm64');
+	assert.equal(parseVsceTarget(['--target=linux-x64']), 'linux-x64');
+	assert.equal(parseVsceTarget(['--no-dependencies']), null);
+});
+
+test('resolveVsceTarget returns the Go build mapping for supported targets', () => {
+	assert.deepEqual(resolveVsceTarget('darwin-arm64'), {
+		binaryName: 'obstudio',
+		goarch: 'arm64',
+		goos: 'darwin',
+	});
+	assert.deepEqual(resolveVsceTarget('win32-x64'), {
+		binaryName: 'obstudio.exe',
+		goarch: 'amd64',
+		goos: 'windows',
+	});
+});
+
+test('resolveVsceTarget rejects unsupported targets', () => {
+	assert.throws(() => resolveVsceTarget('linux-arm64'), /Unsupported VS Code target/);
+});
+
+test('buildObserverEnvironment exports the cross-compile target for prepublish builds', () => {
+	const env = buildObserverEnvironment({ PATH: '/usr/bin' }, 'darwin-x64');
+	assert.equal(env.OBSTUDIO_GOOS, 'darwin');
+	assert.equal(env.OBSTUDIO_GOARCH, 'amd64');
+	assert.equal(env.OBSTUDIO_OBSERVER_BINARY_NAME, 'obstudio');
+	assert.equal(env.OBSTUDIO_VSCODE_TARGET, 'darwin-x64');
+	assert.equal(env.PATH, '/usr/bin');
+});
+
+test('vsceExecOptions enables shell execution on Windows cmd shims only', () => {
+	const options = vsceExecOptions({
+		cwd: '/tmp/extension',
+		env: { PATH: '/usr/bin' },
+	});
+
+	assert.equal(options.cwd, '/tmp/extension');
+	assert.equal(options.env?.PATH, '/usr/bin');
+	assert.equal(options.encoding, 'utf-8');
+	assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe']);
+	assert.equal(options.shell, process.platform === 'win32');
 });
 
 test('buildVsceArgs adds release-version flags only when needed', () => {

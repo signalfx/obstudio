@@ -37,7 +37,7 @@ var supportedTargets = []target{
 	{goos: "darwin", goarch: "arm64", asset: "weaver-aarch64-apple-darwin.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
 	{goos: "darwin", goarch: "amd64", asset: "weaver-x86_64-apple-darwin.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
 	{goos: "linux", goarch: "amd64", asset: "weaver-x86_64-unknown-linux-gnu.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
-	{goos: "windows", goarch: "amd64", asset: "weaver-x86_64-pc-windows-msvc.zip", archiveBinaryName: "weaver.exe", bundledBinaryName: "weaver"},
+	{goos: "windows", goarch: "amd64", asset: "weaver-x86_64-pc-windows-msvc.zip", archiveBinaryName: "weaver.exe", bundledBinaryName: "weaver.exe"},
 }
 
 func main() {

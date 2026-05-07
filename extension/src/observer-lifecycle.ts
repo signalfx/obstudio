@@ -5,6 +5,7 @@ export interface ObserverLifecycleState {
 	currentRunId: number;
 	port: number | undefined;
 	startupError: string | undefined;
+	startupHint: string | undefined;
 	status: ObserverLifecycleStatus;
 }
 
@@ -21,6 +22,7 @@ export function createObserverLifecycleState(): ObserverLifecycleState {
 		currentRunId: 0,
 		port: undefined,
 		startupError: undefined,
+		startupHint: undefined,
 		status: 'stopped',
 	};
 }
@@ -32,6 +34,7 @@ export function beginObserverStart(state: ObserverLifecycleState): number {
 	state.currentRunId = runId;
 	state.port = undefined;
 	state.startupError = undefined;
+	state.startupHint = undefined;
 	state.status = 'starting';
 
 	return runId;
@@ -42,6 +45,7 @@ export function stopObserverRun(state: ObserverLifecycleState): void {
 	state.currentRunId += 1;
 	state.port = undefined;
 	state.startupError = undefined;
+	state.startupHint = undefined;
 	state.status = 'stopped';
 }
 
@@ -66,6 +70,7 @@ export function completeObserverStart(
 
 	state.port = port;
 	state.startupError = undefined;
+	state.startupHint = undefined;
 	state.status = 'running';
 
 	return true;
@@ -75,6 +80,7 @@ export function failObserverStart(
 	state: ObserverLifecycleState,
 	runId: number,
 	errorMessage: string,
+	startupHint?: string,
 ): boolean {
 	if (!isObserverRunCurrent(state, runId)) {
 		return false;
@@ -83,6 +89,7 @@ export function failObserverStart(
 	state.activeRunId = undefined;
 	state.port = undefined;
 	state.startupError = errorMessage;
+	state.startupHint = startupHint;
 	state.status = 'error';
 
 	return true;
@@ -96,6 +103,7 @@ export function finishObserverRun(state: ObserverLifecycleState, runId: number):
 	state.activeRunId = undefined;
 	state.port = undefined;
 	state.startupError = undefined;
+	state.startupHint = undefined;
 	state.status = 'stopped';
 
 	return true;
