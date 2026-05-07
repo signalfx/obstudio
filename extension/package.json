@@ -5,7 +5,12 @@
   "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code.",
   "version": "0.0.1",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
+  "bugs": {
+    "url": "https://github.com/signalfx/obstudio/issues"
+  },
   "repository": {
+    "directory": "extension",
     "type": "git",
     "url": "git+https://github.com/signalfx/obstudio.git"
   },
@@ -13,8 +18,36 @@
     "vscode": "^1.110.0"
   },
   "categories": [
+    "Visualization",
+    "Debuggers",
+    "Testing",
     "Other"
   ],
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "observability",
+    "telemetry",
+    "tracing",
+    "traces",
+    "metrics",
+    "logs",
+    "validation",
+    "debugger",
+    "debugging",
+    "devtools",
+    "developer-tools",
+    "code-analysis",
+    "mcp",
+    "codex",
+    "cursor",
+    "claude",
+    "splunk"
+  ],
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
   "activationEvents": [
     "onStartupFinished",
     "onWebviewPanel:observabilityStudioObserver"
