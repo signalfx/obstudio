@@ -7,6 +7,7 @@ import {
 	getObserverStoppedWebviewHtml,
 	getStatusBarUpdate,
 } from '../webview-html';
+import { getObserverStartupHint } from '../startup-errors';
 
 // --- getObserverWebviewHtml ---
 
@@ -63,6 +64,24 @@ describe('getObserverErrorWebviewHtml', () => {
 	it('includes restart hint', () => {
 		const html = getObserverErrorWebviewHtml('some error');
 		assert.ok(html.includes('Restart Observer'));
+		assert.ok(html.includes('output log'));
+	});
+
+	it('includes port-specific restart guidance for port conflicts', () => {
+		const html = getObserverErrorWebviewHtml(
+			'Observer UI port 3000 is already in use by "nginx (PID 42)".',
+			getObserverStartupHint('port-conflict'),
+		);
+		assert.ok(html.includes('freeing the conflicting port'));
+	});
+
+	it('includes platform guidance for ENOEXEC failures', () => {
+		const html = getObserverErrorWebviewHtml(
+			'binary cannot run on darwin-arm64 (spawn ENOEXEC).',
+			getObserverStartupHint('wrong-platform'),
+		);
+		assert.ok(html.includes('platform-specific extension package'));
+		assert.ok(html.includes('sharedObserverUrl'));
 	});
 
 	it('escapes HTML in error messages to prevent XSS', () => {

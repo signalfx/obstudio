@@ -62,13 +62,27 @@ export function observerPortFromUrl(baseUrl: string): number | undefined {
 }
 
 export function resolveBackend(extensionPath: string): ObserverBackend {
-	const binary = path.join(extensionPath, 'dist', 'observer', 'obstudio');
+	const candidates = process.platform === 'win32'
+		? ['obstudio.exe', 'obstudio']
+		: ['obstudio', 'obstudio.exe'];
 
-	if (fs.existsSync(binary)) {
+	for (const candidate of candidates) {
+		const binary = path.join(extensionPath, 'dist', 'observer', candidate);
+		if (!fs.existsSync(binary)) {
+			continue;
+		}
+
 		const env: Record<string, string> = {};
-		const weaver = path.join(path.dirname(binary), 'weaver');
-		if (fs.existsSync(weaver)) {
+		const weaverCandidates = path.extname(binary) === '.exe'
+			? ['weaver.exe', 'weaver']
+			: ['weaver', 'weaver.exe'];
+		for (const weaverCandidate of weaverCandidates) {
+			const weaver = path.join(path.dirname(binary), weaverCandidate);
+			if (!fs.existsSync(weaver)) {
+				continue;
+			}
 			env.WEAVER_PATH = weaver;
+			break;
 		}
 		return {
 			args: [],
@@ -80,6 +94,6 @@ export function resolveBackend(extensionPath: string): ObserverBackend {
 	}
 
 	throw new Error(
-		`observer binary not found at ${binary}. Run 'npm run compile' in the extension directory.`,
+		`observer binary not found in ${path.join(extensionPath, 'dist', 'observer')}. Run 'npm run compile' in the extension directory.`,
 	);
 }

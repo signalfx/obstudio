@@ -32,6 +32,35 @@ jobs:
       - name: Run tests
         run: make -C observer test
 
+  observer-smoke:
+    name: Observer smoke – ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: win32-x64
+          - os: macos-13
+            label: darwin-x64
+          - os: macos-14
+            label: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
+
+      - name: Run install smoke test
+        working-directory: observer
+        run: |
+          go run ./cmd/stage-skills
+          go test ./cmd/obstudio -run TestInstallSmokeInstallsBinaryAndAcceptsOTLP -count=1
+
   extension:
     name: Extension – test & package
     runs-on: ubuntu-latest
@@ -65,16 +94,90 @@ jobs:
         working-directory: extension
         run: xvfb-run -a npm run test:host
 
-      - name: Build VSIX
+  extension-vsix:
+    name: Extension VSIX – ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: win32-x64
+          - os: macos-13
+            label: darwin-x64
+          - os: macos-14
+            label: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: observer/go.mod
+          cache-dependency-path: observer/go.sum
+
+      - name: Install dependencies
         working-directory: extension
-        run: npm run build:vsix
+        run: npm ci
+
+      - name: Build target VSIX
+        working-directory: extension
+        run: npm run build:vsix -- --target "${{ matrix.label }}"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: observability-studio-vsix
+          name: observability-studio-vsix-${{ matrix.label }}
           path: extension/*.vsix
           if-no-files-found: error
+
+  extension-smoke:
+    name: Extension smoke – ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    needs: extension-vsix
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: windows-latest
+            label: win32-x64
+          - os: macos-13
+            label: darwin-x64
+          - os: macos-14
+            label: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Download target VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: observability-studio-vsix-${{ matrix.label }}
+          path: extension/.smoke-vsix
+
+      - name: Run installed VSIX smoke test
+        working-directory: extension
+        env:
+          OBSTUDIO_PREBUILT_VSIX_DIR: .smoke-vsix
+        run: npm run test:integration:smoke
 
   client:
     name: Client – unit tests

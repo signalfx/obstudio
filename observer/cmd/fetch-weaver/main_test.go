@@ -26,6 +26,21 @@ func TestFindTarget(t *testing.T) {
 	}
 }
 
+func TestFindTargetWindowsPreservesExeSuffix(t *testing.T) {
+	t.Parallel()
+
+	target, err := findTarget("windows", "amd64")
+	if err != nil {
+		t.Fatalf("findTarget returned error: %v", err)
+	}
+	if target.archiveBinaryName != "weaver.exe" {
+		t.Fatalf("unexpected archive binary name: %s", target.archiveBinaryName)
+	}
+	if target.bundledBinaryName != "weaver.exe" {
+		t.Fatalf("unexpected bundled binary name: %s", target.bundledBinaryName)
+	}
+}
+
 func TestFindTargetUnsupported(t *testing.T) {
 	t.Parallel()
 

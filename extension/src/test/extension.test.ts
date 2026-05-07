@@ -13,14 +13,21 @@ import {
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
-	getBuildPaths: (extensionRoot?: string) => {
+	getBuildPaths: (extensionRoot?: string, env?: NodeJS.ProcessEnv) => {
 		observerRoot: string;
 		observerOutDir: string;
 		observerOutBinary: string;
+		target: {
+			binaryName: string;
+			goarch: string;
+			goos: string;
+		};
 	};
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
 };
-const weaverBinaryName = 'weaver';
+function hostWeaverBinaryName(): string {
+	return process.platform === 'win32' ? 'weaver.exe' : 'weaver';
+}
 
 function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 	const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-extension-'));
@@ -35,7 +42,7 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 test('resolveBackend returns observer binary when it exists', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		const binary = path.join(extensionRoot, 'dist', 'observer', 'obstudio');
-		const weaver = path.join(extensionRoot, 'dist', 'observer', 'weaver');
+		const weaver = path.join(extensionRoot, 'dist', 'observer', hostWeaverBinaryName());
 
 		fs.mkdirSync(path.dirname(binary), { recursive: true });
 		fs.writeFileSync(binary, '#!/bin/sh\n');
@@ -51,12 +58,41 @@ test('resolveBackend returns observer binary when it exists', () => {
 	});
 });
 
+test('resolveBackend picks a Windows weaver.exe runtime when present', () => {
+	withTempExtensionRoot((extensionRoot) => {
+		const binary = path.join(extensionRoot, 'dist', 'observer', 'obstudio.exe');
+		const weaver = path.join(extensionRoot, 'dist', 'observer', 'weaver.exe');
+
+		fs.mkdirSync(path.dirname(binary), { recursive: true });
+		fs.writeFileSync(binary, 'MZ');
+		fs.writeFileSync(weaver, 'MZ');
+
+		const backend = resolveBackend(extensionRoot);
+
+		assert.equal(backend.command, binary);
+		assert.equal(backend.env.WEAVER_PATH, weaver);
+	});
+});
+
 test('build output layout reserves the bundled weaver runtime path', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		const paths = getBuildPaths(extensionRoot);
-		const expected = path.join(paths.observerOutDir, weaverBinaryName);
+		const expected = path.join(paths.observerOutDir, hostWeaverBinaryName());
 
 		assert.equal(expected.startsWith(paths.observerOutDir), true);
+	});
+});
+
+test('build output layout uses an .exe suffix for Windows targets', () => {
+	withTempExtensionRoot((extensionRoot) => {
+		const paths = getBuildPaths(extensionRoot, {
+			OBSTUDIO_GOARCH: 'amd64',
+			OBSTUDIO_GOOS: 'windows',
+		});
+
+		assert.equal(path.basename(paths.observerOutBinary), 'obstudio.exe');
+		assert.equal(paths.target.goos, 'windows');
+		assert.equal(paths.target.goarch, 'amd64');
 	});
 });
 

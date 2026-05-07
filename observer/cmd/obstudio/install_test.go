@@ -1,14 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClaudeCodeTargetUsesClaudeJSON(t *testing.T) {
@@ -779,4 +785,293 @@ func TestBuildSharedObserverStateNormalizesWildcardHost(t *testing.T) {
 	if state.MCPURL != "http://127.0.0.1:41234/mcp" {
 		t.Fatalf("MCPURL = %q, want %q", state.MCPURL, "http://127.0.0.1:41234/mcp")
 	}
+}
+
+func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
+	observerRoot := observerModuleRoot(t)
+	tempRoot := t.TempDir()
+	bundleDir := filepath.Join(tempRoot, "bundle")
+	homeDir := filepath.Join(tempRoot, "home")
+	binaryName := smokeBinaryName()
+	weaverName := installedWeaverName(filepath.Join(bundleDir, binaryName))
+	bundledBinary := filepath.Join(bundleDir, binaryName)
+	bundledWeaver := filepath.Join(bundleDir, weaverName)
+
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle dir: %v", err)
+	}
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home dir: %v", err)
+	}
+
+	build := exec.Command("go", "build", "-o", bundledBinary, "./cmd/obstudio")
+	build.Dir = observerRoot
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build smoke obstudio binary: %v\n%s", err, strings.TrimSpace(string(output)))
+	}
+	if err := copyFile(bundledBinary, bundledWeaver); err != nil {
+		t.Fatalf("bundle sibling weaver runtime: %v", err)
+	}
+	if err := os.Chmod(bundledWeaver, 0o755); err != nil {
+		t.Fatalf("chmod sibling weaver runtime: %v", err)
+	}
+
+	install := exec.Command(bundledBinary, "install", "--target", "codex")
+	install.Env = append(os.Environ(), smokeHomeEnv(homeDir)...)
+	if output, err := install.CombinedOutput(); err != nil {
+		t.Fatalf("run obstudio install smoke test: %v\n%s", err, strings.TrimSpace(string(output)))
+	}
+
+	installedDir := filepath.Join(homeDir, ".codex", "skills", "obstudio")
+	installedBinary := filepath.Join(installedDir, binaryName)
+	if _, err := os.Stat(installedBinary); err != nil {
+		t.Fatalf("expected installed binary at %s: %v", installedBinary, err)
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, weaverName)); err != nil {
+		t.Fatalf("expected installed weaver runtime at %s: %v", filepath.Join(installedDir, weaverName), err)
+	}
+
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read generated codex config: %v", err)
+	}
+	configText := string(config)
+	for _, want := range []string{
+		codexManagedBlockStart,
+		"[mcp_servers.obstudio]",
+		fmt.Sprintf("command = %q", installedBinary),
+		"args = []",
+		codexManagedBlockEnd,
+	} {
+		if !strings.Contains(configText, want) {
+			t.Fatalf("expected generated codex config to contain %q, got:\n%s", want, configText)
+		}
+	}
+
+	observerPort := pickSmokePort(t)
+	otlpHTTPPort := pickSmokePort(t)
+	otlpGRPCPort := pickSmokePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", observerPort)
+	otlpHTTPURL := fmt.Sprintf("http://127.0.0.1:%d", otlpHTTPPort)
+
+	run := exec.Command(installedBinary)
+	runEnv := append(os.Environ(), smokeHomeEnv(homeDir)...)
+	runEnv = append(runEnv,
+		fmt.Sprintf("PORT=%d", observerPort),
+		fmt.Sprintf("OTLP_HTTP_PORT=%d", otlpHTTPPort),
+		fmt.Sprintf("OTLP_GRPC_PORT=%d", otlpGRPCPort),
+	)
+	run.Env = runEnv
+	var logs bytes.Buffer
+	run.Stdout = &logs
+	run.Stderr = &logs
+	if err := run.Start(); err != nil {
+		t.Fatalf("start installed obstudio binary: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- run.Wait()
+	}()
+	defer stopSmokeProcess(run, done)
+
+	client := &http.Client{Timeout: time.Second}
+	waitForSmokeHealth(t, client, baseURL+"/api/health", done, &logs, 10*time.Second)
+
+	var health struct {
+		Kind      string            `json:"kind"`
+		Endpoints map[string]string `json:"endpoints"`
+	}
+	if status := doSmokeJSONRequest(t, client, http.MethodGet, baseURL+"/api/health", "", nil, &health); status != http.StatusOK {
+		t.Fatalf("health endpoint returned %d", status)
+	}
+	if health.Kind != "obstudio" {
+		t.Fatalf("health kind = %q, want %q", health.Kind, "obstudio")
+	}
+	if got := health.Endpoints["otlpHttp"]; got != otlpHTTPURL {
+		t.Fatalf("health otlpHttp = %q, want %q", got, otlpHTTPURL)
+	}
+	if got := health.Endpoints["otlpGrpc"]; got != fmt.Sprintf("127.0.0.1:%d", otlpGRPCPort) {
+		t.Fatalf("health otlpGrpc = %q, want %q", got, fmt.Sprintf("127.0.0.1:%d", otlpGRPCPort))
+	}
+
+	if status := doSmokeJSONRequest(t, client, http.MethodDelete, baseURL+"/api/data", "", nil, nil); status != http.StatusOK {
+		t.Fatalf("clear data endpoint returned %d", status)
+	}
+
+	tracePayload := `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"install-smoke-test"}}]},"scopeSpans":[{"scope":{"name":"install-smoke"},"spans":[{"traceId":"0af7651916cd43dd8448eb211c80319c","spanId":"b7ad6b7169203331","name":"installed-binary-span","kind":1,"startTimeUnixNano":1000000000000000000,"endTimeUnixNano":1000000001000000000,"status":{"code":0},"attributes":[]}]}]}]}`
+	if status := doSmokeJSONRequest(t, client, http.MethodPost, otlpHTTPURL+"/v1/traces", tracePayload, map[string]string{
+		"Content-Type": "application/json",
+	}, nil); status != http.StatusOK {
+		t.Fatalf("otlp ingest endpoint returned %d", status)
+	}
+
+	var stats struct {
+		SpanCount  int `json:"spanCount"`
+		TraceCount int `json:"traceCount"`
+	}
+	waitForSmokeStats(t, client, baseURL+"/api/query/stats", done, &logs, 10*time.Second, &stats)
+	if stats.SpanCount != 1 {
+		t.Fatalf("stats spanCount = %d, want 1", stats.SpanCount)
+	}
+	if stats.TraceCount != 1 {
+		t.Fatalf("stats traceCount = %d, want 1", stats.TraceCount)
+	}
+
+	var traces []struct {
+		ServiceName string `json:"serviceName"`
+		TraceID     string `json:"traceId"`
+	}
+	if status := doSmokeJSONRequest(t, client, http.MethodGet, baseURL+"/api/query/traces?limit=5", "", nil, &traces); status != http.StatusOK {
+		t.Fatalf("trace query endpoint returned %d", status)
+	}
+	found := false
+	for _, trace := range traces {
+		if trace.TraceID == "0af7651916cd43dd8448eb211c80319c" || trace.ServiceName == "install-smoke-test" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ingested trace to be queryable, got %#v", traces)
+	}
+}
+
+func observerModuleRoot(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve install_test.go path")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func smokeBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "obstudio.exe"
+	}
+	return "obstudio"
+}
+
+func smokeHomeEnv(homeDir string) []string {
+	env := []string{
+		"HOME=" + homeDir,
+		"USERPROFILE=" + homeDir,
+	}
+	if runtime.GOOS == "windows" {
+		volume := filepath.VolumeName(homeDir)
+		if volume != "" {
+			env = append(env,
+				"HOMEDRIVE="+volume,
+				"HOMEPATH="+strings.TrimPrefix(homeDir, volume),
+			)
+		}
+	}
+	return env
+}
+
+func pickSmokePort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("pick free port: %v", err)
+	}
+	defer listener.Close()
+
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("expected TCP listener address, got %T", listener.Addr())
+	}
+	return addr.Port
+}
+
+func stopSmokeProcess(cmd *exec.Cmd, done <-chan error) {
+	if cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+	}
+}
+
+func waitForSmokeHealth(t *testing.T, client *http.Client, url string, done <-chan error, logs *bytes.Buffer, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-done:
+			t.Fatalf("installed obstudio exited before health check succeeded: %v\n%s", err, strings.TrimSpace(logs.String()))
+		default:
+		}
+
+		resp, err := client.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	t.Fatalf("installed obstudio did not become healthy within %s\n%s", timeout, strings.TrimSpace(logs.String()))
+}
+
+func waitForSmokeStats(t *testing.T, client *http.Client, url string, done <-chan error, logs *bytes.Buffer, timeout time.Duration, stats *struct {
+	SpanCount  int `json:"spanCount"`
+	TraceCount int `json:"traceCount"`
+}) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-done:
+			t.Fatalf("installed obstudio exited before stats query succeeded: %v\n%s", err, strings.TrimSpace(logs.String()))
+		default:
+		}
+
+		if status := doSmokeJSONRequest(t, client, http.MethodGet, url, "", nil, stats); status == http.StatusOK && stats.SpanCount == 1 && stats.TraceCount == 1 {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	t.Fatalf("installed obstudio did not report ingested stats within %s\n%s", timeout, strings.TrimSpace(logs.String()))
+}
+
+func doSmokeJSONRequest(t *testing.T, client *http.Client, method, url, body string, headers map[string]string, target any) int {
+	t.Helper()
+
+	var requestBody io.Reader
+	if body != "" {
+		requestBody = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, requestBody)
+	if err != nil {
+		t.Fatalf("build %s request %s: %v", method, url, err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer resp.Body.Close()
+
+	if target == nil {
+		io.Copy(io.Discard, resp.Body)
+		return resp.StatusCode
+	}
+	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
+		t.Fatalf("decode %s %s response: %v", method, url, err)
+	}
+	return resp.StatusCode
 }

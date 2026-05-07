@@ -8,6 +8,12 @@ const REPOSITORY_ROOT_URL = "https://github.com/signalfx/obstudio";
 const EXTENSION_SUBDIRECTORY = "extension";
 const MARKETPLACE_BASE_CONTENT_URL = `${REPOSITORY_ROOT_URL}/blob/main/${EXTENSION_SUBDIRECTORY}`;
 const MARKETPLACE_BASE_IMAGES_URL = `${REPOSITORY_ROOT_URL}/raw/main/${EXTENSION_SUBDIRECTORY}`;
+const SUPPORTED_VSCODE_TARGETS = {
+	"darwin-arm64": { binaryName: "obstudio", goarch: "arm64", goos: "darwin" },
+	"darwin-x64": { binaryName: "obstudio", goarch: "amd64", goos: "darwin" },
+	"linux-x64": { binaryName: "obstudio", goarch: "amd64", goos: "linux" },
+	"win32-x64": { binaryName: "obstudio.exe", goarch: "amd64", goos: "windows" },
+};
 
 function normalizeReleaseVersion(rawVersion) {
 	const trimmed = String(rawVersion ?? "").trim();
@@ -75,6 +81,46 @@ function resolveReleaseVersion({
 	return normalizeReleaseVersion(gitTag);
 }
 
+function parseVsceTarget(extraArgs = []) {
+	for (let index = 0; index < extraArgs.length; index += 1) {
+		const value = extraArgs[index];
+		if (value === "--target") {
+			return extraArgs[index + 1] ?? null;
+		}
+		if (value.startsWith("--target=")) {
+			return value.slice("--target=".length);
+		}
+	}
+	return null;
+}
+
+function resolveVsceTarget(target) {
+	if (target === null || target === undefined || target === "") {
+		return null;
+	}
+	const resolved = SUPPORTED_VSCODE_TARGETS[target];
+	if (!resolved) {
+		throw new Error(
+			`Unsupported VS Code target "${target}". Supported targets: ${Object.keys(SUPPORTED_VSCODE_TARGETS).join(", ")}`
+		);
+	}
+	return resolved;
+}
+
+function buildObserverEnvironment(env = process.env, target = null) {
+	const resolved = resolveVsceTarget(target);
+	if (!resolved) {
+		return env;
+	}
+	return {
+		...env,
+		OBSTUDIO_GOARCH: resolved.goarch,
+		OBSTUDIO_GOOS: resolved.goos,
+		OBSTUDIO_OBSERVER_BINARY_NAME: resolved.binaryName,
+		OBSTUDIO_VSCODE_TARGET: target,
+	};
+}
+
 function vsceCommand(extensionRoot = __dirname) {
 	const binName = process.platform === "win32" ? "vsce.cmd" : "vsce";
 	const command = path.join(extensionRoot, "node_modules", ".bin", binName);
@@ -99,11 +145,25 @@ function buildVsceArgs({ releaseVersion = null, extraArgs = [] } = {}) {
 	return args.concat(extraArgs);
 }
 
+function vsceExecOptions({
+	cwd,
+	env,
+} = {}) {
+	return {
+		cwd,
+		env,
+		encoding: "utf-8",
+		shell: process.platform === "win32",
+		stdio: ["ignore", "pipe", "pipe"],
+	};
+}
+
 function packageVsix({
 	extensionRoot = __dirname,
 	env = process.env,
 	extraArgs = [],
 } = {}) {
+	const target = parseVsceTarget(extraArgs);
 	const releaseVersion = resolveReleaseVersion({
 		env,
 		repoRoot: path.resolve(extensionRoot, ".."),
@@ -111,12 +171,10 @@ function packageVsix({
 	const output = execFileSync(vsceCommand(extensionRoot), buildVsceArgs({
 		releaseVersion,
 		extraArgs,
-	}), {
+	}), vsceExecOptions({
 		cwd: extensionRoot,
-		env,
-		encoding: "utf-8",
-		stdio: ["ignore", "pipe", "pipe"],
-	});
+		env: buildObserverEnvironment(env, target),
+	}));
 
 	return { output, releaseVersion };
 }
@@ -145,13 +203,18 @@ if (require.main === module) {
 }
 
 module.exports = {
+	buildObserverEnvironment,
 	buildVsceArgs,
 	gitExactTag,
 	MARKETPLACE_BASE_CONTENT_URL,
 	MARKETPLACE_BASE_IMAGES_URL,
 	normalizeReleaseVersion,
+	parseVsceTarget,
 	packageVsix,
 	releaseTagFromEnvironment,
 	resolveReleaseVersion,
+	resolveVsceTarget,
+	SUPPORTED_VSCODE_TARGETS,
 	vsceCommand,
+	vsceExecOptions,
 };
