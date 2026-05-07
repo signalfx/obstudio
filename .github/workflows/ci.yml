@@ -43,7 +43,7 @@ jobs:
             label: linux-x64
           - os: windows-latest
             label: win32-x64
-          - os: macos-13
+          - os: macos-15-intel
             label: darwin-x64
           - os: macos-14
             label: darwin-arm64
@@ -105,7 +105,7 @@ jobs:
             label: linux-x64
           - os: windows-latest
             label: win32-x64
-          - os: macos-13
+          - os: macos-15-intel
             label: darwin-x64
           - os: macos-14
             label: darwin-arm64
@@ -150,7 +150,7 @@ jobs:
             label: linux-x64
           - os: windows-latest
             label: win32-x64
-          - os: macos-13
+          - os: macos-15-intel
             label: darwin-x64
           - os: macos-14
             label: darwin-arm64
