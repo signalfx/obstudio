@@ -11,6 +11,7 @@ auditing and adding OpenTelemetry instrumentation.
 |---|---|
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
+| `$otel-detect` | Generate Splunk O11y detector Terraform from an audit report |
 
 The canonical skill sources live under `skills/`. Codex discovers repo-local
 entries through `.agents/skills/`, which points at those source directories.
@@ -62,11 +63,15 @@ From a service directory, invoke the relevant skill in Codex:
 ```text
 $otel-audit
 $otel-instrument
+$otel-detect
 ```
 
 Use `$otel-audit` to understand what is missing before editing. Use
 `$otel-instrument` when you are ready to add SDK setup, auto-instrumentation,
-and targeted custom signals.
+and targeted custom signals. Use `$otel-detect` after auditing to generate
+Splunk Observability Cloud detector Terraform — it reads the audit report,
+classifies metrics, and outputs ready-to-apply HCL with a `terraform.tfvars.example`
+for credentials.
 
 ## Validation
 
@@ -95,6 +100,7 @@ obstudio/
 ├── skills/            # Canonical agent skill sources
 │   ├── otel-audit/
 │   ├── otel-instrument/
+│   ├── otel-detect/
 │   └── references/    # Shared language guides and signal references
 ├── .agents/skills/    # Repo-scoped Codex skill entries
 ├── evals/             # Fixture services and JSON eval cases
