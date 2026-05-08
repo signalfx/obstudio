@@ -7,6 +7,17 @@
 | Identify observability gaps without making code changes | `/otel-audit` this service and show me the gaps | `/otel-audit` |
 | Assess a legacy service before planning instrumentation work | Run `/otel-audit` on this service -- I need a gap report before the sprint planning | `/otel-audit` |
 
+## Detect -- Generate Alerts
+
+| Use Case | Prompt | Skill |
+|----------|--------|-------|
+| Generate detectors from an existing audit report | Generate Splunk detectors from my audit report | `$otel-detect` |
+| Target a specific detector category | Create latency detectors for this service | `$otel-detect` |
+| Post-instrument workflow -- set up alerts after adding OTel | I just instrumented the service -- now set up alerts | `$otel-detect` |
+| Override default thresholds | Generate detectors with a 2s latency threshold and 90% saturation | `$otel-detect` |
+| Full audit-to-detect pipeline | Audit this service, then generate detector Terraform | `$otel-audit` → `$otel-detect` |
+| Explore what would be generated without writing files | What detectors would you create from the audit report? | `$otel-detect` |
+
 ## Instrument -- Add or Adjust OTel Code
 
 | Use Case | Prompt | Skill |

@@ -34,9 +34,15 @@
 - [x] 9. Update `AGENTS.md` Available Skills table with a `$otel-detect` row: "Generate Splunk O11y detector Terraform from audit report"
 - [x] 10. Stage a copy of the skill in `observer/cmd/obstudio/_skills/otel-detect/` for CLI embedding
 
-## Group 4 — Verify
+## Group 4 — Examples
 
-- [ ] 11. Load the skill in an agent and run it against a repo with an existing `.observe/otel.md` (e.g., `go-agent-management`)
-- [ ] 12. Confirm the generated `.observe/terraform/detectors.tf` contains `resource "signalfx_detector"` blocks
-- [ ] 13. Confirm the generated `.observe/terraform/variables.tf` contains `variable` blocks for `realm`, `api_token`, `service_name`, and threshold overrides
-- [x] 14. Confirm no hardcoded API tokens or realm values appear in the generated files
+- [x] 15. Add a "Detect -- Generate Alerts" section to `docs/examples.md` with prompts such as:
+   - Generate detectors from audit: "Generate Splunk detectors from my audit report"
+   - Targeted category: "Create latency detectors for this service"
+   - Post-instrument workflow: "I just instrumented the service -- now set up alerts"
+   - Threshold tuning context: "Generate detectors with a 2s latency threshold"
+   - Full pipeline: "Audit this service, then generate detector Terraform"
+
+## Validation
+
+See `specs/otel-detect/validation.md` for the full definition of done.
