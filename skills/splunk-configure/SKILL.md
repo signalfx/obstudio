@@ -1,10 +1,10 @@
 ---
-name: otel-detect
+name: splunk-configure
 description: >-
   Generate Splunk Observability Cloud detector Terraform from an existing
   otel-audit report. Reads .observe/otel.md, classifies metrics into
   detector categories, and outputs ready-to-apply HCL with SignalFlow
-  program_text. Use when the user types $otel-detect, asks to "generate
+  program_text. Use when the user types $splunk-configure, asks to "generate
   detectors", "create alerts from audit", "build Terraform for monitors",
   or "set up Splunk detectors".
 metadata:
@@ -148,8 +148,9 @@ notification_channel = ""   # e.g. "Email,team@example.com" or PagerDuty routing
 ```
 
 Do NOT include per-detector threshold variables in this file — they already have
-sensible defaults in `variables.tf`. Only include the four required variables
-that have no defaults.
+sensible defaults in `variables.tf`. Include `realm`, `api_token`, and
+`notification_channel` (which have no defaults) plus `service_name` for
+convenience (it has a default from the report but users often override it).
 
 ### Step 5 -- Chat Summary
 
@@ -203,9 +204,8 @@ resource "signalfx_detector" "latency_http_server_request_duration" {
   description = "Detects high p99 latency for http.server.request.duration"
 
   program_text = <<-EOF
-    from signalfx.detectors.against_recent import against_recent
     A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99 Latency')
-    detect(when(A > threshold(var.latency_http_server_request_duration_threshold))).publish('P99 Latency Too High')
+    detect(when(A > threshold(${var.latency_http_server_request_duration_threshold}))).publish('P99 Latency Too High')
   EOF
 
   rule {

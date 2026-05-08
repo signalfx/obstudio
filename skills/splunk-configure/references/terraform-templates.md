@@ -17,7 +17,7 @@ resource "signalfx_detector" "latency_<metric_id>" {
 
   program_text = <<-EOF
     A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99 Latency')
-    detect(when(A > threshold(var.latency_<metric_id>_threshold))).publish('P99 Latency Too High')
+    detect(when(A > threshold(${var.latency_<metric_id>_threshold}))).publish('P99 Latency Too High')
   EOF
 
   rule {
@@ -55,7 +55,7 @@ resource "signalfx_detector" "error_<metric_id>" {
   program_text = <<-EOF
     from signalfx.detectors.against_recent import against_recent
     A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).sum().publish(label='Error Rate')
-    against_recent.detector_mean_std(stream=A, current_window='5m', historical_window='1h', fire_num_stddev=var.error_<metric_id>_stddev, clear_num_stddev=2.5, orientation='above', ignore_extremes=True, calculation_mode='vanilla').publish('Error Rate Anomaly')
+    against_recent.detector_mean_std(stream=A, current_window='5m', historical_window='1h', fire_num_stddev=${var.error_<metric_id>_stddev}, clear_num_stddev=2.5, orientation='above', ignore_extremes=True, calculation_mode='vanilla').publish('Error Rate Anomaly')
   EOF
 
   rule {
@@ -92,7 +92,7 @@ resource "signalfx_detector" "saturation_<metric_id>" {
 
   program_text = <<-EOF
     A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).publish(label='Saturation')
-    detect(when(A > threshold(var.saturation_<metric_id>_threshold))).publish('Saturation Too High')
+    detect(when(A > threshold(${var.saturation_<metric_id>_threshold}))).publish('Saturation Too High')
   EOF
 
   rule {
@@ -130,7 +130,7 @@ resource "signalfx_detector" "throughput_<metric_id>" {
   program_text = <<-EOF
     from signalfx.detectors.against_recent import against_recent
     A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).sum().publish(label='Throughput')
-    against_recent.detector_mean_std(stream=A, current_window='5m', historical_window='1h', fire_num_stddev=var.throughput_<metric_id>_stddev, clear_num_stddev=2.5, orientation='out_of_band', ignore_extremes=True, calculation_mode='vanilla').publish('Throughput Anomaly')
+    against_recent.detector_mean_std(stream=A, current_window='5m', historical_window='1h', fire_num_stddev=${var.throughput_<metric_id>_stddev}, clear_num_stddev=2.5, orientation='out_of_band', ignore_extremes=True, calculation_mode='vanilla').publish('Throughput Anomaly')
   EOF
 
   rule {
@@ -164,7 +164,8 @@ service_name         = "<service-name>"
 notification_channel = ""   # e.g. "Email,team@example.com" or PagerDuty routing key
 ```
 
-Only the four required variables (those without defaults) are included.
+Includes `realm`, `api_token`, and `notification_channel` (no defaults) plus
+`service_name` for convenience (has a default from the report but commonly overridden).
 Per-detector threshold overrides are omitted — they have sensible defaults in
 `variables.tf` and users add overrides only when tuning.
 

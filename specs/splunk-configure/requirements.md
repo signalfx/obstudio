@@ -1,4 +1,4 @@
-# otel-detect Requirements
+# splunk-configure Requirements
 
 ## Scope
 
@@ -46,7 +46,7 @@ The skill generates a `terraform.tfvars.example` alongside the `.tf` files conta
 
 ### SignalFlow filtering
 
-All SignalFlow programs filter by `var.service_name` using `filter('service.name', var.service_name)`. This scopes detectors to a single service.
+All SignalFlow programs filter by service name using `filter('service.name', '${var.service_name}')` (Terraform interpolation embeds the variable value into the SignalFlow string). This scopes detectors to a single service.
 
 ## Context
 
@@ -56,7 +56,7 @@ All SignalFlow programs filter by `var.service_name` using `filter('service.name
 
 ### Token budget
 
-SKILL.md must stay under 200 lines. Reference files (`terraform-templates.md`, `detector-classification.md`) are loaded only during the generation step to keep context lean.
+SKILL.md must stay under 300 lines. Reference files (`terraform-templates.md`, `detector-classification.md`) are loaded only during the generation step to keep context lean.
 
 ### Skill patterns
 

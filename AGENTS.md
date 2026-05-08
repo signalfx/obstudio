@@ -90,4 +90,4 @@ Outputs:
 |---|---|
 | `$otel-audit` | Read-only observability coverage scan |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |
-| `$otel-detect` | Generate Splunk O11y detector Terraform from audit report |
+| `$splunk-configure` | Generate Splunk O11y detector Terraform from audit report |
