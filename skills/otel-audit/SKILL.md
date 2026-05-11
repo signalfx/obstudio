@@ -10,7 +10,7 @@ description: >-
   use $otel-instrument instead.
 metadata:
   author: otel-studio
-  version: 0.6.0
+  version: 0.7.0
   category: observability
 ---
 
@@ -80,7 +80,9 @@ row.
 `@WithSpan` / `Span.current()` (Java).
 Record the span name and source file with line number.
 
-**Metrics inventory** -- build a list of every metric source:
+**Metrics inventory** -- build a list of every metric source. This includes
+both OpenTelemetry metrics and non-OTel custom application metrics that may be
+exported through an agent, bridge, legacy reporter, or sidecar.
 
 - Auto-instrumentation packages that emit metrics (check the "Signals" column).
 Enumerate every individual metric name the package produces -- one row per
@@ -98,7 +100,17 @@ list each individually.
 `meter.create_observable_gauge` (Python);
 `meter.createCounter`, `meter.createHistogram`,
 `meter.createObservableGauge` (Node.js).
-Record the metric name and source file with line number.
+- Custom application metric registrations, even when they do not use the OTel
+  Metrics API. Examples include Java `com.splunk.o11y.metrics.Metrics`,
+  Dropwizard/Codahale `Counter`, `Timer`, `Histogram`, `MetricRegistry`,
+  Micrometer `Counter`/`Timer`, Prometheus clients, StatsD clients, and
+  framework-specific metric helpers.
+Record the metric name, source file with line number, type, and export path.
+Use type values such as `auto`, `source OTel`, `custom app`, or `agent-exported`.
+For Java Dropwizard/Codahale/Splunk metrics, state when export is conditional on
+the Splunk/OpenTelemetry Java agent, Codahale reporter, or runtime config.
+Do not write "No metrics detected" when custom app metrics exist only because
+no source-level OTel `Meter` usage was found.
 
 **Logs inventory** -- build a list of OTel log integrations:
 
@@ -127,6 +139,72 @@ Status: `covered` / `partial` / `missing`.
 percentiles? (e.g. `http.server.request.duration` histogram, or span
 duration from auto-instrumentation.)
 Status: `covered` / `partial` / `missing`.
+
+**Gap priority and instrument handoff** -- classify every grouped gap before
+writing the report:
+
+- `required`: needed for baseline RED coverage, trace continuity, error
+  attribution, exporter/resource correctness, or removal of an OTel
+  anti-pattern that can break signals. Plain `$otel-instrument <service>`
+  should be able to fix these gaps by default.
+- `recommended`: useful deeper visibility, business metrics, optional log
+  export when trace-correlated stdout logs already exist, or client/cache
+  operational metrics beyond baseline RED. These are included when the user
+  asks `$otel-instrument fix all <service>`.
+- `deferred`: needs product/operator input, external infrastructure, secrets,
+  or a downstream ownership decision. Do not imply `$otel-instrument` will fix
+  it without clarification.
+
+If no `required` gaps remain, say that explicitly in `## Recommendation`.
+
+**Flow and gap synthesis** -- before writing the final report, synthesize the
+findings into a reader-first map:
+
+- **Signal Flow:** show the actual runtime topology as a component or edge map,
+  not a generic mental-model explanation and not a forced single request path.
+  Use concrete components discovered in the repo: runtime startup/export,
+  entry points, middleware/filters, controllers/handlers, service logic,
+  DAO/database calls, caches, queues, outbound clients, downstream services,
+  background workers, scheduled jobs, migration/maintenance runners, and
+  telemetry export.
+- Separate independent roots. Show synchronous request/RPC entry points,
+  message/queue consumers, scheduled/background services, maintenance runners,
+  and telemetry startup/export as separate branches when they are started by
+  different processes or lifecycle modules.
+- Do not place a component under an upstream branch unless the code proves that
+  it is invoked by that branch. For example, a Kafka/background process should
+  not appear under a Thrift/HTTP request branch just because it shares clients
+  or data stores.
+- Mark `[COVERED]` only for the exact component or edge where instrumentation
+  evidence exists. Coverage does not automatically flow through child data
+  stores, clients, queues, or helpers; mark those separately if evidence is
+  present, otherwise show the appropriate gap marker.
+- Include a `### Component Flow Map` under `## Signal Flow`. Prefer a compact
+  text flow with `[COVERED]` for covered edges and numbered gap markers like `[GAP1]`, `[GAP2]`, and `[GAP3]` over Mermaid when there are more than
+  four nodes or any edge needs explanation. Keep the map visually simple:
+  component names and markers only, no long edge labels. Use `[GAP1]` rather than `[G1]`; do not generate `[G1]`, `[G2]`, or `[G3]`.
+- Include a `### Map Legend` table immediately after the map when symbols are
+  used. Columns must be exactly `Symbol`, `Location`, `Meaning`,
+  `Signals Affected`. Use this table to explain coverage gaps, broken
+  propagation boundaries, missing metrics, missing log correlation, and missing
+  error recording.
+- Include a `### Step-by-Step Signal Coverage` table under `## Signal Flow`.
+  Use a normalized table with one row per flow step and signal type. Columns
+  must be exactly `Step`, `Component / Edge`, `Signal`, `Shows Today`,
+  `Missing Today`.
+  For each step, include rows for `Trace`, `Metric`, and `Log` when applicable.
+  Use `None detected` when that signal has no coverage for the step, and
+  `None identified` when no missing coverage is apparent. This table is
+  diagnostic: it shows where visibility stops in the flow, not the remediation
+  backlog.
+- **Gap:** convert the detailed gaps into an action-oriented table with
+  exactly these columns: `Priority`, `Area`, `Gap`, `User Impact`, `Fix`,
+  `Instrument Mode`. The `Priority` values must be `required`, `recommended`,
+  or `deferred`. Use `Instrument Mode` values `default`, `fix all`, or
+  `manual decision`. The `Fix` column is the target remediation and must not be
+  presented as current behavior.
+  Deduplicate and group related flow blind spots into remediation themes so the
+  `## Gap` table does not repeat the flow table one row at a time.
 
 **Anti-patterns** -- flag any of these:
 
@@ -159,11 +237,14 @@ Use this template for `.observe/otel.md`:
 
 **Language:** {language} | **Framework:** {framework} | **Date:** {YYYY-MM-DD}
 
-## Evidence
-- Manifest: {path}
-- Entry point: {path}
-- Route source: {path(s)}
-- Runtime/startup: {path(s) or "none detected"}
+## Audit Evidence
+
+| Check | Finding | Source |
+|-------|---------|--------|
+| Manifest | {dependency and build evidence} | {path} |
+| Entry point | {process entry point} | {path} |
+| Route source | {route/controller files inspected} | {path(s)} |
+| Runtime/startup | {startup surface and telemetry config} | {path(s) or "none detected"} |
 
 ## Routes
 
@@ -174,6 +255,57 @@ Use this template for `.observe/otel.md`:
 | POST | /tasks |
 | GET | /tasks/{id} |
 | ... | ... |
+
+## Signal Flow
+
+Use this section to show the component flow first, then the signal coverage for
+each step. The user should be able to point at a node or edge and understand
+what traces, metrics, and logs can explain today, and what remains invisible.
+
+### Component Flow Map
+
+```text
+Inbound request
+  |
+  v
+[Router / controller] [COVERED]
+  |-- [COVERED] [Repository / database]
+  |-- [GAP1] [Downstream service]
+  `-- [GAP2] [Telemetry export]
+```
+
+### Map Legend
+
+| Symbol | Location | Meaning | Signals Affected |
+|--------|----------|---------|------------------|
+| COVERED | Router / controller -> Repository / database | Trace context and enough RED signal coverage were detected | Trace, Metric, Log |
+| GAP1 | Router / controller -> Downstream service | Propagation: downstream visibility is incomplete | Trace |
+| GAP2 | Service -> Telemetry export | Export config: resource or exporter configuration is inconsistent | Trace, Metric, Log |
+
+### Step-by-Step Signal Coverage
+
+| Step | Component / Edge | Signal | Shows Today | Missing Today |
+|------|------------------|--------|-------------|---------------|
+| 1 | Client -> Router / controller | Trace | GET /tasks server span from otelhttp | Missing in non-instrumented startup path |
+| 1 | Client -> Router / controller | Metric | Request rate and duration from http.server.request.duration | None identified |
+| 1 | Client -> Router / controller | Log | Request log with trace_id/span_id | None identified |
+| 2 | Handler -> Repository / client | Trace | tasks.lookup custom span | Missing recordException on failures |
+| 2 | Handler -> Repository / client | Metric | db.client.operation.duration | None identified |
+| 2 | Handler -> Repository / client | Log | Repository error log with trace_id/span_id | None identified |
+| ... | ... | ... | ... | ... |
+
+## Gap
+
+Highest-impact fixes derived from the flow map. Group related blind spots so
+this is a prioritized remediation backlog, not a second signal inventory.
+
+| Priority | Area | Gap | User Impact | Fix | Instrument Mode |
+|----------|------|-----|-------------|-----|-----------------|
+| required | Startup | Java agent/env setup only appears in one startup path | Local runs can miss HTTP, DB, and client spans | Standardize startup with OTel enabled for every runtime | default |
+| required | Errors | Custom spans do not record exceptions | Failed operations are hard to find from traces | Set span status and record exceptions on failure paths | default |
+| recommended | Logs | OTel log export is not configured, but trace-correlated stdout logs exist | Logs can be correlated but may not appear as OTel log signals | Add a supported OTel log bridge/exporter only if log signals are required | fix all |
+| deferred | Downstream owner | External service does not publish telemetry | Cross-service traces stop outside this repo | Coordinate downstream instrumentation with the owning team | manual decision |
+| ... | ... | ... | ... | ... | ... |
 
 ## Current Instrumentation
 
@@ -195,18 +327,24 @@ If no span sources are found, write: "No spans detected."
 ### Metrics
 
 List every individual metric name -- one row per metric. Never group auto-
-instrumented metrics with vague labels like "(+ related)" or parenthetical
-summaries.
+instrumented or custom application metrics with vague labels like "(+ related)"
+or parenthetical summaries.
 
-| Name | Source | Type |
-|------|--------|------|
-| http.server.request.duration | otelhttp | auto |
-| http.server.active_requests | otelhttp | auto |
-| http.server.request.size | otelhttp | auto |
-| http.server.response.size | otelhttp | auto |
-| orders.processed.count | orders/metrics.go:15 | custom |
+| Name | Source | Type | Export Path |
+|------|--------|------|-------------|
+| http.server.request.duration | otelhttp | auto | OTel SDK/exporter |
+| http.server.active_requests | otelhttp | auto | OTel SDK/exporter |
+| http.server.request.size | otelhttp | auto | OTel SDK/exporter |
+| http.server.response.size | otelhttp | auto | OTel SDK/exporter |
+| orders.processed.count | orders/metrics.go:15 | source OTel | OTel SDK/exporter |
+| orders.queue.depth | orders/worker.go:88 | custom app | Prometheus scrape |
+| service.query.timer | QueryManager.java:120 | custom app | Dropwizard/Codahale; may be exported by Java agent or legacy reporter when enabled |
 
-If no metric sources are found, write: "No metrics detected."
+If custom application metrics exist but no source-level OTel `Meter`
+instruments are found, list the custom metrics and add a short note:
+"No source-level custom OpenTelemetry `Meter` instruments were detected."
+Only write "No metrics detected." when no OTel, auto-instrumented, or custom
+application metric sources are found.
 
 ### Logs
 
@@ -234,12 +372,6 @@ Status values:
   exist but no histogram for percentile breakdown).
 - **missing** -- no data source provides this signal.
 
-## Gaps
-- {remaining non-RED gaps: missing auto-instrumentation packages, missing
-  context propagation, missing OTLP exporter configuration, missing
-  service.name resource, etc.}
-- If no gaps remain, write: "No additional gaps detected."
-
 ## Anti-Patterns
 - {any issues found, or "None detected"}
 
@@ -249,12 +381,75 @@ Status values:
   $otel-instrument for custom business metrics"}
 
 ---
-*Generated by obstudio v0.6.0 otel-audit on {YYYY-MM-DD HH:MM UTC}*
+*Generated by obstudio v0.7.0 otel-audit on {YYYY-MM-DD HH:MM UTC}*
 ```
 
 Report requirements:
 
+- Do not include a generic mental-model section. Apply that reasoning inside the
+  `## Signal Flow` map and coverage table instead.
+- Use `## Audit Evidence` instead of a generic `## Evidence` heading. The table
+  columns must be exactly `Check`, `Finding`, `Source`; do not use
+  `Area | Evidence`, because it repeats the section title and is hard for users
+  to scan.
+- Always include `## Signal Flow` after `## Routes`.
+- Under `## Signal Flow`, always include `### Component Flow Map`. If the map
+  uses symbols, include `### Map Legend` next, followed by
+  `### Step-by-Step Signal Coverage`.
+- Always include `## Gap` before `## Current Instrumentation`, with columns
+  `Priority`, `Area`, `Gap`, `User Impact`, `Fix`, `Instrument Mode`.
+- Do not include a separate `## Gaps` section. `## Gap` is the single
+  gap summary for the report.
+- The component flow map must use concrete service components and edges from the
+  scanned repo. Do not use placeholder-only maps in the final report.
+- Prefer compact text maps with markers over Mermaid when Mermaid edge labels
+  would make the map hard to read. Do not put long explanations on map edges.
+- Use `[COVERED]` for covered flow edges and `[GAP1]`, `[GAP2]`, etc. for gap markers. Do not use opaque shortened markers like `[G1]`, `[G2]`, or `[G3]`.
+- The map legend table must explain each symbol with columns `Symbol`,
+  `Location`, `Meaning`, `Signals Affected`.
+- The signal coverage table must make it easy to follow one request through
+  traces, metrics, and logs. Use one row per flow step and signal type with
+  columns `Step`, `Component / Edge`, `Signal`, `Shows Today`, `Missing Today`.
+- Do not use nested sub-rows, multiple Markdown paragraphs inside a cell, or
+  separate `Trace: Catches`, `Metric: Catches`, and `Log: Catches` columns.
+- The `## Gap` table must be grouped by fix area, not by flow step. It should
+  be possible for one gap row to cover several flow-step blind spots.
+- The `## Gap` table is consumed by `$otel-instrument` during its static
+  validation loop. Use exact lowercase `Priority` values (`required`,
+  `recommended`, `deferred`) and exact `Instrument Mode` values (`default`,
+  `fix all`, `manual decision`). Do not use variants such as `Required`,
+  `fix-all`, `optional`, or `manual`.
+- If no gaps remain, keep the `## Gap` heading plus the table header and
+  separator row, then write the sentence `No gaps found.` directly below the
+  table. This lets the instrument skill count zero remaining rows without
+  guessing.
+- Broken inter-service propagation, missing downstream spans, missing request
+  metrics, missing log correlation, and missing error recording should appear on
+  the flow map or in the flow-step gap column when evidence supports them.
+- The Metrics inventory must include all discovered custom application metrics,
+  not only metrics created through the OTel `Meter` API. Include legacy and
+  library-backed metrics such as Dropwizard/Codahale, Micrometer, Prometheus,
+  StatsD, `com.splunk.o11y.metrics.Metrics`, and similar wrappers.
+- Do not say `No metrics detected` if custom application counters, timers,
+  gauges, histograms, or summaries are present. If no OTel `Meter` calls exist,
+  say `No source-level custom OpenTelemetry Meter instruments were detected`
+  and still list the app metrics.
+- For each metric row, explain the export path when evidence is available:
+  source OTel SDK/exporter, Java agent auto-instrumentation, Dropwizard/Codahale
+  reporter, Prometheus scrape, StatsD, or unknown. If export depends on runtime
+  settings such as `OTEL_AGENT_ENABLED`, `OTEL_METRICS_EXPORTER`, or a reporter
+  module, state that conditionality.
+- The gap table must be action-oriented: one row per major gap, clear user
+  impact, and a concrete fix.
+- The gap table must rank gaps. Use `required` only for fixes needed to make
+  baseline OTel instrumentation complete and trustworthy. Use `recommended` for
+  useful but non-baseline improvements. Use `deferred` for items that require
+  external decisions or infrastructure.
 - If instrumentation is incomplete, always include the exact token `$otel-instrument` in the recommendation.
+- If `required` gaps exist, recommend `$otel-instrument <service>` to fix the
+  required gaps. If only `recommended` gaps exist, say baseline required
+  instrumentation is complete and recommend `$otel-instrument fix all <service>`
+  only if the user wants the recommended improvements too.
 - If OpenTelemetry is absent, include both words `OpenTelemetry` and `missing`.
 - Name the concrete files that support findings; do not only refer to "the service" or "./service".
 - For Node.js, mention `package.json` and the app entry point such as `app.js`.
@@ -264,8 +459,10 @@ Report requirements:
 - For Go multi-package services, name the process entry point such as `cmd/kvstore-server/main.go` and relevant library files. If filesystem persistence, background indexing, or LRU eviction exists, call those out explicitly.
 
 **Chat summary:** After writing `.observe/otel.md`, present a brief summary in
-chat that includes: RED signal statuses, count of gaps found, and the
-recommendation line. End with: `Full report: .observe/otel.md`.
+chat that includes: RED signal statuses, count of gaps found by priority using
+the exact labels `Required gaps: N`, `Recommended gaps: N`, and
+`Deferred gaps: N`, plus the recommendation line. End with:
+`Full report: .observe/otel.md`.
 
 ### Step 4 -- Verify Telemetry (optional)
 
