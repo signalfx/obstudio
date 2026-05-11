@@ -221,9 +221,8 @@ describe("AppView validation tab", () => {
 
     expect(screen.getAllByText("Validation").length).toBeGreaterThan(0);
     expect(screen.getByText("1 issue")).toBeTruthy();
-    expect(screen.getByText("Services")).toBeTruthy();
     expect(screen.queryByText(/occurrences/i)).toBeNull();
-    expect(container.querySelector(".metric-summary")).toBeTruthy();
+    expect(container.querySelector(".metric-summary")).toBeNull();
     expect(screen.queryByText("Aggregate Validation")).toBeNull();
     expect(screen.queryByText("Group By")).toBeNull();
     expect(screen.queryByText(/^Validator ready/i)).toBeNull();
@@ -235,14 +234,13 @@ describe("AppView validation tab", () => {
     expect(screen.getAllByText("GET /orders").length).toBeGreaterThan(0);
   });
 
-  it("renders summary cards on non-validation tabs", () => {
+  it("renders the services tab as the default tab", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
 
-    const { container } = render(<AppView telemetry={telemetry} />);
+    render(<AppView telemetry={telemetry} />);
 
-    expect(screen.getByRole("tab", { name: /metrics/i }).getAttribute("aria-selected")).toBe("true");
-    expect(container.querySelector(".metric-summary")).toBeTruthy();
-    expect(screen.getByText("Services")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /metrics/i }).getAttribute("aria-selected")).toBe("false");
   });
 
   it("renders tab labels with count badges", () => {
@@ -250,11 +248,15 @@ describe("AppView validation tab", () => {
 
     const { container } = render(<AppView telemetry={telemetry} />);
 
+    const servicesTab = screen.getByRole("tab", { name: /services/i });
     const metricsTab = screen.getByRole("tab", { name: /metrics/i });
     const tracesTab = screen.getByRole("tab", { name: /traces/i });
     const logsTab = screen.getByRole("tab", { name: /logs/i });
     const validationTab = screen.getByRole("tab", { name: /validation/i });
 
+    expect(servicesTab.textContent).toContain("Services");
+    expect(servicesTab.querySelector(".tab-button__count")?.textContent).toBe("1");
+    expect(servicesTab.getAttribute("aria-label")).toBe("Services, 1 service");
     expect(metricsTab.textContent).toContain("Metrics");
     expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
     expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metric names");
@@ -276,6 +278,7 @@ describe("AppView validation tab", () => {
 
     render(<AppView telemetry={telemetry} />);
 
+    fireEvent.click(screen.getByRole("tab", { name: /metrics/i }));
     fireEvent.click(screen.getByRole("button", { name: /alpha\.metric/i }));
 
     expect(telemetry.pause).not.toHaveBeenCalled();

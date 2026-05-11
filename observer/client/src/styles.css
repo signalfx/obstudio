@@ -2997,6 +2997,41 @@ code {
   --table-columns: 220px 220px 140px 1fr;
 }
 
+.data-table__head--services,
+.data-table__row--services {
+  --table-columns: minmax(160px, 1fr) 80px 80px 80px 120px 120px 120px;
+}
+
+.data-table__body-inner--services {
+  overflow-x: auto;
+}
+
+.data-table__th--sortable {
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.data-table__th--sortable:hover {
+  color: var(--text);
+}
+
+.explorer-row__numeric--muted {
+  color: var(--text-dim);
+}
+
+.services-tab__error-count {
+  color: var(--red, #f47174);
+  font-weight: 600;
+}
+
 .data-table__td {
   display: flex;
   align-items: center;

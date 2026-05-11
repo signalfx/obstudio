@@ -205,11 +205,12 @@ type TraceSummaryFilter struct {
 
 // SpanPreview represents a preview of a span in a trace.
 type SpanPreview struct {
-	SpanID     string  `json:"spanId"`
-	Name       string  `json:"name"`
-	Kind       string  `json:"kind"`
-	DurationMs float64 `json:"durationMs"`
-	StatusCode string  `json:"statusCode"`
+	SpanID      string  `json:"spanId"`
+	Name        string  `json:"name"`
+	Kind        string  `json:"kind"`
+	DurationMs  float64 `json:"durationMs"`
+	StatusCode  string  `json:"statusCode"`
+	ServiceName string  `json:"serviceName,omitempty"`
 }
 
 // TraceDetail represents the full details of a trace.
@@ -1540,11 +1541,12 @@ func makeSpanPreviews(spans []Span, limit int) []SpanPreview {
 	previews := make([]SpanPreview, n)
 	for i := 0; i < n; i++ {
 		previews[i] = SpanPreview{
-			SpanID:     spans[i].SpanID,
-			Name:       spans[i].Name,
-			Kind:       spans[i].Kind,
-			DurationMs: spans[i].DurationMs,
-			StatusCode: spans[i].Status.Code,
+			SpanID:      spans[i].SpanID,
+			Name:        spans[i].Name,
+			Kind:        spans[i].Kind,
+			DurationMs:  spans[i].DurationMs,
+			StatusCode:  spans[i].Status.Code,
+			ServiceName: spans[i].Resource.ServiceName,
 		}
 	}
 	return previews
