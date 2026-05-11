@@ -2997,13 +2997,66 @@ code {
   --table-columns: 220px 220px 140px 1fr;
 }
 
-.data-table__head--services,
-.data-table__row--services {
-  --table-columns: minmax(160px, 1fr) 80px 80px 80px 120px 120px 120px;
+/* Services table: single scroll container so head + rows scroll together */
+.services-table-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
 }
 
-.data-table__body-inner--services {
-  overflow-x: auto;
+.services-table {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 80px 80px 80px 120px 120px 120px;
+  min-width: 780px;
+  width: 100%;
+}
+
+.services-table__head {
+  display: contents;
+}
+
+.services-table__head .data-table__th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border);
+  min-height: 30px;
+  padding: 0 6px;
+}
+
+.services-table__head .data-table__th:first-child {
+  padding-left: 14px;
+}
+
+.services-table__head .data-table__th:last-child {
+  padding-right: 14px;
+}
+
+.services-table__row {
+  display: contents;
+}
+
+.services-table__row .data-table__td {
+  border-bottom: 1px solid var(--border-soft);
+  min-height: 38px;
+  padding: 3px 6px;
+}
+
+.services-table__row .data-table__td:first-child {
+  padding-left: 14px;
+}
+
+.services-table__row .data-table__td:last-child {
+  padding-right: 14px;
+}
+
+.services-table__row:nth-child(even) .data-table__td {
+  background: var(--chrome-2);
+}
+
+.services-table__row:hover .data-table__td {
+  background: var(--chrome-2);
 }
 
 .data-table__th--sortable {

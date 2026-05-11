@@ -25,6 +25,7 @@ export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.R
 
   const rows = useMemo<ServiceRow[]>(() => {
     const map = new Map<string, ServiceRow>();
+    const allCounts = new Map<string, number>();
     const clientCounts = new Map<string, number>();
     const serverCounts = new Map<string, number>();
 
@@ -44,23 +45,22 @@ export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.R
       const svc = trace.serviceName ?? "unknown";
       const row = get(svc);
       row.traceCount += 1;
-      if (trace.status === "error") row.errorCount += 1;
-      if (trace.durationMs !== undefined) {
-        const prev = row.avgDurationMs ?? 0;
-        row.avgDurationMs = (prev * (row.traceCount - 1) + trace.durationMs) / row.traceCount;
-      }
       for (const span of trace.spans ?? []) {
         const spanSvc = span.serviceName ?? svc;
         const spanRow = get(spanSvc);
         spanRow.spanCount += 1;
+        if (span.statusCode === "ERROR") spanRow.errorCount += 1;
+        const n = (allCounts.get(spanSvc) ?? 0) + 1;
+        allCounts.set(spanSvc, n);
+        spanRow.avgDurationMs = ((spanRow.avgDurationMs ?? 0) * (n - 1) + span.durationMs) / n;
         if (span.kind === "CLIENT") {
-          const n = (clientCounts.get(spanSvc) ?? 0) + 1;
-          clientCounts.set(spanSvc, n);
-          spanRow.avgClientDurationMs = ((spanRow.avgClientDurationMs ?? 0) * (n - 1) + span.durationMs) / n;
+          const cn = (clientCounts.get(spanSvc) ?? 0) + 1;
+          clientCounts.set(spanSvc, cn);
+          spanRow.avgClientDurationMs = ((spanRow.avgClientDurationMs ?? 0) * (cn - 1) + span.durationMs) / cn;
         } else if (span.kind === "SERVER") {
-          const n = (serverCounts.get(spanSvc) ?? 0) + 1;
-          serverCounts.set(spanSvc, n);
-          spanRow.avgServerDurationMs = ((spanRow.avgServerDurationMs ?? 0) * (n - 1) + span.durationMs) / n;
+          const sn = (serverCounts.get(spanSvc) ?? 0) + 1;
+          serverCounts.set(spanSvc, sn);
+          spanRow.avgServerDurationMs = ((spanRow.avgServerDurationMs ?? 0) * (sn - 1) + span.durationMs) / sn;
         }
       }
     }
@@ -112,9 +112,9 @@ export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.R
 
   return (
     <section className="tab-panel" role="tabpanel">
-      <div className="signal-view">
-        <div className="signal-view__content">
-          <div className="data-table__head data-table__head--services">
+      <div className="services-table-scroll">
+        <div className="services-table">
+          <div className="services-table__head">
             <button type="button" className="data-table__th data-table__th--sortable" onClick={() => handleSort("name")}>
               Service{arrow("name")}
             </button>
@@ -138,43 +138,39 @@ export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.R
             </button>
           </div>
 
-          <div className="data-table__body">
-            <div className="data-table__body-inner data-table__body-inner--services">
-              {sorted.map((row) => (
-                <div key={row.name} className="data-table__row data-table__row--services">
-                  <span className="data-table__td data-table__td--service-name">
-                    <span className="explorer-row__primary">{row.name}</span>
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    {row.errorCount > 0
-                      ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
-                      : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    <span className="explorer-row__numeric">
-                      {row.avgDurationMs !== null ? `${row.avgDurationMs.toFixed(1)} ms` : "—"}
-                    </span>
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    <span className="explorer-row__numeric">
-                      {row.avgClientDurationMs !== null ? `${row.avgClientDurationMs.toFixed(1)} ms` : "—"}
-                    </span>
-                  </span>
-                  <span className="data-table__td data-table__td--numeric">
-                    <span className="explorer-row__numeric">
-                      {row.avgServerDurationMs !== null ? `${row.avgServerDurationMs.toFixed(1)} ms` : "—"}
-                    </span>
-                  </span>
-                </div>
-              ))}
+          {sorted.map((row) => (
+            <div key={row.name} className="services-table__row">
+              <span className="data-table__td data-table__td--service-name">
+                <span className="explorer-row__primary">{row.name}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">{row.traceCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">{row.spanCount || "—"}</span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                {row.errorCount > 0
+                  ? <span className="explorer-row__numeric services-tab__error-count">{row.errorCount}</span>
+                  : <span className="explorer-row__numeric explorer-row__numeric--muted">—</span>}
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">
+                  {row.avgDurationMs !== null ? `${row.avgDurationMs.toFixed(1)} ms` : "—"}
+                </span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">
+                  {row.avgClientDurationMs !== null ? `${row.avgClientDurationMs.toFixed(1)} ms` : "—"}
+                </span>
+              </span>
+              <span className="data-table__td data-table__td--numeric">
+                <span className="explorer-row__numeric">
+                  {row.avgServerDurationMs !== null ? `${row.avgServerDurationMs.toFixed(1)} ms` : "—"}
+                </span>
+              </span>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     </section>
