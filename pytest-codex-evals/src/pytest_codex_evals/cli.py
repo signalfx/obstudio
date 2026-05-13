@@ -4,6 +4,12 @@ import argparse
 from pathlib import Path
 
 from .discovery import discover_cases
+from .pr_summary import (
+    available_kinds,
+    discover_changed_skills,
+    render_rubric_pr_summary,
+    replace_rubric_summary_section,
+)
 from .report import load_raw_run_payloads, normalize_kind, render_reports_for_run_root
 
 
@@ -21,6 +27,26 @@ def main(argv: list[str] | None = None) -> int:
     report_parser.add_argument("--kind", required=True, choices=("validation", "sanity", "rubric", "runtime"), help="Report kind to render")
     report_parser.add_argument("--skill", default="", help="Skill directory path or skill name; optional with --run-root")
     report_parser.add_argument("--output-dir", default="", help="Directory for latest report copies; defaults to <repo-root>/eval-reports")
+
+    changed_parser = subparsers.add_parser("changed-skills", help="List changed skill names for a PR diff")
+    changed_parser.add_argument("--repo-root", default=".", help="Repository root")
+    changed_parser.add_argument("--base", required=True, help="Base git revision")
+    changed_parser.add_argument("--head", required=True, help="Head git revision")
+
+    kinds_parser = subparsers.add_parser("eval-kinds", help="List available eval kinds for a skill")
+    kinds_parser.add_argument("--repo-root", default=".", help="Repository root")
+    kinds_parser.add_argument("--skill", required=True, help="Skill name or skills/<name> path")
+
+    summary_parser = subparsers.add_parser("pr-rubric-summary", help="Render or insert PR-body before/after rubric summaries")
+    summary_parser.add_argument("--repo-root", default=".", help="Repository root")
+    summary_parser.add_argument("--skill", action="append", default=[], help="Skill name or skills/<name> path; repeatable")
+    summary_parser.add_argument("--skills-file", default="", help="Newline-delimited skill names")
+    summary_parser.add_argument("--body-file", default="", help="Existing PR body to update")
+    summary_parser.add_argument("--output", default="", help="Output file; defaults to stdout")
+    summary_parser.add_argument("--base-report-root", default="", help="Directory containing base eval-reports copies")
+    summary_parser.add_argument("--base-label", default="base", help="Label for the before report")
+    summary_parser.add_argument("--after-label", default="this PR", help="Label for the after report")
+    summary_parser.add_argument("--missing-after-note", default="not run", help="Text for missing after rubric report")
 
     args = parser.parse_args(argv)
     if args.command == "list":
@@ -46,6 +72,44 @@ def main(argv: list[str] | None = None) -> int:
             report_path, benchmark_path = render_reports_for_run_root(run_root, args.kind, skill=skill, output_dir=output_dir)
             print(f"wrote {report_path}")
             print(f"wrote {benchmark_path}")
+        return 0
+    if args.command == "changed-skills":
+        repo_root = infer_repo_root(Path(args.repo_root).expanduser().resolve())
+        for skill in discover_changed_skills(repo_root, args.base, args.head):
+            print(skill)
+        return 0
+    if args.command == "eval-kinds":
+        repo_root = infer_repo_root(Path(args.repo_root).expanduser().resolve())
+        for kind in available_kinds(repo_root, skill_name(args.skill) or args.skill):
+            print(kind)
+        return 0
+    if args.command == "pr-rubric-summary":
+        repo_root = infer_repo_root(Path(args.repo_root).expanduser().resolve())
+        skills = [skill_name(skill) or skill for skill in args.skill]
+        if args.skills_file:
+            skills_path = Path(args.skills_file).expanduser()
+            skills.extend(
+                skill_name(line.strip()) or line.strip()
+                for line in skills_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        base_report_root = Path(args.base_report_root).expanduser().resolve() if args.base_report_root else None
+        section = render_rubric_pr_summary(
+            repo_root,
+            skills,
+            base_report_root=base_report_root,
+            base_label=args.base_label,
+            after_label=args.after_label,
+            missing_after_note=args.missing_after_note,
+        )
+        output = section
+        if args.body_file:
+            body = Path(args.body_file).expanduser().read_text(encoding="utf-8")
+            output = replace_rubric_summary_section(body, section)
+        if args.output:
+            Path(args.output).expanduser().write_text(output, encoding="utf-8")
+        else:
+            print(output, end="")
         return 0
     return 1
 

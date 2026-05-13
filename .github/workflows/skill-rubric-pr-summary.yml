@@ -1,0 +1,179 @@
+name: Skill Rubric PR Summary
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "skills/**"
+      - "evals/**"
+      - "pytest-codex-evals/**"
+      - ".github/workflows/skill-rubric-pr-summary.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: skill-rubric-pr-summary-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rubric-summary:
+    name: Skill rubric PR summary
+    runs-on: ubuntu-latest
+    env:
+      MODEL: gpt-5.4
+      EVAL_WORKERS: "1"
+      EVAL_PROGRESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Detect changed skills
+        id: changed
+        run: |
+          cd evals
+          uv run codex-eval-harness changed-skills \
+            --repo-root .. \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            > ../.changed-skills
+          cd ..
+          if [ -s .changed-skills ]; then
+            echo "has_skills=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "skills<<EOF"
+              cat .changed-skills
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_skills=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check Codex secret availability
+        id: codex_secret
+        if: steps.changed.outputs.has_skills == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect base rubric reports
+        if: steps.changed.outputs.has_skills == 'true'
+        run: |
+          mkdir -p .baseline-eval-reports
+          while IFS= read -r skill; do
+            [ -n "$skill" ] || continue
+            mkdir -p ".baseline-eval-reports/${skill}/rubric"
+            git show "${{ github.event.pull_request.base.sha }}:eval-reports/${skill}/rubric/report.md" \
+              > ".baseline-eval-reports/${skill}/rubric/report.md" 2>/dev/null || true
+            rm -rf "eval-reports/${skill}/rubric"
+          done < .changed-skills
+
+      - name: Bootstrap Codex CLI
+        id: codex_bootstrap
+        if: steps.changed.outputs.has_skills == 'true' && steps.codex_secret.outputs.available == 'true'
+        continue-on-error: true
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt: "Print the Codex version and exit."
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+
+      - name: Run validation evals
+        if: steps.changed.outputs.has_skills == 'true'
+        run: |
+          set +e
+          while IFS= read -r skill; do
+            [ -n "$skill" ] || continue
+            echo "::group::validation ${skill}"
+            make eval-validation-test SKILL="skills/${skill}" EVAL_WORKERS="${EVAL_WORKERS}" EVAL_PROGRESS="${EVAL_PROGRESS}"
+            status=$?
+            make eval-validation-report SKILL="skills/${skill}" || true
+            if [ "$status" -ne 0 ]; then
+              echo "validation ${skill} ${status}" >> .eval-failures
+            fi
+            echo "::endgroup::"
+          done < .changed-skills
+          exit 0
+
+      - name: Run rubric evals
+        if: steps.changed.outputs.has_skills == 'true' && steps.codex_secret.outputs.available == 'true' && steps.codex_bootstrap.outcome == 'success'
+        run: |
+          set +e
+          while IFS= read -r skill; do
+            [ -n "$skill" ] || continue
+            kinds=$(cd evals && uv run codex-eval-harness eval-kinds --repo-root .. --skill "$skill")
+            if ! printf '%s\n' "$kinds" | grep -qx rubric; then
+              continue
+            fi
+            echo "::group::rubric ${skill}"
+            make eval-rubric-test SKILL="skills/${skill}" MODEL="${MODEL}" EVAL_WORKERS="${EVAL_WORKERS}" EVAL_PROGRESS="${EVAL_PROGRESS}"
+            status=$?
+            make eval-rubric-report SKILL="skills/${skill}" || true
+            if [ "$status" -ne 0 ]; then
+              echo "rubric ${skill} ${status}" >> .eval-failures
+            fi
+            echo "::endgroup::"
+          done < .changed-skills
+          exit 0
+
+      - name: Render PR rubric summary
+        if: always() && steps.changed.outputs.has_skills == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ steps.codex_secret.outputs.available }}" != "true" ]; then
+            missing_note="not run: OPENAI_API_KEY not configured"
+          elif [ "${{ steps.codex_bootstrap.outcome }}" != "success" ]; then
+            missing_note="not run: Codex bootstrap failed"
+          else
+            missing_note="not run: rubric report unavailable"
+          fi
+
+          gh pr view "$PR_NUMBER" --json body --jq '.body // ""' > .pr-body.md
+          cd evals
+          uv run codex-eval-harness pr-rubric-summary \
+            --repo-root .. \
+            --skills-file ../.changed-skills \
+            --base-report-root ../.baseline-eval-reports \
+            --base-label "${{ github.event.pull_request.base.sha }}" \
+            --after-label "${{ github.event.pull_request.head.sha }}" \
+            --body-file ../.pr-body.md \
+            --output ../.pr-body-updated.md \
+            --missing-after-note "$missing_note"
+          cd ..
+          gh pr edit "$PR_NUMBER" --body-file .pr-body-updated.md
+
+      - name: Upload eval artifacts
+        if: always() && steps.changed.outputs.has_skills == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-rubric-pr-summary
+          path: |
+            eval-reports/
+            .baseline-eval-reports/
+            .workspace/codex-evals/
+            .changed-skills
+            .eval-failures
+          if-no-files-found: ignore
+
+      - name: Fail if eval commands failed
+        if: always() && steps.changed.outputs.has_skills == 'true'
+        run: |
+          if [ -s .eval-failures ]; then
+            cat .eval-failures
+            exit 1
+          fi
