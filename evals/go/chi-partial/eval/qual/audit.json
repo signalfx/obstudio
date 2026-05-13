@@ -16,7 +16,7 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Identifies main.go as the entry point and chi as the router.",
+    "Identifies main.go as the relevant service file and recognizes the service as a Go chi/router-based service.",
     "Recognizes existing tracing setup and otelhttp.NewHandler wrapping the router.",
     "Flags the hardcoded OTLP endpoint and absence of environment-driven configuration.",
     "Flags high-cardinality custom span naming and tracer creation inside a request handler.",
