@@ -18,8 +18,8 @@
   "rubric": [
     "Identifies cmd/kvstore-server/main.go as the entry point and preserves the cmd/ plus library package boundary.",
     "Identifies GET/PUT/DELETE /kv/{key} and GET /search?word= routes without embedding concrete key values.",
-    "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
-    "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
-    "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation."
+    "Reports OpenTelemetry instrumentation/export coverage is absent, including no spans, no metrics, and no OTLP/exporter setup.",
+    "Calls out filesystem persistence or startup reload work and background index/goroutine work as optional custom instrumentation candidates; LRU eviction is optional when surfaced by the audit.",
+    "Separates missing coverage from current coverage and/or anti-pattern concerns, and avoids inventing existing instrumentation."
   ]
 }

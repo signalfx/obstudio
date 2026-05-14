@@ -20,6 +20,6 @@
     "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
-    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path."
+    "Mentions the appropriate Go HTTP/chi server instrumentation path, such as official OTel HTTP/chi middleware; explicit otelhttp or otelchi package names are preferred but not required."
   ]
 }

@@ -19,7 +19,7 @@
     "Identifies app.js and package.json as the relevant startup and dependency surfaces.",
     "Enumerates the Express routes for health and task CRUD.",
     "Reports missing HTTP and Express auto-instrumentation packages.",
-    "Calls out missing request duration, request rate, error visibility, and OTLP exporter configuration.",
+    "Calls out missing request duration, request rate, error visibility, and telemetry export/bootstrap configuration such as OTLP, resource/exporter, or SDK exporter setup.",
     "Avoids suggesting unrelated frameworks or package managers."
   ]
 }

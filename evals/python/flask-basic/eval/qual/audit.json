@@ -19,7 +19,7 @@
     "Identifies app.py and pyproject.toml as the relevant entrypoint and dependency files.",
     "Enumerates the Flask task CRUD routes and health route.",
     "Reports no opentelemetry packages and no SDK initialization.",
-    "Mentions opentelemetry-instrumentation-flask as the auto-instrumentation gap.",
+    "Identifies Flask server auto-instrumentation as the gap, either by naming opentelemetry-instrumentation-flask or by describing official Flask auto-instrumentation / opentelemetry-instrument baseline setup.",
     "Calls out request duration, rate, errors, and OTLP exporter configuration."
   ]
 }
