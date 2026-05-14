@@ -9,7 +9,7 @@ description: >-
   payment processing", "track error rate for X".
 metadata:
   author: otel-studio
-  version: 0.1.0
+  version: 0.1.1
   category: observability
 ---
 
@@ -28,6 +28,20 @@ Before editing anything, ground the plan with repo evidence:
 - Confirm the language and framework from actual dependency or source files
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
 - Confirm existing telemetry indicators or record `none found`
+- For Java projects, build an existing trace wiring inventory before adding any
+  dependency, SDK/provider setup, tracer binding, or custom span:
+  - Runtime/agent: `-javaagent`, `JAVA_TOOL_OPTIONS`, `OTEL_*`, launcher
+    scripts, Docker/Kubernetes startup, sidecars, and collector config.
+  - Build files: Maven/Gradle OTel dependencies, Java agent artifacts,
+    framework tracing dependencies, and any existing telemetry modules.
+  - SDK/provider setup: `OpenTelemetrySdk`, `SdkTracerProvider`,
+    `GlobalOpenTelemetry`, `OpenTelemetry`, framework `@Bean`/`@Factory`,
+    Guice `@Provides`, and external bootstrap modules named in the injector.
+  - Tracer usage: constructor-injected `Tracer`, `getTracer`, `spanBuilder`,
+    `Span.current`, span status, `recordException`, MDC/log correlation, and
+    propagation inject/extract.
+  Classify Java trace wiring as `auto-only`, `custom-with-provider`,
+  `custom-provider-external`, or `missing` and state the evidence before editing.
 - Confirm the planned `service.name` source and `deployment.environment` source
 - Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
 - If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
@@ -41,6 +55,9 @@ Do not proceed until you can state all of these clearly:
 - `service.name`
 - environment dimension
 - incremental addition vs new scaffold
+- for Java, trace source of truth: existing provider/binding to reuse, existing
+  agent-backed global provider, external provider likely supplied by bootstrap,
+  or evidence that the provider/binding is missing
 
 ### Fast Path: Targeted Custom Signal
 
@@ -86,6 +103,24 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it.
+- Reuse the existing trace source of truth. If Java custom spans already obtain a
+  tracer through DI, framework beans, globals, or an agent-backed global
+  provider, add spans through that path instead of creating a second provider or
+  a new binding.
+- Do not add a new Java dependency, SDK initializer, tracer provider, meter
+  provider, or DI `Tracer` binding unless the inventory proves it is absent and
+  required for the requested signal. If dependency manifests already contain the
+  OTel APIs you are using, do not add duplicate dependencies.
+- For Java DI apps, search every module/factory plus external bootstrap modules
+  named in the injector. If a constructor already accepts `Tracer` and the app
+  builds or starts, assume a binding may be provided externally. Add a fallback
+  binding only after proving injector startup fails without it.
+- If a Java fallback `Tracer` binding is truly needed, place it in an
+  observability-owned module/factory such as `OtelModule`, `TelemetryModule`, or
+  `ObservabilityConfig`, not in an unrelated persistence/client/business module.
+  The fallback should bridge to the existing global/runtime provider
+  (`GlobalOpenTelemetry.getTracer(...)` in Java agent setups) and must not
+  initialize a second SDK.
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
 - Do not create spans for trivial helpers. Only span real diagnostic boundaries.
@@ -134,8 +169,23 @@ Go:
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
 - Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
+- Before adding Java dependencies or a `Tracer` provider, inspect existing
+  `pom.xml`/Gradle files, Java agent startup, DI modules, framework factories,
+  and current constructor-injected `Tracer` usage. Existing OTel dependencies or
+  constructor-injected custom spans mean tracing was already partially present.
+- Prefer `GlobalOpenTelemetry` only as a bridge to the Java agent's global
+  provider. Do not call `OpenTelemetrySdk.builder()` or install another provider
+  in an agent-instrumented app unless the repo already uses that pattern and
+  there is one provider per process.
+- For Guice/Micronaut/Spring DI, do not add `@Provides Tracer`, `@Bean Tracer`,
+  or `@Factory Tracer` by default. First verify no existing binding is supplied
+  by the app, framework, or external bootstrap module. If one is required, add it
+  to an OTel/Telemetry module and mention in the final response why it was
+  needed.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
-- In the final response, explicitly mention `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and `http.server.request.duration`.
+- In the final response, explicitly mention the agent setup or path,
+  `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
+  `http.server.request.duration`.
 
 ### 4. Custom Instrumentation
 
