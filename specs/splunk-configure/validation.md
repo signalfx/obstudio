@@ -145,11 +145,11 @@ runs `terraform plan` and `terraform apply` against a live Splunk Observability
 Cloud org.
 
 Requires credentials (ask the user before running):
-- `realm` — Splunk O11y realm → **`lab0`**
-- `api_token` — Splunk O11y API token with detector write permissions → **awaiting**
-- `notification_channel` — alert target (e.g. email or Slack webhook) → **awaiting**
+- `realm` — Splunk O11y realm → **`lab1`**
+- `api_token` — Splunk O11y API token with detector write permissions → **provided**
+- `notification_channel` — alert target → **`Email,noop@test.local`** (placeholder for testing)
 
-**Status:** Blocked — awaiting `api_token` and `notification_channel`
+- [x] Verified — `terraform plan` succeeded (21 to add); `terraform apply` completed (21 detectors created in lab1 org)
 
 ### 11. README and repo wiring
 

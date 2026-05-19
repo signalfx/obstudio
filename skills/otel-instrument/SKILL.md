@@ -9,7 +9,7 @@ description: >-
   payment processing", "track error rate for X".
 metadata:
   author: otel-studio
-  version: 0.1.0
+  version: 0.1.1
   category: observability
 ---
 
@@ -28,6 +28,7 @@ Before editing anything, ground the plan with repo evidence:
 - Confirm the language and framework from actual dependency or source files
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
 - Confirm existing telemetry indicators or record `none found`
+- For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
 - Confirm the planned `service.name` source and `deployment.environment` source
 - Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
 - If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
@@ -41,6 +42,7 @@ Do not proceed until you can state all of these clearly:
 - `service.name`
 - environment dimension
 - incremental addition vs new scaffold
+- for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
 
 ### Fast Path: Targeted Custom Signal
 
@@ -86,6 +88,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it.
+- For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
 - Do not create spans for trivial helpers. Only span real diagnostic boundaries.
@@ -134,8 +137,11 @@ Go:
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
 - Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
+- Follow `./references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
-- In the final response, explicitly mention `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and `http.server.request.duration`.
+- In the final response, explicitly mention the agent setup or path,
+  `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
+  `http.server.request.duration`.
 
 ### 4. Custom Instrumentation
 

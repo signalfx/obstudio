@@ -4,6 +4,77 @@ Language-specific instrumentation guidance for Java services.
 
 ---
 
+## Preflight: Trace Wiring Inventory
+
+Before adding any dependency, SDK/provider setup, tracer binding, or custom span
+in a Java project, build an existing trace wiring inventory:
+
+- **Runtime/agent:** `-javaagent`, `JAVA_TOOL_OPTIONS`, `OTEL_*`, launcher
+  scripts, Docker/Kubernetes startup, sidecars, and collector config.
+- **Build files:** Maven/Gradle OTel dependencies, Java agent artifacts,
+  framework tracing dependencies, and any existing telemetry modules.
+- **SDK/provider setup:** `OpenTelemetrySdk`, `SdkTracerProvider`,
+  `GlobalOpenTelemetry`, `OpenTelemetry`, framework `@Bean`/`@Factory`,
+  Guice `@Provides`, and external bootstrap modules named in the injector.
+- **Tracer usage:** constructor-injected `Tracer`, `getTracer`, `spanBuilder`,
+  `Span.current`, span status, `recordException`, MDC/log correlation, and
+  propagation inject/extract.
+
+Classify trace wiring as one of:
+- `auto-only` — Java agent present, no custom spans
+- `custom-with-provider` — custom spans with an in-repo provider/binding
+- `custom-provider-external` — custom spans with provider supplied by external bootstrap
+- `missing` — no OTel setup found
+
+State the classification and evidence before editing.
+
+### Trace Source of Truth
+
+Record the trace source of truth in the preflight summary:
+- Existing provider/binding to reuse
+- Existing agent-backed global provider
+- External provider likely supplied by bootstrap
+- Evidence that the provider/binding is missing
+
+---
+
+## Implementation Rules
+
+- Reuse the existing trace source of truth. If custom spans already obtain a
+  tracer through DI, framework beans, globals, or an agent-backed global
+  provider, add spans through that path instead of creating a second provider or
+  a new binding.
+- Do not add a new dependency, SDK initializer, tracer provider, meter provider,
+  or DI `Tracer` binding unless the inventory proves it is absent and required
+  for the requested signal. If dependency manifests already contain the OTel APIs
+  you need, do not add duplicate dependencies.
+- Before adding dependencies or a `Tracer` provider, inspect existing
+  `pom.xml`/Gradle files, Java agent startup, DI modules, framework factories,
+  and current constructor-injected `Tracer` usage. Existing OTel dependencies or
+  constructor-injected custom spans mean tracing was already partially present.
+- Prefer `GlobalOpenTelemetry` only as a bridge to the Java agent's global
+  provider. Do not call `OpenTelemetrySdk.builder()` or install another provider
+  in an agent-instrumented app unless the repo already uses that pattern and
+  there is one provider per process.
+- For DI apps (Guice/Micronaut/Spring), search every module/factory plus
+  external bootstrap modules named in the injector. If a constructor already
+  accepts `Tracer` and the app builds or starts, assume a binding may be provided
+  externally. Add a fallback binding only after proving injector startup fails
+  without it.
+- If a fallback `Tracer` binding is truly needed, place it in an
+  observability-owned module/factory such as `OtelModule`, `TelemetryModule`, or
+  `ObservabilityConfig`, not in an unrelated persistence/client/business module.
+  The fallback should bridge to the existing global/runtime provider
+  (`GlobalOpenTelemetry.getTracer(...)` in Java agent setups) and must not
+  initialize a second SDK.
+- For Guice/Micronaut/Spring DI, do not add `@Provides Tracer`, `@Bean Tracer`,
+  or `@Factory Tracer` by default. First verify no existing binding is supplied
+  by the app, framework, or external bootstrap module. If one is required, add it
+  to an OTel/Telemetry module and mention in the final response why it was
+  needed.
+
+---
+
 ## OTel Java Agent (Recommended)
 
 The OpenTelemetry Java agent provides auto-instrumentation with zero code changes.
