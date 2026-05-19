@@ -39,10 +39,10 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const shortcuts = useMemo(() => ({
     "?": () => setShowHelp((v) => !v),
     p: () => toggle(),
-    "1": () => switchTab("services"),
-    "2": () => switchTab("metrics"),
-    "3": () => switchTab("traces"),
-    "4": () => switchTab("logs"),
+    "1": () => switchTab("metrics"),
+    "2": () => switchTab("traces"),
+    "3": () => switchTab("logs"),
+    "4": () => switchTab("services"),
     "5": () => switchTab("validation"),
   }), [toggle, switchTab]);
 
@@ -100,17 +100,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === "services"}
-            aria-label={formatTabAriaLabel("Services", state.stats?.serviceNames?.length, "service", "services")}
-            className={activeTab === "services" ? "tab-button is-active" : "tab-button"}
-            onClick={() => switchTab("services")}
-          >
-            Services
-            {state.stats?.serviceNames?.length ? <span className="tab-button__count" aria-hidden="true">{state.stats.serviceNames.length}</span> : null}
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={activeTab === "metrics"}
             aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
@@ -140,6 +129,17 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Logs
             {state.stats?.logCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.logCount}</span> : null}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "services"}
+            aria-label={formatTabAriaLabel("Services", state.stats?.serviceNames?.length, "service", "services")}
+            className={activeTab === "services" ? "tab-button is-active" : "tab-button"}
+            onClick={() => switchTab("services")}
+          >
+            Services
+            {state.stats?.serviceNames?.length ? <span className="tab-button__count" aria-hidden="true">{state.stats.serviceNames.length}</span> : null}
           </button>
           <button
             type="button"
@@ -204,7 +204,7 @@ function initialTabFromLocation(): AppTab {
     case "validation":
       return tab;
     default:
-      return "services";
+      return "metrics";
   }
 }
 

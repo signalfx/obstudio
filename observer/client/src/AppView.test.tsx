@@ -234,13 +234,13 @@ describe("AppView validation tab", () => {
     expect(screen.getAllByText("GET /orders").length).toBeGreaterThan(0);
   });
 
-  it("renders the services tab as the default tab", () => {
+  it("renders the metrics tab as the default tab", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
 
     render(<AppView telemetry={telemetry} />);
 
-    expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: /metrics/i }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tab", { name: /metrics/i }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("false");
   });
 
   it("renders tab labels with count badges", () => {
