@@ -54,10 +54,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         <header className="title-bar">
           <div className="title-bar__brand">
             <span className="title-bar__dot" aria-hidden="true" />
-            <div>
-              <p className="title-bar__eyebrow">Observer</p>
-              <h1 className="title-bar__title">Telemetry Explorer</h1>
-            </div>
+            <p className="title-bar__eyebrow">Telemetry Explorer</p>
           </div>
           <div className="title-bar__meta">
             {/* Pause / Resume toggle */}

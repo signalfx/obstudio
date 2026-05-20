@@ -131,6 +131,36 @@ function logKey(r: LogRecord): string {
   return r.id || `${r.timeUnixNano}|${r.resource?.serviceName ?? ""}|${r.severityText ?? ""}|${r.severityNumber ?? ""}|${r.body}`;
 }
 
+// Tokenizes a pretty-printed JSON string for syntax highlighting.
+const JSON_TOKEN_RE =
+  /("(?:[^"\\]|\\.)*")|(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?(?=[\s,\}\]]))|(\btrue\b|\bfalse\b|\bnull\b)|([{}\[\],:])|(\s+|.)/g;
+
+function JsonHighlight({ json }: { json: string }): React.ReactElement {
+  const parts: React.ReactNode[] = [];
+  let m: RegExpExecArray | null;
+
+  JSON_TOKEN_RE.lastIndex = 0;
+  while ((m = JSON_TOKEN_RE.exec(json)) !== null) {
+    const [full, str, num, kw, punct] = m;
+    if (str !== undefined) {
+      // A string is a key when it's immediately followed by optional whitespace then ":"
+      const afterEnd = json.slice(JSON_TOKEN_RE.lastIndex);
+      const isKey = /^\s*:/.test(afterEnd);
+      parts.push(<span key={parts.length} className={isKey ? "json-hl__key" : "json-hl__string"}>{full}</span>);
+    } else if (num !== undefined) {
+      parts.push(<span key={parts.length} className="json-hl__number">{full}</span>);
+    } else if (kw !== undefined) {
+      parts.push(<span key={parts.length} className="json-hl__keyword">{full}</span>);
+    } else if (punct !== undefined) {
+      parts.push(<span key={parts.length} className="json-hl__punct">{full}</span>);
+    } else {
+      parts.push(full);
+    }
+  }
+
+  return <pre className="log-detail__body">{parts}</pre>;
+}
+
 /** Logs tab with virtualized table and detail panel for selected log records. */
 export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement {
   const [clauses, setClauses] = useState<FilterClause[]>([]);
@@ -388,7 +418,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "6px" }}>
                       <CopyTextButton text={JSON.stringify(selectedLog, null, 2)} label="JSON" />
                     </div>
-                    <pre className="log-detail__body">{JSON.stringify(selectedLog, null, 2)}</pre>
+                    <JsonHighlight json={JSON.stringify(selectedLog, null, 2)} />
                   </div>
                 </div>
               )}

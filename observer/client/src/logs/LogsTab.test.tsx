@@ -373,6 +373,73 @@ describe("LogsTab", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".sev-badge--info {\n  background: rgba(124, 199, 255, 0.14);\n  color: #7cc7ff;\n}");
+    expect(css).toContain(".sev-badge--info {\n  background: rgba(97, 202, 250, 0.18);\n  color: #61cafa;\n}");
+  });
+
+  it("severity badges use pill shape with no border-left accent", () => {
+    const { readFileSync } = require("fs");
+    const { resolve } = require("path");
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(css).toContain("border-radius: 999px;");
+    // No border-left on sev-badge base rule
+    const badgeBlock = css.slice(css.indexOf(".sev-badge {"), css.indexOf(".sev-badge--error {"));
+    expect(badgeBlock).not.toContain("border-left");
+  });
+
+  it("renders JSON tab with syntax-highlighted spans for key, string, number, and keyword tokens", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "checkout started",
+            attributes: { count: 3, active: true },
+            resource: { serviceName: "checkout", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+
+    const jsonTab = screen.getByRole("button", { name: "JSON" });
+    fireEvent.click(jsonTab);
+
+    // Highlighted keys
+    expect(container.querySelector(".json-hl__key")).toBeTruthy();
+    // Highlighted string values
+    expect(container.querySelector(".json-hl__string")).toBeTruthy();
+    // Highlighted numbers
+    expect(container.querySelector(".json-hl__number")).toBeTruthy();
+    // Highlighted keywords (true/false/null)
+    expect(container.querySelector(".json-hl__keyword")).toBeTruthy();
+  });
+
+  it("JSON tab copy button copies raw JSON not highlighted markup", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+    const log = {
+      id: "1",
+      timeUnixNano: "1712700000000000000",
+      severityText: "INFO",
+      body: "checkout started",
+      attributes: {},
+      resource: { serviceName: "checkout", attributes: {} },
+      scope: { name: "otel" },
+    };
+
+    const { container } = render(<LogsTab logs={[log]} onInteract={vi.fn()} />);
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy JSON" }));
+
+    expect(writeText).toHaveBeenCalledWith(JSON.stringify(log, null, 2));
   });
 });

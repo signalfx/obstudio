@@ -276,13 +276,99 @@ describe("TracesTab row layout", () => {
     expect(screen.queryByText("invalid_format")).toBeNull();
   });
 
+  it("renders a close button in the span detail panel when onClose is provided", () => {
+    const onClose = vi.fn();
+    render(
+      <SpanDetailsPanel
+        span={{
+          traceId: "trace-1",
+          spanId: "span-1",
+          parentSpanId: "",
+          name: "GET /orders",
+          kind: "SERVER",
+          startTimeUnixNano: "2026-04-11T12:00:00Z",
+          endTimeUnixNano: "2026-04-11T12:00:01Z",
+          durationMs: 42,
+          status: { code: "OK", message: "" },
+          attributes: {},
+          events: [],
+          links: [],
+          resource: { serviceName: "checkout", attributes: {} },
+          scope: { name: "otel", version: "" },
+        }}
+        validationFindings={[]}
+        onClose={onClose}
+      />,
+    );
+
+    const closeBtn = screen.getByRole("button", { name: "Close span details" });
+    expect(closeBtn).toBeTruthy();
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("does not render a close button in the span detail panel when onClose is not provided", () => {
+    render(
+      <SpanDetailsPanel
+        span={{
+          traceId: "trace-1",
+          spanId: "span-1",
+          parentSpanId: "",
+          name: "GET /orders",
+          kind: "SERVER",
+          startTimeUnixNano: "2026-04-11T12:00:00Z",
+          endTimeUnixNano: "2026-04-11T12:00:01Z",
+          durationMs: 42,
+          status: { code: "OK", message: "" },
+          attributes: {},
+          events: [],
+          links: [],
+          resource: { serviceName: "checkout", attributes: {} },
+          scope: { name: "otel", version: "" },
+        }}
+        validationFindings={[]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Close span details" })).toBeNull();
+  });
+
+  it("span detail panel header status badge does not use trace-status--plain", () => {
+    const { container } = render(
+      <SpanDetailsPanel
+        span={{
+          traceId: "trace-1",
+          spanId: "span-1",
+          parentSpanId: "",
+          name: "GET /orders",
+          kind: "SERVER",
+          startTimeUnixNano: "2026-04-11T12:00:00Z",
+          endTimeUnixNano: "2026-04-11T12:00:01Z",
+          durationMs: 42,
+          status: { code: "OK", message: "" },
+          attributes: {},
+          events: [],
+          links: [],
+          resource: { serviceName: "checkout", attributes: {} },
+          scope: { name: "otel", version: "" },
+        }}
+        validationFindings={[]}
+      />,
+    );
+
+    const badge = container.querySelector(".span-details__meta .trace-status");
+    expect(badge).toBeTruthy();
+    expect(badge?.classList.contains("trace-status--ok")).toBe(true);
+    expect(badge?.classList.contains("trace-status--plain")).toBe(false);
+  });
+
   it("uses bounded per-tab column caps with trailing spacer tracks", () => {
     const { readFileSync } = require("fs");
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: 220px 220px 140px 1fr;\n}");
-    expect(css).toContain("--table-columns: 220px 240px 140px 96px 88px 56px 1fr;");
+    expect(css).toContain("--table-columns: 220px 240px 140px 72px 88px 56px 1fr;");
     expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
     expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
     expect(css).toContain("--table-columns: 220px 240px 88px 1fr;");
@@ -294,8 +380,8 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: 220px 240px 140px 96px 88px 56px 1fr;\n}");
-    expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 38px;\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: 220px 240px 140px 72px 88px 56px 1fr;\n}");
+    expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 32px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
     expect(css).toContain(".filter-builder {\n  position: relative;\n  display: flex;\n  flex: 0 1 auto;");
     expect(css).toContain("width: min(100%, 760px);");
