@@ -150,3 +150,19 @@ export async function fetchMetricFilterValues(field: string, prefix: string, que
 export async function fetchLogFilterValues(field: string, prefix: string, query: LogsQuery = {}, signal?: AbortSignal): Promise<string[]> {
   return fetchValueSuggestions("/api/query/logs/filter-values", field, prefix, query, signal);
 }
+
+/** Fetch per-service aggregates computed from the full span store. */
+export async function fetchServiceStats(signal?: AbortSignal): Promise<ServiceStats[]> {
+  const data = await fetchJSON<ServiceStats[] | null>("/api/query/stats/services", { signal });
+  return Array.isArray(data) ? data : [];
+}
+
+export interface ServiceStats {
+  name: string;
+  traceCount: number;
+  spanCount: number;
+  errorCount: number;
+  avgDurationMs: number | null;
+  avgClientDurationMs: number | null;
+  avgServerDurationMs: number | null;
+}

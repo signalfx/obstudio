@@ -11,7 +11,8 @@ const shortcuts = [
   { key: "1", description: "Switch to Metrics tab" },
   { key: "2", description: "Switch to Traces tab" },
   { key: "3", description: "Switch to Logs tab" },
-  { key: "4", description: "Switch to Validation tab" },
+  { key: "4", description: "Switch to Services tab" },
+  { key: "5", description: "Switch to Validation tab" },
 ];
 
 /** Modal overlay listing available keyboard shortcuts. */

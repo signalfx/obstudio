@@ -153,7 +153,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
 
         {activeTab === "services" ? (
           <ServicesTab
-            traces={state.traces ?? []}
             serviceNames={state.stats?.serviceNames ?? []}
           />
         ) : null}

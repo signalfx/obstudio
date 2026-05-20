@@ -65,6 +65,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/logs", queryLogs(s))
 	mux.HandleFunc("GET /api/query/logs/filter-values", queryLogFilterValues(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
+	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
@@ -129,6 +130,12 @@ func queryLogs(s *store.Store) http.HandlerFunc {
 func queryStats(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.Stats())
+	}
+}
+
+func queryServiceStats(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, s.ServiceStatsAll())
 	}
 }
 

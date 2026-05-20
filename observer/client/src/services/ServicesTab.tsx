@@ -1,90 +1,41 @@
-import React, { useMemo, useState } from "react";
-import type { TraceSummary } from "../api/types";
+import React, { useEffect, useState } from "react";
+import { fetchServiceStats, type ServiceStats } from "../api/client";
 
 interface ServicesTabProps {
-  traces: TraceSummary[];
   serviceNames: string[];
 }
 
-interface ServiceRow {
-  name: string;
-  traceCount: number;
-  spanCount: number;
-  errorCount: number;
-  avgDurationMs: number | null;
-  avgClientDurationMs: number | null;
-  avgServerDurationMs: number | null;
-}
-
-type SortKey = "name" | "traceCount" | "spanCount" | "errorCount" | "avgDurationMs" | "avgClientDurationMs" | "avgServerDurationMs";
+type SortKey = keyof ServiceStats;
 type SortDir = "asc" | "desc";
 
-export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.ReactElement {
+export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElement {
+  const [rows, setRows] = useState<ServiceStats[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const rows = useMemo<ServiceRow[]>(() => {
-    const map = new Map<string, ServiceRow>();
-    const allCounts = new Map<string, number>();
-    const clientCounts = new Map<string, number>();
-    const serverCounts = new Map<string, number>();
-
-    const get = (name: string): ServiceRow => {
-      let row = map.get(name);
-      if (!row) {
-        row = { name, traceCount: 0, spanCount: 0, errorCount: 0, avgDurationMs: null, avgClientDurationMs: null, avgServerDurationMs: null };
-        map.set(name, row);
-      }
-      return row;
-    };
-
-    // seed from the authoritative service name list so zero-signal services appear
-    for (const name of serviceNames) get(name);
-
-    for (const trace of traces) {
-      const svc = trace.serviceName ?? "unknown";
-      const row = get(svc);
-      row.traceCount += 1;
-      for (const span of trace.spans ?? []) {
-        const spanSvc = span.serviceName ?? svc;
-        const spanRow = get(spanSvc);
-        spanRow.spanCount += 1;
-        if (span.statusCode === "ERROR") spanRow.errorCount += 1;
-        const n = (allCounts.get(spanSvc) ?? 0) + 1;
-        allCounts.set(spanSvc, n);
-        spanRow.avgDurationMs = ((spanRow.avgDurationMs ?? 0) * (n - 1) + span.durationMs) / n;
-        if (span.kind === "CLIENT") {
-          const cn = (clientCounts.get(spanSvc) ?? 0) + 1;
-          clientCounts.set(spanSvc, cn);
-          spanRow.avgClientDurationMs = ((spanRow.avgClientDurationMs ?? 0) * (cn - 1) + span.durationMs) / cn;
-        } else if (span.kind === "SERVER") {
-          const sn = (serverCounts.get(spanSvc) ?? 0) + 1;
-          serverCounts.set(spanSvc, sn);
-          spanRow.avgServerDurationMs = ((spanRow.avgServerDurationMs ?? 0) * (sn - 1) + span.durationMs) / sn;
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchServiceStats(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setRows(data);
         }
-      }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [serviceNames]);
+
+  const sorted = [...rows].sort((a, b) => {
+    let cmp = 0;
+    if (sortKey === "name") {
+      cmp = a.name.localeCompare(b.name);
+    } else {
+      const av = a[sortKey] ?? -1;
+      const bv = b[sortKey] ?? -1;
+      cmp = (av as number) - (bv as number);
     }
-
-    return [...map.values()];
-  }, [traces, serviceNames]);
-
-  const sorted = useMemo(() => {
-    return [...rows].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "name") {
-        cmp = a.name.localeCompare(b.name);
-      } else if (sortKey === "avgDurationMs") {
-        cmp = (a.avgDurationMs ?? -1) - (b.avgDurationMs ?? -1);
-      } else if (sortKey === "avgClientDurationMs") {
-        cmp = (a.avgClientDurationMs ?? -1) - (b.avgClientDurationMs ?? -1);
-      } else if (sortKey === "avgServerDurationMs") {
-        cmp = (a.avgServerDurationMs ?? -1) - (b.avgServerDurationMs ?? -1);
-      } else {
-        cmp = (a[sortKey] as number) - (b[sortKey] as number);
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [rows, sortKey, sortDir]);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -100,7 +51,7 @@ export function ServicesTab({ traces, serviceNames }: ServicesTabProps): React.R
     return sortDir === "asc" ? " ▲" : " ▼";
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && serviceNames.length === 0) {
     return (
       <section className="tab-panel" role="tabpanel">
         <p className="explorer__status explorer__status--empty">
