@@ -36,6 +36,7 @@ func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
 	// SPA fallback: serve index.html for paths that don't match a static file.
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 			fileServer.ServeHTTP(w, r)
 			return
 		}

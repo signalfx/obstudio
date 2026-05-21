@@ -76,48 +76,32 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.title-bar {
+.tab-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 14px;
+  align-items: stretch;
+  gap: 0;
   border-bottom: 1px solid var(--border);
   background: var(--chrome);
 }
 
-.title-bar__brand {
+.tab-bar__tabs {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
+  padding: 0 4px;
+  flex: 1;
+  min-width: 0;
 }
 
-.title-bar__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(57, 147, 255, 0.12);
-}
-
-.title-bar__eyebrow {
-  margin: 0;
-  font-size: var(--font-label);
-  font-weight: 600;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text);
-}
-
-.title-bar__meta {
+.tab-bar__actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  margin-left: auto;
+  padding: 0 6px;
 }
 
-.title-bar__help {
+.tab-bar__help {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -135,17 +119,9 @@ body {
   transition: color 120ms ease, border-color 120ms ease;
 }
 
-.title-bar__help:hover {
+.tab-bar__help:hover {
   color: var(--text);
   border-color: var(--text-dim);
-}
-
-.tab-bar {
-  display: flex;
-  gap: 0;
-  padding: 0 4px;
-  border-bottom: 1px solid var(--border);
-  background: var(--chrome);
 }
 
 .tab-button {
@@ -1108,7 +1084,6 @@ code {
     border-right: 0;
   }
 
-  .title-bar,
   .panel-toolbar {
     align-items: flex-start;
     flex-direction: column;

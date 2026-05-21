@@ -185,6 +185,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	observerStatusBarItem.show();
 	logObserverLifecycle('Status bar item created.');
 
+	// Open the panel automatically on activation, but only if the serializer hasn't
+	// already restored a panel from the previous session.
+	setTimeout(() => {
+		if (!observerPanel) {
+			void openObserverPanel(context);
+		}
+	}, 500);
+
 	// Start the packaged observer as soon as the extension activates so the UI
 	// and OTLP receiver are ready before the user opens the panel.
 	void ensureObserverRunning(context).catch((error) => {
@@ -736,7 +744,7 @@ async function openObserverPanel(context: vscode.ExtensionContext): Promise<void
 		lastObserverPanelRenderKey = undefined;
 		observerPanel = vscode.window.createWebviewPanel(
 			observerPanelViewType,
-			'Observer',
+			'Observer – Telemetry Explorer',
 			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
@@ -783,7 +791,7 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 
 function applyObserverPanelPresentation(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
 	const iconUri = vscode.Uri.joinPath(context.extensionUri, 'assets', 'observer-icon.png');
-	panel.title = 'Observer';
+	panel.title = 'Observer – Telemetry Explorer';
 	panel.iconPath = {
 		light: iconUri,
 		dark: iconUri,

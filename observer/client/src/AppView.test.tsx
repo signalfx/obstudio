@@ -284,10 +284,11 @@ describe("AppView validation tab", () => {
     expect(telemetry.pause).not.toHaveBeenCalled();
   });
 
-  it("allows title-bar controls to wrap when the header gets crowded", () => {
-    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-
-    expect(css).toContain(".title-bar__meta {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex-wrap: wrap;\n}");
+  it("renders tab-bar actions (live toggle and help) in the tab bar row", () => {
+    const telemetry = makeTelemetryHandle([]);
+    const { container } = render(<AppView telemetry={telemetry} />);
+    expect(container.querySelector(".tab-bar__actions")).toBeTruthy();
+    expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {

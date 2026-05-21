@@ -51,49 +51,8 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   return (
     <main className="app-shell">
       <section className="app-frame">
-        <header className="title-bar">
-          <div className="title-bar__brand">
-            <span className="title-bar__dot" aria-hidden="true" />
-            <p className="title-bar__eyebrow">Telemetry Explorer</p>
-          </div>
-          <div className="title-bar__meta">
-            {/* Pause / Resume toggle */}
-            <button
-              className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
-              onClick={toggle}
-              title={paused ? "Resume live updates (p)" : "Pause live updates (p)"}
-            >
-              <span className="stream-toggle__icon" aria-hidden="true">
-                {paused ? "\u25B6" : "\u275A\u275A"}
-              </span>
-              {paused ? "Paused" : "Live"}
-            </button>
-            {/* Pending updates badge */}
-            {paused && hasNewUpdates ? (
-              <button
-                className="pending-badge"
-                onClick={resume}
-                title="New updates available — click to resume live view"
-              >
-                updates available — resume
-              </button>
-            ) : null}
-            {state.error !== null ? (
-              <span className="pill pill--error">{state.error}</span>
-            ) : null}
-            <button
-              className="title-bar__help"
-              onClick={() => setShowHelp(true)}
-              title="Keyboard shortcuts (?)"
-              type="button"
-              aria-label="Keyboard shortcuts"
-            >
-              ?
-            </button>
-          </div>
-        </header>
-
-        <div className="tab-bar" role="tablist" aria-label="Observer sections">
+        <div className="tab-bar">
+          <div className="tab-bar__tabs" role="tablist" aria-label="Observer sections">
           <button
             type="button"
             role="tab"
@@ -149,6 +108,41 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             Validation
             {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn" aria-hidden="true">{validationIssues.length}</span> : null}
           </button>
+          </div>
+
+          <div className="tab-bar__actions">
+            <button
+              className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
+              onClick={toggle}
+              title={paused ? "Resume live updates (p)" : "Pause live updates (p)"}
+            >
+              <span className="stream-toggle__icon" aria-hidden="true">
+                {paused ? "▶" : "❚❚"}
+              </span>
+              {paused ? "Paused" : "Live"}
+            </button>
+            {paused && hasNewUpdates ? (
+              <button
+                className="pending-badge"
+                onClick={resume}
+                title="New updates available — click to resume live view"
+              >
+                updates available — resume
+              </button>
+            ) : null}
+            {state.error !== null ? (
+              <span className="pill pill--error">{state.error}</span>
+            ) : null}
+            <button
+              className="tab-bar__help"
+              onClick={() => setShowHelp(true)}
+              title="Keyboard shortcuts (?)"
+              type="button"
+              aria-label="Keyboard shortcuts"
+            >
+              ?
+            </button>
+          </div>
         </div>
 
         {activeTab === "services" ? (
