@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/signalfx/obstudio/observer/internal/buildutil"
 )
 
 func TestClaudeCodeTargetUsesClaudeJSON(t *testing.T) {
@@ -802,6 +804,13 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	}
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatalf("mkdir home dir: %v", err)
+	}
+
+	// Stage skills before building to avoid a race with internal/integration's
+	// TestMain, which also calls StageEmbeddedSkills on the shared _skills dir.
+	repoRoot := filepath.Dir(observerRoot)
+	if err := buildutil.StageEmbeddedSkills(repoRoot, observerRoot); err != nil {
+		t.Fatalf("stage embedded skills: %v", err)
 	}
 
 	build := exec.Command("go", "build", "-o", bundledBinary, "./cmd/obstudio")
