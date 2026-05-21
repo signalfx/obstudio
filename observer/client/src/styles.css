@@ -64,7 +64,6 @@ body {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
-  padding: 12px;
 }
 
 .app-frame {
@@ -73,8 +72,6 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
   background: var(--app-bg);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
