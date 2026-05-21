@@ -1010,11 +1010,25 @@ func (s *Store) Stats() Stats {
 	}
 }
 
-// ServiceStatsAll computes per-service aggregates over all retained spans.
+// ServiceStatsAll computes per-service aggregates over all retained telemetry.
+// Every service name observed across spans, metrics, and logs is included; services
+// with no spans will have zero trace/span counts and nil duration fields.
 // traceCount counts distinct traces that include each service (not just root service).
 func (s *Store) ServiceStatsAll() []ServiceStats {
 	s.mu.RLock()
 	allSpans := s.spans.snapshot()
+	// Collect service names from metrics and logs while holding the read lock.
+	metricLogSvcs := make(map[string]struct{})
+	s.metrics.iterate(func(m MetricDataPoint) {
+		if m.Resource.ServiceName != "" {
+			metricLogSvcs[m.Resource.ServiceName] = struct{}{}
+		}
+	})
+	s.logs.iterate(func(l LogRecord) {
+		if l.Resource.ServiceName != "" {
+			metricLogSvcs[l.Resource.ServiceName] = struct{}{}
+		}
+	})
 	s.mu.RUnlock()
 
 	grouped := groupSpansByTrace(allSpans)
@@ -1076,6 +1090,13 @@ func (s *Store) ServiceStatsAll() []ServiceStats {
 				a.serverDurSum += sp.DurationMs
 				a.serverCount++
 			}
+		}
+	}
+
+	// Ensure metric/log-only services appear with zero span fields.
+	for svc := range metricLogSvcs {
+		if _, ok := acc[svc]; !ok {
+			acc[svc] = &accum{traceIDs: make(map[string]struct{})}
 		}
 	}
 

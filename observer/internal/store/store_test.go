@@ -1197,6 +1197,50 @@ func TestServiceStatsAll_ErrorCountAndDurations(t *testing.T) {
 	}
 }
 
+func TestServiceStatsAll_IncludesMetricAndLogOnlyServices(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	// One span-bearing service.
+	sp := newTestSpan("trace-1", "span-1", "root", now, 10)
+	sp.Resource.ServiceName = "span-svc"
+	s.AddSpansForConnection("conn", []Span{sp})
+
+	// A metric-only service.
+	s.AddMetricsForConnection("conn", []MetricDataPoint{
+		{Resource: Resource{ServiceName: "metric-only-svc"}, Name: "some.metric"},
+	})
+
+	// A log-only service.
+	s.AddLogsForConnection("conn", []LogRecord{
+		{Resource: Resource{ServiceName: "log-only-svc"}},
+	})
+
+	stats := s.ServiceStatsAll()
+	names := make(map[string]ServiceStats)
+	for _, ss := range stats {
+		names[ss.Name] = ss
+	}
+
+	if _, ok := names["span-svc"]; !ok {
+		t.Fatal("want span-svc in results")
+	}
+	metricSvc, ok := names["metric-only-svc"]
+	if !ok {
+		t.Fatal("want metric-only-svc in results")
+	}
+	if metricSvc.TraceCount != 0 || metricSvc.SpanCount != 0 {
+		t.Errorf("metric-only-svc should have zero trace/span counts, got trace=%d span=%d", metricSvc.TraceCount, metricSvc.SpanCount)
+	}
+	logSvc, ok := names["log-only-svc"]
+	if !ok {
+		t.Fatal("want log-only-svc in results")
+	}
+	if logSvc.TraceCount != 0 || logSvc.SpanCount != 0 {
+		t.Errorf("log-only-svc should have zero trace/span counts, got trace=%d span=%d", logSvc.TraceCount, logSvc.SpanCount)
+	}
+}
+
 // ============================================================================
 
 func TestQueryTracesFiltered_FilterByServiceName(t *testing.T) {

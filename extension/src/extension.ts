@@ -185,14 +185,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	observerStatusBarItem.show();
 	logObserverLifecycle('Status bar item created.');
 
-	// Open the panel automatically on activation, but only if the serializer hasn't
-	// already restored a panel from the previous session.
-	setTimeout(() => {
-		if (!observerPanel) {
-			void openObserverPanel(context);
-		}
-	}, 500);
-
 	// Start the packaged observer as soon as the extension activates so the UI
 	// and OTLP receiver are ready before the user opens the panel.
 	void ensureObserverRunning(context).catch((error) => {
