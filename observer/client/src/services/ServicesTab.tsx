@@ -12,6 +12,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   const [rows, setRows] = useState<ServiceStats[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const serviceNamesKey = serviceNames.join("\0");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -23,7 +24,8 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [serviceNames]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceNamesKey]);
 
   const sorted = [...rows].sort((a, b) => {
     let cmp = 0;

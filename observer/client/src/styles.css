@@ -1035,13 +1035,13 @@ body {
 }
 
 .trace-status--mixed {
-  background: rgba(244, 145, 6, 0.18);
-  color: #ffb74d;
+  background: rgba(244, 145, 6, 0.12);
+  color: var(--yellow);
 }
 
 .trace-status--unset {
-  background: rgba(144, 144, 144, 0.10);
-  color: var(--text-dim);
+  background: rgba(244, 145, 6, 0.10);
+  color: rgba(244, 145, 6, 0.75);
 }
 
 .trace-status--plain.trace-status--ok,
@@ -1678,20 +1678,6 @@ code {
   border-bottom: 0;
 }
 
-
-/* ======================================
-   Mixed status
-   ====================================== */
-
-.trace-status--mixed {
-  background: rgba(244, 145, 6, 0.12);
-  color: var(--yellow);
-}
-
-.trace-status--unset {
-  background: rgba(244, 145, 6, 0.10);
-  color: rgba(244, 145, 6, 0.75);
-}
 
 /* ======================================
    Responsive: traces layout

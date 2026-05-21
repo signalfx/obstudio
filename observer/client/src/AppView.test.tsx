@@ -291,6 +291,24 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
+  it("keyboard help lists shortcuts that match AppView key bindings", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    const dialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
+
+    const keys = Array.from(dialog.querySelectorAll(".keyboard-help__key")).map((el) => el.textContent);
+    const descs = Array.from(dialog.querySelectorAll(".keyboard-help__desc")).map((el) => el.textContent);
+    const helpMap = Object.fromEntries(keys.map((k, i) => [k, descs[i]]));
+
+    expect(helpMap["4"]).toMatch(/services/i);
+    expect(helpMap["5"]).toMatch(/validation/i);
+    expect(helpMap["1"]).toMatch(/metrics/i);
+    expect(helpMap["2"]).toMatch(/traces/i);
+    expect(helpMap["3"]).toMatch(/logs/i);
+  });
+
   it("closes keyboard help without clearing the selected trace", async () => {
     window.history.replaceState({}, "", "/?tab=traces");
     const telemetry = makeTelemetryHandle([]);
