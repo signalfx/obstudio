@@ -6,6 +6,7 @@ import { KVTable } from "../components/KVTable";
 interface SpanDetailsPanelProps {
   span: Span;
   validationFindings: ValidationFinding[];
+  onClose?: () => void;
 }
 
 type TabId = "info" | "attributes" | "events" | "links";
@@ -27,7 +28,7 @@ function relativeTime(eventNano: string, spanStartNano: string): string {
 }
 
 /** Tabbed detail view for a single span showing info, attributes, events, and links. */
-export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelProps): React.ReactElement {
+export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDetailsPanelProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("info");
   const [attributeFilter, setAttributeFilter] = useState("");
 
@@ -49,16 +50,19 @@ export function SpanDetailsPanel({ span, validationFindings }: SpanDetailsPanelP
   return (
     <div className="span-details">
       <div className="span-details__header">
-        <div>
+        <div className="span-details__title">
           <div className="span-details__name">{span.name}</div>
           <div className="span-details__meta">
             <span className="span-details__service">{span.resource?.serviceName ?? "unknown"}</span>
-            <span className={`trace-status trace-status--plain trace-status--${span.status.code === "ERROR" ? "error" : span.status.code === "OK" ? "ok" : "unset"}`}>
+            <span className={`trace-status trace-status--${span.status.code === "ERROR" ? "error" : span.status.code === "OK" ? "ok" : "unset"}`}>
               {span.status.code}
             </span>
             <span className="span-details__duration">{span.durationMs.toFixed(2)}ms</span>
           </div>
         </div>
+        {onClose ? (
+          <button className="span-details__close" onClick={onClose} type="button" aria-label="Close span details">×</button>
+        ) : null}
       </div>
 
       {/* Tabs */}

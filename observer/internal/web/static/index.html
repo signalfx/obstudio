@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Observer — Telemetry Explorer</title>
   <link rel="icon" type="image/svg+xml" href="/assets/observer-icon.svg" />
-  <link rel="stylesheet" href="/assets/main.css?v=20260418-filter-flow-v6" />
+  <link rel="stylesheet" href="/assets/main.css?v=20260520-1cd" />
 </head>
 <body>
-  <div id="root"><h1 style="color:lime;padding:40px;font-size:40px;background:black;">LOADING OBSERVER UI...</h1></div>
+  <div id="root"></div>
   <script>
     window.onerror = function(msg, url, line, col, err) {
       document.getElementById('root').innerHTML =
         '<pre style="color:red;padding:40px;font-size:14px;background:black;">JS Error:\n' + msg + '\nat ' + url + ':' + line + ':' + col + '\n' + (err && err.stack ? err.stack : '') + '</pre>';
     };
   </script>
-  <script src="/assets/main.js?v=20260418-filter-flow-v6"></script>
+  <script src="/assets/main.js?v=20260520-1cd"></script>
 </body>
 </html>

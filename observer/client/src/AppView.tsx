@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
+import { ServicesTab } from "./services";
 import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
 import { KeyboardHelp } from "./components/KeyboardHelp";
@@ -12,7 +13,7 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "metrics" | "traces" | "logs" | "validation";
+type AppTab = "services" | "metrics" | "traces" | "logs" | "validation";
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -41,7 +42,8 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "1": () => switchTab("metrics"),
     "2": () => switchTab("traces"),
     "3": () => switchTab("logs"),
-    "4": () => switchTab("validation"),
+    "4": () => switchTab("services"),
+    "5": () => switchTab("validation"),
   }), [toggle, switchTab]);
 
   useKeyboardShortcuts(shortcuts);
@@ -49,86 +51,8 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   return (
     <main className="app-shell">
       <section className="app-frame">
-        <header className="title-bar">
-          <div className="title-bar__brand">
-            <span className="title-bar__dot" aria-hidden="true" />
-            <div>
-              <p className="title-bar__eyebrow">Observer</p>
-              <h1 className="title-bar__title">Telemetry Explorer</h1>
-            </div>
-          </div>
-          <div className="title-bar__meta">
-            {/* Pause / Resume toggle */}
-            <button
-              className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
-              onClick={toggle}
-              title={paused ? "Resume live updates (p)" : "Pause live updates (p)"}
-            >
-              <span className="stream-toggle__icon" aria-hidden="true">
-                {paused ? "\u25B6" : "\u275A\u275A"}
-              </span>
-              {paused ? "Paused" : "Live"}
-            </button>
-            {/* Pending updates badge */}
-            {paused && hasNewUpdates ? (
-              <button
-                className="pending-badge"
-                onClick={resume}
-                title="New updates available — click to resume live view"
-              >
-                updates available — resume
-              </button>
-            ) : null}
-            {state.error !== null ? (
-              <span className="pill pill--error">{state.error}</span>
-            ) : null}
-            <button
-              className="title-bar__help"
-              onClick={() => setShowHelp(true)}
-              title="Keyboard shortcuts (?)"
-              type="button"
-              aria-label="Keyboard shortcuts"
-            >
-              ?
-            </button>
-          </div>
-        </header>
-
-        {(state.stats?.traceCount || state.stats?.metricNameCount || state.stats?.logCount) ? (
-          <div className="metric-summary">
-            {state.stats.traceCount ? (
-              <div className="summary-card">
-                <p className="summary-card__label">Traces</p>
-                <p className="summary-card__value">{state.stats.traceCount}</p>
-              </div>
-            ) : null}
-            {state.stats.metricNameCount ? (
-              <div className="summary-card">
-                <p className="summary-card__label">Metrics</p>
-                <p className="summary-card__value">{state.stats.metricNameCount}</p>
-              </div>
-            ) : null}
-            {state.stats.logCount ? (
-              <div className="summary-card">
-                <p className="summary-card__label">Logs</p>
-                <p className="summary-card__value">{state.stats.logCount}</p>
-              </div>
-            ) : null}
-            {state.stats.serviceNames?.length ? (
-              <div className="summary-card summary-card--wide" title={state.stats.serviceNames.join(", ")}>
-                <p className="summary-card__label">Services</p>
-                <p className="summary-card__value">{state.stats.serviceNames.length}</p>
-                <p className="summary-card__services">
-                  {state.stats.serviceNames.map((name) => (
-                    <span key={name} className="summary-card__service-tag">{name}</span>
-                  ))}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="tab-bar" role="tablist" aria-label="Observer sections">
+        <div className="tab-bar">
+          <div className="tab-bar__tabs" role="tablist" aria-label="Observer sections">
           <button
             type="button"
             role="tab"
@@ -165,6 +89,17 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === "services"}
+            aria-label={formatTabAriaLabel("Services", state.stats?.serviceNames?.length, "service", "services")}
+            className={activeTab === "services" ? "tab-button is-active" : "tab-button"}
+            onClick={() => switchTab("services")}
+          >
+            Services
+            {state.stats?.serviceNames?.length ? <span className="tab-button__count" aria-hidden="true">{state.stats.serviceNames.length}</span> : null}
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === "validation"}
             aria-label={formatTabAriaLabel("Validation", validationIssues.length, "issue", "issues")}
             className={activeTab === "validation" ? "tab-button is-active" : "tab-button"}
@@ -173,8 +108,48 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             Validation
             {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn" aria-hidden="true">{validationIssues.length}</span> : null}
           </button>
+          </div>
+
+          <div className="tab-bar__actions">
+            <button
+              className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
+              onClick={toggle}
+              title={paused ? "Resume live updates (p)" : "Pause live updates (p)"}
+            >
+              <span className="stream-toggle__icon" aria-hidden="true">
+                {paused ? "▶" : "❚❚"}
+              </span>
+              {paused ? "Paused" : "Live"}
+            </button>
+            {paused && hasNewUpdates ? (
+              <button
+                className="pending-badge"
+                onClick={resume}
+                title="New updates available — click to resume live view"
+              >
+                updates available — resume
+              </button>
+            ) : null}
+            {state.error !== null ? (
+              <span className="pill pill--error">{state.error}</span>
+            ) : null}
+            <button
+              className="tab-bar__help"
+              onClick={() => setShowHelp(true)}
+              title="Keyboard shortcuts (?)"
+              type="button"
+              aria-label="Keyboard shortcuts"
+            >
+              ?
+            </button>
+          </div>
         </div>
 
+        {activeTab === "services" ? (
+          <ServicesTab
+            serviceNames={state.stats?.serviceNames ?? []}
+          />
+        ) : null}
         {activeTab === "metrics" ? (
           <MetricsTab
             metrics={state.metrics ?? []}
@@ -212,6 +187,7 @@ function initialTabFromLocation(): AppTab {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
   switch (tab) {
+    case "services":
     case "metrics":
     case "traces":
     case "logs":

@@ -103,6 +103,7 @@ export interface SpanPreview {
   kind: string;
   durationMs: number;
   statusCode: string;
+  serviceName?: string;
 }
 
 /** Summary of a trace with optional span previews. */

@@ -1092,6 +1092,157 @@ func TestStats_ServiceNames(t *testing.T) {
 // QueryTracesFiltered Tests
 // ============================================================================
 
+func TestServiceStatsAll_TraceCountIncludesChildServices(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	// Trace-1: root span owned by "frontend", child span owned by "payments"
+	root := newTestSpan("trace-1", "span-r", "GET /checkout", now, 50)
+	root.ParentSpanID = ""
+	root.Resource.ServiceName = "frontend"
+
+	child := newTestSpan("trace-1", "span-c", "charge", now.Add(5*time.Millisecond), 30)
+	child.ParentSpanID = "span-r"
+	child.Resource.ServiceName = "payments"
+
+	s.AddSpansForConnection("conn-1", []Span{root, child})
+
+	stats := s.ServiceStatsAll()
+	byName := make(map[string]ServiceStats)
+	for _, ss := range stats {
+		byName[ss.Name] = ss
+	}
+
+	// Both services must be present and each must show traceCount=1
+	fe, ok := byName["frontend"]
+	if !ok {
+		t.Fatal("expected frontend in service stats")
+	}
+	if fe.TraceCount != 1 {
+		t.Errorf("frontend: want traceCount=1, got %d", fe.TraceCount)
+	}
+	if fe.SpanCount != 1 {
+		t.Errorf("frontend: want spanCount=1, got %d", fe.SpanCount)
+	}
+
+	pay, ok := byName["payments"]
+	if !ok {
+		t.Fatal("expected payments in service stats")
+	}
+	if pay.TraceCount != 1 {
+		t.Errorf("payments: want traceCount=1, got %d (child service must count the trace)", pay.TraceCount)
+	}
+	if pay.SpanCount != 1 {
+		t.Errorf("payments: want spanCount=1, got %d", pay.SpanCount)
+	}
+}
+
+func TestServiceStatsAll_SpanCountNotCappedByPreview(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	// 12 spans in a single trace from "backend" — more than the 8-span preview cap.
+	spans := make([]Span, 12)
+	for i := range spans {
+		sp := newTestSpan("trace-big", fmt.Sprintf("span-%d", i), "work", now.Add(time.Duration(i)*time.Millisecond), 5)
+		if i > 0 {
+			sp.ParentSpanID = "span-0"
+		}
+		sp.Resource.ServiceName = "backend"
+		spans[i] = sp
+	}
+	s.AddSpansForConnection("conn-1", spans)
+
+	stats := s.ServiceStatsAll()
+	if len(stats) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(stats))
+	}
+	if stats[0].SpanCount != 12 {
+		t.Errorf("want spanCount=12 (all spans, not preview cap), got %d", stats[0].SpanCount)
+	}
+}
+
+func TestServiceStatsAll_ErrorCountAndDurations(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	ok1 := newTestSpan("t1", "s1", "op", now, 10)
+	ok1.Resource.ServiceName = "svc"
+	ok1.Kind = "SERVER"
+
+	errSpan := newTestSpan("t1", "s2", "op", now.Add(5*time.Millisecond), 20)
+	errSpan.ParentSpanID = "s1"
+	errSpan.Resource.ServiceName = "svc"
+	errSpan.Status = SpanStatus{Code: "ERROR"}
+	errSpan.Kind = "CLIENT"
+
+	s.AddSpansForConnection("conn-1", []Span{ok1, errSpan})
+
+	stats := s.ServiceStatsAll()
+	if len(stats) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(stats))
+	}
+	ss := stats[0]
+	if ss.ErrorCount != 1 {
+		t.Errorf("want errorCount=1, got %d", ss.ErrorCount)
+	}
+	if ss.AvgDurationMs == nil || *ss.AvgDurationMs != 15.0 {
+		t.Errorf("want avgDurationMs=15.0, got %v", ss.AvgDurationMs)
+	}
+	if ss.AvgClientDuration == nil || *ss.AvgClientDuration != 20.0 {
+		t.Errorf("want avgClientDurationMs=20.0, got %v", ss.AvgClientDuration)
+	}
+	if ss.AvgServerDuration == nil || *ss.AvgServerDuration != 10.0 {
+		t.Errorf("want avgServerDurationMs=10.0, got %v", ss.AvgServerDuration)
+	}
+}
+
+func TestServiceStatsAll_IncludesMetricAndLogOnlyServices(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	// One span-bearing service.
+	sp := newTestSpan("trace-1", "span-1", "root", now, 10)
+	sp.Resource.ServiceName = "span-svc"
+	s.AddSpansForConnection("conn", []Span{sp})
+
+	// A metric-only service.
+	s.AddMetricsForConnection("conn", []MetricDataPoint{
+		{Resource: Resource{ServiceName: "metric-only-svc"}, Name: "some.metric"},
+	})
+
+	// A log-only service.
+	s.AddLogsForConnection("conn", []LogRecord{
+		{Resource: Resource{ServiceName: "log-only-svc"}},
+	})
+
+	stats := s.ServiceStatsAll()
+	names := make(map[string]ServiceStats)
+	for _, ss := range stats {
+		names[ss.Name] = ss
+	}
+
+	if _, ok := names["span-svc"]; !ok {
+		t.Fatal("want span-svc in results")
+	}
+	metricSvc, ok := names["metric-only-svc"]
+	if !ok {
+		t.Fatal("want metric-only-svc in results")
+	}
+	if metricSvc.TraceCount != 0 || metricSvc.SpanCount != 0 {
+		t.Errorf("metric-only-svc should have zero trace/span counts, got trace=%d span=%d", metricSvc.TraceCount, metricSvc.SpanCount)
+	}
+	logSvc, ok := names["log-only-svc"]
+	if !ok {
+		t.Fatal("want log-only-svc in results")
+	}
+	if logSvc.TraceCount != 0 || logSvc.SpanCount != 0 {
+		t.Errorf("log-only-svc should have zero trace/span counts, got trace=%d span=%d", logSvc.TraceCount, logSvc.SpanCount)
+	}
+}
+
+// ============================================================================
+
 func TestQueryTracesFiltered_FilterByServiceName(t *testing.T) {
 	s := New()
 	now := time.Now()

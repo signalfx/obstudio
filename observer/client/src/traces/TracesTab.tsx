@@ -342,7 +342,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                     </span>
                     <span className="data-table__td data-table__td--status">
                       <span className="trace-row__status">
-                        <span className={`trace-status trace-status--plain trace-status--${normalizeTraceStatusClass(t.status)}`}>{traceStatusLabel(t.status)}</span>
+                        <span className={`trace-status trace-status--${normalizeTraceStatusClass(t.status)}`}>{traceStatusLabel(t.status)}</span>
                       </span>
                     </span>
                     <span className="data-table__td data-table__td--duration data-table__td--numeric">
@@ -367,6 +367,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
               title={traceDetail.rootSpanName}
               subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${formatTraceDuration(traceDetail.durationMs)}`}
               onClose={() => selectTrace(null)}
+              footer={selectedSpan ? <SpanDetailsPanel span={selectedSpan} validationFindings={selectedSpanValidation} onClose={() => setSelectedSpanId(null)} /> : null}
             >
               <div className="trace-detail__summary">
                 <KVTable rows={[{ key: "Trace ID", value: <span title={traceDetail.traceId}>{traceDetail.traceId}</span>, action: <CopyTextButton text={traceDetail.traceId} label="Trace ID" /> }]} />
@@ -378,7 +379,6 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                 traceDurationMs={traceDetail.durationMs ?? 0}
                 validationIndex={validationIndex}
               />
-              {selectedSpan ? <SpanDetailsPanel span={selectedSpan} validationFindings={selectedSpanValidation} /> : null}
             </DetailPanel>
           </ResizablePanel>
         ) : selectedTraceId && detailLoading ? (

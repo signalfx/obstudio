@@ -205,11 +205,12 @@ type TraceSummaryFilter struct {
 
 // SpanPreview represents a preview of a span in a trace.
 type SpanPreview struct {
-	SpanID     string  `json:"spanId"`
-	Name       string  `json:"name"`
-	Kind       string  `json:"kind"`
-	DurationMs float64 `json:"durationMs"`
-	StatusCode string  `json:"statusCode"`
+	SpanID      string  `json:"spanId"`
+	Name        string  `json:"name"`
+	Kind        string  `json:"kind"`
+	DurationMs  float64 `json:"durationMs"`
+	StatusCode  string  `json:"statusCode"`
+	ServiceName string  `json:"serviceName,omitempty"`
 }
 
 // TraceDetail represents the full details of a trace.
@@ -278,6 +279,17 @@ type Stats struct {
 	LogCount        int      `json:"logCount"`
 	TraceCount      int      `json:"traceCount"`
 	ServiceNames    []string `json:"serviceNames"`
+}
+
+// ServiceStats holds per-service aggregate counts computed from the full span store.
+type ServiceStats struct {
+	Name              string   `json:"name"`
+	TraceCount        int      `json:"traceCount"`
+	SpanCount         int      `json:"spanCount"`
+	ErrorCount        int      `json:"errorCount"`
+	AvgDurationMs     *float64 `json:"avgDurationMs"`
+	AvgClientDuration *float64 `json:"avgClientDurationMs"`
+	AvgServerDuration *float64 `json:"avgServerDurationMs"`
 }
 
 // Endpoints holds the addresses the collector is listening on.
@@ -998,6 +1010,122 @@ func (s *Store) Stats() Stats {
 	}
 }
 
+// ServiceStatsAll computes per-service aggregates over all retained telemetry.
+// Every service name observed across spans, metrics, and logs is included; services
+// with no spans will have zero trace/span counts and nil duration fields.
+// traceCount counts distinct traces that include each service (not just root service).
+func (s *Store) ServiceStatsAll() []ServiceStats {
+	s.mu.RLock()
+	allSpans := s.spans.snapshot()
+	// Collect service names from metrics and logs while holding the read lock.
+	metricLogSvcs := make(map[string]struct{})
+	s.metrics.iterate(func(m MetricDataPoint) {
+		if m.Resource.ServiceName != "" {
+			metricLogSvcs[m.Resource.ServiceName] = struct{}{}
+		}
+	})
+	s.logs.iterate(func(l LogRecord) {
+		if l.Resource.ServiceName != "" {
+			metricLogSvcs[l.Resource.ServiceName] = struct{}{}
+		}
+	})
+	s.mu.RUnlock()
+
+	grouped := groupSpansByTrace(allSpans)
+
+	type accum struct {
+		traceIDs     map[string]struct{}
+		spanCount    int
+		errorCount   int
+		allDurSum    float64
+		allDurCount  int
+		clientDurSum float64
+		clientCount  int
+		serverDurSum float64
+		serverCount  int
+	}
+
+	acc := make(map[string]*accum)
+	getAcc := func(name string) *accum {
+		a := acc[name]
+		if a == nil {
+			a = &accum{traceIDs: make(map[string]struct{})}
+			acc[name] = a
+		}
+		return a
+	}
+
+	for traceID, spans := range grouped {
+		// Collect every service name present in this trace.
+		traceServices := make(map[string]struct{})
+		for _, sp := range spans {
+			svc := sp.Resource.ServiceName
+			if svc == "" {
+				svc = "unknown"
+			}
+			traceServices[svc] = struct{}{}
+		}
+		// Increment traceCount for every service seen in this trace.
+		for svc := range traceServices {
+			getAcc(svc).traceIDs[traceID] = struct{}{}
+		}
+		// Accumulate span-level stats.
+		for _, sp := range spans {
+			svc := sp.Resource.ServiceName
+			if svc == "" {
+				svc = "unknown"
+			}
+			a := getAcc(svc)
+			a.spanCount++
+			if sp.Status.Code == "ERROR" {
+				a.errorCount++
+			}
+			a.allDurSum += sp.DurationMs
+			a.allDurCount++
+			switch sp.Kind {
+			case "CLIENT":
+				a.clientDurSum += sp.DurationMs
+				a.clientCount++
+			case "SERVER":
+				a.serverDurSum += sp.DurationMs
+				a.serverCount++
+			}
+		}
+	}
+
+	// Ensure metric/log-only services appear with zero span fields.
+	for svc := range metricLogSvcs {
+		if _, ok := acc[svc]; !ok {
+			acc[svc] = &accum{traceIDs: make(map[string]struct{})}
+		}
+	}
+
+	result := make([]ServiceStats, 0, len(acc))
+	for name, a := range acc {
+		ss := ServiceStats{
+			Name:       name,
+			TraceCount: len(a.traceIDs),
+			SpanCount:  a.spanCount,
+			ErrorCount: a.errorCount,
+		}
+		if a.allDurCount > 0 {
+			v := a.allDurSum / float64(a.allDurCount)
+			ss.AvgDurationMs = &v
+		}
+		if a.clientCount > 0 {
+			v := a.clientDurSum / float64(a.clientCount)
+			ss.AvgClientDuration = &v
+		}
+		if a.serverCount > 0 {
+			v := a.serverDurSum / float64(a.serverCount)
+			ss.AvgServerDuration = &v
+		}
+		result = append(result, ss)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
 // SnapshotTelemetry returns a point-in-time copy of all retained telemetry.
 func (s *Store) SnapshotTelemetry() TelemetrySnapshot {
 	s.mu.RLock()
@@ -1540,11 +1668,12 @@ func makeSpanPreviews(spans []Span, limit int) []SpanPreview {
 	previews := make([]SpanPreview, n)
 	for i := 0; i < n; i++ {
 		previews[i] = SpanPreview{
-			SpanID:     spans[i].SpanID,
-			Name:       spans[i].Name,
-			Kind:       spans[i].Kind,
-			DurationMs: spans[i].DurationMs,
-			StatusCode: spans[i].Status.Code,
+			SpanID:      spans[i].SpanID,
+			Name:        spans[i].Name,
+			Kind:        spans[i].Kind,
+			DurationMs:  spans[i].DurationMs,
+			StatusCode:  spans[i].Status.Code,
+			ServiceName: spans[i].Resource.ServiceName,
 		}
 	}
 	return previews

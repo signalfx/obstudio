@@ -7,6 +7,7 @@ interface DetailPanelProps {
   scrollResetKey?: string | number;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
 }
 
 /** Closeable side panel for displaying detail views. */
@@ -17,6 +18,7 @@ export function DetailPanel({
   scrollResetKey,
   onClose,
   children,
+  footer,
 }: DetailPanelProps): React.ReactElement {
   const bodyRef = useRef<HTMLDivElement>(null);
   const showTitles = headerMode === "default" && Boolean(title || subtitle);
@@ -39,6 +41,7 @@ export function DetailPanel({
         </button>
       </div>
       <div ref={bodyRef} className={headerMode === "close-only" ? "detail-panel__body detail-panel__body--close-only" : "detail-panel__body"}>{children}</div>
+      {footer ? <div className="detail-panel__footer">{footer}</div> : null}
     </div>
   );
 }
