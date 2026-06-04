@@ -1,0 +1,27 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Java Kafka Streams service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Java Kafka Streams service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, stream-processing risks, existing Guice wiring, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies KafkaStreamsApplication.java as the process entry point and StreamProcessingModule.java as the Guice module that provides KafkaStreams.",
+    "Identifies OrderStreamTopology.java as the Kafka Streams topology and names the orders, orders.enriched, and orders.fraud-alerts topics.",
+    "Reports no OpenTelemetry SDK setup, Java agent startup, OTLP exporter configuration, or Guice Tracer binding.",
+    "Calls out missing Kafka producer/consumer traces plus record-processing, failed-parse, high-risk-alert, error, and latency visibility.",
+    "Calls out that OrderEventParser.parse() drops null records with no log, metric, or span, making null-record events invisible at runtime.",
+    "Calls out that OrderEventParser.parse() swallows malformed JSON with no log, metric, or span, making parse failures invisible at runtime.",
+    "Recommends the OpenTelemetry Java agent as the primary Kafka Streams instrumentation path and limits custom spans or metrics to explicit business signal needs."
+  ]
+}

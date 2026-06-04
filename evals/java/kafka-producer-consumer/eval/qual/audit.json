@@ -1,0 +1,26 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the plain Java Kafka producer/consumer service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the plain Java Kafka producer/consumer service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, producer/consumer risks, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies ProducerConsumerApplication.java as the entry point and KafkaClientConfig.java as the startup/runtime configuration surface.",
+    "Identifies OrderConsumer.java as the KafkaConsumer poll loop and ShipmentProducer.java as the KafkaProducer send path.",
+    "Names the orders and shipments topics and distinguishes consumed records from produced shipment commands.",
+    "Reports no OpenTelemetry SDK setup, Java agent startup, OTLP exporter configuration, or custom Tracer usage.",
+    "Calls out missing Kafka producer/consumer spans, shipment command counts, malformed/null order visibility, consumer lag/offset visibility, and producer send error visibility.",
+    "Recommends the OpenTelemetry Java agent as the primary Kafka producer/consumer instrumentation path and treats business metrics as optional custom signals."
+  ]
+}

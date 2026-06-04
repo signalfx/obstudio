@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Java Kafka listener-container service in ./service. Preserve the Spring Boot runtime and @KafkaListener container behavior. Prefer Java agent auto-instrumentation for Kafka clients; do not add custom spans or metrics unless explicitly required."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Java Kafka listener-container service in ./service while preserving the existing Maven runtime, Spring Kafka listener annotations, topic configuration, and listener container behavior. Prefer the OpenTelemetry Java agent, include fast local metric export settings for development use, and avoid unnecessary application code changes."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Performs a Java trace wiring inventory covering Maven dependencies, JAVA_TOOL_OPTIONS or -javaagent startup, OTEL_* configuration, Spring Kafka listener configuration, and existing Tracer usage, then classifies the pre-change fixture as missing based on evidence.",
+    "Preserves KafkaListenerContainerApplication.java, AlertListener.java, AlertService.java, application.properties, the alerts topic, and @KafkaListener behavior.",
+    "Uses or recommends the OpenTelemetry Java agent in the existing Maven/Spring Boot startup path with OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_METRIC_EXPORT_INTERVAL=1000, and OTEL_METRIC_EXPORT_TIMEOUT=500.",
+    "Does not add OpenTelemetrySdk, a duplicate provider, broad manual tracing, custom Tracer creation, or replacement KafkaConsumer loops when no custom spans are requested.",
+    "Mentions that Kafka consumer spans from Spring Kafka listener containers come from the Java agent and treats processed alert counts or malformed-payload counters as optional business instrumentation unless explicitly requested."
+  ]
+}

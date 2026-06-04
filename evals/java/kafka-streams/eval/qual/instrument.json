@@ -1,0 +1,26 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Add OpenTelemetry instrumentation to the Java Kafka Streams service in ./service. Preserve the Kafka topology and existing Guice module structure. Prefer Java agent auto-instrumentation for Kafka clients; do not create a second SDK or Guice Tracer binding unless custom spans are explicitly required."
+    },
+    {
+      "id": "runtime-preserving",
+      "task": "Instrument the Java Kafka Streams service in ./service while preserving the existing Maven runtime, Guice injector, and Kafka topic behavior. Prefer the OpenTelemetry Java agent for Kafka Streams coverage, include fast local metric export settings for development use, and avoid unnecessary application code changes."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Performs a Java trace wiring inventory covering Maven dependencies, JAVA_TOOL_OPTIONS or -javaagent startup, OTEL_* configuration, Guice modules, and existing Tracer usage, then classifies the pre-change fixture as missing based on evidence.",
+    "Preserves KafkaStreamsApplication.java, StreamProcessingModule.java, OrderStreamTopology.java, and the orders to orders.enriched plus orders.fraud-alerts topic flow.",
+    "Uses or recommends the OpenTelemetry Java agent in the existing Maven/Java startup path with OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_METRIC_EXPORT_INTERVAL=1000, and OTEL_METRIC_EXPORT_TIMEOUT=500.",
+    "Does not add OpenTelemetrySdk, a duplicate provider, broad manual tracing, or a Guice @Provides Tracer binding when no custom spans are requested.",
+    "Mentions that Kafka producer/consumer spans, including clients used internally by Kafka Streams, come from the Java agent and treats custom record-processing spans or metrics as optional business instrumentation rather than required auto-instrumentation when custom signals are not explicitly requested.",
+    "Acknowledges that OrderEventParser.parse() drops null and malformed records with no telemetry, and treats a failed-parse counter as optional business instrumentation unless explicitly requested."
+  ]
+}

@@ -261,6 +261,17 @@ Report requirements:
 - For Python, mention `pyproject.toml` or `requirements.txt`, the app file such as `app.py`, and runtime files such as `Dockerfile` or `docker-compose.yml` when present.
 - For FastAPI/Celery services, mention the web app, worker file, Dockerfile, compose commands, FastAPI/ASGI coverage, Celery instrumentation, Redis instrumentation if Redis is present, and HTTP client instrumentation only when an HTTP client dependency is detected.
 - For Java/Spring Boot, mention the Spring Boot entry point such as `TasksApplication.java`, controller files such as `TaskController.java`, and the Java agent recommendation.
+- For Java/Kafka services, mention the main entry point, runtime configuration,
+  producer/consumer classes that wrap `KafkaProducer` or `KafkaConsumer`, batch
+  poll loops that handle `ConsumerRecords`, listener-container classes or
+  methods such as `@KafkaListener`, and Kafka Streams lifecycle/topology code
+  that constructs `KafkaStreams`, `Topology`, `StreamsBuilder`, `KStream`, or
+  `KTable`.
+- For Java/Kafka services, name topics, consumer groups, poll/send/listener or
+  topology behavior, offset commit behavior, uncaught exception handling, Java
+  agent coverage for Kafka clients, and missing business signals such as
+  processed records, failed parses, high-risk alerts, processing errors,
+  consumer lag/offset visibility, and record-processing latency.
 - For Go multi-package services, name the process entry point such as `cmd/kvstore-server/main.go` and relevant library files. If filesystem persistence, background indexing, or LRU eviction exists, call those out explicitly.
 
 **Chat summary:** After writing `.observe/otel.md`, present a brief summary in
@@ -379,7 +390,8 @@ appear in the project.
 The OpenTelemetry Java agent auto-instruments without code changes:
 - Spring MVC (REST controllers), Spring WebFlux, Spring Data (JPA, JDBC)
 - RestTemplate and WebClient (outbound HTTP)
-- Kafka, RabbitMQ, gRPC
+- Kafka producers/consumers (including clients used internally by Kafka Streams)
+- RabbitMQ, gRPC
 - Servlet containers (Tomcat, Jetty, Undertow)
 - JDBC drivers
 

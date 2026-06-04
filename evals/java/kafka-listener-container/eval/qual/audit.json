@@ -1,0 +1,26 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the Java Kafka listener-container service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the Java Kafka listener-container service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, Spring Kafka listener-container risks, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies KafkaListenerContainerApplication.java as the Spring Boot entry point and application.properties as the Spring Kafka listener-container configuration surface.",
+    "Identifies AlertListener.java and its @KafkaListener method as the Kafka listener entry point, including the alerts topic and alerts-worker group.",
+    "Identifies AlertService.java as the business processing logic for paging-required alerts.",
+    "Reports no OpenTelemetry SDK setup, Java agent startup, OTLP exporter configuration, or custom Tracer usage.",
+    "Calls out missing Kafka listener spans, malformed/null payload visibility, processed alert counts, critical alert counts, listener error visibility, and consumer lag/offset visibility.",
+    "Recommends the OpenTelemetry Java agent as the primary Spring Kafka instrumentation path and avoids replacing listener container behavior with manual Kafka clients."
+  ]
+}

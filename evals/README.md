@@ -223,3 +223,17 @@ baseline side.
 | `evals/go/chi-partial/` | Chi with partial OTel | `go run .` |
 | `evals/go/kvstore/` | Chi + package tests | `make test` |
 | `evals/java/springboot-basic/` | Spring Boot | `mvn spring-boot:run` |
+| `evals/java/kafka-producer-consumer/` | Plain Kafka producer + consumer | `mvn test` |
+| `evals/java/kafka-batch-consumer/` | Plain Kafka batch consumer | `mvn test` |
+| `evals/java/kafka-listener-container/` | Kafka listener container | `mvn test` |
+| `evals/java/kafka-streams/` | Kafka Streams with Guice wiring | `mvn test` |
+
+The Java Kafka fixtures use broker-free unit or topology tests as eval commands.
+Running the services with `mvn exec:java` or `mvn spring-boot:run` requires a
+Kafka broker and is documented in each fixture README. See those fixture READMEs
+for eval intent, required environment variables, and the Java-agent versus
+manual-SDK boundary.
+
+Kafka coverage is organized by processing pattern rather than by every
+framework combination: direct producer/consumer, batch consumer, listener
+container, and Kafka Streams.
