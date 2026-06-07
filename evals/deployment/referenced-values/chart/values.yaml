@@ -1,0 +1,13 @@
+replicaCount: 2
+
+image:
+  repository: example.com/orders-api
+  tag: 1.4.2
+
+service:
+  port: 3000
+
+otel:
+  enabled: true
+  resourceAttributes:
+    service.name: orders-api

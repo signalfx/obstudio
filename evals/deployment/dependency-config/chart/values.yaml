@@ -1,0 +1,17 @@
+replicaCount: 2
+
+image:
+  repository: example.com/orders-api
+  tag: 2.1.0
+
+dependencies:
+  payments:
+    configMapName: orders-api-dependencies
+    endpointKey: payments_api_url
+    timeoutMs: 2000
+    retryPolicy: standard-3
+    circuitBreaker: payments-primary
+  database:
+    secretName: orders-api-db
+    urlKey: database_url
+    poolMax: 20

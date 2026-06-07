@@ -1,0 +1,14 @@
+replicaCount: 2
+
+image:
+  repository: example.com/orders-api
+  tag: 1.4.2
+
+service:
+  port: 3000
+
+otel:
+  enabled: true
+  endpoint: http://otel-collector.observability.svc.cluster.local:4318
+  resourceAttributes:
+    service.name: orders-api

@@ -1,0 +1,13 @@
+replicaCount: 4
+
+image:
+  repository: registry.example.com/platform/orders-api
+  tag: 1.4.2
+
+otel:
+  endpoint: https://otel-collector.example.invalid/v2/trace/otlp
+  resourceAttributes:
+    service.name: orders-api
+    deployment.environment: prod
+    cloud.region: us-east-1
+    deployment.rollout.id: batch-20260607

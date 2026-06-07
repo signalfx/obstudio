@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "referenced-values-not-supplied",
+      "task": "Instrument ./service for OpenTelemetry and use ./chart, ./gitops, and ./terraform as deployment context. Do not inspect or assume any external env-values repo. If deployment files reference values or config sources that are not present, do not hardcode environment-specific telemetry values into app code or chart defaults."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./gitops, and ./terraform for resulting files when present.",
+    "Confirm there is no ./env-values or ./values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Confirms the app process and the inspected deployment sources before editing.",
+    "Detects that Argo CD and Terraform reference an external values source that is not supplied.",
+    "Does not hardcode production environment, region, OTLP endpoint, token, rollout, or config values into app source or chart defaults.",
+    "Patches only reusable app or chart instrumentation knobs when appropriate.",
+    "Reports referenced deployment context as unknown or referenced but not inspected and asks for the missing values/config source."
+  ]
+}

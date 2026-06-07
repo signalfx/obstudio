@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orders-api-prod
+spec:
+  project: default
+  sources:
+    - repoURL: https://git.example.com/platform/helm-charts.git
+      path: charts/orders-api
+      targetRevision: main
+      helm:
+        valueFiles:
+          - $values/prod/orders-api.yaml
+    - repoURL: https://git.example.com/platform/env-values.git
+      path: prod/orders-api
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orders-prod

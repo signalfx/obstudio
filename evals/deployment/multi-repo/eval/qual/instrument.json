@@ -1,0 +1,21 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "multi-repo-deployment",
+      "task": "Instrument ./service for OpenTelemetry and use ./chart, ./values, ./gitops, and ./terraform as deployment context. If runtime OTel attributes belong in deployment config, update the deployment source instead of hardcoding production values in app code."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./values, ./gitops, and ./terraform for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Confirms the app process and the separate deployment sources before editing.",
+    "Does not hardcode production OTLP endpoints, tokens, region, or environment into app source.",
+    "Preserves deployment-owned runtime attributes in Helm values or templates when those files already own runtime config.",
+    "States which file class should be patched: app code, chart template, values, GitOps, or Terraform.",
+    "Reports deployment context as unknown rather than missing if a production source is not supplied."
+  ]
+}

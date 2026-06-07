@@ -1,0 +1,21 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "multi-repo-deployment",
+      "task": "Scan ./service for observability gaps and include deployment context from ./chart, ./values, ./gitops, and ./terraform. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./values, ./gitops, and ./terraform for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.js and package.json as the app code surfaces.",
+    "Identifies Helm chart, production values, Argo CD multi-source Application, and Terraform helm_release as deployment sources.",
+    "Reports Kubernetes/Helm/GitOps/Terraform deployment context rather than treating the app repo as the only source of runtime truth.",
+    "Recognizes service.name, deployment.environment, service.version or image tag, region, rollout id, OTLP endpoint, readiness probe, and resource requests/limits when present.",
+    "Distinguishes unknown deployment context from missing deployment signals when a source is not inspected."
+  ]
+}

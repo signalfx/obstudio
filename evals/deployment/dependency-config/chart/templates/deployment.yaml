@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orders-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: orders-api
+    spec:
+      containers:
+        - name: orders-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          env:
+            - name: PAYMENTS_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.dependencies.payments.configMapName | quote }}
+                  key: {{ .Values.dependencies.payments.endpointKey | quote }}
+            - name: PAYMENTS_TIMEOUT_MS
+              value: {{ .Values.dependencies.payments.timeoutMs | quote }}
+            - name: PAYMENTS_RETRY_POLICY
+              value: {{ .Values.dependencies.payments.retryPolicy | quote }}
+            - name: PAYMENTS_CIRCUIT_BREAKER
+              value: {{ .Values.dependencies.payments.circuitBreaker | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dependencies.database.secretName | quote }}
+                  key: {{ .Values.dependencies.database.urlKey | quote }}
+            - name: DB_POOL_MAX
+              value: {{ .Values.dependencies.database.poolMax | quote }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000

@@ -5,12 +5,14 @@ description: >-
   on observability coverage gaps. Read-only -- does not modify code.
   Use when the user types $otel-audit, asks about observability gaps,
   wants to assess instrumentation coverage, says "what signals am I
-  missing", "scan this service for observability", or asks about
-  "observability readiness". Do NOT use for implementing code changes --
-  use $otel-instrument instead.
+  missing", "scan this service for observability", asks about
+  "observability readiness", or asks whether deployment, Helm, GitOps,
+  Terraform, serverless, VM, container, dependency config, or runtime
+  configuration supports observability. Do NOT use for implementing code changes -- use
+  $otel-instrument instead.
 metadata:
   author: otel-studio
-  version: 0.6.0
+  version: 0.6.1
   category: observability
 ---
 
@@ -29,6 +31,11 @@ is modified.
 - Checking what auto-instrumentation is already wired up
 - Identifying dependencies that lack matching OTel instrumentation
 - Quick health check of an existing OTel setup
+- Checking whether deployment/runtime configuration carries service name,
+  environment, version, collector, health, capacity, rollout, and config context
+- Checking whether deployment-owned dependency endpoints, regions, timeouts,
+  retries, circuit breakers, or credential refs are discoverable
+
 **When NOT to use:** If you want to add instrumentation, use `$otel-instrument`.
 
 ## Process
@@ -47,11 +54,49 @@ Scan the repository to determine language, framework, and existing instrumentati
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
 3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
 4. Use the Auto-Instrumentation Library Map below to identify which packages should be present for each detected dependency.
-5. Record exact evidence paths that should appear in the report:
+5. Detect deployment-context ownership. Search the current repo for runtime and
+  deployment sources such as Docker Compose, Dockerfiles, systemd units, Procfiles,
+  Helm charts, values files, Kustomize overlays, Kubernetes workloads, Argo CD,
+  Flux, Terraform/Pulumi/CDK, ECS task definitions, serverless manifests, Nomad
+  jobs, CI/CD release files, and deploy docs. If deployment context exists or the
+  user provides deployment repo paths, load `../references/deployment-context-readiness.md`.
+6. Resolve deployment references visible in inspected files. For example, follow
+  Helm/helmfile value-file references, Argo CD/Flux source and value references,
+  Terraform `helm_release.values` or tfvars, Kubernetes `configMapRef`/`secretRef`,
+  Docker Compose `env_file`, systemd `EnvironmentFile`, serverless stage config,
+  dependency endpoint/config references, and CI/CD chart/value path references
+  when the target is present or supplied.
+  If a referenced source is not available, pause before writing
+  `.observe/otel.md` and ask once for its local path or URL. Name the referenced
+  source from the inspected file, such as a chart path, values file, GitOps
+  repo/path, IaC module, CI/CD template, environment file, ConfigMap, Secret,
+  tfvars, stack config, or deployment pipeline. Do not treat this as optional
+  report text; it is an interaction boundary. If the user provides paths,
+  inspect them and continue. If the user says to continue without those sources,
+  record them as `referenced but not inspected` and mark the affected deployment
+  context as `unknown`, not `missing`.
+7. If app code exists but production deployment sources are not discoverable,
+  pause before writing `.observe/otel.md` and ask once for known chart, values,
+  GitOps, IaC, CI/CD, or runtime repo paths. Ask for local paths or URLs and
+  include examples such as `./chart`, `./values`, `./gitops`, `./terraform`,
+  a Helm chart repo, an environment-values repo, or a deployment pipeline path.
+  Do not treat this as optional report text; it is an interaction boundary.
+  If the user provides paths, inspect them and continue. If the user says there
+  are none, asks to continue app-code-only, or provides no paths after the ask,
+  continue the app-code audit and mark deployment context as `unknown`, not
+  `missing`.
+8. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
   - Route source: router/controller files such as `TaskController.java`, `app.py`, `app.js`, or `kvstore/http.go`.
   - Runtime/startup files when present: `Dockerfile`, `docker-compose.yml`, `Makefile`, `package.json` scripts, launch configs, worker files.
+  - Deployment/runtime files when present: `Chart.yaml`, `values*.yaml`,
+    `kustomization.yaml`, Argo/Flux resources, Terraform/Pulumi/CDK files,
+    task definitions, systemd units, serverless manifests, Nomad jobs, and CI/CD
+    release files.
+  - Dependency config sources when present: app config files, env var names,
+    ConfigMap/Secret references, parameter-store refs, values/tfvars/stack
+    config, service mesh or egress config, and gateway/route config.
 
 ### Step 2 -- Instrumentation Assessment
 
@@ -113,6 +158,10 @@ for Python, `@opentelemetry/instrumentation-winston` /
 - Check if a matching auto-instrumentation package is installed
 - Use the Auto-Instrumentation Library Map below as the checklist
 - Flag any dependency that has an available auto-instrumentation package but is not instrumented
+- When deployment context is available, map app dependencies to deployment-owned
+  endpoint, region, timeout, retry, circuit breaker, pool/concurrency, config
+  version, and credential-reference sources. Record source names and references,
+  not secret values.
 
 **RED signal assessment** -- for each RED dimension, determine status:
 
@@ -128,6 +177,22 @@ percentiles? (e.g. `http.server.request.duration` histogram, or span
 duration from auto-instrumentation.)
 Status: `covered` / `partial` / `missing`.
 
+**Deployment context assessment** -- when deployment/runtime sources are found
+or supplied, use `../references/deployment-context-readiness.md` to identify
+platform, source repo/path, runtime workload, and whether telemetry-critical
+runtime settings exist. Add a `## Deployment Context` section and `## Gaps`
+entries for missing service identity, environment, version, collector, health,
+capacity, dependency config, rollout, or config signals. Use these status values:
+
+- **covered** -- inspected deployment sources configure the signal.
+- **partial** -- some runtime context exists, but key dimensions or health/capacity
+  signals are missing.
+- **missing** -- inspected deployment sources prove the signal is absent.
+- **unknown** -- deployment sources were not discoverable or not provided.
+  Include `referenced but not inspected` evidence when inspected deployment
+  files point to another chart, values, GitOps, IaC, env, secret, or runtime
+  config source that is not available in the workspace.
+
 **Anti-patterns** -- flag any of these:
 
 - Multiple SDK initializations in the same process
@@ -136,6 +201,12 @@ Status: `covered` / `partial` / `missing`.
 - High-cardinality attributes on metrics (user IDs, request IDs)
 - Missing `recordException` in error handling paths
 - Custom span names with variable segments (IDs, paths)
+- Claiming deployment/runtime signals are missing when the deployment source was
+  not inspected; use `unknown` instead
+- Ignoring referenced deployment sources such as values files, env files,
+  GitOps sources, IaC modules, ConfigMaps, Secrets, or CI/CD release inputs
+- Claiming dependency endpoint, timeout, retry, circuit breaker, region, or
+  credential-reference coverage when those values live in an uninspected source
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/`*, `opentelemetry-*`)
 
 For partially instrumented Go services, explicitly check and report:
@@ -164,6 +235,7 @@ Use this template for `.observe/otel.md`:
 - Entry point: {path}
 - Route source: {path(s)}
 - Runtime/startup: {path(s) or "none detected"}
+- Deployment/runtime: {path(s), supplied paths, or "unknown -- no deployment source found"}
 
 ## Routes
 
@@ -234,6 +306,18 @@ Status values:
   exist but no histogram for percentile breakdown).
 - **missing** -- no data source provides this signal.
 
+## Deployment Context
+
+| Area | Status | Evidence | Gap |
+|------|--------|----------|-----|
+| Platform/source | {covered / partial / unknown} | {Kubernetes/Helm/GitOps/Terraform/Compose/ECS/Lambda/VM/etc. evidence} | {missing repo path or source detail} |
+| Service identity | {covered / partial / missing / unknown} | {service.name / OTEL_SERVICE_NAME / resource attrs} | {missing identity signal} |
+| Release/config | {covered / partial / missing / unknown} | {service.version, container.image.tag/artifact version, config version, rollout/canary id} | {missing release/config signal} |
+| Dependency config | {covered / partial / missing / unknown} | {dependency endpoint alias, dependency type/name, timeout, retry, circuit breaker, provider region/deployment, config ref/version} | {missing dependency config source or referenced source detail} |
+| Dependency health | {covered / partial / missing / unknown} | {endpoint health, target health, availability, error/timeout/rate-limit metrics, unhealthy target count} | {missing dependency health signal or platform metric source} |
+| Health/capacity | {covered / partial / missing / unknown} | {startup/readiness/liveness checks, health checks, task health, restarts, desired vs healthy instances, CPU/memory/disk/concurrency/limits, throttles, quotas} | {missing health/capacity signal} |
+| Export path | {covered / partial / missing / unknown} | {OTLP endpoint, collector sidecar/gateway, OTel Operator, env vars} | {missing export config} |
+
 ## Gaps
 - {remaining non-RED gaps: missing auto-instrumentation packages, missing
   context propagation, missing OTLP exporter configuration, missing
@@ -249,7 +333,7 @@ Status values:
   $otel-instrument for custom business metrics"}
 
 ---
-*Generated by obstudio v0.6.0 otel-audit on {YYYY-MM-DD HH:MM UTC}*
+*Generated by obstudio v0.6.1 otel-audit on {YYYY-MM-DD HH:MM UTC}*
 ```
 
 Report requirements:

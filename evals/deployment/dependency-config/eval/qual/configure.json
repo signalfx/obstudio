@@ -1,0 +1,23 @@
+{
+  "skill": "splunk-configure",
+  "prompts": [
+    {
+      "id": "dependency-config-sources",
+      "task": "Use the audit report at ./.observe/otel.md to generate detector Terraform and deployment prerequisites. The report includes dependency config references to an external dependency-values source that was not inspected. Do not invent dependency endpoint, provider, retry, timeout, circuit breaker, region, or config-version detectors from absent metrics or uninspected config."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./.observe/otel.md and any generated .observe detector files.",
+    "Confirm there is no ./dependency-values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Uses dependency dimensions only when proven low-cardinality, such as dependency type/name, sanitized endpoint alias, provider region, retry policy name, circuit breaker name, or config version.",
+    "Does not use full URLs, credentials, raw hosts with user/tenant data, request payloads, or secret values as detector filters or group-bys.",
+    "Documents the external dependency-values source as a prerequisite when endpoint, provider region, credential reference, or config version are unknown.",
+    "Does not create dependency endpoint, retry, timeout, circuit breaker, provider, or config-version detectors from absent metrics.",
+    "Does not create dependency endpoint-health detectors from config-only evidence when endpoint health or target health metrics are absent.",
+    "Keeps detector output service-scoped when dependency config dimensions are unknown."
+  ]
+}

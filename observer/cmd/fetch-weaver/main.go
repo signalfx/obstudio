@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	weaverVersion = "v0.22.1"
-	downloadBase  = "https://github.com/open-telemetry/weaver/releases/download/" + weaverVersion
+	weaverVersion         = "v0.22.1"
+	downloadBase          = "https://github.com/open-telemetry/weaver/releases/download/" + weaverVersion
+	downloadRetryDelay    = 500 * time.Millisecond
+	downloadRetryAttempts = 4
 )
 
 type target struct {
@@ -179,32 +181,82 @@ func weaverCacheDir() (string, error) {
 }
 
 func downloadFile(ctx context.Context, url, destination string) error {
+	return downloadFileWithClient(ctx, http.DefaultClient, url, destination, downloadRetryAttempts, downloadRetryDelay)
+}
+
+type httpClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+func downloadFileWithClient(ctx context.Context, client httpClient, url, destination string, attempts int, retryDelay time.Duration) error {
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		err, retryable := downloadFileOnce(ctx, client, url, destination)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !retryable || attempt == attempts {
+			return err
+		}
+
+		wait := retryDelay * time.Duration(attempt)
+		log.Printf("download %s failed on attempt %d/%d: %v; retrying in %s", url, attempt, attempts, err, wait)
+		if wait <= 0 {
+			continue
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("download %s: %w", url, ctx.Err())
+		case <-timer.C:
+		}
+	}
+	return lastErr
+}
+
+func downloadFileOnce(ctx context.Context, client httpClient, url, destination string) (error, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("create download request: %w", err)
+		return fmt.Errorf("create download request: %w", err), false
 	}
 	req.Header.Set("User-Agent", "obstudio-fetch-weaver/"+weaverVersion)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
+		if ctx.Err() != nil {
+			return fmt.Errorf("download %s: %w", url, ctx.Err()), false
+		}
+		return fmt.Errorf("download %s: %w", url, err), true
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: unexpected status %s", url, resp.Status)
+		err := fmt.Errorf("download %s: unexpected status %s", url, resp.Status)
+		return err, isRetryableDownloadStatus(resp.StatusCode)
 	}
 
 	out, err := os.Create(destination)
 	if err != nil {
-		return fmt.Errorf("create archive file: %w", err)
+		return fmt.Errorf("create archive file: %w", err), false
 	}
 	defer out.Close()
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
-		return fmt.Errorf("write archive file: %w", err)
+		return fmt.Errorf("write archive file: %w", err), true
 	}
-	return nil
+	return nil, false
+}
+
+func isRetryableDownloadStatus(statusCode int) bool {
+	return statusCode == http.StatusRequestTimeout ||
+		statusCode == http.StatusTooManyRequests ||
+		statusCode >= http.StatusInternalServerError
 }
 
 func extractBinary(archivePath, workDir, binaryName string) (string, error) {

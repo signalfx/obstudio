@@ -3,6 +3,17 @@
 SignalFlow + HCL templates for each detector category. The agent uses these
 templates to generate `.observe/terraform/detectors.tf` resources.
 
+When adapting a template, use only metric names, filters, group-bys, and units
+proven by the audit, local metric metadata, or approved Splunk API metadata. Do
+not treat the provider/API `realm` variable as a telemetry dimension such as
+`sfx_realm`, `deployment.region`, or `cloud.region`; hard-code telemetry
+dimension values only when the audit or user explicitly provides that value.
+For precomputed percentile metrics such as `.p99`, `.p95`, `p50`, or
+already-quantized streams, do not apply another percentile calculation or
+average the percentile values. Use raw histogram distributions for
+`.percentile(pct=99)`, or `max()`/`max(by=[...])` for already-computed
+percentile series.
+
 ## Latency Detector
 
 Monitors p99 latency using a static threshold on histogram percentile data.
@@ -158,7 +169,7 @@ variable "throughput_<metric_id>_stddev" {
 Generated alongside the `.tf` files so users know exactly which values to provide.
 
 ```hcl
-realm                = ""   # e.g. us1, eu0, lab0
+realm                = ""   # e.g. us1, eu0
 api_token            = ""   # Splunk O11y API token (org-level, detector write)
 service_name         = "<service-name>"
 notification_channel = ""   # e.g. "Email,team@example.com" or PagerDuty routing key

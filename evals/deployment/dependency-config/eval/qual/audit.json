@@ -1,0 +1,23 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "dependency-config-sources",
+      "task": "Scan ./service for observability gaps and include deployment context from ./chart, ./gitops, and ./terraform. Map app dependencies to deployment-owned endpoint, timeout, retry, circuit breaker, pool, region, and credential-reference config. Do not inspect or assume any external dependency-values repo."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./gitops, and ./terraform for resulting files when present.",
+    "Confirm there is no ./dependency-values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies outbound dependencies from app code and package.json, including HTTP client and database dependencies.",
+    "Maps dependency config to deployment sources such as env vars, ConfigMap refs, Secret refs, chart values, Argo CD valueFiles, and Terraform helm_release.values.",
+    "Reports endpoint, provider region, credential reference target, and config version from the external dependency-values source as referenced but not inspected or unknown.",
+    "Recognizes timeout, retry policy, circuit breaker, and pool settings when present in inspected chart values or templates.",
+    "Reports dependency endpoint health as missing or unknown unless endpoint health, target health, timeout count, rate-limit count, or unhealthy target metrics are proven.",
+    "Does not treat full URLs, secret values, or credential values as safe detector dimensions."
+  ]
+}

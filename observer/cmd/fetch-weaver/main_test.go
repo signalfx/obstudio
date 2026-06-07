@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -127,6 +129,56 @@ func TestFetchTargetUsesCachedBinaryFromOverride(t *testing.T) {
 	}
 	if string(data) != "cached-weaver" {
 		t.Fatalf("unexpected output contents: %q", string(data))
+	}
+}
+
+func TestDownloadFileRetriesTransientStatus(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, "temporary gateway failure", http.StatusGatewayTimeout)
+			return
+		}
+		_, _ = w.Write([]byte("weaver-archive"))
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), "weaver.tar.xz")
+	err := downloadFileWithClient(t.Context(), server.Client(), server.URL, destination, 2, 0)
+	if err != nil {
+		t.Fatalf("downloadFileWithClient returned error: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 download attempts, got %d", attempts)
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatalf("read destination: %v", err)
+	}
+	if string(data) != "weaver-archive" {
+		t.Fatalf("unexpected archive contents: %q", string(data))
+	}
+}
+
+func TestDownloadFileDoesNotRetryPermanentStatus(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), "weaver.tar.xz")
+	err := downloadFileWithClient(t.Context(), server.Client(), server.URL, destination, 3, 0)
+	if err == nil {
+		t.Fatal("expected permanent status error")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Fatalf("expected status in error, got %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected one download attempt for permanent failure, got %d", attempts)
 	}
 }
 

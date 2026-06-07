@@ -1,0 +1,21 @@
+{
+  "skill": "splunk-configure",
+  "prompts": [
+    {
+      "id": "deployment-aware-detectors",
+      "task": "Use the audit report at ./.observe/otel.md, which includes deployment context from ./chart, ./values, ./gitops, and ./terraform, to generate detector Terraform and document deployment prerequisites. Do not invent detectors from absent runtime metrics."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./values, ./gitops, and ./terraform for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Uses proven deployment dimensions such as service.name, deployment.environment, service.version or image tag, region, namespace, and rollout id only when present.",
+    "Does not group detectors by raw pod, container, request, user, tenant, session, trace, or raw URL values.",
+    "Does not create release/config, health, capacity, or rollout detectors from absent metrics.",
+    "Documents deployment prerequisites for missing or unknown runtime health, capacity, export path, and release/config signals.",
+    "Keeps detector output service-scoped when deployment dimensions are unknown."
+  ]
+}

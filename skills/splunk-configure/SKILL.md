@@ -6,10 +6,12 @@ description: >-
   detector categories, and outputs ready-to-apply HCL with SignalFlow
   program_text. Use when the user types $splunk-configure, asks to "generate
   detectors", "create alerts from audit", "build Terraform for monitors",
-  or "set up Splunk detectors".
+  "set up Splunk detectors", or asks to include deployment, release,
+  environment, Helm, GitOps, Terraform, serverless, VM, container, health,
+  capacity, rollout, dependency config, or config context in alerts.
 metadata:
   author: otel-studio
-  version: 0.1.0
+  version: 0.1.1
   category: observability
 ---
 
@@ -20,13 +22,17 @@ metadata:
 Read an existing `.observe/otel.md` audit report, classify detected metrics
 into detector categories (latency, error, saturation, throughput), and generate
 Terraform configuration for Splunk Observability Cloud `signalfx_detector`
-resources with inline SignalFlow programs.
+resources with inline SignalFlow programs. When the audit includes deployment
+context, use it to add safe detector dimensions and to report runtime,
+release/config, health, and capacity prerequisites.
 
 ## When to Use
 
 - After running `$otel-audit` to generate `.observe/otel.md`
 - When the user wants alerting/detection Terraform for their service
 - When creating monitors for RED signals or saturation metrics
+- When deployment/runtime context should shape alert grouping, filters, or
+  prerequisites for release/config, health, rollout, and capacity detection
 
 **When NOT to use:** If no audit report exists yet, instruct the user to run
 `$otel-audit` first.
@@ -56,10 +62,32 @@ Extract from `.observe/otel.md`:
    - Each row provides: metric name, source, and type (auto/custom)
    - Record all metrics for classification in Step 3
 
-If the Metrics section says "No metrics detected.", stop and respond:
+3. **Deployment Context** from `## Deployment Context`, when present:
+   - Platform/source
+   - Service identity
+   - Release/config
+   - Dependency config
+   - Dependency health
+   - Health/capacity
+   - Export path
+   Load `../references/deployment-context-readiness.md` when this section exists.
+   Treat rows with `unknown` as missing repository context, not missing telemetry.
+   Treat `referenced but not inspected` evidence as missing repository context:
+   document the referenced source path or URL as a prerequisite, but do not use
+   its dimensions, values, or metrics in detector Terraform.
+   Add rows with `missing` or `partial` to the detector report's prerequisites
+   unless matching metrics or dimensions exist.
+
+If the Metrics section says "No metrics detected." and there is no Deployment
+Context section, stop and respond:
 
 > The audit report contains no metrics. Detectors require metric data.
 > Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
+
+If the Metrics section says "No metrics detected." but Deployment Context is
+present, do not generate detector Terraform from absent metrics. Continue to
+create `.observe/detectors.md` with Deployment Prerequisites and clearly state
+that detectors require instrumentation or platform metrics first.
 
 ### Step 3 -- Classify Metrics into Detector Categories
 
@@ -74,6 +102,38 @@ Assign each metric to exactly one category:
 
 Skip metrics that match the exclusion rules (auto-instrumented library metrics
 that duplicate custom signals).
+
+If deployment context is present:
+
+- Add `service.name` filters when available.
+- Add environment, region, cluster, namespace, task, function, image tag,
+  service version, config version, rollout, or canary dimensions only when the
+  audit proves they exist and they are low-cardinality.
+- Treat `deployment.region`, `deployment.platform`, `container.image.tag`, and
+  artifact version as aliases for deployment-aware filters only when they are
+  proven and low-cardinality.
+- Prefer exact metric/resource attribute names proven by the audit, such as
+  `cloud.region` or platform-provided container image attributes. Do not create
+  duplicate filters only to force generic alias names.
+- Add dependency filters or dashboard dimensions only when the audit proves they
+  exist and they are low-cardinality, such as dependency type/name, sanitized
+  endpoint alias, provider region/deployment, gateway, timeout tier, retry
+  policy name, circuit breaker name, or config version. Do not use full URLs,
+  credentials, raw hosts with user/tenant data, request payloads, or secret
+  values.
+- If deployment files reference another chart, values, GitOps, IaC, env, secret,
+  or runtime config source that was not inspected, leave affected filters and
+  group-bys service-scoped and list that source under Deployment Prerequisites.
+- Do not group detectors by raw pod, container, request, user, tenant, session,
+  trace, or raw URL values.
+- Do not create release/config, health, capacity, rollout, or platform detectors
+  from absent metrics. Record them as prerequisites instead.
+- Do not create dependency endpoint, retry, timeout, circuit breaker, provider,
+  or config-version detectors from absent metrics. Record the missing source or
+  metric as a prerequisite instead.
+- Create dependency endpoint-health detectors only from available dependency or
+  platform health metrics. If only dependency config is present, document the
+  missing health metric prerequisite instead.
 
 ### Step 4 -- Generate Terraform
 
@@ -106,6 +166,36 @@ resource "signalfx_detector" "<category>_<sanitized_metric_name>" {
 
 Sanitize metric names for HCL identifiers: replace dots and hyphens with
 underscores, strip leading digits.
+
+For deployment-aware output, include only safe proven filters or dimensions in
+SignalFlow. Examples: `service.name`, `deployment.environment`, `service.version`,
+`k8s.namespace.name`, `cloud.region`, `container.image.tag`, `faas.name`, or
+`deployment.rollout.id`. Also accept proven low-cardinality aliases such as
+`deployment.region`, `deployment.platform`, and artifact version. Dependency
+examples include `dependency.type`, `dependency.name`,
+`dependency.endpoint.alias`, `cloud.region`, `deployment.config.version`, or
+`deployment.rollout.id` when proven. When those dimensions are `unknown`, leave
+the detector service-scoped and document the missing deployment context in
+`.observe/detectors.md`.
+Keep the Splunk Observability Cloud API `realm` variable separate from service
+telemetry dimensions. Do not use `var.realm` as a SignalFlow filter for
+`sfx_realm`, `deployment.region`, `cloud.region`, or any application/runtime
+dimension unless live metric metadata or the audit proves that exact dimension
+and value. If a dimension exists but its current value is unknown, leave the
+detector service-scoped or make the dimension a dashboard/filter candidate
+instead of hard-coding it.
+Before writing SignalFlow, verify every filter and group-by dimension against
+the audit, local metric metadata, or approved Splunk API metadata. If a
+dimension is absent from the target metric, omit it and document the missing
+dimension as a prerequisite. Never use a dimension solely because referenced
+deployment files, uninspected values, or intended instrumentation imply it may
+exist.
+For percentile metrics that are already aggregated, including names such as
+`.p99`, `.p95`, `p50`, `quantile`, or metrics marked as already-quantized, do
+not use `.percentile(pct=99)` or average streams. Use raw histograms for
+percentile calculations, or use `max()`/`max(by=[...])` for precomputed
+percentile series. Match units to metric names and metadata before choosing
+threshold defaults.
 
 #### `.observe/terraform/variables.tf`
 
@@ -141,7 +231,7 @@ variable "notification_channel" {
 Generate a `.tfvars.example` file the user copies and fills in to apply:
 
 ```hcl
-realm                = ""   # e.g. us1, eu0, lab0
+realm                = ""   # e.g. us1, eu0
 api_token            = ""   # Splunk O11y API token (org-level, detector write)
 service_name         = "<service-name from report>"
 notification_channel = ""   # e.g. "Email,team@example.com" or PagerDuty routing key
@@ -215,6 +305,16 @@ Default: **3.0 stddev**, 5m current window vs 1h history.
 | Metric | Reason |
 |--------|--------|
 | `<metric>` | <why it was not classified> |
+
+## Deployment Prerequisites
+
+| Area | Status | Needed Before Alerting |
+|------|--------|------------------------|
+| Release/config | <partial/missing/unknown> | <version/config/rollout dimensions or repo path needed> |
+| Dependency config | <partial/missing/unknown> | <dependency endpoint/region/timeout/retry/circuit-breaker/config source or metric needed> |
+| Dependency health | <partial/missing/unknown> | <dependency endpoint health/target health/error/timeout/rate-limit metric needed> |
+| Health/capacity | <partial/missing/unknown> | <restart/readiness/desired-vs-healthy/CPU/memory/disk/throttle/quota/concurrency metrics or deployment source needed> |
+| Export path | <partial/missing/unknown> | <collector/export configuration needed> |
 
 ## Classification Rules Applied
 

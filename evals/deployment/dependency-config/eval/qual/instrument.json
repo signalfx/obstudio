@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "dependency-config-sources",
+      "task": "Instrument ./service for OpenTelemetry and use ./chart, ./gitops, and ./terraform as deployment context. If dependency endpoint, region, timeout, retry, circuit breaker, pool, or credential-reference config belongs in deployment config, update only reusable app/chart knobs and do not hardcode external dependency-values into app code."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./gitops, and ./terraform for resulting files when present.",
+    "Confirm there is no ./dependency-values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Confirms app dependencies and inspected deployment config sources before editing.",
+    "Does not hardcode dependency endpoints, provider regions, database URLs, credential values, or secret material into app code or chart defaults.",
+    "Patches app code only for spans/metrics and safe local defaults, while preserving deployment-owned dependency config in chart/values/GitOps/IaC.",
+    "Reports unresolved dependency endpoint, provider region, credential reference, or config version sources as unknown or referenced but not inspected.",
+    "Uses low-cardinality dependency attributes and avoids full URLs, raw hosts with tenant/user data, request payloads, or secret values."
+  ]
+}
