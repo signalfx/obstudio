@@ -6,10 +6,12 @@ description: >-
   asks to "add OTel", "add tracing", "add metrics", "implement observability",
   "wire up telemetry", "instrument this service", or asks to add a specific
   custom signal like "add a metric to track queue depth", "add a span for
-  payment processing", "track error rate for X".
+  payment processing", "track error rate for X", or asks to configure
+  runtime/deployment observability or dependency config across Helm, values,
+  GitOps, Terraform, serverless, VM, container, or other deployment repos.
 metadata:
   author: otel-studio
-  version: 0.1.1
+  version: 0.1.2
   category: observability
 ---
 
@@ -28,11 +30,63 @@ Before editing anything, ground the plan with repo evidence:
 - Confirm the language and framework from actual dependency or source files
 - Confirm the target process from the repo's real start surface: `docker-compose.yml`, Kubernetes manifests, `package.json` scripts, `Makefile`, `Procfile`, PM2 configs, Supervisor configs, systemd units, launchd plists, PowerShell scripts, or a plain shell command
 - Confirm existing telemetry indicators or record `none found`
+- Detect deployment context. Search the current repo and any user-provided paths
+  for Docker Compose, Dockerfiles, systemd units, Procfiles, Helm charts, values
+  files, Kustomize overlays, Kubernetes workloads, Argo CD, Flux, Terraform/Pulumi/CDK,
+  ECS task definitions, serverless manifests, Nomad jobs, CI/CD release files,
+  and deploy docs. When found or supplied, load
+  `../references/deployment-context-readiness.md`.
+- Resolve deployment references visible in inspected files before choosing a
+  patch location. For example, follow Helm/helmfile value-file references,
+  Argo CD/Flux sources and value references, Terraform `helm_release.values` or
+  tfvars, Kubernetes `configMapRef`/`secretRef`, Docker Compose `env_file`,
+  systemd `EnvironmentFile`, serverless stage config, dependency endpoint/config
+  references, and CI/CD chart/value path references when the target is present
+  or supplied.
+- If `.observe/otel.md` or inspected files mention referenced deployment,
+  runtime, CI/CD, chart, values, GitOps, IaC, environment, ConfigMap, Secret,
+  tfvars, stack config, or dependency-config sources that were not inspected,
+  pause before editing code, writing instrumentation output, or changing
+  telemetry configuration and ask once for their local paths or URLs. Name the
+  referenced sources from the report or inspected file. This is a hard
+  interaction boundary when the requested work includes deployment-owned
+  resource attributes, exporter settings, service/version/environment/region
+  context, health/capacity signals, dependency endpoint/timeout/retry/circuit
+  breaker config, or provisioning prerequisites. If the user provides paths,
+  inspect them and continue. If the user explicitly says to continue without
+  those sources, keep deployment-owned context `unknown`, avoid patching
+  production OTEL/export/resource settings from app-code guesses, and limit
+  changes to repo-owned spans and metrics.
+- If app code exists but production deployment sources are not discoverable, and
+  the requested work depends on runtime/deployment context, pause before editing
+  and ask once for known chart, values, GitOps, IaC, CI/CD, or runtime repo
+  paths. Continue app-code-only only after the user explicitly says to proceed
+  without those sources.
 - For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
 - Confirm the planned `service.name` source and `deployment.environment` source
+- Confirm whether telemetry runtime config should be patched in app code, a
+  startup wrapper, Helm chart templates, environment values, GitOps resources,
+  IaC, serverless config, systemd/VM config, or Docker Compose.
+- Map app dependencies to deployment-owned config when possible: endpoint alias,
+  provider region/deployment, timeout, retry/backoff, circuit breaker,
+  pool/concurrency, config version, and credential-reference source. Track
+  source names and refs; do not read or copy secret values.
 - Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
 - If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
 - If the repo is primarily tooling or library code and no runnable surface is obvious, stop and ask instead of inventing an app shell
+- If app code exists but production deployment sources are not discoverable, ask
+  once for known chart, values, GitOps, IaC, CI/CD, or runtime repo paths. If none
+  are provided, continue with app-code-only instrumentation and report deployment
+  context as `unknown`.
+- If inspected deployment files reference another chart, values, GitOps, IaC,
+  env, secret, or runtime config source that is not available, record it as
+  `referenced but not inspected`, ask once for its path or URL, and do not
+  hardcode that source's environment-specific values into app code or chart
+  defaults.
+- If dependency endpoint, timeout, retry, circuit breaker, region, or credential
+  reference values live in an uninspected values/tfvars/secret/config repo, do
+  not duplicate those values in app code. Patch only reusable config knobs and
+  report dependency config as `unknown`.
 - Ask one focused clarifying question only if the target process or runtime shape is still ambiguous after checking the repo
 
 Do not proceed until you can state all of these clearly:
@@ -43,6 +97,16 @@ Do not proceed until you can state all of these clearly:
 - environment dimension
 - incremental addition vs new scaffold
 - for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
+- deployment platform/source status, or `unknown` when not inspected
+- exact file or repo class to patch for runtime OTel env/resource attributes
+- exact file or repo class that owns dependency endpoint, timeout, retry,
+  circuit breaker, region, and credential-reference config, or `unknown`
+
+If the user's request includes aligning resource/export configuration with the
+Java agent or deployment-owned OTEL settings, provisioning detectors, adding
+environment/region/version dimensions, or adding health/capacity/dependency
+config readiness, the exact deployment/config file or repo class must not remain
+`unknown`; ask for the missing repo paths before editing.
 
 ### Fast Path: Targeted Custom Signal
 
@@ -102,6 +166,31 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Span names must be low-cardinality (no IDs, no variable path segments).
 - Metric attributes must avoid high cardinality.
 - Preserve existing env-var patterns for telemetry config instead of hardcoding endpoints.
+- When deployment config is separate from app code, patch the deployment source
+  that already owns runtime env/config instead of adding duplicate app-code
+  defaults. Follow `../references/deployment-context-readiness.md`.
+- When only a chart/template repo is available but inspected files reference a
+  separate environment values or release repo, patch reusable chart knobs only;
+  treat environment-specific telemetry values as `unknown` until the referenced
+  source is supplied.
+- When dependency config is separate from app code, patch the source that already
+  owns dependency env/config. Use app code for spans/metrics and safe config
+  defaults, but use values/tfvars/GitOps/IaC/runtime config for environment-
+  specific endpoints, regions, timeouts, retries, circuit breakers, and
+  credential references.
+- Do not clone private deployment repos or guess production values paths. Use
+  local paths or URLs supplied by the user, or report deployment context as
+  `unknown`.
+- Add deployment/runtime attributes only when the platform can supply stable,
+  low-cardinality values: `service.name`, `service.version`,
+  `deployment.environment`, `deployment.region`, `deployment.platform`,
+  region/zone, `container.image.tag`, artifact version, config version,
+  rollout or canary id, cluster/namespace/task/function identifiers, and
+  platform type.
+- Prefer existing OTel semantic-convention or platform resource attribute names
+  when they are already emitted. Treat `deployment.region`,
+  `deployment.platform`, and `container.image.tag` as generic context aliases
+  unless the repo already uses those exact attribute names.
 - If the app is a library, provide an opt-in setup path rather than forcing SDK initialization on import.
 - Keep the codebase idiomatic. Match the repo's dependency manager, config style, and lifecycle patterns.
 - Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` or `getMeter` in hot paths.
@@ -158,6 +247,12 @@ Then wait for the user's answer.
   - External calls not covered by auto-instrumentation libraries
   - Background workers and scheduled jobs
   - Cache interactions without auto-instrumentation support
+  - Deployment/runtime context: service identity, version, environment, region,
+    platform, collector endpoint, health checks, restart signals, capacity
+    limits including CPU/memory/disk, rollout or canary identifiers, config
+    version, dependency endpoint/config sources, dependency endpoint health,
+    timeout/retry/circuit-breaker config, and platform-specific health signals
+    when a deployment source is available
   - Suggest specific spans and metrics with names, attributes, and rationale
   - Apply after user approval
 
@@ -197,6 +292,10 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - In the final response, separate file changes from verified outcomes
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
 - Always include the service-name configuration, OTLP endpoint configuration, and which automatic spans/metrics are expected from the instrumentation.
+- If deployment context was inspected, state which deployment files were changed,
+  which platform signals are now available, and which release/config or health
+  signals remain missing. If it was not inspected, state `deployment context:
+  unknown`.
 
 ## Credential Safety
 

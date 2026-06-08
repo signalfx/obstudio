@@ -1,0 +1,23 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "app-only-deployment-path-prompt",
+      "task": "Scan ./service for observability gaps. This fixture intentionally contains app code only and no chart, values, GitOps, IaC, CI/CD, or runtime deployment repo. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for app code.",
+    "Confirm there are no ./chart, ./values, ./gitops, ./terraform, or deployment manifest directories in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.js and package.json as the app code surfaces.",
+    "Recognizes that production deployment/config sources are not discoverable in the workspace.",
+    "Before treating deployment context as final, asks the user for optional chart, values, GitOps, IaC, CI/CD, or runtime repo paths or URLs.",
+    "Uses concrete examples such as ./chart, ./values, ./gitops, ./terraform, a Helm chart repo, environment-values repo, or deployment pipeline path.",
+    "Does not invent deployment context, production values, or deployment health signals from the app-only repo.",
+    "If continuing app-code-only, marks deployment context as unknown rather than missing."
+  ]
+}

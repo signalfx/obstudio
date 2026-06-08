@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "referenced-values-not-supplied",
+      "task": "Scan ./service for observability gaps and include deployment context from ./chart, ./gitops, and ./terraform. Do not inspect or assume any external env-values repo. If deployment files reference values or config sources that are not present, report them as referenced but not inspected."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./chart, ./gitops, and ./terraform for resulting files when present.",
+    "Confirm there is no ./env-values or ./values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.js and package.json as the app code surfaces.",
+    "Identifies Helm, Argo CD, and Terraform as deployment sources.",
+    "Recognizes that Argo CD valueFiles and Terraform helm_release.values reference an external values source.",
+    "Marks the referenced values source as referenced but not inspected or unknown, not as a proven missing telemetry signal.",
+    "Asks for the referenced values/config source path or URL rather than cloning or inventing it."
+  ]
+}

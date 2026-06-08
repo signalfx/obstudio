@@ -1,0 +1,22 @@
+{
+  "skill": "splunk-configure",
+  "prompts": [
+    {
+      "id": "referenced-values-not-supplied",
+      "task": "Use the audit report at ./.observe/otel.md to generate detector Terraform and deployment prerequisites. The report includes deployment references to an external values source that was not inspected. Do not invent detectors, filters, or group-bys from that source."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./.observe/otel.md and any generated .observe detector files.",
+    "Confirm there is no ./env-values or ./values directory in the fixture.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Does not generate detectors from absent metrics.",
+    "Does not use deployment.environment, region, config version, rollout id, or OTLP endpoint as proven dimensions when only the missing values source could provide them.",
+    "Documents the referenced env values source as a deployment prerequisite.",
+    "Keeps any detector output service-scoped when deployment dimensions are unknown.",
+    "Does not group by raw pod, container, request, user, tenant, session, trace, raw URL, or secret values."
+  ]
+}

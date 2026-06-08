@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orders-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: orders-api
+    spec:
+      containers:
+        - name: orders-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          env:
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.version={{ .Values.image.tag | urlquery }}{{ range $key, $value := .Values.otel.resourceAttributes }},{{ $key }}={{ $value | toString | urlquery }}{{ end }}"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
