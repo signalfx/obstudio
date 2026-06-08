@@ -1,0 +1,26 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the plain Java Kafka batch consumer service in ./service for observability gaps. Do not modify files."
+    },
+    {
+      "id": "readiness-review",
+      "task": "Produce an observability readiness review for the plain Java Kafka batch consumer service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, batch-processing risks, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies BatchConsumerApplication.java as the entry point and BatchConsumerConfig.java as the startup/runtime configuration surface.",
+    "Identifies PaymentBatchConsumer.java as the KafkaConsumer poll loop that processes ConsumerRecords as batches and commits offsets with commitSync().",
+    "Identifies PaymentBatchProcessor.java as the batch aggregation logic and names the payments topic.",
+    "Reports no OpenTelemetry SDK setup, Java agent startup, OTLP exporter configuration, or custom Tracer usage.",
+    "Calls out missing Kafka consumer spans, batch size, valid/failed record counts, high-value-payment counts, batch duration, commit error, and consumer lag/offset visibility.",
+    "Recommends the OpenTelemetry Java agent as the primary Kafka consumer instrumentation path and treats batch metrics as optional custom signals."
+  ]
+}

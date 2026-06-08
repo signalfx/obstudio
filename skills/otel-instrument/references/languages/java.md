@@ -124,15 +124,41 @@ The Java agent auto-instruments:
 - Spring WebFlux (reactive endpoints)
 - Spring Data (JPA, JDBC)
 - RestTemplate and WebClient (outbound HTTP)
-- Kafka, RabbitMQ, gRPC
+- Kafka producers/consumers (including clients used internally by Kafka Streams)
+- RabbitMQ, gRPC
 - Servlet containers (Tomcat, Jetty, Undertow)
 - JDBC drivers
 
 No code changes needed for basic coverage.
-In final user-facing output, state that Spring MVC and the servlet container
-will emit HTTP server spans and request duration metrics through the agent.
-Also name the service identity and exporter settings, for example
-`OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT`.
+In final user-facing output, name only the frameworks and clients actually
+detected in the project. For Spring MVC or servlet apps, state that HTTP server
+spans and request duration metrics will come through the agent. For Kafka or
+Kafka Streams apps, state that producer, consumer, and stream client spans will
+come through the agent. Also name the service identity and exporter settings,
+for example `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+### Kafka Processing Patterns
+
+For Java Kafka services, preserve the current processing pattern instead of
+rewriting the application to fit instrumentation. Do not convert one Kafka
+processing model into another just to add telemetry:
+
+- Plain producer/consumer services: keep `KafkaProducer.send()` and
+  `KafkaConsumer.poll()` startup behavior intact.
+- Batch consumers: keep `ConsumerRecords` batch processing, offset commit
+  behavior, and batch-level error handling intact.
+- Listener-container services, such as Spring Kafka `@KafkaListener` apps: keep
+  listener annotations, container factories, topic properties, and framework
+  startup intact.
+- Kafka Streams: keep the topology, processors, state stores, topic flow, and
+  stream lifecycle code intact.
+
+The Java agent covers Kafka producer and consumer clients, including clients
+used internally by Kafka Streams and Spring Kafka listener containers. It does
+not create spans for Kafka Streams DSL operations or business batch-processing
+steps by itself. Treat processed-record counts, failed-parse counters,
+batch-size metrics, high-risk alert counts, and topology-level spans as optional
+custom business instrumentation unless the user explicitly requests them.
 
 ---
 
@@ -271,7 +297,11 @@ Use the `-javaagent` JVM flag in the `bootRun` task or application config.
 
 - **Agent vs SDK**: The javaagent approach requires no code changes for basic coverage. Only add the OTel API dependency when you need custom spans or metrics.
 - **`JAVA_TOOL_OPTIONS`**: This env var is the cleanest way to inject the agent in containerized or service-managed environments.
-- **Spring Boot**: The agent covers Spring MVC, WebFlux, Data, RestTemplate, WebClient, Kafka, and RabbitMQ automatically. No additional setup needed.
+- **Spring Boot and Kafka**: The agent covers Spring MVC, WebFlux, Data,
+  RestTemplate, WebClient, Kafka producers/consumers including clients used
+  internally by Kafka Streams, and RabbitMQ automatically. Topology-level
+  Kafka Streams DSL spans require custom instrumentation. No additional setup
+  needed for basic spans and runtime metrics.
 - **Metric export interval and timeout**: For local runtime checks, set both
   `OTEL_METRIC_EXPORT_INTERVAL=1000` and `OTEL_METRIC_EXPORT_TIMEOUT=500` so
   HTTP duration metrics flush promptly.
