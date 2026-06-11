@@ -30,6 +30,35 @@ detected in the codebase. Only install what the project actually uses.
 registered before framework-specific instrumentations (Express, Fastify, etc.)
 because the framework instrumentations depend on HTTP spans being created first.
 
+**Note**: `http.server.active_requests` is experimental in the Node.js OTel SDK
+and may not be emitted by all versions. Do not treat its presence as a hard
+requirement when assessing instrumentation coverage.
+
+---
+
+## Dependencies
+
+```bash
+npm install @opentelemetry/sdk-node \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/exporter-metrics-otlp-http \
+  @opentelemetry/sdk-metrics \
+  @opentelemetry/instrumentation-http \
+  @opentelemetry/resources \
+  @opentelemetry/semantic-conventions
+```
+
+Add detected framework/client packages explicitly. For Express, also install:
+
+```bash
+npm install @opentelemetry/instrumentation-express
+```
+
+Do not rely on `@opentelemetry/auto-instrumentations-node` alone when the
+project uses a known framework such as Express, Fastify, Koa, NestJS, or a
+known client library. The manifest should name the matching instrumentation
+packages directly.
+
 ---
 
 ## SDK Initialization
@@ -46,7 +75,8 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-// ... add detected framework/client instrumentations here
+import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+// ... add other detected framework/client instrumentations here
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -55,10 +85,13 @@ const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter(),
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter(),
+    exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
+    exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
   }),
   instrumentations: [
     new HttpInstrumentation(),
-    // ... add detected instrumentations here
+    new ExpressInstrumentation(),
+    // ... add other detected instrumentations here
   ],
 });
 
@@ -66,6 +99,13 @@ sdk.start();
 
 process.on('SIGTERM', () => sdk.shutdown());
 ```
+
+The explicit `exportIntervalMillis` and `exportTimeoutMillis` are required for
+local and eval runs. Do not rely on metric reader defaults; they can be too slow
+for short-lived runtime checks, causing valid HTTP metrics to never reach the
+collector before the process stops. Keep the timeout less than or equal to the
+interval; the Node SDK rejects configurations such as interval `1000` ms with
+the default timeout `30000` ms.
 
 ### Loading the SDK
 
@@ -89,6 +129,14 @@ application entry point:
 ```typescript
 import './instrumentation';
 // ... rest of app
+```
+
+If the repo already uses `npm run start`, `npm run dev`, `tsx`, `ts-node`, or `nodemon`, add the preload there instead of creating a separate observability-only command path.
+
+If the project already runs in Docker:
+```dockerfile
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+CMD ["node", "--require", "./instrumentation.js", "app.js"]
 ```
 
 ---
@@ -161,6 +209,21 @@ orderDuration.record((performance.now() - start) / 1000, { 'order.type': 'standa
 
 ---
 
+## Error Handling
+
+APM backends identify errors by `otel.status_code = ERROR`. Always set error status:
+
+```typescript
+import { SpanStatusCode } from '@opentelemetry/api';
+
+span.setStatus({ code: SpanStatusCode.ERROR, message: 'Payment failed' });
+span.recordException(error);
+```
+
+Express/Fastify auto-instrumentation automatically sets ERROR on 5xx responses.
+
+---
+
 ## OTLP Export Configuration
 
 All configuration is via environment variables. Do not hardcode endpoints.
@@ -170,13 +233,35 @@ All configuration is via environment variables. Do not hardcode endpoints.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
+| `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with the Observer, run with:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     OTEL_METRIC_EXPORT_INTERVAL=1000
+    OTEL_METRIC_EXPORT_TIMEOUT=500
     OTEL_BSP_SCHEDULE_DELAY=100
+
+When creating `PeriodicExportingMetricReader`, pass
+`exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)`
+and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`.
+This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
+`http.server.request.duration` when stable HTTP semantic conventions are
+enabled, export promptly to Observer.
+
+---
+
+## Framework Notes
+
+### Express
+Auto-instrumented via `@opentelemetry/instrumentation-express` (included in auto-instrumentations-node). All middleware and route handlers produce spans.
+
+### Fastify
+Auto-instrumented via `@opentelemetry/instrumentation-fastify`. Hooks and handlers produce spans automatically.
+
+### Database Clients
+Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included in the auto-instrumentations package.
 
 ---
 
@@ -191,6 +276,14 @@ For local development with the Observer, run with:
   OTel setup exists, extend its instrumentation array.
 - **Graceful shutdown**: Always hook `SIGTERM` to `sdk.shutdown()` to flush
   pending telemetry.
+- **Metric reader option**: Use the `NodeSDK` option `metricReader` exactly as
+  shown above. Do not write `metricReaders` unless the installed SDK version
+  documents that option; older versions ignore it and fall back to env-based
+  reader setup.
+- **Metric export interval and timeout**: Always set `exportIntervalMillis` and
+  `exportTimeoutMillis` on `PeriodicExportingMetricReader`. Environment
+  variables alone are not enough when constructing the reader manually, and the
+  timeout must be less than or equal to the interval.
 - **Avoid `@opentelemetry/auto-instrumentations-node`**: This meta-package
   installs every instrumentation. Only install what the project uses to
   minimize dependency surface.

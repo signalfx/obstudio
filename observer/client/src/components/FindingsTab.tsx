@@ -179,6 +179,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 role="tab"
                 className={tab.key === activeSignalTab ? "findings-tab__signal-tab is-active" : "findings-tab__signal-tab"}
                 aria-selected={tab.key === activeSignalTab}
+                aria-label={formatSignalTabAriaLabel(tab.label, count)}
                 data-has-issues={count > 0 ? "true" : "false"}
                 onClick={() => {
                   setHasExplicitSignalTabSelection(true);
@@ -186,7 +187,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 }}
               >
                 {tab.label}
-                <span className="findings-tab__signal-count">{count}</span>
+                {count > 0 ? <span className="findings-tab__signal-count" aria-hidden="true">{count}</span> : null}
               </button>
             );
           })}
@@ -247,14 +248,14 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                             onClick={() => setSelectedKey(issue.key)}
                             aria-pressed={isSelected}
                             aria-controls="validation-issue-detail"
-                            aria-label={`${row.issue} ${row.rule} ${totals.violation} violations ${totals.improvement} improvements ${totals.information} information`}
+                            aria-label={formatIssueRowAriaLabel(row.issue, row.rule, totals)}
                           >
                             <div className="findings-tab__item-grid">
                               <span className="findings-tab__item-title explorer-row__primary">{row.issue}</span>
                               <span className="findings-tab__item-rule explorer-row__secondary">{row.rule}</span>
-                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.violation === 0 ? "is-zero" : ""}`}>{totals.violation}</span>
-                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.improvement === 0 ? "is-zero" : ""}`}>{totals.improvement}</span>
-                              <span className={`findings-tab__item-count explorer-row__numeric ${totals.information === 0 ? "is-zero" : ""}`}>{totals.information}</span>
+                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.violation)}</span>
+                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.improvement)}</span>
+                              <span className="findings-tab__item-count explorer-row__numeric" aria-hidden="true">{formatIssueCountCell(totals.information)}</span>
                             </div>
                           </button>
                         </article>
@@ -391,6 +392,27 @@ function issueSeverityTotals(issue: ValidationIssue, variants: IssueVariant[]): 
     improvement: issue.improvementCount || fallbackCounts.improvement,
     information: issue.informationCount || fallbackCounts.information,
   };
+}
+
+function formatSignalTabAriaLabel(label: string, count: number): string {
+  if (count <= 0) {
+    return label;
+  }
+  return `${label}, ${count} ${count === 1 ? "issue" : "issues"}`;
+}
+
+function formatIssueCountCell(count: number): string {
+  return count > 0 ? String(count) : "";
+}
+
+function formatIssueRowAriaLabel(issue: string, rule: string, totals: SeverityTotals): string {
+  const countSummary = [
+    totals.violation > 0 ? `${totals.violation} ${totals.violation === 1 ? "violation" : "violations"}` : null,
+    totals.improvement > 0 ? `${totals.improvement} ${totals.improvement === 1 ? "improvement" : "improvements"}` : null,
+    totals.information > 0 ? `${totals.information} ${totals.information === 1 ? "information finding" : "information findings"}` : null,
+  ].filter(Boolean).join(", ");
+
+  return [issue, rule === "—" ? null : rule, countSummary || null].filter(Boolean).join(", ");
 }
 
 function sampleLogBodies(findings: ValidationFinding[]): string[] {

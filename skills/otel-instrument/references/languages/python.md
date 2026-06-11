@@ -30,10 +30,60 @@ detected in the codebase. Only install what the project actually uses.
 
 ---
 
-## SDK Initialization
+## Dependencies
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+Or in `requirements.txt`:
+```
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+opentelemetry-instrumentation-flask      # if Flask
+opentelemetry-instrumentation-fastapi    # if FastAPI
+opentelemetry-instrumentation-django     # if Django
+opentelemetry-instrumentation-requests   # if using requests
+opentelemetry-instrumentation-sqlalchemy # if using SQLAlchemy
+```
+
+Use `opentelemetry-distro` and `opentelemetry-bootstrap -a install` only as an
+additional convenience when the project explicitly wants broad CLI
+auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
+`opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
+
+---
+
+## Auto-Instrumentation (CLI Wrapper)
+
+Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
+
+```bash
+opentelemetry-instrument \
+  --service_name my-service \
+  --exporter_otlp_endpoint http://localhost:4318 \
+  --resource_attributes deployment.environment=production \
+  python app.py
+```
+
+Wrap the same command the project already uses, such as `python`, `uv run`, `poetry run`, `gunicorn`, or `uvicorn`.
+
+If the project already runs in Docker:
+```dockerfile
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+CMD ["opentelemetry-instrument", "--service_name", "my-service", "python", "app.py"]
+```
+
+---
+
+## SDK Initialization (Programmatic)
 
 Create a separate file for OTel setup. Call the setup function before
 creating the application object (Flask app, FastAPI app, etc.).
+For Python services, this explicit setup file is the default implementation
+path; a Makefile or Docker command that only wraps the process with
+`opentelemetry-instrument` is not enough by itself.
 
 **File**: `otel_setup.py`
 
@@ -58,10 +108,19 @@ def configure_opentelemetry():
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(tracer_provider)
 
-    metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
+    metric_reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(),
+        export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000")),
+        export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500")),
+    )
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
 ```
+
+The explicit `export_interval_millis` and `export_timeout_millis` are required
+for local and eval runs. Do not rely on metric reader defaults; they can be too
+slow for short-lived runtime checks, causing valid HTTP metrics to never reach
+the collector before the process stops.
 
 ### Loading the SDK
 
@@ -72,7 +131,6 @@ def configure_opentelemetry():
 from otel_setup import configure_opentelemetry
 configure_opentelemetry()
 
-# Instrument AFTER SDK init
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from flask import Flask
 
@@ -80,7 +138,7 @@ app = Flask(__name__)
 FlaskInstrumentor().instrument_app(app)
 ```
 
-**Option 2** -- programmatic auto-instrumentation via `opentelemetry-instrument`:
+**Option 2** -- CLI auto-instrumentation via `opentelemetry-instrument`:
 
 ```bash
 opentelemetry-instrument python app.py
@@ -181,9 +239,6 @@ order_duration = meter.create_histogram(
 )
 
 # Observable Gauge (callback-based)
-# CAUTION: The callback receives CallbackOptions, NOT an observation object.
-# It must yield Observation instances. Using result.observe() will raise
-# AttributeError at export time (not at registration), making it hard to catch.
 from opentelemetry.metrics import Observation
 
 def get_queue_depth(_options):
@@ -203,6 +258,21 @@ order_duration.record(elapsed_seconds, {"order.type": "standard"})
 
 ---
 
+## Error Handling
+
+APM backends identify errors by `otel.status_code = ERROR`. Always set error status on exceptions:
+
+```python
+from opentelemetry.trace import StatusCode
+
+span.set_status(StatusCode.ERROR, "Description of what failed")
+span.record_exception(exception)
+```
+
+For Flask/FastAPI, unhandled 5xx responses automatically set ERROR status via the auto-instrumentation.
+
+---
+
 ## OTLP Export Configuration
 
 All configuration is via environment variables. Do not hardcode endpoints.
@@ -212,14 +282,36 @@ All configuration is via environment variables. Do not hardcode endpoints.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
+| `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with the Observer:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
     OTEL_METRIC_EXPORT_INTERVAL=1000 \
+    OTEL_METRIC_EXPORT_TIMEOUT=500 \
     OTEL_BSP_SCHEDULE_DELAY=100 \
     python app.py
+
+When creating `PeriodicExportingMetricReader`, pass
+`export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000"))`
+and `export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500"))`.
+This makes HTTP metrics from Flask/FastAPI instrumentation, including
+`http.server.request.duration` or the older `http.server.duration` name,
+export promptly to Observer.
+
+---
+
+## Framework-Specific Notes
+
+### FastAPI
+Auto-instrumentation covers all route handlers. Add `opentelemetry-instrumentation-fastapi` to get request/response attributes.
+
+### Flask
+Add `opentelemetry-instrumentation-flask`. For Gunicorn, use the `post_fork` hook to initialize the tracer in each worker.
+
+### Django
+Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.django` to `INSTALLED_APPS` if using explicit programmatic setup instead of automatic module loading.
 
 ---
 
@@ -245,6 +337,10 @@ For local development with the Observer:
   process gets its own SDK instance.
 - **Singleton provider**: Never call `trace.set_tracer_provider()` more
   than once. If existing OTel setup exists, extend it.
+- **Metric export interval and timeout**: Always set
+  `export_interval_millis` and `export_timeout_millis` on
+  `PeriodicExportingMetricReader`. Environment variables alone are not enough
+  when constructing the reader manually.
 - **Observable gauge callback signature**: The callback receives a
   `CallbackOptions` argument and must **yield `Observation` objects**
   (from `opentelemetry.metrics`). A common mistake is writing

@@ -7,10 +7,8 @@ description: >-
   "wire up telemetry", "instrument this service", or asks to add a specific
   custom signal like "add a metric to track queue depth", "add a span for
   payment processing", "track error rate for X", asks to add signals that make
-  incidents faster to detect or localize, asks to instrument GenAI/LLM
-  workflows with OpenTelemetry semantic conventions, or asks to configure
-  runtime/deployment observability or dependency config across Helm, values,
-  GitOps, Terraform, serverless, VM, container, or other deployment repos.
+  incidents faster to detect or localize, or asks to instrument GenAI/LLM
+  workflows with OpenTelemetry semantic conventions.
 metadata:
   author: otel-studio
   version: 0.1.2
@@ -37,42 +35,15 @@ Before editing anything, ground the plan with repo evidence:
   freshness, auth/edge paths, capacity limits, and release/config context. When
   present or when the user asks for faster incident detection/localization, load
   `../references/incident-readiness.md`.
+- When incident reports, postmortems, tickets, alerts, or user-provided failure
+  examples are part of the request, use incident-evidence mode from
+  `../references/incident-readiness.md`: map each failure mechanism to the
+  owning code surface before editing, and judge proposed signals by whether they
+  improve detection, routing, localization, or only documentation.
 - Detect GenAI/LLM ownership. Search dependencies, config, and source for
   provider clients, model gateways, agent/workflow orchestration, tool/function
   dispatch, MCP, retrieval/RAG, model/deployment config, fallback, token usage,
   and usage logging. When present, load `../references/genai-readiness.md`.
-- Detect deployment context. Search the current repo and any user-provided paths
-  for Docker Compose, Dockerfiles, systemd units, Procfiles, Helm charts, values
-  files, Kustomize overlays, Kubernetes workloads, Argo CD, Flux, Terraform/Pulumi/CDK,
-  ECS task definitions, serverless manifests, Nomad jobs, CI/CD release files,
-  and deploy docs. When found or supplied, load
-  `../references/deployment-context-readiness.md`.
-- Resolve deployment references visible in inspected files before choosing a
-  patch location. For example, follow Helm/helmfile value-file references,
-  Argo CD/Flux sources and value references, Terraform `helm_release.values` or
-  tfvars, Kubernetes `configMapRef`/`secretRef`, Docker Compose `env_file`,
-  systemd `EnvironmentFile`, serverless stage config, dependency endpoint/config
-  references, and CI/CD chart/value path references when the target is present
-  or supplied.
-- If `.observe/otel.md` or inspected files mention referenced deployment,
-  runtime, CI/CD, chart, values, GitOps, IaC, environment, ConfigMap, Secret,
-  tfvars, stack config, or dependency-config sources that were not inspected,
-  pause before editing code, writing instrumentation output, or changing
-  telemetry configuration and ask once for their local paths or URLs. Name the
-  referenced sources from the report or inspected file. This is a hard
-  interaction boundary when the requested work includes deployment-owned
-  resource attributes, exporter settings, service/version/environment/region
-  context, health/capacity signals, dependency endpoint/timeout/retry/circuit
-  breaker config, or provisioning prerequisites. If the user provides paths,
-  inspect them and continue. If the user explicitly says to continue without
-  those sources, keep deployment-owned context `unknown`, avoid patching
-  production OTEL/export/resource settings from app-code guesses, and limit
-  changes to repo-owned spans and metrics.
-- If app code exists but production deployment sources are not discoverable, and
-  the requested work depends on runtime/deployment context, pause before editing
-  and ask once for known chart, values, GitOps, IaC, CI/CD, or runtime repo
-  paths. Continue app-code-only only after the user explicitly says to proceed
-  without those sources.
 - For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
 - Confirm the planned `service.name`, `service.version`,
   `deployment.environment`, `deployment.region`, `deployment.platform`, and
@@ -82,13 +53,6 @@ Before editing anything, ground the plan with repo evidence:
   when they are already emitted. Treat `deployment.region`,
   `deployment.platform`, and `container.image.tag` as generic context aliases
   unless the repo already uses those exact attribute names.
-- Confirm whether telemetry runtime config should be patched in app code, a
-  startup wrapper, Helm chart templates, environment values, GitOps resources,
-  IaC, serverless config, systemd/VM config, or Docker Compose.
-- Map app dependencies to deployment-owned config when possible: endpoint alias,
-  provider region/deployment, timeout, retry/backoff, circuit breaker,
-  pool/concurrency, config version, and credential-reference source. Track
-  source names and refs; do not read or copy secret values.
 - Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
 - If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
 - If the repo is primarily tooling or library code and no runnable surface is obvious, stop and ask instead of inventing an app shell
@@ -103,19 +67,12 @@ Do not proceed until you can state all of these clearly:
 - incremental addition vs new scaffold
 - for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
 - incident-readiness surfaces and the workflow/dependency/freshness/backpressure
-  signals to add, when the repo owns those surfaces
+  signals to add, prove, or owner-map, when the repo owns those surfaces
+- incident-evidence coverage when incidents are supplied: failure mechanism,
+  owning code surface, signal to add or prove, expected MTTD/localization impact,
+  and remaining non-code or dependency owner
 - GenAI workflow surfaces and the GenAI semantic-convention signals to add,
-  when the repo owns LLM, agent, tool, or retrieval code
-- deployment platform/source status, or `unknown` when not inspected
-- exact file or repo class to patch for runtime OTel env/resource attributes
-- exact file or repo class that owns dependency endpoint, timeout, retry,
-  circuit breaker, region, and credential-reference config, or `unknown`
-
-If the user's request includes aligning resource/export configuration with the
-Java agent or deployment-owned OTEL settings, provisioning detectors, adding
-environment/region/version dimensions, or adding health/capacity/dependency
-config readiness, the exact deployment/config file or repo class must not remain
-`unknown`; ask for the missing repo paths before editing.
+  prove, or owner-map, when the repo owns LLM, agent, tool, or retrieval code
 
 ### Fast Path: Targeted Custom Signal
 
@@ -133,11 +90,43 @@ needs to be set up first and continue with the full workflow (Steps 2-3).
 
 ### Audit-Driven Incident Readiness
 
+#### Audit Gap Contract
+
+If `.observe/otel.md` contains `## Gap Ledger`, use that ledger as the source
+of truth. The audit output is a contract, not background context. Start by
+parsing every row into `gap_id`, `required_signals`, `owner`, `code_surface`,
+and `acceptance_criteria`. If the audit predates `## Gap Ledger`, synthesize
+the same fields from `## Gaps`, `## Incident Readiness`, `## GenAI Readiness`,
+and `## Deployment Context` before editing code.
+
+Reconcile every audit gap to a required instrumentation result:
+
+| Audit Gap | Required Instrumentation Result |
+|---|---|
+| App-owned + patchable | Code added + tests |
+| App-owned but unsafe/too large | Explicitly split into named follow-up batch |
+| Provider/platform-owned | Owner mapped with exact missing source |
+| Already covered | Proven with source path and signal name |
+
+For each row, produce and maintain a closure matrix:
+`gap_id -> required_signals -> implemented_signals -> tests ->
+remaining_signals -> status`. The final gate is strict: the instrumentation
+pass cannot say `covered`, `fixed`, `closed`, or `complete` unless every
+required signal is either implemented with tests, proven existing with source
+path and signal name, or explicitly owner-mapped with the exact missing source.
+Optimize for honesty over broad progress. Partial closure is acceptable; silent
+partial closure is the bug.
+
 If `.observe/otel.md` contains `## Incident Readiness` rows with `partial` or
 `missing` status and the user asked to instrument, treat those rows as an
 approved request for custom incident-readiness instrumentation. Do not stop
 after auto-instrumentation and do not ask the Step 4 custom-instrumentation
 question for gaps that the repo clearly owns.
+
+When the user asks broadly to apply readiness skills, improve MTTD, or fix
+found gaps, treat the scope as **all discovered app-owned gaps**. Do not select
+one representative or highest-value gap unless the user explicitly narrows the
+scope to that gap.
 
 1. Convert each partial/missing row into candidate signals using
    `../references/incident-readiness.md`.
@@ -145,15 +134,109 @@ question for gaps that the repo clearly owns.
    - **app-owned and patchable**: the code exposes the value accurately and a
      low-cardinality metric/span can be added in an owned handler, client,
      queue, worker, limiter, or health path.
+   - **app-owned but unsafe/too large**: the code owns the signal, but the
+     change cannot be safely completed in the current batch; split it into a
+     named follow-up batch with exact remaining signals.
    - **deployment/platform-owned**: the signal belongs in Helm, Kubernetes,
      Terraform, VM/systemd, load balancer, collector, or runtime telemetry.
+   - **already covered**: the signal exists and is proven with source path and
+     signal name.
    - **unknown owner**: the audit names a dependency/config source that was not
      inspected.
-3. Implement the highest-value app-owned patchable signal per affected area
-   before moving to verification. Prefer workflow outcome/error/latency,
-   dependency timeout/retry/rate-limit/error, queue/backpressure, freshness, or
-   capacity saturation signals that can become detectors.
-4. If no app-owned candidate is safe to patch, make no placeholder instruments.
+3. Implement every safe app-owned patchable signal before moving to
+   verification. Prefer workflow outcome/error/latency, dependency
+   timeout/retry/rate-limit/error, queue/backpressure, freshness, or capacity
+   saturation signals that can become detectors. If the full set is too large
+   for one change, stop and report the scoped batch before editing; otherwise
+   do not leave an app-owned candidate as a follow-up.
+   Keep dependency timeout/retry/rate-limit/error coverage explicit when a
+   downstream dependency is part of the gap.
+4. Also close generic runtime surfaces discovered during the scan:
+   - If the target code owns executor services, thread pools, worker pools,
+     bounded queues, rejected-execution paths, queue-full handling, or async
+     dispatch, add or prove detector-ready queue depth, active/inflight work,
+     pool capacity, queue wait, rejected/shed work, timeout, and saturation outcome
+     signals.
+   - If the target code owns long-lived connection or streaming surfaces such as
+     WebSocket, SSE, streaming HTTP/RPC, broker streams, or bidirectional client streams,
+     add or prove lifecycle signals for connect/open,
+     authentication/authorization, start/stop/detach/keepalive, close reason
+     family, send/write failure, active connections/channels/streams, and stream
+     duration/outcome. Treat close reason family and stream duration/outcome as
+     required lifecycle signals when the code owns the stream.
+   - If the target code owns auth, identity, token, secret, certificate, domain,
+     or edge-routing flows, add or prove lifecycle, failure reason family,
+     expiry/rotation, and route/config mismatch signals.
+   - If the target code owns scheduled jobs, reports, exports, notifications,
+     ingestion, sync, or derived data, add or prove last-success timestamp,
+     freshness/age, duration, output count, dropped/skipped reason, and
+     publish/consume outcome signals.
+   - If the target code owns rollout/config/feature-flag decisions, add or prove
+     low-cardinality version, config version, rollout batch, expected-vs-running,
+     and decision outcome dimensions.
+5. Also close GenAI/LLM surfaces discovered during the scan. Follow
+   `../references/genai-readiness.md` and do not stop at semantic-convention
+   spans when the incident mechanism needs detector-ready app-owned signals.
+   If the target code owns provider/model gateway, agent/workflow orchestration,
+   tool/function execution or AI-owned session/stream lifecycle including MCP
+   when present, retrieval/RAG, streaming responses, token/context pressure,
+   prompt/response assembly, safety/policy decisions, AI-derived data jobs,
+   model/config rollout, or AI-owned cache/session state, add or prove every
+   safe low-cardinality outcome, latency, error-class, duration, count, version,
+   parse, freshness, fallback, rejection, prompt/tool schema, model/config
+   readiness, model/config compatibility, and expected-vs-running model/config
+   signal the code can observe accurately. Use the incident-readiness path for
+   generic lifecycle, job, synthetic/canary, input-complexity,
+   startup/deployment, capacity, and release/config surfaces. If incident
+   evidence depends on missed, flapping, auto-resolved, or no-data alerts,
+   record detector reliability evidence as a `$splunk-configure` handoff
+   instead of app-owned GenAI instrumentation.
+   For each app-owned GenAI surface, close the applicable trace, metric, and
+   log/span-event planes. Metric-only closure is not acceptable for
+   provider/model calls, streaming responses, tool execution, retrieval,
+   prompt/response parsing, safety/policy decisions, model/config resolution, or
+   AI-derived data jobs when the code can emit a meaningful span or span event.
+   Add or prove low-cardinality GenAI spans with error status/`error.type`, add
+   detector-ready metrics for MTTD signals, and add or prove trace-correlated
+   logs or span events for lifecycle outcomes operators otherwise search logs
+   for, such as retry scheduled, fallback selected/failed, stream
+   truncated/finished, parse failure, safety rejection, and job success/failure.
+   For token/context pressure gaps, `gen_ai.client.token.usage` plus a
+   context-window usage gauge does not close a broader token-pressure gap
+   unless the audit ledger only requires those two signals. If
+   `required_signals` include context budget percent, truncation rate,
+   token-limit errors, prompt/tool schema size, LLM call count per turn, or
+   tool call count per turn, mark the row partial until each signal is
+   implemented, proven, or owner-mapped. Use this exact style when only token
+   and context-window usage were added: `Partial: token usage and context window added; truncation, token-limit error, prompt/tool schema size, and LLM-call fanout remain missing.`
+6. Before finalizing, maintain a gap-closure matrix with one row per incident
+   or readiness gap: `gap_id -> required_signals -> implemented_signals ->
+   tests -> remaining_signals -> status`, plus repo evidence, owner, code
+   location, action, trace evidence, metric evidence, log/event evidence, signal
+   names/attributes, test/verification, and remaining owner/source. The
+   compatibility form `gap -> repo evidence -> owner -> code location ->
+   action -> trace evidence -> metric evidence -> log/event evidence -> signal
+   names/attributes -> test/verification -> remaining owner` is acceptable only
+   when no structured `gap_id` exists.
+   action must be `add instrumentation`, `prove existing instrumentation`, or
+   `mark out of scope with owner`.
+   Every discovered gap must resolve to one of those actions before the work is
+   called complete. A final response, audit, or PR description must not say
+   complete, covered, or fixed while any app-owned gap is still only a
+   follow-up.
+7. Do not call incident-readiness instrumentation complete when an app-owned
+   executor/backpressure, streaming, auth/edge, freshness/job, dependency, or
+   release/config surface remains only listed as a follow-up, unless the user
+   explicitly narrowed scope.
+8. Do not call GenAI instrumentation complete when an app-owned provider/model,
+   workflow, tool/function execution or AI-owned session/stream including MCP
+   when present, retrieval, streaming, token/context, safety/policy,
+   prompt/response, AI-derived data, model/config rollout, or AI-owned
+   cache/session surface remains only listed as a follow-up, unless the user
+   explicitly narrowed scope. Generic incident-readiness surfaces must also be
+   closed through `../references/incident-readiness.md` when they are
+   app-owned.
+9. If no app-owned candidate is safe to patch, make no placeholder instruments.
    Instead, update the report or final response with `no safe app-owned
    incident-readiness patch found`, list the missing owner/source, and name the
    exact signal that remains a prerequisite for `$splunk-configure`.
@@ -220,6 +303,18 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   add low-cardinality `error.type`; and avoid raw prompt, completion, retrieved
   content, tool argument, user, tenant, session, task, trace, or raw URL values
   in metric dimensions.
+- GenAI instrumentation is incomplete if a patchable app-owned GenAI operation
+  is closed only by a custom metric. Prefer the existing tracer/provider setup;
+  wrap the operation in a stable span, set GenAI semantic attributes, set error
+  status and `error.type` on failure, and add a span event or trace-correlated
+  structured log for important lifecycle outcomes.
+- For GenAI incident-readiness work, close every safe app-owned GenAI pathway
+  gap discovered during the scan. Do not stop after one representative provider,
+  token, stream, tool, retrieval, model/config, prompt/response, safety, or
+  AI-derived data signal if the repo owns more patchable gaps. For each
+  remaining gap, prove existing telemetry with file/line evidence or mark it out
+  of scope with the owning deployment, platform, dependency, or
+  `$splunk-configure` handoff.
 - For custom attribute names use `{domain}.{noun}.{adjective}` format.
 - Span names must be low-cardinality (no IDs, no variable path segments).
 - Metric attributes must avoid high cardinality.
@@ -292,15 +387,15 @@ signals and clearly list any unpatched prerequisites.
     CPU/memory/disk/concurrency saturation, desired-vs-healthy,
     startup/readiness/healthcheck failure, traffic target health, and
     release/config context when code evidence exists
+  - Incident-evidence boundaries: every incident mechanism supplied by the user
+    or available in local reports must map to either added/proven code-owned
+    signals or an explicit external owner; do not stop at generic endpoint
+    metrics when the incident mechanism was auth handshake, secret expiry,
+    report freshness, rollout skew, dependency active-node health, or pool
+    saturation
   - GenAI/LLM workflow boundaries: workflow span, agent/workflow invocation,
     LLM inference, tool execution, retrieval, fallback, token usage, and
     model/config readiness when code evidence exists
-  - Deployment/runtime context: service identity, version, environment, region,
-    platform, collector endpoint, health checks, restart signals, capacity
-    limits including CPU/memory/disk, rollout or canary identifiers, config
-    version, dependency endpoint/config sources, dependency endpoint health,
-    timeout/retry/circuit-breaker config, and platform-specific health signals
-    when a deployment source is available
   - Suggest specific spans and metrics with names, attributes, and rationale
   - Apply after user approval
 
@@ -343,6 +438,9 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - For incident-readiness work, state which workflow, dependency, freshness,
   backpressure, auth/edge, capacity, and release/config signals were added and
   which gaps remain prerequisites for `$splunk-configure`.
+- For incident-evidence work, include a concise coverage summary explaining
+  whether each incident class would likely improve MTTD, improve localization
+  only, or remain uncovered.
 - Include exact deployment-context dimensions that were wired, such as
   `service.version`, `deployment.environment`, `deployment.region`,
   `deployment.platform`, `container.image.tag`, artifact version, config
@@ -352,10 +450,6 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
   GenAI metrics are expected, whether trace continuity should produce a nested
   workflow/agent/tool/chat/retrieval shape, and which privacy/cardinality limits
   were enforced.
-- If deployment context was inspected, state which deployment files were changed,
-  which platform signals are now available, and which release/config or health
-  signals remain missing. If it was not inspected, state `deployment context:
-  unknown`.
 
 ## Credential Safety
 
