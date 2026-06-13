@@ -968,6 +968,7 @@ func smokeHomeEnv(homeDir string) []string {
 	env := []string{
 		"HOME=" + homeDir,
 		"USERPROFILE=" + homeDir,
+		disableSharedObserverDetectionEnv + "=1",
 	}
 	if runtime.GOOS == "windows" {
 		volume := filepath.VolumeName(homeDir)

@@ -40,6 +40,9 @@ const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "maxSpanCount", label: "Max Span Count", kind: "number", placeholder: "10", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
 ];
 const TRACE_SUGGESTIBLE_FIELDS = new Set(["rootSpanName", "serviceName"]);
+const TRACE_DETAIL_PANEL_DEFAULT_WIDTH = "min(1600px, calc(100vw - 320px))";
+const TRACE_DETAIL_PANEL_MIN_WIDTH = 560;
+const TRACE_DETAIL_PANEL_MAX_WIDTH = 1600;
 
 function assignQueryFilter(query: TracesQuery, clause: FilterClause): void {
   const targetKey = clause.op === "neq" ? "notFilters" : "filters";
@@ -362,7 +365,13 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
 
         {/* Detail panel */}
         {selectedTraceId && traceDetail ? (
-          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
+          <ResizablePanel
+            className="signal-view__panel"
+            defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
+            minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
+            maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
+            resizeLabel="Resize traces panel"
+          >
             <DetailPanel
               title={traceDetail.rootSpanName}
               subtitle={`${traceDetail.spanCount} spans${errorSpanCount > 0 ? ` \u00B7 ${errorSpanCount} error${errorSpanCount > 1 ? "s" : ""}` : ""} \u00B7 ${formatTraceDuration(traceDetail.durationMs)}`}
@@ -374,6 +383,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
               </div>
               <TraceWaterfall
                 spans={traceDetail.spans}
+                genAI={traceDetail.genAI ?? null}
                 selectedSpanId={selectedSpanId}
                 onSelectSpan={setSelectedSpanId}
                 traceDurationMs={traceDetail.durationMs ?? 0}
@@ -382,13 +392,25 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
             </DetailPanel>
           </ResizablePanel>
         ) : selectedTraceId && detailLoading ? (
-          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
+          <ResizablePanel
+            className="signal-view__panel"
+            defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
+            minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
+            maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
+            resizeLabel="Resize traces panel"
+          >
             <DetailPanel title="Loading..." onClose={() => selectTrace(null)}>
               <p className="explorer__status">Fetching trace detail...</p>
             </DetailPanel>
           </ResizablePanel>
         ) : selectedTraceId && detailError ? (
-          <ResizablePanel className="signal-view__panel" resizeLabel="Resize traces panel">
+          <ResizablePanel
+            className="signal-view__panel"
+            defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
+            minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
+            maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
+            resizeLabel="Resize traces panel"
+          >
             <DetailPanel
               title="Trace detail unavailable"
               subtitle={selectedSummary?.rootSpanName ?? selectedTraceId.slice(-12)}

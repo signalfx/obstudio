@@ -386,27 +386,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
 		dispose: () => {
-			logObserverLifecycle('Extension disposed; terminating observer process.');
-			stopObserverRun(observerLifecycleState);
-			observerStartupPromise = undefined;
-			observerStopPromise = undefined;
-			observerBaseUrl = undefined;
-			observerUsesSharedServer = false;
-			terminateObserverProcess(observerProcess, 'SIGTERM');
-			observerProcess = undefined;
+			disposeObserverForExtensionUnload('Extension disposed');
 		},
 	});
 }
 
-export function deactivate() {
-	logObserverLifecycle('Extension deactivated; terminating observer process.');
-	stopObserverRun(observerLifecycleState);
-	observerStartupPromise = undefined;
-	observerStopPromise = undefined;
-	observerBaseUrl = undefined;
-	observerUsesSharedServer = false;
-	terminateObserverProcess(observerProcess, 'SIGTERM');
-	observerProcess = undefined;
+export async function deactivate(): Promise<void> {
+	await shutdownObserverForExtensionUnload('Extension deactivated');
 }
 
 // ---------------------------------------------------------------------------
@@ -708,6 +694,28 @@ async function stopObserver(): Promise<void> {
 
 	observerStopPromise = stopPromise;
 	return observerStopPromise;
+}
+
+async function shutdownObserverForExtensionUnload(reason: string): Promise<void> {
+	logObserverLifecycle(`${reason}; stopping observer process.`);
+	try {
+		await stopObserver();
+	} catch (error) {
+		logObserverLifecycle(`${reason}; observer shutdown failed: ${getErrorMessage(error)}`);
+	}
+}
+
+function disposeObserverForExtensionUnload(reason: string): void {
+	logObserverLifecycle(`${reason}; synchronously terminating observer process.`);
+	const proc = observerProcess;
+	stopObserverRun(observerLifecycleState);
+	observerProcess = undefined;
+	observerStartupPromise = undefined;
+	observerStopPromise = undefined;
+	observerBaseUrl = undefined;
+	observerUsesSharedServer = false;
+	syncObserverUi();
+	terminateObserverProcess(proc, 'SIGTERM');
 }
 
 function syncObserverUi(): void {

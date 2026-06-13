@@ -27,10 +27,11 @@ const (
 	codexManagedBlockStart = "# BEGIN OBSTUDIO MCP CONFIG"
 	codexManagedBlockEnd   = "# END OBSTUDIO MCP CONFIG"
 
-	defaultSharedObserverBaseURL = "http://127.0.0.1:3000"
-	defaultSharedObserverMCPURL  = defaultSharedObserverBaseURL + "/mcp"
-	defaultSharedObserverHealth  = defaultSharedObserverBaseURL + "/api/health"
-	sharedObserverHealthTimeout  = 750 * time.Millisecond
+	defaultSharedObserverBaseURL      = "http://127.0.0.1:3000"
+	defaultSharedObserverMCPURL       = defaultSharedObserverBaseURL + "/mcp"
+	defaultSharedObserverHealth       = defaultSharedObserverBaseURL + "/api/health"
+	sharedObserverHealthTimeout       = 750 * time.Millisecond
+	disableSharedObserverDetectionEnv = "OBSTUDIO_DISABLE_SHARED_OBSERVER_DETECTION"
 
 	sharedObserverStateDirName  = ".obstudio"
 	sharedObserverStateFileName = "shared-observer.json"
@@ -125,7 +126,7 @@ func runInstall(target, sharedURL string) error {
 	}
 	resolvedSharedURL := sharedURL
 	autodetectedSharedURL := false
-	if resolvedSharedURL == "" {
+	if resolvedSharedURL == "" && os.Getenv(disableSharedObserverDetectionEnv) == "" {
 		if detectedURL, ok := detectConfiguredSharedObserverURL(http.DefaultClient); ok {
 			resolvedSharedURL = detectedURL
 			autodetectedSharedURL = true

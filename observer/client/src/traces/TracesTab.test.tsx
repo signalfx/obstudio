@@ -27,6 +27,82 @@ afterEach(() => {
 });
 
 describe("TracesTab", () => {
+  it("renders unfiltered traces from the live websocket snapshot without a REST query", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-websocket", rootSpanName: "GET /live-websocket", serviceName: "checkout", spanCount: 1, durationMs: 1, status: "ok" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    expect(screen.getByText("GET /live-websocket")).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes filtered traces from REST when live telemetry changes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { traceId: "trace-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 1, durationMs: 10, status: "ok" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { traceId: "trace-2", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 2, durationMs: 20, status: "ok" },
+        ],
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = render(
+      <TracesTab
+        traces={[
+          { traceId: "live-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 1, durationMs: 1, status: "ok" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter field"), {
+      target: { value: "rootSpanName" },
+    });
+    fireEvent.change(screen.getByLabelText("rootSpanName value"), {
+      target: { value: "GET /orders" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    await screen.findByText("trace-1");
+
+    view.rerender(
+      <TracesTab
+        traces={[
+          { traceId: "live-2", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 2, durationMs: 2, status: "ok" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    await screen.findByText("trace-2");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/query/traces?filter%5BrootSpanName%5D%5Beq%5D=GET+%2Forders", expect.any(Object));
+  });
+
   it("filters traces from the compact explorer toolbar via the REST query endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -49,7 +125,7 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
+    fireEvent.change(await screen.findByLabelText("Filter field"), {
       target: { value: "rootSpanName" },
     });
     expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
@@ -83,6 +159,61 @@ describe("TracesTab", () => {
     expect(screen.queryByText("--")).toBeNull();
   });
 
+  it("opens selected trace details at the widest usable panel width", async () => {
+    const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          traceId: "trace-1",
+          rootSpanName: "GET /orders",
+          serviceName: "checkout",
+          spanCount: 1,
+          durationMs: 42,
+          status: "ok",
+          spans: [
+            {
+              traceId: "trace-1",
+              spanId: "span-1",
+              parentSpanId: "",
+              name: "GET /orders",
+              kind: "SERVER",
+              startTimeUnixNano: "2026-06-12T18:00:00.000Z",
+              endTimeUnixNano: "2026-06-12T18:00:00.042Z",
+              durationMs: 42,
+              status: { code: "OK" },
+              attributes: {},
+              events: [],
+              links: [],
+              resource: { attributes: {}, serviceName: "checkout" },
+              scope: { name: "test" },
+            },
+          ],
+        }),
+      }) as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-1", rootSpanName: "GET /orders", serviceName: "checkout", spanCount: 1, durationMs: 42, status: "ok" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    const traceRow = (await screen.findByText("GET /orders")).closest("button");
+    expect(traceRow).toBeTruthy();
+    fireEvent.click(traceRow as HTMLButtonElement);
+
+    await screen.findByText("Trace ID");
+
+    const panel = container.querySelector<HTMLElement>(".resizable-panel.signal-view__panel");
+    expect(panel?.style.getPropertyValue("--panel-width")).toBe("min(1600px, calc(100vw - 320px))");
+    expect(fetchMock).toHaveBeenCalledWith("/api/query/traces/trace-1", undefined);
+  });
+
   it("handles a null filtered trace response without crashing", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -102,7 +233,7 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
+    fireEvent.change(await screen.findByLabelText("Filter field"), {
       target: { value: "serviceName" },
     });
     expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
@@ -137,7 +268,7 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
+    fireEvent.change(await screen.findByLabelText("Filter field"), {
       target: { value: "minDurationMs" },
     });
     fireEvent.click(screen.getByRole("button", { name: "<" }));
@@ -179,6 +310,8 @@ describe("TracesTab", () => {
     const panelStyles = window.getComputedStyle(panel);
     const contentStyles = window.getComputedStyle(content);
 
+    expect(css).toContain("width: var(--panel-width, min(560px, calc(100vw - 320px)));");
+    expect(css).toContain("flex: 0 0 var(--panel-width, min(560px, calc(100vw - 320px)));");
     expect(layoutStyles.flexDirection).toBe("row");
     expect(panelStyles.position).toBe("static");
     expect(panelStyles.borderTopWidth).toBe("0px");
