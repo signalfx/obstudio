@@ -38,34 +38,37 @@ type GenAITraceSummary struct {
 }
 
 type GenAIFlowNode struct {
-	NodeID                        string          `json:"nodeId"`
-	TraceID                       string          `json:"traceId"`
-	SpanID                        string          `json:"spanId"`
-	Name                          string          `json:"name"`
-	Kind                          GenAISpanKind   `json:"kind"`
-	Operation                     string          `json:"operation,omitempty"`
-	ModelNames                    []string        `json:"modelNames"`
-	TokenUsage                    GenAITokenUsage `json:"tokenUsage"`
-	Depth                         int             `json:"depth"`
-	DurationMs                    float64         `json:"durationMs"`
-	AvgDurationMs                 float64         `json:"avgDurationMs,omitempty"`
-	MaxDurationMs                 float64         `json:"maxDurationMs,omitempty"`
-	StatusCode                    string          `json:"statusCode"`
-	Grouped                       bool            `json:"grouped"`
-	CallCount                     int             `json:"callCount,omitempty"`
-	GroupedSpanIDs                []string        `json:"groupedSpanIds"`
-	ParentFlowSpanID              string          `json:"parentFlowSpanId,omitempty"`
-	DescendantSpanIDs             []string        `json:"descendantSpanIds"`
-	DescendantTokenUsage          GenAITokenUsage `json:"descendantTokenUsage"`
-	DescendantLLMCalls            int             `json:"descendantLlmCalls"`
-	DescendantLLMSpanIDs          []string        `json:"descendantLlmSpanIds"`
-	DescendantToolCalls           int             `json:"descendantToolCalls"`
-	DescendantToolSpanIDs         []string        `json:"descendantToolSpanIds"`
-	DescendantSecurityRiskCount   int             `json:"descendantSecurityRiskCount"`
-	DescendantSecurityRiskSpanIDs []string        `json:"descendantSecurityRiskSpanIds"`
-	DescendantPrivacyRiskCount    int             `json:"descendantPrivacyRiskCount"`
-	DescendantPrivacyRiskSpanIDs  []string        `json:"descendantPrivacyRiskSpanIds"`
-	DescendantRiskCount           int             `json:"descendantRiskCount"`
+	NodeID                            string          `json:"nodeId"`
+	TraceID                           string          `json:"traceId"`
+	SpanID                            string          `json:"spanId"`
+	Name                              string          `json:"name"`
+	Kind                              GenAISpanKind   `json:"kind"`
+	Operation                         string          `json:"operation,omitempty"`
+	ModelNames                        []string        `json:"modelNames"`
+	TokenUsage                        GenAITokenUsage `json:"tokenUsage"`
+	Depth                             int             `json:"depth"`
+	DurationMs                        float64         `json:"durationMs"`
+	AvgDurationMs                     float64         `json:"avgDurationMs,omitempty"`
+	MaxDurationMs                     float64         `json:"maxDurationMs,omitempty"`
+	StatusCode                        string          `json:"statusCode"`
+	Grouped                           bool            `json:"grouped"`
+	CallCount                         int             `json:"callCount,omitempty"`
+	GroupedSpanIDs                    []string        `json:"groupedSpanIds"`
+	ParentFlowSpanID                  string          `json:"parentFlowSpanId,omitempty"`
+	DescendantSpanIDs                 []string        `json:"descendantSpanIds"`
+	DescendantTokenUsage              GenAITokenUsage `json:"descendantTokenUsage"`
+	DescendantLLMCalls                int             `json:"descendantLlmCalls"`
+	DescendantLLMSpanIDs              []string        `json:"descendantLlmSpanIds"`
+	DescendantToolCalls               int             `json:"descendantToolCalls"`
+	DescendantToolSpanIDs             []string        `json:"descendantToolSpanIds"`
+	DescendantSecurityRiskCount       int             `json:"descendantSecurityRiskCount"`
+	DescendantSecurityRiskSpanIDs     []string        `json:"descendantSecurityRiskSpanIds"`
+	DescendantPrivacyRiskCount        int             `json:"descendantPrivacyRiskCount"`
+	DescendantPrivacyRiskSpanIDs      []string        `json:"descendantPrivacyRiskSpanIds"`
+	DescendantRiskCount               int             `json:"descendantRiskCount"`
+	DescendantEvaluationCount         int             `json:"descendantEvaluationCount"`
+	DescendantEvaluationFailedCount   int             `json:"descendantEvaluationFailedCount"`
+	DescendantEvaluationFailedSpanIDs []string        `json:"descendantEvaluationFailedSpanIds"`
 
 	parentSpanID string
 	linkSpanIDs  []string
@@ -162,6 +165,9 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 		tokens = addTokenUsage(tokens, getGenAITokenUsage(span))
 		for _, model := range getGenAIModelNames(span) {
 			modelSet[model] = struct{}{}
+		}
+		if isGenAIEvaluationOnlySpan(span) {
+			continue
 		}
 		switch classifyGenAISpan(span) {
 		case GenAISpanTool:
@@ -294,25 +300,26 @@ func newGenAIFlowNode(span Span, depth int) GenAIFlowNode {
 	kind := classifyGenAISpan(span)
 	operation := getGenAIOperation(span)
 	return GenAIFlowNode{
-		NodeID:                        span.SpanID,
-		TraceID:                       span.TraceID,
-		SpanID:                        span.SpanID,
-		Name:                          getGenAIFlowNodeName(span, kind, operation),
-		Kind:                          kind,
-		Operation:                     operation,
-		ModelNames:                    getGenAIModelNames(span),
-		TokenUsage:                    getGenAITokenUsage(span),
-		Depth:                         depth,
-		DurationMs:                    span.DurationMs,
-		StatusCode:                    span.Status.Code,
-		GroupedSpanIDs:                []string{},
-		DescendantSpanIDs:             []string{},
-		DescendantLLMSpanIDs:          []string{},
-		DescendantToolSpanIDs:         []string{},
-		DescendantSecurityRiskSpanIDs: []string{},
-		DescendantPrivacyRiskSpanIDs:  []string{},
-		parentSpanID:                  span.ParentSpanID,
-		linkSpanIDs:                   getGenAILinkSpanIDs(span),
+		NodeID:                            span.SpanID,
+		TraceID:                           span.TraceID,
+		SpanID:                            span.SpanID,
+		Name:                              getGenAIFlowNodeName(span, kind, operation),
+		Kind:                              kind,
+		Operation:                         operation,
+		ModelNames:                        getGenAIModelNames(span),
+		TokenUsage:                        getGenAITokenUsage(span),
+		Depth:                             depth,
+		DurationMs:                        span.DurationMs,
+		StatusCode:                        span.Status.Code,
+		GroupedSpanIDs:                    []string{},
+		DescendantSpanIDs:                 []string{},
+		DescendantLLMSpanIDs:              []string{},
+		DescendantToolSpanIDs:             []string{},
+		DescendantSecurityRiskSpanIDs:     []string{},
+		DescendantPrivacyRiskSpanIDs:      []string{},
+		DescendantEvaluationFailedSpanIDs: []string{},
+		parentSpanID:                      span.ParentSpanID,
+		linkSpanIDs:                       getGenAILinkSpanIDs(span),
 	}
 }
 
@@ -537,9 +544,12 @@ func newGroupedGenAIFlowNode(nodes []GenAIFlowNode, indexes []int) GenAIFlowNode
 	statusCode := "OK"
 	securityRiskSpanIDs := make([]string, 0)
 	privacyRiskSpanIDs := make([]string, 0)
+	evaluationFailedSpanIDs := make([]string, 0)
 	linkSpanIDs := make([]string, 0)
 	internalSpanIDs := make(map[string]struct{})
 	riskCount := 0
+	evaluationCount := 0
+	evaluationFailedCount := 0
 
 	for _, index := range indexes {
 		internalSpanIDs[nodes[index].SpanID] = struct{}{}
@@ -558,6 +568,9 @@ func newGroupedGenAIFlowNode(nodes []GenAIFlowNode, indexes []int) GenAIFlowNode
 		}
 		securityRiskSpanIDs = append(securityRiskSpanIDs, node.DescendantSecurityRiskSpanIDs...)
 		privacyRiskSpanIDs = append(privacyRiskSpanIDs, node.DescendantPrivacyRiskSpanIDs...)
+		evaluationCount += node.DescendantEvaluationCount
+		evaluationFailedCount += node.DescendantEvaluationFailedCount
+		evaluationFailedSpanIDs = append(evaluationFailedSpanIDs, node.DescendantEvaluationFailedSpanIDs...)
 		for _, linkSpanID := range node.linkSpanIDs {
 			if _, ok := internalSpanIDs[linkSpanID]; !ok {
 				linkSpanIDs = append(linkSpanIDs, linkSpanID)
@@ -575,31 +588,34 @@ func newGroupedGenAIFlowNode(nodes []GenAIFlowNode, indexes []int) GenAIFlowNode
 	}
 
 	grouped := GenAIFlowNode{
-		NodeID:                        groupID,
-		TraceID:                       first.TraceID,
-		SpanID:                        groupID,
-		Name:                          groupedName,
-		Kind:                          first.Kind,
-		Operation:                     first.Operation,
-		ModelNames:                    first.ModelNames,
-		TokenUsage:                    tokenUsage,
-		Depth:                         first.Depth,
-		DurationMs:                    durationMax,
-		AvgDurationMs:                 avgDuration,
-		MaxDurationMs:                 durationMax,
-		StatusCode:                    statusCode,
-		Grouped:                       true,
-		CallCount:                     callCount,
-		GroupedSpanIDs:                groupedSpanIDs,
-		ParentFlowSpanID:              first.ParentFlowSpanID,
-		DescendantSpanIDs:             groupedSpanIDs,
-		DescendantTokenUsage:          tokenUsage,
-		DescendantSecurityRiskCount:   len(securityRiskSpanIDs),
-		DescendantSecurityRiskSpanIDs: securityRiskSpanIDs,
-		DescendantPrivacyRiskCount:    len(privacyRiskSpanIDs),
-		DescendantPrivacyRiskSpanIDs:  privacyRiskSpanIDs,
-		DescendantRiskCount:           riskCount,
-		linkSpanIDs:                   uniqueStrings(linkSpanIDs),
+		NodeID:                            groupID,
+		TraceID:                           first.TraceID,
+		SpanID:                            groupID,
+		Name:                              groupedName,
+		Kind:                              first.Kind,
+		Operation:                         first.Operation,
+		ModelNames:                        first.ModelNames,
+		TokenUsage:                        tokenUsage,
+		Depth:                             first.Depth,
+		DurationMs:                        durationMax,
+		AvgDurationMs:                     avgDuration,
+		MaxDurationMs:                     durationMax,
+		StatusCode:                        statusCode,
+		Grouped:                           true,
+		CallCount:                         callCount,
+		GroupedSpanIDs:                    groupedSpanIDs,
+		ParentFlowSpanID:                  first.ParentFlowSpanID,
+		DescendantSpanIDs:                 groupedSpanIDs,
+		DescendantTokenUsage:              tokenUsage,
+		DescendantSecurityRiskCount:       len(securityRiskSpanIDs),
+		DescendantSecurityRiskSpanIDs:     securityRiskSpanIDs,
+		DescendantPrivacyRiskCount:        len(privacyRiskSpanIDs),
+		DescendantPrivacyRiskSpanIDs:      privacyRiskSpanIDs,
+		DescendantRiskCount:               riskCount,
+		DescendantEvaluationCount:         evaluationCount,
+		DescendantEvaluationFailedCount:   evaluationFailedCount,
+		DescendantEvaluationFailedSpanIDs: uniqueStrings(evaluationFailedSpanIDs),
+		linkSpanIDs:                       uniqueStrings(linkSpanIDs),
 	}
 	switch first.Kind {
 	case GenAISpanLLM:
@@ -629,12 +645,15 @@ func newGroupedGenAIFlowCycleNode(nodes []GenAIFlowNode, indexes []int, patternL
 	toolSpanIDs := make([]string, 0)
 	securityRiskSpanIDs := make([]string, 0)
 	privacyRiskSpanIDs := make([]string, 0)
+	evaluationFailedSpanIDs := make([]string, 0)
 	internalSpanIDs := make(map[string]struct{})
 	var tokenUsage GenAITokenUsage
 	var durationTotal float64
 	var durationMax float64
 	statusCode := "OK"
 	riskCount := 0
+	evaluationCount := 0
+	evaluationFailedCount := 0
 	llmCalls := 0
 	toolCalls := 0
 
@@ -672,6 +691,9 @@ func newGroupedGenAIFlowCycleNode(nodes []GenAIFlowNode, indexes []int, patternL
 		securityRiskSpanIDs = append(securityRiskSpanIDs, node.DescendantSecurityRiskSpanIDs...)
 		privacyRiskSpanIDs = append(privacyRiskSpanIDs, node.DescendantPrivacyRiskSpanIDs...)
 		riskCount += node.DescendantRiskCount
+		evaluationCount += node.DescendantEvaluationCount
+		evaluationFailedCount += node.DescendantEvaluationFailedCount
+		evaluationFailedSpanIDs = append(evaluationFailedSpanIDs, node.DescendantEvaluationFailedSpanIDs...)
 	}
 
 	linkSpanIDs := make([]string, 0)
@@ -690,35 +712,38 @@ func newGroupedGenAIFlowCycleNode(nodes []GenAIFlowNode, indexes []int, patternL
 	}
 
 	return GenAIFlowNode{
-		NodeID:                        groupID,
-		TraceID:                       first.TraceID,
-		SpanID:                        groupID,
-		Name:                          fmt.Sprintf("%s loop x%d", genAIFlowCyclePatternName(patternNodes), iterations),
-		Kind:                          GenAISpanLoop,
-		Operation:                     "loop",
-		ModelNames:                    uniqueStrings(flattenGenAIFlowNodeModelNames(patternNodes)),
-		TokenUsage:                    tokenUsage,
-		Depth:                         first.Depth,
-		DurationMs:                    durationTotal,
-		AvgDurationMs:                 avgDuration,
-		MaxDurationMs:                 durationMax,
-		StatusCode:                    statusCode,
-		Grouped:                       true,
-		CallCount:                     iterations,
-		GroupedSpanIDs:                uniqueStrings(groupedSpanIDs),
-		ParentFlowSpanID:              first.ParentFlowSpanID,
-		DescendantSpanIDs:             uniqueStrings(groupedSpanIDs),
-		DescendantTokenUsage:          tokenUsage,
-		DescendantLLMCalls:            llmCalls,
-		DescendantLLMSpanIDs:          uniqueStrings(llmSpanIDs),
-		DescendantToolCalls:           toolCalls,
-		DescendantToolSpanIDs:         uniqueStrings(toolSpanIDs),
-		DescendantSecurityRiskCount:   len(uniqueStrings(securityRiskSpanIDs)),
-		DescendantSecurityRiskSpanIDs: uniqueStrings(securityRiskSpanIDs),
-		DescendantPrivacyRiskCount:    len(uniqueStrings(privacyRiskSpanIDs)),
-		DescendantPrivacyRiskSpanIDs:  uniqueStrings(privacyRiskSpanIDs),
-		DescendantRiskCount:           riskCount,
-		linkSpanIDs:                   uniqueStrings(linkSpanIDs),
+		NodeID:                            groupID,
+		TraceID:                           first.TraceID,
+		SpanID:                            groupID,
+		Name:                              fmt.Sprintf("%s loop x%d", genAIFlowCyclePatternName(patternNodes), iterations),
+		Kind:                              GenAISpanLoop,
+		Operation:                         "loop",
+		ModelNames:                        uniqueStrings(flattenGenAIFlowNodeModelNames(patternNodes)),
+		TokenUsage:                        tokenUsage,
+		Depth:                             first.Depth,
+		DurationMs:                        durationTotal,
+		AvgDurationMs:                     avgDuration,
+		MaxDurationMs:                     durationMax,
+		StatusCode:                        statusCode,
+		Grouped:                           true,
+		CallCount:                         iterations,
+		GroupedSpanIDs:                    uniqueStrings(groupedSpanIDs),
+		ParentFlowSpanID:                  first.ParentFlowSpanID,
+		DescendantSpanIDs:                 uniqueStrings(groupedSpanIDs),
+		DescendantTokenUsage:              tokenUsage,
+		DescendantLLMCalls:                llmCalls,
+		DescendantLLMSpanIDs:              uniqueStrings(llmSpanIDs),
+		DescendantToolCalls:               toolCalls,
+		DescendantToolSpanIDs:             uniqueStrings(toolSpanIDs),
+		DescendantSecurityRiskCount:       len(uniqueStrings(securityRiskSpanIDs)),
+		DescendantSecurityRiskSpanIDs:     uniqueStrings(securityRiskSpanIDs),
+		DescendantPrivacyRiskCount:        len(uniqueStrings(privacyRiskSpanIDs)),
+		DescendantPrivacyRiskSpanIDs:      uniqueStrings(privacyRiskSpanIDs),
+		DescendantRiskCount:               riskCount,
+		DescendantEvaluationCount:         evaluationCount,
+		DescendantEvaluationFailedCount:   evaluationFailedCount,
+		DescendantEvaluationFailedSpanIDs: uniqueStrings(evaluationFailedSpanIDs),
+		linkSpanIDs:                       uniqueStrings(linkSpanIDs),
 	}
 }
 
@@ -803,11 +828,14 @@ func buildGenAIFlowEdges(nodes []GenAIFlowNode) []GenAIFlowEdge {
 }
 
 func isGenAISpan(span Span) bool {
-	return hasAttributePrefix(span.Attributes, genAIPrefix) || hasAttributePrefix(span.Resource.Attributes, genAIPrefix)
+	return hasAttributePrefix(span.Attributes, genAIPrefix) || hasAttributePrefix(span.Resource.Attributes, genAIPrefix) || hasGenAIEvaluationSignal(span)
 }
 
 func isGenAIFlowNodeSpan(span Span) bool {
 	if isInferredGenAISpan(span) {
+		return false
+	}
+	if isGenAIEvaluationOnlySpan(span) {
 		return false
 	}
 	switch classifyGenAISpan(span) {
@@ -925,21 +953,25 @@ func getGenAIFlowNodeName(span Span, kind GenAISpanKind, operation string) strin
 
 func addGenAIFlowNodeOwnSignals(node *GenAIFlowNode, span Span) {
 	addGenAIFlowNodeRiskSignals(node, span, 0)
+	addGenAIFlowNodeEvaluationSignals(node, span, 0)
 }
 
 func addGenAIFlowNodeDescendantSignals(node *GenAIFlowNode, span Span, spanListCap int) {
 	if isGenAISpan(span) {
 		node.DescendantTokenUsage = addTokenUsage(node.DescendantTokenUsage, getGenAITokenUsage(span))
-		switch classifyGenAISpan(span) {
-		case GenAISpanLLM:
-			node.DescendantLLMCalls++
-			node.DescendantLLMSpanIDs = appendSpanIDWithCap(node.DescendantLLMSpanIDs, span.SpanID, spanListCap)
-		case GenAISpanTool:
-			node.DescendantToolCalls++
-			node.DescendantToolSpanIDs = appendSpanIDWithCap(node.DescendantToolSpanIDs, span.SpanID, spanListCap)
+		if !isGenAIEvaluationOnlySpan(span) {
+			switch classifyGenAISpan(span) {
+			case GenAISpanLLM:
+				node.DescendantLLMCalls++
+				node.DescendantLLMSpanIDs = appendSpanIDWithCap(node.DescendantLLMSpanIDs, span.SpanID, spanListCap)
+			case GenAISpanTool:
+				node.DescendantToolCalls++
+				node.DescendantToolSpanIDs = appendSpanIDWithCap(node.DescendantToolSpanIDs, span.SpanID, spanListCap)
+			}
 		}
 	}
 	addGenAIFlowNodeRiskSignals(node, span, spanListCap)
+	addGenAIFlowNodeEvaluationSignals(node, span, spanListCap)
 }
 
 func addGenAIFlowNodeRiskSignals(node *GenAIFlowNode, span Span, spanListCap int) {
@@ -971,6 +1003,120 @@ func hasGenAISecurityRiskAttributes(span Span) bool {
 
 func hasGenAIPrivacyRiskAttributes(span Span) bool {
 	return hasAttributePrefix(span.Attributes, "gen_ai.privacy.")
+}
+
+func addGenAIFlowNodeEvaluationSignals(node *GenAIFlowNode, span Span, spanListCap int) {
+	evaluationCount, failedCount := getGenAIEvaluationCounts(span)
+	if evaluationCount == 0 {
+		return
+	}
+	node.DescendantEvaluationCount += evaluationCount
+	node.DescendantEvaluationFailedCount += failedCount
+	if failedCount > 0 {
+		node.DescendantEvaluationFailedSpanIDs = appendSpanIDWithCap(node.DescendantEvaluationFailedSpanIDs, span.SpanID, spanListCap)
+	}
+}
+
+func getGenAIEvaluationCounts(span Span) (int, int) {
+	evaluationCount := 0
+	failedCount := 0
+	for _, event := range span.Events {
+		if !isGenAIEvaluationEvent(event) {
+			continue
+		}
+		evaluationCount++
+		if genAIEvaluationAttributesFailed(event.Attributes) {
+			failedCount++
+		}
+	}
+	if evaluationCount > 0 {
+		return evaluationCount, failedCount
+	}
+	if !hasGenAIEvaluationAttributes(span.Attributes) {
+		return 0, 0
+	}
+	evaluationCount = 1
+	if genAIEvaluationAttributesFailed(span.Attributes) {
+		failedCount = 1
+	}
+	return evaluationCount, failedCount
+}
+
+func isGenAIEvaluationOnlySpan(span Span) bool {
+	if !hasGenAIEvaluationSignal(span) {
+		return false
+	}
+	if strings.TrimSpace(getGenAIOperation(span)) != "" {
+		return false
+	}
+	if getFirstAttributeString(span.Attributes, genAIToolNameKeys) != "" {
+		return false
+	}
+	if getFirstAttributeString(span.Attributes, genAIAgentNameKeys) != "" {
+		return false
+	}
+	if getFirstAttributeString(span.Attributes, genAIRetrievalNameKeys) != "" {
+		return false
+	}
+	return true
+}
+
+func hasGenAIEvaluationSignal(span Span) bool {
+	if hasGenAIEvaluationAttributes(span.Attributes) {
+		return true
+	}
+	for _, event := range span.Events {
+		if isGenAIEvaluationEvent(event) {
+			return true
+		}
+	}
+	return false
+}
+
+func isGenAIEvaluationEvent(event SpanEvent) bool {
+	return event.Name == "gen_ai.evaluation.result" || hasGenAIEvaluationAttributes(event.Attributes)
+}
+
+func hasGenAIEvaluationAttributes(attrs map[string]any) bool {
+	if hasAttributePrefix(attrs, "gen_ai.evaluation.") {
+		return true
+	}
+	if _, ok := attrs["gen_ai.evaluations"]; ok {
+		return true
+	}
+	if _, ok := attrs["assistant.evaluation.outcome"]; ok {
+		return true
+	}
+	return false
+}
+
+func genAIEvaluationAttributesFailed(attrs map[string]any) bool {
+	if raw, ok := attrs["gen_ai.evaluation.passed"]; ok {
+		switch typed := raw.(type) {
+		case bool:
+			return !typed
+		case string:
+			parsed, err := strconv.ParseBool(strings.TrimSpace(typed))
+			if err == nil {
+				return !parsed
+			}
+		}
+	}
+
+	outcome := strings.ToLower(firstNonBlankString(attrs["assistant.evaluation.outcome"]))
+	switch outcome {
+	case "failed", "fail", "error", "no_data":
+		return true
+	}
+
+	scoreLabel := strings.ToLower(firstNonBlankString(attrs["gen_ai.evaluation.score.label"]))
+	switch scoreLabel {
+	case "failed", "fail", "error":
+		return true
+	}
+
+	errorType := strings.ToLower(firstNonBlankString(attrs["error.type"]))
+	return errorType != "" && errorType != "unknown" && errorType != "none"
 }
 
 func getGenAILinkSpanIDs(span Span) []string {

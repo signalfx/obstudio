@@ -75,11 +75,11 @@ function makeBranchingFixtureSpans(): Span[] {
 }
 
 function makeGenAISummary(spans: Span[]): GenAITraceSummary {
-  const flowSpans = spans.filter((span) => Object.keys(span.attributes).some((key) => key.startsWith("gen_ai.")));
+  const flowSpans = spans.filter(hasFixtureGenAISignal);
   const nodeSpans = flowSpans.filter((span) => {
     const operation = String(span.attributes["gen_ai.operation.name"] ?? "");
     const kind = getFixtureKind(span, operation);
-    return kind === "workflow" || kind === "agent" || kind === "tool" || kind === "llm" || kind === "retrieval";
+    return !isFixtureEvaluationOnlySpan(span) && (kind === "workflow" || kind === "agent" || kind === "tool" || kind === "llm" || kind === "retrieval");
   });
   const selectedIds = new Set(nodeSpans.map((span) => span.spanId));
   const nodeBySpanId = new Map<string, GenAIFlowNode>();
@@ -115,6 +115,9 @@ function makeGenAISummary(spans: Span[]): GenAITraceSummary {
       descendantPrivacyRiskCount: 0,
       descendantPrivacyRiskSpanIds: [],
       descendantRiskCount: 0,
+      descendantEvaluationCount: 0,
+      descendantEvaluationFailedCount: 0,
+      descendantEvaluationFailedSpanIds: [],
     };
     nodeBySpanId.set(span.spanId, node);
     return node;
@@ -149,6 +152,7 @@ function makeGenAISummary(spans: Span[]): GenAITraceSummary {
       node.descendantPrivacyRiskCount += 1;
     }
     node.descendantRiskCount = new Set([...node.descendantSecurityRiskSpanIds, ...node.descendantPrivacyRiskSpanIds]).size;
+    addFixtureEvaluationSignals(node, span);
   };
 
   const visit = (span: Span, currentNode: GenAIFlowNode | null) => {
@@ -164,6 +168,7 @@ function makeGenAISummary(spans: Span[]): GenAITraceSummary {
         node.descendantPrivacyRiskCount += 1;
       }
       node.descendantRiskCount = new Set([...node.descendantSecurityRiskSpanIds, ...node.descendantPrivacyRiskSpanIds]).size;
+      addFixtureEvaluationSignals(node, span);
     } else if (currentNode) {
       addOwnedSpan(currentNode, span);
     }
@@ -186,7 +191,7 @@ function makeGenAISummary(spans: Span[]): GenAITraceSummary {
   });
 
   const tokens = flowSpans.map(makeTokenUsage).reduce(addTokenUsage, { input: 0, output: 0, total: 0 });
-  const kinds = flowSpans.map((span) => getFixtureKind(span, String(span.attributes["gen_ai.operation.name"] ?? "")));
+  const kinds = flowSpans.filter((span) => !isFixtureEvaluationOnlySpan(span)).map((span) => getFixtureKind(span, String(span.attributes["gen_ai.operation.name"] ?? "")));
   return {
     isGenAI: flowSpans.length > 0,
     tokens,
@@ -246,6 +251,69 @@ function findFixtureParentFlowSpanId(span: Span, parentBySpanId: Map<string, str
 function hasFixtureRisk(spanId: string, spans: Span[], type: "security" | "privacy"): boolean {
   const span = spans.find((candidate) => candidate.spanId === spanId);
   return Object.keys(span?.attributes ?? {}).some((key) => key.startsWith(`gen_ai.${type}.`));
+}
+
+function hasFixtureGenAISignal(span: Span): boolean {
+  return Object.keys(span.attributes).some((key) => key.startsWith("gen_ai.")) || hasFixtureEvaluationSignal(span);
+}
+
+function isFixtureEvaluationOnlySpan(span: Span): boolean {
+  return hasFixtureEvaluationSignal(span) && !span.attributes["gen_ai.operation.name"] && !span.attributes["gen_ai.agent.name"] && !span.attributes["gen_ai.tool.name"] && !span.attributes["gen_ai.retrieval.source"];
+}
+
+function hasFixtureEvaluationSignal(span: Span): boolean {
+  return hasFixtureEvaluationAttributes(span.attributes) || span.events.some((event) => event.name === "gen_ai.evaluation.result" || hasFixtureEvaluationAttributes(event.attributes));
+}
+
+function hasFixtureEvaluationAttributes(attributes: Record<string, unknown>): boolean {
+  return Object.keys(attributes).some((key) => key.startsWith("gen_ai.evaluation.")) || "gen_ai.evaluations" in attributes || "assistant.evaluation.outcome" in attributes;
+}
+
+function addFixtureEvaluationSignals(node: GenAIFlowNode, span: Span): void {
+  const { count, failed } = getFixtureEvaluationCounts(span);
+  if (count === 0) return;
+  node.descendantEvaluationCount += count;
+  node.descendantEvaluationFailedCount += failed;
+  if (failed > 0 && !node.descendantEvaluationFailedSpanIds.includes(span.spanId)) {
+    node.descendantEvaluationFailedSpanIds.push(span.spanId);
+  }
+}
+
+function getFixtureEvaluationCounts(span: Span): { count: number; failed: number } {
+  const evaluationEvents = span.events.filter((event) => event.name === "gen_ai.evaluation.result" || hasFixtureEvaluationAttributes(event.attributes));
+  if (evaluationEvents.length > 0) {
+    return {
+      count: evaluationEvents.length,
+      failed: evaluationEvents.filter((event) => fixtureEvaluationAttributesFailed(event.attributes)).length,
+    };
+  }
+  if (!hasFixtureEvaluationAttributes(span.attributes)) {
+    return { count: 0, failed: 0 };
+  }
+  return { count: 1, failed: fixtureEvaluationAttributesFailed(span.attributes) ? 1 : 0 };
+}
+
+function fixtureEvaluationAttributesFailed(attributes: Record<string, unknown>): boolean {
+  const passed = attributes["gen_ai.evaluation.passed"];
+  if (typeof passed === "boolean") {
+    return !passed;
+  }
+  if (typeof passed === "string" && ["true", "false"].includes(passed.trim().toLowerCase())) {
+    return passed.trim().toLowerCase() === "false";
+  }
+
+  const outcome = String(attributes["assistant.evaluation.outcome"] ?? "").toLowerCase();
+  if (["failed", "fail", "error", "no_data"].includes(outcome)) {
+    return true;
+  }
+
+  const scoreLabel = String(attributes["gen_ai.evaluation.score.label"] ?? "").toLowerCase();
+  if (["failed", "fail", "error"].includes(scoreLabel)) {
+    return true;
+  }
+
+  const errorType = String(attributes["error.type"] ?? "").toLowerCase();
+  return errorType !== "" && errorType !== "unknown" && errorType !== "none";
 }
 
 let restoreClientWidth = () => undefined;
@@ -327,6 +395,17 @@ describe("TraceWaterfall GenAI overview", () => {
           "gen_ai.usage.output_tokens": 20,
           "gen_ai.security.prompt_injection.detected": true,
         },
+        events: [
+          {
+            name: "gen_ai.evaluation.result",
+            timeUnixNano: "2026-06-12T18:00:02.500Z",
+            attributes: {
+              "gen_ai.evaluation.name": "faithfulness",
+              "gen_ai.evaluation.score.label": "fail",
+              "assistant.evaluation.outcome": "failed",
+            },
+          },
+        ],
       }),
       makeSpan({
         spanId: "tool",
@@ -374,23 +453,18 @@ describe("TraceWaterfall GenAI overview", () => {
     expect(screen.getByRole("button", { name: /triage-agent/i })).toBeTruthy();
     const riskSignal = container.querySelector(".genai-flow__signal--risk");
     expect(riskSignal?.getAttribute("title")).toBeNull();
-    expect(riskSignal?.getAttribute("data-tooltip")).toBe("1 security risk. Click to filter waterfall.");
+    expect(riskSignal?.getAttribute("data-tooltip")).toBe("1 security risk on nested spans");
     expect(screen.getByRole("button", { name: /llm chat gpt-4o/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /tool fetch_logs/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /retrieval retrieval vector_store/i })).toBeTruthy();
     expect(container.querySelectorAll(".waterfall__row")).toHaveLength(4);
-    fireEvent.click(screen.getAllByLabelText("No quality issues detected")[0]);
-    expect(onSelectSpan).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Filter waterfall to 1 security risk span" })[0]);
-    expect(onSelectSpan).toHaveBeenCalledWith(null);
-    expect(screen.getByRole("button", { name: /Security risk spans/ })).toBeTruthy();
-    expect(screen.getByText("1 / 4 spans")).toBeTruthy();
-    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(1);
-    expect(Array.from(container.querySelectorAll(".waterfall__span-name")).map((element) => element.textContent)).toEqual([
-      "assistant: chat",
-    ]);
-    fireEvent.click(screen.getByRole("button", { name: /Security risk spans/ }));
-    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(4);
+    const qualitySignal = container.querySelector(".genai-flow__signal--issue");
+    expect(qualitySignal?.getAttribute("data-tooltip")).toBe("1 quality issue on nested spans");
+    const qualityChip = container.querySelector(".waterfall__ai-chip--issue");
+    expect(qualityChip?.textContent).toBe("Faithfulness");
+    expect(qualityChip?.getAttribute("data-tooltip")).toBe("Faithfulness quality issue");
+    fireEvent.click(qualitySignal as Element);
+    expect(onSelectSpan).toHaveBeenCalledWith("llm");
     onSelectSpan.mockClear();
     expect(screen.getByText("4 spans")).toBeTruthy();
 

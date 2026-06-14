@@ -154,6 +154,9 @@ export interface GenAIFlowNode {
   descendantPrivacyRiskCount: number;
   descendantPrivacyRiskSpanIds: string[];
   descendantRiskCount: number;
+  descendantEvaluationCount: number;
+  descendantEvaluationFailedCount: number;
+  descendantEvaluationFailedSpanIds: string[];
 }
 
 export interface GenAIFlowEdge {

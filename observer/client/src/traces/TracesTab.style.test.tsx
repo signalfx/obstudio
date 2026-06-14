@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TracesTab, traceStatusLabel } from "./TracesTab";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { MetricsTab } from "../metrics/MetricsTab";
+import type { Span } from "../api/types";
 
 declare const require: (id: string) => any;
 declare const process: { cwd(): string };
@@ -290,7 +291,12 @@ describe("TracesTab row layout", () => {
           endTimeUnixNano: "2026-04-11T12:00:01Z",
           durationMs: 42,
           status: { code: "OK", message: "" },
-          attributes: {},
+          attributes: {
+            "gen_ai.evaluation.name": "groundedness",
+            "gen_ai.evaluation.score.value": 0.32,
+            "gen_ai.evaluation.explanation": "Answer was not grounded in retrieved context.",
+            "assistant.evaluation.outcome": "failed",
+          },
           events: [],
           links: [],
           resource: { serviceName: "checkout", attributes: {} },
@@ -305,6 +311,96 @@ describe("TracesTab row layout", () => {
     expect(closeBtn).toBeTruthy();
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("opens AI details for spans with GenAI evaluation issues", () => {
+    render(
+      <SpanDetailsPanel
+        span={{
+          traceId: "trace-1",
+          spanId: "span-1",
+          parentSpanId: "",
+          name: "chat gpt-5.5",
+          kind: "INTERNAL",
+          startTimeUnixNano: "2026-04-11T12:00:00Z",
+          endTimeUnixNano: "2026-04-11T12:00:01Z",
+          durationMs: 42,
+          status: { code: "OK", message: "" },
+          attributes: {},
+          events: [
+            {
+              name: "gen_ai.evaluation.result",
+              timeUnixNano: "2026-04-11T12:00:00.500Z",
+              attributes: {
+                "gen_ai.evaluation.name": "groundedness",
+                "gen_ai.evaluation.score.label": "fail",
+                "gen_ai.evaluation.score.value": 0.32,
+                "gen_ai.evaluation.explanation": "Answer was not grounded in retrieved context.",
+                "assistant.evaluation.outcome": "failed",
+              },
+            },
+          ],
+          links: [],
+          resource: { serviceName: "assistant", attributes: {} },
+          scope: { name: "otel", version: "" },
+        }}
+        validationFindings={[]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /AI details/i }).classList.contains("span-details__tab--active")).toBe(true);
+    expect(screen.getByText("Evaluations")).toBeTruthy();
+    expect(screen.getByText("1 issue")).toBeTruthy();
+    expect(screen.getByText("Groundedness")).toBeTruthy();
+    expect(screen.getByText("fail")).toBeTruthy();
+    expect(screen.getByText("0.32")).toBeTruthy();
+    expect(screen.getByText("Answer was not grounded in retrieved context.")).toBeTruthy();
+  });
+
+  it("does not reset the selected details tab when evaluations arrive for the same span", () => {
+    const span: Span = {
+      traceId: "trace-1",
+      spanId: "span-1",
+      parentSpanId: "",
+      name: "chat gpt-5.5",
+      kind: "INTERNAL",
+      startTimeUnixNano: "2026-04-11T12:00:00Z",
+      endTimeUnixNano: "2026-04-11T12:00:01Z",
+      durationMs: 42,
+      status: { code: "OK", message: "" },
+      attributes: {},
+      events: [],
+      links: [],
+      resource: { serviceName: "assistant", attributes: {} },
+      scope: { name: "otel", version: "" },
+    };
+    const { rerender } = render(<SpanDetailsPanel span={span} validationFindings={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
+    expect(screen.getByRole("button", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
+
+    rerender(
+      <SpanDetailsPanel
+        span={{
+          ...span,
+          events: [
+            {
+              name: "gen_ai.evaluation.result",
+              timeUnixNano: "2026-04-11T12:00:00.500Z",
+              attributes: {
+                "gen_ai.evaluation.name": "groundedness",
+                "gen_ai.evaluation.score.label": "fail",
+                "assistant.evaluation.outcome": "failed",
+              },
+            },
+          ],
+        }}
+        validationFindings={[]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
+    expect(screen.getByRole("button", { name: /AI details/i })).toBeTruthy();
   });
 
   it("does not render a close button in the span detail panel when onClose is not provided", () => {

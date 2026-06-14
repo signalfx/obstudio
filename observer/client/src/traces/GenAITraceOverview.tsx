@@ -4,11 +4,13 @@ import { ValidationBadge } from "../components/ValidationBadge";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
 
+type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop" | "quality";
+
 interface GenAITraceOverviewProps {
   summary: GenAITraceSummary | null;
   selectedSpanId: string | null;
   onSelectSpan: (spanId: string | null) => void;
-  onApplySpanFilter: (type: "security" | "privacy" | "llm" | "tool" | "loop", spanIds: string[]) => void;
+  onApplySpanFilter: (type: GenAISpanFilterType, spanIds: string[]) => void;
   validationIndex: ValidationIndex;
 }
 
@@ -246,16 +248,21 @@ function GenAIFlowCard({
   width: number;
   height: number;
   onSelectSpan: (spanId: string | null) => void;
-  onApplySpanFilter: (type: "security" | "privacy" | "llm" | "tool" | "loop", spanIds: string[]) => void;
+  onApplySpanFilter: (type: GenAISpanFilterType, spanIds: string[]) => void;
   validationIndex: ValidationIndex;
 }): React.ReactElement {
   const validation = lookupSpanValidation(validationIndex, node.traceId, node.spanId);
   const title = getNodeTitle(node);
-  const hasQualityIssues = (validation?.count ?? 0) > 0;
+  const evaluationCount = node.descendantEvaluationCount ?? 0;
+  const failedEvaluationCount = node.descendantEvaluationFailedCount ?? 0;
+  const hasEvaluations = evaluationCount > 0;
+  const hasQualityIssues = failedEvaluationCount > 0;
   const hasLLMCalls = (node.kind === "loop" || !node.grouped) && node.descendantLlmCalls > 0;
   const hasToolCalls = (node.kind === "loop" || !node.grouped) && node.descendantToolCalls > 0;
   const hasSecurityRisk = node.descendantSecurityRiskCount > 0;
   const hasPrivacyRisk = node.descendantPrivacyRiskCount > 0;
+  const firstFailedEvaluationSpanId = node.descendantEvaluationFailedSpanIds?.[0] ?? "";
+  const canSelectFailedEvaluationSpan = firstFailedEvaluationSpanId !== "";
   const meta = getNodeMeta(node);
   const ariaLabel = `${node.kind} ${title}${meta.length > 0 ? `, ${meta.join(", ")}` : ""}`;
   const groupedFilterType = getGroupedFilterType(node);
@@ -275,16 +282,16 @@ function GenAIFlowCard({
       selectNode();
     }
   };
-  const stopSignalPropagation = (event: React.SyntheticEvent) => {
+  const selectFirstFailedEvaluationSpan = (event: React.MouseEvent<HTMLSpanElement> | React.KeyboardEvent<HTMLSpanElement>) => {
     event.stopPropagation();
+    if (!firstFailedEvaluationSpanId) return;
+    onSelectSpan(firstFailedEvaluationSpanId);
   };
-  const applySpanFilter = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    type: "security" | "privacy" | "llm" | "tool" | "loop",
-    spanIds: string[],
-  ) => {
-    event.stopPropagation();
-    onApplySpanFilter(type, spanIds);
+  const handleFailedEvaluationSignalKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectFirstFailedEvaluationSpan(event);
+    }
   };
 
   return (
@@ -315,64 +322,69 @@ function GenAIFlowCard({
         <span
           className="quality-issues-container genai-flow__signals"
           aria-label="GenAI node signals"
-          onClick={stopSignalPropagation}
-          onKeyDown={stopSignalPropagation}
         >
           {node.statusCode === "ERROR" ? <span className="genai-flow__badge genai-flow__badge--error">Error</span> : null}
-          <span
-            className={`genai-flow__signal genai-flow__signal--${hasQualityIssues ? "issue" : "ok"}`}
-            aria-label={hasQualityIssues ? `${validation?.count ?? 0} quality issues` : "No quality issues detected"}
-            data-tooltip={hasQualityIssues ? `${validation?.count ?? 0} quality issues` : "No quality issues detected"}
-          >
-            {hasQualityIssues ? <IssueIcon /> : <CheckIcon />}
-          </span>
+          {hasQualityIssues ? (
+            <span
+              className={`genai-flow__signal genai-flow__signal--issue${canSelectFailedEvaluationSpan ? " genai-flow__signal--interactive" : ""}`}
+              aria-label={formatQualityIssueLabel(failedEvaluationCount)}
+              data-tooltip={`${formatQualityIssueLabel(failedEvaluationCount)} on nested spans`}
+              role={canSelectFailedEvaluationSpan ? "button" : undefined}
+              tabIndex={canSelectFailedEvaluationSpan ? 0 : undefined}
+              onClick={canSelectFailedEvaluationSpan ? selectFirstFailedEvaluationSpan : undefined}
+              onKeyDown={canSelectFailedEvaluationSpan ? handleFailedEvaluationSignalKeyDown : undefined}
+            >
+              <IssueIcon />
+              {failedEvaluationCount > 1 ? <span>{formatCount(failedEvaluationCount)}</span> : null}
+            </span>
+          ) : (
+            <span
+              className={`genai-flow__signal genai-flow__signal--${hasEvaluations ? "ok" : "unknown"}`}
+              aria-label={hasEvaluations ? "Evaluated with no quality issues" : "Not evaluated for quality issues"}
+              data-tooltip={hasEvaluations ? "Evaluated with no quality issues" : "Not evaluated for quality issues"}
+            >
+              {hasEvaluations ? <CheckIcon /> : <NotEvaluatedIcon />}
+            </span>
+          )}
           {hasLLMCalls ? (
-            <button
-              className="genai-flow__signal genai-flow__signal--call genai-flow__signal-button"
-              type="button"
-              aria-label={formatCallFilterLabel(node.descendantLlmCalls, "LLM")}
-              data-tooltip={`${formatCallLabel(node.descendantLlmCalls, "LLM")}. Click to filter waterfall.`}
-              onClick={(event) => applySpanFilter(event, "llm", node.descendantLlmSpanIds)}
+            <span
+              className="genai-flow__signal genai-flow__signal--call"
+              aria-label={formatCallLabel(node.descendantLlmCalls, "LLM")}
+              data-tooltip={`${formatCallLabel(node.descendantLlmCalls, "LLM")} on nested spans`}
             >
               <span>LLM</span>
               <span>{formatCount(node.descendantLlmCalls)}</span>
-            </button>
+            </span>
           ) : null}
           {hasToolCalls ? (
-            <button
-              className="genai-flow__signal genai-flow__signal--call genai-flow__signal-button"
-              type="button"
-              aria-label={formatCallFilterLabel(node.descendantToolCalls, "Tool")}
-              data-tooltip={`${formatCallLabel(node.descendantToolCalls, "tool")}. Click to filter waterfall.`}
-              onClick={(event) => applySpanFilter(event, "tool", node.descendantToolSpanIds)}
+            <span
+              className="genai-flow__signal genai-flow__signal--call"
+              aria-label={formatCallLabel(node.descendantToolCalls, "tool")}
+              data-tooltip={`${formatCallLabel(node.descendantToolCalls, "tool")} on nested spans`}
             >
               <span>Tool</span>
               <span>{formatCount(node.descendantToolCalls)}</span>
-            </button>
+            </span>
           ) : null}
           {hasSecurityRisk ? (
-            <button
-              className="genai-flow__signal genai-flow__signal--risk genai-flow__signal-button"
-              type="button"
-              aria-label={formatRiskFilterLabel(node.descendantSecurityRiskCount, "security")}
-              data-tooltip={`${formatRiskLabel(node.descendantSecurityRiskCount, "security")}. Click to filter waterfall.`}
-              onClick={(event) => applySpanFilter(event, "security", node.descendantSecurityRiskSpanIds)}
+            <span
+              className="genai-flow__signal genai-flow__signal--risk"
+              aria-label={formatRiskLabel(node.descendantSecurityRiskCount, "security")}
+              data-tooltip={`${formatRiskLabel(node.descendantSecurityRiskCount, "security")} on nested spans`}
             >
               <ShieldIcon />
               <span>{formatCount(node.descendantSecurityRiskCount)}</span>
-            </button>
+            </span>
           ) : null}
           {hasPrivacyRisk ? (
-            <button
-              className="genai-flow__signal genai-flow__signal--risk genai-flow__signal-button"
-              type="button"
-              aria-label={formatRiskFilterLabel(node.descendantPrivacyRiskCount, "privacy")}
-              data-tooltip={`${formatRiskLabel(node.descendantPrivacyRiskCount, "privacy")}. Click to filter waterfall.`}
-              onClick={(event) => applySpanFilter(event, "privacy", node.descendantPrivacyRiskSpanIds)}
+            <span
+              className="genai-flow__signal genai-flow__signal--risk"
+              aria-label={formatRiskLabel(node.descendantPrivacyRiskCount, "privacy")}
+              data-tooltip={`${formatRiskLabel(node.descendantPrivacyRiskCount, "privacy")} on nested spans`}
             >
               <LockIcon />
               <span>{formatCount(node.descendantPrivacyRiskCount)}</span>
-            </button>
+            </span>
           ) : null}
           <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
         </span>
@@ -735,18 +747,13 @@ function formatRiskLabel(value: number, type: "security" | "privacy"): string {
   return `${formatCount(value)} ${type} risk${value === 1 ? "" : "s"}`;
 }
 
-function formatRiskFilterLabel(value: number, type: "security" | "privacy"): string {
-  return `Filter waterfall to ${formatCount(value)} ${type} risk span${value === 1 ? "" : "s"}`;
-}
-
 function formatCallLabel(value: number, label: "LLM" | "tool"): string {
   const noun = label === "LLM" ? "LLM call" : "tool call";
   return `${formatCount(value)} ${noun}${value === 1 ? "" : "s"}`;
 }
 
-function formatCallFilterLabel(value: number, label: "LLM" | "Tool"): string {
-  const noun = label === "LLM" ? "LLM call" : "tool call";
-  return `Filter waterfall to ${formatCount(value)} ${noun} span${value === 1 ? "" : "s"}`;
+function formatQualityIssueLabel(value: number): string {
+  return `${formatCount(value)} quality issue${value === 1 ? "" : "s"}`;
 }
 
 function formatDuration(durationMs: number): string {
@@ -851,6 +858,19 @@ function IssueIcon(): React.ReactElement {
         clipRule="evenodd"
         d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20C7.58172 20 4 16.4183 4 12C4 7.58172 7.58172 4 12 4Z"
       />
+    </svg>
+  );
+}
+
+function NotEvaluatedIcon(): React.ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4ZM2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12Z"
+      />
+      <path d="M8 11H16V13H8V11Z" />
     </svg>
   );
 }

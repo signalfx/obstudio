@@ -6,8 +6,9 @@ import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 import { GenAITraceOverview } from "./GenAITraceOverview";
+import { formatEvaluationName, getSpanEvaluations } from "./genai-evaluations";
 
-type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop";
+type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop" | "quality";
 
 interface TraceWaterfallProps {
   spans: Span[];
@@ -38,6 +39,16 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
   const [genAISpanFilter, setGenAISpanFilter] = useState<{ type: GenAISpanFilterType; spanIds: string[] } | null>(null);
 
   const serviceColors = useMemo(() => getServiceColorMap(spans), [spans]);
+  const evaluationsBySpanId = useMemo(() => {
+    const result = new Map<string, ReturnType<typeof getSpanEvaluations>>();
+    for (const span of spans) {
+      const evaluations = getSpanEvaluations(span);
+      if (evaluations.length > 0) {
+        result.set(span.spanId, evaluations);
+      }
+    }
+    return result;
+  }, [spans]);
 
   const roots = buildWaterfallTree(spans);
   const allFlat = flattenTree(roots);
@@ -127,6 +138,8 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           const svcColor = serviceColors.get(s.resource?.serviceName ?? "unknown") ?? TELEMETRY_SERIES_COLORS[0];
           const childCount = countDescendants(s);
           const validation = lookupSpanValidation(validationIndex, s.traceId, s.spanId);
+          const evaluations = evaluationsBySpanId.get(s.spanId) ?? [];
+          const failedEvaluations = evaluations.filter((evaluation) => !evaluation.passed);
 
           return (
             <div
@@ -148,6 +161,15 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
                 <span className="waterfall__service-dot" style={{ background: svcColor }} />
                 <span className="waterfall__service-name">{s.resource?.serviceName ?? ""}</span>
                 <span className="waterfall__span-name">{s.name}</span>
+                {failedEvaluations.length > 0 ? (
+                  <span className="waterfall__ai-chip waterfall__ai-chip--issue" data-tooltip={formatEvaluationTooltip(failedEvaluations)}>
+                    <span className="waterfall__ai-chip-label">{formatWaterfallEvaluationChipLabel(failedEvaluations)}</span>
+                  </span>
+                ) : evaluations.length > 0 ? (
+                  <span className="waterfall__ai-chip waterfall__ai-chip--ok" data-tooltip="No quality issues">
+                    <span className="waterfall__ai-chip-label">Quality</span>
+                  </span>
+                ) : null}
                 <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
               </div>
               <div className="waterfall__row-timeline">
@@ -177,6 +199,18 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
   );
 }
 
+function formatWaterfallEvaluationChipLabel(evaluations: ReturnType<typeof getSpanEvaluations>): string {
+  const firstName = evaluations[0]?.name ? formatEvaluationName(evaluations[0].name) : "Quality";
+  return evaluations.length > 1 ? `${firstName}...(+${evaluations.length - 1})` : firstName;
+}
+
+function formatEvaluationTooltip(evaluations: ReturnType<typeof getSpanEvaluations>): string {
+  if (evaluations.length === 1) {
+    return `${formatEvaluationName(evaluations[0].name)} quality issue`;
+  }
+  return `${evaluations.length} quality issues: ${evaluations.map((evaluation) => formatEvaluationName(evaluation.name)).join(", ")}`;
+}
+
 function countDescendants(span: WaterfallSpan): number {
   let count = span.children.length;
   for (const child of span.children) {
@@ -197,6 +231,8 @@ function formatGenAISpanFilterLabel(type: GenAISpanFilterType): string {
       return "Tool call spans";
     case "loop":
       return "Loop spans";
+    case "quality":
+      return "Quality issue spans";
   }
 }
 

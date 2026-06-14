@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Span, ValidationFinding } from "../api/types";
 import { CopyTextButton } from "../layout";
 import { KVTable } from "../components/KVTable";
+import { formatEvaluationName, getSpanEvaluations, type GenAIEvaluation } from "./genai-evaluations";
 
 interface SpanDetailsPanelProps {
   span: Span;
@@ -9,7 +10,7 @@ interface SpanDetailsPanelProps {
   onClose?: () => void;
 }
 
-type TabId = "info" | "attributes" | "events" | "links";
+type TabId = "info" | "ai-details" | "attributes" | "events" | "links";
 
 function nanoToMs(ts: string): number {
   if (/^\d+$/.test(ts)) {
@@ -31,17 +32,28 @@ function relativeTime(eventNano: string, spanStartNano: string): string {
 export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDetailsPanelProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("info");
   const [attributeFilter, setAttributeFilter] = useState("");
+  const lastSpanIdRef = useRef<string | null>(null);
 
   const attrCount = Object.keys(span.attributes ?? {}).length;
   const eventCount = (span.events ?? []).length;
   const linkCount = (span.links ?? []).length;
+  const evaluations = useMemo(() => getSpanEvaluations(span), [span]);
+  const failedEvaluationCount = evaluations.filter((evaluation) => !evaluation.passed).length;
   const filteredAttributes = useMemo(
     () => Object.entries(span.attributes ?? {}).filter(([key, value]) => attributeMatchesFilter(key, value, attributeFilter)),
     [attributeFilter, span.attributes],
   );
 
+  useEffect(() => {
+    if (lastSpanIdRef.current === span.spanId) return;
+    lastSpanIdRef.current = span.spanId;
+    setActiveTab(evaluations.length > 0 ? "ai-details" : "info");
+    setAttributeFilter("");
+  }, [span.spanId, evaluations.length]);
+
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "info", label: "Info" },
+    ...(evaluations.length > 0 ? [{ id: "ai-details" as const, label: "AI details", count: evaluations.length }] : []),
     { id: "attributes", label: "Attributes", count: attrCount },
     { id: "events", label: "Events", count: eventCount },
     { id: "links", label: "Links", count: linkCount },
@@ -110,6 +122,28 @@ export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDeta
                 ...(span.resource?.serviceName ? [{ key: "Service", value: span.resource.serviceName }] : []),
                 ...(span.scope?.name ? [{ key: "Scope", value: `${span.scope.name}${span.scope.version ? ` v${span.scope.version}` : ""}` }] : []),
               ]} />
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "ai-details" ? (
+          <div className="span-details__section">
+            <div className="span-details__section-body span-details__ai-details">
+              <div className="ai-evaluations__header">
+                <span className="ai-evaluations__title">Evaluations</span>
+                {failedEvaluationCount > 0 ? (
+                  <span className="ai-evaluations__issue-count">
+                    {failedEvaluationCount} issue{failedEvaluationCount === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <span className="ai-evaluations__ok-count">No quality issues</span>
+                )}
+              </div>
+              <div className="ai-evaluations__list">
+                {evaluations.map((evaluation, index) => (
+                  <EvaluationItem evaluation={evaluation} key={`${evaluation.name}:${index}`} />
+                ))}
+              </div>
             </div>
           </div>
         ) : null}
@@ -184,6 +218,33 @@ export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDeta
       </div>
     </div>
   );
+}
+
+function EvaluationItem({ evaluation }: { evaluation: GenAIEvaluation }): React.ReactElement {
+  const scoreText = formatEvaluationScore(evaluation);
+  return (
+    <div className={`ai-evaluations__item ${evaluation.passed ? "ai-evaluations__item--ok" : "ai-evaluations__item--issue"}`}>
+      <span className="ai-evaluations__status" aria-hidden="true">
+        {evaluation.passed ? "✓" : "!"}
+      </span>
+      <div className="ai-evaluations__content">
+        <div className="ai-evaluations__line">
+          <strong>{formatEvaluationName(evaluation.name)}</strong>
+          {evaluation.scoreLabel ? <span className="ai-evaluations__label">{evaluation.scoreLabel}</span> : null}
+          {scoreText ? <span className="ai-evaluations__score">{scoreText}</span> : null}
+        </div>
+        {evaluation.explanation ? <div className="ai-evaluations__explanation">{evaluation.explanation}</div> : null}
+        {evaluation.errorType ? <div className="ai-evaluations__explanation">Error: {evaluation.errorType}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function formatEvaluationScore(evaluation: GenAIEvaluation): string | null {
+  if (evaluation.scoreValue == null) {
+    return null;
+  }
+  return Number.isInteger(evaluation.scoreValue) ? String(evaluation.scoreValue) : evaluation.scoreValue.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function formatNanoTimestamp(ts: string): string {

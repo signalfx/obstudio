@@ -831,12 +831,33 @@ func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	llm.Attributes["ai.usage.input_tokens"] = 999
 	llm.Attributes["llm.token_count.completion"] = 888
 	llm.Attributes["gen_ai.security.prompt_injection.detected"] = true
+	llm.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(35 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "faithfulness",
+				"gen_ai.evaluation.score.label": "fail",
+				"assistant.evaluation.outcome":  "failed",
+			},
+		},
+	}
 
 	tool := newTestSpan("trace-genai", "tool", "execute_tool", now.Add(40*time.Millisecond), 200)
 	tool.ParentSpanID = "agent"
 	tool.Attributes["gen_ai.operation.name"] = "execute_tool"
 	tool.Attributes["gen_ai.tool.name"] = "lookup_context"
 	tool.Attributes["gen_ai.privacy.pii.detected"] = true
+	tool.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(45 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":   "toxicity",
+				"gen_ai.evaluation.passed": true,
+			},
+		},
+	}
 
 	summarizer := newTestSpan("trace-genai", "summarizer", "invoke_agent", now.Add(60*time.Millisecond), 700)
 	summarizer.ParentSpanID = "workflow"
@@ -897,6 +918,12 @@ func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	if strings.Join(workflowNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
 		t.Fatalf("unexpected workflow privacy risk span ids: %v", workflowNode.DescendantPrivacyRiskSpanIDs)
 	}
+	if workflowNode.DescendantEvaluationCount != 2 || workflowNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected workflow evaluation rollup: count=%d failed=%d", workflowNode.DescendantEvaluationCount, workflowNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(workflowNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected workflow failed evaluation span ids: %v", workflowNode.DescendantEvaluationFailedSpanIDs)
+	}
 
 	agentNode := nodesByID["agent"]
 	if agentNode.ParentFlowSpanID != "workflow" {
@@ -920,6 +947,12 @@ func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	if strings.Join(agentNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
 		t.Fatalf("unexpected privacy risk span ids: %v", agentNode.DescendantPrivacyRiskSpanIDs)
 	}
+	if agentNode.DescendantEvaluationCount != 2 || agentNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected agent evaluation rollup: count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(agentNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected agent failed evaluation span ids: %v", agentNode.DescendantEvaluationFailedSpanIDs)
+	}
 
 	llmNode := nodesByID["llm"]
 	if llmNode.ParentFlowSpanID != "agent" {
@@ -931,6 +964,12 @@ func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	if strings.Join(llmNode.DescendantSecurityRiskSpanIDs, ",") != "llm" {
 		t.Fatalf("unexpected llm security risk span ids: %v", llmNode.DescendantSecurityRiskSpanIDs)
 	}
+	if llmNode.DescendantEvaluationCount != 1 || llmNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected llm evaluation rollup: count=%d failed=%d", llmNode.DescendantEvaluationCount, llmNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(llmNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected llm failed evaluation span ids: %v", llmNode.DescendantEvaluationFailedSpanIDs)
+	}
 
 	toolNode := nodesByID["tool"]
 	if toolNode.ParentFlowSpanID != "agent" {
@@ -938,6 +977,9 @@ func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	}
 	if strings.Join(toolNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
 		t.Fatalf("unexpected tool privacy risk span ids: %v", toolNode.DescendantPrivacyRiskSpanIDs)
+	}
+	if toolNode.DescendantEvaluationCount != 1 || toolNode.DescendantEvaluationFailedCount != 0 || len(toolNode.DescendantEvaluationFailedSpanIDs) != 0 {
+		t.Fatalf("unexpected tool evaluation rollup: count=%d failed=%d ids=%v", toolNode.DescendantEvaluationCount, toolNode.DescendantEvaluationFailedCount, toolNode.DescendantEvaluationFailedSpanIDs)
 	}
 
 	edges := make([]string, 0, len(genAI.FlowEdges))
@@ -997,6 +1039,66 @@ func TestTrace_IncludesRetrievalFlowNode(t *testing.T) {
 	}
 	if strings.Join(edges, "|") != "workflow->agent|agent->retrieval" {
 		t.Fatalf("unexpected retrieval flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GenAIEvaluationOnlySpanRollsUpWithoutFlowNode(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-eval", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-eval", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Research Agent"
+
+	evaluation := newTestSpan("trace-genai-eval", "eval", "evaluate groundedness", now.Add(20*time.Millisecond), 300)
+	evaluation.ParentSpanID = "agent"
+	evaluation.Attributes["gen_ai.evaluation.name"] = "groundedness"
+	evaluation.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	evaluation.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+	evaluation.Attributes["assistant.evaluation.outcome"] = "failed"
+	evaluation.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(25 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "groundedness",
+				"gen_ai.evaluation.score.label": "fail",
+				"assistant.evaluation.outcome":  "failed",
+			},
+		},
+	}
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, evaluation})
+
+	result := s.Trace("trace-genai-eval", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if result.GenAI.LLMCalls != 0 {
+		t.Fatalf("expected eval-only span not to count as LLM call, got %d", result.GenAI.LLMCalls)
+	}
+
+	nodeNames := make([]string, 0, len(result.GenAI.FlowNodes))
+	nodesByID := make(map[string]GenAIFlowNode)
+	for _, node := range result.GenAI.FlowNodes {
+		nodeNames = append(nodeNames, node.Name)
+		nodesByID[node.SpanID] = node
+	}
+	if strings.Join(nodeNames, "|") != "Budget Guru|Research Agent" {
+		t.Fatalf("unexpected flow nodes: %v", nodeNames)
+	}
+
+	agentNode := nodesByID["agent"]
+	if agentNode.DescendantEvaluationCount != 1 || agentNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected agent evaluation rollup: count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(agentNode.DescendantEvaluationFailedSpanIDs, ",") != "eval" {
+		t.Fatalf("unexpected failed evaluation span ids: %v", agentNode.DescendantEvaluationFailedSpanIDs)
 	}
 }
 
