@@ -95,7 +95,7 @@ export function ResizablePanel({
     const observer = new ResizeObserver(updateMeasuredWidth);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [panelWidth]);
+  }, []);
 
   useEffect(() => {
     if (!isResizing) {
