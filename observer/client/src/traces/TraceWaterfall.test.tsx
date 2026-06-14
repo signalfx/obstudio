@@ -454,6 +454,13 @@ describe("TraceWaterfall GenAI overview", () => {
     const riskSignal = container.querySelector(".genai-flow__signal--risk");
     expect(riskSignal?.getAttribute("title")).toBeNull();
     expect(riskSignal?.getAttribute("data-tooltip")).toBe("1 security risk on nested spans");
+    fireEvent.click(riskSignal as Element);
+    expect(onSelectSpan).toHaveBeenCalledWith(null);
+    expect(screen.getByRole("button", { name: /Security risk spans/ })).toBeTruthy();
+    expect(screen.getByText("1 / 4 spans")).toBeTruthy();
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /Security risk spans/ }));
+    onSelectSpan.mockClear();
     expect(screen.getByRole("button", { name: /llm chat gpt-4o/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /tool fetch_logs/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /retrieval retrieval vector_store/i })).toBeTruthy();

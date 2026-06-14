@@ -287,10 +287,29 @@ function GenAIFlowCard({
     if (!firstFailedEvaluationSpanId) return;
     onSelectSpan(firstFailedEvaluationSpanId);
   };
+  const applySpanFilterFromSignal = (
+    event: React.MouseEvent<HTMLSpanElement> | React.KeyboardEvent<HTMLSpanElement>,
+    type: GenAISpanFilterType,
+    spanIds: string[],
+  ) => {
+    event.stopPropagation();
+    if (spanIds.length === 0) return;
+    onApplySpanFilter(type, spanIds);
+  };
   const handleFailedEvaluationSignalKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       selectFirstFailedEvaluationSpan(event);
+    }
+  };
+  const handleSpanFilterSignalKeyDown = (
+    event: React.KeyboardEvent<HTMLSpanElement>,
+    type: GenAISpanFilterType,
+    spanIds: string[],
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      applySpanFilterFromSignal(event, type, spanIds);
     }
   };
 
@@ -348,9 +367,13 @@ function GenAIFlowCard({
           )}
           {hasLLMCalls ? (
             <span
-              className="genai-flow__signal genai-flow__signal--call"
+              className="genai-flow__signal genai-flow__signal--call genai-flow__signal--interactive"
               aria-label={formatCallLabel(node.descendantLlmCalls, "LLM")}
               data-tooltip={`${formatCallLabel(node.descendantLlmCalls, "LLM")} on nested spans`}
+              role="button"
+              tabIndex={0}
+              onClick={(event) => applySpanFilterFromSignal(event, "llm", node.descendantLlmSpanIds)}
+              onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "llm", node.descendantLlmSpanIds)}
             >
               <span>LLM</span>
               <span>{formatCount(node.descendantLlmCalls)}</span>
@@ -358,9 +381,13 @@ function GenAIFlowCard({
           ) : null}
           {hasToolCalls ? (
             <span
-              className="genai-flow__signal genai-flow__signal--call"
+              className="genai-flow__signal genai-flow__signal--call genai-flow__signal--interactive"
               aria-label={formatCallLabel(node.descendantToolCalls, "tool")}
               data-tooltip={`${formatCallLabel(node.descendantToolCalls, "tool")} on nested spans`}
+              role="button"
+              tabIndex={0}
+              onClick={(event) => applySpanFilterFromSignal(event, "tool", node.descendantToolSpanIds)}
+              onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "tool", node.descendantToolSpanIds)}
             >
               <span>Tool</span>
               <span>{formatCount(node.descendantToolCalls)}</span>
@@ -368,9 +395,13 @@ function GenAIFlowCard({
           ) : null}
           {hasSecurityRisk ? (
             <span
-              className="genai-flow__signal genai-flow__signal--risk"
+              className="genai-flow__signal genai-flow__signal--risk genai-flow__signal--interactive"
               aria-label={formatRiskLabel(node.descendantSecurityRiskCount, "security")}
               data-tooltip={`${formatRiskLabel(node.descendantSecurityRiskCount, "security")} on nested spans`}
+              role="button"
+              tabIndex={0}
+              onClick={(event) => applySpanFilterFromSignal(event, "security", node.descendantSecurityRiskSpanIds)}
+              onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "security", node.descendantSecurityRiskSpanIds)}
             >
               <ShieldIcon />
               <span>{formatCount(node.descendantSecurityRiskCount)}</span>
@@ -378,9 +409,13 @@ function GenAIFlowCard({
           ) : null}
           {hasPrivacyRisk ? (
             <span
-              className="genai-flow__signal genai-flow__signal--risk"
+              className="genai-flow__signal genai-flow__signal--risk genai-flow__signal--interactive"
               aria-label={formatRiskLabel(node.descendantPrivacyRiskCount, "privacy")}
               data-tooltip={`${formatRiskLabel(node.descendantPrivacyRiskCount, "privacy")} on nested spans`}
+              role="button"
+              tabIndex={0}
+              onClick={(event) => applySpanFilterFromSignal(event, "privacy", node.descendantPrivacyRiskSpanIds)}
+              onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "privacy", node.descendantPrivacyRiskSpanIds)}
             >
               <LockIcon />
               <span>{formatCount(node.descendantPrivacyRiskCount)}</span>
