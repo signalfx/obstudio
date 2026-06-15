@@ -1042,6 +1042,88 @@ func TestTrace_IncludesRetrievalFlowNode(t *testing.T) {
 	}
 }
 
+func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-langgraph", "workflow", "invoke_workflow_assistant_v3_turn", now, 1000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+	workflow.Attributes["gen_ai.request.model"] = "gpt-5.5"
+
+	agent := newTestSpan("trace-genai-langgraph", "agent", "invoke_agent LangGraph", now.Add(10*time.Millisecond), 900)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	middleware := newTestSpan("trace-genai-langgraph", "middleware", "step SkillsMiddleware.before_agent", now.Add(20*time.Millisecond), 20)
+	middleware.ParentSpanID = "agent"
+	middleware.Attributes["gen_ai.agent.name"] = "LangGraph"
+	middleware.Attributes["gen_ai.step.name"] = "SkillsMiddleware.before_agent"
+	middleware.Attributes["gen_ai.step.type"] = "chain"
+
+	modelStep := newTestSpan("trace-genai-langgraph", "model-step", "step model", now.Add(40*time.Millisecond), 600)
+	modelStep.ParentSpanID = "agent"
+	modelStep.Attributes["gen_ai.agent.name"] = "LangGraph"
+	modelStep.Attributes["gen_ai.step.name"] = "model"
+	modelStep.Attributes["gen_ai.step.type"] = "chain"
+	modelStep.Attributes["gen_ai.step.status"] = "failed"
+	modelStep.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	modelStep.Attributes["gen_ai.usage.input_tokens"] = 100
+	modelStep.Attributes["gen_ai.usage.output_tokens"] = 5
+
+	llm := newTestSpan("trace-genai-langgraph", "llm", "chat unknown_model", now.Add(50*time.Millisecond), 500)
+	llm.ParentSpanID = "model-step"
+	llm.Status = SpanStatus{Code: "ERROR", Message: "authentication failed"}
+	llm.Attributes["gen_ai.agent.name"] = "LangGraph"
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.request.model"] = "unknown_model"
+	llm.Attributes["gen_ai.provider.name"] = "azure"
+	llm.Attributes["error.type"] = "AuthenticationError"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, middleware, modelStep, llm})
+
+	result := s.Trace("trace-genai-langgraph", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if result.GenAI.LLMCalls != 1 {
+		t.Fatalf("expected chat span to count as an LLM call, got %d", result.GenAI.LLMCalls)
+	}
+
+	nodeNames := make([]string, 0, len(result.GenAI.FlowNodes))
+	nodesByID := make(map[string]GenAIFlowNode)
+	for _, node := range result.GenAI.FlowNodes {
+		nodeNames = append(nodeNames, node.Name)
+		nodesByID[node.SpanID] = node
+	}
+	if strings.Join(nodeNames, "|") != "assistant_v3_turn|LangGraph|chat unknown_model" {
+		t.Fatalf("unexpected flow nodes: %v", nodeNames)
+	}
+	if _, ok := nodesByID["middleware"]; ok {
+		t.Fatalf("expected middleware step to roll up instead of becoming a flow node: %#v", nodesByID["middleware"])
+	}
+	if _, ok := nodesByID["model-step"]; ok {
+		t.Fatalf("expected model step wrapper to roll up instead of becoming a flow node: %#v", nodesByID["model-step"])
+	}
+
+	llmNode := nodesByID["llm"]
+	if llmNode.Kind != GenAISpanLLM {
+		t.Fatalf("expected chat span to be an LLM node, got %q", llmNode.Kind)
+	}
+	if llmNode.ParentFlowSpanID != "agent" {
+		t.Fatalf("expected chat span to attach to the LangGraph agent through skipped step spans, got %q", llmNode.ParentFlowSpanID)
+	}
+
+	edges := make([]string, 0, len(result.GenAI.FlowEdges))
+	for _, edge := range result.GenAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if strings.Join(edges, "|") != "workflow->agent|agent->llm" {
+		t.Fatalf("unexpected flow edges: %v", edges)
+	}
+}
+
 func TestTrace_GenAIEvaluationOnlySpanRollsUpWithoutFlowNode(t *testing.T) {
 	s := New()
 	now := time.Now()

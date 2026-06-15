@@ -877,21 +877,34 @@ func classifyGenAISpan(span Span) GenAISpanKind {
 	modelNames := getGenAIModelNames(span)
 	tokens := getGenAITokenUsage(span)
 	spanName := strings.ToLower(span.Name)
+	isToolOperation := strings.Contains(operation, "tool") || operation == "function" || strings.Contains(spanName, " tool")
+	isWorkflowOperation := strings.Contains(operation, "workflow")
+	isRetrievalOperation := operation == "retrieval" || operation == "retriever" || strings.Contains(operation, "retrieval") || strings.Contains(operation, "retriever")
+	isLLMOperation := operation == "llm" || strings.Contains(operation, "chat") || strings.Contains(operation, "completion") || strings.Contains(operation, "embedding") || strings.Contains(operation, "generate")
+	isAgentOperation := strings.Contains(operation, "agent")
 
 	switch {
-	case toolName != "" || strings.Contains(operation, "tool") || operation == "function" || strings.Contains(spanName, " tool"):
+	case toolName != "" || isToolOperation:
 		return GenAISpanTool
-	case strings.Contains(operation, "workflow"):
+	case isWorkflowOperation:
 		return GenAISpanWorkflow
-	case agentName != "" || strings.Contains(operation, "agent"):
-		return GenAISpanAgent
-	case operation == "retrieval" || operation == "retriever" || strings.Contains(operation, "retrieval") || strings.Contains(operation, "retriever"):
+	case isRetrievalOperation:
 		return GenAISpanRetrieval
-	case len(modelNames) > 0 || tokens.Total > 0 || operation == "llm" || strings.Contains(operation, "chat") || strings.Contains(operation, "completion") || strings.Contains(operation, "embedding") || strings.Contains(operation, "generate"):
+	case isLLMOperation:
+		return GenAISpanLLM
+	case isAgentOperation || (agentName != "" && !isGenAIStepSpan(span)):
+		return GenAISpanAgent
+	case isGenAIStepSpan(span):
+		return GenAISpanGeneric
+	case len(modelNames) > 0 || tokens.Total > 0:
 		return GenAISpanLLM
 	default:
 		return GenAISpanGeneric
 	}
+}
+
+func isGenAIStepSpan(span Span) bool {
+	return firstNonBlankString(span.Attributes["gen_ai.step.name"], span.Attributes["gen_ai.step.type"]) != ""
 }
 
 func getGenAIOperation(span Span) string {
