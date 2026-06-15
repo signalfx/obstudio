@@ -1078,6 +1078,7 @@ func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
 	llm.Attributes["gen_ai.agent.name"] = "LangGraph"
 	llm.Attributes["gen_ai.operation.name"] = "chat"
 	llm.Attributes["gen_ai.request.model"] = "unknown_model"
+	llm.Attributes["gen_ai.response.model"] = "gpt-5.5"
 	llm.Attributes["gen_ai.provider.name"] = "azure"
 	llm.Attributes["error.type"] = "AuthenticationError"
 
@@ -1097,7 +1098,7 @@ func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
 		nodeNames = append(nodeNames, node.Name)
 		nodesByID[node.SpanID] = node
 	}
-	if strings.Join(nodeNames, "|") != "assistant_v3_turn|LangGraph|chat unknown_model" {
+	if strings.Join(nodeNames, "|") != "assistant_v3_turn|LangGraph|chat gpt-5.5" {
 		t.Fatalf("unexpected flow nodes: %v", nodeNames)
 	}
 	if _, ok := nodesByID["middleware"]; ok {
@@ -1111,6 +1112,9 @@ func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
 	if llmNode.Kind != GenAISpanLLM {
 		t.Fatalf("expected chat span to be an LLM node, got %q", llmNode.Kind)
 	}
+	if strings.Join(llmNode.ModelNames, "|") != "gpt-5.5" {
+		t.Fatalf("expected real response model without placeholder request model, got %v", llmNode.ModelNames)
+	}
 	if llmNode.ParentFlowSpanID != "agent" {
 		t.Fatalf("expected chat span to attach to the LangGraph agent through skipped step spans, got %q", llmNode.ParentFlowSpanID)
 	}
@@ -1121,6 +1125,37 @@ func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
 	}
 	if strings.Join(edges, "|") != "workflow->agent|agent->llm" {
 		t.Fatalf("unexpected flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GenAIModelNamesPreferResponseThenRequest(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	llm := newTestSpan("trace-genai-model-preference", "llm", "chat", now, 100)
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.provider.name"] = "azure"
+	llm.Attributes["gen_ai.request.model"] = "assistant-prod-deployment"
+	llm.Attributes["gen_ai.response.model"] = "gpt-5.5"
+
+	s.AddSpansForConnection("conn-1", []Span{llm})
+
+	result := s.Trace("trace-genai-model-preference", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if strings.Join(result.GenAI.ModelNames, "|") != "gpt-5.5|assistant-prod-deployment" {
+		t.Fatalf("expected trace model names to prefer response then request, got %v", result.GenAI.ModelNames)
+	}
+	if len(result.GenAI.FlowNodes) != 1 {
+		t.Fatalf("expected one flow node, got %#v", result.GenAI.FlowNodes)
+	}
+	node := result.GenAI.FlowNodes[0]
+	if node.Name != "chat gpt-5.5" {
+		t.Fatalf("expected node title to use response model, got %q", node.Name)
+	}
+	if strings.Join(node.ModelNames, "|") != "gpt-5.5|assistant-prod-deployment" {
+		t.Fatalf("expected node model names to keep response then request, got %v", node.ModelNames)
 	}
 }
 
@@ -1262,6 +1297,7 @@ func TestTrace_GenAITokenUsagePreservesExplicitZeroValues(t *testing.T) {
 	llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
 	llm.Attributes["gen_ai.usage.input_tokens"] = 12
 	llm.Attributes["gen_ai.usage.output_tokens"] = 0
+	llm.Attributes["gen_ai.usage.total_tokens"] = 0
 	llm.Attributes["llm.token_count.completion"] = 888
 
 	s.AddSpansForConnection("conn-1", []Span{workflow, llm})
@@ -1270,13 +1306,13 @@ func TestTrace_GenAITokenUsagePreservesExplicitZeroValues(t *testing.T) {
 	if result == nil || result.GenAI == nil {
 		t.Fatal("expected GenAI projection")
 	}
-	if result.GenAI.Tokens != (GenAITokenUsage{Input: 12, Output: 0, Total: 12}) {
+	if result.GenAI.Tokens != (GenAITokenUsage{Input: 12, Output: 0, Total: 0}) {
 		t.Fatalf("unexpected token usage: %#v", result.GenAI.Tokens)
 	}
 
 	foundLLMNode := false
 	for _, node := range result.GenAI.FlowNodes {
-		if node.SpanID == "llm" && node.TokenUsage != (GenAITokenUsage{Input: 12, Output: 0, Total: 12}) {
+		if node.SpanID == "llm" && node.TokenUsage != (GenAITokenUsage{Input: 12, Output: 0, Total: 0}) {
 			t.Fatalf("unexpected llm token usage: %#v", node.TokenUsage)
 		}
 		if node.SpanID == "llm" {

@@ -91,15 +91,27 @@ var (
 		"llm.operation",
 		"openinference.span.kind",
 	}
-	genAIModelKeys = []string{
-		"gen_ai.request.model",
+	genAIResponseModelKeys = []string{
 		"gen_ai.response.model",
-		"llm.model_name",
+		"openai.response.model",
+	}
+	genAIRequestModelKeys = []string{
+		"gen_ai.request.model",
 		"llm.request.model",
 		"openai.request.model",
-		"openai.response.model",
+	}
+	genAIOtherModelKeys = []string{
+		"llm.model_name",
 		"ai.model.id",
 		"model",
+	}
+	genAIPlaceholderModelNames = map[string]struct{}{
+		"unknown":       {},
+		"unknown_model": {},
+		"n/a":           {},
+		"none":          {},
+		"null":          {},
+		"<nil>":         {},
 	}
 	genAIInputTokenKeys = []string{
 		"gen_ai.usage.input_tokens",
@@ -158,14 +170,10 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 	}
 
 	var tokens GenAITokenUsage
-	modelSet := make(map[string]struct{})
 	toolCalls := 0
 	llmCalls := 0
 	for _, span := range genAISpans {
 		tokens = addTokenUsage(tokens, getGenAITokenUsage(span))
-		for _, model := range getGenAIModelNames(span) {
-			modelSet[model] = struct{}{}
-		}
 		if isGenAIEvaluationOnlySpan(span) {
 			continue
 		}
@@ -176,22 +184,12 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 			llmCalls++
 		}
 	}
-	if tokens.Total == 0 {
-		tokens.Total = tokens.Input + tokens.Output
-	}
-
-	modelNames := make([]string, 0, len(modelSet))
-	for model := range modelSet {
-		modelNames = append(modelNames, model)
-	}
-	sort.Strings(modelNames)
-
 	return &GenAITraceSummary{
 		IsGenAI:    true,
 		Tokens:     tokens,
 		ToolCalls:  toolCalls,
 		LLMCalls:   llmCalls,
-		ModelNames: modelNames,
+		ModelNames: getGenAITraceModelNames(genAISpans),
 		FlowNodes:  nodes,
 		FlowEdges:  buildGenAIFlowEdges(nodes),
 	}
@@ -603,9 +601,9 @@ func newGroupedGenAIFlowNode(nodes []GenAIFlowNode, indexes []int) GenAIFlowNode
 		StatusCode:                        statusCode,
 		Grouped:                           true,
 		CallCount:                         callCount,
-		GroupedSpanIDs:                    groupedSpanIDs,
+		GroupedSpanIDs:                    cloneStrings(groupedSpanIDs),
 		ParentFlowSpanID:                  first.ParentFlowSpanID,
-		DescendantSpanIDs:                 groupedSpanIDs,
+		DescendantSpanIDs:                 cloneStrings(groupedSpanIDs),
 		DescendantTokenUsage:              tokenUsage,
 		DescendantSecurityRiskCount:       len(securityRiskSpanIDs),
 		DescendantSecurityRiskSpanIDs:     securityRiskSpanIDs,
@@ -620,11 +618,11 @@ func newGroupedGenAIFlowNode(nodes []GenAIFlowNode, indexes []int) GenAIFlowNode
 	switch first.Kind {
 	case GenAISpanLLM:
 		grouped.DescendantLLMCalls = callCount
-		grouped.DescendantLLMSpanIDs = groupedSpanIDs
+		grouped.DescendantLLMSpanIDs = cloneStrings(groupedSpanIDs)
 		grouped.DescendantToolSpanIDs = []string{}
 	case GenAISpanTool:
 		grouped.DescendantToolCalls = callCount
-		grouped.DescendantToolSpanIDs = groupedSpanIDs
+		grouped.DescendantToolSpanIDs = cloneStrings(groupedSpanIDs)
 		grouped.DescendantLLMSpanIDs = []string{}
 	default:
 		grouped.DescendantLLMSpanIDs = []string{}
@@ -913,17 +911,48 @@ func getGenAIOperation(span Span) string {
 
 func getGenAIModelNames(span Span) []string {
 	var models []string
-	for _, key := range genAIModelKeys {
-		models = append(models, splitAttributeValues(span.Attributes[key])...)
+	for _, keys := range [][]string{genAIResponseModelKeys, genAIRequestModelKeys, genAIOtherModelKeys} {
+		models = append(models, getGenAIModelNamesForKeys(span, keys)...)
 	}
 	return uniqueStrings(models)
+}
+
+func getGenAITraceModelNames(spans []Span) []string {
+	models := make([]string, 0)
+	for _, keys := range [][]string{genAIResponseModelKeys, genAIRequestModelKeys, genAIOtherModelKeys} {
+		for _, span := range spans {
+			models = append(models, getGenAIModelNamesForKeys(span, keys)...)
+		}
+	}
+	return uniqueStrings(models)
+}
+
+func getGenAIModelNamesForKeys(span Span, keys []string) []string {
+	models := make([]string, 0)
+	for _, key := range keys {
+		for _, model := range splitAttributeValues(span.Attributes[key]) {
+			if isKnownGenAIModelName(model) {
+				models = append(models, model)
+			}
+		}
+	}
+	return models
+}
+
+func isKnownGenAIModelName(model string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	if normalized == "" {
+		return false
+	}
+	_, unknown := genAIPlaceholderModelNames[normalized]
+	return !unknown
 }
 
 func getGenAITokenUsage(span Span) GenAITokenUsage {
 	input := firstNumericAttribute(span.Attributes, genAIInputTokenKeys)
 	output := firstNumericAttribute(span.Attributes, genAIOutputTokenKeys)
-	total := firstNumericAttribute(span.Attributes, genAITotalTokenKeys)
-	if total == 0 {
+	total, hasTotal := firstNumericAttributeValue(span.Attributes, genAITotalTokenKeys)
+	if !hasTotal {
 		total = input + output
 	}
 	return GenAITokenUsage{Input: input, Output: output, Total: total}
@@ -951,8 +980,9 @@ func getGenAIFlowNodeName(span Span, kind GenAISpanKind, operation string) strin
 			return source
 		}
 	case GenAISpanLLM:
-		if operation != "" && len(getGenAIModelNames(span)) > 0 {
-			return operation + " " + strings.Join(getGenAIModelNames(span), ", ")
+		modelNames := getGenAIModelNames(span)
+		if operation != "" && len(modelNames) > 0 {
+			return operation + " " + modelNames[0]
 		}
 		if operation != "" {
 			return operation
@@ -1220,6 +1250,11 @@ func splitAttributeValues(value any) []string {
 }
 
 func firstNumericAttribute(attrs map[string]any, keys []string) float64 {
+	value, _ := firstNumericAttributeValue(attrs, keys)
+	return value
+}
+
+func firstNumericAttributeValue(attrs map[string]any, keys []string) (float64, bool) {
 	for _, key := range keys {
 		raw, ok := attrs[key]
 		if !ok {
@@ -1227,10 +1262,10 @@ func firstNumericAttribute(attrs map[string]any, keys []string) float64 {
 		}
 		value, ok := numericAttributeValue(raw)
 		if ok && value >= 0 {
-			return value
+			return value, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 func toFloat64(value any) float64 {
@@ -1302,6 +1337,13 @@ func uniqueStrings(values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func cloneStrings(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), values...)
 }
 
 func maxGenAIFlowNodeSpanListSize() int {
