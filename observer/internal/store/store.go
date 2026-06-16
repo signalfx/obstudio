@@ -760,7 +760,7 @@ func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 		DurationMs:   computeTraceDuration(spans),
 		Status:       computeTraceStatus(spans),
 		Spans:        truncated,
-		GenAI:        buildGenAITraceSummary(truncated),
+		GenAI:        buildGenAITraceSummary(spans),
 	}
 }
 

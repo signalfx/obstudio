@@ -1248,6 +1248,68 @@ func TestTrace_GenAIEvaluationOnlySpanRollsUpWithoutFlowNode(t *testing.T) {
 	}
 }
 
+func TestTrace_GenAIProjectionUsesFullEventsWhenPayloadEventsAreTruncated(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-eval-events", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-eval-events", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Research Agent"
+
+	evaluation := newTestSpan("trace-genai-eval-events", "eval", "evaluate groundedness", now.Add(20*time.Millisecond), 300)
+	evaluation.ParentSpanID = "agent"
+	evaluation.Attributes["gen_ai.evaluation.name"] = "groundedness"
+	for i := 0; i < 20; i++ {
+		evaluation.Events = append(evaluation.Events, SpanEvent{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(time.Duration(25+i) * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "groundedness",
+				"gen_ai.evaluation.score.label": "fail",
+			},
+		})
+	}
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, evaluation})
+
+	result := s.Trace("trace-genai-eval-events", 1)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	var payloadEval Span
+	for _, span := range result.Spans {
+		if span.SpanID == "eval" {
+			payloadEval = span
+			break
+		}
+	}
+	if payloadEval.SpanID == "" {
+		t.Fatal("expected eval span in payload")
+	}
+	if got := len(payloadEval.Events); got != 1 {
+		t.Fatalf("expected payload events to stay truncated, got %d", got)
+	}
+
+	var agentNode GenAIFlowNode
+	for _, node := range result.GenAI.FlowNodes {
+		if node.SpanID == "agent" {
+			agentNode = node
+			break
+		}
+	}
+	if agentNode.SpanID == "" {
+		t.Fatal("expected agent node")
+	}
+	if agentNode.DescendantEvaluationCount != 20 || agentNode.DescendantEvaluationFailedCount != 20 {
+		t.Fatalf("expected GenAI rollup to use full event set, got count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+}
+
 func TestTrace_GenAIProjectionCapsSpanListsButNotCounts(t *testing.T) {
 	t.Setenv("MAX_FLOW_NODE_SPAN_LIST_SIZE", "1")
 
