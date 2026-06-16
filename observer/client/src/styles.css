@@ -1422,17 +1422,6 @@ code {
   color: var(--red);
 }
 
-.genai-flow__legend-call {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: 600;
-}
-
-.genai-flow__legend-call .genai-flow__node-icon {
-  margin-right: 0;
-}
-
 .genai-flow__header {
   display: inline-flex;
   align-items: center;

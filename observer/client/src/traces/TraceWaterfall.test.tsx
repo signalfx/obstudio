@@ -455,7 +455,6 @@ describe("TraceWaterfall GenAI overview", () => {
     expect(screen.getByText("LLM")).toBeTruthy();
     expect(screen.getByText("Tool")).toBeTruthy();
     expect(screen.getByText("Evaluated")).toBeTruthy();
-    expect(screen.getByText("Nested calls")).toBeTruthy();
     expect(screen.getByTestId("genai-agent-flow")).toBeTruthy();
     expect(screen.getByRole("button", { name: /triage-agent/i })).toBeTruthy();
     const riskSignal = container.querySelector(".genai-flow__signal--risk");

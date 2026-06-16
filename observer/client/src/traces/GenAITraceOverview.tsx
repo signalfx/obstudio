@@ -264,13 +264,6 @@ function GenAIFlowLegend(): React.ReactElement {
         </span>
         <span>Issue</span>
       </span>
-      <span className="genai-flow__legend-item">
-        <span className="genai-flow__legend-call">
-          <NodeKindIcon kind="llm" />
-          <span>2</span>
-        </span>
-        <span>Nested calls</span>
-      </span>
     </div>
   );
 }
