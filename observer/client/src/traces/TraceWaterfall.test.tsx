@@ -449,6 +449,13 @@ describe("TraceWaterfall GenAI overview", () => {
     expect(screen.getByLabelText("Center flow")).toBeTruthy();
     expect(screen.getByLabelText("Zoom out")).toBeTruthy();
     expect(screen.getByLabelText("Zoom in")).toBeTruthy();
+    expect(screen.getByLabelText("GenAI flow legend")).toBeTruthy();
+    expect(screen.getByText("Workflow")).toBeTruthy();
+    expect(screen.getByText("Agent")).toBeTruthy();
+    expect(screen.getByText("LLM")).toBeTruthy();
+    expect(screen.getByText("Tool")).toBeTruthy();
+    expect(screen.getByText("Evaluated")).toBeTruthy();
+    expect(screen.getByText("Nested calls")).toBeTruthy();
     expect(screen.getByTestId("genai-agent-flow")).toBeTruthy();
     expect(screen.getByRole("button", { name: /triage-agent/i })).toBeTruthy();
     const riskSignal = container.querySelector(".genai-flow__signal--risk");

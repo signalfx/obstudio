@@ -1375,6 +1375,63 @@ code {
   gap: 12px;
 }
 
+.genai-flow__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--text-dim);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.genai-flow__legend-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.genai-flow__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.genai-flow__legend-divider {
+  width: 1px;
+  height: 14px;
+  flex: 0 0 auto;
+  background: var(--border);
+}
+
+.genai-flow__legend-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.genai-flow__legend-signal svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.genai-flow__legend-signal--ok {
+  color: var(--green);
+}
+
+.genai-flow__legend-signal--issue {
+  color: var(--red);
+}
+
+.genai-flow__legend-chip {
+  color: var(--blue);
+  font-weight: 600;
+}
+
 .genai-flow__header {
   display: inline-flex;
   align-items: center;
@@ -3792,6 +3849,28 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trace-row__operation-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.trace-row__genai-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(171, 116, 241, 0.18);
+  color: #c9a7ff;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .trace-row__service {

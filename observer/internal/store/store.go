@@ -170,6 +170,7 @@ type TraceSummary struct {
 	SpanCount    int           `json:"spanCount"`
 	DurationMs   float64       `json:"durationMs"`
 	Status       string        `json:"status"`
+	IsGenAI      bool          `json:"isGenAI,omitempty"`
 	Spans        []SpanPreview `json:"spans,omitempty"`
 }
 
@@ -705,6 +706,7 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 			SpanCount:    len(spans),
 			DurationMs:   dur,
 			Status:       computeTraceStatus(spans),
+			IsGenAI:      traceHasGenAISignal(spans),
 			Spans:        makeSpanPreviews(spans, filter.SpanPreviewCap),
 		}
 		if !matchesTraceSummaryFilter(summary, filter) {
@@ -1249,6 +1251,7 @@ func (s *Store) QueryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 			SpanCount:    len(spans),
 			DurationMs:   dur,
 			Status:       st,
+			IsGenAI:      traceHasGenAISignal(spans),
 			Spans:        previews,
 		})
 	}
@@ -1266,6 +1269,15 @@ func (s *Store) QueryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 		results = results[:limit]
 	}
 	return results
+}
+
+func traceHasGenAISignal(spans []Span) bool {
+	for _, span := range spans {
+		if isGenAISpan(span) {
+			return true
+		}
+	}
+	return false
 }
 
 // QueryMetricsFiltered is used by MCP tools that need filtering.

@@ -335,7 +335,14 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                     ref={virtualizer.measureElement}
                   >
                     <span className="data-table__td data-table__td--operation">
-                      <span className="trace-row__operation explorer-row__primary">{t.rootSpanName}</span>
+                      <span className="trace-row__operation-wrap">
+                        {t.isGenAI ? (
+                          <span className="trace-row__genai-badge" aria-label="GenAI trace" title="GenAI trace">
+                            GenAI
+                          </span>
+                        ) : null}
+                        <span className="trace-row__operation explorer-row__primary">{t.rootSpanName}</span>
+                      </span>
                     </span>
                     <span className="data-table__td data-table__td--trace-id">
                       <span className="trace-row__trace-id explorer-row__secondary">{t.traceId}</span>

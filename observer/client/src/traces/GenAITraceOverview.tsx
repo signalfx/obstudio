@@ -132,17 +132,20 @@ export function GenAITraceOverview({
           </button>
 
           {!collapsed ? (
-            <div className="genai-flow__controls" aria-label="Agent flow controls">
-              <IconButton label="Center flow" onClick={resetFlowView}>
-                <CenterIcon />
-              </IconButton>
-              <IconButton label="Zoom out" onClick={() => setZoom((value) => Math.max(0.7, roundZoom(value - 0.1)))}>
-                <ZoomOutIcon />
-              </IconButton>
-              <IconButton label="Zoom in" onClick={() => setZoom((value) => Math.min(1.4, roundZoom(value + 0.1)))}>
-                <ZoomInIcon />
-              </IconButton>
-            </div>
+            <>
+              <GenAIFlowLegend />
+              <div className="genai-flow__controls" aria-label="Agent flow controls">
+                <IconButton label="Center flow" onClick={resetFlowView}>
+                  <CenterIcon />
+                </IconButton>
+                <IconButton label="Zoom out" onClick={() => setZoom((value) => Math.max(0.7, roundZoom(value - 0.1)))}>
+                  <ZoomOutIcon />
+                </IconButton>
+                <IconButton label="Zoom in" onClick={() => setZoom((value) => Math.min(1.4, roundZoom(value + 0.1)))}>
+                  <ZoomInIcon />
+                </IconButton>
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -226,6 +229,46 @@ function SummaryValue({ label, value }: { label: string; value: string }): React
     <div className="genai-summary__item">
       <span className="genai-summary__label">{label}:</span>
       <span className="genai-summary__value">{value}</span>
+    </div>
+  );
+}
+
+function GenAIFlowLegend(): React.ReactElement {
+  const kindItems: Array<{ kind: GenAIFlowNode["kind"]; label: string }> = [
+    { kind: "workflow", label: "Workflow" },
+    { kind: "agent", label: "Agent" },
+    { kind: "llm", label: "LLM" },
+    { kind: "tool", label: "Tool" },
+    { kind: "retrieval", label: "Retrieval" },
+    { kind: "loop", label: "Loop" },
+  ];
+
+  return (
+    <div className="genai-flow__legend" aria-label="GenAI flow legend">
+      <span className="genai-flow__legend-label">Legend</span>
+      {kindItems.map((item) => (
+        <span className="genai-flow__legend-item" key={item.kind}>
+          <NodeKindIcon kind={item.kind} />
+          <span>{item.label}</span>
+        </span>
+      ))}
+      <span className="genai-flow__legend-divider" aria-hidden="true" />
+      <span className="genai-flow__legend-item">
+        <span className="genai-flow__legend-signal genai-flow__legend-signal--ok">
+          <CheckIcon />
+        </span>
+        <span>Evaluated</span>
+      </span>
+      <span className="genai-flow__legend-item">
+        <span className="genai-flow__legend-signal genai-flow__legend-signal--issue">
+          <IssueIcon />
+        </span>
+        <span>Issue</span>
+      </span>
+      <span className="genai-flow__legend-item">
+        <span className="genai-flow__legend-chip">LLM n</span>
+        <span>Nested calls</span>
+      </span>
     </div>
   );
 }

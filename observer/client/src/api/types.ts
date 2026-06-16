@@ -114,6 +114,7 @@ export interface TraceSummary {
   spanCount: number;
   durationMs?: number;
   status: string;
+  isGenAI?: boolean;
   spans?: SpanPreview[];
 }
 

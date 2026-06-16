@@ -806,6 +806,35 @@ func TestTrace_NonGenAITraceOmitsGenAIProjection(t *testing.T) {
 	}
 }
 
+func TestQueryTraceSummariesFiltered_MarksGenAITraces(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	plain := newTestSpan("trace-plain", "plain-root", "GET /health", now, 10)
+
+	genai := newTestSpan("trace-genai", "workflow", "assistant_v3_turn", now.Add(100*time.Millisecond), 20)
+	genai.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	genai.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+
+	s.AddSpansForConnection("conn-1", []Span{plain, genai})
+
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: 10})
+	if len(results) != 2 {
+		t.Fatalf("expected 2 traces, got %d", len(results))
+	}
+
+	byTraceID := make(map[string]TraceSummary)
+	for _, result := range results {
+		byTraceID[result.TraceID] = result
+	}
+	if byTraceID["trace-genai"].IsGenAI != true {
+		t.Fatalf("expected GenAI trace summary to be marked")
+	}
+	if byTraceID["trace-plain"].IsGenAI {
+		t.Fatalf("expected non-GenAI trace summary to stay unmarked")
+	}
+}
+
 func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
 	s := New()
 	now := time.Now()

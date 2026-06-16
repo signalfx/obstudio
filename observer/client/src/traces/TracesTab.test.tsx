@@ -47,6 +47,25 @@ describe("TracesTab", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("differentiates GenAI traces in the trace list", () => {
+    render(
+      <TracesTab
+        traces={[
+          { traceId: "trace-genai", rootSpanName: "POST /v2/assistant/sessions", serviceName: "assistant", spanCount: 4, durationMs: 120, status: "ok", isGenAI: true },
+          { traceId: "trace-http", rootSpanName: "GET /health", serviceName: "api", spanCount: 1, durationMs: 3, status: "ok" },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+        validationFindings={[]}
+        validationIndex={{ trace: new Map(), span: new Map(), metric: new Map(), log: new Map() }}
+      />,
+    );
+
+    expect(screen.getByLabelText("GenAI trace")).toBeTruthy();
+    expect(screen.getByText("POST /v2/assistant/sessions")).toBeTruthy();
+    expect(screen.getByText("GET /health")).toBeTruthy();
+  });
+
   it("refreshes filtered traces from REST when live telemetry changes", async () => {
     const fetchMock = vi
       .fn()
