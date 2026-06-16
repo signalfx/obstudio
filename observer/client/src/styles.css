@@ -1719,16 +1719,16 @@ code {
 .genai-flow__signal[data-tooltip]::before,
 .genai-flow__signal[data-tooltip]::after {
   position: absolute;
-  left: 50%;
   z-index: 40;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 4px);
+  transform: translateY(4px);
   transition: none;
 }
 
 .genai-flow__signal[data-tooltip]::before {
   bottom: calc(100% + 5px);
+  left: 4px;
   border: 5px solid transparent;
   border-top-color: #202a38;
   content: "";
@@ -1736,6 +1736,7 @@ code {
 
 .genai-flow__signal[data-tooltip]::after {
   bottom: calc(100% + 14px);
+  left: 0;
   max-width: 220px;
   min-width: max-content;
   border: 1px solid var(--border);
@@ -1757,7 +1758,7 @@ code {
 .genai-flow__signal[data-tooltip]:focus-visible::before,
 .genai-flow__signal[data-tooltip]:focus-visible::after {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
 }
 
 .genai-flow__signal svg {

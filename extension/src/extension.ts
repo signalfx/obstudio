@@ -386,7 +386,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
 		dispose: () => {
-			void shutdownObserverForExtensionUnload('Extension disposed');
+			disposeObserverForExtensionUnload('Extension disposed');
 		},
 	});
 }
@@ -703,6 +703,19 @@ async function shutdownObserverForExtensionUnload(reason: string): Promise<void>
 	} catch (error) {
 		logObserverLifecycle(`${reason}; observer shutdown failed: ${getErrorMessage(error)}`);
 	}
+}
+
+function disposeObserverForExtensionUnload(reason: string): void {
+	logObserverLifecycle(`${reason}; terminating observer process.`);
+	const proc = observerProcess;
+	stopObserverRun(observerLifecycleState);
+	observerProcess = undefined;
+	observerStartupPromise = undefined;
+	observerStopPromise = undefined;
+	observerBaseUrl = undefined;
+	observerUsesSharedServer = false;
+	syncObserverUi();
+	terminateObserverProcess(proc, 'SIGTERM');
 }
 
 function syncObserverUi(): void {

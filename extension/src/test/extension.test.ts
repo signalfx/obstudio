@@ -168,8 +168,9 @@ test('extension unload paths clean up observer state', () => {
 	assert.match(source, /await\s+shutdownObserverForExtensionUnload\('Extension deactivated'\)/);
 	assert.match(source, /async\s+function\s+shutdownObserverForExtensionUnload\(reason:\s*string\):\s*Promise<void>/);
 	assert.match(source, /await\s+stopObserver\(\)/);
-	assert.match(source, /void\s+shutdownObserverForExtensionUnload\('Extension disposed'\)/);
-	assert.doesNotMatch(source, /function\s+disposeObserverForExtensionUnload\(reason:\s*string\):\s*void/);
+	assert.match(source, /dispose:\s*\(\)\s*=>\s*\{[\s\S]*?disposeObserverForExtensionUnload\('Extension disposed'\)/);
+	assert.match(source, /function\s+disposeObserverForExtensionUnload\(reason:\s*string\):\s*void/);
+	assert.match(source, /stopObserverRun\(observerLifecycleState\)/);
 	assert.match(source, /terminateObserverProcess\(proc,\s*'SIGTERM'\)/);
 	assert.doesNotMatch(source, /export\s+function\s+deactivate\(\)\s*\{[\s\S]*?terminateObserverProcess\(observerProcess,\s*'SIGTERM'\)/);
 });

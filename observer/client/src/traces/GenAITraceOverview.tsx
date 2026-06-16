@@ -885,9 +885,11 @@ function NodeKindIcon({ kind }: { kind: GenAIFlowNode["kind"] }): React.ReactEle
     case "retrieval":
       return (
         <svg className="genai-flow__node-icon genai-flow__node-icon--retrieval" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M3 4c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2Z" />
-          <path d="M3 4v4c0 1.1 2.2 2 5 2s5-.9 5-2V4" />
-          <path d="M3 8v4c0 1.1 2.2 2 5 2s5-.9 5-2V8" />
+          <path d="M2.8 4c0-1.1 2-2 4.5-2s4.5.9 4.5 2-2 2-4.5 2-4.5-.9-4.5-2Z" />
+          <path d="M2.8 4v4c0 1 1.6 1.8 3.8 2" />
+          <path d="M11.8 4v2.8" />
+          <path d="M9 10.8a2.2 2.2 0 1 0 4.4 0 2.2 2.2 0 0 0-4.4 0Z" />
+          <path d="M12.8 12.4 14.2 13.8" />
         </svg>
       );
     case "loop":
