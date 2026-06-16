@@ -70,9 +70,17 @@ export function ResizablePanel({
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const lastMeasuredWidthRef = useRef<number | null>(null);
+  const hasUserResizedRef = useRef(false);
+  const previousDefaultWidthRef = useRef(defaultWidth);
 
   useEffect(() => {
-    setPanelWidth(defaultWidth);
+    if (Object.is(previousDefaultWidthRef.current, defaultWidth)) {
+      return;
+    }
+    previousDefaultWidthRef.current = defaultWidth;
+    if (!hasUserResizedRef.current) {
+      setPanelWidth(defaultWidth);
+    }
   }, [defaultWidth]);
 
   useEffect(() => {
@@ -113,6 +121,7 @@ export function ResizablePanel({
       }
       const deltaX = event.clientX - dragStateRef.current.startX;
       const nextWidth = Math.min(maxWidth, Math.max(minWidth, dragStateRef.current.startWidth - deltaX));
+      hasUserResizedRef.current = true;
       setPanelWidth(nextWidth);
     };
 

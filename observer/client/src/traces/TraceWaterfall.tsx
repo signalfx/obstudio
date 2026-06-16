@@ -61,7 +61,7 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
     return true;
   });
   const filteredSpanIds = genAISpanFilter ? new Set(genAISpanFilter.spanIds) : null;
-  const flat = filteredSpanIds ? allFlat.filter((s) => filteredSpanIds.has(s.spanId)) : collapsedFlat;
+  const flat = filteredSpanIds ? collapsedFlat.filter((s) => filteredSpanIds.has(s.spanId)) : collapsedFlat;
   const selectedSpanVisible = selectedSpanId ? flat.some((s) => s.spanId === selectedSpanId) : false;
 
   const applyGenAISpanFilter = (type: GenAISpanFilterType, spanIds: string[]) => {

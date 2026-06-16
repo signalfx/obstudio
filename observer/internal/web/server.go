@@ -38,7 +38,7 @@ func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			// Asset names are stable, so keep webviews from pinning stale JS/CSS
 			// across extension upgrades.
-			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Cache-Control", "max-age=0, must-revalidate")
 			fileServer.ServeHTTP(w, r)
 			return
 		}

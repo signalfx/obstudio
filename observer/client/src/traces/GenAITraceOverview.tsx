@@ -82,7 +82,7 @@ export function GenAITraceOverview({
     const observer = new ResizeObserver(updateWidth);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [collapsed]);
+  }, []);
 
   useEffect(() => {
     setZoom(1);

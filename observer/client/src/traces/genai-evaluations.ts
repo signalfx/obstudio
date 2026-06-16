@@ -20,10 +20,6 @@ export function getSpanEvaluations(span: Span): GenAIEvaluation[] {
     }
   }
 
-  if (evaluations.length > 0) {
-    return dedupeEvaluations(evaluations);
-  }
-
   evaluations.push(...getEvaluationsFromAttributes(span.attributes ?? {}));
   return dedupeEvaluations(evaluations);
 }

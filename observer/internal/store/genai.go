@@ -201,16 +201,22 @@ func buildGenAIFlowNodes(spans []Span, descendantCap int) []GenAIFlowNode {
 	}
 
 	byID := make(map[string]Span, len(spans))
-	childrenByParent := make(map[string][]Span)
 	for _, span := range spans {
 		byID[span.SpanID] = span
 	}
+
+	childrenByParent := make(map[string][]Span)
+	roots := make([]Span, 0)
 	for _, span := range spans {
-		if span.ParentSpanID != "" {
-			if _, ok := byID[span.ParentSpanID]; ok {
-				childrenByParent[span.ParentSpanID] = append(childrenByParent[span.ParentSpanID], span)
-			}
+		if span.ParentSpanID == "" {
+			roots = append(roots, span)
+			continue
 		}
+		if _, ok := byID[span.ParentSpanID]; ok {
+			childrenByParent[span.ParentSpanID] = append(childrenByParent[span.ParentSpanID], span)
+			continue
+		}
+		roots = append(roots, span)
 	}
 	for parentID := range childrenByParent {
 		sort.SliceStable(childrenByParent[parentID], func(i, j int) bool {
@@ -218,16 +224,6 @@ func buildGenAIFlowNodes(spans []Span, descendantCap int) []GenAIFlowNode {
 		})
 	}
 
-	roots := make([]Span, 0)
-	for _, span := range spans {
-		if span.ParentSpanID == "" {
-			roots = append(roots, span)
-			continue
-		}
-		if _, ok := byID[span.ParentSpanID]; !ok {
-			roots = append(roots, span)
-		}
-	}
 	sort.SliceStable(roots, func(i, j int) bool {
 		return roots[i].StartTime.Before(roots[j].StartTime)
 	})

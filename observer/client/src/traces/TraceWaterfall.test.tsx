@@ -705,6 +705,83 @@ describe("TraceWaterfall GenAI overview", () => {
     expect(container.querySelectorAll(".waterfall__row")).toHaveLength(4);
   });
 
+  it("keeps GenAI-filtered waterfall rows aligned with collapsed parents", () => {
+    setObservedCanvasWidth(900);
+    const spans = [
+      makeSpan({
+        spanId: "workflow",
+        name: "Budget Guru",
+        attributes: {
+          "gen_ai.operation.name": "invoke_workflow",
+          "gen_ai.workflow.name": "Budget Guru",
+        },
+      }),
+      makeSpan({
+        spanId: "agent",
+        parentSpanId: "workflow",
+        name: "LangGraph",
+        attributes: {
+          "gen_ai.operation.name": "invoke_agent",
+          "gen_ai.agent.name": "LangGraph",
+        },
+      }),
+      makeSpan({
+        spanId: "llm",
+        parentSpanId: "agent",
+        name: "chat gpt-5.5",
+        attributes: {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": "gpt-5.5",
+        },
+      }),
+    ];
+    const baseSummary = makeGenAISummary(spans);
+    const workflowNode = baseSummary.flowNodes.find((node) => node.spanId === "workflow");
+    const agentNode = baseSummary.flowNodes.find((node) => node.spanId === "agent");
+    const llmTemplate = baseSummary.flowNodes.find((node) => node.spanId === "llm");
+    if (!workflowNode || !agentNode || !llmTemplate) {
+      throw new Error("missing fixture flow nodes");
+    }
+    const loopNode: GenAIFlowNode = {
+      ...llmTemplate,
+      nodeId: "group:agent:loop:agent_llm",
+      spanId: "group:agent:loop:agent_llm",
+      name: "agent + chat loop x1",
+      kind: "loop",
+      operation: "loop",
+      grouped: true,
+      callCount: 1,
+      groupedSpanIds: ["agent", "llm"],
+      descendantSpanIds: ["agent", "llm"],
+      descendantLlmCalls: 1,
+      descendantLlmSpanIds: ["llm"],
+    };
+
+    const { container } = render(
+      <TraceWaterfall
+        spans={spans}
+        genAI={{
+          ...baseSummary,
+          flowNodes: [workflowNode, loopNode],
+          flowEdges: [{ source: "workflow", target: loopNode.spanId }],
+        }}
+        selectedSpanId={null}
+        onSelectSpan={vi.fn()}
+        traceDurationMs={2500}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /loop agent \+ chat loop x1/i }));
+    expect(screen.getByText("2 / 3 spans")).toBeTruthy();
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(2);
+
+    const collapseButton = container.querySelector<HTMLElement>(".waterfall__toggle");
+    fireEvent.click(collapseButton as HTMLElement);
+
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(1);
+  });
+
   it("renders branching GenAI agent flows vertically on narrow panels", () => {
     setObservedCanvasWidth(480);
     const spans = makeBranchingFixtureSpans();

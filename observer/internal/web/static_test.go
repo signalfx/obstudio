@@ -46,7 +46,7 @@ func TestStaticAssetsAreRevalidated(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected asset response status 200, got %d", recorder.Code)
 	}
-	if cache := recorder.Header().Get("Cache-Control"); cache != "no-cache" {
-		t.Fatalf("expected Cache-Control no-cache, got %q", cache)
+	if cache := recorder.Header().Get("Cache-Control"); cache != "max-age=0, must-revalidate" {
+		t.Fatalf("expected Cache-Control max-age=0, must-revalidate, got %q", cache)
 	}
 }
