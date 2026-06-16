@@ -1388,11 +1388,6 @@ code {
   white-space: nowrap;
 }
 
-.genai-flow__legend-label {
-  color: var(--text);
-  font-weight: 600;
-}
-
 .genai-flow__legend-item {
   display: inline-flex;
   align-items: center;
@@ -1427,9 +1422,15 @@ code {
   color: var(--red);
 }
 
-.genai-flow__legend-chip {
-  color: var(--blue);
+.genai-flow__legend-call {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-weight: 600;
+}
+
+.genai-flow__legend-call .genai-flow__node-icon {
+  margin-right: 0;
 }
 
 .genai-flow__header {
@@ -1775,6 +1776,10 @@ code {
   height: 12px;
   margin-right: 0;
   fill: currentColor;
+}
+
+.genai-flow__signal .genai-flow__node-icon {
+  margin-right: 0;
 }
 
 .genai-flow__signal-button {

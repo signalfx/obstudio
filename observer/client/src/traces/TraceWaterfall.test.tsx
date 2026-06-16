@@ -449,7 +449,7 @@ describe("TraceWaterfall GenAI overview", () => {
     expect(screen.getByLabelText("Center flow")).toBeTruthy();
     expect(screen.getByLabelText("Zoom out")).toBeTruthy();
     expect(screen.getByLabelText("Zoom in")).toBeTruthy();
-    expect(screen.getByLabelText("GenAI flow legend")).toBeTruthy();
+    expect(screen.getByLabelText("GenAI flow guide")).toBeTruthy();
     expect(screen.getByText("Workflow")).toBeTruthy();
     expect(screen.getByText("Agent")).toBeTruthy();
     expect(screen.getByText("LLM")).toBeTruthy();

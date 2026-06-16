@@ -244,8 +244,7 @@ function GenAIFlowLegend(): React.ReactElement {
   ];
 
   return (
-    <div className="genai-flow__legend" aria-label="GenAI flow legend">
-      <span className="genai-flow__legend-label">Legend</span>
+    <div className="genai-flow__legend" aria-label="GenAI flow guide">
       {kindItems.map((item) => (
         <span className="genai-flow__legend-item" key={item.kind}>
           <NodeKindIcon kind={item.kind} />
@@ -266,7 +265,10 @@ function GenAIFlowLegend(): React.ReactElement {
         <span>Issue</span>
       </span>
       <span className="genai-flow__legend-item">
-        <span className="genai-flow__legend-chip">LLM n</span>
+        <span className="genai-flow__legend-call">
+          <NodeKindIcon kind="llm" />
+          <span>2</span>
+        </span>
         <span>Nested calls</span>
       </span>
     </div>
@@ -418,7 +420,7 @@ function GenAIFlowCard({
               onClick={(event) => applySpanFilterFromSignal(event, "llm", node.descendantLlmSpanIds)}
               onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "llm", node.descendantLlmSpanIds)}
             >
-              <span>LLM</span>
+              <NodeKindIcon kind="llm" />
               <span>{formatCount(node.descendantLlmCalls)}</span>
             </span>
           ) : null}
@@ -432,7 +434,7 @@ function GenAIFlowCard({
               onClick={(event) => applySpanFilterFromSignal(event, "tool", node.descendantToolSpanIds)}
               onKeyDown={(event) => handleSpanFilterSignalKeyDown(event, "tool", node.descendantToolSpanIds)}
             >
-              <span>Tool</span>
+              <NodeKindIcon kind="tool" />
               <span>{formatCount(node.descendantToolCalls)}</span>
             </span>
           ) : null}
