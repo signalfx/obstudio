@@ -264,6 +264,10 @@ Use the following structure:
 | GenAI Model Config | N | Critical | Readiness/mismatch failure |
 | GenAI Workflow Fanout | N | Major | LLM/tool call fanout |
 | GenAI Retrieval | N | Major | Retrieval error/latency/staleness |
+| GenAI Memory Context | N | Major | Memory/context latency, error, freshness, or permission failure |
+| GenAI Evaluation Quality | N | Major | Evaluation score, violation, error, no-data, or freshness |
+| GenAI Content Governance | N | Critical | Unsafe capture, redaction, truncation, or policy failure |
+| GenAI Cost | N | Major | Cost spike, budget/quota pressure, or billing freshness |
 | **Total**  | **N** | | |
 
 ## Latency Detectors
@@ -358,6 +362,10 @@ After generating all files (Terraform + report), present a summary:
 | GenAI Model Config | N |
 | GenAI Workflow Fanout | N |
 | GenAI Retrieval | N |
+| GenAI Memory Context | N |
+| GenAI Evaluation Quality | N |
+| GenAI Content Governance | N |
+| GenAI Cost | N |
 
 **Output:** `.observe/terraform/`
 

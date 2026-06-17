@@ -902,6 +902,25 @@ def test_splunk_configure_generates_genai_readiness_categories():
         assert not missing
 
 
+def test_splunk_configure_summary_lists_all_genai_display_categories():
+    skill = _read(SPLUNK_CONFIGURE)
+    required_display_terms = [
+        "GenAI Latency",
+        "GenAI Token Pressure",
+        "GenAI Provider",
+        "GenAI Tool",
+        "GenAI Model Config",
+        "GenAI Workflow Fanout",
+        "GenAI Retrieval",
+        "GenAI Memory Context",
+        "GenAI Evaluation Quality",
+        "GenAI Content Governance",
+        "GenAI Cost",
+    ]
+    for term in required_display_terms:
+        assert skill.count(term) >= 2
+
+
 def test_splunk_configure_consumes_all_genai_readiness_rows():
     skill = _read(SPLUNK_CONFIGURE)
     required_terms = [
