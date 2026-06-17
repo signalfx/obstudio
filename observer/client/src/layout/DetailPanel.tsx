@@ -49,7 +49,7 @@ export function DetailPanel({
 interface ResizablePanelProps {
   children: ReactNode;
   className?: string;
-  defaultWidth?: number;
+  defaultWidth?: number | string;
   minWidth?: number;
   maxWidth?: number;
   resizeLabel?: string;
@@ -65,9 +65,45 @@ export function ResizablePanel({
   resizeLabel = "Resize panel",
   widthVarName = "--panel-width",
 }: ResizablePanelProps): React.ReactElement {
-  const [panelWidth, setPanelWidth] = useState(defaultWidth);
+  const [panelWidth, setPanelWidth] = useState<number | string>(defaultWidth);
   const [isResizing, setIsResizing] = useState(false);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const lastMeasuredWidthRef = useRef<number | null>(null);
+  const hasUserResizedRef = useRef(false);
+  const previousDefaultWidthRef = useRef(defaultWidth);
+
+  useEffect(() => {
+    if (Object.is(previousDefaultWidthRef.current, defaultWidth)) {
+      return;
+    }
+    previousDefaultWidthRef.current = defaultWidth;
+    if (!hasUserResizedRef.current) {
+      setPanelWidth(defaultWidth);
+    }
+  }, [defaultWidth]);
+
+  useEffect(() => {
+    const element = panelRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const updateMeasuredWidth = () => {
+      const width = element.getBoundingClientRect().width;
+      if (width > 0) {
+        lastMeasuredWidthRef.current = width;
+      }
+    };
+
+    updateMeasuredWidth();
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new ResizeObserver(updateMeasuredWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!isResizing) {
@@ -85,6 +121,7 @@ export function ResizablePanel({
       }
       const deltaX = event.clientX - dragStateRef.current.startX;
       const nextWidth = Math.min(maxWidth, Math.max(minWidth, dragStateRef.current.startWidth - deltaX));
+      hasUserResizedRef.current = true;
       setPanelWidth(nextWidth);
     };
 
@@ -106,15 +143,21 @@ export function ResizablePanel({
 
   return (
     <div
+      ref={panelRef}
       className={`resizable-panel ${isResizing ? "is-resizing" : ""} ${className}`.trim()}
-      style={{ [widthVarName]: `${panelWidth}px` } as React.CSSProperties}
+      style={{ [widthVarName]: typeof panelWidth === "number" ? `${panelWidth}px` : panelWidth } as React.CSSProperties}
     >
       <button
         type="button"
         className="resizable-panel__handle"
         aria-label={resizeLabel}
         onMouseDown={(event) => {
-          dragStateRef.current = { startX: event.clientX, startWidth: panelWidth };
+          const measuredWidth = panelRef.current?.getBoundingClientRect().width;
+          const fallbackWidth = typeof panelWidth === "number" ? panelWidth : lastMeasuredWidthRef.current ?? maxWidth;
+          dragStateRef.current = {
+            startX: event.clientX,
+            startWidth: measuredWidth && measuredWidth > 0 ? measuredWidth : fallbackWidth,
+          };
           setIsResizing(true);
           event.preventDefault();
         }}

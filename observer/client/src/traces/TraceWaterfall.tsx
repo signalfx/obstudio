@@ -1,17 +1,20 @@
 import React, { useState, useMemo } from "react";
-import type { Span } from "../api/types";
+import type { GenAITraceSummary, Span } from "../api/types";
 import { buildWaterfallTree, flattenTree, type WaterfallSpan } from "./waterfall-layout";
 import { ValidationBadge } from "../components/ValidationBadge";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
+import { GenAITraceOverview, type GenAISpanFilterType } from "./GenAITraceOverview";
+import { formatEvaluationName, getSpanEvaluations } from "./genai-evaluations";
 
 interface TraceWaterfallProps {
   spans: Span[];
   selectedSpanId: string | null;
-  onSelectSpan: (spanId: string) => void;
+  onSelectSpan: (spanId: string | null) => void;
   traceDurationMs: number;
   validationIndex: ValidationIndex;
+  genAI?: GenAITraceSummary | null;
 }
 
 // Consistent service colors — same service always gets same color
@@ -29,13 +32,25 @@ function getServiceColorMap(spans: Span[]): Map<string, string> {
 }
 
 /** Renders a collapsible span waterfall with timing bars and service colors. */
-export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurationMs, validationIndex }: TraceWaterfallProps): React.ReactElement {
+export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurationMs, validationIndex, genAI }: TraceWaterfallProps): React.ReactElement {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [genAISpanFilter, setGenAISpanFilter] = useState<{ type: GenAISpanFilterType; spanIds: string[] } | null>(null);
 
   const serviceColors = useMemo(() => getServiceColorMap(spans), [spans]);
+  const evaluationsBySpanId = useMemo(() => {
+    const result = new Map<string, ReturnType<typeof getSpanEvaluations>>();
+    for (const span of spans) {
+      const evaluations = getSpanEvaluations(span);
+      if (evaluations.length > 0) {
+        result.set(span.spanId, evaluations);
+      }
+    }
+    return result;
+  }, [spans]);
 
   const roots = buildWaterfallTree(spans);
-  const flat = flattenTree(roots).filter((s) => {
+  const allFlat = flattenTree(roots);
+  const collapsedFlat = allFlat.filter((s) => {
     let parent = spans.find((p) => p.spanId === s.parentSpanId);
     while (parent) {
       if (collapsed.has(parent.spanId)) return false;
@@ -43,6 +58,19 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
     }
     return true;
   });
+  const filteredSpanIds = genAISpanFilter ? new Set(genAISpanFilter.spanIds) : null;
+  const flat = filteredSpanIds ? collapsedFlat.filter((s) => filteredSpanIds.has(s.spanId)) : collapsedFlat;
+  const selectedSpanVisible = selectedSpanId ? flat.some((s) => s.spanId === selectedSpanId) : false;
+
+  const applyGenAISpanFilter = (type: GenAISpanFilterType, spanIds: string[]) => {
+    setGenAISpanFilter({ type, spanIds });
+    setCollapsed(new Set());
+    onSelectSpan(null);
+  };
+
+  const clearGenAISpanFilter = () => {
+    setGenAISpanFilter(null);
+  };
 
   const toggleCollapse = (e: React.MouseEvent, spanId: string) => {
     e.stopPropagation();
@@ -62,12 +90,28 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
 
   return (
     <div className="waterfall">
+      <GenAITraceOverview
+        summary={genAI ?? null}
+        selectedSpanId={selectedSpanId}
+        onSelectSpan={onSelectSpan}
+        onApplySpanFilter={applyGenAISpanFilter}
+        validationIndex={validationIndex}
+      />
+
       {/* Waterfall header with trace metadata */}
       <div className="waterfall__header">
         <div className="waterfall__header-left">
-          <span className="waterfall__span-count">{spans.length} spans</span>
+          <span className="waterfall__span-count">
+            {genAISpanFilter ? `${flat.length} / ${spans.length} spans` : `${spans.length} spans`}
+          </span>
           {errorCount > 0 ? (
             <span className="trace-status trace-status--error">{errorCount} error{errorCount > 1 ? "s" : ""}</span>
+          ) : null}
+          {genAISpanFilter ? (
+            <button className="waterfall__filter-chip" type="button" onClick={clearGenAISpanFilter}>
+              {formatGenAISpanFilterLabel(genAISpanFilter.type)}: {flat.length}
+              <span aria-hidden="true">×</span>
+            </button>
           ) : null}
         </div>
         <div className="waterfall__header-right">
@@ -92,11 +136,13 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           const svcColor = serviceColors.get(s.resource?.serviceName ?? "unknown") ?? TELEMETRY_SERIES_COLORS[0];
           const childCount = countDescendants(s);
           const validation = lookupSpanValidation(validationIndex, s.traceId, s.spanId);
+          const evaluations = evaluationsBySpanId.get(s.spanId) ?? [];
+          const failedEvaluations = evaluations.filter((evaluation) => !evaluation.passed);
 
           return (
             <div
               key={s.spanId}
-              className={`waterfall__row ${s.spanId === selectedSpanId ? "waterfall__row--selected" : ""}`}
+              className={`waterfall__row ${s.spanId === selectedSpanId && selectedSpanVisible ? "waterfall__row--selected" : ""}`}
               onClick={() => onSelectSpan(s.spanId)}
             >
               <div className="waterfall__row-service" style={{ paddingLeft: `${8 + s.depth * 16}px` }}>
@@ -113,6 +159,15 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
                 <span className="waterfall__service-dot" style={{ background: svcColor }} />
                 <span className="waterfall__service-name">{s.resource?.serviceName ?? ""}</span>
                 <span className="waterfall__span-name">{s.name}</span>
+                {failedEvaluations.length > 0 ? (
+                  <span className="waterfall__ai-chip waterfall__ai-chip--issue" data-tooltip={formatEvaluationTooltip(failedEvaluations)}>
+                    <span className="waterfall__ai-chip-label">{formatWaterfallEvaluationChipLabel(failedEvaluations)}</span>
+                  </span>
+                ) : evaluations.length > 0 ? (
+                  <span className="waterfall__ai-chip waterfall__ai-chip--ok" data-tooltip="No quality issues">
+                    <span className="waterfall__ai-chip-label">Quality</span>
+                  </span>
+                ) : null}
                 <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
               </div>
               <div className="waterfall__row-timeline">
@@ -142,12 +197,41 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
   );
 }
 
+function formatWaterfallEvaluationChipLabel(evaluations: ReturnType<typeof getSpanEvaluations>): string {
+  const firstName = evaluations[0]?.name ? formatEvaluationName(evaluations[0].name) : "Quality";
+  return evaluations.length > 1 ? `${firstName}...(+${evaluations.length - 1})` : firstName;
+}
+
+function formatEvaluationTooltip(evaluations: ReturnType<typeof getSpanEvaluations>): string {
+  if (evaluations.length === 1) {
+    return `${formatEvaluationName(evaluations[0].name)} quality issue`;
+  }
+  return `${evaluations.length} quality issues: ${evaluations.map((evaluation) => formatEvaluationName(evaluation.name)).join(", ")}`;
+}
+
 function countDescendants(span: WaterfallSpan): number {
   let count = span.children.length;
   for (const child of span.children) {
     count += countDescendants(child);
   }
   return count;
+}
+
+function formatGenAISpanFilterLabel(type: GenAISpanFilterType): string {
+  switch (type) {
+    case "security":
+      return "Security risk spans";
+    case "privacy":
+      return "Privacy risk spans";
+    case "llm":
+      return "LLM call spans";
+    case "tool":
+      return "Tool call spans";
+    case "loop":
+      return "Loop spans";
+    case "quality":
+      return "Quality issue spans";
+  }
 }
 
 function hexToRgba(hex: string, alpha: number): string {

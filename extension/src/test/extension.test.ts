@@ -160,6 +160,21 @@ test('observer webview panel uses the bundled observer icon', () => {
 	assert.match(source, /observer-icon\.png/);
 });
 
+test('extension unload paths clean up observer state', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(source, /export\s+async\s+function\s+deactivate\(\):\s*Promise<void>\s*\{/);
+	assert.match(source, /await\s+shutdownObserverForExtensionUnload\('Extension deactivated'\)/);
+	assert.match(source, /async\s+function\s+shutdownObserverForExtensionUnload\(reason:\s*string\):\s*Promise<void>/);
+	assert.match(source, /await\s+stopObserver\(\)/);
+	assert.match(source, /dispose:\s*\(\)\s*=>\s*\{[\s\S]*?disposeObserverForExtensionUnload\('Extension disposed'\)/);
+	assert.match(source, /function\s+disposeObserverForExtensionUnload\(reason:\s*string\):\s*void/);
+	assert.match(source, /stopObserverRun\(observerLifecycleState\)/);
+	assert.match(source, /terminateObserverProcess\(proc,\s*'SIGTERM'\)/);
+	assert.doesNotMatch(source, /export\s+function\s+deactivate\(\)\s*\{[\s\S]*?terminateObserverProcess\(observerProcess,\s*'SIGTERM'\)/);
+});
+
 test('resolveBackend throws when the observer binary is missing', () => {
 	withTempExtensionRoot((extensionRoot) => {
 		assert.throws(() => resolveBackend(extensionRoot), /observer binary not found/);

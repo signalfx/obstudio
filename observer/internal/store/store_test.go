@@ -790,6 +790,965 @@ func TestTrace_DefaultEventLimit(t *testing.T) {
 	// Default eventLimit is 12
 }
 
+func TestTrace_NonGenAITraceOmitsGenAIProjection(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	span := newTestSpan("trace-1", "span-1", "GET /health", now, 10)
+	s.AddSpansForConnection("conn-1", []Span{span})
+
+	result := s.Trace("trace-1", 0)
+	if result == nil {
+		t.Fatal("expected trace to be found")
+	}
+	if result.GenAI != nil {
+		t.Fatalf("expected no GenAI projection for non-GenAI trace, got %#v", result.GenAI)
+	}
+}
+
+func TestQueryTraceSummariesFiltered_MarksGenAITraces(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	plain := newTestSpan("trace-plain", "plain-root", "GET /health", now, 10)
+
+	genai := newTestSpan("trace-genai", "workflow", "assistant_v3_turn", now.Add(100*time.Millisecond), 20)
+	genai.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	genai.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+
+	s.AddSpansForConnection("conn-1", []Span{plain, genai})
+
+	results := s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: 10})
+	if len(results) != 2 {
+		t.Fatalf("expected 2 traces, got %d", len(results))
+	}
+
+	byTraceID := make(map[string]TraceSummary)
+	for _, result := range results {
+		byTraceID[result.TraceID] = result
+	}
+	if byTraceID["trace-genai"].IsGenAI != true {
+		t.Fatalf("expected GenAI trace summary to be marked")
+	}
+	if byTraceID["trace-plain"].IsGenAI {
+		t.Fatalf("expected non-GenAI trace summary to stay unmarked")
+	}
+}
+
+func TestTrace_IncludesBackendGenAIProjection(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	httpSpan := newTestSpan("trace-genai", "http", "POST /assistant", now.Add(10*time.Millisecond), 2900)
+	httpSpan.ParentSpanID = "workflow"
+
+	agent := newTestSpan("trace-genai", "agent", "invoke_agent", now.Add(20*time.Millisecond), 2500)
+	agent.ParentSpanID = "http"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Triage Agent"
+
+	llm := newTestSpan("trace-genai", "llm", "chat", now.Add(30*time.Millisecond), 1200)
+	llm.ParentSpanID = "agent"
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	llm.Attributes["gen_ai.usage.input_tokens"] = "120"
+	llm.Attributes["gen_ai.usage.output_tokens"] = 30
+	llm.Attributes["ai.usage.input_tokens"] = 999
+	llm.Attributes["llm.token_count.completion"] = 888
+	llm.Attributes["gen_ai.security.prompt_injection.detected"] = true
+	llm.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(35 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "faithfulness",
+				"gen_ai.evaluation.score.label": "fail",
+				"assistant.evaluation.outcome":  "failed",
+			},
+		},
+	}
+
+	tool := newTestSpan("trace-genai", "tool", "execute_tool", now.Add(40*time.Millisecond), 200)
+	tool.ParentSpanID = "agent"
+	tool.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool.Attributes["gen_ai.tool.name"] = "lookup_context"
+	tool.Attributes["gen_ai.privacy.pii.detected"] = true
+	tool.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(45 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":   "toxicity",
+				"gen_ai.evaluation.passed": true,
+			},
+		},
+	}
+
+	summarizer := newTestSpan("trace-genai", "summarizer", "invoke_agent", now.Add(60*time.Millisecond), 700)
+	summarizer.ParentSpanID = "workflow"
+	summarizer.Links = []SpanLink{{TraceID: "trace-genai", SpanID: "tool"}}
+	summarizer.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	summarizer.Attributes["gen_ai.agent.name"] = "Summarizer Agent"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, httpSpan, agent, llm, tool, summarizer})
+
+	result := s.Trace("trace-genai", 0)
+	if result == nil {
+		t.Fatal("expected trace to be found")
+	}
+	if result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	genAI := result.GenAI
+	if !genAI.IsGenAI {
+		t.Fatal("expected GenAI projection to be marked GenAI")
+	}
+	if genAI.Tokens != (GenAITokenUsage{Input: 120, Output: 30, Total: 150}) {
+		t.Fatalf("unexpected token rollup: %#v", genAI.Tokens)
+	}
+	if genAI.LLMCalls != 1 || genAI.ToolCalls != 1 {
+		t.Fatalf("expected 1 llm and 1 tool call, got llm=%d tool=%d", genAI.LLMCalls, genAI.ToolCalls)
+	}
+	if got := strings.Join(genAI.ModelNames, ","); got != "gpt-5.5" {
+		t.Fatalf("unexpected model names: %s", got)
+	}
+
+	nodeNames := make([]string, 0, len(genAI.FlowNodes))
+	nodesByID := make(map[string]GenAIFlowNode)
+	for _, node := range genAI.FlowNodes {
+		nodeNames = append(nodeNames, node.Name)
+		nodesByID[node.SpanID] = node
+	}
+	if strings.Join(nodeNames, "|") != "Budget Guru|Triage Agent|chat gpt-5.5|lookup_context|Summarizer Agent" {
+		t.Fatalf("unexpected flow nodes: %v", nodeNames)
+	}
+
+	workflowNode := nodesByID["workflow"]
+	if strings.Join(workflowNode.DescendantSpanIDs, ",") != "http,agent,llm,tool,summarizer" {
+		t.Fatalf("unexpected workflow descendants: %v", workflowNode.DescendantSpanIDs)
+	}
+	if workflowNode.DescendantLLMCalls != 1 || workflowNode.DescendantToolCalls != 1 {
+		t.Fatalf("expected workflow to roll up child LLM/tool spans, got llm=%d tool=%d", workflowNode.DescendantLLMCalls, workflowNode.DescendantToolCalls)
+	}
+	if strings.Join(workflowNode.DescendantLLMSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected workflow llm span ids: %v", workflowNode.DescendantLLMSpanIDs)
+	}
+	if strings.Join(workflowNode.DescendantToolSpanIDs, ",") != "tool" {
+		t.Fatalf("unexpected workflow tool span ids: %v", workflowNode.DescendantToolSpanIDs)
+	}
+	if strings.Join(workflowNode.DescendantSecurityRiskSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected workflow security risk span ids: %v", workflowNode.DescendantSecurityRiskSpanIDs)
+	}
+	if strings.Join(workflowNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
+		t.Fatalf("unexpected workflow privacy risk span ids: %v", workflowNode.DescendantPrivacyRiskSpanIDs)
+	}
+	if workflowNode.DescendantEvaluationCount != 2 || workflowNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected workflow evaluation rollup: count=%d failed=%d", workflowNode.DescendantEvaluationCount, workflowNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(workflowNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected workflow failed evaluation span ids: %v", workflowNode.DescendantEvaluationFailedSpanIDs)
+	}
+
+	agentNode := nodesByID["agent"]
+	if agentNode.ParentFlowSpanID != "workflow" {
+		t.Fatalf("expected agent to attach to workflow through non-GenAI http span, got %q", agentNode.ParentFlowSpanID)
+	}
+	if strings.Join(agentNode.DescendantSpanIDs, ",") != "llm,tool" {
+		t.Fatalf("unexpected agent descendants: %v", agentNode.DescendantSpanIDs)
+	}
+	if agentNode.DescendantLLMCalls != 1 || agentNode.DescendantToolCalls != 1 {
+		t.Fatalf("unexpected descendant call rollups: llm=%d tool=%d", agentNode.DescendantLLMCalls, agentNode.DescendantToolCalls)
+	}
+	if strings.Join(agentNode.DescendantLLMSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected llm span ids: %v", agentNode.DescendantLLMSpanIDs)
+	}
+	if strings.Join(agentNode.DescendantToolSpanIDs, ",") != "tool" {
+		t.Fatalf("unexpected tool span ids: %v", agentNode.DescendantToolSpanIDs)
+	}
+	if strings.Join(agentNode.DescendantSecurityRiskSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected security risk span ids: %v", agentNode.DescendantSecurityRiskSpanIDs)
+	}
+	if strings.Join(agentNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
+		t.Fatalf("unexpected privacy risk span ids: %v", agentNode.DescendantPrivacyRiskSpanIDs)
+	}
+	if agentNode.DescendantEvaluationCount != 2 || agentNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected agent evaluation rollup: count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(agentNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected agent failed evaluation span ids: %v", agentNode.DescendantEvaluationFailedSpanIDs)
+	}
+
+	llmNode := nodesByID["llm"]
+	if llmNode.ParentFlowSpanID != "agent" {
+		t.Fatalf("expected llm to attach to agent, got %q", llmNode.ParentFlowSpanID)
+	}
+	if llmNode.TokenUsage != (GenAITokenUsage{Input: 120, Output: 30, Total: 150}) {
+		t.Fatalf("unexpected llm token usage: %#v", llmNode.TokenUsage)
+	}
+	if strings.Join(llmNode.DescendantSecurityRiskSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected llm security risk span ids: %v", llmNode.DescendantSecurityRiskSpanIDs)
+	}
+	if llmNode.DescendantEvaluationCount != 1 || llmNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected llm evaluation rollup: count=%d failed=%d", llmNode.DescendantEvaluationCount, llmNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(llmNode.DescendantEvaluationFailedSpanIDs, ",") != "llm" {
+		t.Fatalf("unexpected llm failed evaluation span ids: %v", llmNode.DescendantEvaluationFailedSpanIDs)
+	}
+
+	toolNode := nodesByID["tool"]
+	if toolNode.ParentFlowSpanID != "agent" {
+		t.Fatalf("expected tool to attach to agent, got %q", toolNode.ParentFlowSpanID)
+	}
+	if strings.Join(toolNode.DescendantPrivacyRiskSpanIDs, ",") != "tool" {
+		t.Fatalf("unexpected tool privacy risk span ids: %v", toolNode.DescendantPrivacyRiskSpanIDs)
+	}
+	if toolNode.DescendantEvaluationCount != 1 || toolNode.DescendantEvaluationFailedCount != 0 || len(toolNode.DescendantEvaluationFailedSpanIDs) != 0 {
+		t.Fatalf("unexpected tool evaluation rollup: count=%d failed=%d ids=%v", toolNode.DescendantEvaluationCount, toolNode.DescendantEvaluationFailedCount, toolNode.DescendantEvaluationFailedSpanIDs)
+	}
+
+	edges := make([]string, 0, len(genAI.FlowEdges))
+	for _, edge := range genAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if strings.Join(edges, "|") != "workflow->agent|agent->llm|agent->tool|tool->summarizer" {
+		t.Fatalf("unexpected flow edges: %v", edges)
+	}
+}
+
+func TestTrace_IncludesRetrievalFlowNode(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-retrieval", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-retrieval", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Research Agent"
+
+	retrieval := newTestSpan("trace-genai-retrieval", "retrieval", "retrieval vector_store", now.Add(20*time.Millisecond), 300)
+	retrieval.ParentSpanID = "agent"
+	retrieval.Attributes["gen_ai.operation.name"] = "retrieval"
+	retrieval.Attributes["gen_ai.retrieval.source"] = "vector_store"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, retrieval})
+
+	result := s.Trace("trace-genai-retrieval", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	var retrievalNode GenAIFlowNode
+	for _, node := range result.GenAI.FlowNodes {
+		if node.SpanID == "retrieval" {
+			retrievalNode = node
+			break
+		}
+	}
+	if retrievalNode.SpanID == "" {
+		t.Fatalf("expected retrieval flow node, got %#v", result.GenAI.FlowNodes)
+	}
+	if retrievalNode.Kind != GenAISpanRetrieval {
+		t.Fatalf("expected retrieval kind, got %q", retrievalNode.Kind)
+	}
+	if retrievalNode.Name != "retrieval vector_store" {
+		t.Fatalf("unexpected retrieval node name: %q", retrievalNode.Name)
+	}
+
+	edges := make([]string, 0, len(result.GenAI.FlowEdges))
+	for _, edge := range result.GenAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if strings.Join(edges, "|") != "workflow->agent|agent->retrieval" {
+		t.Fatalf("unexpected retrieval flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GenAILangGraphStepsRollUpAndChatStaysLLM(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-langgraph", "workflow", "invoke_workflow_assistant_v3_turn", now, 1000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+	workflow.Attributes["gen_ai.request.model"] = "gpt-5.5"
+
+	agent := newTestSpan("trace-genai-langgraph", "agent", "invoke_agent LangGraph", now.Add(10*time.Millisecond), 900)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	middleware := newTestSpan("trace-genai-langgraph", "middleware", "step SkillsMiddleware.before_agent", now.Add(20*time.Millisecond), 20)
+	middleware.ParentSpanID = "agent"
+	middleware.Attributes["gen_ai.agent.name"] = "LangGraph"
+	middleware.Attributes["gen_ai.step.name"] = "SkillsMiddleware.before_agent"
+	middleware.Attributes["gen_ai.step.type"] = "chain"
+
+	modelStep := newTestSpan("trace-genai-langgraph", "model-step", "step model", now.Add(40*time.Millisecond), 600)
+	modelStep.ParentSpanID = "agent"
+	modelStep.Attributes["gen_ai.agent.name"] = "LangGraph"
+	modelStep.Attributes["gen_ai.step.name"] = "model"
+	modelStep.Attributes["gen_ai.step.type"] = "chain"
+	modelStep.Attributes["gen_ai.step.status"] = "failed"
+	modelStep.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	modelStep.Attributes["gen_ai.usage.input_tokens"] = 100
+	modelStep.Attributes["gen_ai.usage.output_tokens"] = 5
+
+	llm := newTestSpan("trace-genai-langgraph", "llm", "chat unknown_model", now.Add(50*time.Millisecond), 500)
+	llm.ParentSpanID = "model-step"
+	llm.Status = SpanStatus{Code: "ERROR", Message: "authentication failed"}
+	llm.Attributes["gen_ai.agent.name"] = "LangGraph"
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.request.model"] = "unknown_model"
+	llm.Attributes["gen_ai.response.model"] = "gpt-5.5"
+	llm.Attributes["gen_ai.provider.name"] = "azure"
+	llm.Attributes["error.type"] = "AuthenticationError"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, middleware, modelStep, llm})
+
+	result := s.Trace("trace-genai-langgraph", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if result.GenAI.LLMCalls != 1 {
+		t.Fatalf("expected chat span to count as an LLM call, got %d", result.GenAI.LLMCalls)
+	}
+
+	nodeNames := make([]string, 0, len(result.GenAI.FlowNodes))
+	nodesByID := make(map[string]GenAIFlowNode)
+	for _, node := range result.GenAI.FlowNodes {
+		nodeNames = append(nodeNames, node.Name)
+		nodesByID[node.SpanID] = node
+	}
+	if strings.Join(nodeNames, "|") != "assistant_v3_turn|LangGraph|chat gpt-5.5" {
+		t.Fatalf("unexpected flow nodes: %v", nodeNames)
+	}
+	if _, ok := nodesByID["middleware"]; ok {
+		t.Fatalf("expected middleware step to roll up instead of becoming a flow node: %#v", nodesByID["middleware"])
+	}
+	if _, ok := nodesByID["model-step"]; ok {
+		t.Fatalf("expected model step wrapper to roll up instead of becoming a flow node: %#v", nodesByID["model-step"])
+	}
+
+	llmNode := nodesByID["llm"]
+	if llmNode.Kind != GenAISpanLLM {
+		t.Fatalf("expected chat span to be an LLM node, got %q", llmNode.Kind)
+	}
+	if strings.Join(llmNode.ModelNames, "|") != "gpt-5.5" {
+		t.Fatalf("expected real response model without placeholder request model, got %v", llmNode.ModelNames)
+	}
+	if llmNode.ParentFlowSpanID != "agent" {
+		t.Fatalf("expected chat span to attach to the LangGraph agent through skipped step spans, got %q", llmNode.ParentFlowSpanID)
+	}
+
+	edges := make([]string, 0, len(result.GenAI.FlowEdges))
+	for _, edge := range result.GenAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if strings.Join(edges, "|") != "workflow->agent|agent->llm" {
+		t.Fatalf("unexpected flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GenAIModelNamesPreferResponseThenRequest(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	llm := newTestSpan("trace-genai-model-preference", "llm", "chat", now, 100)
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.provider.name"] = "azure"
+	llm.Attributes["gen_ai.request.model"] = "assistant-prod-deployment"
+	llm.Attributes["gen_ai.response.model"] = "gpt-5.5"
+
+	s.AddSpansForConnection("conn-1", []Span{llm})
+
+	result := s.Trace("trace-genai-model-preference", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if strings.Join(result.GenAI.ModelNames, "|") != "gpt-5.5|assistant-prod-deployment" {
+		t.Fatalf("expected trace model names to prefer response then request, got %v", result.GenAI.ModelNames)
+	}
+	if len(result.GenAI.FlowNodes) != 1 {
+		t.Fatalf("expected one flow node, got %#v", result.GenAI.FlowNodes)
+	}
+	node := result.GenAI.FlowNodes[0]
+	if node.Name != "chat gpt-5.5" {
+		t.Fatalf("expected node title to use response model, got %q", node.Name)
+	}
+	if strings.Join(node.ModelNames, "|") != "gpt-5.5|assistant-prod-deployment" {
+		t.Fatalf("expected node model names to keep response then request, got %v", node.ModelNames)
+	}
+}
+
+func TestTrace_GenAIEvaluationOnlySpanRollsUpWithoutFlowNode(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-eval", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-eval", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Research Agent"
+
+	evaluation := newTestSpan("trace-genai-eval", "eval", "evaluate groundedness", now.Add(20*time.Millisecond), 300)
+	evaluation.ParentSpanID = "agent"
+	evaluation.Attributes["gen_ai.evaluation.name"] = "groundedness"
+	evaluation.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	evaluation.Attributes["gen_ai.workflow.name"] = "assistant_v3_turn"
+	evaluation.Attributes["assistant.evaluation.outcome"] = "failed"
+	evaluation.Events = []SpanEvent{
+		{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(25 * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "groundedness",
+				"gen_ai.evaluation.score.label": "fail",
+				"assistant.evaluation.outcome":  "failed",
+			},
+		},
+	}
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, evaluation})
+
+	result := s.Trace("trace-genai-eval", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if result.GenAI.LLMCalls != 0 {
+		t.Fatalf("expected eval-only span not to count as LLM call, got %d", result.GenAI.LLMCalls)
+	}
+
+	nodeNames := make([]string, 0, len(result.GenAI.FlowNodes))
+	nodesByID := make(map[string]GenAIFlowNode)
+	for _, node := range result.GenAI.FlowNodes {
+		nodeNames = append(nodeNames, node.Name)
+		nodesByID[node.SpanID] = node
+	}
+	if strings.Join(nodeNames, "|") != "Budget Guru|Research Agent" {
+		t.Fatalf("unexpected flow nodes: %v", nodeNames)
+	}
+
+	agentNode := nodesByID["agent"]
+	if agentNode.DescendantEvaluationCount != 1 || agentNode.DescendantEvaluationFailedCount != 1 {
+		t.Fatalf("unexpected agent evaluation rollup: count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+	if strings.Join(agentNode.DescendantEvaluationFailedSpanIDs, ",") != "eval" {
+		t.Fatalf("unexpected failed evaluation span ids: %v", agentNode.DescendantEvaluationFailedSpanIDs)
+	}
+}
+
+func TestTrace_GenAIProjectionUsesFullEventsWhenPayloadEventsAreTruncated(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-eval-events", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-eval-events", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Research Agent"
+
+	evaluation := newTestSpan("trace-genai-eval-events", "eval", "evaluate groundedness", now.Add(20*time.Millisecond), 300)
+	evaluation.ParentSpanID = "agent"
+	evaluation.Attributes["gen_ai.evaluation.name"] = "groundedness"
+	for i := 0; i < 20; i++ {
+		evaluation.Events = append(evaluation.Events, SpanEvent{
+			Name:      "gen_ai.evaluation.result",
+			Timestamp: now.Add(time.Duration(25+i) * time.Millisecond),
+			Attributes: map[string]any{
+				"gen_ai.evaluation.name":        "groundedness",
+				"gen_ai.evaluation.score.label": "fail",
+			},
+		})
+	}
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, evaluation})
+
+	result := s.Trace("trace-genai-eval-events", 1)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	var payloadEval Span
+	for _, span := range result.Spans {
+		if span.SpanID == "eval" {
+			payloadEval = span
+			break
+		}
+	}
+	if payloadEval.SpanID == "" {
+		t.Fatal("expected eval span in payload")
+	}
+	if got := len(payloadEval.Events); got != 1 {
+		t.Fatalf("expected payload events to stay truncated, got %d", got)
+	}
+
+	var agentNode GenAIFlowNode
+	for _, node := range result.GenAI.FlowNodes {
+		if node.SpanID == "agent" {
+			agentNode = node
+			break
+		}
+	}
+	if agentNode.SpanID == "" {
+		t.Fatal("expected agent node")
+	}
+	if agentNode.DescendantEvaluationCount != 20 || agentNode.DescendantEvaluationFailedCount != 20 {
+		t.Fatalf("expected GenAI rollup to use full event set, got count=%d failed=%d", agentNode.DescendantEvaluationCount, agentNode.DescendantEvaluationFailedCount)
+	}
+}
+
+func TestTrace_GenAIProjectionCapsSpanListsButNotCounts(t *testing.T) {
+	t.Setenv("MAX_FLOW_NODE_SPAN_LIST_SIZE", "1")
+
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-cap", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-cap", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "Triage Agent"
+
+	spans := []Span{workflow, agent}
+	for i := 0; i < 3; i++ {
+		llm := newTestSpan("trace-genai-cap", fmt.Sprintf("llm-%d", i), "chat", now.Add(time.Duration(20+i)*time.Millisecond), 100)
+		llm.ParentSpanID = "agent"
+		llm.Attributes["gen_ai.operation.name"] = "chat"
+		llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
+		llm.Attributes["gen_ai.usage.input_tokens"] = 10
+		llm.Attributes["gen_ai.usage.output_tokens"] = 1
+		llm.Attributes["gen_ai.security.prompt_injection.detected"] = true
+		spans = append(spans, llm)
+	}
+
+	s.AddSpansForConnection("conn-1", spans)
+
+	result := s.Trace("trace-genai-cap", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	var agentNode GenAIFlowNode
+	for _, node := range result.GenAI.FlowNodes {
+		if node.SpanID == "agent" {
+			agentNode = node
+			break
+		}
+	}
+	if agentNode.SpanID == "" {
+		t.Fatal("expected agent node")
+	}
+	if got := len(agentNode.DescendantSpanIDs); got != 1 {
+		t.Fatalf("expected capped descendant span ID list, got %d ids: %v", got, agentNode.DescendantSpanIDs)
+	}
+	if got := len(agentNode.DescendantLLMSpanIDs); got != 1 {
+		t.Fatalf("expected capped LLM span ID list, got %d ids: %v", got, agentNode.DescendantLLMSpanIDs)
+	}
+	if got := len(agentNode.DescendantSecurityRiskSpanIDs); got != 1 {
+		t.Fatalf("expected capped risk span ID list, got %d ids: %v", got, agentNode.DescendantSecurityRiskSpanIDs)
+	}
+	if agentNode.DescendantLLMCalls != 3 {
+		t.Fatalf("expected uncapped LLM call count, got %d", agentNode.DescendantLLMCalls)
+	}
+	if agentNode.DescendantSecurityRiskCount != 3 || agentNode.DescendantRiskCount != 3 {
+		t.Fatalf("expected uncapped risk counts, got security=%d total=%d", agentNode.DescendantSecurityRiskCount, agentNode.DescendantRiskCount)
+	}
+	if agentNode.DescendantTokenUsage != (GenAITokenUsage{Input: 30, Output: 3, Total: 33}) {
+		t.Fatalf("expected uncapped token usage, got %#v", agentNode.DescendantTokenUsage)
+	}
+}
+
+func TestTrace_GenAITokenUsagePreservesExplicitZeroValues(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-zero", "workflow", "invoke_workflow", now, 1000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	llm := newTestSpan("trace-genai-zero", "llm", "chat", now.Add(10*time.Millisecond), 500)
+	llm.ParentSpanID = "workflow"
+	llm.Attributes["gen_ai.operation.name"] = "chat"
+	llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	llm.Attributes["gen_ai.usage.input_tokens"] = 12
+	llm.Attributes["gen_ai.usage.output_tokens"] = 0
+	llm.Attributes["gen_ai.usage.total_tokens"] = 0
+	llm.Attributes["llm.token_count.completion"] = 888
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, llm})
+
+	result := s.Trace("trace-genai-zero", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+	if result.GenAI.Tokens != (GenAITokenUsage{Input: 12, Output: 0, Total: 0}) {
+		t.Fatalf("unexpected token usage: %#v", result.GenAI.Tokens)
+	}
+
+	foundLLMNode := false
+	for _, node := range result.GenAI.FlowNodes {
+		if node.SpanID == "llm" && node.TokenUsage != (GenAITokenUsage{Input: 12, Output: 0, Total: 0}) {
+			t.Fatalf("unexpected llm token usage: %#v", node.TokenUsage)
+		}
+		if node.SpanID == "llm" {
+			foundLLMNode = true
+		}
+	}
+	if !foundLLMNode {
+		t.Fatal("expected llm flow node")
+	}
+}
+
+func TestTrace_GroupsRepeatedLeafLLMNodes(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-loop", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-loop", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	spans := []Span{workflow, agent}
+	for i := 0; i < genAIFlowGroupThreshold+1; i++ {
+		spanID := fmt.Sprintf("llm-%d", i)
+		llm := newTestSpan("trace-genai-loop", spanID, "chat", now.Add(time.Duration(20+i)*time.Millisecond), float64(100+i))
+		llm.ParentSpanID = "agent"
+		llm.Attributes["gen_ai.operation.name"] = "chat"
+		llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
+		llm.Attributes["gen_ai.usage.input_tokens"] = 10
+		llm.Attributes["gen_ai.usage.output_tokens"] = 1
+		if i == 0 {
+			llm.Attributes["gen_ai.security.prompt_injection.detected"] = true
+		}
+		spans = append(spans, llm)
+	}
+
+	s.AddSpansForConnection("conn-1", spans)
+
+	result := s.Trace("trace-genai-loop", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	genAI := result.GenAI
+	if genAI.LLMCalls != genAIFlowGroupThreshold+1 {
+		t.Fatalf("unexpected llm calls: %d", genAI.LLMCalls)
+	}
+	if len(genAI.FlowNodes) != 3 {
+		t.Fatalf("expected workflow, agent, grouped llm nodes; got %d nodes: %#v", len(genAI.FlowNodes), genAI.FlowNodes)
+	}
+
+	groupNode := GenAIFlowNode{}
+	for _, node := range genAI.FlowNodes {
+		if node.Kind == GenAISpanLLM {
+			groupNode = node
+			break
+		}
+	}
+	if !groupNode.Grouped {
+		t.Fatalf("expected llm node to be grouped: %#v", groupNode)
+	}
+	if groupNode.CallCount != genAIFlowGroupThreshold+1 {
+		t.Fatalf("unexpected grouped call count: %d", groupNode.CallCount)
+	}
+	if groupNode.Name != "chat gpt-5.5 x9" {
+		t.Fatalf("unexpected grouped node name: %q", groupNode.Name)
+	}
+	if strings.Join(groupNode.GroupedSpanIDs, ",") != "llm-0,llm-1,llm-2,llm-3,llm-4,llm-5,llm-6,llm-7,llm-8" {
+		t.Fatalf("unexpected grouped span ids: %v", groupNode.GroupedSpanIDs)
+	}
+	if groupNode.TokenUsage != (GenAITokenUsage{Input: 90, Output: 9, Total: 99}) {
+		t.Fatalf("unexpected grouped token usage: %#v", groupNode.TokenUsage)
+	}
+	if groupNode.DurationMs != 108 || groupNode.MaxDurationMs != 108 || groupNode.AvgDurationMs != 104 {
+		t.Fatalf("unexpected grouped durations: duration=%v max=%v avg=%v", groupNode.DurationMs, groupNode.MaxDurationMs, groupNode.AvgDurationMs)
+	}
+	if strings.Join(groupNode.DescendantSecurityRiskSpanIDs, ",") != "llm-0" {
+		t.Fatalf("unexpected grouped risk span ids: %v", groupNode.DescendantSecurityRiskSpanIDs)
+	}
+
+	edges := make([]string, 0, len(genAI.FlowEdges))
+	for _, edge := range genAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if len(edges) != 2 || edges[0] != "workflow->agent" || !strings.HasPrefix(edges[1], "agent->group:agent:llm:chat:chat_gpt-5.5") {
+		t.Fatalf("unexpected grouped flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GroupsRepeatedLeafNodesUsesUniqueIDsForDifferentModels(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-model-groups", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-model-groups", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	spans := []Span{workflow, agent}
+	models := []string{"gpt-5.5", "claude-4"}
+	for modelIndex, model := range models {
+		for i := 0; i < genAIFlowGroupThreshold+1; i++ {
+			spanID := fmt.Sprintf("llm-%d-%d", modelIndex, i)
+			llm := newTestSpan("trace-genai-model-groups", spanID, "chat", now.Add(time.Duration(20+modelIndex*20+i)*time.Millisecond), float64(100+i))
+			llm.ParentSpanID = "agent"
+			llm.Attributes["gen_ai.request.model"] = model
+			spans = append(spans, llm)
+		}
+	}
+
+	s.AddSpansForConnection("conn-1", spans)
+
+	result := s.Trace("trace-genai-model-groups", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	groupIDs := make(map[string]struct{})
+	groupCount := 0
+	for _, node := range result.GenAI.FlowNodes {
+		if node.Kind != GenAISpanLLM || !node.Grouped {
+			continue
+		}
+		groupCount++
+		if _, exists := groupIDs[node.SpanID]; exists {
+			t.Fatalf("duplicate grouped node id %q in %#v", node.SpanID, result.GenAI.FlowNodes)
+		}
+		groupIDs[node.SpanID] = struct{}{}
+	}
+	if groupCount != len(models) {
+		t.Fatalf("expected one grouped LLM node per model, got %d nodes: %#v", groupCount, result.GenAI.FlowNodes)
+	}
+}
+
+func TestTrace_GroupsRepeatedLeafNodesPreservesSpanLinkEdges(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-group-links", "workflow", "invoke_workflow", now, 3000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-group-links", "agent", "invoke_agent", now.Add(10*time.Millisecond), 2500)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	tool := newTestSpan("trace-genai-group-links", "tool", "execute_tool", now.Add(15*time.Millisecond), 100)
+	tool.ParentSpanID = "agent"
+	tool.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool.Attributes["gen_ai.tool.name"] = "lookup_context"
+
+	spans := []Span{workflow, agent, tool}
+	for i := 0; i < genAIFlowGroupThreshold+1; i++ {
+		spanID := fmt.Sprintf("llm-%d", i)
+		llm := newTestSpan("trace-genai-group-links", spanID, "chat", now.Add(time.Duration(20+i)*time.Millisecond), float64(100+i))
+		llm.ParentSpanID = "agent"
+		llm.Links = []SpanLink{{TraceID: "trace-genai-group-links", SpanID: "tool"}}
+		llm.Attributes["gen_ai.operation.name"] = "chat"
+		llm.Attributes["gen_ai.request.model"] = "gpt-5.5"
+		llm.Attributes["gen_ai.usage.input_tokens"] = 10
+		llm.Attributes["gen_ai.usage.output_tokens"] = 1
+		spans = append(spans, llm)
+	}
+
+	s.AddSpansForConnection("conn-1", spans)
+
+	result := s.Trace("trace-genai-group-links", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	edges := make([]string, 0, len(result.GenAI.FlowEdges))
+	for _, edge := range result.GenAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if len(edges) != 3 || edges[0] != "workflow->agent" || edges[1] != "agent->tool" || !strings.HasPrefix(edges[2], "tool->group:agent:llm:chat:chat_gpt-5.5") {
+		t.Fatalf("unexpected grouped flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GroupsRepeatedLLMToolCycles(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-cycle", "workflow", "invoke_workflow", now, 8000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-cycle", "agent", "invoke_agent", now.Add(10*time.Millisecond), 7000)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	llm1 := newTestSpan("trace-genai-cycle", "llm-1", "chat", now.Add(20*time.Millisecond), 1000)
+	llm1.ParentSpanID = "agent"
+	llm1.Attributes["gen_ai.operation.name"] = "chat"
+	llm1.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	llm1.Attributes["gen_ai.usage.input_tokens"] = 10
+	llm1.Attributes["gen_ai.usage.output_tokens"] = 2
+
+	tool1 := newTestSpan("trace-genai-cycle", "tool-1", "execute_tool", now.Add(30*time.Millisecond), 200)
+	tool1.ParentSpanID = "agent"
+	tool1.Links = []SpanLink{{TraceID: "trace-genai-cycle", SpanID: "llm-1"}}
+	tool1.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool1.Attributes["gen_ai.tool.name"] = "lookup_context"
+	tool1.Attributes["gen_ai.privacy.pii.detected"] = true
+
+	llm2 := newTestSpan("trace-genai-cycle", "llm-2", "chat", now.Add(40*time.Millisecond), 900)
+	llm2.ParentSpanID = "agent"
+	llm2.Links = []SpanLink{{TraceID: "trace-genai-cycle", SpanID: "tool-1"}}
+	llm2.Attributes["gen_ai.operation.name"] = "chat"
+	llm2.Attributes["gen_ai.request.model"] = "gpt-5.5"
+	llm2.Attributes["gen_ai.usage.input_tokens"] = 12
+	llm2.Attributes["gen_ai.usage.output_tokens"] = 3
+
+	tool2 := newTestSpan("trace-genai-cycle", "tool-2", "execute_tool", now.Add(50*time.Millisecond), 300)
+	tool2.ParentSpanID = "agent"
+	tool2.Links = []SpanLink{{TraceID: "trace-genai-cycle", SpanID: "llm-2"}}
+	tool2.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool2.Attributes["gen_ai.tool.name"] = "lookup_context"
+
+	summarizer := newTestSpan("trace-genai-cycle", "summarizer", "invoke_agent", now.Add(60*time.Millisecond), 600)
+	summarizer.ParentSpanID = "workflow"
+	summarizer.Links = []SpanLink{{TraceID: "trace-genai-cycle", SpanID: "tool-2"}}
+	summarizer.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	summarizer.Attributes["gen_ai.agent.name"] = "Summarizer Agent"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, llm1, tool1, llm2, tool2, summarizer})
+
+	result := s.Trace("trace-genai-cycle", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	genAI := result.GenAI
+	if genAI.LLMCalls != 2 || genAI.ToolCalls != 2 {
+		t.Fatalf("unexpected call rollup: llm=%d tool=%d", genAI.LLMCalls, genAI.ToolCalls)
+	}
+
+	nodesByKind := make(map[GenAISpanKind]GenAIFlowNode)
+	for _, node := range genAI.FlowNodes {
+		nodesByKind[node.Kind] = node
+	}
+	loopNode := nodesByKind[GenAISpanLoop]
+	if !loopNode.Grouped {
+		t.Fatalf("expected loop node to be grouped: %#v", loopNode)
+	}
+	if loopNode.CallCount != 2 {
+		t.Fatalf("expected two loop iterations, got %d", loopNode.CallCount)
+	}
+	if loopNode.Name != "chat gpt-5.5 + lookup_context loop x2" {
+		t.Fatalf("unexpected loop node name: %q", loopNode.Name)
+	}
+	if strings.Join(loopNode.GroupedSpanIDs, ",") != "llm-1,tool-1,llm-2,tool-2" {
+		t.Fatalf("unexpected loop span ids: %v", loopNode.GroupedSpanIDs)
+	}
+	if loopNode.DescendantLLMCalls != 2 || loopNode.DescendantToolCalls != 2 {
+		t.Fatalf("unexpected loop descendant calls: llm=%d tool=%d", loopNode.DescendantLLMCalls, loopNode.DescendantToolCalls)
+	}
+	if strings.Join(loopNode.DescendantLLMSpanIDs, ",") != "llm-1,llm-2" {
+		t.Fatalf("unexpected loop llm span ids: %v", loopNode.DescendantLLMSpanIDs)
+	}
+	if strings.Join(loopNode.DescendantToolSpanIDs, ",") != "tool-1,tool-2" {
+		t.Fatalf("unexpected loop tool span ids: %v", loopNode.DescendantToolSpanIDs)
+	}
+	if loopNode.TokenUsage != (GenAITokenUsage{Input: 22, Output: 5, Total: 27}) {
+		t.Fatalf("unexpected loop token rollup: %#v", loopNode.TokenUsage)
+	}
+	if strings.Join(loopNode.DescendantPrivacyRiskSpanIDs, ",") != "tool-1" {
+		t.Fatalf("unexpected loop privacy risk span ids: %v", loopNode.DescendantPrivacyRiskSpanIDs)
+	}
+
+	edges := make([]string, 0, len(genAI.FlowEdges))
+	for _, edge := range genAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if len(edges) != 3 || edges[0] != "workflow->agent" || !strings.HasPrefix(edges[1], "agent->group:agent:loop:") || !strings.HasPrefix(edges[2], "group:agent:loop:") || !strings.HasSuffix(edges[2], "->summarizer") {
+		t.Fatalf("unexpected loop flow edges: %v", edges)
+	}
+}
+
+func TestTrace_GroupedLoopPreservesExternalLinksFromCollapsedMembers(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	workflow := newTestSpan("trace-genai-loop-link", "workflow", "invoke_workflow", now, 8000)
+	workflow.Attributes["gen_ai.operation.name"] = "invoke_workflow"
+	workflow.Attributes["gen_ai.workflow.name"] = "Budget Guru"
+
+	agent := newTestSpan("trace-genai-loop-link", "agent", "invoke_agent", now.Add(10*time.Millisecond), 7000)
+	agent.ParentSpanID = "workflow"
+	agent.Attributes["gen_ai.operation.name"] = "invoke_agent"
+	agent.Attributes["gen_ai.agent.name"] = "LangGraph"
+
+	primer := newTestSpan("trace-genai-loop-link", "primer", "execute_tool", now.Add(15*time.Millisecond), 100)
+	primer.ParentSpanID = "agent"
+	primer.Attributes["gen_ai.operation.name"] = "execute_tool"
+	primer.Attributes["gen_ai.tool.name"] = "load_context"
+
+	llm1 := newTestSpan("trace-genai-loop-link", "llm-1", "chat", now.Add(20*time.Millisecond), 1000)
+	llm1.ParentSpanID = "agent"
+	llm1.Attributes["gen_ai.operation.name"] = "chat"
+	llm1.Attributes["gen_ai.request.model"] = "gpt-5.5"
+
+	tool1 := newTestSpan("trace-genai-loop-link", "tool-1", "execute_tool", now.Add(30*time.Millisecond), 200)
+	tool1.ParentSpanID = "agent"
+	tool1.Links = []SpanLink{{TraceID: "trace-genai-loop-link", SpanID: "primer"}}
+	tool1.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool1.Attributes["gen_ai.tool.name"] = "lookup_context"
+
+	llm2 := newTestSpan("trace-genai-loop-link", "llm-2", "chat", now.Add(40*time.Millisecond), 900)
+	llm2.ParentSpanID = "agent"
+	llm2.Attributes["gen_ai.operation.name"] = "chat"
+	llm2.Attributes["gen_ai.request.model"] = "gpt-5.5"
+
+	tool2 := newTestSpan("trace-genai-loop-link", "tool-2", "execute_tool", now.Add(50*time.Millisecond), 300)
+	tool2.ParentSpanID = "agent"
+	tool2.Links = []SpanLink{{TraceID: "trace-genai-loop-link", SpanID: "primer"}}
+	tool2.Attributes["gen_ai.operation.name"] = "execute_tool"
+	tool2.Attributes["gen_ai.tool.name"] = "lookup_context"
+
+	s.AddSpansForConnection("conn-1", []Span{workflow, agent, primer, llm1, tool1, llm2, tool2})
+
+	result := s.Trace("trace-genai-loop-link", 0)
+	if result == nil || result.GenAI == nil {
+		t.Fatal("expected GenAI projection")
+	}
+
+	edges := make([]string, 0, len(result.GenAI.FlowEdges))
+	for _, edge := range result.GenAI.FlowEdges {
+		edges = append(edges, edge.Source+"->"+edge.Target)
+	}
+	if len(edges) != 3 || edges[0] != "workflow->agent" || edges[1] != "agent->primer" || !strings.HasPrefix(edges[2], "primer->group:agent:loop:") {
+		t.Fatalf("unexpected loop flow edges: %v", edges)
+	}
+}
+
 // ============================================================================
 // Compute Status Tests
 // ============================================================================

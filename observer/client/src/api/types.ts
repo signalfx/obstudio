@@ -114,7 +114,65 @@ export interface TraceSummary {
   spanCount: number;
   durationMs?: number;
   status: string;
+  isGenAI?: boolean;
   spans?: SpanPreview[];
+}
+
+export type GenAISpanKind = "workflow" | "agent" | "tool" | "llm" | "retrieval" | "loop" | "genai";
+
+export interface GenAITokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
+export interface GenAIFlowNode {
+  nodeId: string;
+  traceId: string;
+  spanId: string;
+  name: string;
+  kind: GenAISpanKind;
+  operation?: string;
+  modelNames: string[];
+  tokenUsage: GenAITokenUsage;
+  depth: number;
+  durationMs: number;
+  avgDurationMs?: number;
+  maxDurationMs?: number;
+  statusCode: string;
+  grouped: boolean;
+  callCount?: number;
+  groupedSpanIds: string[];
+  parentFlowSpanId?: string;
+  descendantSpanIds: string[];
+  descendantTokenUsage: GenAITokenUsage;
+  descendantLlmCalls: number;
+  descendantLlmSpanIds: string[];
+  descendantToolCalls: number;
+  descendantToolSpanIds: string[];
+  descendantSecurityRiskCount: number;
+  descendantSecurityRiskSpanIds: string[];
+  descendantPrivacyRiskCount: number;
+  descendantPrivacyRiskSpanIds: string[];
+  descendantRiskCount: number;
+  descendantEvaluationCount: number;
+  descendantEvaluationFailedCount: number;
+  descendantEvaluationFailedSpanIds: string[];
+}
+
+export interface GenAIFlowEdge {
+  source: string;
+  target: string;
+}
+
+export interface GenAITraceSummary {
+  isGenAI: boolean;
+  tokens: GenAITokenUsage;
+  toolCalls: number;
+  llmCalls: number;
+  modelNames: string[];
+  flowNodes: GenAIFlowNode[];
+  flowEdges: GenAIFlowEdge[];
 }
 
 /** Full trace detail including all spans. */
@@ -126,6 +184,7 @@ export interface TraceDetail {
   durationMs?: number;
   status: string;
   spans: Span[];
+  genAI?: GenAITraceSummary;
 }
 
 /** A metric grouped by name, service, and scope with bounded data points. */

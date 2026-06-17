@@ -170,6 +170,7 @@ type TraceSummary struct {
 	SpanCount    int           `json:"spanCount"`
 	DurationMs   float64       `json:"durationMs"`
 	Status       string        `json:"status"`
+	IsGenAI      bool          `json:"isGenAI,omitempty"`
 	Spans        []SpanPreview `json:"spans,omitempty"`
 }
 
@@ -215,13 +216,14 @@ type SpanPreview struct {
 
 // TraceDetail represents the full details of a trace.
 type TraceDetail struct {
-	TraceID      string  `json:"traceId"`
-	RootSpanName string  `json:"rootSpanName"`
-	ServiceName  string  `json:"serviceName,omitempty"`
-	SpanCount    int     `json:"spanCount"`
-	DurationMs   float64 `json:"durationMs"`
-	Status       string  `json:"status"`
-	Spans        []Span  `json:"spans"`
+	TraceID      string             `json:"traceId"`
+	RootSpanName string             `json:"rootSpanName"`
+	ServiceName  string             `json:"serviceName,omitempty"`
+	SpanCount    int                `json:"spanCount"`
+	DurationMs   float64            `json:"durationMs"`
+	Status       string             `json:"status"`
+	Spans        []Span             `json:"spans"`
+	GenAI        *GenAITraceSummary `json:"genAI,omitempty"`
 }
 
 // MetricGroup represents a group of metric data points with the same name.
@@ -704,6 +706,7 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 			SpanCount:    len(spans),
 			DurationMs:   dur,
 			Status:       computeTraceStatus(spans),
+			IsGenAI:      traceHasGenAISignal(spans),
 			Spans:        makeSpanPreviews(spans, filter.SpanPreviewCap),
 		}
 		if !matchesTraceSummaryFilter(summary, filter) {
@@ -757,6 +760,7 @@ func (s *Store) Trace(traceID string, eventLimit int) *TraceDetail {
 		DurationMs:   computeTraceDuration(spans),
 		Status:       computeTraceStatus(spans),
 		Spans:        truncated,
+		GenAI:        buildGenAITraceSummary(spans),
 	}
 }
 
@@ -1247,6 +1251,7 @@ func (s *Store) QueryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 			SpanCount:    len(spans),
 			DurationMs:   dur,
 			Status:       st,
+			IsGenAI:      traceHasGenAISignal(spans),
 			Spans:        previews,
 		})
 	}
@@ -1264,6 +1269,15 @@ func (s *Store) QueryTracesFiltered(serviceName, spanName, status, traceIDPrefix
 		results = results[:limit]
 	}
 	return results
+}
+
+func traceHasGenAISignal(spans []Span) bool {
+	for _, span := range spans {
+		if isGenAISpan(span) {
+			return true
+		}
+	}
+	return false
 }
 
 // QueryMetricsFiltered is used by MCP tools that need filtering.
