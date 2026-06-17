@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -806,15 +807,15 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 		t.Fatalf("mkdir home dir: %v", err)
 	}
 
-	// Stage skills before building to avoid a race with internal/integration's
-	// TestMain, which also calls StageEmbeddedSkills on the shared _skills dir.
 	repoRoot := filepath.Dir(observerRoot)
-	if err := buildutil.StageEmbeddedSkills(repoRoot, observerRoot); err != nil {
+	isolatedObserverRoot := copySmokeRepoForBuild(t, repoRoot, observerRoot, filepath.Join(tempRoot, "source"))
+	isolatedRepoRoot := filepath.Dir(isolatedObserverRoot)
+	if err := buildutil.StageEmbeddedSkills(isolatedRepoRoot, isolatedObserverRoot); err != nil {
 		t.Fatalf("stage embedded skills: %v", err)
 	}
 
 	build := exec.Command("go", "build", "-o", bundledBinary, "./cmd/obstudio")
-	build.Dir = observerRoot
+	build.Dir = isolatedObserverRoot
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build smoke obstudio binary: %v\n%s", err, strings.TrimSpace(string(output)))
 	}
@@ -849,13 +850,18 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	for _, want := range []string{
 		codexManagedBlockStart,
 		"[mcp_servers.obstudio]",
-		fmt.Sprintf("command = %q", installedBinary),
-		"args = []",
+		"enabled = true",
 		codexManagedBlockEnd,
 	} {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("expected generated codex config to contain %q, got:\n%s", want, configText)
 		}
+	}
+	hasURLConfig := strings.Contains(configText, `url = "http://127.0.0.1:3000/mcp"`)
+	hasCommandConfig := strings.Contains(configText, fmt.Sprintf("command = %q", installedBinary)) &&
+		strings.Contains(configText, "args = []")
+	if !hasURLConfig && !hasCommandConfig {
+		t.Fatalf("expected generated codex config to contain either local URL or installed command, got:\n%s", configText)
 	}
 
 	observerPort := pickSmokePort(t)
@@ -955,6 +961,62 @@ func observerModuleRoot(t *testing.T) string {
 		t.Fatal("resolve install_test.go path")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func copySmokeRepoForBuild(t *testing.T, repoRoot, observerRoot, dstRoot string) string {
+	t.Helper()
+
+	isolatedObserverRoot := filepath.Join(dstRoot, "observer")
+	copySmokeDir(t, observerRoot, isolatedObserverRoot, func(rel string, d fs.DirEntry) bool {
+		return d.IsDir() && (rel == filepath.Join("cmd", "obstudio", "_skills") || rel == filepath.Join("client", "node_modules"))
+	})
+	copySmokeDir(t, filepath.Join(repoRoot, "skills"), filepath.Join(dstRoot, "skills"), nil)
+
+	examplesSrc := filepath.Join(repoRoot, "docs", "examples.md")
+	if _, err := os.Stat(examplesSrc); err == nil {
+		if err := copyFile(examplesSrc, filepath.Join(dstRoot, "docs", "examples.md")); err != nil {
+			t.Fatalf("copy examples.md: %v", err)
+		}
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat examples.md: %v", err)
+	}
+
+	return isolatedObserverRoot
+}
+
+func copySmokeDir(t *testing.T, src, dst string, skip func(string, fs.DirEntry) bool) {
+	t.Helper()
+
+	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return os.MkdirAll(dst, 0o755)
+		}
+		if skip != nil && skip(rel, d) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		return copyFile(path, target)
+	}); err != nil {
+		t.Fatalf("copy %s to %s: %v", src, dst, err)
+	}
 }
 
 func smokeBinaryName() string {

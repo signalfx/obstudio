@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Instrument the MCP-style AI tool gateway in ./service for OpenTelemetry, MCP lifecycle, and GenAI readiness. Add safe app-owned signals and tests where practical."
+    },
+    {
+      "id": "audit-ledger",
+      "task": "Use the audit gap-ledger contract implied by the MCP-style AI tool gateway in ./service. Add instrumentation for patchable GenAI and session/stream lifecycle gaps and explicitly report any remaining signals."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed files, tests, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
+    "Instruments FastAPI plus app-owned JSON-RPC method outcome, MCP session lifecycle, active streams, stream duration/outcome, close reason family, send/write failure, tool execution, and provider/model calls.",
+    "Uses OTel GenAI semantic-convention names where data is available, including execute_tool and model/provider attributes, without inventing unsafe high-cardinality dimensions.",
+    "Includes detector-ready metrics for tool error/latency, provider error/latency, active sessions or streams, and stream close/detach outcomes.",
+    "Adds or updates tests or compile checks and keeps raw JSON-RPC payloads, prompts, completions, sessions, users, tenants, requests, traces, and tool arguments out of metric dimensions."
+  ]
+}

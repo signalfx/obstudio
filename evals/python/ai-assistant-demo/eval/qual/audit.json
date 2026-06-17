@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify files."
+    },
+    {
+      "id": "genai-readiness",
+      "task": "Produce an observability readiness review for the AI assistant service in ./service. Identify existing telemetry, GenAI pathway gaps, incident-detection impact, and the next instrumentation step. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for app.py, load_demo.py, pyproject.toml, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.py, load_demo.py, pyproject.toml, and FastAPI routes for chat, streaming chat, stream inventory, feedback, and feedback export.",
+    "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
+    "Maps GenAI readiness gaps for provider/model calls, tool fanout, token/context pressure, streaming lifecycle, prompt/response outcome, and offline AI data export.",
+    "Creates or describes a Gap Ledger-style contract with required signals instead of treating the audit as background context.",
+    "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions."
+  ]
+}

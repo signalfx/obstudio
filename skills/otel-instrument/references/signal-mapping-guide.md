@@ -57,3 +57,21 @@ When adding log events that should correlate with traces:
 - `{component}.{entity}.{action}` for state changes: `opamp.agent.registered`
 - `{component}.{operation}.{outcome}` for results: `broker.publish.failed`
 - `{component}.{resource}.{condition}` for alerts: `health.agent.status_changed`
+
+---
+
+## GenAI Signal Mapping
+
+For GenAI/LLM code, use the shared `../../references/genai-readiness.md` as the source of
+truth. The most important local trace-view rule is: metrics are not enough for
+single-trace demos. Emit the OTel metric when available, and also add safe
+summary attributes to the relevant span.
+
+| Need | Signal |
+|---|---|
+| Show agent flow | spans with `gen_ai.operation.name` and nested parent/child context |
+| Show model call | `chat {model}` span with provider and request/response model attributes |
+| Show token pressure | `gen_ai.client.token.usage` metric plus `gen_ai.usage.*_tokens` span attributes |
+| Show tool work | `execute_tool {tool}` span with stable `gen_ai.tool.name` |
+| Explain streaming timeout | workflow span status ERROR, `error.type`, first-event/chunk latency, stream close reason |
+| Build detectors | low-cardinality workflow/provider/model/tool outcome, latency, error, timeout, token, fanout, and stream lifecycle metrics |

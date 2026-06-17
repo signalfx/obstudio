@@ -1,0 +1,21 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "framework-bridge",
+      "task": "Instrument the assistant v3 service in ./service. It already has app-owned GenAI lifecycle spans and also preloads framework instrumentation. Preserve the app-owned DAG and prevent duplicate framework GenAI nodes."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed files, tests, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Chooses the app-owned GenAI spans as the canonical source for this fixture and does not add duplicate app-owned chat or execute_tool spans.",
+    "For app-owned canonical spans, suppresses overlapping LangChain/OpenAI GenAI instrumentors in the Makefile or another real startup surface before opentelemetry-instrument bootstraps.",
+    "Keeps baseline HTTP/database/runtime auto-instrumentation active while suppressing only overlapping GenAI framework emitters.",
+    "Preserves assistant_v3_turn and deepagents exactly; it does not invent assistant_v3_session_turn, assistant_v3_agent, or POST /v2/assistant/sessions as GenAI names.",
+    "Requires runtime/static proof that Obstudio would show one workflow node, one agent node, expected LLM/tool counts, stable model/tool names, and no wrapper-only LangGraph or step nodes."
+  ]
+}

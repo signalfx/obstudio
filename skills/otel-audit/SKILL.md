@@ -5,12 +5,13 @@ description: >-
   on observability coverage gaps. Read-only -- does not modify code.
   Use when the user types $otel-audit, asks about observability gaps,
   wants to assess instrumentation coverage, says "what signals am I
-  missing", "scan this service for observability", or asks about
-  "observability readiness". Do NOT use for implementing code changes --
-  use $otel-instrument instead.
+  missing", "scan this service for observability", asks about
+  "observability readiness", or asks whether GenAI/LLM workflows follow
+  OpenTelemetry semantic conventions. Do NOT use for implementing code
+  changes -- use $otel-instrument instead.
 metadata:
   author: otel-studio
-  version: 0.6.0
+  version: 0.6.1
   category: observability
 ---
 
@@ -29,6 +30,9 @@ is modified.
 - Checking what auto-instrumentation is already wired up
 - Identifying dependencies that lack matching OTel instrumentation
 - Quick health check of an existing OTel setup
+- Assessing GenAI/LLM, agent, workflow, tool/function calling, MCP,
+  retrieval/RAG, or model-gateway instrumentation against OpenTelemetry GenAI
+  semantic conventions
 **When NOT to use:** If you want to add instrumentation, use `$otel-instrument`.
 
 ## Process
@@ -47,10 +51,26 @@ Scan the repository to determine language, framework, and existing instrumentati
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
 3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
 4. Use the Auto-Instrumentation Library Map below to identify which packages should be present for each detected dependency.
-5. Record exact evidence paths that should appear in the report:
+5. Detect GenAI/LLM ownership: provider clients/model gateways, agents or
+  workflows, tool/function dispatch, MCP when present, retrieval/RAG,
+  model/deployment config, fallback/readiness checks, token accounting, call
+  counts, prompt/response assembly, AI-derived data jobs, AI-path synthetic/canary checks, or usage logging. When any are present, load
+  `../references/genai-readiness.md`.
+  Follow its GenAI Semconv Source Contract before scoring GenAI coverage:
+  reconcile detected AI surfaces with official semconv docs when available,
+  record live-or-snapshot provenance, and build a semconv closure matrix.
+  When GenAI incidents, postmortems, alerts, tickets, or failure examples are
+  part of the request, use GenAI incident-evidence mode and map each failure
+  mechanism to provider/model gateway, workflow, tool/function execution or
+  AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
+  token/context, prompt/response parser, safety/policy, AI-derived data,
+  model/config rollout, or AI-owned cache/session evidence.
+6. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
   - Route source: router/controller files such as `TaskController.java`, `app.py`, `app.js`, or `kvstore/http.go`.
+  - Traffic and readiness clients when they exercise a GenAI path: demo, load, eval, or replay scripts, plus AI-path synthetic or canary scripts such as `load_demo.py`,
+    `smoke.py`, `scripts/check-*`, or `tests/e2e/*`.
   - Runtime/startup files when present: `Dockerfile`, `docker-compose.yml`, `Makefile`, `package.json` scripts, launch configs, worker files.
 
 ### Step 2 -- Instrumentation Assessment
@@ -108,6 +128,26 @@ for Python, `@opentelemetry/instrumentation-winston` /
 - Trace-context injection into log records (`trace_id`, `span_id` fields).
 - `span.AddEvent()` / `span.add_event()` calls used as structured log events.
 
+**Instrumentation delta** -- compare the current scan with the previous
+`.observe/otel.md` report when it exists. This is a generic observability
+change log, not a GenAI-only section. Before overwriting the report, parse the
+prior `## Current Instrumentation` and `## Instrumentation Delta` sections when
+available, then compare them to the current source inventory and changed files.
+Classify each signal-level change as:
+
+- **Added** -- a new trace/span, metric, log bridge/event, runtime/exporter
+  setting, or OTel dependency now exists.
+- **Modified** -- the signal still exists but its name, source path, kind,
+  attributes/dimensions, unit, parentage, status/error behavior, exporter
+  configuration, or semantic meaning changed.
+- **Deleted** -- a previously reported signal source, OTel dependency, runtime
+  setting, or log/trace/metric integration was removed. Do not infer deletion
+  from uncertainty; require prior-report evidence plus current source or diff
+  evidence that the signal source is gone.
+
+Use exact signal names and source paths where possible. If no prior report
+exists, emit a baseline statement instead of fabricating a delta.
+
 **Dependencies without instrumentation** -- for each dependency detected in Step 1:
 
 - Check if a matching auto-instrumentation package is installed
@@ -127,6 +167,179 @@ Status: `covered` / `partial` / `missing`.
 percentiles? (e.g. `http.server.request.duration` histogram, or span
 duration from auto-instrumentation.)
 Status: `covered` / `partial` / `missing`.
+
+**GenAI readiness assessment** -- when GenAI/LLM evidence exists, use
+`../references/genai-readiness.md` to check baseline trace continuity,
+OpenTelemetry GenAI spans, semconv completeness, GenAI metrics, and
+privacy/cardinality controls. Add or update `## GenAI Readiness` rows for
+missing workflow, provider/model gateway, model/config rollout,
+tool/function execution or AI-owned session/stream lifecycle including MCP when
+present, token/context pressure, retrieval/RAG, streaming response lifecycle,
+fallback/failover, prompt/response assembly, safety/policy outcome,
+AI-derived data freshness, memory/context, evaluation quality, framework bridge
+coverage, content governance, cost ownership, or AI-owned cache/session state
+signals. For
+code-owned GenAI pathway gaps, explicitly check for token/context pressure,
+response parse failure, AI-derived data freshness, prompt/tool schema version,
+LLM-call count, tool-call count, authentication/authorization result,
+invalid-token or permission failure outcome, active AI-owned streams or
+sessions, close reason family, stream duration/outcome, send/write failure,
+memory hit/miss or stale/missing context, `gen_ai.evaluation.result` coverage,
+evaluation score distribution, content capture mode/redaction/access owner, and
+app-owned cost or owner-mapped billing source when those values are observable.
+For LLM/model-call coverage, apply the `LLM Inference Lifecycle Contract`:
+audit the real lifecycle hook or client call site, not only the outer workflow
+and final usage aggregation. In LangChain, LangGraph, DeepAgents, callback, or
+event-stream based systems, look for `on_chat_model_start`,
+`on_chat_model_end`, `on_chat_model_error`, or an equivalent model-call
+callback. In direct provider SDK or model-gateway code, look for a span wrapping
+the provider request or streaming generator. If token/model attributes are
+present only on a workflow span, final usage event, turn-finalization path, or
+other workflow-level token accounting, but no `chat`, `generate_content`,
+`text_completion`, or equivalent inference span exists with
+`gen_ai.operation.name`, `gen_ai.request.model`, and `gen_ai.response.model`
+when known, mark trace and semconv coverage `partial`; do not mark LLM coverage
+as `covered`. Keep the missing model-call lifecycle span and attributes in
+`remaining_signals`.
+Apply the `Single-Source GenAI Span Contract` from the GenAI readiness
+reference before deciding trace coverage. Inventory framework/vendor bridges,
+provider SDK hooks, callbacks, middleware, and auto-instrumentors that can emit
+GenAI spans, then compare them with app-owned spans for the same logical
+workflow, agent, chat/model call, tool call, retrieval, memory, or evaluation
+operation. Mark trace and semconv coverage `partial` when a representative
+trace or source proof shows both framework/vendor and app-owned spans for the
+same logical operation, wrapper spans such as middleware or step execution being
+counted as tools, duplicate model/tool call counts, divergent parentage, or
+aggregate attributes written to the wrong canonical span. Required closure
+evidence is one canonical GenAI span source per logical operation. A
+representative trace must show one GenAI node per logical operation, expected
+LLM and tool counts, stable model/tool names, correct workflow/agent parent
+shape, and no wrapper-only spans counted as GenAI work.
+Audit workflow naming as part of this proof. GenAI workflow names must preserve
+the application's stable business workflow identity from constants, handlers,
+workflow registrations, telemetry event names, docs, or prior trace names. Mark
+workflow coverage `partial` when instrumentation invents names from HTTP
+routes, request resources, session/storage concepts, or transport labels. For
+example, `assistant_v3_turn` must not become `assistant_v3_session_turn` or
+`POST /v2/assistant/sessions`.
+Do not invent names from HTTP routes or session-derived labels.
+Audit agent naming with the same rule. GenAI agent names must preserve the
+application's stable agent identity from framework agent names, agent factory
+names, classes, registration names, callback owner names, docs, or prior trace
+names. Mark agent coverage `partial` when instrumentation invents generic
+service-derived names. For example, a DeepAgents-backed agent should be
+`deepagents`, not `assistant_v3_agent`, `assistant`, or `agent`.
+Keep duplicate-span remediation in `remaining_signals` unless the audit proves
+either the framework/vendor bridge is canonical and app duplicates are absent,
+or app-owned spans are
+canonical and overlapping framework/vendor GenAI instrumentation is disabled,
+opted out, or suppressed by the app's discovered runtime mechanism.
+When app-owned spans are canonical and the process uses preload, agent,
+`opentelemetry-instrument`, `NODE_OPTIONS --require`, or another
+auto-instrumentation bootstrap, audit the launch environment and startup
+surfaces that run before the bootstrap. Mark duplicate-span remediation
+`partial` if the only proof is App module code that mutates environment
+variables after import, because that is not sufficient proof and framework
+hooks may already be registered. Accept proof from Makefile
+targets, service runner scripts, Docker or Helm env, VS Code launch configs,
+procfiles, systemd units, shell env generators, or the exact documented run
+command. Also accept generated env scripts when they are sourced before the
+bootstrap.
+Also audit parent-context proof for event-derived spans. In representative trace
+evidence or tests, chat/model and tool spans must preserve the owning workflow/agent context
+and prove a trace shape such as `workflow -> chat`, `workflow -> execute_tool`,
+and follow-up `workflow -> chat` or `agent -> chat` edges. If they appear as
+siblings of the workflow under a generic HTTP root span or generic server span,
+mark the trace shape `partial` and keep parent-context propagation in
+`remaining_signals`. Also check long-lived helper/setup spans such as memory
+store, checkpointer, database session, stream-writer, or resource setup spans.
+If callback-created chat/tool spans are parented to those helper spans instead
+of the owning workflow/agent span, mark the trace shape `partial`; the
+instrumentation must capture/re-enter the workflow/agent context before opening
+helper spans and must not rely on whichever current span is active during
+callback cleanup. Use this rule for memory store, checkpointer, database
+session, stream-writer, or resource setup paths: helper spans must not become
+the parent; capture the workflow/agent context before opening helper spans,
+start event-derived `chat` and `execute_tool` spans with that captured context,
+and write aggregate counters to the workflow span, not to whichever current span
+is active. For async generator, SSE, WebSocket, ping-loop, or timeout
+wrapper paths, check whether the stream is advanced with `create_task`, `wait`,
+`anext`, or equivalent task handoff. If an OpenTelemetry current-span context
+manager is kept open across those yield/task boundaries, mark the trace shape
+`partial`; require an explicit workflow span/context handle that is passed into
+the callback/event translator and ended manually. Also check whether that
+workflow/agent context is carried through a request, turn input, event payload,
+callback state, or config object that may be immutable/frozen. If the
+instrumentation does not prove that app code will avoid mutating immutable,
+frozen, or framework-owned carriers, keep parent-context propagation `partial`;
+do not mutate those carriers in place. Treat a carrier as immutable/frozen when
+source evidence shows frozen or readonly declarations, record/value types, no
+mutation API, framework request immutability patterns, or existing code
+constructs new copies instead of mutating.
+Accept app-idiomatic copy/replacement proof such as Python
+`dataclasses.replace`, `attrs.evolve`, pydantic `model_copy(update=...)` or v1
+`copy(update=...)`; Java records, builders, or copy constructors; TypeScript
+object spread, explicit `Readonly<T>` replacements, or `structuredClone` only
+for plain-data carriers and never for live OTel `Context` or `Span` handles; Go
+value copies with explicit field replacement; or the framework's request
+clone/with-context API. If no safe copy path exists, require a separate
+invocation-scoped sidecar context: a local object, context variable,
+request-scoped map, or callback state keyed to the invocation lifecycle and
+cleared after cleanup. Do not key sidecar context by raw user, tenant, session,
+request, or trace IDs. Require a test or explicit static proof that the parent context is
+passed downstream and the original immutable input remains unchanged; Python
+tests should guard against `FrozenInstanceError` where frozen dataclasses or
+models exist. Audit aggregate placement separately: if
+`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
+`gen_ai.usage.total_tokens`, `assistant.llm.calls`, or `assistant.tool.calls`
+are written only to a generic HTTP root span, report misplaced aggregate GenAI
+attributes and require moving them to the workflow span or most specific owning GenAI span.
+A generic HTTP root span should not be the evidence for a GenAI flow card unless
+it has an explicit GenAI workflow operation.
+If incident evidence depends on missed, flapping, auto-resolved, or no-data alerts, record detector reliability evidence
+as a `$splunk-configure` handoff instead of an app-owned GenAI instrumentation
+prerequisite.
+
+For GenAI services and demos, distinguish demo-only environment hints from
+complete telemetry wiring. If a Makefile, README, script, or example command
+sets only `OTEL_SERVICE_NAME` or `OTEL_EXPORTER_OTLP_ENDPOINT`, but the service
+has no SDK setup, exporter setup, resource attributes, or framework
+instrumentation, report that as incomplete resource/exporter configuration
+rather than covered setup.
+
+**GenAI readiness contract** -- the `## GenAI Readiness` table is the
+instrumentation contract, not background context. Do not require a separate
+GenAI gap-contract section and do not require opaque IDs such as `GR8` or `G1`.
+For every GenAI readiness gap, create or update a structured surface row with:
+`surface`, `evidence`, `current_status`, `required_signals`,
+`owner/source_files`, and `acceptance_criteria`. If an existing audit already
+has an ID column, treat it only as an optional source-row reference; use the
+surface name in human-facing summaries and closure handoffs. Split a surface
+when required signals have different owners or acceptance criteria. Required
+signals must be concrete signal names or signal intents, not vague area labels.
+Use owner values that map directly to instrumentation outcomes: `App-owned +
+patchable`, `App-owned but unsafe/too large`, `Provider/platform-owned`, or
+`Already covered`.
+
+Status must be computed against every required signal:
+
+| Ledger result | Rule |
+|---|---|
+| `covered` | Every required GenAI signal is proven existing with source path and signal name. |
+| `partial` | Some required GenAI signals exist, but remaining required signals are named. |
+| `missing` | No required app-owned GenAI signal exists. |
+| `owner-mapped` | The repo cannot accurately observe the signal and the provider/platform/deployment owner plus exact missing source is named. |
+
+Do not collapse a partial GenAI gap into `covered` because one metric or span
+exists. The GenAI Readiness surface row is the source of truth for
+`$otel-instrument` and `$splunk-configure`.
+
+**Deterministic gap section contract** -- the audit report must contain at most
+one top-level gap section, named exactly `## Gaps`. Do not emit `## Gap
+Register`, `## Gaps and Recommendations`, `Gaps:`, or any GenAI-local gap
+subsection. For GenAI issues, record the contract in `## GenAI Readiness` table
+rows and add only concise references in `## Gaps` that point back to the
+human-readable readiness surface name.
 
 **Anti-patterns** -- flag any of these:
 
@@ -220,6 +433,23 @@ If no OTel log integrations are found, write: "No OTel log instrumentation detec
 If no OTel packages or setup are found across all three signal types, include
 the phrase: "OpenTelemetry instrumentation is missing."
 
+## Instrumentation Delta
+
+Compare this scan with the previous `.observe/otel.md` when one existed.
+This section is generic across observability signals; include it even when no
+GenAI code is present.
+
+If no previous report exists, write:
+"Baseline audit: no previous instrumentation report found; no delta computed."
+
+| Signal Type | Added | Modified | Deleted | Evidence |
+|-------------|-------|----------|---------|----------|
+| Traces/spans | {exact span names or "None"} | {exact span names/changes or "None"} | {exact span names or "None"} | {source paths, prior report, or diff evidence} |
+| Metrics | {exact metric names or "None"} | {exact metric names/changes or "None"} | {exact metric names or "None"} | {source paths, prior report, or diff evidence} |
+| Logs/events | {log bridge/event names or "None"} | {changed fields/correlation behavior or "None"} | {removed integrations/events or "None"} | {source paths, prior report, or diff evidence} |
+| Runtime/config | {service.name/exporter/env/startup additions or "None"} | {changed service/exporter/startup settings or "None"} | {removed settings or "None"} | {source paths, prior report, or diff evidence} |
+| Dependencies | {OTel package additions or "None"} | {version/package changes or "None"} | {removed OTel packages or "None"} | {manifest paths or lockfile evidence} |
+
 ## RED Signals
 
 | Signal | Status | Detail |
@@ -234,10 +464,24 @@ Status values:
   exist but no histogram for percentile breakdown).
 - **missing** -- no data source provides this signal.
 
+## GenAI Readiness
+
+Include only when GenAI/LLM ownership evidence exists.
+
+| Surface | Status | Evidence | Required Signals | Owner / Source Files | Acceptance Criteria | Detection/Localization Impact |
+|---------|--------|----------|------------------|----------------------|---------------------|-------------------------------|
+| Trace and semconv | {covered / partial / missing} | {workflow, agent, tool, chat, retrieval spans and gen_ai attrs; model-call lifecycle hook evidence} | {missing parent/child span, propagation, request model, provider, tool name, chat/model lifecycle span, or error type} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {model/provider/tool issues remain slow to localize} |
+| Metrics and detectors | {covered / partial / missing} | {gen_ai metrics or service-owned counters/histograms} | {missing latency/token/fanout/readiness/fallback metric} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {alert cannot fire before manual trace search} |
+| AI pathway surfaces | {covered / partial / missing} | {provider/model gateway, workflow, tool/function execution or AI-owned session/stream lifecycle including MCP when present, retrieval/RAG, streaming, token/context, prompt/response parser, safety/policy, AI-derived data, model/config rollout, or AI-owned cache/session signals} | {missing outcome, latency, error class, duration, count, freshness, fallback, rejection, version, parse, prompt/tool schema, or model/config compatibility signal} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {AI pathway incidents cannot be detected or routed by failure mechanism} |
+| Memory/context | {covered / partial / missing} | {memory/context spans, hit/miss, stale/missing context, source/version, auth failure} | {missing memory operation span or detector-ready stale/miss signal} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {bad context may look like model quality failure} |
+| Evaluation quality | {covered / partial / missing} | {`gen_ai.evaluation.result`, score value/label, evaluator errors, sample/freshness metrics} | {missing quality event, score distribution, failure count, or no-data signal} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {hallucination, toxicity, factuality, or instruction-following regressions need manual review} |
+| Framework bridge/content/cost | {covered / partial / missing / owner-mapped} | {framework OTel bridge evidence, content capture mode/redaction/access owner, token-to-cost or billing source} | {unproven bridge, unsafe content capture, missing cost source, or provider/platform owner missing} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {duplicate/missing spans, unsafe telemetry, or cost incidents remain hard to explain} |
+| Privacy/cardinality | {covered / partial / missing} | {content capture and attribute policy evidence} | {raw content or high-cardinality dimension risk} | {owner and file/path evidence} | {code + tests, proof path + signal name, or exact external owner/source} | {telemetry may be unsafe or unusable for alert grouping} |
+
 ## Gaps
 - {remaining non-RED gaps: missing auto-instrumentation packages, missing
   context propagation, missing OTLP exporter configuration, missing
-  service.name resource, etc.}
+  service.name resource, GenAI signals, etc.}
 - If no gaps remain, write: "No additional gaps detected."
 
 ## Anti-Patterns
@@ -249,11 +493,55 @@ Status values:
   $otel-instrument for custom business metrics"}
 
 ---
-*Generated by obstudio v0.6.0 otel-audit on {YYYY-MM-DD HH:MM UTC}*
+*Generated by obstudio v0.6.1 otel-audit on {YYYY-MM-DD HH:MM UTC}*
 ```
 
 Report requirements:
 
+- Always include top-level `## Instrumentation Delta` after
+  `## Current Instrumentation` and before `## RED Signals`.
+- Keep `## Instrumentation Delta` generic, not GenAI-specific. It must cover
+  traces/spans, metrics, logs/events, runtime/config, and dependencies.
+- Use exact signal names and source paths in the delta. Use `None` for empty
+  cells. Use the baseline sentence when no previous report exists. Only list a
+  deleted signal when prior-report evidence and current source/diff evidence
+  show the signal source was removed.
+- If GenAI/LLM code is detected, include `## GenAI Readiness` after
+  `## RED Signals`; omit it otherwise.
+- The report must have at most one top-level gap section, named exactly
+  `## Gaps`. Do not emit `## Gap Register`, `## Gaps and Recommendations`,
+  `Gaps:`, or a GenAI-local gap subsection.
+- If GenAI readiness gaps exist, put the required signals, owner/source files,
+  and acceptance criteria directly in the `## GenAI Readiness` surface rows.
+  Every GenAI-related `## Gaps` bullet must refer back to the human-readable
+  surface name, not an opaque ID such as `GR8`.
+- Keep GenAI readiness generic: no organization-specific service names,
+  incident IDs, customer names, realms, or provider account names.
+- Prefer OTel GenAI semantic conventions. Treat missing
+  `gen_ai.request.model` as a gap when the requested model is available.
+- For GenAI incident-evidence requests, include the generic coverage mapping
+  `incident class -> failure mechanism -> repo/service owner -> code surface ->
+  signal -> MTTD impact -> remaining owner`. Mark each gap as
+  `MTTD-improving`, `localization-only`, `provider/platform-owned`, or
+  `unknown owner`.
+- Treat missing provider/model gateway health, workflow outcome,
+  tool/function execution or AI-owned session/stream lifecycle including MCP
+  when present, retrieval/RAG freshness or quality, streaming lifecycle,
+  token/context pressure, prompt/response build or parse outcome,
+  safety/policy outcome, AI-derived data freshness, model/config rollout, and
+  AI-owned cache/session state as GenAI gaps only when code or runtime evidence
+  shows the service owns that AI pathway surface.
+- When those GenAI surfaces are owned, name concrete detector-ready signals such
+  as token/context budget percent, truncation rate, token-limit errors,
+  prompt/tool schema size, LLM call count, tool call count, response parse
+  failure, AI-derived data freshness, prompt/tool schema version,
+  model/config readiness, and expected-vs-running model/config state instead
+  of reporting a vague GenAI gap. Put missed, flapping, auto-resolved, or
+  no-data alert evidence into the `$splunk-configure` detector reliability
+  handoff.
+- IDs for users, accounts, tenants, sessions, tasks, conversations, requests,
+  and traces may help trace drilldown, but must not be metric dimensions or
+  detector group-by keys.
 - If instrumentation is incomplete, always include the exact token `$otel-instrument` in the recommendation.
 - If OpenTelemetry is absent, include both words `OpenTelemetry` and `missing`.
 - Name the concrete files that support findings; do not only refer to "the service" or "./service".

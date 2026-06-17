@@ -153,6 +153,30 @@ variable "throughput_<metric_id>_stddev" {
 }
 ```
 
+## GenAI Detector Defaults
+
+Use these defaults for GenAI categories from
+`detector-classification.md`. Generate concrete HCL with the same
+`signalfx_detector` resource shape used above.
+
+| Category | SignalFlow Method | Default | Severity | Detect Label |
+|---|---|---|---|---|
+| genai-latency | P99 model/provider/workflow duration and streaming first-chunk or chunk latency | 5.0s workflow, 2.0s first chunk, or 3 stddev | Major | GenAI Latency Degraded |
+| genai-token-pressure | P95/P99 input, output, total, cached, prompt, completion, and context token volume | 3 stddev above baseline or service-specific token limit | Major | GenAI Token Pressure High |
+| genai-provider | Provider/model timeout, throttle, rate-limit, unavailable, retry, fallback, or deployment error rate | 1 timeout/unavailable event or 3 stddev error increase | Critical | GenAI Provider Degraded |
+| genai-tool | Tool execution error/timeout rate, p99 tool latency, and tool-call count per workflow | 1.0s, 1 timeout/error, or 3 stddev fanout increase | Major | GenAI Tool Degraded |
+| genai-model-config | Model/deployment readiness failure, model resolution failure, requested-vs-response mismatch, config/canary failure | 1 readiness or mismatch failure | Critical | GenAI Model Config Degraded |
+| genai-workflow-fanout | LLM-call count, tool-call count, nested-agent count, workflow timeout, and workflow outcome rate | 3 stddev fanout increase or 1 timeout/unavailable event | Major | GenAI Workflow Fanout High |
+| genai-retrieval | Retrieval/RAG latency, error/no-result/stale-result rate, vector search dependency health | 1.0s, 3 stddev error/no-result increase, or freshness threshold | Major | GenAI Retrieval Degraded |
+| genai-memory-context | Memory/context latency, error, hit/miss, stale/missing context, source/version, or permission failure | 1.0s, 1 permission failure, or freshness threshold | Major | GenAI Memory Context Degraded |
+| genai-evaluation-quality | Evaluation score distribution, pass/fail or violation count, evaluator error/no-data, sample rate/count, freshness | 3 stddev score drop, 1 critical violation, or no-data threshold | Major | GenAI Evaluation Quality Degraded |
+| genai-content-governance | Content capture mode, redaction/truncation outcome, unsafe capture, policy rejection, access/retention owner evidence | 1 unsafe capture or policy failure | Critical | GenAI Content Governance Risk |
+| genai-cost | App-computed cost, budget/quota consumption, billing export freshness, or cost calculation failure | 3 stddev cost spike or budget threshold | Major | GenAI Cost Spike |
+
+When a GenAI readiness area is missing in `.observe/otel.md`, do not generate a
+detector placeholder. Add it to `.observe/detectors.md` as a GenAI
+instrumentation prerequisite and recommend `$otel-instrument`.
+
 ## terraform.tfvars.example
 
 Generated alongside the `.tf` files so users know exactly which values to provide.
