@@ -1,0 +1,25 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Instrument the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness. Add safe app-owned signals and tests where practical."
+    },
+    {
+      "id": "audit-ledger",
+      "task": "Use the audit gap-ledger contract implied by the AI assistant service in ./service. Add instrumentation for patchable GenAI gaps and explicitly report any remaining signals."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed files, tests, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
+    "Instruments FastAPI plus app-owned assistant turn, provider/model call, tool execution, streaming lifecycle, token/context pressure, and feedback export surfaces.",
+    "Uses OTel GenAI semantic-convention names where data is available, including gen_ai operation/model/provider attributes and token usage metrics.",
+    "Handles partial token-pressure closure honestly by naming remaining truncation, token-limit, prompt/tool schema size, or fanout signals when not implemented.",
+    "Adds or updates tests or compile checks and keeps raw prompts, completions, sessions, users, tenants, requests, and tool arguments out of metric dimensions."
+  ]
+}

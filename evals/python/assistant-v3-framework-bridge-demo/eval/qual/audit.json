@@ -1,0 +1,21 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "framework-bridge",
+      "task": "Scan the assistant v3 FastAPI service in ./service. It has app-owned GenAI spans and a startup command that preloads framework instrumentation. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for app.py, Makefile, pyproject.toml, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Detects the app-owned assistant_v3_turn workflow and deepagents agent names as stable source identities that must be preserved.",
+    "Detects framework/vendor GenAI bridge risk from LangChain/OpenAI dependencies, opentelemetry-instrument startup, and app.py framework_shadow_nodes such as LangGraph and step tools.",
+    "Marks trace/semconv coverage partial unless there is proof of one canonical GenAI span source per logical workflow, chat/model call, and tool call.",
+    "Requires duplicate-span remediation in the real startup surface before bootstrap, not only app module code that mutates environment variables after import.",
+    "States that POST /v2/assistant/sessions can remain the HTTP root span but must not become the GenAI workflow card."
+  ]
+}

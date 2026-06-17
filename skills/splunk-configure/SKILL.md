@@ -6,7 +6,8 @@ description: >-
   detector categories, and outputs ready-to-apply HCL with SignalFlow
   program_text. Use when the user types $splunk-configure, asks to "generate
   detectors", "create alerts from audit", "build Terraform for monitors",
-  or "set up Splunk detectors".
+  "set up Splunk detectors", or asks for GenAI/LLM detector coverage from an
+  otel-audit report.
 metadata:
   author: otel-studio
   version: 0.1.0
@@ -22,11 +23,19 @@ into detector categories (latency, error, saturation, throughput), and generate
 Terraform configuration for Splunk Observability Cloud `signalfx_detector`
 resources with inline SignalFlow programs.
 
+When the audit report contains `## GenAI Readiness`, classify available GenAI
+metrics first and report missing GenAI signals as instrumentation prerequisites
+instead of inventing detectors from absent data.
+
 ## When to Use
 
 - After running `$otel-audit` to generate `.observe/otel.md`
 - When the user wants alerting/detection Terraform for their service
 - When creating monitors for RED signals or saturation metrics
+- When creating GenAI/LLM detectors from audit output containing `gen_ai.*`
+  metrics, provider/model/tool/retrieval spans, memory/context, evaluation
+  quality, token pressure, content governance, cost, fallback, model/config
+  readiness, or workflow fanout gaps
 
 **When NOT to use:** If no audit report exists yet, instruct the user to run
 `$otel-audit` first.
@@ -43,7 +52,7 @@ Look for `.observe/otel.md` in the repository root.
 > No audit report found at `.observe/otel.md`. Please run `$otel-audit` first
 > to generate the observability coverage report.
 
-### Step 2 -- Parse Service Metadata and Metrics
+### Step 2 -- Parse Service Metadata, Metrics, and GenAI Coverage
 
 Extract from `.observe/otel.md`:
 
@@ -56,17 +65,84 @@ Extract from `.observe/otel.md`:
    - Each row provides: metric name, source, and type (auto/custom)
    - Record all metrics for classification in Step 3
 
-If the Metrics section says "No metrics detected.", stop and respond:
+3. **GenAI Readiness** from the `## GenAI Readiness` section when present:
+   - workflow trace shape
+   - semantic-convention completeness
+   - metrics and detectors
+   - AI pathway surfaces
+   - memory/context
+   - evaluation quality
+   - content governance and privacy/cardinality
+   - cost source or owner mapping
+   Missing or partial GenAI areas become instrumentation prerequisites unless
+   matching metrics already exist in the Metrics table.
+
+4. **Legacy GenAI gap-contract input** when present:
+   - Treat older machine-oriented GenAI gap contracts as legacy audit input.
+     Normalize each row into the human-readable `## GenAI Readiness` surface
+     model before producing detector prerequisites.
+   - Parse surface/status, `required_signals`, owner/source files, and
+     `acceptance_criteria`; do not require or display opaque row IDs.
+   - Treat any GenAI surface with status `missing` or `partial` as an
+     instrumentation prerequisite unless matching metrics already exist in the
+     Metrics table.
+   - Generate detectors only for implemented or proven GenAI signals. Do not
+     imply complete token/context, provider/model, tool, stream, retrieval, or
+     model/config coverage while required signals remain missing.
+
+If the Metrics section says "No metrics detected." and there are no GenAI
+readiness sections or legacy GenAI gap-contract inputs, stop and respond:
 
 > The audit report contains no metrics. Detectors require metric data.
 > Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
+
+If the Metrics section says "No metrics detected." but GenAI readiness sections
+or legacy GenAI gap-contract inputs exist, do not generate detector Terraform. Create
+`.observe/detectors.md` with GenAI instrumentation prerequisites and recommend
+`$otel-instrument` for the specific missing signals.
 
 ### Step 3 -- Classify Metrics into Detector Categories
 
 Load `references/detector-classification.md` and apply the classification rules
 to each metric from Step 2.
 
-Assign each metric to exactly one category:
+Assign each metric to exactly one category. Apply GenAI-specific rules first
+when the audit has a `## GenAI Readiness` section or when metric names or
+dimensions explicitly indicate LLM/GenAI ownership: `gen_ai.*`, LLM, inference,
+embedding, model provider/deployment, agent, tool/function calling, retrieval,
+prompt/completion/context token usage, fallback, or model/config readiness. Do
+not classify generic `model`, `workflow`, `tool`, `config`, `canary`, `token`,
+`session`, `chat`, `memory`, `context`, `evaluation`, `evaluator`, `quality`,
+`cost`, or `billing` metrics as GenAI unless the audit evidence shows they
+belong to a GenAI/LLM path. Use generic latency, error, throughput, or
+saturation categories when no GenAI-specific category matches.
+
+- **genai-latency** -- `gen_ai.client.operation.duration`, model/provider
+  request duration, workflow duration, streaming first-chunk/time-per-chunk
+- **genai-token-pressure** -- `gen_ai.client.token.usage`, prompt/context/token
+  size, cache read/create tokens, input/output token histograms
+- **genai-provider** -- provider/model timeout, rate-limit, throttle, 5xx,
+  unavailable, fallback selected/failed, region/deployment errors
+- **genai-tool** -- `execute_tool` success/error/latency, stable tool name,
+  tool failure class, tool-call count per workflow
+- **genai-model-config** -- requested vs response model, model/deployment
+  readiness, failed model resolution, config version/canary/feature flag
+- **genai-workflow-fanout** -- LLM-call count, tool-call count, nested
+  agent/workflow count, workflow outcome and timeout by surface/environment
+- **genai-retrieval** -- retrieval duration/error/no-result/stale-result
+  signals when retrieval/RAG code exists
+- **genai-memory-context** -- memory/context duration/outcome/error,
+  hit/miss, stale/missing context, source/version, and permission/auth failure
+- **genai-evaluation-quality** -- `gen_ai.evaluation.result` derived or
+  app-owned score distribution, pass/fail or violation count, evaluator
+  error/timeout/no-data, sample rate/count, and freshness
+- **genai-content-governance** -- content capture mode, redaction/truncation
+  outcome, unsafe capture/policy rejection, and access/retention owner evidence;
+  use mostly as a prerequisite/dashboard category, never raw content
+- **genai-cost** -- app-computed request/model/provider cost, budget/quota
+  consumption, billing export freshness, or cost calculation failure. If the app
+  does not own an accurate pricing map, owner-map the billing/provider source
+  instead of generating an approximate cost detector
 - **latency** -- duration histograms
 - **error** -- counters with failure/error/invalid keywords
 - **throughput** -- counters without error keywords
@@ -74,6 +150,13 @@ Assign each metric to exactly one category:
 
 Skip metrics that match the exclusion rules (auto-instrumented library metrics
 that duplicate custom signals).
+
+For every `## GenAI Readiness` row or GenAI `## Gaps` entry that is still
+missing a metric, trace attribute, span event, or owner-mapped external signal,
+add an entry to the generated report's "GenAI Instrumentation Prerequisites"
+section. Do not generate a detector for a missing signal. Recommend
+`$otel-instrument` with the specific human-readable GenAI surface and coverage
+area that must be added first.
 
 ### Step 4 -- Generate Terraform
 
@@ -174,6 +257,17 @@ Use the following structure:
 | Error      | N     | Critical | Sudden change (mean + stddev) |
 | Saturation | N     | Warning  | Static threshold |
 | Throughput | N     | Major    | Sudden change (mean + stddev) |
+| GenAI Latency | N | Major | P99 or sudden change |
+| GenAI Token Pressure | N | Major | Token/context threshold or baseline |
+| GenAI Provider | N | Critical | Error/timeout/rate-limit/fallback |
+| GenAI Tool | N | Major | Tool error/latency/fanout |
+| GenAI Model Config | N | Critical | Readiness/mismatch failure |
+| GenAI Workflow Fanout | N | Major | LLM/tool call fanout |
+| GenAI Retrieval | N | Major | Retrieval error/latency/staleness |
+| GenAI Memory Context | N | Major | Memory/context latency, error, freshness, or permission failure |
+| GenAI Evaluation Quality | N | Major | Evaluation score, violation, error, no-data, or freshness |
+| GenAI Content Governance | N | Critical | Unsafe capture, redaction, truncation, or policy failure |
+| GenAI Cost | N | Major | Cost spike, budget/quota pressure, or billing freshness |
 | **Total**  | **N** | | |
 
 ## Latency Detectors
@@ -216,6 +310,15 @@ Default: **3.0 stddev**, 5m current window vs 1h history.
 |--------|--------|
 | `<metric>` | <why it was not classified> |
 
+## GenAI Instrumentation Prerequisites
+
+Include this section when `## GenAI Readiness` or a legacy GenAI gap-contract input exists
+and any required GenAI signal is missing or partial.
+
+| Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
+|---------|--------------|----------------|-------------------------------|-----------|
+| Token/context pressure | partial | truncation rate, token-limit errors, prompt/tool schema size, LLM-call fanout | Matching metrics are absent or only token usage exists | Run `$otel-instrument` to close the named GenAI signals or owner-map them |
+
 ## Classification Rules Applied
 
 <include the decision flowchart from references/detector-classification.md>
@@ -252,6 +355,17 @@ After generating all files (Terraform + report), present a summary:
 | Error       | N     |
 | Saturation  | N     |
 | Throughput  | N     |
+| GenAI Latency | N |
+| GenAI Token Pressure | N |
+| GenAI Provider | N |
+| GenAI Tool | N |
+| GenAI Model Config | N |
+| GenAI Workflow Fanout | N |
+| GenAI Retrieval | N |
+| GenAI Memory Context | N |
+| GenAI Evaluation Quality | N |
+| GenAI Content Governance | N |
+| GenAI Cost | N |
 
 **Output:** `.observe/terraform/`
 

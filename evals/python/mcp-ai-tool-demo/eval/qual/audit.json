@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Scan the MCP-style AI tool gateway in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify files."
+    },
+    {
+      "id": "mcp-readiness",
+      "task": "Produce an observability readiness review for the MCP-style AI tool gateway in ./service. Cover MCP method routing, tool execution, sessions, streams, provider calls, and incident-detection impact. Do not modify files."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for app.py, load_demo.py, pyproject.toml, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Identifies app.py, pyproject.toml, health, JSON-RPC /mcp, session listing, session close, and session stream endpoints.",
+    "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
+    "Maps GenAI and MCP gaps for JSON-RPC method outcome, auth result, session lifecycle, active streams, close reason, stream duration, send/write failure, tool execution, and provider/model calls.",
+    "Scopes session, stream, and backpressure signals to AI-owned MCP/tool pathways instead of treating unrelated generic runtime readiness as GenAI coverage.",
+    "Keeps privacy and cardinality safe by not recommending raw JSON-RPC payloads, tool arguments, sessions, users, tenants, requests, or traces as metric dimensions."
+  ]
+}
