@@ -158,7 +158,6 @@ var (
 )
 
 func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
-	nodes := buildGenAIFlowNodes(spans, maxGenAIFlowNodeSpanListSize())
 	genAISpans := make([]Span, 0)
 	for _, span := range spans {
 		if isGenAISpan(span) {
@@ -168,6 +167,7 @@ func buildGenAITraceSummary(spans []Span) *GenAITraceSummary {
 	if len(genAISpans) == 0 {
 		return nil
 	}
+	nodes := buildGenAIFlowNodes(spans, maxGenAIFlowNodeSpanListSize())
 
 	var tokens GenAITokenUsage
 	toolCalls := 0
@@ -1262,14 +1262,6 @@ func firstNumericAttributeValue(attrs map[string]any, keys []string) (float64, b
 		}
 	}
 	return 0, false
-}
-
-func toFloat64(value any) float64 {
-	numericValue, ok := numericAttributeValue(value)
-	if !ok {
-		return 0
-	}
-	return numericValue
 }
 
 func numericAttributeValue(value any) (float64, bool) {

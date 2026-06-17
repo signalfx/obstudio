@@ -5,10 +5,8 @@ import { ValidationBadge } from "../components/ValidationBadge";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
-import { GenAITraceOverview } from "./GenAITraceOverview";
+import { GenAITraceOverview, type GenAISpanFilterType } from "./GenAITraceOverview";
 import { formatEvaluationName, getSpanEvaluations } from "./genai-evaluations";
-
-type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop" | "quality";
 
 interface TraceWaterfallProps {
   spans: Span[];

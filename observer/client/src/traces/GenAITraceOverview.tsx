@@ -4,7 +4,7 @@ import { ValidationBadge } from "../components/ValidationBadge";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
 
-type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop" | "quality";
+export type GenAISpanFilterType = "security" | "privacy" | "llm" | "tool" | "loop" | "quality";
 
 interface GenAITraceOverviewProps {
   summary: GenAITraceSummary | null;
