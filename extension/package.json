@@ -3,7 +3,7 @@
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
   "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
   "bugs": {
@@ -15,7 +15,7 @@
     "url": "git+https://github.com/signalfx/obstudio.git"
   },
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Visualization",
@@ -138,7 +138,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.110.0",
+    "@types/vscode": "^1.82.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
