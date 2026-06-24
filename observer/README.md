@@ -51,12 +51,52 @@ OTLP/HTTP + gRPC ──▶ In-memory Store
 
 ## Environment Variables
 
+### Core
+
 | Variable | Default | Description |
 |---|---|---|
 | `HOST` | `127.0.0.1` | Bind address |
 | `PORT` | `3000` | Web UI / API / MCP port |
 | `OTLP_HTTP_PORT` | `4318` | OTLP/HTTP receiver port |
 | `OTLP_GRPC_PORT` | `4317` | OTLP/gRPC receiver port |
+
+### Optional Splunk Observability Cloud forwarding
+
+Observer can forward received telemetry to Splunk Observability Cloud.
+Metrics and traces are configured independently; both are disabled by default.
+
+**Shared credentials** (used by both metrics and traces):
+
+| Variable | Description |
+|---|---|
+| `SPLUNK_REALM` or `OBSTUDIO_SPLUNK_REALM` | Splunk realm (e.g. `us1`, `eu0`). Used to build the default ingest endpoint when no explicit endpoint is set. |
+| `SPLUNK_ACCESS_TOKEN` | Splunk org access token with ingest scope. |
+
+**Metrics forwarding** (`/v2/datapoint/otlp`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `OBSTUDIO_SPLUNK_METRICS_EXPORT` or `SPLUNK_METRICS_EXPORT` | `false` | Enable metrics forwarding. |
+| `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` | auto from realm | Override the metrics ingest URL. |
+| `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` | `5s` | Per-request timeout (e.g. `10s` or `10`). |
+
+**Traces forwarding** (`/v2/trace/otlp`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `OBSTUDIO_SPLUNK_TRACES_EXPORT` or `SPLUNK_TRACES_EXPORT` | `false` | Enable traces forwarding. Sending spans to Splunk makes the instrumented service visible as an APM service. |
+| `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` | auto from realm | Override the traces ingest URL. |
+| `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` | `5s` | Per-request timeout (e.g. `10s` or `10`). |
+
+**Example**: forward both metrics and traces for realm `us1`:
+
+```bash
+export SPLUNK_REALM=us1
+export SPLUNK_ACCESS_TOKEN=<your-token>
+export OBSTUDIO_SPLUNK_METRICS_EXPORT=true
+export OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+make run
+```
 
 ## Sending Telemetry
 

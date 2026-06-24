@@ -17,8 +17,10 @@ import (
 // so we can associate incoming data with the connection ID resolved by
 // the ConnTracker.
 type otlpHTTPHandler struct {
-	store *store.Store
-	ct    *ConnTracker
+	store          *store.Store
+	ct             *ConnTracker
+	exporter       MetricsExporter
+	tracesExporter TracesExporter
 }
 
 func (h *otlpHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,7 @@ func (h *otlpHTTPHandler) handleTraces(w http.ResponseWriter, body []byte, isPro
 		return
 	}
 	h.store.AddSpansForConnection(connID, ConvertTraces(td))
+	exportTracesAsync(h.tracesExporter, td)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("{}"))
@@ -83,6 +86,7 @@ func (h *otlpHTTPHandler) handleMetrics(w http.ResponseWriter, body []byte, isPr
 		return
 	}
 	h.store.AddMetricsForConnection(connID, ConvertMetrics(md))
+	exportMetricsAsync(h.exporter, md)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("{}"))
