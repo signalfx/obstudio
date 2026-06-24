@@ -214,7 +214,7 @@ func TestDispatchToolsList(t *testing.T) {
 }
 
 func TestValidationToolDescriptionsGuideNaturalUsage(t *testing.T) {
-	tools := buildToolDefs()
+	tools := buildToolDefs(false)
 	index := make(map[string]toolDef, len(tools))
 	for _, tool := range tools {
 		index[tool.Name] = tool

@@ -141,9 +141,17 @@ func run(config runConfig) {
 		)
 	}
 
+	var metricsExporter otlp.MetricsExporter
+	if splunkExportController.Status().Configured {
+		metricsExporter = splunkExportController
+	}
+	var tracesExporter otlp.TracesExporter
+	if splunkTracesController.Status().Configured {
+		tracesExporter = splunkTracesController
+	}
 	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr,
-		otlp.WithMetricsExporter(splunkExportController),
-		otlp.WithTracesExporter(splunkTracesController),
+		otlp.WithMetricsExporter(metricsExporter),
+		otlp.WithTracesExporter(tracesExporter),
 	)
 	if err != nil {
 		log.Fatalf("failed to start OTLP receiver: %v", err)

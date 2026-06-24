@@ -16,7 +16,7 @@ live Standard detector:
    detector's `programText`, either as `filter('service.name', '<value>')` or
    `filter('sf_service', '<value>')` — both dimension keys are equivalent for
    this check.
-3. **Standard origin** — the live detector has `detector_origin != "AutoDetect"`.
+3. **Standard origin** — the live detector has `detectorOrigin != "AutoDetect"`.
    Org-wide AutoDetect detectors never qualify as COVERED (see AutoDetect section).
 
 If ANY condition is not met, the spec is NOT COVERED.
@@ -65,7 +65,7 @@ Common UNCERTAIN triggers:
 
 ### AutoDetect Advisory
 
-A live detector where `detector_origin == "AutoDetect"`.
+A live detector where `detectorOrigin == "AutoDetect"`.
 
 These detectors are created by Splunk's org-wide APM AutoDetect feature. They
 use `blended()` over `service.request.*` metrics aggregated across all services
@@ -122,7 +122,7 @@ Live detectors: none reference `db.pool.connections.active` in their `programTex
 
 Local spec: latency detector for `service.request.duration` (or similar) for `orders-api`
 
-Live detector: `detector_origin == "AutoDetect"`, `programText` uses `blended()` over
+Live detector: `detectorOrigin == "AutoDetect"`, `programText` uses `blended()` over
 `service.request.*` with no `filter('service.name', ...)`.
 
 → Local spec classification determined by Standard detectors only.

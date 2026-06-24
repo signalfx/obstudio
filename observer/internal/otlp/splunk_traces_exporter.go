@@ -304,7 +304,6 @@ func (e *SplunkTracesExporter) exportTracesToEndpoint(ctx context.Context, endpo
 	return fmt.Errorf("splunk traces export returned status %d: %s", resp.StatusCode, redactSensitiveText(strings.TrimSpace(string(responseBody)), e.accessToken))
 }
 
-// exportTracesAsync clones and forwards traces in the background. No-op when
 // exportTracesAsync forwards td to exporter in a background goroutine.
 // One goroutine is fired per batch with no concurrency cap — intentional for
 // a dev-tool workload where batches are infrequent and ingest latency is low.

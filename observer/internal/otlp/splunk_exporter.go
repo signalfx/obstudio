@@ -377,68 +377,6 @@ func redactKeyedSecret(text, marker string) string {
 	}
 }
 
-func redactHeaderValue(key, value string) string {
-	lowerKey := strings.ToLower(key)
-	switch {
-	case strings.Contains(lowerKey, "authorization"),
-		strings.Contains(lowerKey, "cookie"),
-		strings.Contains(lowerKey, "key"),
-		strings.Contains(lowerKey, "secret"),
-		strings.Contains(lowerKey, "token"):
-		return fmt.Sprintf("<redacted len=%d>", len(value))
-	default:
-		return value
-	}
-}
-
-func metricExportSummary(md pmetric.Metrics) string {
-	resourceMetrics := md.ResourceMetrics().Len()
-	scopeMetrics := 0
-	metrics := 0
-	dataPoints := 0
-	names := make([]string, 0, 6)
-	for i := 0; i < md.ResourceMetrics().Len(); i++ {
-		resourceMetric := md.ResourceMetrics().At(i)
-		scopeMetrics += resourceMetric.ScopeMetrics().Len()
-		for j := 0; j < resourceMetric.ScopeMetrics().Len(); j++ {
-			scopeMetric := resourceMetric.ScopeMetrics().At(j)
-			metrics += scopeMetric.Metrics().Len()
-			for k := 0; k < scopeMetric.Metrics().Len(); k++ {
-				metric := scopeMetric.Metrics().At(k)
-				if len(names) < 6 {
-					names = append(names, metric.Name())
-				}
-				dataPoints += metricDataPointCount(metric)
-			}
-		}
-	}
-	return fmt.Sprintf(
-		"resourceMetrics=%d scopeMetrics=%d metrics=%d dataPoints=%d names=%s",
-		resourceMetrics,
-		scopeMetrics,
-		metrics,
-		dataPoints,
-		strings.Join(names, ","),
-	)
-}
-
-func metricDataPointCount(metric pmetric.Metric) int {
-	switch metric.Type() {
-	case pmetric.MetricTypeGauge:
-		return metric.Gauge().DataPoints().Len()
-	case pmetric.MetricTypeSum:
-		return metric.Sum().DataPoints().Len()
-	case pmetric.MetricTypeHistogram:
-		return metric.Histogram().DataPoints().Len()
-	case pmetric.MetricTypeExponentialHistogram:
-		return metric.ExponentialHistogram().DataPoints().Len()
-	case pmetric.MetricTypeSummary:
-		return metric.Summary().DataPoints().Len()
-	default:
-		return 0
-	}
-}
-
 func splunkExporterCanaryMetric(metricName string) pmetric.Metrics {
 	md := pmetric.NewMetrics()
 	rm := md.ResourceMetrics().AppendEmpty()

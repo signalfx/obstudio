@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -74,15 +75,17 @@ type toolContent struct {
 
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
-	store             *store.Store
-	validationService *validator.Service
-	tools             []toolDef
+	store                 *store.Store
+	validationService     *validator.Service
+	splunkMetricsCtrl     *otlp.SplunkMetricsExportController
+	tools                 []toolDef
 }
 
 // NewDispatcher creates a new transport-agnostic MCP dispatcher.
 func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var validationStore *validator.Store
 	var runner validator.Runner
+	var splunkMetricsCtrl *otlp.SplunkMetricsExportController
 	for _, param := range params {
 		switch value := param.(type) {
 		case *validator.Store:
@@ -93,6 +96,10 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 			if value != nil {
 				runner = value
 			}
+		case *otlp.SplunkMetricsExportController:
+			if value != nil {
+				splunkMetricsCtrl = value
+			}
 		}
 	}
 	if validationStore == nil {
@@ -101,7 +108,8 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	return &Dispatcher{
 		store:             s,
 		validationService: validator.NewService(validationStore, runner),
-		tools:             buildToolDefs(),
+		splunkMetricsCtrl: splunkMetricsCtrl,
+		tools:             buildToolDefs(splunkMetricsCtrl != nil),
 	}
 }
 
@@ -172,6 +180,12 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.validationAnalyze(args)
 	case "observer_validation_refresh":
 		result = d.validationRefresh(args)
+	case "observer_splunk_metrics_export_status":
+		result = d.splunkMetricsExportStatus()
+	case "observer_splunk_metrics_export_configure":
+		result = d.splunkMetricsExportConfigure(args)
+	case "observer_splunk_metrics_export_test":
+		result = d.splunkMetricsExportTest(args)
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 	}
@@ -288,9 +302,39 @@ func (d *Dispatcher) validationRefresh(args map[string]any) toolResult {
 	return jsonToolResult(analysis)
 }
 
-func buildToolDefs() []toolDef {
+func (d *Dispatcher) splunkMetricsExportStatus() toolResult {
+	return jsonToolResult(d.splunkMetricsCtrl.Status())
+}
+
+func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResult {
+	cfg := otlp.SplunkMetricsExporterConfig{
+		Enabled:     boolArg(args, "enabled", false),
+		Realm:       strArg(args, "realm"),
+		Endpoint:    strArg(args, "endpoint"),
+		AccessToken: strArg(args, "accessToken"),
+	}
+	if seconds := intArg(args, "timeoutSeconds", 0); seconds > 0 {
+		cfg.Timeout = time.Duration(seconds) * time.Second
+	}
+	if err := d.splunkMetricsCtrl.Configure(cfg); err != nil {
+		return errorResult(fmt.Sprintf("configure Splunk metrics export: %v", err))
+	}
+	return jsonToolResult(d.splunkMetricsCtrl.Status())
+}
+
+func (d *Dispatcher) splunkMetricsExportTest(args map[string]any) toolResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	status, err := d.splunkMetricsCtrl.TestConnection(ctx, strArg(args, "metricName"))
+	if err != nil {
+		return jsonErrorResult(map[string]any{"error": err.Error(), "status": status})
+	}
+	return jsonToolResult(status)
+}
+
+func buildToolDefs(withSplunk bool) []toolDef {
 	f := false
-	return []toolDef{
+	tools := []toolDef{
 		{
 			Name:        "observer_metrics_overview",
 			Description: "List metrics currently present in the OTLP in-memory store, with compact summaries and bounded datapoint previews. Use this when the user asks what metrics are flowing right now or wants a quick metrics inventory.",
@@ -431,6 +475,43 @@ func buildToolDefs() []toolDef {
 			Annotations: toolAnnot{Title: "Observer Status", ReadOnlyHint: true, IdempotentHint: true},
 		},
 	}
+	if withSplunk {
+		tools = append(tools,
+			toolDef{
+				Name:        "observer_splunk_metrics_export_status",
+				Description: "Return the current Splunk Observability Cloud metrics forwarding status, including configured endpoints, token presence, and the last export attempt. Use this to check whether Splunk metrics export is active.",
+				InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
+				Annotations: toolAnnot{Title: "Splunk Metrics Export Status", ReadOnlyHint: true, IdempotentHint: true},
+			},
+			toolDef{
+				Name:        "observer_splunk_metrics_export_configure",
+				Description: "Update the Splunk Observability Cloud metrics forwarding configuration at runtime. Use this to enable, disable, or change the realm, endpoint, or access token without restarting obstudio.",
+				InputSchema: jsonSchema{
+					Type: "object", AdditionalProperties: &f,
+					Properties: map[string]jsonSchema{
+						"enabled":        {Type: "boolean", Description: "Enable or disable Splunk metrics forwarding."},
+						"realm":          {Type: "string", Description: "Splunk realm (e.g. us0, us1, eu0). Ignored when endpoint is set."},
+						"endpoint":       {Type: "string", Description: "Custom OTLP ingest endpoint URL. Overrides realm-derived URL."},
+						"accessToken":    {Type: "string", Description: "Splunk access token for authentication."},
+						"timeoutSeconds": {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(120), Description: "Per-export HTTP timeout in seconds."},
+					},
+				},
+				Annotations: toolAnnot{Title: "Splunk Metrics Export Configure", IdempotentHint: true},
+			},
+			toolDef{
+				Name:        "observer_splunk_metrics_export_test",
+				Description: "Send a single canary metric to the configured Splunk Observability Cloud endpoint to verify connectivity and token validity. Returns the updated export status including the outcome of the test send.",
+				InputSchema: jsonSchema{
+					Type: "object", AdditionalProperties: &f,
+					Properties: map[string]jsonSchema{
+						"metricName": {Type: "string", Description: "Optional metric name for the canary datapoint. Defaults to obstudio.splunk_exporter.test."},
+					},
+				},
+				Annotations: toolAnnot{Title: "Splunk Metrics Export Test"},
+			},
+		)
+	}
+	return tools
 }
 
 func rpcResult(id any, result any) jsonRPCResponse {
