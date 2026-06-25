@@ -112,11 +112,15 @@ while consecutive_empty < 5:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.load(resp)
-    except Exception:
-        # Skip-on-500: the API has a known bug at certain offsets.
-        offset += limit
-        consecutive_empty += 1
-        continue
+    except urllib.error.HTTPError as e:
+        if e.code == 500:
+            # Skip-on-500: the API has a known bug at certain offsets.
+            offset += limit
+            consecutive_empty += 1
+            continue
+        raise RuntimeError(f"Splunk API error {e.code} fetching detectors: {e}") from e
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
+        raise RuntimeError(f"Failed to fetch detectors: {e}") from e
 
     batch = data.get("results", [])
     if not batch:
