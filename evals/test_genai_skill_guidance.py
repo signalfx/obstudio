@@ -1135,3 +1135,21 @@ def test_splunk_sync_skill_requires_confirmation_before_create():
     assert "if_not_exists" in text, (
         "SKILL.md must use if_not_exists=true as belt-and-suspenders on create"
     )
+
+
+def test_splunk_sync_skill_normalizes_program_text_before_create():
+    text = _read(SPLUNK_SYNC)
+    # Heredoc dedent: <<-EOF leading whitespace must be stripped or Splunk 400s.
+    assert "dedent" in text.lower(), (
+        "SKILL.md must require dedenting the <<-EOF heredoc before POSTing program_text"
+    )
+    assert "<<-EOF" in text or "<<-eof" in text.lower(), (
+        "SKILL.md must call out the indented-heredoc (<<-EOF) parse hazard"
+    )
+    # Full variable resolution: every ${var.*}, not just service.name.
+    assert "${var." in text, "SKILL.md must reference ${var.*} interpolation in program_text"
+    assert "threshold" in text.lower() and "stddev" in text.lower(), (
+        "SKILL.md must require resolving threshold/stddev variables, not just service.name"
+    )
+    # The failure is a SignalFlow parse 400, distinct from a field-name 400.
+    assert "400" in text, "SKILL.md must document the HTTP 400 SignalFlow-parse failure"

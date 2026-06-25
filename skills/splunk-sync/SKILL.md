@@ -12,7 +12,7 @@ description: >-
   missing", "create missing monitors", or "push detector gaps to Splunk".
 metadata:
   author: otel-studio
-  version: 0.2.0
+  version: 0.3.0
   category: observability
 ---
 
@@ -87,6 +87,82 @@ extract:
 when comparing.**
 
 Fail fast if the file is not parseable (malformed HCL) and tell the user.
+
+#### Step 2a -- Normalize `program_text` to valid SignalFlow (required before create)
+
+The raw `program_text` value extracted from HCL is **not** valid SignalFlow and
+**must** be normalized before it is sent in any `POST /v2/detector` body. The
+Splunk API runs the string through the SignalFlow parser as-is and rejects it
+with **HTTP 400** if either of the following is left unhandled. Do this once,
+during parsing, and carry the normalized string forward:
+
+1. **Strip indented-heredoc whitespace (`<<-EOF`).** Terraform's `<<-EOF`
+   "indented heredoc" deletes the leading whitespace of the *least-indented*
+   line at apply time, but the raw bytes between the `<<-EOF` and `EOF` markers
+   still carry the editor indentation. SignalFlow treats a leading-whitespace
+   line as a syntax error, so reproduce Terraform's behavior: find the smallest
+   leading-whitespace run across all non-blank lines and strip exactly that many
+   leading characters from every line (i.e. `textwrap.dedent` after trimming the
+   trailing marker line). Plain `<<EOF` (no dash) is already flush-left — leave
+   it unchanged. Always `.strip()` the final result so a leading/trailing blank
+   line never reaches the parser.
+
+2. **Resolve every `${var.*}` reference, not just `service.name`.** Detector
+   program text routinely interpolates thresholds, stddev counts, and windows —
+   `threshold(${var.saturation_queue_depth_threshold})`,
+   `fire_num_stddev=${var...._stddev}`, etc. A literal `${var...}` token is
+   invalid SignalFlow. Resolve **all** of them, in this precedence order, before
+   create:
+
+   - a matching assignment in `terraform.tfvars` (then `*.auto.tfvars`, then
+     `terraform.tfvars.example`), else
+   - the `default` value of the matching `variable "<name>" { ... }` block in
+     `variables.tf`, else
+   - prompt the user for the value (do not guess, and do not POST with an
+     unresolved token).
+
+   Substitute the resolved literal for the whole `${var.<name>}` span. Numbers
+   are emitted bare (`50.0`), strings keep their SignalFlow quoting as written
+   in the surrounding program text.
+
+```python
+import re, textwrap
+
+def dedent_heredoc(raw: str) -> str:
+    # Mirrors Terraform <<-EOF: strip common leading whitespace, trim blank edges.
+    return textwrap.dedent(raw).strip()
+
+def resolve_vars(program_text: str, tf_vars: dict, var_defaults: dict) -> str:
+    # tf_vars: name->value from terraform.tfvars / *.auto.tfvars / .example
+    # var_defaults: name->default from variables.tf `variable` blocks
+    unresolved = []
+
+    def repl(m):
+        name = m.group(1)
+        if name in tf_vars:
+            return str(tf_vars[name])
+        if name in var_defaults:
+            return str(var_defaults[name])
+        unresolved.append(name)
+        return m.group(0)
+
+    out = re.sub(r"\$\{var\.([A-Za-z0-9_]+)\}", repl, program_text)
+    if unresolved:
+        raise ValueError(
+            "Unresolved Terraform variables in program_text "
+            f"(no tfvars assignment and no default): {sorted(set(unresolved))}. "
+            "Prompt the user for these before POSTing the detector."
+        )
+    return out
+
+# Per spec, during parsing:
+program_text = resolve_vars(dedent_heredoc(raw_program_text), tf_vars, var_defaults)
+```
+
+Both transforms are pure-string and deterministic; the result is the exact
+SignalFlow Splunk would have received had the Terraform been `terraform apply`-d.
+Use this normalized `program_text` everywhere downstream — both for COVERED/GAP
+comparison and for the create body in Step 6.
 
 ### Step 3 -- Fetch Live Detectors
 
@@ -222,7 +298,9 @@ After the user confirms, for each GAP spec:
    ```python
    body = {
        "name": resolved_name,           # ${var.service_name} substituted
-       "programText": program_text,     # from the HCL program_text field
+       "programText": program_text,     # NORMALIZED per Step 2a: heredoc dedented
+                                        # AND all ${var.*} resolved — never the raw
+                                        # HCL value, or Splunk returns HTTP 400
        "rules": [
            {
                "severity": rule["severity"],
@@ -336,3 +414,8 @@ reviewing and resolving the ambiguous live detectors manually.
   stop
 - POST returns HTTP 400 with "Unrecognized field" — field name casing mismatch;
   check `programText` vs `program_text` and `detectLabel` vs `detect_label`
+- POST returns HTTP 400 with a SignalFlow parse/syntax error (not a field-name
+  error) — the `program_text` was sent un-normalized. Re-check Step 2a: the
+  `<<-EOF` heredoc must be dedented and **every** `${var.*}` (thresholds, stddev,
+  windows — not just `service.name`) must be resolved before the POST. A literal
+  `${var...}` token or a leading-whitespace program line both parse-fail as 400.
