@@ -199,7 +199,7 @@ func (c *SplunkTracesExportController) recordExport(err error) {
 		Success: err == nil,
 	}
 	if err != nil {
-		c.lastExport.Error = err.Error()
+		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
 	}
 }
 

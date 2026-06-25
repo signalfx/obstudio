@@ -35,8 +35,8 @@ type ConnTracker struct {
 	store      *store.Store
 	grpcServer *grpc.Server
 	httpServer *http.Server
-	grpcLn     net.Listener
-	httpLn     net.Listener
+	grpcLn         net.Listener
+	httpLn         net.Listener
 	backendCC      *grpc.ClientConn
 	exporter       MetricsExporter
 	tracesExporter TracesExporter

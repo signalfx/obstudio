@@ -17,10 +17,16 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/ulikunitz/xz v0.5.15
 	go.opentelemetry.io/collector/config/configgrpc v0.149.0
+	go.opentelemetry.io/collector/config/confighttp v0.149.0
 	go.opentelemetry.io/collector/config/confignet v1.55.0
+	go.opentelemetry.io/collector/config/configopaque v1.55.0
 	go.opentelemetry.io/collector/config/configoptional v1.55.0
+	go.opentelemetry.io/collector/exporter v1.55.0
+	go.opentelemetry.io/collector/exporter/exporterhelper v0.149.0
+	go.opentelemetry.io/collector/exporter/otlphttpexporter v0.149.0
 	go.opentelemetry.io/otel/metric v1.42.0
 	go.opentelemetry.io/otel/trace v1.42.0
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/sys v0.42.0
 	google.golang.org/grpc v1.79.3
 )
@@ -62,9 +68,7 @@ require (
 	go.opentelemetry.io/collector/component/componentstatus v0.149.0 // indirect
 	go.opentelemetry.io/collector/config/configauth v1.55.0 // indirect
 	go.opentelemetry.io/collector/config/configcompression v1.55.0 // indirect
-	go.opentelemetry.io/collector/config/confighttp v0.149.0 // indirect
 	go.opentelemetry.io/collector/config/configmiddleware v1.55.0 // indirect
-	go.opentelemetry.io/collector/config/configopaque v1.55.0 // indirect
 	go.opentelemetry.io/collector/config/configretry v1.55.0 // indirect
 	go.opentelemetry.io/collector/config/configtls v1.55.0 // indirect
 	go.opentelemetry.io/collector/confmap v1.55.0 // indirect
@@ -72,10 +76,7 @@ require (
 	go.opentelemetry.io/collector/consumer/consumererror v0.149.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror/xconsumererror v0.149.0 // indirect
 	go.opentelemetry.io/collector/consumer/xconsumer v0.149.0 // indirect
-	go.opentelemetry.io/collector/exporter v1.55.0 // indirect
-	go.opentelemetry.io/collector/exporter/exporterhelper v0.149.0 // indirect
 	go.opentelemetry.io/collector/exporter/exporterhelper/xexporterhelper v0.149.0 // indirect
-	go.opentelemetry.io/collector/exporter/otlphttpexporter v0.149.0 // indirect
 	go.opentelemetry.io/collector/exporter/xexporter v0.149.0 // indirect
 	go.opentelemetry.io/collector/extension v1.55.0 // indirect
 	go.opentelemetry.io/collector/extension/extensionauth v1.55.0 // indirect
@@ -95,7 +96,6 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.42.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/text v0.35.0 // indirect

@@ -203,7 +203,7 @@ func (c *SplunkMetricsExportController) recordExport(err error) {
 		Success: err == nil,
 	}
 	if err != nil {
-		c.lastExport.Error = err.Error()
+		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
 	}
 }
 
@@ -227,6 +227,18 @@ func redactConfiguredToken(token string) string {
 		return ""
 	}
 	return fmt.Sprintf("<redacted len=%d>", len(token))
+}
+
+// sanitizeExportError returns err.Error() with the access token replaced by
+// "<redacted>" if it appears. The otlphttpexporter uses configopaque.String so
+// the token should never appear in its own error messages, but a Splunk backend
+// can echo submitted credentials in a 401 body; this is a defence-in-depth guard.
+func sanitizeExportError(err error, token string) string {
+	msg := err.Error()
+	if token == "" {
+		return msg
+	}
+	return strings.ReplaceAll(msg, token, "<redacted>")
 }
 
 func newConfiguredSplunkMetricsExporter(config SplunkMetricsExporterConfig) (splunkMetricsExporterRuntime, error) {
