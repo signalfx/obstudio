@@ -75,10 +75,10 @@ type toolContent struct {
 
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
-	store                 *store.Store
-	validationService     *validator.Service
-	splunkMetricsCtrl     *otlp.SplunkMetricsExportController
-	tools                 []toolDef
+	store             *store.Store
+	validationService *validator.Service
+	splunkMetricsCtrl *otlp.SplunkMetricsExportController
+	tools             []toolDef
 }
 
 // NewDispatcher creates a new transport-agnostic MCP dispatcher.
