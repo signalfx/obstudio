@@ -1,19 +1,26 @@
 package otlp
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configoptional"
+	"go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"go.uber.org/zap"
 )
 
 const defaultSplunkMetricsExportTimeout = 5 * time.Second
@@ -69,6 +76,7 @@ type SplunkMetricsExportController struct {
 type splunkMetricsExporterRuntime interface {
 	MetricsExporter
 	Endpoints() []string
+	Shutdown(ctx context.Context)
 }
 
 // NewSplunkMetricsExportController creates a runtime controller. Disabled
@@ -88,12 +96,30 @@ func (c *SplunkMetricsExportController) Configure(config SplunkMetricsExporterCo
 		return err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	old := c.exporter
 	c.config = normalizeSplunkMetricsExporterConfig(config)
 	c.exporter = exporter
 	c.lastExport = SplunkMetricsExportAttempt{}
 	c.hasLastExport = false
+	c.mu.Unlock()
+	if old != nil {
+		old.Shutdown(context.Background())
+	}
 	return nil
+}
+
+// Shutdown stops the active exporter component cleanly.
+func (c *SplunkMetricsExportController) Shutdown(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	exp := c.exporter
+	c.exporter = nil
+	c.mu.Unlock()
+	if exp != nil {
+		exp.Shutdown(ctx)
+	}
 }
 
 // Config returns the current config. Callers must not log or return the access
@@ -210,19 +236,12 @@ func newConfiguredSplunkMetricsExporter(config SplunkMetricsExporterConfig) (spl
 	return NewSplunkMetricsExporter(config)
 }
 
-// splunkEndpoint is a named outbound export target shared by metrics and traces exporters.
-type splunkEndpoint struct {
-	name string
-	url  string
-}
-
 // SplunkMetricsExporter forwards metrics to Splunk Observability Cloud using
-// OTLP/HTTP protobuf and an org access token in the X-SF-Token header.
+// the Collector otlphttpexporter with X-SF-Token auth and queue disabled for
+// synchronous delivery.
 type SplunkMetricsExporter struct {
-	endpoints   []splunkEndpoint
-	accessToken string
-	timeout     time.Duration
-	client      *http.Client
+	endpoint string
+	exp      exporter.Metrics
 }
 
 // NewSplunkMetricsExporter creates a Splunk metrics exporter when enabled. It
@@ -239,30 +258,50 @@ func NewSplunkMetricsExporter(config SplunkMetricsExporterConfig) (*SplunkMetric
 		}
 		endpoint = fmt.Sprintf("https://ingest.%s.observability.splunkcloud.com%s", realm, splunkMetricsOTLPPath)
 	}
-	primaryEndpoint, err := normalizeSplunkMetricsEndpoint(endpoint)
-	if err != nil {
+	if _, err := normalizeSplunkMetricsEndpoint(endpoint); err != nil {
 		return nil, fmt.Errorf("invalid Splunk metrics endpoint: %w", err)
 	}
 	token := strings.TrimSpace(config.AccessToken)
 	if token == "" {
 		return nil, fmt.Errorf("splunk metrics export requires SPLUNK_ACCESS_TOKEN")
 	}
-	timeout := effectiveSplunkMetricsTimeout(config.Timeout)
-	endpoints := []splunkEndpoint{{name: "primary", url: primaryEndpoint}}
-	return &SplunkMetricsExporter{
-		endpoints:   endpoints,
-		accessToken: token,
-		timeout:     timeout,
-		client:      &http.Client{Timeout: timeout},
-	}, nil
+
+	factory := otlphttpexporter.NewFactory()
+	cfg := factory.CreateDefaultConfig().(*otlphttpexporter.Config)
+	cfg.MetricsEndpoint = endpoint
+	cfg.ClientConfig = confighttp.ClientConfig{
+		Timeout: effectiveSplunkMetricsTimeout(config.Timeout),
+		Headers: configopaque.MapList{
+			{Name: "X-SF-Token", Value: configopaque.String(token)},
+		},
+	}
+	cfg.QueueConfig = configoptional.None[exporterhelper.QueueBatchConfig]()
+
+	set := exporter.Settings{
+		ID: component.MustNewID("otlphttp"),
+		TelemetrySettings: component.TelemetrySettings{
+			Logger:         zap.NewNop(),
+			MeterProvider:  metricnoop.NewMeterProvider(),
+			TracerProvider: tracenoop.NewTracerProvider(),
+		},
+	}
+	exp, err := factory.CreateMetrics(context.Background(), set, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create Splunk metrics exporter: %w", err)
+	}
+	if err := exp.Start(context.Background(), minimalHost{}); err != nil {
+		_ = exp.Shutdown(context.Background())
+		return nil, fmt.Errorf("start Splunk metrics exporter: %w", err)
+	}
+	return &SplunkMetricsExporter{endpoint: endpoint, exp: exp}, nil
 }
 
 // Endpoint returns the configured non-secret export endpoint.
 func (e *SplunkMetricsExporter) Endpoint() string {
-	if e == nil || len(e.endpoints) == 0 {
+	if e == nil {
 		return ""
 	}
-	return e.endpoints[0].url
+	return e.endpoint
 }
 
 // Endpoints returns all configured non-secret export endpoints.
@@ -270,56 +309,25 @@ func (e *SplunkMetricsExporter) Endpoints() []string {
 	if e == nil {
 		return nil
 	}
-	endpoints := make([]string, 0, len(e.endpoints))
-	for _, endpoint := range e.endpoints {
-		endpoints = append(endpoints, endpoint.url)
-	}
-	return endpoints
+	return []string{e.endpoint}
 }
 
+// ExportMetrics forwards metrics to the Splunk ingest endpoint synchronously.
 func (e *SplunkMetricsExporter) ExportMetrics(ctx context.Context, md pmetric.Metrics) error {
 	if e == nil {
 		return nil
 	}
-	body, err := (&pmetric.ProtoMarshaler{}).MarshalMetrics(md)
-	if err != nil {
-		return fmt.Errorf("marshal metrics: %w", err)
-	}
-
-	if len(e.endpoints) == 0 {
-		return nil
-	}
-	return e.exportMetricsToEndpoint(ctx, e.endpoints[0], body)
+	return e.exp.ConsumeMetrics(ctx, md)
 }
 
-func (e *SplunkMetricsExporter) exportMetricsToEndpoint(ctx context.Context, endpoint splunkEndpoint, body []byte) error {
-	reqCtx, cancel := context.WithTimeout(ctx, e.timeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint.url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+// Shutdown stops the underlying exporter component.
+func (e *SplunkMetricsExporter) Shutdown(ctx context.Context) {
+	if e == nil {
+		return
 	}
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("X-SF-Token", e.accessToken)
-	req.Header.Set("User-Agent", "obstudio-splunk-metrics-exporter")
-
-	started := time.Now()
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("post metrics: %w", err)
+	if err := e.exp.Shutdown(ctx); err != nil {
+		log.Printf("[splunk-export] shutdown error: %v", err)
 	}
-	defer resp.Body.Close()
-	duration := time.Since(started)
-	log.Printf("[splunk-export] response endpoint=%s status=%d duration=%s", endpoint.name, resp.StatusCode, duration.Round(time.Millisecond))
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
-	}
-	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	if len(responseBody) == 0 {
-		return fmt.Errorf("splunk metrics export returned status %d", resp.StatusCode)
-	}
-	return fmt.Errorf("splunk metrics export returned status %d: %s", resp.StatusCode, redactSensitiveText(strings.TrimSpace(string(responseBody)), e.accessToken))
 }
 
 func normalizeSplunkMetricsEndpoint(rawEndpoint string) (string, error) {
@@ -335,46 +343,6 @@ func normalizeSplunkMetricsEndpoint(rawEndpoint string) (string, error) {
 		return "", fmt.Errorf("endpoint must include scheme and host")
 	}
 	return parsed.String(), nil
-}
-
-func redactSensitiveText(text string, secrets ...string) string {
-	redacted := text
-	for _, secret := range secrets {
-		if strings.TrimSpace(secret) != "" {
-			redacted = strings.ReplaceAll(redacted, secret, "<redacted>")
-		}
-	}
-	for _, marker := range []string{"authorization", "x-sf-token", "token", "secret", "password"} {
-		redacted = redactKeyedSecret(redacted, marker)
-	}
-	return redacted
-}
-
-func redactKeyedSecret(text, marker string) string {
-	lower := strings.ToLower(text)
-	searchStart := 0
-	for {
-		idx := strings.Index(lower[searchStart:], marker)
-		if idx < 0 {
-			return text
-		}
-		idx += searchStart
-		valueStart := idx + len(marker)
-		for valueStart < len(text) && (text[valueStart] == ' ' || text[valueStart] == ':' || text[valueStart] == '=') {
-			valueStart++
-		}
-		valueEnd := valueStart
-		for valueEnd < len(text) && !strings.ContainsRune(" \t\r\n,;\"'}", rune(text[valueEnd])) {
-			valueEnd++
-		}
-		if valueEnd > valueStart {
-			text = text[:valueStart] + "<redacted>" + text[valueEnd:]
-			lower = strings.ToLower(text)
-			searchStart = valueStart + len("<redacted>")
-			continue
-		}
-		searchStart = valueStart
-	}
 }
 
 func splunkExporterCanaryMetric(metricName string) pmetric.Metrics {

@@ -192,6 +192,8 @@ func run(config runConfig) {
 	webCleanup()
 	validatorManager.Shutdown(shutCtx)
 	rcv.Shutdown(ctx)
+	splunkExportController.Shutdown(shutCtx)
+	splunkTracesController.Shutdown(shutCtx)
 }
 
 func envOr(key, fallback string) string {

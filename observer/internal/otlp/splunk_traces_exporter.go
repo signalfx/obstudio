@@ -1,18 +1,25 @@
 package otlp
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configoptional"
+	"go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"go.uber.org/zap"
 )
 
 const defaultSplunkTracesExportTimeout = 5 * time.Second
@@ -36,13 +43,13 @@ type SplunkTracesExporterConfig struct {
 // SplunkTracesExportStatus is a redacted snapshot of outbound Splunk traces
 // forwarding state.
 type SplunkTracesExportStatus struct {
-	Enabled               bool                        `json:"enabled"`
-	Configured            bool                        `json:"configured"`
-	Realm                 string                      `json:"realm,omitempty"`
-	Endpoints             []string                    `json:"endpoints,omitempty"`
-	AccessTokenConfigured bool                        `json:"accessTokenConfigured"`
-	AccessToken           string                      `json:"accessToken,omitempty"`
-	Timeout               string                      `json:"timeout,omitempty"`
+	Enabled               bool                       `json:"enabled"`
+	Configured            bool                       `json:"configured"`
+	Realm                 string                     `json:"realm,omitempty"`
+	Endpoints             []string                   `json:"endpoints,omitempty"`
+	AccessTokenConfigured bool                       `json:"accessTokenConfigured"`
+	AccessToken           string                     `json:"accessToken,omitempty"`
+	Timeout               string                     `json:"timeout,omitempty"`
 	LastExport            *SplunkTracesExportAttempt `json:"lastExport,omitempty"`
 }
 
@@ -57,6 +64,7 @@ type SplunkTracesExportAttempt struct {
 type splunkTracesExporterRuntime interface {
 	TracesExporter
 	Endpoints() []string
+	Shutdown(ctx context.Context)
 }
 
 // SplunkTracesExportController owns a live Splunk traces exporter and allows
@@ -87,12 +95,30 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 		return err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	old := c.exporter
 	c.config = normalizeSplunkTracesExporterConfig(config)
 	c.exporter = exporter
 	c.lastExport = SplunkTracesExportAttempt{}
 	c.hasLastExport = false
+	c.mu.Unlock()
+	if old != nil {
+		old.Shutdown(context.Background())
+	}
 	return nil
+}
+
+// Shutdown stops the active exporter component cleanly.
+func (c *SplunkTracesExportController) Shutdown(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	exp := c.exporter
+	c.exporter = nil
+	c.mu.Unlock()
+	if exp != nil {
+		exp.Shutdown(ctx)
+	}
 }
 
 // Config returns the current config. Callers must not log or return the access
@@ -200,12 +226,11 @@ func newConfiguredSplunkTracesExporter(config SplunkTracesExporterConfig) (splun
 }
 
 // SplunkTracesExporter forwards traces to Splunk Observability Cloud using
-// OTLP/HTTP protobuf and an org access token in the X-SF-Token header.
+// the Collector otlphttpexporter with X-SF-Token auth and queue disabled for
+// synchronous delivery.
 type SplunkTracesExporter struct {
-	endpoints   []splunkEndpoint
-	accessToken string
-	timeout     time.Duration
-	client      *http.Client
+	endpoint string
+	exp      exporter.Traces
 }
 
 // NewSplunkTracesExporter creates a Splunk traces exporter when enabled. It
@@ -222,29 +247,50 @@ func NewSplunkTracesExporter(config SplunkTracesExporterConfig) (*SplunkTracesEx
 		}
 		endpoint = fmt.Sprintf("https://ingest.%s.observability.splunkcloud.com%s", realm, splunkTracesOTLPPath)
 	}
-	primaryEndpoint, err := normalizeSplunkMetricsEndpoint(endpoint)
-	if err != nil {
+	if _, err := normalizeSplunkMetricsEndpoint(endpoint); err != nil {
 		return nil, fmt.Errorf("invalid Splunk traces endpoint: %w", err)
 	}
 	token := strings.TrimSpace(config.AccessToken)
 	if token == "" {
 		return nil, fmt.Errorf("splunk traces export requires SPLUNK_ACCESS_TOKEN")
 	}
-	timeout := effectiveSplunkTracesTimeout(config.Timeout)
-	return &SplunkTracesExporter{
-		endpoints:   []splunkEndpoint{{name: "primary", url: primaryEndpoint}},
-		accessToken: token,
-		timeout:     timeout,
-		client:      &http.Client{Timeout: timeout},
-	}, nil
+
+	factory := otlphttpexporter.NewFactory()
+	cfg := factory.CreateDefaultConfig().(*otlphttpexporter.Config)
+	cfg.TracesEndpoint = endpoint
+	cfg.ClientConfig = confighttp.ClientConfig{
+		Timeout: effectiveSplunkTracesTimeout(config.Timeout),
+		Headers: configopaque.MapList{
+			{Name: "X-SF-Token", Value: configopaque.String(token)},
+		},
+	}
+	cfg.QueueConfig = configoptional.None[exporterhelper.QueueBatchConfig]()
+
+	set := exporter.Settings{
+		ID: component.MustNewID("otlphttp"),
+		TelemetrySettings: component.TelemetrySettings{
+			Logger:         zap.NewNop(),
+			MeterProvider:  metricnoop.NewMeterProvider(),
+			TracerProvider: tracenoop.NewTracerProvider(),
+		},
+	}
+	exp, err := factory.CreateTraces(context.Background(), set, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create Splunk traces exporter: %w", err)
+	}
+	if err := exp.Start(context.Background(), minimalHost{}); err != nil {
+		_ = exp.Shutdown(context.Background())
+		return nil, fmt.Errorf("start Splunk traces exporter: %w", err)
+	}
+	return &SplunkTracesExporter{endpoint: endpoint, exp: exp}, nil
 }
 
 // Endpoint returns the configured non-secret export endpoint.
 func (e *SplunkTracesExporter) Endpoint() string {
-	if e == nil || len(e.endpoints) == 0 {
+	if e == nil {
 		return ""
 	}
-	return e.endpoints[0].url
+	return e.endpoint
 }
 
 // Endpoints returns all configured non-secret export endpoints.
@@ -252,56 +298,25 @@ func (e *SplunkTracesExporter) Endpoints() []string {
 	if e == nil {
 		return nil
 	}
-	endpoints := make([]string, 0, len(e.endpoints))
-	for _, ep := range e.endpoints {
-		endpoints = append(endpoints, ep.url)
-	}
-	return endpoints
+	return []string{e.endpoint}
 }
 
-// ExportTraces serializes and POSTs the traces to Splunk ingest.
+// ExportTraces forwards traces to the Splunk ingest endpoint synchronously.
 func (e *SplunkTracesExporter) ExportTraces(ctx context.Context, td ptrace.Traces) error {
 	if e == nil {
 		return nil
 	}
-	body, err := (&ptrace.ProtoMarshaler{}).MarshalTraces(td)
-	if err != nil {
-		return fmt.Errorf("marshal traces: %w", err)
-	}
-	if len(e.endpoints) == 0 {
-		return nil
-	}
-	return e.exportTracesToEndpoint(ctx, e.endpoints[0], body)
+	return e.exp.ConsumeTraces(ctx, td)
 }
 
-func (e *SplunkTracesExporter) exportTracesToEndpoint(ctx context.Context, endpoint splunkEndpoint, body []byte) error {
-	reqCtx, cancel := context.WithTimeout(ctx, e.timeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint.url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+// Shutdown stops the underlying exporter component.
+func (e *SplunkTracesExporter) Shutdown(ctx context.Context) {
+	if e == nil {
+		return
 	}
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("X-SF-Token", e.accessToken)
-	req.Header.Set("User-Agent", "obstudio-splunk-traces-exporter")
-
-	started := time.Now()
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("post traces: %w", err)
+	if err := e.exp.Shutdown(ctx); err != nil {
+		log.Printf("[splunk-traces] shutdown error: %v", err)
 	}
-	defer resp.Body.Close()
-	duration := time.Since(started)
-	log.Printf("[splunk-traces] response endpoint=%s status=%d duration=%s", endpoint.name, resp.StatusCode, duration.Round(time.Millisecond))
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
-	}
-	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	if len(responseBody) == 0 {
-		return fmt.Errorf("splunk traces export returned status %d", resp.StatusCode)
-	}
-	return fmt.Errorf("splunk traces export returned status %d: %s", resp.StatusCode, redactSensitiveText(strings.TrimSpace(string(responseBody)), e.accessToken))
 }
 
 // exportTracesAsync forwards td to exporter in a background goroutine.
@@ -338,4 +353,3 @@ func splunkTracesCanary() ptrace.Traces {
 	span.SetEndTimestamp(now)
 	return td
 }
-

@@ -32,6 +32,7 @@ func TestNewSplunkTracesExporterBuildsRealmEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exporter, got error %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	want := "https://ingest.us1.observability.splunkcloud.com/v2/trace/otlp"
 	if exporter.Endpoint() != want {
 		t.Fatalf("endpoint = %q, want %q", exporter.Endpoint(), want)
@@ -47,6 +48,7 @@ func TestNewSplunkTracesExporterPreservesExplicitEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exporter, got error %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	want := []string{"https://mon-ingest.signalfx.com/v2/trace/otlp"}
 	got := exporter.Endpoints()
 	if len(got) != len(want) {
@@ -118,6 +120,7 @@ func TestSplunkTracesExporterPostsOTLPProtobuf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create exporter: %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	if err := exporter.ExportTraces(context.Background(), td); err != nil {
 		t.Fatalf("export traces: %v", err)
 	}
@@ -137,6 +140,7 @@ func TestSplunkTracesExporterReportsHTTPErrorWithoutToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create exporter: %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	err = exporter.ExportTraces(context.Background(), createTestSpan())
 	if err == nil {
 		t.Fatal("expected export error")

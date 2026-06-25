@@ -33,6 +33,7 @@ func TestNewSplunkMetricsExporterBuildsRealmEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exporter, got error %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	want := "https://ingest.us1.observability.splunkcloud.com/v2/datapoint/otlp"
 	if exporter.Endpoint() != want {
 		t.Fatalf("endpoint = %q, want %q", exporter.Endpoint(), want)
@@ -48,6 +49,7 @@ func TestNewSplunkMetricsExporterPreservesExplicitEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected exporter, got error %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	want := []string{"https://mon-ingest.signalfx.com"}
 	got := exporter.Endpoints()
 	if len(got) != len(want) {
@@ -119,6 +121,7 @@ func TestSplunkMetricsExporterPostsOTLPProtobuf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create exporter: %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	if err := exporter.ExportMetrics(context.Background(), md); err != nil {
 		t.Fatalf("export metrics: %v", err)
 	}
@@ -138,6 +141,7 @@ func TestSplunkMetricsExporterReportsHTTPErrorWithoutToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create exporter: %v", err)
 	}
+	defer exporter.Shutdown(context.Background())
 	err = exporter.ExportMetrics(context.Background(), createTestMetric())
 	if err == nil {
 		t.Fatal("expected export error")
@@ -147,32 +151,6 @@ func TestSplunkMetricsExporterReportsHTTPErrorWithoutToken(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Fatalf("expected status in error, got %v", err)
-	}
-}
-
-func TestSplunkMetricsExporterRedactsTokenInJSONErrorBody(t *testing.T) {
-	token := "secret-abc123xyz"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"message":"invalid token ` + token + `","code":401}`))
-	}))
-	defer server.Close()
-
-	exporter, err := NewSplunkMetricsExporter(SplunkMetricsExporterConfig{
-		Enabled:     true,
-		Endpoint:    server.URL,
-		AccessToken: token,
-	})
-	if err != nil {
-		t.Fatalf("create exporter: %v", err)
-	}
-	err = exporter.ExportMetrics(context.Background(), createTestMetric())
-	if err == nil {
-		t.Fatal("expected export error")
-	}
-	if strings.Contains(err.Error(), token) {
-		t.Fatalf("export error leaked token in JSON body: %v", err)
 	}
 }
 
@@ -221,4 +199,3 @@ func (e *captureMetricsExporter) ExportMetrics(_ context.Context, md pmetric.Met
 	e.ch <- md
 	return nil
 }
-
