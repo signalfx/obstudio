@@ -47,7 +47,7 @@ A live Standard detector's `programText` contains:
 ### GAP
 No live Standard detector matches on both metric name AND service filter.
 
-**Action:** create via `create_detector_o11y` with `if_not_exists=true`.
+**Action:** create via `POST /v2/detector` (Splunk REST API) with `if_not_exists` semantics.
 
 ### UNCERTAIN
 At least one live Standard detector references the same metric name, but the
