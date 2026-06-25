@@ -32,9 +32,9 @@ import (
 //     A background goroutine polls process liveness every second. When the
 //     process exits, that connection's data is evicted from the store.
 type ConnTracker struct {
-	store      *store.Store
-	grpcServer *grpc.Server
-	httpServer *http.Server
+	store          *store.Store
+	grpcServer     *grpc.Server
+	httpServer     *http.Server
 	grpcLn         net.Listener
 	httpLn         net.Listener
 	backendCC      *grpc.ClientConn

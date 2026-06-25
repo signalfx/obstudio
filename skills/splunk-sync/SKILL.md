@@ -234,15 +234,24 @@ After the user confirms, for each GAP spec:
        ],
        "description": f"Created by splunk-sync from {hcl_label}",
    }
-   resp = requests.post(
+   data = json.dumps(body).encode("utf-8")
+   req = urllib.request.Request(
        f"https://api.{realm}.signalfx.com/v2/detector",
+       data=data,
+       method="POST",
        headers={"X-SF-Token": token, "Content-Type": "application/json"},
-       json=body,
-       timeout=30,
    )
+   try:
+       with urllib.request.urlopen(req, timeout=30) as resp:
+           status = resp.status
+           created = json.load(resp)
+   except urllib.error.HTTPError as e:
+       status = e.code          # branch on status below; do not raise blindly
+       created = None
    ```
    Note: HCL uses `detect_label`; the REST API uses `detectLabel` — normalize.
-3. On HTTP 200: record `{id, name}` plus
+   `urllib` raises `HTTPError` for any non-2xx response, so branch on `status`:
+3. On HTTP 200: record `created["id"]` and `created["name"]` plus
    `https://app.${SPLUNK_REALM}.signalfx.com/#/detector/{id}` for the ledger.
 4. On HTTP 409 or a duplicate-name response: reclassify as COVERED in the ledger
    (race condition between diff and create). Not an error.

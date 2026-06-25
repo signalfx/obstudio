@@ -180,12 +180,23 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.validationAnalyze(args)
 	case "observer_validation_refresh":
 		result = d.validationRefresh(args)
-	case "observer_splunk_metrics_export_status":
-		result = d.splunkMetricsExportStatus()
-	case "observer_splunk_metrics_export_configure":
-		result = d.splunkMetricsExportConfigure(args)
-	case "observer_splunk_metrics_export_test":
-		result = d.splunkMetricsExportTest(args)
+	case "observer_splunk_metrics_export_status",
+		"observer_splunk_metrics_export_configure",
+		"observer_splunk_metrics_export_test":
+		// These tools are only advertised in tools/list when a Splunk metrics
+		// controller is configured. Reject direct calls otherwise so a crafted
+		// request cannot reach a nil controller.
+		if d.splunkMetricsCtrl == nil {
+			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
+		}
+		switch toolName {
+		case "observer_splunk_metrics_export_status":
+			result = d.splunkMetricsExportStatus()
+		case "observer_splunk_metrics_export_configure":
+			result = d.splunkMetricsExportConfigure(args)
+		case "observer_splunk_metrics_export_test":
+			result = d.splunkMetricsExportTest(args)
+		}
 	default:
 		return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 	}

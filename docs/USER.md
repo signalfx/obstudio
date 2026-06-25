@@ -229,7 +229,7 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 | `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
 | `SPLUNK_REALM` / `OBSTUDIO_SPLUNK_REALM` | unset | Splunk Observability Cloud realm — used for both metrics and trace export endpoints |
 | `SPLUNK_ACCESS_TOKEN` | unset | Splunk org ingest token (metrics and traces `X-SF-Token` header) |
-| `OBSTUDIO_SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |
+| `OBSTUDIO_SPLUNK_METRICS_EXPORT` / `SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |
 | `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` | unset | Full OTLP/HTTP metrics endpoint override |
 | `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` | `5s` | Splunk metrics export request timeout |
 | `OBSTUDIO_SPLUNK_TRACES_EXPORT` / `SPLUNK_TRACES_EXPORT` | `false` | Forward received OTLP spans to Splunk Observability Cloud (activates APM service visibility) |
