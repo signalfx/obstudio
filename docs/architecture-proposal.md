@@ -52,9 +52,10 @@ of them change what the product does.
 ## Who Is the Customer?
 
 Developers who use **AI agents** to write, instrument, and debug code. The
-Instrumenter and Terraformer are agent skills. The Telemetry Explorer and
-Validator produce data that agents consume via MCP, but the Telemetry Explorer
-also stands on its own as a live telemetry viewer — no agent workflow required.
+Instrumenter, Terraformer, and Splunk-sync skills are agent skills. The Telemetry
+Explorer and Validator produce data that agents consume via MCP, but the
+Telemetry Explorer also stands on its own as a live telemetry viewer — no agent
+workflow required.
 
 The product must reach these developers wherever they work: Cursor, Claude Code,
 Windsurf, Cline, Continue, GitHub Copilot, JetBrains AI, OpenAI Codex, and
@@ -76,15 +77,11 @@ codebase and which semantic conventions to follow.
 
 ```
 skills/
-├── instrument/
-│   └── opentelemetry/
-│       ├── SKILL.md          # Workflow, rules, checklist
-│       ├── go.md             # Go-specific guidance
-│       ├── python.md         # Python-specific guidance
-│       ├── java.md           # Java-specific guidance
-│       └── ...
-└── terraform/
-    └── SKILL.md              # Terraform generation
+├── otel-audit/        # Scan a service for observability coverage gaps
+├── otel-instrument/   # Add OTel auto-instrumentation and custom signals
+├── splunk-configure/  # Generate Splunk O11y detector Terraform from an audit
+└── splunk-sync/       # Diff local detector specs against live Splunk detectors;
+                       # create only the confirmed gaps via the Splunk REST API
 ```
 
 Skills are plain files. They require no runtime, no server, no binary. Any AI
@@ -96,12 +93,17 @@ The Observer is a local server that receives, stores, and exposes OpenTelemetry
 data. It provides four surfaces:
 
 
-| Surface       | Protocol                       | Purpose                                    |
-| ------------- | ------------------------------ | ------------------------------------------ |
-| OTLP receiver | HTTP `:4318`, gRPC `:4317`     | Ingest traces, metrics, logs               |
-| Query API     | REST on `:3000`                | Structured access to stored telemetry      |
-| MCP server    | Streamable HTTP on `:3000/mcp` | AI agents query telemetry programmatically |
-| Web UI        | HTTP on `:3000`                | Visual trace/metric/log explorer           |
+| Surface             | Protocol                       | Purpose                                                 |
+| ------------------- | ------------------------------ | ------------------------------------------------------- |
+| OTLP receiver       | HTTP `:4318`, gRPC `:4317`     | Ingest traces, metrics, logs from instrumented services |
+| Splunk forwarding   | OTLP/HTTP to Splunk ingest     | Mirror received metrics and traces to Splunk O11y Cloud |
+| Query API           | REST on `:3000`                | Structured access to stored telemetry                   |
+| MCP server          | Streamable HTTP on `:3000/mcp` | AI agents query telemetry programmatically              |
+| Web UI              | HTTP on `:3000`                | Visual trace/metric/log explorer                        |
+
+Splunk forwarding is optional. Set `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` to
+enable it. The same token is used by `$splunk-sync` to read and create detectors
+via the Splunk REST API (`GET`/`POST /v2/detector`).
 
 
 The Observer is also Layer 1. It has no knowledge of skills, no CLI wrapper, and
@@ -114,13 +116,17 @@ Skills tell the agent *what to do*. The Observer tells the agent *what happened*
 Together they form a closed loop:
 
 ```
-┌─────────────────────────────────────────────────┐
-│  1. Agent reads skill → instruments the code    │
-│  2. Developer runs the app                      │
-│  3. App sends OTLP to Observer (localhost:4318)  │
-│  4. Agent calls MCP tools → inspects telemetry  │
-│  5. Agent fixes issues → go to step 2           │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  1. Agent reads $otel-audit → finds coverage gaps            │
+│  2. Agent reads $otel-instrument → adds OTel SDK + signals   │
+│  3. Developer runs the app                                   │
+│  4. App sends OTLP to Observer (localhost:4318)              │
+│  5. Observer forwards metrics + traces to Splunk O11y Cloud  │
+│  6. Agent calls MCP tools → inspects local telemetry         │
+│  7. Agent reads $splunk-configure → generates detectors.tf   │
+│  8. Agent reads $splunk-sync → creates only the gap detectors│
+│  9. Agent fixes instrumentation issues → go to step 3        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Neither component knows about the other. The agent is the orchestrator that
@@ -149,13 +155,15 @@ telemetry and validate instrumentation results.
 ### What Layer 2 Adds Over Layer 1
 
 
-| Capability             | Layer 1 (Core)      | Layer 2 (obstudio)                       |
-| ---------------------- | ------------------- | ---------------------------------------- |
-| Run Observer           | Manual server start | `obstudio start`                         |
-| Install skills         | Manual file copy    | `obstudio skills install --agent cursor` |
-| Register with AI tools | Manual config edit  | `obstudio register --agent cursor`       |
-| Lifecycle management   | None                | Start, stop, restart, health check       |
-| Cross-platform binary  | Source code         | Single binary, zero deps                 |
+| Capability               | Layer 1 (Core)      | Layer 2 (obstudio)                         |
+| ------------------------ | ------------------- | ------------------------------------------ |
+| Run Observer             | Manual server start | `obstudio start`                           |
+| Install skills           | Manual file copy    | `obstudio install --target=<agent>`        |
+| Register with AI tools   | Manual config edit  | Handled by `obstudio install`              |
+| Lifecycle management     | None                | Start, stop, restart, health check         |
+| Cross-platform binary    | Source code         | Single binary, zero deps                   |
+| Forward to Splunk O11y   | None                | `SPLUNK_ACCESS_TOKEN` + `SPLUNK_REALM`     |
+| Sync detectors to Splunk | None                | `$splunk-sync` via Splunk REST API         |
 
 
 ### Why Go
@@ -166,21 +174,28 @@ toolchains.
 
 ### MCP Tools
 
-The MCP server exposes four tools that let agents inspect telemetry produced by
-the instrumented application:
+The MCP server exposes tools that let agents inspect local telemetry and control
+the observer:
 
-
-| MCP Tool                    | What It Does                                           |
-| --------------------------- | ------------------------------------------------------ |
-| `observer_metrics_overview` | List metrics with filters (name, service, type, scope) |
-| `observer_metric_detail`    | Fetch one metric by name with full datapoint history   |
-| `observer_traces_overview`  | List recent traces with span previews and status       |
-| `observer_trace_detail`     | Fetch one trace by ID with all spans, events, links    |
-
+| MCP Tool                       | What It Does                                            |
+| ------------------------------ | ------------------------------------------------------- |
+| `observer_metrics_overview`    | List metrics with filters (name, service, type, scope)  |
+| `observer_metric_detail`       | Fetch one metric by name with full datapoint history    |
+| `observer_traces_overview`     | List recent traces with span previews and status        |
+| `observer_trace_detail`        | Fetch one trace by ID with all spans, events, links     |
+| `observer_logs_overview`       | List recent log records with filters                    |
+| `observer_validation_status`   | Return validator state and result freshness             |
+| `observer_validation_analyze`  | Run or return OTel convention validation analysis       |
+| `observer_validation_refresh`  | Force a fresh validation run against current telemetry  |
+| `observer_clear`               | Clear all in-memory telemetry                           |
+| `observer_status`              | Return collector endpoints and telemetry stats          |
 
 Every AI tool talks to the same endpoint: `http://localhost:3000/mcp`. No
 editor-specific protocol, no custom integration. Standard MCP over Streamable
 HTTP.
+
+Splunk detector operations (`$splunk-sync`) call the Splunk REST API directly
+(`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP server.
 
 ---
 
@@ -504,10 +519,10 @@ are shown explicitly so engineers can work independently.
 ### Core components (parallel tracks)
 
 
-| Component    | Layer | Deliverable                            | Depends On |
-| ------------ | ----- | -------------------------------------- | ---------- |
-| **Observer** | 1     | OTLP ingest, web UI, MCP server        | —          |
-| **Skills**   | 1     | Instrumenter (multi-lang), Terraformer | —          |
+| Component    | Layer | Deliverable                                                                          | Depends On |
+| ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
+| **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$splunk-configure`, `$splunk-sync` (REST-direct) | —          |
 
 
 Observer and Skills have no dependency on each other. They can be developed,

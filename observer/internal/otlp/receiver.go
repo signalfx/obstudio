@@ -37,6 +37,30 @@ type Receiver struct {
 	connTracker *ConnTracker
 }
 
+type receiverConfig struct {
+	metricsExporter MetricsExporter
+	tracesExporter  TracesExporter
+}
+
+// ReceiverOption configures optional receiver behavior.
+type ReceiverOption func(*receiverConfig)
+
+// WithMetricsExporter forwards ingested OTLP metrics to an external metrics
+// backend in addition to storing them locally.
+func WithMetricsExporter(exporter MetricsExporter) ReceiverOption {
+	return func(config *receiverConfig) {
+		config.metricsExporter = exporter
+	}
+}
+
+// WithTracesExporter forwards ingested OTLP traces to an external traces
+// backend in addition to storing them locally.
+func WithTracesExporter(exporter TracesExporter) ReceiverOption {
+	return func(config *receiverConfig) {
+		config.tracesExporter = exporter
+	}
+}
+
 // minimalHost satisfies component.Host for starting receivers outside
 // the collector framework.
 type minimalHost struct{}
@@ -64,7 +88,14 @@ func pickEphemeralAddr() (string, error) {
 // JSON/protobuf itself), resolving the remote process PID with
 // platform-specific socket ownership lookup, and monitoring process liveness.
 // No internal HTTP receiver is needed.
-func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr string) (*Receiver, error) {
+func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr string, opts ...ReceiverOption) (*Receiver, error) {
+	var config receiverConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&config)
+		}
+	}
+
 	internalGRPC, err := pickEphemeralAddr()
 	if err != nil {
 		return nil, fmt.Errorf("pick internal gRPC port: %w", err)
@@ -101,6 +132,7 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 	// similar to the Node implementation's per-connection source ownership.
 	tracesConsumer, err := consumer.NewTraces(func(ctx context.Context, td ptrace.Traces) error {
 		s.AddSpansForConnection(connIDFromContext(ctx), ConvertTraces(td))
+		exportTracesAsync(config.tracesExporter, td)
 		return nil
 	})
 	if err != nil {
@@ -108,6 +140,7 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 	}
 	metricsConsumer, err := consumer.NewMetrics(func(ctx context.Context, md pmetric.Metrics) error {
 		s.AddMetricsForConnection(connIDFromContext(ctx), ConvertMetrics(md))
+		exportMetricsAsync(config.metricsExporter, md)
 		return nil
 	})
 	if err != nil {
@@ -156,7 +189,7 @@ func StartReceiver(ctx context.Context, s *store.Store, grpcAddr, httpAddr strin
 	}
 	started = append(started, rcvLogs)
 
-	ct, err := StartConnTracker(s, grpcAddr, httpAddr, internalGRPC)
+	ct, err := StartConnTracker(s, grpcAddr, httpAddr, internalGRPC, config.metricsExporter, config.tracesExporter)
 	if err != nil {
 		shutdownAll(ctx, started)
 		return nil, fmt.Errorf("start connection tracker: %w", err)

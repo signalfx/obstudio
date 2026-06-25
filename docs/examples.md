@@ -18,6 +18,26 @@
 | Full audit-to-detect pipeline | Audit this service, then generate detector Terraform | `$otel-audit` → `$splunk-configure` |
 | Explore what would be generated without writing files | What detectors would you create from the audit report? | `$splunk-configure` |
 
+## Sync -- Push Detector Gaps to Splunk
+
+| Use Case | Prompt | Skill |
+|----------|--------|-------|
+| See which local detector specs are already live vs. missing | Show me which of my local detectors already exist in Splunk | `$splunk-sync` |
+| Create only the missing detectors, skip existing ones | Sync my local detector Terraform to Splunk -- create only the gaps | `$splunk-sync` |
+| Dry-run the create before writing anything | Preview what would be created without making any API calls | `$splunk-sync` |
+| Re-run after a partial sync to fill in what failed | Resume the detector sync -- pick up where it left off | `$splunk-sync` |
+| Full end-to-end pipeline: audit → configure → sync | Audit this service, generate detectors, then push the gaps to Splunk | `$otel-audit` → `$splunk-configure` → `$splunk-sync` |
+
+## Export -- Forward Telemetry to Splunk
+
+| Use Case | Prompt | Skill / Config |
+|----------|--------|----------------|
+| Forward metrics to Splunk while developing locally | How do I send my local metrics to Splunk O11y? | `USER.md` — metrics export config |
+| Make this service appear in Splunk APM | Forward my spans to Splunk so it shows up in APM | `USER.md` — trace export config |
+| Check whether metrics are reaching Splunk | Is the Splunk metrics export working? | MCP: `observer_splunk_metrics_export_status` |
+| Apply a new ingest token without restarting obstudio | Update the Splunk ingest token for the running observer | MCP: `observer_splunk_metrics_export_configure` |
+| Send a test canary metric to verify connectivity | Send a test metric to confirm Splunk connectivity | MCP: `observer_splunk_metrics_export_test` |
+
 ## Instrument -- Add or Adjust OTel Code
 
 | Use Case | Prompt | Skill |

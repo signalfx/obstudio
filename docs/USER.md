@@ -66,6 +66,7 @@ Restart your agent to activate.
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
 | `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
+| `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
 
@@ -121,6 +122,81 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SERVICE_NAME=my-service
 ```
 
+To forward incoming telemetry to Splunk Observability Cloud while still keeping
+the local Explorer experience, put the settings in Obstudio's default env file:
+
+```bash
+mkdir -p ~/.obstudio
+chmod 700 ~/.obstudio
+cat > ~/.obstudio/env <<'EOF'
+OBSTUDIO_SPLUNK_METRICS_EXPORT=true
+SPLUNK_REALM=<your-realm>
+SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
+EOF
+chmod 600 ~/.obstudio/env
+obstudio
+```
+
+### Metrics export
+
+Metrics are forwarded via OTLP/HTTP protobuf to
+`https://ingest.<realm>.observability.splunkcloud.com/v2/datapoint/otlp`.
+Set `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` to override the full endpoint. Explicit
+endpoint values are used exactly as configured.
+The token must be an org access token with ingest scope. Splunk's documented
+OTLP/HTTP authentication header is `X-SF-Token`.
+
+Shell environment variables override values from the env file. Use
+`obstudio --env-file <path>` or `OBSTUDIO_ENV_FILE=<path>` to load a different
+env file.
+
+### Trace / span export
+
+Obstudio also forwards spans to Splunk Observability Cloud via OTLP/HTTP,
+making your service visible as a real **Splunk APM service** with
+`service.request.*` metrics, trace latency distributions, and dependency maps.
+
+Add the following to the env file (same token as metrics):
+
+```bash
+cat >> ~/.obstudio/env <<'EOF'
+OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+SPLUNK_REALM=<your-realm>
+SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
+EOF
+```
+
+With these set, Obstudio exports all received spans to
+`https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp` (OTLP/HTTP)
+alongside the local Explorer.
+
+After spans flow in, Splunk APM materialises:
+- `service.request.count`, `service.request.duration`, and related metrics per
+  operation on the instrumented service
+- Dependency maps showing calls between services
+- Trace search and exemplar traces in the Splunk O11y UI
+
+### Detector sync
+
+Once your service is live in Splunk APM and you have local detector Terraform
+from `$splunk-configure`, use `$splunk-sync` to close the loop:
+
+```
+$splunk-sync
+```
+
+This diffs `.observe/terraform/detectors.tf` against live Splunk Observability
+Cloud detectors for the same service, classifies each local spec as COVERED /
+GAP / UNCERTAIN, shows a confirmation diff, and creates only the genuine gaps
+via the Splunk Observability Cloud REST API (`POST /v2/detector`). A resume
+ledger is written to `.observe/detector-sync.md` so re-runs are idempotent.
+
+`$splunk-sync` calls the Splunk REST API directly using `SPLUNK_ACCESS_TOKEN`
+and `SPLUNK_REALM` — the same variables already required for metrics and traces
+forwarding. No additional configuration is needed.
+
+See the `$splunk-sync` skill for the full process and coverage model.
+
 ## Validation
 
 When telemetry is flowing, open the **Validation** tab in the Telemetry
@@ -150,6 +226,15 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 |----------|---------|-------------|
 | `HOST` | `127.0.0.1` | Bind address for all servers |
 | `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
+| `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
+| `SPLUNK_REALM` / `OBSTUDIO_SPLUNK_REALM` | unset | Splunk Observability Cloud realm — used for both metrics and trace export endpoints |
+| `SPLUNK_ACCESS_TOKEN` | unset | Splunk org ingest token (metrics and traces `X-SF-Token` header) |
+| `OBSTUDIO_SPLUNK_METRICS_EXPORT` / `SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |
+| `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` | unset | Full OTLP/HTTP metrics endpoint override |
+| `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` | `5s` | Splunk metrics export request timeout |
+| `OBSTUDIO_SPLUNK_TRACES_EXPORT` / `SPLUNK_TRACES_EXPORT` | `false` | Forward received OTLP spans to Splunk Observability Cloud (activates APM service visibility) |
+| `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` | auto from realm | Full OTLP/HTTP traces endpoint override |
+| `OBSTUDIO_SPLUNK_TRACES_TIMEOUT` | `5s` | Splunk traces export request timeout |
 
 ## Example Prompts
 

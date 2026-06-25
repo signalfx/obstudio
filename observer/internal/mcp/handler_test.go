@@ -214,7 +214,7 @@ func TestDispatchToolsList(t *testing.T) {
 }
 
 func TestValidationToolDescriptionsGuideNaturalUsage(t *testing.T) {
-	tools := buildToolDefs()
+	tools := buildToolDefs(false)
 	index := make(map[string]toolDef, len(tools))
 	for _, tool := range tools {
 		index[tool.Name] = tool
@@ -499,6 +499,40 @@ func TestToolsCallObserverStatus(t *testing.T) {
 	stats := toMapAny(statusMap["stats"])
 	if stats["spanCount"] == nil {
 		t.Fatalf("missing spanCount in stats")
+	}
+}
+
+func TestToolsCallSplunkExportRejectedWhenUnconfigured(t *testing.T) {
+	// The Splunk export tools are only advertised in tools/list when a
+	// controller is configured. A crafted call by name when no controller is
+	// present must return an "Unknown tool" error, not panic on a nil
+	// controller.
+	s := store.New()
+	d := NewDispatcher(s)
+
+	for _, name := range []string{
+		"observer_splunk_metrics_export_status",
+		"observer_splunk_metrics_export_configure",
+		"observer_splunk_metrics_export_test",
+	} {
+		resp, handled := d.Dispatch(jsonRPCRequest{
+			ID:      1,
+			JSONRPC: "2.0",
+			Method:  "tools/call",
+			Params: map[string]any{
+				"name":      name,
+				"arguments": map[string]any{"enabled": true},
+			},
+		})
+		if !handled {
+			t.Fatalf("%s: expected handled=true", name)
+		}
+		if resp.Error == nil {
+			t.Fatalf("%s: expected error for unconfigured Splunk tool, got result", name)
+		}
+		if resp.Error.Code != -32602 {
+			t.Fatalf("%s: error code = %d, want -32602", name, resp.Error.Code)
+		}
 	}
 }
 

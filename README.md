@@ -12,6 +12,7 @@ auditing and adding OpenTelemetry instrumentation.
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
+| `$splunk-sync` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
 
 The canonical skill sources live under `skills/`. Codex discovers repo-local
 entries through `.agents/skills/`, which points at those source directories.
@@ -56,6 +57,65 @@ Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
 and `4317`, matching the VS Code extension.
 
+### Optional Splunk Metrics Forwarding
+
+By default, Obstudio stores incoming OTLP telemetry locally for inspection. To
+also forward received metrics to Splunk Observability Cloud, put the settings
+in Obstudio's default env file:
+
+```bash
+mkdir -p ~/.obstudio
+chmod 700 ~/.obstudio
+cat > ~/.obstudio/env <<'EOF'
+OBSTUDIO_SPLUNK_METRICS_EXPORT=true
+SPLUNK_REALM=<your-realm>
+SPLUNK_ACCESS_TOKEN=<your-org-ingest-token>
+EOF
+chmod 600 ~/.obstudio/env
+obstudio
+```
+
+The token must be an org access token with ingest scope. Splunk's documented
+OTLP/HTTP authentication header is `X-SF-Token`.
+Shell environment variables override values from the env file. Use
+`obstudio --env-file <path>` or `OBSTUDIO_ENV_FILE=<path>` to load a different
+env file.
+
+Obstudio forwards metrics over OTLP/HTTP protobuf to:
+
+```text
+https://ingest.<realm>.observability.splunkcloud.com/v2/datapoint/otlp
+```
+
+Use `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` to override the full endpoint. Explicit
+endpoint values are used exactly as configured. Use
+`OBSTUDIO_SPLUNK_METRICS_TIMEOUT` to override the default `5s` export timeout.
+The access token is only read from the environment and is never returned by
+`/api/health`.
+
+### Optional Splunk Traces Forwarding
+
+To also forward received traces to Splunk Observability Cloud APM, add the
+traces flag to the same env file:
+
+```bash
+cat >> ~/.obstudio/env <<'EOF'
+OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+EOF
+```
+
+The same `SPLUNK_REALM` and `SPLUNK_ACCESS_TOKEN` values are used for both
+metrics and traces. Obstudio forwards traces over OTLP/HTTP protobuf to:
+
+```text
+https://ingest.<realm>.observability.splunkcloud.com/v2/trace/otlp
+```
+
+Use `OBSTUDIO_SPLUNK_TRACES_ENDPOINT` to override the full endpoint. Use
+`OBSTUDIO_SPLUNK_TRACES_TIMEOUT` to override the default `5s` export timeout.
+Once traces are flowing, the service appears as an APM service in Splunk
+Observability Cloud and becomes a valid target for `$splunk-sync`.
+
 ## Using The Skills
 
 From a service directory, invoke the relevant skill in Codex:
@@ -64,6 +124,7 @@ From a service directory, invoke the relevant skill in Codex:
 $otel-audit
 $otel-instrument
 $splunk-configure
+$splunk-sync
 ```
 
 Use `$otel-audit` to understand what is missing before editing. Use
@@ -71,7 +132,8 @@ Use `$otel-audit` to understand what is missing before editing. Use
 and targeted custom signals. Use `$splunk-configure` after auditing to generate
 Splunk Observability Cloud detector Terraform — it reads the audit report,
 classifies metrics, and outputs ready-to-apply HCL with a `terraform.tfvars.example`
-for credentials.
+for credentials. Use `$splunk-sync` to diff those specs against live Splunk
+detectors and create only the ones that don't exist yet.
 
 ## Validation
 
@@ -101,6 +163,7 @@ obstudio/
 │   ├── otel-audit/
 │   ├── otel-instrument/
 │   ├── splunk-configure/
+│   ├── splunk-sync/
 │   └── references/    # Shared language guides and signal references
 ├── .agents/skills/    # Repo-scoped Codex skill entries
 ├── evals/             # Fixture services and JSON eval cases

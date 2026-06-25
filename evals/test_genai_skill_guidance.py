@@ -8,6 +8,8 @@ SKILLS_DIR = REPO_ROOT / "skills"
 GENAI_REF = SKILLS_DIR / "references" / "genai-readiness.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
+SPLUNK_SYNC = SKILLS_DIR / "splunk-sync" / "SKILL.md"
+SPLUNK_SYNC_REFS = SKILLS_DIR / "splunk-sync" / "references"
 
 
 def _read(path: Path) -> str:
@@ -1055,3 +1057,99 @@ def test_genai_guidance_stays_generic():
         text = _read(path)
         bad = [term for term in blocked_terms if term in text]
         assert not bad, f"{path} contains non-generic terms: {bad}"
+
+
+# ---------------------------------------------------------------------------
+# splunk-sync skill
+# ---------------------------------------------------------------------------
+
+
+def test_splunk_sync_skill_exists():
+    assert SPLUNK_SYNC.exists(), "skills/splunk-sync/SKILL.md not found"
+    assert (SPLUNK_SYNC_REFS / "coverage-model.md").exists(), (
+        "skills/splunk-sync/references/coverage-model.md not found"
+    )
+
+
+def test_splunk_sync_coverage_model_defines_all_statuses():
+    text = _read(SPLUNK_SYNC_REFS / "coverage-model.md")
+    for status in ("COVERED", "GAP", "UNCERTAIN"):
+        assert status in text, f"coverage-model.md missing status: {status}"
+
+
+def test_splunk_sync_coverage_model_uses_camel_case_detector_origin():
+    text = _read(SPLUNK_SYNC_REFS / "coverage-model.md")
+    assert "detectorOrigin" in text, "coverage-model.md must use camelCase detectorOrigin"
+    assert "detector_origin" not in text, (
+        "coverage-model.md must not use snake_case detector_origin"
+    )
+
+
+def test_splunk_sync_coverage_model_treats_autodetect_as_advisory_only():
+    text = _read(SPLUNK_SYNC_REFS / "coverage-model.md")
+    assert "AutoDetect" in text
+    # Advisory — never auto-covers a local spec
+    assert "advisory" in text.lower()
+    assert "never" in text.lower()
+
+
+def test_splunk_sync_skill_reads_terraform_detectors_tf():
+    text = _read(SPLUNK_SYNC)
+    assert "detectors.tf" in text, "SKILL.md must reference detectors.tf parsing"
+    assert "program_text" in text or "programText" in text, (
+        "SKILL.md must reference programText/program_text field"
+    )
+
+
+def test_splunk_sync_skill_requires_service_filter_for_covered():
+    skill = _read(SPLUNK_SYNC)
+    coverage = _read(SPLUNK_SYNC_REFS / "coverage-model.md")
+    for text in (skill, coverage):
+        assert "service.name" in text, "Must reference service.name filter for COVERED classification"
+        assert "sf_service" in text, "Must reference sf_service as equivalent filter key"
+
+
+def test_splunk_sync_skill_only_skips_http_500():
+    text = _read(SPLUNK_SYNC)
+    # The skill must mention 500 as the only skippable error
+    assert "500" in text, "SKILL.md must document skip-on-500 behavior"
+    # Must not suggest swallowing all errors (bare except-all patterns)
+    assert "except Exception" not in text, (
+        "SKILL.md must not use bare except Exception — only HTTPError 500 should be skipped"
+    )
+
+
+def test_splunk_sync_skill_requires_detector_sync_md_output():
+    text = _read(SPLUNK_SYNC)
+    assert "detector-sync.md" in text, (
+        "SKILL.md must require writing .observe/detector-sync.md as the resume ledger"
+    )
+
+
+def test_splunk_sync_skill_requires_confirmation_before_create():
+    text = _read(SPLUNK_SYNC)
+    # The skill must gate creates on user confirmation
+    assert "confirm" in text.lower() or "confirmation" in text.lower(), (
+        "SKILL.md must require explicit user confirmation before creating detectors"
+    )
+    assert "if_not_exists" in text, (
+        "SKILL.md must use if_not_exists=true as belt-and-suspenders on create"
+    )
+
+
+def test_splunk_sync_skill_normalizes_program_text_before_create():
+    text = _read(SPLUNK_SYNC)
+    # Heredoc dedent: <<-EOF leading whitespace must be stripped or Splunk 400s.
+    assert "dedent" in text.lower(), (
+        "SKILL.md must require dedenting the <<-EOF heredoc before POSTing program_text"
+    )
+    assert "<<-EOF" in text or "<<-eof" in text.lower(), (
+        "SKILL.md must call out the indented-heredoc (<<-EOF) parse hazard"
+    )
+    # Full variable resolution: every ${var.*}, not just service.name.
+    assert "${var." in text, "SKILL.md must reference ${var.*} interpolation in program_text"
+    assert "threshold" in text.lower() and "stddev" in text.lower(), (
+        "SKILL.md must require resolving threshold/stddev variables, not just service.name"
+    )
+    # The failure is a SignalFlow parse 400, distinct from a field-name 400.
+    assert "400" in text, "SKILL.md must document the HTTP 400 SignalFlow-parse failure"

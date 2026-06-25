@@ -14,12 +14,19 @@ import (
 )
 
 type ServerInfo struct {
-	APIVersion string    `json:"apiVersion"`
-	Kind       string    `json:"kind"`
-	Mode       string    `json:"mode"`
-	Owner      string    `json:"owner"`
-	StartedAt  time.Time `json:"startedAt"`
-	Version    string    `json:"version"`
+	APIVersion string                  `json:"apiVersion"`
+	Kind       string                  `json:"kind"`
+	Mode       string                  `json:"mode"`
+	Owner      string                  `json:"owner"`
+	StartedAt  time.Time               `json:"startedAt"`
+	Version    string                  `json:"version"`
+	Exporters  map[string]ExporterInfo `json:"exporters,omitempty"`
+}
+
+// ExporterInfo describes optional non-secret outbound exporter state.
+type ExporterInfo struct {
+	Enabled  bool   `json:"enabled"`
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 type healthResponse struct {

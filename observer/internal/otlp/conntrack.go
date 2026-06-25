@@ -32,12 +32,14 @@ import (
 //     A background goroutine polls process liveness every second. When the
 //     process exits, that connection's data is evicted from the store.
 type ConnTracker struct {
-	store      *store.Store
-	grpcServer *grpc.Server
-	httpServer *http.Server
-	grpcLn     net.Listener
-	httpLn     net.Listener
-	backendCC  *grpc.ClientConn
+	store          *store.Store
+	grpcServer     *grpc.Server
+	httpServer     *http.Server
+	grpcLn         net.Listener
+	httpLn         net.Listener
+	backendCC      *grpc.ClientConn
+	exporter       MetricsExporter
+	tracesExporter TracesExporter
 
 	mu sync.Mutex
 
@@ -72,9 +74,13 @@ func StartConnTracker(
 	s *store.Store,
 	grpcAddr, httpAddr string,
 	internalGRPCAddr string,
+	exporter MetricsExporter,
+	tracesExporter TracesExporter,
 ) (*ConnTracker, error) {
 	ct := &ConnTracker{
 		store:           s,
+		exporter:        exporter,
+		tracesExporter:  tracesExporter,
 		grpcConns:       make(map[string]struct{}),
 		httpConnsByAddr: make(map[string]*httpConn),
 		httpConnsByID:   make(map[string]*httpConn),
@@ -417,7 +423,7 @@ type ctxKeyRawConn struct{}
 // directly (instead of proxying to an internal receiver). This lets us
 // resolve the PID from the connection and tag data with the connection ID.
 func (ct *ConnTracker) startHTTPHandler(listenAddr string) error {
-	handler := &otlpHTTPHandler{store: ct.store, ct: ct}
+	handler := &otlpHTTPHandler{store: ct.store, ct: ct, exporter: ct.exporter, tracesExporter: ct.tracesExporter}
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
