@@ -132,7 +132,7 @@ If the managed endpoint or either OTLP port is already in use by an incompatible
 
 ## Requirements
 
-- VS Code `^1.110.0`
+- VS Code `^1.82.0`
 - No additional runtime setup is required for normal extension use.
 - To build the extension from source, install Node.js, `npm`, and the Go toolchain, and make sure `go version` works in your shell before running the build scripts.
 
