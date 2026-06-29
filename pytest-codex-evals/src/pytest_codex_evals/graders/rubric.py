@@ -65,6 +65,8 @@ Task: {case.task}
 Return only JSON matching the provided schema. Grade against this rubric:
 {rubric_text(case)}
 
+Set `score` to a 0-100 percentage-style quality score. Do not put the number
+of passed checks in `score`.
 Use check ids derived from the rubric order, such as rubric-1, rubric-2, etc.
 """
 

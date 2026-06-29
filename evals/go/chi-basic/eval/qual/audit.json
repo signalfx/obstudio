@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify files."
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     }
   ],
   "judge_inputs": [
@@ -20,6 +20,7 @@
     "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
-    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path."
+    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
+    "Writes .observe/otel.md with GenAI ownership detected as No, a matching Audit Evidence row, Current Instrumentation before Gaps, and GenAI Readiness omitted when ownership is No."
   ]
 }

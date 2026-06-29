@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-audit",
-    "run_id": "20260429T165922300205Z",
+    "run_id": "20260629T201829754346Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -21,11 +21,11 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 2,
-      "command_count": 0,
-      "duration_seconds": 23.242,
-      "agent_duration_seconds": 23.208,
-      "tokens": 50739,
-      "agent_tokens": 50739,
+      "command_count": 14,
+      "duration_seconds": 89.379,
+      "agent_duration_seconds": 89.357,
+      "tokens": 221167,
+      "agent_tokens": 221167,
       "error_count": 0,
       "checks": {
         "passed": 4,
@@ -48,11 +48,11 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 0,
-        "duration_seconds": 23.242,
-        "agent_duration_seconds": 23.208,
-        "tokens": 50739,
-        "agent_tokens": 50739,
+        "command_count": 14,
+        "duration_seconds": 89.379,
+        "agent_duration_seconds": 89.357,
+        "tokens": 221167,
+        "agent_tokens": 221167,
         "error_count": 0,
         "checks": {
           "passed": 4,
@@ -63,9 +63,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260429T165922300205Z/results/sanity/skill-smoke/sanity-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260429T165922300205Z/results/sanity/skill-smoke/sanity-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260429T165922300205Z/results/sanity/skill-smoke/sanity-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260629T201829754346Z/results/sanity/skill-smoke/sanity-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260629T201829754346Z/results/sanity/skill-smoke/sanity-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T201829754346Z/results/sanity/skill-smoke/sanity-audit/with_baseline.json"
       }
     }
   ],

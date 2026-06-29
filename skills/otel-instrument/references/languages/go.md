@@ -36,8 +36,8 @@ instead.
 
 Framework-specific middleware packages (otelchi, otelgin, otelmux) only emit
 **spans** -- they do not register HTTP server metric instruments. To get full
-RED coverage (Rate via request counts, Errors via status codes, Duration via
-`http.server.request.duration`), wrap the outermost handler with
+request count, error status, and request-duration coverage, wrap the outermost
+handler with
 `otelhttp.NewHandler`, which emits both spans and metrics.
 
 **Default rule:** always use `otelhttp.NewHandler` as the outermost wrapper.

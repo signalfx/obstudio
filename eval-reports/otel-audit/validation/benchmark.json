@@ -6,11 +6,12 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260429T161229087446Z",
-    "repo_root": "/Users/pavankri/Cisco/obstudio",
+    "run_id": "20260629T201942788890Z",
+    "repo_root": "/Users/tithumma/code/splunk/obstudio-genai-readiness-pr",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
+    "agent_backend": "codex",
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1"
@@ -30,7 +31,7 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -68,6 +69,74 @@
       "runtime_check_count": 0
     },
     {
+      "id": "java/kafka-batch-consumer/qual/audit",
+      "case": "java/kafka-batch-consumer",
+      "language": "java",
+      "service": "kafka-batch-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-batch-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-listener-container/qual/audit",
+      "case": "java/kafka-listener-container",
+      "language": "java",
+      "service": "kafka-listener-container",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-listener-container",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-producer-consumer/qual/audit",
+      "case": "java/kafka-producer-consumer",
+      "language": "java",
+      "service": "kafka-producer-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-producer-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-streams/qual/audit",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-streams",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
       "id": "java/springboot-basic/qual/audit",
       "case": "java/springboot-basic",
       "language": "java",
@@ -99,6 +168,39 @@
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "genai-readiness"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/assistant-v3-framework-bridge-demo/qual/audit",
+      "case": "python/assistant-v3-framework-bridge-demo",
+      "language": "python",
+      "service": "assistant-v3-framework-bridge-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "framework-bridge"
+      ],
+      "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/assistant-v3-framework-bridge-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -136,6 +238,23 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/mcp-ai-tool-demo/qual/audit",
+      "case": "python/mcp-ai-tool-demo",
+      "language": "python",
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "mcp-readiness"
+      ],
+      "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/mcp-ai-tool-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
       "id": "sanity/skill-smoke/sanity/audit",
       "case": "sanity/skill-smoke",
       "language": "sanity",
@@ -154,11 +273,11 @@
     }
   ],
   "summary": {
-    "eval_count": 8,
-    "case_count": 16,
-    "prompt_count": 16,
+    "eval_count": 15,
+    "case_count": 29,
+    "prompt_count": 29,
     "sanity_check_count": 0,
-    "rubric_check_count": 70,
+    "rubric_check_count": 152,
     "runtime_check_count": 0
   }
 }

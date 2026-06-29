@@ -812,15 +812,22 @@ def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
     data = json.loads(path.read_text(encoding="utf-8"))
     checks = data.get("checks") or []
     passed = sum(1 for check in checks if bool(check.get("pass")))
+    score = normalize_rubric_score(data.get("score"), passed, len(checks))
     normalized = {
         "overall_pass": data.get("overall_pass"),
-        "score": data.get("score"),
+        "score": score,
         "passed": passed,
         "total": len(checks),
         "checks": checks,
         "path": side.rubric_grade_path,
     }
     return normalized
+
+
+def normalize_rubric_score(score: Any, passed: int, total: int) -> Any:
+    if isinstance(score, int) and total > 0 and score == passed and score <= total:
+        return round((passed / total) * 100)
+    return score
 
 
 def format_rubric(side: dict[str, Any] | None) -> str:
