@@ -3,6 +3,9 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/signalfx/obstudio/observer/internal/o11yoauth"
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
 func TestSplunkMetricsExporterConfigFromEnvDisabledByDefault(t *testing.T) {
@@ -128,5 +131,63 @@ func TestSplunkTracesExporterConfigFromEnvRejectsBadTimeout(t *testing.T) {
 
 	if _, err := splunkTracesExporterConfigFromEnv(); err == nil {
 		t.Fatal("expected bad timeout error")
+	}
+}
+
+func TestStoredCloudConnectionConfiguresDisabledExporters(t *testing.T) {
+	connection := o11yoauth.Connection{
+		AccessToken: "stored-token",
+		Endpoint:    "https://ingest.lab0.signalfx.com",
+		Realm:       "lab0",
+	}
+	metrics := applyStoredCloudConnectionToMetrics(otlp.SplunkMetricsExporterConfig{}, connection)
+	traces := applyStoredCloudConnectionToTraces(otlp.SplunkTracesExporterConfig{}, connection)
+
+	if metrics.Enabled || traces.Enabled {
+		t.Fatal("loading a stored connection must not enable export")
+	}
+	if metrics.AccessToken != "stored-token" || traces.AccessToken != "stored-token" {
+		t.Fatal("stored access token was not applied to both exporters")
+	}
+	if metrics.Realm != "lab0" || traces.Realm != "lab0" {
+		t.Fatal("stored realm was not applied to both exporters")
+	}
+	if metrics.Endpoint != connection.Endpoint || traces.Endpoint != connection.Endpoint {
+		t.Fatal("stored endpoint was not applied to both exporters")
+	}
+}
+
+func TestExplicitExporterCredentialsTakePrecedenceOverStoredConnection(t *testing.T) {
+	connection := o11yoauth.Connection{
+		AccessToken: "stored-token",
+		Endpoint:    "https://ingest.lab0.signalfx.com",
+		Realm:       "lab0",
+	}
+	metricsInput := otlp.SplunkMetricsExporterConfig{
+		AccessToken: "environment-token",
+		Endpoint:    "https://ingest.us1.signalfx.com",
+		Realm:       "us1",
+	}
+	tracesInput := otlp.SplunkTracesExporterConfig{
+		AccessToken: "environment-token",
+		Endpoint:    "https://ingest.us1.signalfx.com",
+		Realm:       "us1",
+	}
+	metrics := applyStoredCloudConnectionToMetrics(metricsInput, connection)
+	traces := applyStoredCloudConnectionToTraces(tracesInput, connection)
+	if metrics != metricsInput || traces != tracesInput {
+		t.Fatalf("explicit exporter settings were changed: metrics=%+v traces=%+v", metrics, traces)
+	}
+}
+
+func TestStoredCloudConnectionOnlyLoadsForStandaloneWithoutExplicitToken(t *testing.T) {
+	if !shouldLoadStoredCloudConnection("standalone", "") {
+		t.Fatal("standalone Observer should load its OS-keychain connection")
+	}
+	if shouldLoadStoredCloudConnection("extension", "") {
+		t.Fatal("extension-managed Observer must wait for IDE SecretStorage restoration")
+	}
+	if shouldLoadStoredCloudConnection("standalone", "environment-token") {
+		t.Fatal("explicit environment credentials must take precedence over the OS keychain")
 	}
 }

@@ -51,6 +51,9 @@ type SplunkTracesExportStatus struct {
 	AccessToken           string                     `json:"accessToken,omitempty"`
 	Timeout               string                     `json:"timeout,omitempty"`
 	LastExport            *SplunkTracesExportAttempt `json:"lastExport,omitempty"`
+	TraceBatches          int64                      `json:"traceBatches,omitempty"`
+	TraceSpans            int64                      `json:"traceSpans,omitempty"`
+	FailedBatches         int64                      `json:"failedBatches,omitempty"`
 }
 
 // SplunkTracesExportAttempt records the latest outbound export result without
@@ -76,6 +79,9 @@ type SplunkTracesExportController struct {
 	exporter      splunkTracesExporterRuntime
 	lastExport    SplunkTracesExportAttempt
 	hasLastExport bool
+	traceBatches  int64
+	traceSpans    int64
+	failedBatches int64
 }
 
 // NewSplunkTracesExportController creates a runtime controller. Disabled
@@ -100,6 +106,9 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 	c.exporter = exporter
 	c.lastExport = SplunkTracesExportAttempt{}
 	c.hasLastExport = false
+	c.traceBatches = 0
+	c.traceSpans = 0
+	c.failedBatches = 0
 	c.mu.Unlock()
 	if old != nil {
 		old.Shutdown(context.Background())
@@ -147,6 +156,9 @@ func (c *SplunkTracesExportController) Status() SplunkTracesExportStatus {
 		AccessTokenConfigured: c.config.AccessToken != "",
 		AccessToken:           redactConfiguredToken(c.config.AccessToken),
 		Timeout:               effectiveSplunkTracesTimeout(c.config.Timeout).String(),
+		TraceBatches:          c.traceBatches,
+		TraceSpans:            c.traceSpans,
+		FailedBatches:         c.failedBatches,
 	}
 	if c.exporter != nil {
 		status.Endpoints = c.exporter.Endpoints()
@@ -170,7 +182,7 @@ func (c *SplunkTracesExportController) ExportTraces(ctx context.Context, td ptra
 		return nil
 	}
 	err := exporter.ExportTraces(ctx, td)
-	c.recordExport(err)
+	c.recordExport(err, int64(td.SpanCount()))
 	return err
 }
 
@@ -190,7 +202,7 @@ func (c *SplunkTracesExportController) TestConnection(ctx context.Context) (Splu
 	return c.Status(), err
 }
 
-func (c *SplunkTracesExportController) recordExport(err error) {
+func (c *SplunkTracesExportController) recordExport(err error, spanCount int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.hasLastExport = true
@@ -200,7 +212,11 @@ func (c *SplunkTracesExportController) recordExport(err error) {
 	}
 	if err != nil {
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		c.failedBatches++
+		return
 	}
+	c.traceBatches++
+	c.traceSpans += spanCount
 }
 
 func normalizeSplunkTracesExporterConfig(config SplunkTracesExporterConfig) SplunkTracesExporterConfig {

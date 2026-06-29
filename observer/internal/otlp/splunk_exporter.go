@@ -52,6 +52,9 @@ type SplunkMetricsExportStatus struct {
 	AccessToken           string                      `json:"accessToken,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty"`
 	LastExport            *SplunkMetricsExportAttempt `json:"lastExport,omitempty"`
+	MetricBatches         int64                       `json:"metricBatches,omitempty"`
+	MetricPoints          int64                       `json:"metricPoints,omitempty"`
+	FailedBatches         int64                       `json:"failedBatches,omitempty"`
 }
 
 // SplunkMetricsExportAttempt records the latest outbound export result without
@@ -71,6 +74,9 @@ type SplunkMetricsExportController struct {
 	exporter      splunkMetricsExporterRuntime
 	lastExport    SplunkMetricsExportAttempt
 	hasLastExport bool
+	metricBatches int64
+	metricPoints  int64
+	failedBatches int64
 }
 
 type splunkMetricsExporterRuntime interface {
@@ -101,6 +107,9 @@ func (c *SplunkMetricsExportController) Configure(config SplunkMetricsExporterCo
 	c.exporter = exporter
 	c.lastExport = SplunkMetricsExportAttempt{}
 	c.hasLastExport = false
+	c.metricBatches = 0
+	c.metricPoints = 0
+	c.failedBatches = 0
 	c.mu.Unlock()
 	if old != nil {
 		old.Shutdown(context.Background())
@@ -148,6 +157,9 @@ func (c *SplunkMetricsExportController) Status() SplunkMetricsExportStatus {
 		AccessTokenConfigured: c.config.AccessToken != "",
 		AccessToken:           redactConfiguredToken(c.config.AccessToken),
 		Timeout:               effectiveSplunkMetricsTimeout(c.config.Timeout).String(),
+		MetricBatches:         c.metricBatches,
+		MetricPoints:          c.metricPoints,
+		FailedBatches:         c.failedBatches,
 	}
 	if c.exporter != nil {
 		status.Endpoints = c.exporter.Endpoints()
@@ -171,7 +183,7 @@ func (c *SplunkMetricsExportController) ExportMetrics(ctx context.Context, md pm
 		return nil
 	}
 	err := exporter.ExportMetrics(ctx, md)
-	c.recordExport(err)
+	c.recordExport(err, countMetricDataPoints(md))
 	return err
 }
 
@@ -194,7 +206,7 @@ func (c *SplunkMetricsExportController) TestConnection(ctx context.Context, metr
 	return c.Status(), err
 }
 
-func (c *SplunkMetricsExportController) recordExport(err error) {
+func (c *SplunkMetricsExportController) recordExport(err error, pointCount int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.hasLastExport = true
@@ -204,7 +216,38 @@ func (c *SplunkMetricsExportController) recordExport(err error) {
 	}
 	if err != nil {
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		c.failedBatches++
+		return
 	}
+	c.metricBatches++
+	c.metricPoints += pointCount
+}
+
+func countMetricDataPoints(md pmetric.Metrics) int64 {
+	var count int64
+	resourceMetrics := md.ResourceMetrics()
+	for i := 0; i < resourceMetrics.Len(); i++ {
+		scopeMetrics := resourceMetrics.At(i).ScopeMetrics()
+		for j := 0; j < scopeMetrics.Len(); j++ {
+			metrics := scopeMetrics.At(j).Metrics()
+			for k := 0; k < metrics.Len(); k++ {
+				metric := metrics.At(k)
+				switch metric.Type() {
+				case pmetric.MetricTypeGauge:
+					count += int64(metric.Gauge().DataPoints().Len())
+				case pmetric.MetricTypeSum:
+					count += int64(metric.Sum().DataPoints().Len())
+				case pmetric.MetricTypeHistogram:
+					count += int64(metric.Histogram().DataPoints().Len())
+				case pmetric.MetricTypeExponentialHistogram:
+					count += int64(metric.ExponentialHistogram().DataPoints().Len())
+				case pmetric.MetricTypeSummary:
+					count += int64(metric.Summary().DataPoints().Len())
+				}
+			}
+		}
+	}
+	return count
 }
 
 func normalizeSplunkMetricsExporterConfig(config SplunkMetricsExporterConfig) SplunkMetricsExporterConfig {

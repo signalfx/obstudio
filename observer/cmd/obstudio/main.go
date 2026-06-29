@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -18,7 +19,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/signalfx/obstudio/observer/internal/api"
+	"github.com/signalfx/obstudio/observer/internal/cloudstore"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
+	"github.com/signalfx/obstudio/observer/internal/o11yoauth"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -68,6 +71,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
+	root.AddCommand(newCloudCmd())
 	return root
 }
 
@@ -111,9 +115,24 @@ func run(config runConfig) {
 		log.Printf("validator startup failed: %v", err)
 	}
 
+	var storedCloudConnection o11yoauth.Connection
+	storedCloudConnectionErr := cloudstore.ErrNotFound
+	if shouldLoadStoredCloudConnection(envOr("OBSTUDIO_MODE", "standalone"), os.Getenv("SPLUNK_ACCESS_TOKEN")) {
+		storedCloudConnection, storedCloudConnectionErr = cloudstore.Keyring{}.Load()
+		if storedCloudConnectionErr != nil && !errors.Is(storedCloudConnectionErr, cloudstore.ErrNotFound) {
+			log.Printf("could not read Splunk Observability Cloud connection from OS keychain: %v", storedCloudConnectionErr)
+		} else if storedCloudConnectionErr == nil && !o11yoauth.ConnectionUsable(storedCloudConnection, "ingest", time.Now().UTC(), time.Minute) {
+			log.Printf("stored Splunk Observability Cloud connection is expired or does not grant ingest scope")
+			storedCloudConnectionErr = cloudstore.ErrNotFound
+		}
+	}
+
 	splunkConfig, err := splunkMetricsExporterConfigFromEnv()
 	if err != nil {
 		log.Fatalf("configure Splunk metrics export: %v", err)
+	}
+	if storedCloudConnectionErr == nil {
+		splunkConfig = applyStoredCloudConnectionToMetrics(splunkConfig, storedCloudConnection)
 	}
 	splunkExportController, err := otlp.NewSplunkMetricsExportController(splunkConfig)
 	if err != nil {
@@ -130,6 +149,9 @@ func run(config runConfig) {
 	if err != nil {
 		log.Fatalf("configure Splunk traces export: %v", err)
 	}
+	if storedCloudConnectionErr == nil {
+		splunkTracesConfig = applyStoredCloudConnectionToTraces(splunkTracesConfig, storedCloudConnection)
+	}
 	splunkTracesController, err := otlp.NewSplunkTracesExportController(splunkTracesConfig)
 	if err != nil {
 		log.Fatalf("configure Splunk traces export: %v", err)
@@ -141,17 +163,9 @@ func run(config runConfig) {
 		)
 	}
 
-	var metricsExporter otlp.MetricsExporter
-	if splunkExportController.Status().Configured {
-		metricsExporter = splunkExportController
-	}
-	var tracesExporter otlp.TracesExporter
-	if splunkTracesController.Status().Configured {
-		tracesExporter = splunkTracesController
-	}
 	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr,
-		otlp.WithMetricsExporter(metricsExporter),
-		otlp.WithTracesExporter(tracesExporter),
+		otlp.WithMetricsExporter(splunkExportController),
+		otlp.WithTracesExporter(splunkTracesController),
 	)
 	if err != nil {
 		log.Fatalf("failed to start OTLP receiver: %v", err)
@@ -166,7 +180,7 @@ func run(config runConfig) {
 		Mode:       envOr("OBSTUDIO_MODE", "standalone"),
 		StartedAt:  startedAt,
 		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
-	})
+	}, splunkExportController, splunkTracesController)
 	mcp.Register(mux, s, v, validatorManager, splunkExportController)
 	webCleanup := web.Register(mux, s, v)
 
@@ -344,6 +358,38 @@ func splunkTracesExporterConfigFromEnv() (otlp.SplunkTracesExporterConfig, error
 		AccessToken: envOr("SPLUNK_ACCESS_TOKEN", ""),
 		Timeout:     timeout,
 	}, nil
+}
+
+func applyStoredCloudConnectionToMetrics(config otlp.SplunkMetricsExporterConfig, connection o11yoauth.Connection) otlp.SplunkMetricsExporterConfig {
+	if config.AccessToken != "" {
+		return config
+	}
+	config.AccessToken = connection.AccessToken
+	if config.Realm == "" {
+		config.Realm = connection.Realm
+	}
+	if config.Endpoint == "" {
+		config.Endpoint = connection.Endpoint
+	}
+	return config
+}
+
+func applyStoredCloudConnectionToTraces(config otlp.SplunkTracesExporterConfig, connection o11yoauth.Connection) otlp.SplunkTracesExporterConfig {
+	if config.AccessToken != "" {
+		return config
+	}
+	config.AccessToken = connection.AccessToken
+	if config.Realm == "" {
+		config.Realm = connection.Realm
+	}
+	if config.Endpoint == "" {
+		config.Endpoint = connection.Endpoint
+	}
+	return config
+}
+
+func shouldLoadStoredCloudConnection(mode, explicitAccessToken string) bool {
+	return mode == "standalone" && strings.TrimSpace(explicitAccessToken) == ""
 }
 
 func durationEnv(key string) (time.Duration, error) {

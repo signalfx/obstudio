@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import test from 'node:test';
@@ -10,8 +11,59 @@ import {
 	observerPortFromUrl,
 	resolveBackend,
 } from '../backend';
+import {
+	configureObserverSplunkExport,
+	forgetObserverSplunkExport,
+	isO11yOAuthConnectionUsable,
+	normalizeO11yOAuthIssuerUrl,
+	o11yOAuthConnectionFingerprint,
+	o11yOAuthSecretStorageKey,
+	parseO11yOAuthForgetMarker,
+	shouldForgetStoredO11yOAuthConnection,
+} from '../o11y-oauth';
+import {
+	defaultCloudClientId,
+	parseCloudConnectionOutput,
+	persistCloudConnectionOrRevoke,
+} from '../cloud-command';
+import {
+	observerControlTokenSecretStorageKey,
+	resolveObserverControlToken,
+} from '../observer-control-token';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
+
+test('Observer control token uses environment configuration for shared servers', async () => {
+	const stored = new Map<string, string>();
+	const storage = {
+		get: async (key: string) => stored.get(key),
+		store: async (key: string, value: string) => {
+			stored.set(key, value);
+		},
+	};
+
+	const token = await resolveObserverControlToken(storage, ' shared-control-token ', () => 'generated');
+
+	assert.equal(token, 'shared-control-token');
+	assert.equal(stored.size, 0);
+});
+
+test('Observer control token persists generated credentials in IDE SecretStorage', async () => {
+	const stored = new Map<string, string>();
+	const storage = {
+		get: async (key: string) => stored.get(key),
+		store: async (key: string, value: string) => {
+			stored.set(key, value);
+		},
+	};
+
+	const first = await resolveObserverControlToken(storage, undefined, () => 'generated-control-token');
+	const second = await resolveObserverControlToken(storage, undefined, () => 'different-token');
+
+	assert.equal(first, 'generated-control-token');
+	assert.equal(second, first);
+	assert.equal(stored.get(observerControlTokenSecretStorageKey), first);
+});
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
 	getBuildPaths: (extensionRoot?: string, env?: NodeJS.ProcessEnv) => {
 		observerRoot: string;
@@ -158,6 +210,281 @@ test('observer webview panel uses the bundled observer icon', () => {
 	assert.match(source, /panel\.iconPath\s*=\s*\{\s*light:\s*iconUri,\s*dark:\s*iconUri,\s*\}/s);
 	assert.match(source, /applyObserverPanelPresentation\(observerPanel,\s*context\)/);
 	assert.match(source, /observer-icon\.png/);
+});
+
+test('OAuth issuer input accepts an organization URL but returns a trusted origin', () => {
+	assert.equal(
+		normalizeO11yOAuthIssuerUrl('https://APP.EU0.observability.splunkcloud.com/#/home'),
+		'https://app.eu0.observability.splunkcloud.com',
+	);
+	assert.equal(
+		normalizeO11yOAuthIssuerUrl('https://mon.signalfx.com/#/signin'),
+		'https://mon.signalfx.com',
+	);
+	assert.throws(
+		() => normalizeO11yOAuthIssuerUrl('https://attacker.example/#/home'),
+		/registered Splunk Observability Cloud host/,
+	);
+	assert.throws(
+		() => normalizeO11yOAuthIssuerUrl('https://user:password@app.eu0.observability.splunkcloud.com'),
+		/must not contain credentials/,
+	);
+});
+
+test('OAuth connection output requires a trusted issuer and bearer token', () => {
+	assert.equal(o11yOAuthSecretStorageKey, 'observability-studio.o11y.oauth.connection');
+	const connection = parseCloudConnectionOutput(JSON.stringify({
+		accessToken: 'secret-token',
+		connected: true,
+		connectedAt: '2026-06-29T12:00:00Z',
+		endpoint: 'https://ingest.us1.signalfx.com',
+		issuer: 'https://app.us1.signalfx.com',
+		realm: 'us1',
+		tokenType: 'Bearer',
+	}));
+	assert.equal(connection.accessToken, 'secret-token');
+	const internalConnection = parseCloudConnectionOutput(JSON.stringify({
+		accessToken: 'internal-secret-token',
+		connected: true,
+		endpoint: 'https://mon-ingest.signalfx.com',
+		issuer: 'https://mon.signalfx.com',
+		realm: 'mon0',
+		tokenType: 'Bearer',
+	}));
+	assert.equal(internalConnection.realm, 'mon0');
+	assert.throws(
+		() => parseCloudConnectionOutput('{"accessToken":"secret","issuer":"https://attacker.example"}'),
+		/invalid connection/,
+	);
+	assert.throws(
+		() => parseCloudConnectionOutput(JSON.stringify({
+			accessToken: 'secret',
+			endpoint: 'https://attacker.example',
+			issuer: 'https://app.us1.signalfx.com',
+			realm: 'us1',
+			tokenType: 'Bearer',
+		})),
+		/invalid connection/,
+	);
+	assert.throws(
+		() => parseCloudConnectionOutput(JSON.stringify({
+			accessToken: 'secret',
+			endpoint: 'https://ingest.us1.signalfx.com:8443/v2/datapoint/otlp',
+			issuer: 'https://app.us1.signalfx.com',
+			realm: 'us1',
+			tokenType: 'Bearer',
+		})),
+		/invalid connection/,
+	);
+});
+
+test('OAuth client registration follows the extension host', () => {
+	assert.equal(defaultCloudClientId('Visual Studio Code'), 'obstudio-vscode');
+	assert.equal(defaultCloudClientId('Cursor'), 'obstudio-cursor');
+});
+
+test('OAuth connection is revoked when IDE SecretStorage fails', async () => {
+	let revoked = false;
+	await assert.rejects(
+		persistCloudConnectionOrRevoke(
+			{
+				accessToken: 'secret-token',
+				connectedAt: '2026-06-29T12:00:00Z',
+				endpoint: 'https://ingest.us1.signalfx.com',
+				issuer: 'https://app.us1.signalfx.com',
+				realm: 'us1',
+				tokenType: 'Bearer',
+			},
+			async () => { throw new Error('keychain unavailable'); },
+			async () => { revoked = true; },
+		),
+		/issued token was revoked/,
+	);
+	assert.equal(revoked, true);
+});
+
+test('OAuth forget marker only clears older stored connections', () => {
+	const oldConnection = {
+		accessToken: 'old-token',
+		connectedAt: '2026-06-27T09:59:59.000Z',
+		issuer: 'https://app.us0.signalfx.com',
+		tokenType: 'Bearer',
+	};
+	const marker = parseO11yOAuthForgetMarker(JSON.stringify({
+		connectionFingerprint: o11yOAuthConnectionFingerprint(oldConnection),
+		forgottenAt: '2026-06-27T10:00:00.000Z',
+	}));
+	assert.ok(marker);
+	assert.equal(
+		shouldForgetStoredO11yOAuthConnection(oldConnection, marker),
+		true,
+	);
+	assert.equal(
+		shouldForgetStoredO11yOAuthConnection({
+			...oldConnection,
+			accessToken: 'different-token',
+			tokenType: 'Bearer',
+		}, marker),
+		false,
+	);
+	assert.equal(
+		shouldForgetStoredO11yOAuthConnection({
+			...oldConnection,
+			connectedAt: '2026-06-27T10:00:01.000Z',
+		}, marker),
+		false,
+	);
+	assert.equal(parseO11yOAuthForgetMarker('{"forgottenAt":"2026-06-27T10:00:00.000Z"}'), undefined);
+	assert.equal(parseO11yOAuthForgetMarker('not-json'), undefined);
+});
+
+test('OAuth connection fingerprint canonicalizes issuer origins', () => {
+	const connection = {
+		accessToken: 'sf-token',
+		connectedAt: '2026-06-27T09:59:59.000Z',
+		issuer: 'https://APP.US0.signalfx.com:443/',
+		tokenType: 'Bearer',
+	};
+	assert.equal(
+		o11yOAuthConnectionFingerprint(connection),
+		o11yOAuthConnectionFingerprint({
+			...connection,
+			issuer: 'https://app.us0.signalfx.com',
+		}),
+	);
+});
+
+test('OAuth connection reuse requires a non-expired token with all requested scopes', () => {
+	const connection = {
+		accessToken: 'sf-token',
+		connectedAt: '2026-06-27T10:00:00.000Z',
+		expiresAt: '2026-06-27T12:00:00.000Z',
+		issuer: 'https://app.us0.signalfx.com',
+		scope: 'api ingest',
+		tokenId: 'token-id',
+		tokenName: 'Obstudio token',
+		tokenType: 'Bearer',
+	};
+	const now = new Date('2026-06-27T11:00:00.000Z');
+
+	assert.equal(isO11yOAuthConnectionUsable(connection, 'ingest', now), true);
+	assert.equal(
+		isO11yOAuthConnectionUsable({ ...connection, tokenId: undefined, tokenName: undefined }, 'ingest', now),
+		true,
+	);
+	assert.equal(isO11yOAuthConnectionUsable(connection, 'ingest api', now), true);
+	assert.equal(isO11yOAuthConnectionUsable(connection, 'admin', now), false);
+	assert.equal(isO11yOAuthConnectionUsable({ ...connection, accessToken: ' ' }, 'ingest', now), false);
+	assert.equal(
+		isO11yOAuthConnectionUsable({ ...connection, expiresAt: '2026-06-27T11:00:30.000Z' }, 'ingest', now),
+		false,
+	);
+	assert.equal(isO11yOAuthConnectionUsable({ ...connection, expiresAt: 'invalid' }, 'ingest', now), false);
+});
+
+test('OAuth connection configures local observer export with control token', async () => {
+	let receivedAuth = '';
+	let receivedBody = '';
+	const server = http.createServer((request, response) => {
+		receivedAuth = request.headers.authorization ?? '';
+		request.on('data', (chunk: Buffer) => {
+			receivedBody += chunk.toString('utf8');
+		});
+		request.on('end', () => {
+			assert.equal(request.method, 'POST');
+			assert.equal(request.url, '/api/splunk/export');
+			response.writeHead(200, { 'Content-Type': 'application/json' });
+			response.end(JSON.stringify({ metrics: { configured: true }, traces: { configured: true } }));
+		});
+	});
+
+	const baseUrl = await new Promise<string>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (typeof address === 'object' && address !== null) {
+				resolve(`http://127.0.0.1:${address.port}`);
+			} else {
+				reject(new Error('server did not bind to an address'));
+			}
+		});
+	});
+	try {
+		await configureObserverSplunkExport({
+			baseUrl,
+			connection: {
+				accessToken: 'sf-secret',
+				connectedAt: '2026-06-27T00:00:00.000Z',
+				endpoint: 'https://ingest.lab0.signalfx.com',
+				issuer: 'http://127.0.0.1:3000',
+				realm: 'lab0',
+				tokenId: 'token-id',
+				tokenName: 'Obstudio token',
+				tokenType: 'Bearer',
+			},
+			controlToken: 'control-secret',
+		});
+	} finally {
+		await new Promise<void>((resolve) => {
+			server.close(() => resolve());
+		});
+	}
+
+	assert.equal(receivedAuth, 'Bearer control-secret');
+	const payload = JSON.parse(receivedBody) as {
+		accessToken?: string;
+		enabled?: boolean;
+		endpoint?: string;
+		issuer?: string;
+		realm?: string;
+	};
+	assert.equal(payload.accessToken, 'sf-secret');
+	assert.equal(payload.enabled, false);
+	assert.equal(payload.endpoint, 'https://ingest.lab0.signalfx.com');
+	assert.equal(payload.issuer, 'http://127.0.0.1:3000');
+	assert.equal(payload.realm, 'lab0');
+});
+
+test('OAuth helper clears local observer export with control token', async () => {
+	let receivedAuth = '';
+	let receivedBody = '';
+	const server = http.createServer((request, response) => {
+		receivedAuth = request.headers.authorization ?? '';
+		request.on('data', (chunk: Buffer) => {
+			receivedBody += chunk.toString('utf8');
+		});
+		request.on('end', () => {
+			assert.equal(request.method, 'POST');
+			assert.equal(request.url, '/api/splunk/export/forget');
+			response.writeHead(200, { 'Content-Type': 'application/json' });
+			response.end(JSON.stringify({ metrics: { accessTokenConfigured: false }, traces: { accessTokenConfigured: false } }));
+		});
+	});
+
+	const baseUrl = await new Promise<string>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (typeof address === 'object' && address !== null) {
+				resolve(`http://127.0.0.1:${address.port}`);
+			} else {
+				reject(new Error('server did not bind to an address'));
+			}
+		});
+	});
+	try {
+		await forgetObserverSplunkExport({
+			baseUrl,
+			controlToken: 'control-secret',
+		});
+	} finally {
+		await new Promise<void>((resolve) => {
+			server.close(() => resolve());
+		});
+	}
+
+	assert.equal(receivedAuth, 'Bearer control-secret');
+	assert.equal(receivedBody, '{}');
 });
 
 test('extension unload paths clean up observer state', () => {

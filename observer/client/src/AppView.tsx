@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
 import { ServicesTab } from "./services";
+import { CloudTab } from "./cloud";
 import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
 import { KeyboardHelp } from "./components/KeyboardHelp";
@@ -13,7 +14,7 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "services" | "metrics" | "traces" | "logs" | "validation";
+type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "cloud";
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -44,6 +45,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "3": () => switchTab("logs"),
     "4": () => switchTab("services"),
     "5": () => switchTab("validation"),
+    "6": () => switchTab("cloud"),
   }), [toggle, switchTab]);
 
   useKeyboardShortcuts(shortcuts);
@@ -107,6 +109,16 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Validation
             {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn" aria-hidden="true">{validationIssues.length}</span> : null}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "cloud"}
+            aria-label="Cloud"
+            className={activeTab === "cloud" ? "tab-button is-active" : "tab-button"}
+            onClick={() => switchTab("cloud")}
+          >
+            Cloud
           </button>
           </div>
 
@@ -175,6 +187,9 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             summary={validationSummary}
           />
         ) : null}
+        {activeTab === "cloud" ? (
+          <CloudTab />
+        ) : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}
@@ -192,6 +207,7 @@ function initialTabFromLocation(): AppTab {
     case "traces":
     case "logs":
     case "validation":
+    case "cloud":
       return tab;
     default:
       return "metrics";

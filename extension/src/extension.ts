@@ -25,6 +25,13 @@ import {
 	isObserverRunCurrent,
 	stopObserverRun,
 } from './observer-lifecycle';
+import { resolveObserverControlToken } from './observer-control-token';
+import {
+	defaultCloudClientId,
+	persistCloudConnectionOrRevoke,
+	runCloudLoginCommand,
+	runCloudRevokeCommand,
+} from './cloud-command';
 import {
 	getObserverErrorWebviewHtml,
 	getObserverLoadingWebviewHtml,
@@ -32,6 +39,20 @@ import {
 	getStatusBarUpdate,
 	getErrorMessage,
 } from './webview-html';
+import {
+	clearO11yOAuthConnection,
+	configureObserverSplunkExport,
+	forgetObserverSplunkExport,
+	isO11yOAuthConnectionUsable,
+	loadO11yOAuthConnection,
+	normalizeO11yOAuthIssuerUrl,
+	observerSplunkExportHasAccessToken,
+	o11yOAuthForgetMarkerPath,
+	parseO11yOAuthForgetMarker,
+	readO11yOAuthForgetMarker,
+	shouldForgetStoredO11yOAuthConnection,
+	storeO11yOAuthConnection,
+} from './o11y-oauth';
 import {
 	describeObserverStartupFailure,
 	formatObserverProbeMismatchMessage,
@@ -55,12 +76,24 @@ let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
 let agentIntegrationPromptPromise: Promise<void> | undefined;
 let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
+let cloudExportRestoreInterval: ReturnType<typeof setInterval> | undefined;
+let cloudExportRestorePromise: Promise<void> | undefined;
+let cloudExportRestoreFailures = 0;
+let cloudExportRestoreNextAttemptAt = 0;
+let cloudForgetMarkerListener: ((current: fs.Stats, previous: fs.Stats) => void) | undefined;
+let cloudForgetMarkerSyncPromise: Promise<void> | undefined;
+let cloudConnectPromise: Promise<void> | undefined;
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
 const managedObserverPortSetting = 'managedObserverPort';
+const o11yOAuthIssuerUrlSetting = 'o11yOAuthIssuerUrl';
+const o11yOAuthClientIdSetting = 'o11yOAuthClientId';
+const o11yOAuthScopeSetting = 'o11yOAuthScope';
+const o11yOAuthRequiredScopeSetting = 'o11yOAuthRequiredScope';
+const o11yOAuthTokenNameSetting = 'o11yOAuthTokenName';
 const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
@@ -73,6 +106,9 @@ const observerOtlpHttpPort = 4318;
 const observerOtlpGrpcPort = 4317;
 const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
 const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+let observerControlToken = '';
+const cloudExportRestoreIntervalMs = 10_000;
+const cloudExportRestoreMaxBackoffMs = 5 * 60_000;
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -148,6 +184,10 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 ];
 
 export async function activate(context: vscode.ExtensionContext) {
+	observerControlToken = await resolveObserverControlToken(
+		context.secrets,
+		process.env.OBSTUDIO_CONTROL_TOKEN,
+	);
 	observerOutputChannel = vscode.window.createOutputChannel('Splunk Observability Studio');
 	context.subscriptions.push(observerOutputChannel);
 	logObserverLifecycle('Extension activated.');
@@ -203,6 +243,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			logObserverLifecycle(`Skipping automatic agent integration prompt: ${getErrorMessage(error)}`);
 		});
+	startCloudExportRestoreLoop(context);
+	context.subscriptions.push({ dispose: stopCloudExportRestoreLoop });
+	startCloudForgetMarkerWatcher(context);
+	context.subscriptions.push({ dispose: stopCloudForgetMarkerWatcher });
+	void syncStoredCloudConnectionFromForgetMarker(context, 'extension activation');
 
 	const openObserverDisposable = vscode.commands.registerCommand('observability-studio.openObserver', () => {
 		openObserverPanel(context);
@@ -213,6 +258,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			const pick = await vscode.window.showQuickPick(
 				[
 					{ label: '$(window) Open Observer', id: 'open' },
+					{ label: '$(cloud) Connect to Splunk Observability Cloud', id: 'connect-cloud' },
+					{ label: '$(trash) Forget Splunk Observability Cloud Key', id: 'forget-cloud' },
 					{ label: '$(debug-restart) Restart Observer', id: 'restart' },
 					{ label: '$(debug-stop) Stop Observer', id: 'stop' },
 					{ label: '$(output) Show Output Log', id: 'log' },
@@ -225,6 +272,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			);
 			if (pick?.id === 'open') {
 				void vscode.commands.executeCommand('observability-studio.openObserver');
+			} else if (pick?.id === 'connect-cloud') {
+				void vscode.commands.executeCommand('observability-studio.connectSplunkObservabilityCloud');
+			} else if (pick?.id === 'forget-cloud') {
+				void vscode.commands.executeCommand('observability-studio.forgetSplunkObservabilityCloud');
 			} else if (pick?.id === 'restart') {
 				void vscode.commands.executeCommand('observability-studio.restartObserver');
 			} else if (pick?.id === 'stop') {
@@ -317,6 +368,118 @@ export async function activate(context: vscode.ExtensionContext) {
 			refreshObserverPanel();
 		}
 	});
+	const connectCloudDisposable = vscode.commands.registerCommand(
+		'observability-studio.connectSplunkObservabilityCloud',
+		async () => {
+			if (cloudConnectPromise !== undefined) {
+				await cloudConnectPromise;
+				return;
+			}
+			const connect = async (): Promise<void> => {
+				const config = vscode.workspace.getConfiguration('observability-studio');
+				try {
+					const requestedScope = config.get<string>(o11yOAuthScopeSetting) ?? '';
+					const requiredScope = config.get<string>(o11yOAuthRequiredScopeSetting) ?? '';
+					let connection = await loadO11yOAuthConnection(context);
+					if (connection !== undefined && await clearStoredCloudConnectionIfForgotten(context, connection)) {
+						connection = undefined;
+					}
+						const reusedStoredConnection = connection !== undefined
+							&& isO11yOAuthConnectionUsable(connection, requiredScope);
+						await ensureObserverRunning(context);
+						if (observerBaseUrl === undefined) {
+							throw new Error('Observer is not running.');
+						}
+						assertSharedObserverCloudControlConfigured();
+						if (!reusedStoredConnection) {
+							if (connection !== undefined) {
+								await clearO11yOAuthConnection(context);
+							}
+							const issuerUrl = await resolveO11yOAuthIssuerUrl(config);
+							if (issuerUrl === undefined) {
+								return;
+							}
+							const cloudBackend = resolveBackend(context.extensionPath);
+							connection = await runCloudLoginCommand(cloudBackend, {
+								clientId: resolveO11yOAuthClientId(config),
+								issuerUrl,
+								requiredScope,
+								scope: requestedScope,
+								tokenName: config.get<string>(o11yOAuthTokenNameSetting) ?? '',
+							});
+							await persistCloudConnectionOrRevoke(
+								connection,
+								() => storeO11yOAuthConnection(context, connection!),
+								() => runCloudRevokeCommand(cloudBackend, connection!),
+							);
+						}
+						if (connection === undefined) {
+							throw new Error('Splunk Observability Cloud connection is unavailable.');
+						}
+						const observerHasAccessToken = await observerSplunkExportHasAccessToken(observerBaseUrl);
+						if (!reusedStoredConnection || !observerHasAccessToken) {
+							await configureObserverSplunkExport({
+								baseUrl: observerBaseUrl,
+								connection,
+								controlToken: observerControlToken,
+								enabled: false,
+							});
+						}
+					refreshObserverPanel();
+					void vscode.window.showInformationMessage(
+						reusedStoredConnection
+							? 'Already connected to Splunk Observability Cloud. Use Forget key before connecting a different organization.'
+							: 'Splunk Observability Cloud connection saved. Enable export from the Cloud tab when ready.',
+					);
+				} catch (error) {
+					void vscode.window.showErrorMessage(
+						`Splunk Observability Cloud authorization failed: ${getErrorMessage(error)}`,
+					);
+				}
+			};
+			cloudConnectPromise = connect();
+			try {
+				await cloudConnectPromise;
+			} finally {
+				cloudConnectPromise = undefined;
+			}
+		},
+	);
+	const forgetCloudDisposable = vscode.commands.registerCommand(
+		'observability-studio.forgetSplunkObservabilityCloud',
+		async () => {
+			if (cloudConnectPromise !== undefined) {
+				await cloudConnectPromise;
+			}
+			const connection = await loadO11yOAuthConnection(context);
+			if (observerBaseUrl !== undefined) {
+				try {
+					assertSharedObserverCloudControlConfigured();
+					await forgetObserverSplunkExport({
+						baseUrl: observerBaseUrl,
+						controlToken: observerControlToken,
+					});
+				} catch (error) {
+					void vscode.window.showErrorMessage(
+						`Splunk Observability Cloud key could not be revoked: ${getErrorMessage(error)}`,
+					);
+					return;
+				}
+			} else if (connection !== undefined) {
+				try {
+					await runCloudRevokeCommand(resolveBackend(context.extensionPath), connection);
+				} catch (error) {
+					void vscode.window.showErrorMessage(
+						`Splunk Observability Cloud key could not be revoked: ${getErrorMessage(error)}`,
+					);
+					return;
+				}
+			}
+			await clearO11yOAuthConnection(context);
+			refreshObserverPanel();
+			void vscode.window.showInformationMessage('Splunk Observability Cloud key forgotten.');
+		},
+	);
 	const configureCodexDisposable = vscode.commands.registerCommand(
 		'observability-studio.configureCodexMCP',
 		() => configureAgentMCP(context, 'codex', 'Codex'),
@@ -375,6 +538,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(startDisposable);
 	context.subscriptions.push(stopDisposable);
 	context.subscriptions.push(restartDisposable);
+	context.subscriptions.push(connectCloudDisposable);
+	context.subscriptions.push(forgetCloudDisposable);
 	context.subscriptions.push(configureCodexDisposable);
 	context.subscriptions.push(configureClaudeDisposable);
 	context.subscriptions.push(configureCursorDisposable);
@@ -391,8 +556,115 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 }
 
+async function resolveO11yOAuthIssuerUrl(
+	config: vscode.WorkspaceConfiguration,
+): Promise<string | undefined> {
+	const configured = config.get<string>(o11yOAuthIssuerUrlSetting)?.trim();
+	if (configured) {
+		return normalizeO11yOAuthIssuerUrl(configured);
+	}
+
+	const entered = await vscode.window.showInputBox({
+		ignoreFocusOut: true,
+		placeHolder: 'https://app.us0.observability.splunkcloud.com',
+		prompt: 'Enter the URL of your Splunk Observability Cloud organization.',
+		title: 'Connect to Splunk Observability Cloud',
+		validateInput(value) {
+			try {
+				normalizeO11yOAuthIssuerUrl(value);
+				return undefined;
+			} catch (error) {
+				return getErrorMessage(error);
+			}
+		},
+	});
+	if (entered === undefined) {
+		return undefined;
+	}
+
+	const issuerUrl = normalizeO11yOAuthIssuerUrl(entered);
+	await config.update(o11yOAuthIssuerUrlSetting, issuerUrl, vscode.ConfigurationTarget.Global);
+	return issuerUrl;
+}
+
+function resolveO11yOAuthClientId(config: vscode.WorkspaceConfiguration): string {
+	const configured = config.get<string>(o11yOAuthClientIdSetting)?.trim();
+	if (configured) {
+		return configured;
+	}
+	return defaultCloudClientId(vscode.env.appName);
+}
+
 export async function deactivate(): Promise<void> {
 	await shutdownObserverForExtensionUnload('Extension deactivated');
+}
+
+function startCloudExportRestoreLoop(context: vscode.ExtensionContext): void {
+	if (cloudExportRestoreInterval !== undefined) {
+		return;
+	}
+	cloudExportRestoreInterval = setInterval(() => {
+		if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
+			return;
+		}
+		void scheduleObserverCloudExportRestore(context, 'periodic refresh');
+	}, cloudExportRestoreIntervalMs);
+}
+
+function stopCloudExportRestoreLoop(): void {
+	if (cloudExportRestoreInterval === undefined) {
+		return;
+	}
+	clearInterval(cloudExportRestoreInterval);
+	cloudExportRestoreInterval = undefined;
+	cloudExportRestorePromise = undefined;
+	cloudExportRestoreFailures = 0;
+	cloudExportRestoreNextAttemptAt = 0;
+}
+
+function startCloudForgetMarkerWatcher(context: vscode.ExtensionContext): void {
+	if (cloudForgetMarkerListener !== undefined) {
+		return;
+	}
+	cloudForgetMarkerListener = () => {
+		void syncStoredCloudConnectionFromForgetMarker(context, 'forget marker changed');
+	};
+	fs.watchFile(o11yOAuthForgetMarkerPath, {
+		interval: 500,
+		persistent: false,
+	}, cloudForgetMarkerListener);
+}
+
+function stopCloudForgetMarkerWatcher(): void {
+	if (cloudForgetMarkerListener === undefined) {
+		return;
+	}
+	fs.unwatchFile(o11yOAuthForgetMarkerPath, cloudForgetMarkerListener);
+	cloudForgetMarkerListener = undefined;
+	cloudForgetMarkerSyncPromise = undefined;
+}
+
+function syncStoredCloudConnectionFromForgetMarker(
+	context: vscode.ExtensionContext,
+	reason: string,
+): Promise<void> {
+	if (cloudForgetMarkerSyncPromise !== undefined) {
+		return cloudForgetMarkerSyncPromise;
+	}
+	cloudForgetMarkerSyncPromise = (async () => {
+		const connection = await loadO11yOAuthConnection(context);
+		if (connection === undefined) {
+			return;
+		}
+		if (await clearStoredCloudConnectionIfForgotten(context, connection)) {
+			logObserverLifecycle(`Cleared the stored cloud destination after ${reason}.`);
+		}
+	})().catch((error) => {
+		logObserverLifecycle(`Could not process the cloud forget marker: ${getErrorMessage(error)}`);
+	}).finally(() => {
+		cloudForgetMarkerSyncPromise = undefined;
+	});
+	return cloudForgetMarkerSyncPromise;
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +674,9 @@ export async function deactivate(): Promise<void> {
 async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<void> {
 	if (observerStartupPromise !== undefined) {
 		logObserverLifecycle('Start requested while startup is already in progress; waiting for existing startup.');
-		return observerStartupPromise;
+		await observerStartupPromise;
+		await scheduleObserverCloudExportRestore(context, 'startup completed', true);
+		return;
 	}
 	if (observerStopPromise !== undefined) {
 		logObserverLifecycle('Start requested while stop is in progress; waiting for observer shutdown.');
@@ -410,6 +684,7 @@ async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<
 	}
 	if (observerLifecycleState.status === 'running' && observerBaseUrl !== undefined) {
 		logObserverLifecycle(`Start requested while observer is already running at ${observerBaseUrl}.`);
+		await scheduleObserverCloudExportRestore(context, 'observer already running', true);
 		return;
 	}
 
@@ -417,7 +692,114 @@ async function ensureObserverRunning(context: vscode.ExtensionContext): Promise<
 		throw new Error('Observer output channel is not initialized.');
 	}
 
-	return startObserver(context);
+	await startObserver(context);
+	await scheduleObserverCloudExportRestore(context, 'observer started', true);
+}
+
+function scheduleObserverCloudExportRestore(
+	context: vscode.ExtensionContext,
+	reason: string,
+	force = false,
+): Promise<void> {
+	if (cloudExportRestorePromise !== undefined) {
+		return cloudExportRestorePromise;
+	}
+	if (!force && Date.now() < cloudExportRestoreNextAttemptAt) {
+		return Promise.resolve();
+	}
+	cloudExportRestorePromise = (async () => {
+		const restored = await restoreObserverCloudExport(context, reason);
+		if (restored) {
+			cloudExportRestoreFailures = 0;
+			cloudExportRestoreNextAttemptAt = 0;
+			return;
+		}
+		cloudExportRestoreFailures += 1;
+		const delay = Math.min(
+			cloudExportRestoreIntervalMs * 2 ** (cloudExportRestoreFailures - 1),
+			cloudExportRestoreMaxBackoffMs,
+		);
+		cloudExportRestoreNextAttemptAt = Date.now() + delay;
+		logObserverLifecycle(`Cloud destination restore will retry in ${Math.round(delay / 1000)} seconds.`);
+	})().finally(() => {
+		cloudExportRestorePromise = undefined;
+	});
+	return cloudExportRestorePromise;
+}
+
+async function restoreObserverCloudExport(context: vscode.ExtensionContext, reason: string): Promise<boolean> {
+	if (observerBaseUrl === undefined) {
+		return true;
+	}
+
+	try {
+		const connection = await loadO11yOAuthConnection(context);
+		if (connection === undefined) {
+			return true;
+		}
+		if (await clearStoredCloudConnectionIfForgotten(context, connection)) {
+			refreshObserverPanel();
+			return true;
+		}
+		const requiredScope = vscode.workspace
+			.getConfiguration('observability-studio')
+			.get<string>(o11yOAuthRequiredScopeSetting) ?? '';
+		if (!isO11yOAuthConnectionUsable(connection, requiredScope)) {
+			await clearO11yOAuthConnection(context);
+			logObserverLifecycle('Cleared expired or unusable Splunk Observability Cloud credentials.');
+			refreshObserverPanel();
+			return true;
+		}
+		if (await observerSplunkExportHasAccessToken(observerBaseUrl)) {
+			return true;
+		}
+		assertSharedObserverCloudControlConfigured();
+		await configureObserverSplunkExport({
+			baseUrl: observerBaseUrl,
+			connection,
+			controlToken: observerControlToken,
+			enabled: false,
+		});
+		if (!await observerSplunkExportHasAccessToken(observerBaseUrl)) {
+			throw new Error('Observer did not retain the restored cloud destination.');
+		}
+		logObserverLifecycle(`Restored Splunk Observability Cloud destination with export disabled (${reason}).`);
+		refreshObserverPanel();
+		return true;
+	} catch (error) {
+		const message = getErrorMessage(error);
+		logObserverLifecycle(`Could not restore Splunk Observability Cloud destination (${reason}): ${message}`);
+		appendObserverOutputLine(`Could not restore Splunk Observability Cloud destination: ${message}`);
+		return false;
+	}
+}
+
+async function clearStoredCloudConnectionIfForgotten(
+	context: vscode.ExtensionContext,
+	connection: Awaited<ReturnType<typeof loadO11yOAuthConnection>>,
+): Promise<boolean> {
+	if (connection === undefined) {
+		return false;
+	}
+	const marker = await readO11yOAuthForgetMarker();
+	if (marker === undefined) {
+		return false;
+	}
+	const forgetMarker = parseO11yOAuthForgetMarker(marker);
+	if (!shouldForgetStoredO11yOAuthConnection(connection, forgetMarker)) {
+		return false;
+	}
+	await clearO11yOAuthConnection(context);
+	logObserverLifecycle('Cleared stored Splunk Observability Cloud destination after local forget marker.');
+	return true;
+}
+
+function assertSharedObserverCloudControlConfigured(): void {
+	if (observerUsesSharedServer && !process.env.OBSTUDIO_CONTROL_TOKEN?.trim()) {
+		throw new Error(
+			'Shared Observer cloud controls require OBSTUDIO_CONTROL_TOKEN in the VS Code environment.',
+		);
+	}
 }
 
 async function startObserver(context: vscode.ExtensionContext): Promise<void> {
@@ -530,6 +912,9 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					...process.env,
 					...backend.env,
 					HOST: managedObserverHost,
+					OBSTUDIO_CONTROL_TOKEN: observerControlToken,
+					OBSTUDIO_MODE: 'extension',
+					OBSTUDIO_OWNER: 'vscode-extension',
 					OTLP_HOST: managedObserverHost,
 					OTLP_PORT: String(otlpHttpPort),
 					OTLP_HTTP_PORT: String(otlpHttpPort),

@@ -285,22 +285,22 @@ integration tests for telemetry emission using the Observer MCP tools.
 
 | Channel | Install | Register |
 |---------|---------|----------|
-| Native CLI | `brew install obstudio` | `obstudio register --agent cursor` |
+| Native CLI | `brew install obstudio` | `obstudio install --target=cursor` |
 | VS Code Extension | Marketplace | Automatic on activation |
 | Manual | `go install` / binary download | Edit MCP config by hand |
 
 All channels result in the same product: same Observer, same MCP tools,
 same skills.
 
-### `obstudio register`
+### `obstudio install`
 
 Writes MCP config and copies skills to the agent's expected location:
 
 | Agent | MCP Config | Skills Location |
 |-------|------------|-----------------|
 | Cursor | `~/.cursor/mcp.json` | `~/.cursor/skills/obstudio/` |
-| Claude Code | `~/.claude/settings.json` | `.claude/skills/obstudio/` |
-| Codex | `~/.codex/config.json` | `~/.codex/skills/obstudio/` |
+| Claude Code | `~/.claude.json` | `~/.claude/skills/obstudio/` |
+| Codex | `~/.codex/config.toml` | `~/.codex/skills/obstudio/` |
 
 ---
 

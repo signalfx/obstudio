@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
+import type { MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
@@ -145,6 +145,36 @@ function makeTraceDetail(): TraceDetail {
   };
 }
 
+function makeCloudStatus(options: { connected?: boolean; enabled?: boolean } = {}): SplunkExportStatus {
+  const connected = options.connected ?? true;
+  const enabled = connected && (options.enabled ?? false);
+  return {
+    metrics: {
+      accessTokenConfigured: connected,
+      configured: enabled,
+      enabled,
+      endpoints: enabled ? ["https://ingest.lab0.signalfx.com/v2/datapoint/otlp"] : undefined,
+      realm: connected ? "lab0" : undefined,
+    },
+    traces: {
+      accessTokenConfigured: connected,
+      configured: enabled,
+      enabled,
+      endpoints: enabled ? ["https://ingest.lab0.signalfx.com/v2/trace/otlp"] : undefined,
+      realm: connected ? "lab0" : undefined,
+    },
+  };
+}
+
+function jsonResponse(body: unknown, options: { ok?: boolean; status?: number; statusText?: string } = {}) {
+  return {
+    ok: options.ok ?? true,
+    status: options.status ?? 200,
+    statusText: options.statusText ?? "OK",
+    json: async () => body,
+  };
+}
+
 beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
@@ -184,6 +214,228 @@ describe("AppView validation tab", () => {
 
     expect(screen.getByRole("tab", { name: /validation/i }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getAllByText("Validation").length).toBeGreaterThan(0);
+  });
+
+  it("supports opening directly to the cloud tab from the location query", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        metrics: {
+          accessTokenConfigured: true,
+          configured: true,
+          enabled: true,
+          endpoints: ["https://ingest.lab0.signalfx.com/v2/datapoint/otlp"],
+          realm: "lab0",
+        },
+        traces: {
+          accessTokenConfigured: true,
+          configured: true,
+          enabled: true,
+          endpoints: ["https://ingest.lab0.signalfx.com/v2/trace/otlp"],
+          realm: "lab0",
+        },
+      }),
+    }));
+    const telemetry = makeTelemetryHandle([]);
+
+    render(<AppView telemetry={telemetry} />);
+
+    expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => {
+      expect(screen.getByText("Splunk Observability Cloud")).toBeTruthy();
+    });
+    expect(screen.getByText("lab0 realm / token in secure storage")).toBeTruthy();
+    expect(screen.getByText("https://ingest.lab0.signalfx.com/v2/datapoint/otlp")).toBeTruthy();
+    expect(screen.getByText("https://ingest.lab0.signalfx.com/v2/trace/otlp")).toBeTruthy();
+  });
+
+  it("keeps the cloud export switch enabled when a token is stored and export is off", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        metrics: {
+          accessTokenConfigured: true,
+          configured: false,
+          enabled: false,
+          realm: "lab0",
+        },
+        traces: {
+          accessTokenConfigured: true,
+          configured: false,
+          enabled: false,
+          realm: "lab0",
+        },
+      }),
+    }));
+    const telemetry = makeTelemetryHandle([]);
+
+    render(<AppView telemetry={telemetry} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Splunk Observability Cloud")).toBeTruthy();
+    });
+    const switchButton = screen.getByRole("switch", { name: "Cloud export" });
+    expect(switchButton.getAttribute("disabled")).toBeNull();
+    expect(switchButton.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("lab0 realm / token in secure storage")).toBeTruthy();
+  });
+
+  it("keeps the cloud export switch disabled for partially configured exporters", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        metrics: {
+          accessTokenConfigured: true,
+          configured: true,
+          enabled: false,
+          realm: "lab0",
+        },
+        traces: {
+          accessTokenConfigured: false,
+          configured: false,
+          enabled: false,
+          realm: "lab0",
+        },
+      }),
+    }));
+    const telemetry = makeTelemetryHandle([]);
+
+    render(<AppView telemetry={telemetry} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Local telemetry")).toBeTruthy();
+    });
+    const switchButton = screen.getByRole("switch", { name: "Cloud export" });
+    expect(switchButton.getAttribute("disabled")).toBe("");
+    expect(screen.getByText("Setup incomplete")).toBeTruthy();
+  });
+
+  it("enables and disables remote export while preserving local storage", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus()))
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus({ enabled: true })))
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    const exportSwitch = await screen.findByRole("switch", { name: "Cloud export" });
+    expect(exportSwitch.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(exportSwitch);
+    await waitFor(() => expect(exportSwitch.getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByText("Telemetry is retained locally and forwarded to lab0.")).toBeTruthy();
+    expect(screen.getByText("Local collection always on")).toBeTruthy();
+
+    fireEvent.click(exportSwitch);
+    await waitFor(() => expect(exportSwitch.getAttribute("aria-checked")).toBe("false"));
+    expect(screen.getByText("Remote export is off")).toBeTruthy();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/splunk/export/enabled");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      body: JSON.stringify({ enabled: true }),
+      method: "POST",
+    });
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({
+      body: JSON.stringify({ enabled: false }),
+      method: "POST",
+    });
+  });
+
+  it("opens an accessible forget confirmation and cancels without calling the API", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCloudStatus()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    const trigger = await screen.findByRole("button", { name: "Forget key" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(document.activeElement).toBe(cancel);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(cancel);
+    expect(screen.queryByRole("dialog", { name: "Forget cloud key?" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports Escape and traps keyboard focus in the forget confirmation", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(makeCloudStatus())));
+
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    const trigger = await screen.findByRole("button", { name: "Forget key" });
+    fireEvent.click(trigger);
+    let dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const confirm = within(dialog).getByRole("button", { name: "Forget key" });
+
+    confirm.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(cancel);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Forget cloud key?" })).toBeNull();
+
+    fireEvent.click(trigger);
+    dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Forget cloud key?" })).toBeNull();
+  });
+
+  it("forgets the cloud key only after explicit confirmation", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus()))
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus({ connected: false })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Forget key" }));
+    const dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forget key" }));
+
+    await waitFor(() => expect(screen.getByText("Local telemetry")).toBeTruthy());
+    expect(screen.getByText("Destination key forgotten.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Forget key" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/splunk/export/forget");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      headers: { "X-Obstudio-Browser-Action": "forget" },
+      method: "POST",
+    });
+  });
+
+  it("keeps the forget confirmation retryable when the API fails", async () => {
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(makeCloudStatus()))
+      .mockResolvedValueOnce(jsonResponse({}, {
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Forget key" }));
+    let dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forget key" }));
+
+    await waitFor(() => {
+      dialog = screen.getByRole("dialog", { name: "Forget cloud key?" });
+      expect(within(dialog).getByRole("alert").textContent).toContain("500 Internal Server Error");
+    });
+    expect(within(dialog).getByRole("button", { name: "Forget key" }).getAttribute("disabled")).toBeNull();
   });
 
   it("renders a dedicated Validation tab with compact explorer chrome and issue-based validation counts", () => {
@@ -253,6 +505,7 @@ describe("AppView validation tab", () => {
     const tracesTab = screen.getByRole("tab", { name: /traces/i });
     const logsTab = screen.getByRole("tab", { name: /logs/i });
     const validationTab = screen.getByRole("tab", { name: /validation/i });
+    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
 
     expect(servicesTab.textContent).toContain("Services");
     expect(servicesTab.querySelector(".tab-button__count")?.textContent).toBe("1");
@@ -269,6 +522,8 @@ describe("AppView validation tab", () => {
     expect(validationTab.textContent).toContain("Validation");
     expect(validationTab.querySelector(".tab-button__count")?.textContent).toBe("1");
     expect(validationTab.getAttribute("aria-label")).toBe("Validation, 1 issue");
+    expect(cloudTab.textContent).toContain("Cloud");
+    expect(cloudTab.querySelector(".tab-button__count")).toBeNull();
     expect(container.querySelector(".tab-button__glyph")).toBeNull();
   });
 
@@ -304,6 +559,7 @@ describe("AppView validation tab", () => {
 
     expect(helpMap["4"]).toMatch(/services/i);
     expect(helpMap["5"]).toMatch(/validation/i);
+    expect(helpMap["6"]).toMatch(/cloud/i);
     expect(helpMap["1"]).toMatch(/metrics/i);
     expect(helpMap["2"]).toMatch(/traces/i);
     expect(helpMap["3"]).toMatch(/logs/i);

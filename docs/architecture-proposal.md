@@ -43,7 +43,7 @@ independently:
 
 - **Layer 1 (Core)** works without Layer 2 or 3. A developer can run the
 Observer server directly and read skill files from disk.
-- **Layer 2 (obstudio)** works without Layer 3. A developer can `obstudio start`
+- **Layer 2 (obstudio)** works without Layer 3. A developer can run `obstudio`
 from any terminal, in any editor, with any AI agent.
 - **Layer 3 (Distribution)** is how obstudio reaches developers. The VS Code
 extension is one channel. Homebrew is another. `go install` is another. None
@@ -140,7 +140,7 @@ Layer 2 composes the core primitives into a single, runnable product. It is a
 cross-platform Go binary with no runtime dependencies.
 
 ```
-$ obstudio start
+$ obstudio
 
   Telemetry Explorer:  http://localhost:3000
   OTLP/HTTP receiver:  http://localhost:4318
@@ -157,7 +157,7 @@ telemetry and validate instrumentation results.
 
 | Capability               | Layer 1 (Core)      | Layer 2 (obstudio)                         |
 | ------------------------ | ------------------- | ------------------------------------------ |
-| Run Observer             | Manual server start | `obstudio start`                           |
+| Run Observer             | Manual server start | `obstudio`                                 |
 | Install skills           | Manual file copy    | `obstudio install --target=<agent>`        |
 | Register with AI tools   | Manual config edit  | Handled by `obstudio install`              |
 | Lifecycle management     | None                | Start, stop, restart, health check         |
@@ -215,16 +215,16 @@ extension, no marketplace, no intermediary. The developer runs a single command
 and the AI tool gains full access to skills and MCP tools.
 
 ```bash
-$ obstudio register --agent cursor
+$ obstudio install --target=cursor
   ✓ MCP server added to ~/.cursor/mcp.json
   ✓ Skills installed to ~/.cursor/skills/obstudio/
 
-$ obstudio register --agent claude-code
-  ✓ MCP server added to ~/.claude/settings.json
-  ✓ Skills installed to .claude/skills/obstudio/
+$ obstudio install --target=claude-code
+  ✓ MCP server added to ~/.claude.json
+  ✓ Skills installed to ~/.claude/skills/obstudio/
 
-$ obstudio register --agent codex
-  ✓ MCP server added to ~/.codex/config.json
+$ obstudio install --target=codex
+  ✓ MCP server added to ~/.codex/config.toml
   ✓ Skills installed to ~/.codex/skills/obstudio/
 ```
 
@@ -236,8 +236,8 @@ resources exactly where the agent expects them.
 | AI Tool     | MCP Config Location       | Skill Location                     |
 | ----------- | ------------------------- | ---------------------------------- |
 | Cursor      | `~/.cursor/mcp.json`      | `~/.cursor/skills/obstudio/`       |
-| Claude Code | `~/.claude/settings.json` | `.claude/skills/obstudio/`         |
-| Codex       | `~/.codex/config.json`    | `~/.codex/skills/obstudio/`        |
+| Claude Code | `~/.claude.json`          | `~/.claude/skills/obstudio/`       |
+| Codex       | `~/.codex/config.toml`    | `~/.codex/skills/obstudio/`        |
 | Generic     | Project `.mcp.json`       | Project `.agents/skills/obstudio/` |
 
 
@@ -247,7 +247,7 @@ automatically via MCP `tools/list`. No extension needed.
 ### Channel 2: VS Code Extension
 
 The extension is a thin wrapper (~400 lines of TypeScript) that automates what
-`obstudio start` and `obstudio register` do manually. It adds three conveniences
+`obstudio` and `obstudio install` provide manually. It adds three conveniences
 specific to the VS Code environment:
 
 1. **Auto-start**: spawns the obstudio binary when the editor opens
@@ -372,13 +372,13 @@ terraform generation that go beyond live telemetry viewing.
 
 ## Native Installation Mechanism
 
-`obstudio register` is the mechanism that makes native agentic installation
+`obstudio install` is the mechanism that makes native agentic installation
 work. It writes the minimum configuration needed for an AI tool to discover
 obstudio's MCP server and skills.
 
-### What `obstudio register` Does
+### What `obstudio install` Does
 
-For each supported AI tool, `register` performs two writes:
+For each supported AI tool, `install` performs two writes:
 
 1. **MCP config**: adds an entry to the tool's MCP configuration file so the
   agent can discover obstudio's tools at `http://localhost:3000/mcp`.
@@ -390,7 +390,7 @@ For each supported AI tool, `register` performs two writes:
 #### Cursor
 
 ```bash
-$ obstudio register --agent cursor
+$ obstudio install --target=cursor
 ```
 
 Writes to `~/.cursor/mcp.json`:
@@ -414,10 +414,10 @@ the skills themselves and may evolve independently of this document.
 #### Claude Code (terminal)
 
 ```bash
-$ obstudio register --agent claude-code
+$ obstudio install --target=claude-code
 ```
 
-Writes to `~/.claude/settings.json`:
+Writes to `~/.claude.json`:
 
 ```json
 {
@@ -429,24 +429,19 @@ Writes to `~/.claude/settings.json`:
 }
 ```
 
-Copies skills to `.claude/skills/obstudio/` in the project root.
+Copies skills to `~/.claude/skills/obstudio/`.
 
 #### OpenAI Codex (CLI)
 
 ```bash
-$ obstudio register --agent codex
+$ obstudio install --target=codex
 ```
 
-Writes to `~/.codex/config.json`:
+Writes to `~/.codex/config.toml`:
 
-```json
-{
-  "mcpServers": {
-    "obstudio": {
-      "url": "http://localhost:3000/mcp"
-    }
-  }
-}
+```toml
+[mcp_servers.obstudio]
+url = "http://localhost:3000/mcp"
 ```
 
 Copies skills to `~/.codex/skills/obstudio/`.
@@ -484,9 +479,9 @@ Three ways to get the same product:
 
 | Path                  | Install                         | Start                    | Register                           | UI                          |
 | --------------------- | ------------------------------- | ------------------------ | ---------------------------------- | --------------------------- |
-| **Native (CLI)**      | `brew install obstudio`         | `obstudio start`         | `obstudio register --agent cursor` | Browser at `localhost:3000` |
+| **Native (CLI)**      | `brew install obstudio`         | `obstudio`               | `obstudio install --target=cursor` | Browser at `localhost:3000` |
 | **VS Code Extension** | Marketplace install             | Automatic on editor open | Automatic on activation            | Embedded webview panel      |
-| **Manual**            | `go install` or binary download | `obstudio start`         | Edit MCP config by hand            | Browser at `localhost:3000` |
+| **Manual**            | `go install` or binary download | `obstudio`               | Edit MCP config by hand            | Browser at `localhost:3000` |
 
 
 All three paths result in the same running product: same Observer, same MCP
@@ -502,7 +497,7 @@ universal.
 
 If a feature only works inside a VS Code extension, it is built wrong. Every
 capability — telemetry visualization, validation, MCP queries, skill-driven
-instrumentation — must work via `obstudio start` + `obstudio register`. 
+instrumentation — must work via `obstudio` + `obstudio install`.
 
 The extension should be a thin shell: lifecycle management (start/stop the binary)
 and editor-specific UI (webviews, status bar). Keeping extension code minimal
@@ -531,10 +526,10 @@ tested, and shipped by separate engineers or teams from day one.
 ### Integration components
 
 
-| Component        | Layer | Deliverable                                    | Depends On       |
-| ---------------- | ----- | ---------------------------------------------- | ---------------- |
-| **obstudio CLI** | 2     | `obstudio start`, `obstudio register`          | Observer, Skills |
-| **Validator**    | 2     | OTel Weaver conformance checks via CLI and MCP | Observer         |
+| Component        | Layer | Deliverable                                      | Depends On       |
+| ---------------- | ----- | ------------------------------------------------ | ---------------- |
+| **obstudio CLI** | 2     | `obstudio`, `obstudio install`, `obstudio cloud` | Observer, Skills |
+| **Validator**    | 2     | OTel Weaver conformance checks via CLI and MCP   | Observer         |
 
 
 The CLI composes Observer and Skills into a single binary and adds lifecycle
