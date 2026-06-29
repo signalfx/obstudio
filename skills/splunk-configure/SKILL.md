@@ -450,8 +450,8 @@ Validation requirements:
      `Working` metric rows in `.observe/otel-verify.md`, unless a source-only
      exception was explicitly accepted and recorded
    - metric names, units, and required dimensions used by detector logic match
-   verification evidence; do not silently substitute an alternate semantic-
-     convention name
+     verification evidence; do not silently substitute an alternate
+     semantic-convention name
 5. Validate coverage:
    - generated detectors map to accepted metrics
    - skipped metrics explain whether they are missing, unverified, duplicate,
