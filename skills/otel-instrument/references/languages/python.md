@@ -85,6 +85,32 @@ For Python services, this explicit setup file is the default implementation
 path; a Makefile or Docker command that only wraps the process with
 `opentelemetry-instrument` is not enough by itself.
 
+### Existing provider reconciliation
+
+Before using the new-process example below, search for explicit or lazy
+`TracerProvider`, `MeterProvider`, `LoggerProvider`, `set_*_provider`, exporter,
+resource, and no-op branches. A provider initialized by a metrics wrapper on
+first counter/gauge access is an existing provider even when the entrypoint has
+no OTel call.
+
+- Keep one global provider per signal.
+- Preserve existing metric views, observable callbacks, file-export modes, and
+  wrapper APIs while moving or adapting provider construction to shared setup.
+- When auto-instrumentation will install providers, suppress that signal's
+  auto-provider or let the shared app setup own it; never call
+  `metrics.set_meter_provider` or `trace.set_tracer_provider` twice.
+- Use one shared resource identity across traces, metrics, and logs. An existing
+  resource that lacks `service.name`, service version, or deployment
+  environment must be repaired, not replaced by a parallel provider.
+- Merge operator-provided resource values before app defaults. Preserve
+  `OTEL_SERVICE_NAME` and keys from `OTEL_RESOURCE_ATTRIBUTES`; defaults may
+  fill missing environment/version fields but must not replace supplied values.
+- Add a focused regression test proving existing instruments still record
+  through the selected provider after reconciliation.
+
+The following example is for a process with no existing providers. Adapt it
+rather than copying it when provider ownership already exists.
+
 **File**: `otel_setup.py`
 
 ```python
@@ -169,6 +195,11 @@ DjangoInstrumentor().instrument()
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 RequestsInstrumentor().instrument()
 ```
+
+For FastAPI/Starlette, call `instrument_app(app)` immediately after creating
+the app and before lifespan/startup is entered. Installing instrumentation for
+the first time inside lifespan is too late because Starlette rejects middleware
+changes after startup.
 
 ---
 
@@ -279,7 +310,10 @@ All configuration is via environment variables. Do not hardcode endpoints.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint; protocol must match |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Common protocol when using port 4318 |
+| `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT` | unset | Per-signal endpoint, including `/v1/<signal>` for HTTP exporters |
+| `OTEL_EXPORTER_OTLP_<SIGNAL>_PROTOCOL` | unset | Per-signal `grpc` or `http/protobuf` |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -288,6 +322,7 @@ All configuration is via environment variables. Do not hardcode endpoints.
 For local development with the Observer:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+    OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     OTEL_METRIC_EXPORT_INTERVAL=1000 \
     OTEL_METRIC_EXPORT_TIMEOUT=500 \
     OTEL_BSP_SCHEDULE_DELAY=100 \
@@ -299,6 +334,12 @@ and `export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500
 This makes HTTP metrics from Flask/FastAPI instrumentation, including
 `http.server.request.duration` or the older `http.server.duration` name,
 export promptly to Observer.
+
+Resolve the effective endpoint/protocol per signal. A gRPC exporter normally
+targets `localhost:4317`; an HTTP/protobuf exporter normally targets
+`localhost:4318/v1/traces`, `/v1/metrics`, or `/v1/logs`. A trace exporter can
+succeed while a separately constructed metrics exporter fails, so exercise
+each configured signal.
 
 ---
 
@@ -320,6 +361,9 @@ Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.d
 - **SDK init before framework**: `configure_opentelemetry()` must be called
   before creating Flask/FastAPI/Django app objects. Auto-instrumentation
   patches happen at import time -- the SDK must be configured first.
+- **FastAPI lifespan timing**: construct and instrument the app before lifespan
+  startup. Do not first invoke `FastAPIInstrumentor.instrument_app(app)` from
+  inside lifespan.
 - **`opentelemetry-distro` vs manual**: `opentelemetry-instrument` is
   convenient for quick starts but hides which instrumentations are active.
   Prefer explicit instrumentation for production services.
@@ -335,8 +379,9 @@ Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.d
 - **Gunicorn / uWSGI**: Call `configure_opentelemetry()` in the
   `post_fork` hook (Gunicorn) or `@postfork` (uWSGI) so each worker
   process gets its own SDK instance.
-- **Singleton provider**: Never call `trace.set_tracer_provider()` more
-  than once. If existing OTel setup exists, extend it.
+- **Singleton providers**: Never call any global `set_*_provider()` more than
+  once. If existing OTel setup exists, extend or consolidate it and prove legacy
+  instruments still use the selected provider.
 - **Metric export interval and timeout**: Always set
   `export_interval_millis` and `export_timeout_millis` on
   `PeriodicExportingMetricReader`. Environment variables alone are not enough

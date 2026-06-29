@@ -193,6 +193,18 @@ Includes `realm`, `api_token`, and `notification_channel` (no defaults) plus
 Per-detector threshold overrides are omitted — they have sensible defaults in
 `variables.tf` and users add overrides only when tuning.
 
+Generate `.gitignore` beside these files:
+
+```gitignore
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+```
+
+Keep `.terraform.lock.hcl` after a successful `terraform init`; it pins the
+resolved provider build without containing credentials.
+
 The user workflow is:
 1. `cp terraform.tfvars.example terraform.tfvars`
 2. Fill in credentials
