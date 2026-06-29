@@ -58,6 +58,8 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
+
+
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
 

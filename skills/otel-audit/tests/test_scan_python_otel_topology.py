@@ -34,8 +34,13 @@ class ScanPythonOtelTopologyTest(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "bootstrap.sh").write_text(
-                "opentelemetry-instrument python -m service\n"
-                "export OTEL_SERVICE_NAME=checkout\n",
+                "opentelemetry-instrument python -m service\n",
+                encoding="utf-8",
+            )
+            (root / ".env").write_text("OTEL_SERVICE_NAME=checkout\n", encoding="utf-8")
+            (root / ".env.local").write_text("NO_OP_OTEL=false\n", encoding="utf-8")
+            (root / ".env.example").write_text(
+                "EXPORT_METRICS_TO_FILE=true\n",
                 encoding="utf-8",
             )
             (root / "notes.txt").write_text(
@@ -96,10 +101,20 @@ class ScanPythonOtelTopologyTest(unittest.TestCase):
                 ],
                 "runtime_configuration": [
                     {
-                        "path": "bootstrap.sh",
-                        "line": 2,
-                        "text": "export OTEL_SERVICE_NAME=checkout",
-                    }
+                        "path": ".env",
+                        "line": 1,
+                        "text": "OTEL_SERVICE_NAME=checkout",
+                    },
+                    {
+                        "path": ".env.example",
+                        "line": 1,
+                        "text": "EXPORT_METRICS_TO_FILE=true",
+                    },
+                    {
+                        "path": ".env.local",
+                        "line": 1,
+                        "text": "NO_OP_OTEL=false",
+                    },
                 ],
                 "shutdown_flush": [
                     {

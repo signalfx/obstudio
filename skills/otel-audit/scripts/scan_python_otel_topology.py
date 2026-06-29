@@ -43,7 +43,10 @@ def candidates(root: Path) -> list[Path]:
     for path in root.rglob("*"):
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        if path.is_file() and (path.name in TEXT_NAMES or path.suffix in TEXT_SUFFIXES):
+        is_env_file = path.name == ".env" or path.name.startswith(".env.")
+        if path.is_file() and (
+            path.name in TEXT_NAMES or is_env_file or path.suffix in TEXT_SUFFIXES
+        ):
             files.append(path)
     return sorted(files)
 
