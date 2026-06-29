@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20260430T171007325917Z",
+    "run_id": "20260629T192245327834Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -16,311 +16,70 @@
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 7,
-    "prompt_count": 14,
-    "failure_count": 5,
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 1,
     "with_skill": {
-      "prompt_count": 14,
-      "command_count": 1044,
-      "duration_seconds": 4335.757,
-      "agent_duration_seconds": 3374.632,
-      "tokens": 18641745,
-      "agent_tokens": 15875071,
+      "prompt_count": 1,
+      "command_count": 116,
+      "duration_seconds": 1088.092,
+      "agent_duration_seconds": 890.005,
+      "tokens": 3039601,
+      "agent_tokens": 2568943,
       "error_count": 0,
       "rubric": {
-        "passed": 65,
-        "total": 70,
-        "average_score": 64.07142857142857
+        "passed": 6,
+        "total": 7,
+        "average_score": 84.0
       },
-      "rubric_tokens": 2766674,
-      "rubric_duration_seconds": 960.767
+      "rubric_tokens": 470658,
+      "rubric_duration_seconds": 195.361
     },
     "with_baseline": null
   },
   "evals": [
     {
-      "id": "go/chi-basic/qual/instrument",
-      "case": "go/chi-basic",
-      "language": "go",
-      "service": "chi-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 340,
-        "duration_seconds": 1018.18,
-        "agent_duration_seconds": 822.395,
-        "tokens": 7955539,
-        "agent_tokens": 7010112,
-        "error_count": 0,
-        "rubric": {
-          "passed": 7,
-          "total": 10,
-          "average_score": 70.0
-        },
-        "rubric_tokens": 945427,
-        "rubric_duration_seconds": 195.719
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-basic/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-basic/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-basic/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "go/chi-partial/qual/instrument",
-      "case": "go/chi-partial",
-      "language": "go",
-      "service": "chi-partial",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 124,
-        "duration_seconds": 690.088,
-        "agent_duration_seconds": 524.405,
-        "tokens": 2601488,
-        "agent_tokens": 2081097,
-        "error_count": 0,
-        "rubric": {
-          "passed": 8,
-          "total": 10,
-          "average_score": 80.0
-        },
-        "rubric_tokens": 520391,
-        "rubric_duration_seconds": 165.638
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-partial/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-partial/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/chi-partial/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "go/kvstore/qual/instrument",
-      "case": "go/kvstore",
-      "language": "go",
-      "service": "kvstore",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 228,
-        "duration_seconds": 729.444,
-        "agent_duration_seconds": 549.784,
-        "tokens": 3439150,
-        "agent_tokens": 3028776,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 100.0
-        },
-        "rubric_tokens": 410374,
-        "rubric_duration_seconds": 179.601
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/kvstore/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/kvstore/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/go/kvstore/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "java/springboot-basic/qual/instrument",
-      "case": "java/springboot-basic",
-      "language": "java",
-      "service": "springboot-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 94,
-        "duration_seconds": 432.022,
-        "agent_duration_seconds": 350.588,
-        "tokens": 1048047,
-        "agent_tokens": 837833,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 52.5
-        },
-        "rubric_tokens": 210214,
-        "rubric_duration_seconds": 81.372
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/java/springboot-basic/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/java/springboot-basic/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/java/springboot-basic/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "node/express-basic/qual/instrument",
-      "case": "node/express-basic",
-      "language": "node",
-      "service": "express-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 76,
-        "duration_seconds": 588.15,
-        "agent_duration_seconds": 488.968,
-        "tokens": 1742664,
-        "agent_tokens": 1504011,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 50.0
-        },
-        "rubric_tokens": 238653,
-        "rubric_duration_seconds": 99.144
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/node/express-basic/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/node/express-basic/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/node/express-basic/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "python/fastapi-celery/qual/instrument",
-      "case": "python/fastapi-celery",
+      "id": "python/mcp-ai-tool-demo/qual/instrument",
+      "case": "python/mcp-ai-tool-demo",
       "language": "python",
-      "service": "fastapi-celery",
-      "prompt_count": 2,
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 1,
       "prompts": [
-        "direct",
-        "runtime-preserving"
+        "direct"
       ],
       "with_skill": {
-        "prompt_count": 2,
-        "command_count": 96,
-        "duration_seconds": 544.236,
-        "agent_duration_seconds": 391.699,
-        "tokens": 1025531,
-        "agent_tokens": 737932,
+        "prompt_count": 1,
+        "command_count": 116,
+        "duration_seconds": 1088.092,
+        "agent_duration_seconds": 890.005,
+        "tokens": 3039601,
+        "agent_tokens": 2568943,
         "error_count": 0,
         "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 91.0
+          "passed": 6,
+          "total": 7,
+          "average_score": 84.0
         },
-        "rubric_tokens": 287599,
-        "rubric_duration_seconds": 152.488
+        "rubric_tokens": 470658,
+        "rubric_duration_seconds": 195.361
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/fastapi-celery/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/fastapi-celery/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/fastapi-celery/qual-instrument/with_baseline.json"
-      }
-    },
-    {
-      "id": "python/flask-basic/qual/instrument",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "runtime-preserving"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 86,
-        "duration_seconds": 333.637,
-        "agent_duration_seconds": 246.793,
-        "tokens": 829326,
-        "agent_tokens": 675310,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 5.0
-        },
-        "rubric_tokens": 154016,
-        "rubric_duration_seconds": 86.805
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/flask-basic/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/flask-basic/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T171007325917Z/results/python/flask-basic/qual-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/with_baseline.json"
       }
     }
   ],
   "failures": [
     {
-      "service": "go/chi-basic",
+      "service": "python/mcp-ai-tool-demo",
       "side": "with_skill",
       "prompt": "direct",
       "category": "rubric",
-      "result": "rubric:rubric-1 FAIL",
-      "evidence": "trace.jsonl agent preflight: existing native Go HTTP service in ./service using chi on :8000, no existing OTel; last_message.md later states OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES=deployment.environment=...",
-      "mode": "with_skill"
-    },
-    {
-      "service": "go/chi-basic",
-      "side": "with_skill",
-      "prompt": "direct",
-      "category": "rubric",
-      "result": "rubric:rubric-3 FAIL",
-      "evidence": "service/main.go uses otelhttp.NewHandler(r, \"server\") only.",
-      "mode": "with_skill"
-    },
-    {
-      "service": "go/chi-basic",
-      "side": "with_skill",
-      "prompt": "runtime-preserving",
-      "category": "rubric",
-      "result": "rubric:rubric-3 FAIL",
-      "evidence": "service/main.go:127 wraps the chi router with otelhttp.NewHandler(r, \"server\"), which keeps the router in place, but there is no otelchi middleware, otelhttp.WithRouteTag, or span name formatter using chi route patterns. Spans will use the constant operation name \"server\" rather than route-aware low-cardinality names or http.route attributes.",
-      "mode": "with_skill"
-    },
-    {
-      "service": "go/chi-partial",
-      "side": "with_skill",
-      "prompt": "direct",
-      "category": "rubric",
-      "result": "rubric:rubric-5 FAIL",
-      "evidence": "rg found no RecordError, SetStatus, or codes.* usage; service/main.go:65,73,91,108,122 write 404/400 responses without span error/status handling.",
-      "mode": "with_skill"
-    },
-    {
-      "service": "go/chi-partial",
-      "side": "with_skill",
-      "prompt": "runtime-preserving",
-      "category": "rubric",
-      "result": "rubric:rubric-5 FAIL",
-      "evidence": "service/main.go has no RecordError or SetStatus calls; 400/404 paths only call writeJSON. The local otelhttp v0.68.0 server status helper sets Error only for status >=500.",
+      "result": "rubric:rubric-7 FAIL",
+      "evidence": ".observe/otel-verify.md reports 24/26 working with OTLP HTTP exporter defaults and FastAPI automatic HTTP server spans/request metrics Not proven; trace.jsonl shows unittest/make test and validate_reader_report, not a live collector or uvicorn acceptance run. grade.json sanity checks passed.",
       "mode": "with_skill"
     }
   ]

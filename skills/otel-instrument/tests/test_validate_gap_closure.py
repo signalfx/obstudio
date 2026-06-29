@@ -23,7 +23,8 @@ AUDIT_NO_GENAI = """# OTel Audit: sample
 GENAI_READINESS = """## GenAI Readiness
 | Surface | Status | Evidence | Required Signals | Owner / Source Files | Acceptance Criteria | Detection/Localization Impact |
 |---|---|---|---|---|---|---|
-| Trace and semconv | missing | Workflow has no GenAI spans | `invoke_workflow`; `chat` | App-owned: app.py | Trace proves parentage | Model failures cannot be localized |
+| Workflow/agent trace | missing | Workflow has no GenAI span | `invoke_workflow` | App-owned: app.py | Trace proves workflow parentage | Workflow failures cannot be localized |
+| Provider/model call | missing | Provider call has no GenAI span | `chat`; provider and model attributes | App-owned: app.py | Trace proves model-call attributes and parentage | Model failures cannot be localized |
 | Privacy/cardinality | partial | Metadata-only spans, stdout IDs remain | metadata-only capture; bounded dimensions | App-owned: logging.py | Sentinel export is clean | Telemetry may expose identifiers |
 """
 
@@ -50,7 +51,8 @@ INSTRUMENT_NO_GENAI = """# OTel Instrumentation Report: sample
 GENAI_CLOSURE = """## GenAI Readiness Closure
 | Surface | Required signals | Implemented / proven | Tests | Remaining signals | Result |
 |---|---|---|---|---|---|
-| Trace and semconv | `invoke_workflow`; `chat` | Both spans emitted with parentage | trace.success; chat.success | None | Working |
+| Workflow/agent trace | `invoke_workflow` | Workflow span emitted with parentage | trace.success | None | Working |
+| Provider/model call | `chat`; provider and model attributes | Chat span emitted with bounded attributes and parentage | chat.success | None | Working |
 | Privacy/cardinality | metadata-only capture; bounded dimensions | Span dimensions are bounded | telemetry.redaction | OTLP log policy | Partial |
 """
 
@@ -85,7 +87,7 @@ class ValidateGapClosureTest(unittest.TestCase):
     def test_accepts_one_to_one_genai_surface_closure(self) -> None:
         result = self.validate(AUDIT_GENAI, INSTRUMENT_GENAI)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("2 GenAI readiness surfaces", result.stdout)
+        self.assertIn("3 GenAI readiness surfaces", result.stdout)
 
     def test_pass_rejects_partial_genai_surface(self) -> None:
         result = self.validate(
@@ -135,8 +137,8 @@ class ValidateGapClosureTest(unittest.TestCase):
         result = self.validate(
             AUDIT_GENAI,
             INSTRUMENT_GENAI.replace(
-                "`invoke_workflow`; `chat`",
-                "`invoke_workflow`",
+                "`chat`; provider and model attributes",
+                "`chat`",
             ),
         )
         self.assertNotEqual(result.returncode, 0)
@@ -168,7 +170,7 @@ class ValidateGapClosureTest(unittest.TestCase):
         result = self.validate(
             AUDIT_GENAI,
             INSTRUMENT_GENAI.replace(
-                "| trace.success; chat.success | None | Working |",
+                "| trace.success | None | Working |",
                 "| Not run | None | Working |",
             ),
         )
@@ -179,7 +181,7 @@ class ValidateGapClosureTest(unittest.TestCase):
         result = self.validate(
             AUDIT_GENAI,
             INSTRUMENT_GENAI.replace(
-                "| trace.success; chat.success | None | Working |",
+                "| trace.success | None | Working |",
                 "| Tests blocked on CI and not run yet | None | Working |",
             ),
         )
@@ -191,7 +193,7 @@ class ValidateGapClosureTest(unittest.TestCase):
             "Both spans emitted with parentage",
             "All spans emitted with parentage; none missing",
         ).replace(
-            "trace.success; chat.success",
+            "trace.success",
             "All pending-state and skipped-state label cases passed",
         )
         result = self.validate(AUDIT_GENAI, report)
@@ -199,7 +201,10 @@ class ValidateGapClosureTest(unittest.TestCase):
 
     def test_rejects_empty_genai_readiness_table(self) -> None:
         empty = AUDIT_GENAI.replace(
-            "| Trace and semconv | missing | Workflow has no GenAI spans | `invoke_workflow`; `chat` | App-owned: app.py | Trace proves parentage | Model failures cannot be localized |\n",
+            "| Workflow/agent trace | missing | Workflow has no GenAI span | `invoke_workflow` | App-owned: app.py | Trace proves workflow parentage | Workflow failures cannot be localized |\n",
+            "",
+        ).replace(
+            "| Provider/model call | missing | Provider call has no GenAI span | `chat`; provider and model attributes | App-owned: app.py | Trace proves model-call attributes and parentage | Model failures cannot be localized |\n",
             "",
         ).replace(
             "| Privacy/cardinality | partial | Metadata-only spans, stdout IDs remain | metadata-only capture; bounded dimensions | App-owned: logging.py | Sentinel export is clean | Telemetry may expose identifiers |\n",
@@ -229,62 +234,14 @@ class ValidateGapClosureTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must not contain ## GenAI Readiness Closure", result.stderr)
 
-    def test_legacy_structured_no_is_not_positive_genai_evidence(self) -> None:
-        legacy = AUDIT_NO_GENAI.replace(
-            "**GenAI ownership detected:** No\n",
-            "",
-        ).replace(
-            "## Gaps",
-            """## Audit Evidence
-| Check | Finding | Source |
-|---|---|---|
-| GenAI ownership | No | repository dependency and source scan |
-
-## Gaps""",
-        )
-        result = self.validate(legacy, INSTRUMENT_NO_GENAI)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_legacy_not_applicable_note_is_not_positive_genai_evidence(self) -> None:
-        legacy = AUDIT_NO_GENAI.replace(
-            "**GenAI ownership detected:** No\n",
-            "",
-        ).replace(
-            "## Gaps",
-            """## Audit Evidence
-| Check | Finding | Source |
-|---|---|---|
-| GenAI not applicable | No provider, model, or workflow code | repository scan |
-
-## Gaps""",
-        )
-        result = self.validate(legacy, INSTRUMENT_NO_GENAI)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_legacy_genai_audit_with_readiness_is_supported(self) -> None:
-        legacy = AUDIT_GENAI.replace(
+    def test_requires_source_audit_genai_ownership_declaration(self) -> None:
+        incomplete = AUDIT_GENAI.replace(
             "**GenAI ownership detected:** Yes\n",
             "",
         )
-        result = self.validate(legacy, INSTRUMENT_GENAI)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_legacy_genai_evidence_without_readiness_is_rejected(self) -> None:
-        legacy = AUDIT_NO_GENAI.replace(
-            "**GenAI ownership detected:** No\n",
-            "",
-        ).replace(
-            "## Gaps",
-            """## Audit Evidence
-| Check | Finding | Source |
-|---|---|---|
-| GenAI topology | DeepAgents invokes a chat model | app/harness.py |
-
-## Gaps""",
-        )
-        result = self.validate(legacy, INSTRUMENT_NO_GENAI)
+        result = self.validate(incomplete, INSTRUMENT_GENAI)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("lacks ## GenAI Readiness", result.stderr)
+        self.assertIn("exactly one GenAI ownership declaration", result.stderr)
 
     def test_rejects_duplicate_genai_closure_surface(self) -> None:
         row = (

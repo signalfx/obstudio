@@ -49,14 +49,12 @@ Before editing anything, ground the plan with repo evidence:
   IDs to the reusable runtime and prerequisite rows before running it.
   Reconcile them with current config/source; preserve stable IDs and update
   stale paths or prerequisites. Keep each `Proof Level`; do not downgrade a
-  `full runtime` row to focused call-site proof. For older audits, normalize
-  `Verification Contract / Project Runtime / Path Scenarios` into this model.
+  `full runtime` row to focused call-site proof.
 - If `.observe/otel.md` contains the prioritized `## Gaps` table, parse every
   row by `Priority`, `Area`, `Required fix`, `Instrument mode`, and
   `Verification scenarios`. Reconcile each row with current source and the
-  verification contract before editing. For legacy bullet-only `## Gaps`,
-  normalize each actionable bullet into the same fields and record inferred
-  priority/mode in the instrumentation report; do not silently drop it.
+  verification contract before editing. If the table is malformed or missing,
+  stop and regenerate the audit rather than inferring an implementation queue.
 - Detect GenAI/LLM ownership. Search dependencies, config, and source for
   provider clients, model gateways, agent/workflow orchestration, tool/function
   dispatch, MCP when present, retrieval/RAG, model/deployment config, fallback,
@@ -102,6 +100,10 @@ Do not proceed until you can state all of these clearly:
   AI-derived-data owner, signal to add or prove, expected MTTD/localization
   impact, and remaining non-code or dependency owner
 
+State these preflight values together in one explicit progress note before the
+first file edit. Do not defer `service.name` or environment ownership to the
+final report.
+
 ### Fast Path: Targeted Custom Signal
 
 If the user is asking for a specific signal ("add a metric for queue depth",
@@ -123,11 +125,8 @@ needs to be set up first and continue with the full workflow (Steps 2-3).
 If `.observe/otel.md` contains `## GenAI Readiness`, use that table as the
 source of truth. The audit output is a contract, not background context.
 Parse each row by human-readable `surface` plus `required_signals`,
-`owner/source_files`, and `acceptance_criteria`. Do not require opaque row IDs such as `GR8`
-or `G1`; if an older audit has an ID column, keep it only as an optional
-source-row reference and use the surface name in human-facing summaries. If an
-older audit contains a separate GenAI gap-contract section, treat it as legacy
-input and normalize it into surface rows before editing code.
+`owner/source_files`, and `acceptance_criteria`. Use the surface name as the
+human-facing identifier throughout implementation and reporting.
 
 Reconcile every GenAI audit gap to a required instrumentation result:
 
@@ -153,8 +152,7 @@ only when the closure matrix has no partial rows. Do not use unqualified
 phrases such as `expected coverage`, `covered`, or `complete` for a GenAI surface
 unless the related row is fully closed by the matrix.
 
-When the source audit declares `**GenAI ownership detected:** Yes`, or a legacy
-source audit contains `## GenAI Readiness`, write
+When the source audit declares `**GenAI ownership detected:** Yes`, write
 `## GenAI Readiness Closure` in `.observe/otel-instrumentation.md` after
 `## Audit Gap Closure`. Copy every `Surface` and its complete `Required Signals`
 cell from the audit readiness table, then record `Implemented / proven`,
@@ -163,10 +161,15 @@ do not merge or omit partial, deferred, or owner-mapped surfaces. Use `Working`,
 `Partial`, `Not working`, `Not proven`, `Not configured`, `Deferred`, or
 `Owner-mapped`. `Working` requires `Remaining signals` to be exactly `None`;
 all other results must name the remaining signal, blocker, or external owner.
-Omit the section only when the source audit explicitly declares `No`. Treat a
-legacy `GenAI` row in `## Audit Evidence` without a readiness table as an
-invalid source audit that must be regenerated, not as permission to omit the
-closure.
+Omit the section only when the source audit explicitly declares `No`. If the
+ownership declaration and readiness table disagree, regenerate the source
+audit before instrumentation.
+
+When no source audit exists, do not create `## GenAI Readiness Closure` or
+invent closure rows from the implementation pass. Record source-derived GenAI
+readiness observations and remaining signals under `## Remaining Gaps`, and
+state that a source audit is required before one-to-one readiness closure can
+be claimed.
 
 If `.observe/otel.md` contains `## GenAI Readiness` rows with `partial` or
 `missing` status and the user asked to instrument, treat those rows as an
@@ -239,7 +242,8 @@ The instrumentation report must be reader-first:
 ## Next Steps
 ```
 
-`Signals Changed` replaces the old audit delta. Include a signal-level table:
+`Signals Changed` is the implementation-change inventory. Include a
+signal-level table:
 
 | Signal type | Added | Modified | Removed | Evidence | Verification status |
 |---|---|---|---|---|---|
@@ -298,9 +302,9 @@ the `$otel-verify` result/report path when run, and any blocked prerequisites.
 This section is not proof of emitted telemetry unless a test, harness, or
 collector actually observed it.
 
-Older `.observe/otel.md` reports may contain `## Instrumentation Delta` or
-`## Instrumentation Verification Handoff`; treat those sections as legacy input
-only. Do not preserve or rewrite them into the audit report.
+Use the current audit's prioritized `## Gaps` and `## Verification Plan` as the
+handoff contract. Do not copy unrelated report sections into the audit or
+instrumentation report.
 
 When the user asks broadly to apply GenAI readiness skills, improve GenAI MTTD,
 or fix found GenAI gaps, treat the scope as **all discovered app-owned GenAI
@@ -469,7 +473,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   the installed SDK requires a semantic-convention stability opt-in, set it in
   the launch environment before importing or constructing the instrumentor.
   Accept `http.server.duration` only when the installed SDK truly emits the
-  legacy name and record that exact runtime evidence; never claim both names.
+  alternate name and record that exact runtime evidence; never claim both names.
 - For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
 - For domains where OTel semantic conventions exist, emit required spans and metrics only, with required attributes only. Do not emit spans or metrics that are marked optional, do not include attributes that are marked optional. Do not invent custom spans, metrics or attributes in domains where OTel semantic conventions exist.
@@ -689,6 +693,11 @@ Node.js:
 
 Go:
 - For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.
+- For chi, gin, mux, or another router with parameterized routes, route-aware
+  server spans are required. Add the matching framework middleware inside the
+  outer `otelhttp.NewHandler`, then prove at least one parameterized route uses
+  its low-cardinality route pattern rather than a constant `server` span name.
+  Also prove the combined wrappers do not emit duplicate server spans.
 - Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
 - In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
 
@@ -789,6 +798,11 @@ startup/exporter wiring, or runtime-installed OTLP logs, read
 runtime gate in the verification handoff. Attempt the gate without asking when
 the repository provides a safe local profile or fixtures. Otherwise record the
 exact prerequisite and keep those rows `Partial`, `Blocked`, or `Not proven`.
+`Not run` or `no collector was run` alone is not an acceptable blocker. For
+each required full-runtime row, record either the executed command and direct
+result or the concrete unavailable runtime, listener, dependency, credential,
+or fixture that prevented the attempt. Do not finalize while a safe local
+profile exists and the required gate has not been attempted.
 
 ### 6. Enable Debugging in VS Code
 
@@ -819,6 +833,11 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - When the source audit declares GenAI ownership, include the complete
   `GenAI Readiness Closure` matrix and list every non-`Working` remaining signal
   in the final response.
+- For GenAI work without a source audit, explicitly list each unimplemented
+  token/context-pressure signal in the final response: context budget,
+  truncation, token-limit errors, prompt/tool schema size, LLM-call fanout, and
+  tool-call fanout. Do not collapse absent items into a generic readiness claim
+  and do not create a `GenAI Readiness Closure` table without source-audit rows.
 - Include `$otel-verify` results and `.observe/otel-verify.md` path when run.
   If detectors/configuration were requested, include `$splunk-configure`
   outputs and `.observe/splunk-configure-verify.md` status when run.

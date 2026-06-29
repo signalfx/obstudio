@@ -99,39 +99,34 @@ Extract from `.observe/otel.md`:
    named metric.
 
 5. **GenAI Readiness** from the `## GenAI Readiness` section when present:
-   - workflow trace shape
-   - semantic-convention completeness
-   - metrics and detectors
-   - AI pathway surfaces
-   - memory/context
-   - evaluation quality
-   - content governance and privacy/cardinality
-   - cost source or owner mapping
+   - Read every independently actionable surface row and its exact required
+     signals, owner/source files, and acceptance criteria.
+   - Keep provider/model, workflow/agent, tool/function, token/context,
+     stream/session, retrieval, memory/context, evaluation/data export,
+     content governance, privacy/cardinality, model/config, and cost ownership
+     as separate detector prerequisites when the audit separates them.
+   - Do not merge distinct readiness surfaces into a generic prerequisite.
    Missing or partial GenAI areas become instrumentation prerequisites unless
    matching metrics already exist in the Metrics table.
 
-6. **Legacy GenAI gap-contract input** when present:
-   - Treat older machine-oriented GenAI gap contracts as legacy audit input.
-     Normalize each row into the human-readable `## GenAI Readiness` surface
-     model before producing detector prerequisites.
-   - Parse surface/status, `required_signals`, owner/source files, and
-     `acceptance_criteria`; do not require or display opaque row IDs.
-   - Treat any GenAI surface with status `missing` or `partial` as an
-     instrumentation prerequisite unless matching metrics already exist in the
-     Metrics table.
+6. **GenAI Readiness Closure** from the instrumentation report when present:
+   - Parse each `Surface`, `Required signals`, `Implemented / proven`, `Tests`,
+     `Remaining signals`, and `Result` cell.
+   - Treat any surface with remaining signals or a non-working result as an
+     instrumentation prerequisite unless matching metrics are proven.
    - Generate detectors only for implemented or proven GenAI signals. Do not
      imply complete token/context, provider/model, tool, stream, retrieval, or
      model/config coverage while required signals remain missing.
 
 If the Metrics section says "No metrics detected." and there are no implemented
 or verified metrics in downstream reports, and there are no GenAI
-readiness sections or legacy GenAI gap-contract inputs, stop and respond:
+readiness or readiness-closure sections, stop and respond:
 
 > The audit report contains no metrics. Detectors require metric data.
 > Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
 
-If the Metrics section says "No metrics detected." but GenAI readiness sections
-or legacy GenAI gap-contract inputs exist, do not generate detector Terraform.
+If the Metrics section says "No metrics detected." but GenAI readiness or
+readiness-closure sections exist, do not generate detector Terraform.
 Create `.observe/detectors.md` and `.observe/splunk-configure-verify.md` with
 GenAI instrumentation prerequisites and recommend `$otel-instrument` for the
 specific missing signals.
@@ -366,8 +361,9 @@ Default: **3.0 stddev**, 5m current window vs 1h history.
 
 ## GenAI Instrumentation Prerequisites
 
-Include this section when `## GenAI Readiness` or a legacy GenAI gap-contract input exists
-and any required GenAI signal is missing or partial.
+Include this section when `## GenAI Readiness` or
+`## GenAI Readiness Closure` exists and any required GenAI signal is missing or
+partial.
 
 | Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
 |---------|--------------|----------------|-------------------------------|-----------|
@@ -454,7 +450,7 @@ Validation requirements:
      `Working` metric rows in `.observe/otel-verify.md`, unless a source-only
      exception was explicitly accepted and recorded
    - metric names, units, and required dimensions used by detector logic match
-     verification evidence; do not silently substitute a legacy semantic-
+   verification evidence; do not silently substitute an alternate semantic-
      convention name
 5. Validate coverage:
    - generated detectors map to accepted metrics

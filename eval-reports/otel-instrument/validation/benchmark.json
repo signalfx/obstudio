@@ -6,11 +6,12 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260429T161229087446Z",
-    "repo_root": "/Users/pavankri/Cisco/obstudio",
+    "run_id": "20260629T201954223762Z",
+    "repo_root": "/Users/tithumma/code/splunk/obstudio-genai-readiness-pr",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
+    "agent_backend": "codex",
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1"
@@ -30,8 +31,24 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/runtime/instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/runtime/instrument.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 1
     },
     {
       "id": "go/chi-partial/qual/instrument",
@@ -51,6 +68,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "go/chi-partial/runtime/instrument",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/go/chi-partial/eval/runtime/instrument.json",
+      "eval_dir": "evals/go/chi-partial",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 1
+    },
+    {
       "id": "go/kvstore/qual/instrument",
       "case": "go/kvstore",
       "language": "go",
@@ -65,6 +98,90 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/kvstore/runtime/instrument",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/go/kvstore/eval/runtime/instrument.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 1
+    },
+    {
+      "id": "java/kafka-batch-consumer/qual/instrument",
+      "case": "java/kafka-batch-consumer",
+      "language": "java",
+      "service": "kafka-batch-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/java/kafka-batch-consumer/eval/qual/instrument.json",
+      "eval_dir": "evals/java/kafka-batch-consumer",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-listener-container/qual/instrument",
+      "case": "java/kafka-listener-container",
+      "language": "java",
+      "service": "kafka-listener-container",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/java/kafka-listener-container/eval/qual/instrument.json",
+      "eval_dir": "evals/java/kafka-listener-container",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-producer-consumer/qual/instrument",
+      "case": "java/kafka-producer-consumer",
+      "language": "java",
+      "service": "kafka-producer-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/java/kafka-producer-consumer/eval/qual/instrument.json",
+      "eval_dir": "evals/java/kafka-producer-consumer",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-streams/qual/instrument",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/java/kafka-streams/eval/qual/instrument.json",
+      "eval_dir": "evals/java/kafka-streams",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -99,6 +216,54 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/runtime/instrument",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/node/express-basic/eval/runtime/instrument.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 1
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/instrument",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/instrument.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/assistant-v3-framework-bridge-demo/qual/instrument",
+      "case": "python/assistant-v3-framework-bridge-demo",
+      "language": "python",
+      "service": "assistant-v3-framework-bridge-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "framework-bridge"
+      ],
+      "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json",
+      "eval_dir": "evals/python/assistant-v3-framework-bridge-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -152,6 +317,38 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/flask-basic/runtime/instrument",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "runtime-preserving"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/runtime/instrument.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 1
+    },
+    {
+      "id": "python/mcp-ai-tool-demo/qual/instrument",
+      "case": "python/mcp-ai-tool-demo",
+      "language": "python",
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/instrument.json",
+      "eval_dir": "evals/python/mcp-ai-tool-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
       "id": "sanity/skill-smoke/sanity/instrument",
       "case": "sanity/skill-smoke",
       "language": "sanity",
@@ -170,11 +367,11 @@
     }
   ],
   "summary": {
-    "eval_count": 9,
-    "case_count": 17,
-    "prompt_count": 17,
+    "eval_count": 21,
+    "case_count": 33,
+    "prompt_count": 33,
     "sanity_check_count": 0,
-    "rubric_check_count": 70,
-    "runtime_check_count": 1
+    "rubric_check_count": 135,
+    "runtime_check_count": 6
   }
 }

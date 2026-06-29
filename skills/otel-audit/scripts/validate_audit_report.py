@@ -49,17 +49,21 @@ INSTRUMENT_MODES = {"default", "fix all", "manual decision"}
 PROOF_LEVELS = {"focused call-site", "full runtime", "either"}
 GENAI_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-FORBIDDEN = (
-    "## RED Signals",
-    "## Instrumentation Delta",
-    "## Step-by-Step Signal Coverage",
-    "Shows Today",
-    "[COVERED]",
-    "## Verification Contract",
-    "### Project Runtime",
-    "### Path Scenarios",
-    "Local-Safe Fixture / Prerequisite",
-)
+REQUIRED_TOP_LEVEL_HEADINGS = [
+    "## Executive Summary",
+    "## Flow",
+    "## Audit Evidence",
+    "## Signal Flow",
+    "## Current Instrumentation",
+    "## Gaps",
+    "## Verification Plan",
+    "## Anti-Patterns",
+    "## Recommendation",
+]
+ALLOWED_TOP_LEVEL_HEADINGS = set(REQUIRED_TOP_LEVEL_HEADINGS) | {
+    "## Routes",
+    "## GenAI Readiness",
+}
 
 
 def fail(message: str) -> None:
@@ -103,23 +107,32 @@ def table(body: str, label: str) -> tuple[list[str], list[list[str]]]:
 
 def validate(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    top_level_headings = re.findall(r"^## [^\n]+$", text, re.MULTILINE)
+    unexpected_headings = sorted(set(top_level_headings) - ALLOWED_TOP_LEVEL_HEADINGS)
+    if unexpected_headings:
+        fail(f"unexpected top-level sections: {unexpected_headings}")
+    duplicate_headings = sorted(
+        heading for heading in set(top_level_headings) if top_level_headings.count(heading) > 1
+    )
+    if duplicate_headings:
+        fail(f"duplicate top-level sections: {duplicate_headings}")
     if text.count("\n## Gaps\n") != 1:
         fail("report must contain exactly one top-level ## Gaps section")
 
-    required_order = [
-        "## Executive Summary",
-        "## Flow",
-        "## Audit Evidence",
-        "## Signal Flow",
-        "## Current Instrumentation",
-        "## Gaps",
-        "## Verification Plan",
-        "## Anti-Patterns",
-        "## Recommendation",
+    positions = [
+        heading_match(text, heading).start()
+        for heading in REQUIRED_TOP_LEVEL_HEADINGS
     ]
-    positions = [heading_match(text, heading).start() for heading in required_order]
     if positions != sorted(positions):
         fail("reader-first section order is incorrect")
+
+    routes_match = re.search(r"^## Routes\s*$", text, re.MULTILINE)
+    if routes_match:
+        evidence_position = heading_match(text, "## Audit Evidence").start()
+        routes_position = routes_match.start()
+        signal_flow_position = heading_match(text, "## Signal Flow").start()
+        if not evidence_position < routes_position < signal_flow_position:
+            fail("## Routes must appear after Audit Evidence and before Signal Flow")
 
     ownership_matches = list(
         re.finditer(
@@ -155,10 +168,6 @@ def validate(path: Path) -> None:
 
     if not re.search(r"^\*\*Status:\*\* (Pass|Partial|Blocked)$", text, re.MULTILINE):
         fail("Status must be Pass, Partial, or Blocked")
-    for forbidden in FORBIDDEN:
-        if forbidden in text:
-            fail(f"forbidden audit content: {forbidden}")
-
     evidence_header, evidence_rows = table(section(text, "## Audit Evidence"), "Audit Evidence")
     if evidence_header != EVIDENCE_HEADER:
         fail(f"Audit Evidence header must be {EVIDENCE_HEADER}")
@@ -238,11 +247,19 @@ def validate(path: Path) -> None:
         fail("Signal Flow must contain one Component Flow Map")
     if "[SOURCE-COVERED]" not in flow:
         fail("Component Flow Map must use source-only coverage semantics")
+    flow_markers = re.findall(r"\[([^\]\n]+)\]", flow)
+    unexpected_markers = sorted(
+        marker
+        for marker in set(flow_markers)
+        if marker != "SOURCE-COVERED" and not marker.startswith("GAP: ")
+    )
+    if unexpected_markers:
+        fail(f"unexpected Component Flow Map markers: {unexpected_markers}")
     map_areas = set(re.findall(r"\[GAP: ([^\]]+)\]", flow))
     missing = map_areas - areas
     if missing:
         fail(f"flow-map gap markers have no prioritized row: {sorted(missing)}")
-    if re.search(r"\b(working|verified|shows today)\b", flow, re.IGNORECASE):
+    if re.search(r"\b(working|verified)\b", flow, re.IGNORECASE):
         fail("Component Flow Map may not claim runtime proof")
 
     verification_plan = section(text, "## Verification Plan")

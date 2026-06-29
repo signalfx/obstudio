@@ -29,8 +29,6 @@ Contract plus Reader-First Report Order.
 - Default source of truth: `.observe/otel.md` for baseline audit and
   `Verification Plan`, plus `.observe/otel-instrumentation.md` for
   `Signals Changed`, validation gates, and verification handoff/results.
-  If an older `.observe/otel.md` contains `Instrumentation Delta` or
-  `Instrumentation Verification Handoff`, treat those as legacy input only.
 - Default mode: read-only for application code
 - Do not add instrumentation. Use `$otel-instrument` for instrumentation
   changes.
@@ -39,8 +37,8 @@ Contract plus Reader-First Report Order.
     runtime/exporter signal in scope
   - `Added Telemetry Inventory`: every added or modified trace/span/event,
     metric, log/event, and runtime/exporter signal from
-    `.observe/otel-instrumentation.md` or legacy audit handoff, with
-    source/call site and user/application path
+    `.observe/otel-instrumentation.md`, with source/call site and
+    user/application path
   - `Acceptance Scenario Inventory`: every audit-derived user/API/runtime path with
     distinct telemetry shape
 - Run a project-runtime build/import viability gate before telemetry harnesses.
@@ -115,8 +113,7 @@ Inspect the repo before running anything:
   `.observe/otel-instrumentation.md` `## Signals Changed` and
   `## Verification Handoff / Results`. Reconcile these rows with current source
   and config; do not blindly trust a stale command, deleted runtime, or renamed
-  module. For older audits, normalize
-  `Verification Contract / Project Runtime / Path Scenarios` first.
+  module.
 - Identify the top-level service/runtime surface under test.
 - Inspect source files referenced by the audit and changed instrumentation
   files from git diff when applicable.
@@ -136,11 +133,6 @@ Inspect the repo before running anything:
   span name and metric call site. Shared helper execution does not prove that
   each route, create, batch, update, delete, workflow, or tool entrypoint emits
   its exact signal name.
-- If a legacy `## Instrumentation Delta` exists in `.observe/otel.md` and no
-  `.observe/otel-instrumentation.md` exists, treat every listed added/changed
-  span, metric, log/event, and runtime/exporter signal as in scope and seed
-  `Added Telemetry Inventory` from it. Prefer `Signals Changed` from
-  `.observe/otel-instrumentation.md` whenever both exist.
 - If `## GenAI Readiness` exists, include workflow, agent, LLM call, tool
   execution, retrieval/memory, eval when present, token usage, model/provider
   attributes, duplicate-span prevention, and correct parent/child topology.
@@ -272,8 +264,7 @@ Rules:
   the changed code and its generated sources/annotation processors.
 - Use the selected runtime from Step 3 for every gate. A failure under a
   rejected global runtime is not an application failure.
-- If `.observe/otel-instrumentation.md` or a legacy
-  `Instrumentation Verification Handoff` records a passing gate, rerun it when
+- If `.observe/otel-instrumentation.md` records a passing gate, rerun it when
   practical; otherwise treat it as prior evidence, not current proof.
 - Classify a failure on a changed line or changed API contract as
   `instrumentation-introduced` unless evidence proves otherwise. Classify
@@ -396,7 +387,7 @@ not an instrumentation failure.
   not prove operator-provided values survive provider construction.
 - For HTTP auto-instrumentation, assert the exact emitted request-duration
   metric and route dimensions. If stable semantic conventions were requested,
-  require `http.server.request.duration`; a legacy metric in source or a unit
+  require `http.server.request.duration`; an alternate metric in source or a unit
   fake does not satisfy that runtime row.
 - Keep an Obstudio contract process alive until trace, metric, and log queries
   complete; some local explorers evict telemetry for short-lived sources.
@@ -571,8 +562,7 @@ Report requirements:
   `unknown`, or `not applicable` in the failure-ownership column. Include
   compiler/import locations or prerequisite evidence for every non-passing row.
 - Always summarize added or modified telemetry in `What Changed` when
-  `.observe/otel-instrumentation.md` exists, legacy change input exists, or the
-  user asks what changed.
+  `.observe/otel-instrumentation.md` exists or the user asks what changed.
 - Preserve per-path verification in the working inventory whenever workflows,
   routes, jobs, startup, streaming, tools, retrieval, redaction, GenAI, or
   runtime paths are in scope. Publish detailed rows only for gaps, failures, or

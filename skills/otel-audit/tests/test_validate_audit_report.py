@@ -63,7 +63,7 @@ No gaps found.
 GENAI_READINESS = """## GenAI Readiness
 | Surface | Status | Evidence | Required Signals | Owner / Source Files | Acceptance Criteria | Detection/Localization Impact |
 |---|---|---|---|---|---|---|
-| Trace and semconv | missing | DeepAgents workflow detected without GenAI spans | `invoke_workflow`, `invoke_agent`, and `chat` spans | App-owned: app/harness.py | In-memory trace proves stable names and parentage | Workflow and model failures cannot be localized |"""
+| Provider/model calls | missing | DeepAgents model call detected without a GenAI span | `chat` span with provider and model attributes | App-owned: app/harness.py | In-memory trace proves stable name, attributes, and parentage | Model failures cannot be localized |"""
 
 
 def with_genai_readiness() -> str:
@@ -107,11 +107,14 @@ class ValidateAuditReportTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("undefined environment IDs", result.stderr)
 
-    def test_rejects_legacy_generated_heading(self) -> None:
-        report = VALID_REPORT.replace("## Verification Plan", "## Verification Contract")
+    def test_rejects_unexpected_top_level_heading(self) -> None:
+        report = VALID_REPORT.replace(
+            "## Anti-Patterns",
+            "## Internal Notes\n- Not part of the contract.\n\n## Anti-Patterns",
+        )
         result = self.validate(report)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing section ## Verification Plan", result.stderr)
+        self.assertIn("unexpected top-level sections", result.stderr)
 
     def test_rejects_gaps_before_current_instrumentation(self) -> None:
         current = "## Current Instrumentation\nNo spans detected."
@@ -127,6 +130,26 @@ No gaps found."""
         result = self.validate(report)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("reader-first section order is incorrect", result.stderr)
+
+    def test_rejects_routes_outside_reader_order(self) -> None:
+        report = VALID_REPORT.replace(
+            "## Recommendation",
+            "## Routes\n- `GET /health`\n\n## Recommendation",
+        )
+        result = self.validate(report)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "## Routes must appear after Audit Evidence and before Signal Flow",
+            result.stderr,
+        )
+
+    def test_accepts_routes_in_reader_order(self) -> None:
+        report = VALID_REPORT.replace(
+            "## Signal Flow",
+            "## Routes\n- `GET /health`\n\n## Signal Flow",
+        )
+        result = self.validate(report)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_genai_readiness_is_current_state_before_gaps(self) -> None:
         current = "## Current Instrumentation\nNo spans detected."

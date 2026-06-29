@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify files."
+      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     },
     {
       "id": "genai-readiness",
-      "task": "Produce an observability readiness review for the AI assistant service in ./service. Identify existing telemetry, GenAI pathway gaps, incident-detection impact, and the next instrumentation step. Do not modify files."
+      "task": "Produce an observability readiness review for the AI assistant service in ./service. Identify existing telemetry, GenAI pathway gaps, incident-detection impact, and the next instrumentation step. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     }
   ],
   "judge_inputs": [
@@ -19,7 +19,8 @@
     "Identifies app.py, load_demo.py, pyproject.toml, and FastAPI routes for chat, streaming chat, stream inventory, feedback, and feedback export.",
     "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
     "Maps GenAI readiness gaps for provider/model calls, tool fanout, token/context pressure, streaming lifecycle, prompt/response outcome, and offline AI data export.",
-    "Creates or describes a Gap Ledger-style contract with required signals instead of treating the audit as background context.",
-    "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions."
+    "Writes .observe/otel.md with GenAI ownership detected as Yes, a matching Audit Evidence row, and a GenAI Readiness table before Gaps with one row per readiness surface and explicit required signals.",
+    "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions.",
+    "Uses only the reader-first baseline headings in this order: Current Instrumentation, GenAI Readiness, Gaps, and Verification Plan."
   ]
 }

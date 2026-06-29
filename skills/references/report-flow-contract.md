@@ -9,7 +9,7 @@ Each document has one job. Do not mix these responsibilities.
 
 | Document | Owner skill | Purpose | Must not contain |
 |---|---|---|---|
-| `.observe/otel.md` | `$otel-audit` | Source-derived audit, current instrumentation inventory, gaps, GenAI readiness, and verification plan | Instrumentation Delta, implementation changelog, executed verification proof, RED Signals |
+| `.observe/otel.md` | `$otel-audit` | Source-derived audit, current instrumentation inventory, gaps, GenAI readiness, and verification plan | Implementation changelog or executed verification proof |
 | `.observe/otel-instrumentation.md` | `$otel-instrument` | Implementation ledger: code changes, added/modified/removed signals, validation gates, verification and detector handoff | Baseline audit rewrite, source-only route inventory unless needed for changed paths |
 | `.observe/otel-verify.md` | `$otel-verify` | Runtime/app-code proof: compile/import viability, tests/harnesses, OTLP/Explorer visibility, path coverage, verified/unverified signals | Unproven implementation claims |
 | `.observe/detectors.md` | `$splunk-configure` | Human-readable detector plan: generated detectors, covered metrics, skipped metrics, prerequisites | Secrets, unverified detector claims |
@@ -67,8 +67,7 @@ Audit is read-only and baseline-oriented:
   include a matching `GenAI ownership` row in `## Audit Evidence`.
 - Include `Current Instrumentation`, `GenAI Readiness` when relevant, `Gaps`,
   and `Verification Plan`.
-- Do not compute or show `Instrumentation Delta`.
-- Do not include `RED Signals`.
+- Use only the top-level sections in the reader order below.
 - Do not run verification harnesses or claim runtime proof.
 
 Use this reader order after the common title, status, summary, and flow:
@@ -109,10 +108,9 @@ scenario. Separate independent process roots. Use these exact evidence markers:
 - `[GAP: <human-readable area>]`: the edge has an instrumentation, safety, or
   proof gap described in `## Gaps`.
 
-Do not use `[COVERED]`, `Shows Today`, `verified`, or `working` in the map unless
-a cited pre-existing runtime artifact actually proves that claim. Do not add a
-step-by-step signal coverage matrix; the component map is the compact reader
-view and `Verification Plan` is the detailed downstream handoff.
+Use only `[SOURCE-COVERED]` and `[GAP: <area>]` in the component map. The map is
+the compact reader view and `Verification Plan` is the detailed downstream
+handoff.
 
 Put `## Current Instrumentation` immediately after the flow map so readers see
 what exists before they evaluate deficiencies. When present, put
@@ -130,9 +128,8 @@ the most important gaps visible on the first screen.
    one or more IDs from `Test Environments`.
 
 Do not repeat fixture or prerequisite prose in every scenario. Add or refine a
-test-environment row and reference its ID instead. New audit reports must use
-these headings. Instrumentation and verification may normalize legacy
-`Verification Contract / Project Runtime / Path Scenarios` input.
+test-environment row and reference its ID instead. Use these headings for every
+audit report and downstream handoff.
 
 Keep exactly one top-level `## Gaps` section and use this prioritized table:
 
@@ -218,8 +215,8 @@ The instrumentation report must include:
 ## Next Steps
 ```
 
-`Signals Changed` is the replacement for the old audit delta. It belongs only
-in `.observe/otel-instrumentation.md`.
+`Signals Changed` is the instrumentation report's implementation-change
+inventory and belongs only in `.observe/otel-instrumentation.md`.
 
 Include `## GenAI Readiness Closure` only when the source audit declares
 `GenAI ownership detected: Yes`. Put it after `## Audit Gap Closure` and use
@@ -246,9 +243,6 @@ Verification reads both audit and instrumentation reports:
 - Audit source: `.observe/otel.md`
 - Implementation source: `.observe/otel-instrumentation.md`
 - Output: `.observe/otel-verify.md`
-
-If an older audit still has `Instrumentation Delta`, treat it as legacy input,
-but do not require new audits or instrumentation runs to write that section.
 
 Write verification reports for a reader deciding whether the instrumentation
 works. The first screen must answer, in this order:

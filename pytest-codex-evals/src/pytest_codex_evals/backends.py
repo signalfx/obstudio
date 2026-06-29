@@ -123,7 +123,7 @@ def _pump_stream(pipe: Any, output_path: Path, chunks: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _codex_subprocess_env() -> dict[str, str]:
+def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
     clean_package_config = env.get("CODEX_EVAL_CLEAN_PACKAGE_CONFIG", "1").strip().lower()
     if clean_package_config in {"1", "true", "yes", "on"}:
@@ -133,6 +133,9 @@ def _codex_subprocess_env() -> dict[str, str]:
         env["PIP_CONFIG_FILE"] = os.devnull
         env["PIP_INDEX_URL"] = default_index
         env.pop("PIP_EXTRA_INDEX_URL", None)
+    if exec_dir is not None:
+        env["UV_CACHE_DIR"] = str(exec_dir / ".uv-cache")
+        env["PIP_CACHE_DIR"] = str(exec_dir / ".pip-cache")
     return env
 
 
@@ -178,7 +181,7 @@ class CodexBackend:
             stdout_path=trace_path,
             stderr_path=stderr_path,
             timeout=timeout,
-            env=_codex_subprocess_env(),
+            env=_codex_subprocess_env(exec_dir),
         )
         if not final_path.exists():
             final_path.write_text("", encoding="utf-8")

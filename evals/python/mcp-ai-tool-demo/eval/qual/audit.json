@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the MCP-style AI tool gateway in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify files."
+      "task": "Scan the MCP-style AI tool gateway in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     },
     {
       "id": "mcp-readiness",
-      "task": "Produce an observability readiness review for the MCP-style AI tool gateway in ./service. Cover MCP method routing, tool execution, sessions, streams, provider calls, and incident-detection impact. Do not modify files."
+      "task": "Produce an observability readiness review for the MCP-style AI tool gateway in ./service. Cover MCP method routing, tool execution, sessions, streams, provider calls, and incident-detection impact. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
     }
   ],
   "judge_inputs": [
@@ -20,6 +20,7 @@
     "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
     "Maps GenAI and MCP gaps for JSON-RPC method outcome, auth result, session lifecycle, active streams, close reason, stream duration, send/write failure, tool execution, and provider/model calls.",
     "Scopes session, stream, and backpressure signals to AI-owned MCP/tool pathways instead of treating unrelated generic runtime readiness as GenAI coverage.",
-    "Keeps privacy and cardinality safe by not recommending raw JSON-RPC payloads, tool arguments, sessions, users, tenants, requests, or traces as metric dimensions."
+    "Keeps privacy and cardinality safe by not recommending raw JSON-RPC payloads, tool arguments, sessions, users, tenants, requests, or traces as metric dimensions.",
+    "Writes .observe/otel.md with GenAI ownership detected as Yes, matching Audit Evidence, and a GenAI Readiness table before Gaps that includes MCP/tool, privacy/cardinality, and detector-ready required signals."
   ]
 }

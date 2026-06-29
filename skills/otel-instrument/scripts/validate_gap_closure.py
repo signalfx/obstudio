@@ -58,12 +58,6 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
-LEGACY_NON_OWNERSHIP_CHECK = re.compile(
-    r"\b(?:not applicable|scan skipped|not detected)\b",
-    re.IGNORECASE,
-)
-
-
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
 
@@ -146,47 +140,13 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
             re.MULTILINE,
         )
     )
-    if len(ownership_matches) > 1:
-        fail("source audit contains multiple GenAI ownership declarations")
-    ownership_match = ownership_matches[0] if ownership_matches else None
+    if len(ownership_matches) != 1:
+        fail("source audit must contain exactly one GenAI ownership declaration")
+    ownership_match = ownership_matches[0]
     audit_genai_heading = re.search(
         r"^## GenAI Readiness\s*$", audit, re.MULTILINE
     )
-    legacy_ownership = None
-    legacy_genai_evidence = False
-    if not ownership_match:
-        audit_evidence_heading = re.search(
-            r"^## Audit Evidence\s*$", audit, re.MULTILINE
-        )
-        if audit_evidence_heading:
-            _evidence_header, evidence_rows = table(
-                section(audit, "## Audit Evidence"), "audit Audit Evidence"
-            )
-            structured_rows = [
-                row for row in evidence_rows if row and row[0] == "GenAI ownership"
-            ]
-            if len(structured_rows) > 1:
-                fail("source audit contains multiple GenAI ownership evidence rows")
-            if structured_rows:
-                structured_row = structured_rows[0]
-                if len(structured_row) < 2 or structured_row[1] not in {"Yes", "No"}:
-                    fail("source audit has invalid GenAI ownership evidence")
-                legacy_ownership = structured_row[1]
-            else:
-                legacy_genai_evidence = any(
-                    row
-                    and "genai" in row[0].lower()
-                    and not LEGACY_NON_OWNERSHIP_CHECK.search(row[0])
-                    for row in evidence_rows
-                )
-    if ownership_match:
-        genai_detected = ownership_match.group(1) == "Yes"
-    else:
-        genai_detected = (
-            legacy_ownership == "Yes"
-            or audit_genai_heading is not None
-            or legacy_genai_evidence
-        )
+    genai_detected = ownership_match.group(1) == "Yes"
     instrumentation_genai_headings = list(
         re.finditer(
             r"^## GenAI Readiness Closure\s*$", instrumentation, re.MULTILINE
@@ -202,9 +162,7 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
 
     if genai_detected and not audit_genai_heading:
         fail("source audit declares GenAI ownership but lacks ## GenAI Readiness")
-    if legacy_ownership == "No" and audit_genai_heading:
-        fail("source audit GenAI ownership evidence is No but has ## GenAI Readiness")
-    if ownership_match and ownership_match.group(1) == "No" and audit_genai_heading:
+    if ownership_match.group(1) == "No" and audit_genai_heading:
         fail("source audit declares no GenAI ownership but has ## GenAI Readiness")
     if genai_detected and not instrumentation_genai_heading:
         fail("GenAI audit requires ## GenAI Readiness Closure")

@@ -22,10 +22,9 @@ project runtime.
 
 When `.observe/otel.md` contains `Verification Plan / Test Environments`, or
 `.observe/otel-instrumentation.md` contains `Verification Handoff / Results`,
-treat their runtime rows and commands as candidates. Normalize legacy
-`Verification Contract / Project Runtime` input when needed. Revalidate all
-candidates against current wrappers, toolchain files, manifests, and local
-availability before execution; a handoff can become stale.
+treat their runtime rows and commands as candidates. Revalidate all candidates
+against current wrappers, toolchain files, manifests, and local availability
+before execution; a handoff can become stale.
 
 ## Discovery Order
 

@@ -19,7 +19,7 @@
     "Identifies TasksApplication.java as the process entry point.",
     "Identifies TaskController routes for health and task CRUD operations.",
     "Reports no OpenTelemetry SDK, Java agent, or OTLP exporter configuration.",
-    "Frames missing HTTP latency, request rate, and error visibility using RED signals.",
+    "Reports missing HTTP request rate, error status, and latency visibility with exact expected signals.",
     "Recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path."
   ]
 }

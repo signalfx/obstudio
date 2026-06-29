@@ -20,6 +20,7 @@
     "Initializes the SDK exactly once and sets tracer provider and text map propagator.",
     "Uses route-aware, low-cardinality HTTP spans and preserves chi routing behavior.",
     "Keeps OTLP endpoint and service name configurable through environment variables.",
-    "Does not introduce broad refactors or custom spans beyond the requested auto-instrumentation."
+    "Does not introduce broad refactors or custom spans beyond the requested auto-instrumentation.",
+    "Writes a separate .observe/otel-instrumentation.md with Signals Changed; when a source audit exists it includes one Audit Gap Closure row per audit gap, otherwise it explicitly records that no source audit was available. It runs otel-verify or records the exact blocker without rewriting the audit baseline."
   ]
 }

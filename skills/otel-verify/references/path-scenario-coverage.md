@@ -26,8 +26,7 @@ Read `.observe/otel.md` and extract scenarios from these places when present:
 - `Verification Plan / Acceptance Scenarios`: use these stable scenario IDs,
   triggers, source entrypoints, expected signals, proof levels, acceptance
   criteria, and environment references as the initial inventory, then
-  reconcile them with source. Normalize legacy
-  `Verification Contract / Project Runtime / Path Scenarios` input when needed.
+  reconcile them with source.
 - `.observe/otel-instrumentation.md` `Verification Handoff / Results` and
   `Signals Changed`: add every changed-signal scenario and preserve the
   implementation gate evidence.

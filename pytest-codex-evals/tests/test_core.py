@@ -21,7 +21,7 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
-from pytest_codex_evals.backends import run_streamed_command
+from pytest_codex_evals.backends import _codex_subprocess_env, run_streamed_command
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
     grade_runtime,
@@ -31,7 +31,11 @@ from pytest_codex_evals.graders.runtime import (
 )
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
-from pytest_codex_evals.report import render_reports_for_run_root, write_session_results
+from pytest_codex_evals.report import (
+    normalize_rubric_score,
+    render_reports_for_run_root,
+    write_session_results,
+)
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -40,6 +44,18 @@ def test_side_prompt_generates_loaded_and_not_loaded_variants():
 
     assert side_prompt(case, "with_skill") == "Use the $sample-skill skill. Scan the service."
     assert side_prompt(case, "baseline") == "Scan the service."
+
+
+def test_codex_subprocess_env_uses_sandbox_local_package_caches(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setenv("UV_CACHE_DIR", "/outside/uv-cache")
+    monkeypatch.setenv("PIP_CACHE_DIR", "/outside/pip-cache")
+
+    env = _codex_subprocess_env(tmp_path)
+
+    assert env["UV_CACHE_DIR"] == str(tmp_path / ".uv-cache")
+    assert env["PIP_CACHE_DIR"] == str(tmp_path / ".pip-cache")
 
 
 def test_trace_parser_extracts_commands_and_tokens(tmp_path: Path):
@@ -307,11 +323,35 @@ def test_rubric_prompt_can_be_overridden_without_service_assumptions():
         judge_inputs=["Read ./answer.md."],
     )
 
-    prompt = rubric_prompt(case)
+    prompt = " ".join(rubric_prompt(case).split())
 
     assert "Read ./answer.md." in prompt
     assert "Must cite evidence." in prompt
     assert "./service" not in prompt
+
+
+def test_default_rubric_prompt_requires_percentage_style_score():
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct",
+        base_id="sample/service/rubric",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Evaluate the answer.",
+        rubric=["Must cite evidence."],
+    )
+
+    prompt = " ".join(rubric_prompt(case).split())
+
+    assert "0-100 percentage-style quality score" in prompt
+    assert "Do not put the number of passed checks" in prompt
+
+
+def test_report_normalizes_count_shaped_rubric_score():
+    assert normalize_rubric_score(6, passed=6, total=6) == 100
+    assert normalize_rubric_score(5, passed=5, total=6) == 83
+    assert normalize_rubric_score(88, passed=5, total=6) == 88
 
 
 def test_session_result_writer_writes_raw_json_without_markdown(tmp_path: Path):

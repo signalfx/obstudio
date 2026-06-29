@@ -3,11 +3,7 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Instrument the MCP-style AI tool gateway in ./service for OpenTelemetry, MCP lifecycle, and GenAI readiness. Add safe app-owned signals and tests where practical."
-    },
-    {
-      "id": "audit-ledger",
-      "task": "Use the audit gap-ledger contract implied by the MCP-style AI tool gateway in ./service. Add instrumentation for patchable GenAI and session/stream lifecycle gaps and explicitly report any remaining signals."
+      "task": "Instrument representative owned paths in the MCP-style AI tool gateway in ./service: JSON-RPC method outcomes, session/stream lifecycle, execute_tool, and the provider call. Add safe spans/metrics, focused tests, and the separate reader-first instrumentation report. Run one focused verification pass; after a dependency or environment blocker, record the exact blocker and finish instead of repeatedly retrying setup."
     }
   ],
   "judge_inputs": [
@@ -17,9 +13,11 @@
   ],
   "rubric": [
     "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
-    "Instruments FastAPI plus app-owned JSON-RPC method outcome, MCP session lifecycle, active streams, stream duration/outcome, close reason family, send/write failure, tool execution, and provider/model calls.",
+    "Instruments FastAPI plus representative app-owned JSON-RPC method outcome, MCP session/stream lifecycle and outcome, tool execution, and provider/model call paths without claiming unexecuted branches are proven.",
     "Uses OTel GenAI semantic-convention names where data is available, including execute_tool and model/provider attributes, without inventing unsafe high-cardinality dimensions.",
-    "Includes detector-ready metrics for tool error/latency, provider error/latency, active sessions or streams, and stream close/detach outcomes.",
-    "Adds or updates tests or compile checks and keeps raw JSON-RPC payloads, prompts, completions, sessions, users, tenants, requests, traces, and tool arguments out of metric dimensions."
+    "Includes detector-ready metrics for tool and provider error/latency plus active session/stream and stream outcome behavior where the fixture exposes those values.",
+    "Adds or updates tests or compile checks and keeps raw JSON-RPC payloads, prompts, completions, sessions, users, tenants, requests, traces, and tool arguments out of metric dimensions.",
+    "Writes a separate .observe/otel-instrumentation.md with Signals Changed. When a source audit exists, it includes one-to-one Audit Gap Closure and GenAI Readiness Closure rows; otherwise it records that no source audit was available and does not fabricate closure rows.",
+    "Runs otel-verify for exact MCP route, tool, stream, error, and privacy paths, or records the exact blocker; any unexecuted path remains Not proven and prevents a Pass result."
   ]
 }
