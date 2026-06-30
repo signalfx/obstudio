@@ -13,6 +13,7 @@ auditing and adding OpenTelemetry instrumentation.
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-sync` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
+| `$splunk-o11y-onboard` | Register or connect Splunk Observability Cloud through the shared OAuth CLI |
 
 The canonical skill sources live under `skills/`. Codex discovers repo-local
 entries through `.agents/skills/`, which points at those source directories.
@@ -57,6 +58,40 @@ Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
 and `4317`, matching the VS Code extension.
 
+### Connect Splunk Observability Cloud
+
+Registration and authentication are separate from agent installation:
+
+```bash
+# New Splunk Observability Cloud Free organization
+obstudio cloud register
+
+# Existing or newly verified organization
+obstudio cloud regions
+obstudio cloud login --region <realm>
+
+# Legacy regional domain or loopback development issuer
+obstudio cloud login --issuer https://app.<realm>.signalfx.com
+
+# Trusted internal issuer page (canonicalized to its origin)
+obstudio cloud login --issuer https://mon.signalfx.com/#/signin
+
+# Redacted connection status
+obstudio cloud status
+
+# Revoke the server-side token and remove the local credential
+obstudio cloud logout
+```
+
+`cloud login` uses authorization-code OAuth with PKCE and a random loopback
+callback port. It reuses the user's browser session, lets the Splunk-hosted page
+handle organization and scope selection, and stores the connection in the OS
+keychain. VS Code and Cursor invoke the same bundled Go flow and move the result
+directly into IDE SecretStorage. Access tokens are not printed by normal login
+or status commands, and export remains disabled until the user enables it.
+Restart an already-running standalone Obstudio process after CLI login so it
+loads the new keychain connection; extension-managed Observers update directly.
+
 ### Optional Splunk Metrics Forwarding
 
 By default, Obstudio stores incoming OTLP telemetry locally for inspection. To
@@ -90,8 +125,8 @@ https://ingest.<realm>.observability.splunkcloud.com/v2/datapoint/otlp
 Use `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` to override the full endpoint. Explicit
 endpoint values are used exactly as configured. Use
 `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` to override the default `5s` export timeout.
-The access token is only read from the environment and is never returned by
-`/api/health`.
+Explicit environment settings override a connection stored by
+`obstudio cloud login`. Access tokens are never returned by `/api/health`.
 
 ### Optional Splunk Traces Forwarding
 
@@ -125,6 +160,7 @@ $otel-audit
 $otel-instrument
 $splunk-configure
 $splunk-sync
+$splunk-o11y-onboard
 ```
 
 Use `$otel-audit` to understand what is missing before editing. Use
@@ -134,6 +170,8 @@ Splunk Observability Cloud detector Terraform — it reads the audit report,
 classifies metrics, and outputs ready-to-apply HCL with a `terraform.tfvars.example`
 for credentials. Use `$splunk-sync` to diff those specs against live Splunk
 detectors and create only the ones that don't exist yet.
+Use `$splunk-o11y-onboard` to open registration, connect an existing
+organization, inspect redacted status, or revoke and forget a connection.
 
 ## Validation
 
@@ -164,6 +202,7 @@ obstudio/
 │   ├── otel-instrument/
 │   ├── splunk-configure/
 │   ├── splunk-sync/
+│   ├── splunk-o11y-onboard/
 │   └── references/    # Shared language guides and signal references
 ├── .agents/skills/    # Repo-scoped Codex skill entries
 ├── evals/             # Fixture services and JSON eval cases

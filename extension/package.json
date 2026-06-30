@@ -82,6 +82,16 @@
         "category": "Splunk Observability Studio"
       },
       {
+        "command": "observability-studio.connectSplunkObservabilityCloud",
+        "title": "Connect to Splunk Observability Cloud",
+        "category": "Splunk Observability Studio"
+      },
+      {
+        "command": "observability-studio.forgetSplunkObservabilityCloud",
+        "title": "Forget Splunk Observability Cloud Key",
+        "category": "Splunk Observability Studio"
+      },
+      {
         "command": "observability-studio.configureCodexMCP",
         "title": "Enable Codex Integration",
         "category": "Splunk Observability Studio"
@@ -103,7 +113,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. For cloud configuration, launch the shared Observer and VS Code with the same `OBSTUDIO_CONTROL_TOKEN`. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",
@@ -111,6 +121,32 @@
           "minimum": 1,
           "maximum": 65535,
           "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
+        },
+        "observability-studio.o11yOAuthIssuerUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Trusted Splunk Observability Cloud OAuth issuer origin. Authorization, token, and revocation endpoints are derived from this one origin to prevent realm mix-up. For local SignalView testing, use `http://localhost:3000`."
+        },
+        "observability-studio.o11yOAuthClientId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional registered OAuth public client identifier. When unset, the extension uses `obstudio-vscode` in VS Code and `obstudio-cursor` in Cursor."
+        },
+        "observability-studio.o11yOAuthScope": {
+          "type": "string",
+          "default": "ingest api",
+          "markdownDescription": "OAuth scopes offered by Splunk Observability Studio. `ingest` is required for telemetry export; `api` is optional and enables dashboard and API automation when approved."
+        },
+        "observability-studio.o11yOAuthRequiredScope": {
+          "type": "string",
+          "default": "ingest",
+          "markdownDescription": "Minimum granted OAuth scope required to reuse a stored Splunk Observability Cloud connection."
+        },
+        "observability-studio.o11yOAuthTokenName": {
+          "type": "string",
+          "default": "Obstudio local agent token",
+          "markdownDescription": "Display name requested for the generated Splunk Observability Cloud access token."
         }
       }
     }
@@ -132,6 +168,7 @@
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:integration:smoke": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test --test-name-pattern=\"installed VSIX smoke test\" out/test/extension-integration.test.js",
     "test:host": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:oauth-contract": "node scripts/verify-o11y-oauth-contract.js",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
     "test": "vscode-test"
   },

@@ -1,4 +1,4 @@
-import type { LogRecord, MetricGroup, TraceDetail, TraceSummary } from "./types";
+import type { LogRecord, MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary } from "./types";
 
 const BASE = "";
 type QueryScalar = string | number;
@@ -155,6 +155,32 @@ export async function fetchLogFilterValues(field: string, prefix: string, query:
 export async function fetchServiceStats(signal?: AbortSignal): Promise<ServiceStats[]> {
   const data = await fetchJSON<ServiceStats[] | null>("/api/query/stats/services", { signal });
   return Array.isArray(data) ? data : [];
+}
+
+export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<SplunkExportStatus> {
+  return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
+}
+
+export async function forgetSplunkExportDestination(signal?: AbortSignal): Promise<SplunkExportStatus> {
+  return fetchJSON<SplunkExportStatus>("/api/splunk/export/forget", {
+    headers: {
+      "X-Obstudio-Browser-Action": "forget",
+    },
+    method: "POST",
+    signal,
+  });
+}
+
+export async function setSplunkExportEnabled(enabled: boolean, signal?: AbortSignal): Promise<SplunkExportStatus> {
+  return fetchJSON<SplunkExportStatus>("/api/splunk/export/enabled", {
+    body: JSON.stringify({ enabled }),
+    headers: {
+      "Content-Type": "application/json",
+      "X-Obstudio-Browser-Action": "export",
+    },
+    method: "POST",
+    signal,
+  });
 }
 
 export interface ServiceStats {

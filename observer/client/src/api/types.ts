@@ -210,6 +210,32 @@ export interface Stats {
   serviceNames: string[];
 }
 
+export interface SplunkExportAttempt {
+  time: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface SplunkExportSignalStatus {
+  accessTokenConfigured: boolean;
+  configured: boolean;
+  enabled: boolean;
+  endpoints?: string[];
+  failedBatches?: number;
+  lastExport?: SplunkExportAttempt;
+  metricBatches?: number;
+  metricPoints?: number;
+  realm?: string;
+  timeout?: string;
+  traceBatches?: number;
+  traceSpans?: number;
+}
+
+export interface SplunkExportStatus {
+  metrics?: SplunkExportSignalStatus;
+  traces?: SplunkExportSignalStatus;
+}
+
 export type ValidationSeverity = "information" | "improvement" | "violation";
 
 export interface ValidationSignalRef {

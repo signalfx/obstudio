@@ -16,3 +16,5 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 assets/observer-icon.svg
+callback-success-*.png
+design-qa.md

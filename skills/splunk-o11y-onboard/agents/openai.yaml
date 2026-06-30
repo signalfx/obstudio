@@ -1,0 +1,4 @@
+interface:
+  display_name: "Splunk O11y Onboard"
+  short_description: "Register or connect by O11y realm"
+  default_prompt: "Use $splunk-o11y-onboard to select a realm and connect this Obstudio installation to Splunk Observability Cloud."

@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -1456,6 +1459,448 @@ func TestQueryHealthHandlesNilStore(t *testing.T) {
 	}
 	if got := endpoints["rest"]; got != "" {
 		t.Fatalf("expected empty rest endpoint, got %#v", got)
+	}
+}
+
+func TestConfigureSplunkExportWithControlToken(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control")
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	var revoked bool
+	revocationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v2/oauth/revoke" {
+			t.Fatalf("unexpected revocation request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("X-SF-TOKEN"); got != "" {
+			t.Fatalf("revocation must not send a bearer-token header: %q", got)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse revocation form: %v", err)
+		}
+		if r.Form.Get("token") != "sf-secret-token" || r.Form.Get("token_type_hint") != "access_token" {
+			t.Fatalf("unexpected revocation form: %v", r.Form)
+		}
+		if r.Form.Get("token_id") != "" || r.Form.Get("token_name") != "" {
+			t.Fatalf("revocation form contains non-standard token metadata: %v", r.Form)
+		}
+		revoked = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer revocationServer.Close()
+
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatalf("create metrics controller: %v", err)
+	}
+	defer metricsController.Shutdown(context.Background())
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatalf("create traces controller: %v", err)
+	}
+	defer tracesController.Shutdown(context.Background())
+
+	mux := http.NewServeMux()
+	Register(mux, store.New(), metricsController, tracesController)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	unauthorizedResp, err := http.Post(server.URL+"/api/splunk/export", "application/json", strings.NewReader(`{"enabled":true}`))
+	if err != nil {
+		t.Fatalf("POST unauthorized configure failed: %v", err)
+	}
+	defer unauthorizedResp.Body.Close()
+	if unauthorizedResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized status, got %d", unauthorizedResp.StatusCode)
+	}
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/splunk/export",
+		strings.NewReader(fmt.Sprintf(
+			`{"enabled":true,"realm":"lab0","accessToken":"sf-secret-token","endpoint":"https://ingest.lab0.signalfx.com","issuer":%q}`,
+			revocationServer.URL,
+		)),
+	)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer observer-control")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST configure failed: %v", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected OK status, got %d: %s", resp.StatusCode, responseBody)
+	}
+	if strings.Contains(string(responseBody), "sf-secret-token") {
+		t.Fatalf("response leaked access token: %s", responseBody)
+	}
+
+	statusResp, err := http.Get(server.URL + "/api/splunk/export")
+	if err != nil {
+		t.Fatalf("GET export status failed: %v", err)
+	}
+	defer statusResp.Body.Close()
+	statusBody, err := io.ReadAll(statusResp.Body)
+	if err != nil {
+		t.Fatalf("read status response: %v", err)
+	}
+	if statusResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected OK status, got %d: %s", statusResp.StatusCode, statusBody)
+	}
+	if strings.Contains(string(statusBody), "sf-secret-token") {
+		t.Fatalf("status response leaked access token: %s", statusBody)
+	}
+	if !strings.Contains(string(statusBody), "https://ingest.lab0.signalfx.com/v2/datapoint/otlp") {
+		t.Fatalf("status response missing metrics endpoint: %s", statusBody)
+	}
+	if !strings.Contains(string(statusBody), "https://ingest.lab0.signalfx.com/v2/trace/otlp") {
+		t.Fatalf("status response missing traces endpoint: %s", statusBody)
+	}
+
+	metricsStatus := metricsController.Status()
+	if !metricsStatus.Enabled || !metricsStatus.Configured || !metricsStatus.AccessTokenConfigured {
+		t.Fatalf("metrics exporter was not configured: %#v", metricsStatus)
+	}
+	if len(metricsStatus.Endpoints) != 1 || metricsStatus.Endpoints[0] != "https://ingest.lab0.signalfx.com/v2/datapoint/otlp" {
+		t.Fatalf("unexpected metrics endpoints: %#v", metricsStatus.Endpoints)
+	}
+
+	tracesStatus := tracesController.Status()
+	if !tracesStatus.Enabled || !tracesStatus.Configured || !tracesStatus.AccessTokenConfigured {
+		t.Fatalf("traces exporter was not configured: %#v", tracesStatus)
+	}
+	if len(tracesStatus.Endpoints) != 1 || tracesStatus.Endpoints[0] != "https://ingest.lab0.signalfx.com/v2/trace/otlp" {
+		t.Fatalf("unexpected traces endpoints: %#v", tracesStatus.Endpoints)
+	}
+
+	toggleUnauthorizedReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/splunk/export/enabled", strings.NewReader(`{"enabled":false}`))
+	if err != nil {
+		t.Fatalf("create unauthorized toggle request: %v", err)
+	}
+	toggleUnauthorizedReq.Header.Set("X-Obstudio-Browser-Action", "export")
+	toggleUnauthorizedReq.Header.Set("Content-Type", "application/json")
+	toggleUnauthorizedResp, err := http.DefaultClient.Do(toggleUnauthorizedReq)
+	if err != nil {
+		t.Fatalf("POST unauthorized toggle failed: %v", err)
+	}
+	defer toggleUnauthorizedResp.Body.Close()
+	if toggleUnauthorizedResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized toggle status, got %d", toggleUnauthorizedResp.StatusCode)
+	}
+
+	toggleReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/splunk/export/enabled", strings.NewReader(`{"enabled":false}`))
+	if err != nil {
+		t.Fatalf("create toggle request: %v", err)
+	}
+	toggleReq.Header.Set("X-Obstudio-Browser-Action", "export")
+	toggleReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	toggleReq.Header.Set("Content-Type", "application/json")
+	toggleResp, err := http.DefaultClient.Do(toggleReq)
+	if err != nil {
+		t.Fatalf("POST toggle failed: %v", err)
+	}
+	defer toggleResp.Body.Close()
+	toggleBody, err := io.ReadAll(toggleResp.Body)
+	if err != nil {
+		t.Fatalf("read toggle response: %v", err)
+	}
+	if toggleResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected OK toggle status, got %d: %s", toggleResp.StatusCode, toggleBody)
+	}
+	if strings.Contains(string(toggleBody), "sf-secret-token") {
+		t.Fatalf("toggle response leaked access token: %s", toggleBody)
+	}
+	if metricsController.Config().AccessToken != "sf-secret-token" || tracesController.Config().AccessToken != "sf-secret-token" {
+		t.Fatalf("toggle cleared access token unexpectedly")
+	}
+	if metricsController.Status().Enabled || tracesController.Status().Enabled {
+		t.Fatalf("toggle did not disable export")
+	}
+
+	forgetUnauthorizedReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/splunk/export/forget", nil)
+	if err != nil {
+		t.Fatalf("create unauthorized forget request: %v", err)
+	}
+	forgetUnauthorizedReq.Header.Set("X-Obstudio-Browser-Action", "forget")
+	forgetUnauthorizedResp, err := http.DefaultClient.Do(forgetUnauthorizedReq)
+	if err != nil {
+		t.Fatalf("POST unauthorized forget failed: %v", err)
+	}
+	defer forgetUnauthorizedResp.Body.Close()
+	if forgetUnauthorizedResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized forget status, got %d", forgetUnauthorizedResp.StatusCode)
+	}
+
+	forgetReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/splunk/export/forget", nil)
+	if err != nil {
+		t.Fatalf("create forget request: %v", err)
+	}
+	forgetReq.Header.Set("X-Obstudio-Browser-Action", "forget")
+	forgetReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	forgetResp, err := http.DefaultClient.Do(forgetReq)
+	if err != nil {
+		t.Fatalf("POST forget failed: %v", err)
+	}
+	defer forgetResp.Body.Close()
+	forgetBody, err := io.ReadAll(forgetResp.Body)
+	if err != nil {
+		t.Fatalf("read forget response: %v", err)
+	}
+	if forgetResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected OK forget status, got %d: %s", forgetResp.StatusCode, forgetBody)
+	}
+	if strings.Contains(string(forgetBody), "sf-secret-token") {
+		t.Fatalf("forget response leaked access token: %s", forgetBody)
+	}
+	if strings.Contains(string(forgetBody), `"accessTokenConfigured":true`) {
+		t.Fatalf("forget response still reports configured token: %s", forgetBody)
+	}
+	if !revoked {
+		t.Fatal("forget did not revoke the server-side token")
+	}
+	markerBody, err := os.ReadFile(filepath.Join(homeDir, ".obstudio", "splunk-export-forgotten.json"))
+	if err != nil {
+		t.Fatalf("read forget marker: %v", err)
+	}
+	var marker struct {
+		ConnectionFingerprint string    `json:"connectionFingerprint"`
+		ForgottenAt           time.Time `json:"forgottenAt"`
+	}
+	if err := json.Unmarshal(markerBody, &marker); err != nil {
+		t.Fatalf("unmarshal forget marker: %v", err)
+	}
+	if marker.ForgottenAt.IsZero() {
+		t.Fatalf("forget marker did not record forgottenAt: %s", markerBody)
+	}
+	if marker.ConnectionFingerprint != splunkOAuthConnectionFingerprint(revocationServer.URL, "sf-secret-token") {
+		t.Fatalf("forget marker did not bind the forgotten connection: %s", markerBody)
+	}
+}
+
+func TestForgetSplunkExportKeepsLocalConfigurationWhenRevocationFails(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "observer-control")
+	t.Setenv("HOME", t.TempDir())
+	revocationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not available", http.StatusServiceUnavailable)
+	}))
+	defer revocationServer.Close()
+
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
+	if err != nil {
+		t.Fatalf("create metrics controller: %v", err)
+	}
+	defer metricsController.Shutdown(context.Background())
+	mux := http.NewServeMux()
+	Register(mux, store.New(), metricsController)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	configureReq, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/splunk/export",
+		strings.NewReader(fmt.Sprintf(
+			`{"enabled":false,"realm":"lab0","accessToken":"sf-secret-token","endpoint":"https://ingest.lab0.signalfx.com","issuer":%q,"tokenId":"token-id","tokenName":"Obstudio token"}`,
+			revocationServer.URL,
+		)),
+	)
+	if err != nil {
+		t.Fatalf("create configure request: %v", err)
+	}
+	configureReq.Header.Set("Authorization", "Bearer observer-control")
+	configureReq.Header.Set("Content-Type", "application/json")
+	configureResp, err := http.DefaultClient.Do(configureReq)
+	if err != nil {
+		t.Fatalf("configure export: %v", err)
+	}
+	configureResp.Body.Close()
+	if configureResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected configure status 200, got %d", configureResp.StatusCode)
+	}
+
+	forgetReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/splunk/export/forget", nil)
+	if err != nil {
+		t.Fatalf("create forget request: %v", err)
+	}
+	forgetReq.Header.Set("X-Obstudio-Browser-Action", "forget")
+	forgetReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	forgetResp, err := http.DefaultClient.Do(forgetReq)
+	if err != nil {
+		t.Fatalf("forget export: %v", err)
+	}
+	defer forgetResp.Body.Close()
+	if forgetResp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected forget status 502, got %d", forgetResp.StatusCode)
+	}
+	if metricsController.Config().AccessToken != "sf-secret-token" {
+		t.Fatal("failed revocation cleared the local access token")
+	}
+}
+
+func TestConfigureSplunkExportFailsClosedWithoutControlTokenConfiguration(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
+	req := httptest.NewRequest(http.MethodPost, "/api/splunk/export", nil)
+	if authorizeObserverControlRequest(req) {
+		t.Fatal("expected observer control authorization to fail closed")
+	}
+}
+
+func TestObserverBrowserActionRejectsNonLoopbackHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://attacker.example/api/splunk/export/forget", nil)
+	req.Header.Set("X-Obstudio-Browser-Action", "forget")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+
+	if authorizeObserverBrowserAction(req, "forget") {
+		t.Fatal("expected browser action to reject a non-loopback Host header")
+	}
+}
+
+func TestObserverBrowserActionAllowsSameOriginLoopbackHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/api/splunk/export/forget", nil)
+	req.RemoteAddr = "127.0.0.1:61927"
+	req.Header.Set("X-Obstudio-Browser-Action", "forget")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+
+	if !authorizeObserverBrowserAction(req, "forget") {
+		t.Fatal("expected browser action to allow a same-origin loopback Host header")
+	}
+}
+
+func TestObserverBrowserActionRejectsNavigationFetchSite(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/api/splunk/export/forget", nil)
+	req.RemoteAddr = "127.0.0.1:61927"
+	req.Header.Set("X-Obstudio-Browser-Action", "forget")
+	req.Header.Set("Sec-Fetch-Site", "none")
+
+	if authorizeObserverBrowserAction(req, "forget") {
+		t.Fatal("expected browser action to require a same-origin fetch")
+	}
+}
+
+func TestEnableSplunkExportDoesNotPartiallyEnableMetrics(t *testing.T) {
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		AccessToken: "metrics-token",
+		Endpoint:    "https://ingest.lab0.signalfx.com/v2/datapoint/otlp",
+		Realm:       "lab0",
+	})
+	if err != nil {
+		t.Fatalf("create metrics controller: %v", err)
+	}
+	defer metricsController.Shutdown(context.Background())
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
+	if err != nil {
+		t.Fatalf("create traces controller: %v", err)
+	}
+	defer tracesController.Shutdown(context.Background())
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"http://127.0.0.1:3000/api/splunk/export/enabled",
+		strings.NewReader(`{"enabled":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:61927"
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("X-Obstudio-Browser-Action", "export")
+	recorder := httptest.NewRecorder()
+
+	setSplunkExportEnabled(metricsController, tracesController, &splunkOAuthRevocationState{}).ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if metricsController.Status().Enabled {
+		t.Fatal("metrics export was enabled even though traces configuration was incomplete")
+	}
+}
+
+func TestSplunkExportEndpointsValidateExplicitEndpoints(t *testing.T) {
+	_, _, err := splunkExportEndpoints(splunkExportConfigureRequest{
+		MetricsEndpoint: "https://user:password@ingest.lab0.signalfx.com/v2/datapoint/otlp",
+		Realm:           "lab0",
+		TracesEndpoint:  "https://ingest.lab0.signalfx.com/v2/trace/otlp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "credentials") {
+		t.Fatalf("expected credential-bearing endpoint rejection, got %v", err)
+	}
+
+	_, _, err = splunkExportEndpoints(splunkExportConfigureRequest{
+		MetricsEndpoint: "https://ingest.lab0.signalfx.com/v2/datapoint/otlp",
+		Realm:           "lab0",
+		TracesEndpoint:  "http://example.com/v2/trace/otlp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "must use https") {
+		t.Fatalf("expected non-loopback HTTP endpoint rejection, got %v", err)
+	}
+
+	_, _, err = splunkExportEndpoints(splunkExportConfigureRequest{
+		Endpoint: "https://ingest.us0.signalfx.com",
+		Realm:    "eu0",
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match export realm") {
+		t.Fatalf("expected mismatched endpoint realm rejection, got %v", err)
+	}
+
+	_, _, err = splunkExportEndpoints(splunkExportConfigureRequest{
+		Endpoint: "https://example.com",
+		Realm:    "us0",
+	})
+	if err == nil || !strings.Contains(err.Error(), "registered Splunk Observability Cloud ingest host") {
+		t.Fatalf("expected unregistered ingest host rejection, got %v", err)
+	}
+
+	_, _, err = splunkExportEndpoints(splunkExportConfigureRequest{
+		Endpoint:        "https://ingest.us0.signalfx.com",
+		MetricsEndpoint: "https://example.com/v2/datapoint/otlp",
+		Realm:           "us0",
+	})
+	if err == nil || !strings.Contains(err.Error(), "metricsEndpoint") {
+		t.Fatalf("expected explicit endpoint override rejection, got %v", err)
+	}
+
+	metricsEndpoint, tracesEndpoint, err := splunkExportEndpoints(splunkExportConfigureRequest{
+		Endpoint: "https://ingest.US0.signalfx.com",
+		Realm:    "us0",
+	})
+	if err != nil {
+		t.Fatalf("expected matching endpoint realm, got %v", err)
+	}
+	if metricsEndpoint != "https://ingest.US0.signalfx.com/v2/datapoint/otlp" ||
+		tracesEndpoint != "https://ingest.US0.signalfx.com/v2/trace/otlp" {
+		t.Fatalf("unexpected derived endpoints: %q %q", metricsEndpoint, tracesEndpoint)
+	}
+}
+
+func TestNormalizeSplunkOAuthIssuerUsesCanonicalOrigin(t *testing.T) {
+	issuer, realm, err := normalizeSplunkOAuthIssuer("https://APP.US0.signalfx.com:443/")
+	if err != nil {
+		t.Fatalf("normalize issuer: %v", err)
+	}
+	if issuer != "https://app.us0.signalfx.com" || realm != "us0" {
+		t.Fatalf("unexpected canonical issuer and realm: %q %q", issuer, realm)
+	}
+	wantFingerprint := splunkOAuthConnectionFingerprint("https://app.us0.signalfx.com", "sf-token")
+	if got := splunkOAuthConnectionFingerprint(issuer, "sf-token"); got != wantFingerprint {
+		t.Fatalf("canonical issuer fingerprint mismatch: got %q want %q", got, wantFingerprint)
+	}
+}
+
+func TestNormalizeSplunkOAuthIssuerAcceptsTrustedInternalOrigin(t *testing.T) {
+	issuer, realm, err := normalizeSplunkOAuthIssuer("https://MON.signalfx.com:443/")
+	if err != nil {
+		t.Fatalf("normalize internal issuer: %v", err)
+	}
+	if issuer != "https://mon.signalfx.com" || realm != "mon0" {
+		t.Fatalf("unexpected internal issuer and realm: %q %q", issuer, realm)
+	}
+	if err := validateSplunkExportEndpoint("https://mon-ingest.signalfx.com", "mon0"); err != nil {
+		t.Fatalf("validate internal ingest endpoint: %v", err)
 	}
 }
 
