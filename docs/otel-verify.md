@@ -50,7 +50,7 @@ When present, verification reads:
 
 It writes `.observe/otel-verify.md`. The canonical ownership and schema for all
 `.observe` reports remain in the
-[report flow contract](../skills/references/report-flow-contract.md#verification-report-contract);
+[report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract);
 this guide does not repeat that full contract.
 
 After an automatic verification run, `.observe/otel-instrumentation.md` records
@@ -99,11 +99,13 @@ Interpret the report-level result as follows:
 | `Pass` | Every in-scope signal and path has direct evidence. |
 | `Partial` | Some evidence passed, but at least one item is blocked, unconfigured, or not proven. |
 | `Fail` | An executed check failed, expected telemetry was absent or invalid, or instrumentation changes broke source viability. |
+| `Blocked` | No meaningful proof could run because a concrete prerequisite is unavailable. |
 | `Not run` | Verification was explicitly skipped. |
 
 Within `Tested And Working`, `Working` requires direct evidence. `Not working`
-means an executed check failed; `Not proven` means the scenario could not run;
-`Not configured` means the requested signal or exporter does not exist.
+means an executed check failed; `Not proven` means the scenario was not run or
+a prerequisite was unavailable; `Not configured` means the requested signal
+or exporter does not exist.
 
 ## Boundaries
 
@@ -118,4 +120,4 @@ means an executed check failed; `Not proven` means the scenario could not run;
   startup, shutdown, or other telemetry-distinct paths.
 
 For the complete agent workflow, see
-[`skills/otel-verify/SKILL.md`](../skills/otel-verify/SKILL.md).
+[`skills/otel-verify/SKILL.md`](https://github.com/signalfx/obstudio/blob/main/skills/otel-verify/SKILL.md).

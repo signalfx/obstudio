@@ -120,10 +120,10 @@ Together they form a closed loop:
 ┌──────────────────────────────────────────────────────────────┐
 │  1. Agent reads $otel-audit → finds coverage gaps            │
 │  2. Agent reads $otel-instrument → adds OTel SDK + signals   │
-│  3. Agent applies $otel-verify → proves app signals and paths│
-│  4. App sends OTLP to Observer (localhost:4318)              │
-│  5. Observer forwards metrics + traces to Splunk O11y Cloud  │
-│  6. Agent calls MCP tools → inspects local telemetry         │
+│  3. $otel-verify runs app-code and runtime scenarios         │
+│  4. App may send OTLP to Observer for local runtime proof    │
+│  5. Observer stores telemetry and may forward it to Splunk   │
+│  6. $otel-verify queries evidence and writes its report      │
 │  7. Agent reads $splunk-configure → generates detectors.tf   │
 │  8. Agent reads $splunk-sync → creates only the gap detectors│
 │  9. Agent fixes instrumentation issues → go to step 3        │

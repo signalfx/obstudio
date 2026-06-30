@@ -71,8 +71,9 @@ Contract plus Reader-First Report Order.
   verification data. Publish only the detail needed to support the result,
   reproduce a failure, or identify an uncovered path. Do not force the reader
   through separate inventories that repeat the same evidence.
-- Report `Partial` whenever any inventoried signal or path remains unverified,
-  even if a representative happy path passes.
+- Report `Partial` when meaningful proof passes but any inventoried signal or
+  path remains unverified. Report `Blocked` when no meaningful proof can run
+  because a concrete prerequisite is missing.
 - Do not require live provider credentials, production tokens, VPN, or manual
   curl commands when deterministic tests or fakes can exercise the same signal.
 - Do not install missing app dependencies globally. Use the project-managed
@@ -276,9 +277,10 @@ Rules:
   `Blocked`, set the overall result to `Fail`, name `$otel-instrument` as the
   repair path, and do not attempt expensive runtime/OTLP harnesses that depend
   on the broken module.
-- An unavailable prerequisite produces `Blocked` rows and normally an overall
-  `Partial`, not `Fail`, unless a scenario ran and its expected telemetry was
-  absent or invalid.
+- An unavailable prerequisite produces `Blocked` rows and an overall `Partial`
+  when meaningful proof passed. Use an overall `Blocked` result when no
+  meaningful proof can run. Use `Fail` only when a scenario ran and its
+  expected telemetry was absent or invalid.
 - Continue with unaffected modules and scenarios when their runtime surface is
   independent.
 
@@ -466,7 +468,7 @@ Create or update this reader-first report shape:
 ```markdown
 # OTel Verification Report: <service>
 
-**Result:** Pass | Fail | Partial | Not run
+**Result:** Pass | Fail | Partial | Blocked | Not run
 **Bottom line:** <one plain-language sentence saying what works and what does not>
 **Source audit:** `.observe/otel.md` or `not found`
 **Source instrumentation:** `.observe/otel-instrumentation.md` or `not found`
@@ -550,11 +552,14 @@ Report requirements:
 - Do not claim a signal is verified unless command output, test assertion, or
   collector/Obstudio evidence proves it.
 - If only fake/in-memory telemetry was used, say it is not explorer-visible.
-- If any inventory row is unverified, set `Result: Partial` or `Fail`.
+- If any inventory row is unverified, set `Result: Partial`, `Blocked`, or
+  `Fail`.
 - Set `Result: Fail` when project-configured source viability fails because of
   instrumentation changes, or when an executed scenario omits or violates
   expected telemetry. Use `Partial` for environmental blockers or unexecuted
-  rows when no executed assertion failed.
+  rows when meaningful proof passed and no executed assertion failed. Use
+  `Blocked` when no meaningful proof can run because a concrete prerequisite
+  is unavailable.
 - Include runtime dependency and build/import details under `Technical Details`
   when they affect the result. A failed gate must map to every blocked signal
   and path that depends on it.
@@ -605,7 +610,7 @@ in this exact order; do not replace them with generic headings such as
 `Outcome`, `Summary`, or `Validation`:
 
 ```markdown
-**Result:** Pass | Fail | Partial | Not run
+**Result:** Pass | Fail | Partial | Blocked | Not run
 **Report:** [otel-verify.md](<absolute path>)
 
 ## What Changed

@@ -93,10 +93,11 @@ verify this service's OpenTelemetry instrumentation
 Codex uses the equivalent `$otel-audit`, `$otel-instrument`, and
 `$otel-verify` syntax. `$otel-instrument` runs the verification workflow by
 default after its implementation gate unless you explicitly opt out or a
-concrete prerequisite blocks it. See [OTel Verify](otel-verify.md) for how to
-run verification directly and read the generated report. The complete report
-schema remains in the canonical
-[report flow contract](../skills/references/report-flow-contract.md#verification-report-contract).
+concrete prerequisite blocks it. See the
+[OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
+for how to run verification directly and read the generated report. The
+complete report schema remains in the canonical
+[report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract).
 
 ## Running the Full Observer
 
