@@ -3,7 +3,7 @@
 Observability Studio is a local OpenTelemetry workspace for receiving,
 exploring, and validating telemetry while developing services. It includes a
 Go collector, REST API, MCP server, React UI, and repo-scoped agent skills for
-auditing and adding OpenTelemetry instrumentation.
+auditing, adding, and verifying OpenTelemetry instrumentation.
 
 ## Core Skills
 
@@ -11,6 +11,7 @@ auditing and adding OpenTelemetry instrumentation.
 |---|---|
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
+| `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-sync` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
 
@@ -35,7 +36,7 @@ After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
 to `obstudio`. It stores the managed bundle under `~/.<agent>/skills/obstudio/`
 and creates top-level discoverable skill entries such as `otel-audit` and
-`otel-instrument` in the agent skills root.
+`otel-verify` in the agent skills root.
 
 ### Build From Source
 
@@ -123,17 +124,22 @@ From a service directory, invoke the relevant skill in Codex:
 ```text
 $otel-audit
 $otel-instrument
+$otel-verify
 $splunk-configure
 $splunk-sync
 ```
 
 Use `$otel-audit` to understand what is missing before editing. Use
 `$otel-instrument` when you are ready to add SDK setup, auto-instrumentation,
-and targeted custom signals. Use `$splunk-configure` after auditing to generate
-Splunk Observability Cloud detector Terraform — it reads the audit report,
-classifies metrics, and outputs ready-to-apply HCL with a `terraform.tfvars.example`
-for credentials. Use `$splunk-sync` to diff those specs against live Splunk
-detectors and create only the ones that don't exist yet.
+and targeted custom signals. It runs the `$otel-verify` workflow by default
+after its implementation gate. Run `$otel-verify` directly to recheck existing
+instrumentation and produce `.observe/otel-verify.md`; see
+[OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
+Use `$splunk-configure` after auditing to generate Splunk Observability Cloud
+detector Terraform — it reads the audit report, classifies metrics, and outputs
+ready-to-apply HCL with a `terraform.tfvars.example` for credentials. Use
+`$splunk-sync` to diff those specs against live Splunk detectors and create only
+the ones that don't exist yet.
 
 ## Validation
 
@@ -162,6 +168,7 @@ obstudio/
 ├── skills/            # Canonical agent skill sources
 │   ├── otel-audit/
 │   ├── otel-instrument/
+│   ├── otel-verify/
 │   ├── splunk-configure/
 │   ├── splunk-sync/
 │   └── references/    # Shared language guides and signal references

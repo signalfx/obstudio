@@ -52,11 +52,13 @@ Restart your agent to activate.
   weaver                # validator runtime used by the Validation tab and APIs
   otel-audit/SKILL.md   # bundled /otel-audit skill file
   otel-instrument/SKILL.md # bundled /otel-instrument skill file
+  otel-verify/SKILL.md  # bundled /otel-verify skill file
   references/           # language guides and reference material
 
 ~/.cursor/skills/
   otel-audit -> obstudio/otel-audit
   otel-instrument -> obstudio/otel-instrument
+  otel-verify -> obstudio/otel-verify
 ```
 
 ## CLI Reference
@@ -78,13 +80,23 @@ Once installed, open any project in your agent and use:
 |---------|-------------|
 | `/otel-audit` | Analyze codebase for observability gaps |
 | `/otel-instrument` | Add OpenTelemetry instrumentation |
+| `/otel-verify` | Prove existing instrumentation and write `.observe/otel-verify.md` |
 
 Or use natural language:
 
 ```
 instrument this service with OpenTelemetry
 audit this service for observability gaps
+verify this service's OpenTelemetry instrumentation
 ```
+
+Codex uses the equivalent `$otel-audit`, `$otel-instrument`, and
+`$otel-verify` syntax. `$otel-instrument` runs the verification workflow by
+default after its implementation gate unless you explicitly opt out or a
+concrete prerequisite blocks it. See [OTel Verify](otel-verify.md) for how to
+run verification directly and read the generated report. The complete report
+schema remains in the canonical
+[report flow contract](../skills/references/report-flow-contract.md#verification-report-contract).
 
 ## Running the Full Observer
 
