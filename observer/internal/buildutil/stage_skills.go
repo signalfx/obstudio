@@ -37,7 +37,6 @@ func StageEmbeddedSkills(repoRoot, observerRoot string) error {
 	return nil
 }
 
-
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

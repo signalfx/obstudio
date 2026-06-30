@@ -37,6 +37,11 @@ ledger so re-runs are idempotent and auditable.
 
 ## Auth and API
 
+> Shared reference: `../references/splunk-api.md` is the single source of truth
+> for auth, the skip-on-500 paginated fetch loop, and HTTP-status handling used
+> by all Splunk sync skills. The detector-specific concrete steps below restate
+> the parts this skill depends on.
+
 All Splunk O11y calls use the **Splunk REST API** directly — no MCP tool
 required. Read credentials from the environment:
 
@@ -89,6 +94,10 @@ when comparing.**
 Fail fast if the file is not parseable (malformed HCL) and tell the user.
 
 #### Step 2a -- Normalize `program_text` to valid SignalFlow (required before create)
+
+> Shared reference: `../references/terraform-normalization.md` documents this
+> normalization (heredoc dedent + resolve every `${var.*}`) once for all sync
+> skills. The detector-specific restatement below is what this skill applies.
 
 The raw `program_text` value extracted from HCL is **not** valid SignalFlow and
 **must** be normalized before it is sent in any `POST /v2/detector` body. The
@@ -222,8 +231,9 @@ with an empty live list.
 
 ### Step 4 -- Classify Each Local Spec
 
-Apply the coverage model from `references/coverage-model.md` to assign each
-local spec one of four statuses:
+Apply the coverage model from `references/coverage-model.md` (which builds on the
+shared `../references/coverage-decision-tree.md` verdict vocabulary) to assign
+each local spec one of four statuses:
 
 **COVERED**
 A live Standard (`detectorOrigin != "AutoDetect"`) detector's `programText`
@@ -341,6 +351,11 @@ Create GAPs sequentially, not in parallel, to make progress visible and errors
 attributable.
 
 ### Step 7 -- Write Ledger
+
+> Shared reference: `../references/ledger-template.md` defines the resumable
+> ledger shape (summary counts + per-item status table with a required non-empty
+> **Reason** column) used by all sync skills. The detector ledger below follows
+> it.
 
 Write or overwrite `.observe/detector-sync.md` after every run (success, partial
 failure, or zero-gap no-op):

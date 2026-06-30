@@ -77,11 +77,17 @@ codebase and which semantic conventions to follow.
 
 ```
 skills/
-├── otel-audit/        # Scan a service for observability coverage gaps
-├── otel-instrument/   # Add OTel auto-instrumentation and custom signals
-├── splunk-configure/  # Generate Splunk O11y detector Terraform from an audit
-└── splunk-sync/       # Diff local detector specs against live Splunk detectors;
-                       # create only the confirmed gaps via the Splunk REST API
+├── otel-audit/            # Scan a service for observability coverage gaps
+├── otel-instrument/       # Add OTel auto-instrumentation and custom signals
+├── splunk-configure/      # Generate Splunk O11y detector Terraform from an audit
+├── splunk-sync/           # Diff local detector specs against live Splunk detectors;
+│                          # create only the confirmed gaps via the Splunk REST API
+├── splunk-dashboard/      # Generate Splunk O11y dashboard Terraform from an audit
+│                          # (group + dashboards + per-panel charts) and a preview sidecar
+├── splunk-dashboard-sync/ # Diff local dashboards/charts against live Splunk dashboards;
+│                          # create only the confirmed gaps (chart-first) via the REST API
+└── references/            # Shared skill prose (Splunk API, normalization, SignalFlow,
+                           # ledger, coverage decision tree) included by the skills above
 ```
 
 Skills are plain files. They require no runtime, no server, no binary. Any AI
@@ -103,7 +109,9 @@ data. It provides four surfaces:
 
 Splunk forwarding is optional. Set `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` to
 enable it. The same token is used by `$splunk-sync` to read and create detectors
-via the Splunk REST API (`GET`/`POST /v2/detector`).
+(`GET`/`POST /v2/detector`) and by `$splunk-dashboard-sync` to read and create
+dashboards and charts (`GET`/`POST /v2/dashboard`, `/v2/chart`,
+`/v2/dashboardgroup`) via the Splunk REST API.
 
 
 The Observer is also Layer 1. It has no knowledge of skills, no CLI wrapper, and
@@ -116,17 +124,19 @@ Skills tell the agent *what to do*. The Observer tells the agent *what happened*
 Together they form a closed loop:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  1. Agent reads $otel-audit → finds coverage gaps            │
-│  2. Agent reads $otel-instrument → adds OTel SDK + signals   │
-│  3. Developer runs the app                                   │
-│  4. App sends OTLP to Observer (localhost:4318)              │
-│  5. Observer forwards metrics + traces to Splunk O11y Cloud  │
-│  6. Agent calls MCP tools → inspects local telemetry         │
-│  7. Agent reads $splunk-configure → generates detectors.tf   │
-│  8. Agent reads $splunk-sync → creates only the gap detectors│
-│  9. Agent fixes instrumentation issues → go to step 3        │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  1. Agent reads $otel-audit → finds coverage gaps                │
+│  2. Agent reads $otel-instrument → adds OTel SDK + signals       │
+│  3. Developer runs the app                                       │
+│  4. App sends OTLP to Observer (localhost:4318)                  │
+│  5. Observer forwards metrics + traces to Splunk O11y Cloud      │
+│  6. Agent calls MCP tools → inspects local telemetry             │
+│  7. Agent reads $splunk-configure → generates detectors.tf       │
+│  8. Agent reads $splunk-sync → creates only the gap detectors    │
+│  9. Agent reads $splunk-dashboard → generates dashboards.tf      │
+│  10. Agent reads $splunk-dashboard-sync → creates the gap charts │
+│  11. Agent fixes instrumentation issues → go to step 3           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 Neither component knows about the other. The agent is the orchestrator that
@@ -164,6 +174,8 @@ telemetry and validate instrumentation results.
 | Cross-platform binary    | Source code         | Single binary, zero deps                   |
 | Forward to Splunk O11y   | None                | `SPLUNK_ACCESS_TOKEN` + `SPLUNK_REALM`     |
 | Sync detectors to Splunk | None                | `$splunk-sync` via Splunk REST API         |
+| Sync dashboards to Splunk | None               | `$splunk-dashboard-sync` via Splunk REST API |
+| Preview dashboards locally | None              | Observer **Dashboards** tab + `GET /api/dashboards/preview` |
 
 
 ### Why Go
@@ -196,6 +208,11 @@ HTTP.
 
 Splunk detector operations (`$splunk-sync`) call the Splunk REST API directly
 (`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP server.
+Dashboard sync (`$splunk-dashboard-sync`) likewise calls the REST API directly
+(`GET`/`POST /v2/dashboard`, `/v2/chart`, `/v2/dashboardgroup`). The Observer's
+read-only `GET /api/dashboards/preview` endpoint is the one exception that *is*
+served by obstudio: it reads the `.observe/dashboards.preview.json` sidecar and
+resolves each panel against locally stored telemetry for the Dashboards tab.
 
 ---
 
@@ -522,7 +539,7 @@ are shown explicitly so engineers can work independently.
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
 | **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
-| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$splunk-configure`, `$splunk-sync` (REST-direct) | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$splunk-configure`, `$splunk-sync`, `$splunk-dashboard`, `$splunk-dashboard-sync` (REST-direct) | —          |
 
 
 Observer and Skills have no dependency on each other. They can be developed,

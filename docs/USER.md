@@ -197,6 +197,62 @@ forwarding. No additional configuration is needed.
 
 See the `$splunk-sync` skill for the full process and coverage model.
 
+### Dashboard generation
+
+Alongside detectors, you can turn the same audit report into Splunk
+Observability Cloud **dashboards**:
+
+```
+$splunk-dashboard
+```
+
+This reads `.observe/otel.md`, groups the service's metrics into RED-style
+panels (latency/duration, error rate, throughput, plus saturation and KPI
+single-value tiles), and writes dashboard Terraform to
+`.observe/terraform/dashboards.tf` — a `signalfx_dashboard_group`, one or more
+`signalfx_dashboard`, and one `signalfx_*_chart` resource per panel placed on
+the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a
+`.observe/dashboards.md` report, and a `.observe/dashboards.preview.json`
+sidecar consumed by the Observer's Dashboards tab. No network call is made; the
+output is ready for `terraform apply` or `$splunk-dashboard-sync`.
+
+### Dashboard preview (Dashboards tab)
+
+Open the **Dashboards** tab in the Telemetry Explorer (or `?tab=dashboards`, or
+press `6`) to preview each generated dashboard's grid layout against the OTLP
+telemetry currently in the local store. The preview is honest about its limits:
+SignalFlow `program_text` runs on Splunk's backend, so the tab parses each
+panel's `{ metric, filters, aggregation }`, plots the matching *local* series in
+the dashboard's real grid, and carries an explicit **"Approximate · local-data
+preview"** badge. Panels whose metric is not currently being emitted show an
+empty card naming the metric and filters rather than a fabricated chart. The tab
+reads `.observe/dashboards.preview.json` on each refresh, so regenerating the
+dashboard and pressing Refresh updates the preview.
+
+### Dashboard sync
+
+Once you have local dashboard Terraform from `$splunk-dashboard`, use
+`$splunk-dashboard-sync` to push only the gaps:
+
+```
+$splunk-dashboard-sync
+```
+
+This diffs `.observe/terraform/dashboards.tf` against live Splunk Observability
+Cloud dashboards for the same service and classifies the dashboard group, each
+dashboard, and each chart as COVERED / GAP / UNCERTAIN with a concrete reason on
+every row. After you confirm, it creates the gaps **chart-first** — `POST
+/v2/chart` for each missing chart to collect chart IDs, then `POST /v2/dashboard`
+referencing those IDs with grid placement (creating the group via `POST
+/v2/dashboardgroup` first when it is missing) — and recovers orphaned charts if
+the dashboard create fails. A resume ledger is written to
+`.observe/dashboard-sync.md` (with the per-verdict reason and app links) so
+re-runs are idempotent. Like `$splunk-sync`, it uses `SPLUNK_ACCESS_TOKEN` and
+`SPLUNK_REALM` directly and needs no extra configuration.
+
+See the `$splunk-dashboard` and `$splunk-dashboard-sync` skills for the full
+classification and coverage model.
+
 ## Validation
 
 When telemetry is flowing, open the **Validation** tab in the Telemetry

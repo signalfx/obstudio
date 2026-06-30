@@ -1,4 +1,5 @@
 import type { LogRecord, MetricGroup, TraceDetail, TraceSummary } from "./types";
+import type { PreviewResponse } from "../dashboards/types";
 
 const BASE = "";
 type QueryScalar = string | number;
@@ -149,6 +150,15 @@ export async function fetchMetricFilterValues(field: string, prefix: string, que
 
 export async function fetchLogFilterValues(field: string, prefix: string, query: LogsQuery = {}, signal?: AbortSignal): Promise<string[]> {
   return fetchValueSuggestions("/api/query/logs/filter-values", field, prefix, query, signal);
+}
+
+/**
+ * Fetch the approximate local-data dashboard preview. Returns the full
+ * PreviewResponse, including the available:false case (the caller renders an
+ * actionable empty state from `message`).
+ */
+export async function fetchDashboardPreview(signal?: AbortSignal): Promise<PreviewResponse> {
+  return fetchJSON<PreviewResponse>("/api/dashboards/preview", { signal });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */

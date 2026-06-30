@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/signalfx/obstudio/observer/internal/api"
+	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -166,7 +167,7 @@ func run(config runConfig) {
 		Mode:       envOr("OBSTUDIO_MODE", "standalone"),
 		StartedAt:  startedAt,
 		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
-	})
+	}, dashboards.Config{SpecPath: envOr("OBSTUDIO_DASHBOARDS_PREVIEW", "")})
 	mcp.Register(mux, s, v, validatorManager, splunkExportController)
 	webCleanup := web.Register(mux, s, v)
 

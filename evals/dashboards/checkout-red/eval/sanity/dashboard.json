@@ -1,0 +1,75 @@
+{
+  "skill": "splunk-dashboard",
+  "language": "dashboards",
+  "service": "checkout-red",
+  "prompts": [
+    {
+      "id": "generate",
+      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform, the variables, the tfvars example, the human report, and the Observer preview sidecar. Do not call any network and do not run terraform."
+    }
+  ],
+  "checks": [
+    {
+      "id": "dashboards-tf-written",
+      "description": "The dashboard Terraform must be written under .observe/terraform/.",
+      "kind": "file_exists",
+      "path": ".observe/terraform/dashboards.tf",
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "variables-tf-written",
+      "description": "variables.tf must accompany the dashboard Terraform.",
+      "kind": "file_exists",
+      "path": ".observe/terraform/variables.tf",
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "tfvars-example-written",
+      "description": "terraform.tfvars.example must be written for the operator.",
+      "kind": "file_exists",
+      "path": ".observe/terraform/terraform.tfvars.example",
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "report-written",
+      "description": "The human dashboard report must be written.",
+      "kind": "file_exists",
+      "path": ".observe/dashboards.md",
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "preview-sidecar-written",
+      "description": "The Observer preview sidecar must be written.",
+      "kind": "file_exists",
+      "path": ".observe/dashboards.preview.json",
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "three-level-terraform",
+      "description": "dashboards.tf must declare the three-level group/dashboard/chart structure.",
+      "kind": "file_contains_all",
+      "path": ".observe/terraform/dashboards.tf",
+      "values": ["signalfx_dashboard_group", "signalfx_dashboard", "chart_id"],
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "api-token-sensitive",
+      "description": "The api_token variable must be marked sensitive = true.",
+      "kind": "file_contains_all",
+      "path": ".observe/terraform/variables.tf",
+      "values": ["api_token", "sensitive = true"],
+      "applies_to": "with_skill"
+    },
+    {
+      "id": "preview-sidecar-valid-json",
+      "description": "The preview sidecar must be valid JSON with schemaVersion and at least one group.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "import json; d=json.load(open('.observe/dashboards.preview.json')); assert d['schemaVersion'] == 1, d.get('schemaVersion'); assert d.get('groups'), 'no groups in preview sidecar'"
+      ],
+      "applies_to": "with_skill"
+    }
+  ]
+}

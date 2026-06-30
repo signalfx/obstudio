@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -39,6 +40,7 @@ type healthResponse struct {
 func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	validationStore := validator.NewStore()
 	var runner validator.Runner
+	var dashboardsConfig dashboards.Config
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -59,9 +61,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			}
 		case ServerInfo:
 			info = value
+		case dashboards.Config:
+			dashboardsConfig = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
+	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig.SpecPath)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
@@ -73,6 +78,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/logs/filter-values", queryLogFilterValues(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
+	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(dashboardResolver))
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
@@ -104,6 +110,12 @@ func queryTraceDetail(s *store.Store) http.HandlerFunc {
 func queryMetrics(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.QueryMetricGroupsFiltered(metricGroupFilterFromRequest(r)))
+	}
+}
+
+func queryDashboardPreview(resolver *dashboards.Resolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, resolver.Build())
 	}
 }
 

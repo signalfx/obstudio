@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -2397,5 +2400,111 @@ func TestTraceDetailEventLimit(t *testing.T) {
 
 	if len(detail2.Spans[0].Events) != 5 {
 		t.Errorf("expected 5 events with eventLimit=5, got %d", len(detail2.Spans[0].Events))
+	}
+}
+
+func TestQueryDashboardPreview(t *testing.T) {
+	// Seed a metric the spec's panel targets.
+	s := store.New()
+	s.AddMetricsForConnection("", []store.MetricDataPoint{{
+		Name:       "http.server.request.duration",
+		Type:       "gauge",
+		Unit:       "ms",
+		Timestamp:  time.Now(),
+		Value:      42,
+		Attributes: map[string]any{},
+		Resource:   store.Resource{ServiceName: "checkout", Attributes: map[string]any{}},
+		Scope:      store.Scope{Name: "otel.http"},
+	}})
+
+	// Write the sidecar to a temp path and point the resolver at it.
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "dashboards.preview.json")
+	spec := `{
+	  "schemaVersion": 1,
+	  "generatedAt": "2026-01-01T00:00:00Z",
+	  "groups": [{
+	    "name": "checkout",
+	    "dashboards": [{
+	      "name": "Checkout RED",
+	      "charts": [{
+	        "label": "p99_latency",
+	        "title": "P99 Latency",
+	        "chartType": "time_series",
+	        "programText": "data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish()",
+	        "layout": {"column": 0, "row": 0, "width": 6, "height": 3}
+	      }]
+	    }]
+	  }]
+	}`
+	if err := os.WriteFile(specPath, []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	Register(mux, s, dashboards.Config{SpecPath: specPath})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/dashboards/preview")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %s", ct)
+	}
+
+	var preview dashboards.PreviewResponse
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &preview); err != nil {
+		t.Fatalf("failed to unmarshal preview: %v", err)
+	}
+
+	if !preview.Available {
+		t.Fatalf("expected available=true, got message %q", preview.Message)
+	}
+	if !preview.Approximate {
+		t.Errorf("expected approximate=true")
+	}
+	if len(preview.Groups) != 1 || len(preview.Groups[0].Dashboards) != 1 {
+		t.Fatalf("expected 1 group / 1 dashboard, got %+v", preview.Groups)
+	}
+	panel := preview.Groups[0].Dashboards[0].Panels[0]
+	if !panel.Matched {
+		t.Errorf("expected panel matched=true (metric seeded in store)")
+	}
+	if panel.Layout.Width != 6 {
+		t.Errorf("expected layout width 6, got %d", panel.Layout.Width)
+	}
+}
+
+func TestQueryDashboardPreviewNoSidecar(t *testing.T) {
+	s := store.New()
+
+	mux := http.NewServeMux()
+	// Point at a path that does not exist → available:false with a message.
+	Register(mux, s, dashboards.Config{SpecPath: filepath.Join(t.TempDir(), "missing.json")})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/dashboards/preview")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200 even with no sidecar, got %d", resp.StatusCode)
+	}
+
+	var preview dashboards.PreviewResponse
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &preview); err != nil {
+		t.Fatalf("failed to unmarshal preview: %v", err)
+	}
+	if preview.Available {
+		t.Errorf("expected available=false with no sidecar")
+	}
+	if preview.Message == "" {
+		t.Errorf("expected an actionable message when sidecar is absent")
 	}
 }

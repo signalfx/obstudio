@@ -1,7 +1,7 @@
 Observability Studio is a local OpenTelemetry workspace that helps instrument
 application code using OpenTelemetry SDKs, verify the telemetry emitted by that
-instrumentation, forward telemetry to Splunk Observability Cloud, and sync
-detector specs to close monitoring gaps.
+instrumentation, forward telemetry to Splunk Observability Cloud, and generate
+and sync detector and dashboard specs to close monitoring and visualization gaps.
 
 ## Architecture
 

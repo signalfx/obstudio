@@ -1,0 +1,24 @@
+{
+  "skill": "splunk-dashboard-sync",
+  "language": "dashboards",
+  "service": "checkout-sync",
+  "prompts": [
+    {
+      "id": "offline-plan",
+      "task": "Treat ./service as the project root. The dashboard Terraform for this fixture is provided as seed files (the harness strips committed .observe/ inputs, so they are shipped with a .seed suffix instead): ./service/dashboards.tf.seed, ./service/variables.tf.seed, and ./service/terraform.tfvars.seed. FIRST create ./service/.observe/terraform/ and copy dashboards.tf.seed -> .observe/terraform/dashboards.tf, variables.tf.seed -> .observe/terraform/variables.tf, and terraform.tfvars.seed -> .observe/terraform/terraform.tfvars. THEN run the $splunk-dashboard-sync skill against ./service. This sandbox has NO network and NO SPLUNK_ACCESS_TOKEN / SPLUNK_REALM, so the live-fetch step is unavailable: go as far as you can OFFLINE and then stop. Produce the offline sync plan only -- parse the group/dashboards/charts, normalize each program_text (dedent the <<-EOF heredoc and resolve every ${var.*}), present the COVERED/GAP/UNCERTAIN confirmation diff with a concrete non-empty Reason on every group/dashboard/chart row, and describe the chart-first creation order you WOULD run. Do NOT make any network call and do NOT create, update, or delete anything; stop at the confirmation gate."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for the placed inputs under ./service/.observe/terraform/ and any plan or ledger the agent wrote.",
+    "Read ./last_message.md for the agent final response containing the offline sync plan and the confirmation diff.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Parses the seed dashboards.tf into the three-level model: the signalfx_dashboard_group, the signalfx_dashboard, and each signalfx_*_chart (kpi_p99_latency single-value, p99_latency time-series, error_rate time-series) with its grid placement.",
+    "Normalizes every chart program_text before any planned POST: dedents the <<-EOF heredoc and resolves ${var.service_name} to checkout (from terraform.tfvars / variables.tf default) so the planned programText is valid SignalFlow with no unresolved ${var.*}.",
+    "Renders a COVERED/GAP/UNCERTAIN confirmation diff covering the group, the dashboard, AND each chart, with a concrete non-empty Reason on every row that names the object and the match basis (metric + service.name filter + chart type) rather than a generic note.",
+    "Describes chart-first creation ordering: POST /v2/chart for each gap chart to collect chart IDs, then POST /v2/dashboard referencing those chartId values with grid placement, and mentions orphan-chart recovery if the dashboard POST fails after charts exist.",
+    "Correctly stops at the confirmation gate: requires explicit user yes/no before any write, makes no network call, and creates/updates/deletes nothing because credentials and confirmation are absent.",
+    "Maps HCL spellings to the REST wire names where relevant (program_text -> programText, dashboard_group -> groupId, chart_id -> chartId; signalfx_time_chart -> TimeSeriesChart, signalfx_single_value_chart -> SingleValue) without inventing live IDs it could not fetch offline."
+  ]
+}
