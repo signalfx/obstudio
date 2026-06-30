@@ -9,18 +9,20 @@ interface DashboardGridProps {
 }
 
 export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps): React.ReactElement {
+  const clamped = panels.map((p) => ({ panel: p, layout: clampLayout(p.layout) }));
+  const rowMap = buildRowMap(clamped.map((c) => c.layout));
   return (
     <div className="dashboard-grid" role="list">
-      {panels.map((panel, i) => {
-        const { column, row, width, height } = clampLayout(panel.layout);
+      {clamped.map(({ panel, layout }, i) => {
+        const packedRow = rowMap.get(layout.row) ?? layout.row;
         return (
           <div
             key={`${panel.label}-${i}`}
             role="listitem"
             className="dashboard-grid__cell"
             style={{
-              gridColumn: `${column + 1} / span ${width}`,
-              gridRow: `${row + 1} / span ${height}`,
+              gridColumn: `${layout.column + 1} / span ${layout.width}`,
+              gridRow: `${packedRow + 1} / span ${layout.height}`,
             }}
           >
             <DashboardPanel panel={panel} windowMs={windowMs} onExpand={onExpand} />
@@ -29,6 +31,19 @@ export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps
       })}
     </div>
   );
+}
+
+/**
+ * Build a mapping from original row index → packed row index. Splunk packs
+ * rows so the first used row maps to 0; each distinct original row maps to the
+ * next consecutive packed row. Non-contiguous rows (e.g. rows 0, 5, 10) are
+ * remapped to 0, 1, 2 so no blank vertical space appears in the local preview.
+ */
+function buildRowMap(layouts: Array<{ row: number }>): Map<number, number> {
+  const distinctRows = [...new Set(layouts.map((l) => l.row))].sort((a, b) => a - b);
+  const map = new Map<number, number>();
+  distinctRows.forEach((orig, packed) => map.set(orig, packed));
+  return map;
 }
 
 /** Clamp a layout into the valid 12-column grid: column 0-11, width 1-12 without overflow, row ≥0, height ≥1. */

@@ -97,7 +97,7 @@ function renderState({
   windowMs: number;
   onExpand: (panel: PreviewPanel) => void;
 }): React.ReactElement {
-  if (loading) {
+  if (loading && !data) {
     return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
   }
   if (error) {

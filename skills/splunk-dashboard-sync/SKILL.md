@@ -192,22 +192,34 @@ detector sync — a dashboard cannot be created before the charts it references)
      `.last()` requires an explicit window duration (e.g. `.last('1m')`). For gauge KPI panels
      use `.mean()` instead — it is the safe no-argument aggregation.
 
-   Collect each returned chart `id`. Record every created chart id in the ledger
-   **as it is created**, so a partial failure can be resumed/cleaned up rather
-   than orphaning charts.
-3. **Create the dashboard referencing the chart ids.**
-   `POST /v2/dashboard` with:
-   ```python
-   body = {
-       "name": dashboard_name,
-       "description": dashboard_description,
-       "groupId": group_id,            # from step 1
-       "charts": [
-           {"chartId": cid, "column": c, "row": r, "width": w, "height": h}
-           for (cid, c, r, w, h) in placed_charts
-       ],
-   }
-   ```
+   Collect each returned chart `id`. Record every created chart id **immediately
+   after each successful POST** by appending a row to the in-progress ledger
+   file (write or rewrite `.observe/dashboard-sync.md` after each chart, not
+   only at Step 7). This incremental write ensures that if the run aborts
+   between chart creation and the final Step 7 ledger write, the chart IDs are
+   still persisted and can be reused or cleaned up on the next run rather than
+   left as silent orphans.
+3. **Create the dashboard or update an existing one.**
+
+   - **If the dashboard is GAP (does not exist):** `POST /v2/dashboard` with:
+     ```python
+     body = {
+         "name": dashboard_name,
+         "description": dashboard_description,
+         "groupId": group_id,            # from step 1
+         "charts": [
+             {"chartId": cid, "column": c, "row": r, "width": w, "height": h}
+             for (cid, c, r, w, h) in placed_charts
+         ],
+     }
+     ```
+
+   - **If the dashboard is COVERED but has chart-level GAPs:** use
+     `PUT /v2/dashboard/{id}` to add only the new charts to the existing
+     dashboard, per `../references/splunk-api.md` ("Updating an existing
+     dashboard"). Fetch the live dashboard's current `charts[]`, append the
+     new `{"chartId": cid, ...}` entries, and PUT the merged array. Do **not**
+     recreate the whole dashboard — that would produce a duplicate.
 
 Status handling per `../references/splunk-api.md`: 200/201 → record id + app
 link; 409/duplicate → reclassify COVERED; 403 → token lacks dashboard-write

@@ -63,6 +63,15 @@ Use the realm's app URL for clickable links (see `splunk-api.md`):
 - Detector: `https://app.${SPLUNK_REALM}.signalfx.com/#/detector/{id}`
 - Dashboard: `https://app.${SPLUNK_REALM}.signalfx.com/#/dashboard/{id}`
 
+## Incremental writes during chart creation
+
+When creating objects in chart-first order, write (or overwrite) the ledger
+file **after each successful chart POST** — not only once at the end. This
+means a partial run that aborts mid-creation leaves the chart IDs persisted, so
+a re-run can find and reuse them (or delete orphans) rather than creating
+duplicates. The Step 7 final write is then a clean overwrite of the complete
+state; the intermediate writes are a safety net.
+
 ## Idempotency
 
 A re-run on a fully-synced service re-reads the live state and produces an

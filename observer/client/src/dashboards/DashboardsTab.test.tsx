@@ -1,14 +1,19 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardsTab } from "./DashboardsTab";
 import { makePreviewResponse } from "./testFixtures";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+beforeEach(() => {
+  vi.useRealTimers();
 });
 
 function stubFetchOnce(payload: unknown): ReturnType<typeof vi.fn> {
@@ -59,5 +64,47 @@ describe("DashboardsTab", () => {
     stubFetchOnce(makePreviewResponse());
     render(<DashboardsTab telemetryError="ingest stalled" />);
     expect(screen.getByText("ingest stalled")).toBeTruthy();
+  });
+
+  it("M1: keeps the grid mounted during background auto-refresh (no teardown flash)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    // The fetch mock resolves immediately every call.
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => makePreviewResponse(),
+    });
+    vi.stubGlobal("fetch", fetchFn);
+
+    const { container } = render(<DashboardsTab />);
+
+    // Let the initial fetch microtasks flush.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+
+    const gridBefore = container.querySelector(".dashboard-grid");
+    expect(gridBefore).not.toBeNull();
+
+    const callsBefore = fetchFn.mock.calls.length;
+
+    // Advance past the 5s auto-refresh interval.
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+      await Promise.resolve();
+    });
+
+    // A second fetch was triggered.
+    expect(fetchFn.mock.calls.length).toBeGreaterThan(callsBefore);
+
+    // Grid is still in the DOM — no loading-state teardown.
+    const gridAfter = container.querySelector(".dashboard-grid");
+    expect(gridAfter).not.toBeNull();
+
+    // No "Loading…" message visible while data is present.
+    expect(screen.queryByText(/Loading dashboard preview/i)).toBeNull();
   });
 });

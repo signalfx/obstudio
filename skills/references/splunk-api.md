@@ -46,9 +46,12 @@ limit = 50          # keep small; large limits hit the 500 bug more often
 offset = 0
 results = []
 seen_ids = set()
-consecutive_empty = 0
+consecutive_empty = 0   # counts empty-batch pages (real end-of-list signal)
+consecutive_500 = 0     # counts 500 pages separately — does NOT contribute to
+                        # the empty-page stop condition; only a long 500 run
+                        # (likely auth masquerading as 500) triggers its own stop
 
-while consecutive_empty < 5:
+while consecutive_empty < 5 and consecutive_500 < 10:
     url = f"{base}?limit={limit}&offset={offset}"
     req = urllib.request.Request(url, headers={"X-SF-Token": token})
     try:
@@ -57,13 +60,17 @@ while consecutive_empty < 5:
     except urllib.error.HTTPError as e:
         if e.code == 500:
             # Skip-on-500: known offset bug. Advance and keep going.
+            # Do NOT increment consecutive_empty here — a 500 is not an empty
+            # page; counting it as one would stop pagination prematurely when
+            # valid pages follow a run of 500-returning offsets.
             offset += limit
-            consecutive_empty += 1
+            consecutive_500 += 1
             continue
         raise RuntimeError(f"Splunk API error {e.code}: {e}") from e
     except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
         raise RuntimeError(f"Failed to fetch from Splunk: {e}") from e
 
+    consecutive_500 = 0  # a successful response resets the 500 streak
     batch = data.get("results", [])
     if not batch:
         consecutive_empty += 1
@@ -94,7 +101,7 @@ code rather than letting it raise blindly:
 | Status | Meaning | Action |
 |---|---|---|
 | 200 / 201 | Created | Record the returned `id`, `name`, and app deep link in the ledger |
-| 409 / duplicate-name | Already exists (diff↔create race) | Reclassify as COVERED in the ledger; not an error |
+| 409 / duplicate-name | Already exists (diff↔create race) | Fetch the existing object's `id` via `GET /v2/<object>?name=<name>` and reuse it; reclassify as COVERED in the ledger |
 | 400 "Unrecognized field" | Field-name casing mismatch | Check camelCase wire names (`programText`, `detectLabel`, `chartId`, `groupId`) vs HCL snake_case |
 | 400 SignalFlow parse/syntax | `program_text` was sent un-normalized | Re-normalize per `terraform-normalization.md`: dedent `<<-EOF`, resolve every `${var.*}` |
 | 403 | Token lacks write scope | **Stop** and tell the user; do not retry |
@@ -103,6 +110,46 @@ code rather than letting it raise blindly:
 
 Create items sequentially (not in parallel) so progress is visible and any
 failure is attributable to a specific local spec.
+
+## Updating an existing dashboard (adding a chart to a COVERED dashboard)
+
+When a dashboard is COVERED but contains one or more chart-level GAPs, use
+`PUT /v2/dashboard/{id}` to add the new chart(s) rather than recreating the
+whole dashboard (which would produce a duplicate):
+
+```python
+# 1. Fetch the existing dashboard to get its current charts[] array.
+url = f"https://api.{realm}.signalfx.com/v2/dashboard/{dashboard_id}"
+req = urllib.request.Request(url, headers={"X-SF-Token": token})
+with urllib.request.urlopen(req, timeout=15) as resp:
+    existing = json.load(resp)
+
+# 2. Create the new GAP chart(s) first (chart-first ordering — see Step 6).
+new_chart_id = ...  # returned by POST /v2/chart
+
+# 3. PUT the dashboard with the merged charts[] list.
+merged_charts = existing["charts"] + [
+    {"chartId": new_chart_id, "column": c, "row": r, "width": w, "height": h}
+]
+put_body = {
+    "name": existing["name"],
+    "description": existing.get("description", ""),
+    "groupId": existing["groupId"],
+    "charts": merged_charts,
+}
+put_req = urllib.request.Request(
+    f"https://api.{realm}.signalfx.com/v2/dashboard/{dashboard_id}",
+    data=json.dumps(put_body).encode(),
+    headers={"X-SF-Token": token, "Content-Type": "application/json"},
+    method="PUT",
+)
+with urllib.request.urlopen(put_req, timeout=15) as resp:
+    updated = json.load(resp)
+```
+
+Status handling on `PUT`: 200 → updated; 404 → dashboard was deleted since
+fetch, re-classify as GAP and create from scratch; 403/401 → stop; 400 → same
+field-casing / normalization check as POST.
 
 ## Red flags
 

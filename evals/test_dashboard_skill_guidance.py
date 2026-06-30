@@ -366,3 +366,86 @@ def test_reason_examples_are_concrete_not_generic():
     assert "chart COVERED:" in coverage
     assert "panel GAP:" in coverage or "GAP:" in coverage
     assert "UNCERTAIN:" in coverage
+
+
+# ---------------------------------------------------------------------------
+# M3 — token-secrecy guidance is guarded by tests
+# ---------------------------------------------------------------------------
+
+
+def test_splunk_access_token_secrecy_prose_in_shared_api_ref():
+    """The REST auth secrecy contract must be present in splunk-api.md so that a
+    future edit deleting it is caught before merge. Guards against a regression
+    where the agent would start echoing the live token into ledger files."""
+    text = _read(SPLUNK_API_REF)
+    # These exact phrases must be present; any edit weakening them turns red.
+    assert "never echo it" in text, "splunk-api.md must say 'never echo it'"
+    assert "never write it" in text, "splunk-api.md must say 'never write it'"
+    assert "never place it in prompt context" in text, (
+        "splunk-api.md must say 'never place it in prompt context'"
+    )
+    assert "SPLUNK_ACCESS_TOKEN" in text, "secrecy prose must name SPLUNK_ACCESS_TOKEN"
+    assert "X-SF-Token" in text, "secrecy prose must name the header X-SF-Token"
+
+
+def test_splunk_dashboard_sync_skill_references_token_secrecy():
+    """The sync skill itself must repeat the token-secrecy instruction so it is
+    present in the model's loaded skill context, not only in the shared ref."""
+    text = _read(SPLUNK_DASHBOARD_SYNC)
+    # The skill must instruct the agent to never log or write the token.
+    assert "never log" in text.lower() or "never write it to the ledger" in text.lower(), (
+        "splunk-dashboard-sync/SKILL.md must explicitly forbid logging/writing SPLUNK_ACCESS_TOKEN"
+    )
+    assert "SPLUNK_ACCESS_TOKEN" in text, "sync SKILL.md must name SPLUNK_ACCESS_TOKEN"
+
+
+def test_m6_500_counter_separate_from_empty_counter():
+    """Regression guard for m6: the pagination loop must use separate counters
+    for 500s and empty pages so a run of 500s before valid pages does not
+    terminate pagination prematurely."""
+    text = _read(SPLUNK_API_REF)
+    # The fixed code has two distinct counter variables.
+    assert "consecutive_500" in text, (
+        "splunk-api.md must track HTTP 500s in a separate counter from consecutive_empty"
+    )
+    # The 500 branch must NOT increment consecutive_empty.
+    # Check the comment that documents this invariant.
+    assert "Do NOT increment consecutive_empty" in text or "do NOT increment consecutive_empty" in text, (
+        "splunk-api.md 500-handler must document that it does not increment consecutive_empty"
+    )
+
+
+def test_m2_409_includes_get_for_existing_id():
+    """m2 regression guard: a chart POST 409 must include a step to GET the
+    existing chart's ID so it can be referenced in the dashboard charts[] array."""
+    text = _read(SPLUNK_API_REF)
+    # The 409 row now describes fetching the existing object's id.
+    assert "GET /v2/" in text and "409" in text, (
+        "splunk-api.md 409 row must instruct fetching the existing object's id"
+    )
+    assert "reuse" in text.lower(), "409 handling must say to reuse the existing id"
+
+
+def test_m2_put_dashboard_documented_for_chart_gap():
+    """M2 regression guard: adding a chart to a COVERED dashboard must use PUT,
+    not recreate the whole dashboard."""
+    api_text = _read(SPLUNK_API_REF)
+    assert "PUT /v2/dashboard/" in api_text, (
+        "splunk-api.md must document PUT /v2/dashboard/{id} for adding charts to a covered dashboard"
+    )
+    assert "duplicate" in api_text.lower(), (
+        "splunk-api.md PUT section must warn against recreating (would produce a duplicate)"
+    )
+
+    sync_text = _read(SPLUNK_DASHBOARD_SYNC)
+    assert "PUT /v2/dashboard" in sync_text, (
+        "sync SKILL.md Step 6 must reference PUT /v2/dashboard for chart-level GAPs in covered dashboards"
+    )
+
+    coverage_text = _read(DASHBOARD_COVERAGE_MODEL)
+    assert "PUT /v2/dashboard" in coverage_text, (
+        "dashboard-coverage-model.md Example 2 must reference PUT, not recreate"
+    )
+    assert "duplicate" in coverage_text.lower(), (
+        "coverage model must warn that recreating the whole dashboard produces a duplicate"
+    )

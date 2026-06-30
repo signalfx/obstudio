@@ -97,8 +97,11 @@ Live: "Checkout RED" (D-2) has latency + error charts but no throughput chart.
 
 → dashboard COVERED; `throughput` chart GAP (`no live chart with
 metric=http.server.requests.total + filter service.name=checkout + type
-time_series in D-2`). Create only the throughput chart, then `PUT`/patch the
-dashboard to add it (or recreate per the skill's create flow).
+time_series in D-2`). Create only the throughput chart via `POST /v2/chart`,
+then `PUT /v2/dashboard/D-2` with the existing `charts[]` plus the new
+`{"chartId": <new_id>, ...}` entry. Do **not** recreate the whole dashboard —
+that produces a duplicate. See `../../references/splunk-api.md` for the PUT
+fetch-merge-update pattern.
 
 ### Example 3 — dashboard GAP (whole dashboard missing)
 

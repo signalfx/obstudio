@@ -31,6 +31,37 @@ var aggHints = []struct {
 	{".last(", "last"},
 }
 
+// resolveAggregation scans program for the first aggregation call and returns
+// the normalized name plus, for percentile, the pct value.
+func resolveAggregation(program string) (string, *float64) {
+	if p := rePercentile.FindStringSubmatch(program); p != nil {
+		if v, err := strconv.ParseFloat(p[1], 64); err == nil {
+			return "percentile", &v
+		}
+
+		return "percentile", nil
+	}
+
+	for _, hint := range aggHints {
+		if strings.Contains(program, hint.token) {
+			return hint.name, nil
+		}
+	}
+
+	return "", nil
+}
+
+// isNegatedFilter reports whether the filter match at matchStart is preceded by
+// a "not" keyword, indicating an exclusion rather than a positive constraint.
+func isNegatedFilter(program string, matchStart int) bool {
+	lookback := matchStart - 10
+	if lookback < 0 {
+		lookback = 0
+	}
+	before := program[lookback:matchStart]
+	return strings.HasSuffix(strings.TrimRight(before, " \t"), "not")
+}
+
 // ParseProgramText extracts { metric, filters, aggregation } from a panel's
 // resolved SignalFlow. An unresolved ${...} value is treated as "no constraint"
 // (skipped), not a literal filter. A program with no data() call yields a
@@ -47,11 +78,18 @@ func ParseProgramText(program string) ParsedQuery {
 
 	q.MetricName = m[1]
 
-	for _, f := range reFilter.FindAllStringSubmatch(program, -1) {
-		key, val := f[1], f[2]
-		if key == "" {
+	// reFilter matches single-value filter('key','val') only. Multi-value
+	// filter('key','a','b') does not match (the closing ')' is not adjacent
+	// to the second arg), so it is intentionally skipped — the local preview
+	// cannot reduce multiple accepted values to a single equality constraint.
+	for _, loc := range reFilter.FindAllStringSubmatchIndex(program, -1) {
+		key := program[loc[2]:loc[3]]
+		val := program[loc[4]:loc[5]]
+
+		if key == "" || isNegatedFilter(program, loc[0]) {
 			continue
 		}
+
 		// An unresolved Terraform variable is not a real constraint.
 		if val == "" || strings.Contains(val, "${") {
 			continue
@@ -60,20 +98,7 @@ func ParseProgramText(program string) ParsedQuery {
 		q.Filters[key] = val
 	}
 
-	if p := rePercentile.FindStringSubmatch(program); p != nil {
-		q.Aggregation = "percentile"
-		if v, err := strconv.ParseFloat(p[1], 64); err == nil {
-			q.Percentile = &v
-		}
-	} else {
-		for _, hint := range aggHints {
-			if strings.Contains(program, hint.token) {
-				q.Aggregation = hint.name
-
-				break
-			}
-		}
-	}
+	q.Aggregation, q.Percentile = resolveAggregation(program)
 
 	return q
 }

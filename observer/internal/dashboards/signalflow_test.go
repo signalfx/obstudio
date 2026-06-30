@@ -94,6 +94,22 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			wantAgg:     "percentile",
 			wantPct:     floatPtr(99.9),
 		},
+		{
+			// m3: negated filter must not be captured as a positive constraint.
+			name:        "not filter is skipped",
+			program:     "data('m', filter=not filter('env','prod') and filter('service.name','api')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string]string{"service.name": "api"},
+			wantAgg:     "sum",
+		},
+		{
+			// m3: multi-value filter is silently skipped (regex requires single value).
+			name:        "multi-value filter is skipped",
+			program:     "data('m', filter=filter('region','a','b') and filter('service.name','svc')).mean().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string]string{"service.name": "svc"},
+			wantAgg:     "mean",
+		},
 	}
 
 	for _, tt := range tests {

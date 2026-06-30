@@ -109,7 +109,12 @@ func (r *Resolver) resolvePanel(c SpecChart) PreviewPanel {
 		return panel
 	}
 
-	groups := r.store.QueryMetricsFiltered(q.MetricName, q.Filters["service.name"], "", "", "", 50, 10_000)
+	// service.name is the OTel key; sf_service is the legacy SignalFx alias.
+	serviceName := q.Filters["service.name"]
+	if serviceName == "" {
+		serviceName = q.Filters["sf_service"]
+	}
+	groups := r.store.QueryMetricsFiltered(q.MetricName, serviceName, "", "", "", 50, 10_000)
 	groups = applyDimensionFilters(groups, q.Filters)
 	panel.Metrics = groups
 	panel.Matched = len(groups) > 0
@@ -126,7 +131,7 @@ func applyDimensionFilters(groups []store.MetricGroup, filters map[string]string
 	extra := make(map[string]string)
 
 	for k, v := range filters {
-		if strings.EqualFold(k, "service.name") {
+		if strings.EqualFold(k, "service.name") || strings.EqualFold(k, "sf_service") {
 			continue
 		}
 
