@@ -92,10 +92,15 @@ type PreviewPanel struct {
 }
 
 // ParsedQuery is the focused extraction from a panel's SignalFlow program_text.
+// Filters maps each dimension key to the accepted values (OR-semantics: a data
+// point matches if its attribute equals any one of the listed values).
+// IgnoredFilters lists dimension keys whose constraints could not be applied
+// (e.g. a nested-function value that the regex could not parse).
 type ParsedQuery struct {
-	MetricName  string            `json:"metricName,omitempty"`
-	Filters     map[string]string `json:"filters,omitempty"`
-	Aggregation string            `json:"aggregation,omitempty"`
-	Percentile  *float64          `json:"percentile,omitempty"`
-	ParseError  string            `json:"parseError,omitempty"`
+	MetricName     string              `json:"metricName,omitempty"`
+	Filters        map[string][]string `json:"filters,omitempty"`
+	IgnoredFilters []string            `json:"ignoredFilters,omitempty"`
+	Aggregation    string              `json:"aggregation,omitempty"`
+	Percentile     *float64            `json:"percentile,omitempty"`
+	ParseError     string              `json:"parseError,omitempty"`
 }

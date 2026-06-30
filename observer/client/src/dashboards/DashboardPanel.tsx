@@ -20,6 +20,14 @@ export function DashboardPanel({ panel, windowMs = 0, onExpand }: DashboardPanel
       <div className="dashboard-panel__head">
         <span className="dashboard-panel__title">{panel.title || panel.label}</span>
         <div className="dashboard-panel__head-right">
+          {(panel.query?.ignoredFilters?.length ?? 0) > 0 ? (
+            <span
+              className="dashboard-panel__chip dashboard-panel__chip--ignored"
+              title={`Filter constraints not applied (preview may over-match): ${panel.query!.ignoredFilters!.join(", ")}`}
+            >
+              ⚠ filters partial
+            </span>
+          ) : null}
           <span className="dashboard-panel__type">{chartTypeLabel(panel.chartType)}</span>
           {onExpand ? (
             <button
@@ -69,6 +77,7 @@ function renderBody(
           No local series matches <code>{panel.query?.metricName ?? "(unknown metric)"}</code>
         </span>
         <FilterChips filters={panel.query?.filters} />
+        <IgnoredFilterChips keys={panel.query?.ignoredFilters} />
         <span className="dashboard-panel__empty-hint">Emit it to localhost:4318 to preview this panel.</span>
       </div>
     );
@@ -136,14 +145,27 @@ function chartTypeLabel(t: string): string {
   return CHART_TYPE_LABELS[t] ?? t;
 }
 
-function FilterChips({ filters }: { filters?: Record<string, string> }): React.ReactElement | null {
+function FilterChips({ filters }: { filters?: Record<string, string[]> }): React.ReactElement | null {
   const entries = Object.entries(filters ?? {});
   if (entries.length === 0) return null;
   return (
     <div className="dashboard-panel__chips">
-      {entries.map(([k, v]) => (
+      {entries.map(([k, vs]) => (
         <span key={k} className="dashboard-panel__chip">
-          {k}={v}
+          {k}={vs.join(" | ")}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function IgnoredFilterChips({ keys }: { keys?: string[] }): React.ReactElement | null {
+  if (!keys || keys.length === 0) return null;
+  return (
+    <div className="dashboard-panel__chips dashboard-panel__chips--ignored" title="These filter constraints could not be applied; the preview may match more series than the real dashboard.">
+      {keys.map((k) => (
+        <span key={k} className="dashboard-panel__chip dashboard-panel__chip--ignored">
+          {k} (not applied)
         </span>
       ))}
     </div>

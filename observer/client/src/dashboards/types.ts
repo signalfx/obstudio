@@ -11,10 +11,17 @@ export interface PanelLayout {
   height: number;
 }
 
-/** Focused extraction from a panel's SignalFlow program_text. */
+/** Focused extraction from a panel's SignalFlow program_text.
+ * filters: OR-semantics per key — a data point matches if its attribute value
+ * equals any one of the listed strings.
+ * ignoredFilters: keys whose constraints could not be applied (e.g. a nested
+ * function value the regex could not parse). The UI surfaces these so the user
+ * knows the preview may be over-matching on those dimensions.
+ */
 export interface ParsedQuery {
   metricName?: string;
-  filters?: Record<string, string>;
+  filters?: Record<string, string[]>;
+  ignoredFilters?: string[];
   aggregation?: string;
   percentile?: number;
   parseError?: string;

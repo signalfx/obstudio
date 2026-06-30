@@ -24,12 +24,18 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
     const controller = new AbortController();
     let active = true;
     fetchingRef.current = true;
-    setLoading(true);
-    setError(null);
+
+    // Only show loading spinner on the initial fetch (no data yet). On
+    // auto-refresh ticks we keep showing existing data without a loading flash.
+    if (data === null) {
+      setLoading(true);
+    }
+
     fetchDashboardPreview(controller.signal)
       .then((resp) => {
         if (active) {
           setData(resp);
+          setError(null);
           setLoading(false);
         }
       })
@@ -39,12 +45,20 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
         setLoading(false);
       })
       .finally(() => {
-        fetchingRef.current = false;
+        // Only clear the guard for the fetch that is still current. An aborted
+        // stale fetch must not clobber the flag while a newer fetch is live.
+        if (active) {
+          fetchingRef.current = false;
+        }
       });
     return () => {
       active = false;
       controller.abort();
+      // Clear the guard here too so a quick cleanup+restart cycle doesn't get
+      // stuck — the new effect will set it to true immediately anyway.
+      fetchingRef.current = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce]);
 
   // Auto-refresh when live (not paused).

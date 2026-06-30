@@ -63,6 +63,10 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			info = value
 		case dashboards.Config:
 			dashboardsConfig = value
+		case *dashboards.Config:
+			if value != nil {
+				dashboardsConfig = *value
+			}
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)

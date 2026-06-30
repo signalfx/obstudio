@@ -274,3 +274,151 @@ func TestNewResolverDefaultsSpecPath(t *testing.T) {
 		t.Errorf("expected a resolved default source path")
 	}
 }
+
+// TestBuildConflictingServiceAlias verifies that a program with both
+// service.name and sf_service set to different values yields Matched=false
+// without a store query.
+func TestBuildConflictingServiceAlias(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("http.server.request.duration", "checkout", 42, nil),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:     "conflict",
+					ChartType: "time_series",
+					// service.name=checkout AND sf_service=legacy-checkout → contradiction
+					ProgramText: "data('http.server.request.duration', filter=filter('service.name','checkout') and filter('sf_service','legacy-checkout')).sum().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if panel.Matched {
+		t.Errorf("expected Matched=false for conflicting service.name/sf_service pair")
+	}
+	if len(panel.Metrics) > 0 {
+		t.Errorf("expected no metrics returned for conflicting service alias")
+	}
+}
+
+// TestBuildOTLPArrayAttributeMatch verifies that a metric attribute stored as
+// []any (OTLP array ingest) is matched by a scalar SignalFlow filter value when
+// the string representation equals the scalar (json.Marshal vs fmt.Sprintf fix).
+func TestBuildOTLPArrayAttributeMatch(t *testing.T) {
+	// Simulate a metric whose "region" attribute was ingested as a single-element
+	// OTLP array and is stored as []any{"us-east"}.
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "svc", 10, map[string]any{"region": []any{"us-east"}}),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:     "region_panel",
+					ChartType: "time_series",
+					// The filter value is the JSON-serialized form of the array element.
+					ProgramText: `data('req.duration', filter=filter('service.name','svc') and filter('region','["us-east"]')).mean().publish()`,
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Errorf("expected Matched=true: []any{\"us-east\"} should match filter value [\"us-east\"] via json.Marshal serialization")
+	}
+}
+
+// TestBuildMultiValueFilterMatchesAny verifies OR-semantics: a panel with a
+// multi-value filter('region','us1','us2') matches a series whose region is
+// 'us1', even though 'us2' is not present.
+func TestBuildMultiValueFilterMatchesAny(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "svc", 10, map[string]any{"region": "us1"}),
+		metricPoint("req.duration", "svc", 20, map[string]any{"region": "eu1"}),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "region_or",
+					ChartType:   "time_series",
+					ProgramText: "data('req.duration', filter=filter('service.name','svc') and filter('region','us1','us2')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected Matched=true: region=us1 satisfies filter('region','us1','us2')")
+	}
+	// eu1 series must be excluded.
+	for _, g := range panel.Metrics {
+		for _, dp := range g.DataPoints {
+			if dp.Attributes["region"] == "eu1" {
+				t.Errorf("eu1 series should not survive the multi-value filter")
+			}
+		}
+	}
+}
+
+// TestBuildDataPointCountSyncedAfterFilter verifies that DataPointCount on a
+// returned MetricGroup equals len(DataPoints) after applyDimensionFilters trims
+// the data points (finding #7).
+func TestBuildDataPointCountSyncedAfterFilter(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("m", "svc", 1, map[string]any{"env": "prod"}),
+		metricPoint("m", "svc", 2, map[string]any{"env": "staging"}),
+		metricPoint("m", "svc", 3, map[string]any{"env": "prod"}),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "prod_only",
+					ChartType:   "time_series",
+					ProgramText: "data('m', filter=filter('service.name','svc') and filter('env','prod')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true")
+	}
+	for _, g := range panel.Metrics {
+		if g.DataPointCount != len(g.DataPoints) {
+			t.Errorf("DataPointCount=%d but len(DataPoints)=%d: they must stay in sync after filtering",
+				g.DataPointCount, len(g.DataPoints))
+		}
+	}
+}

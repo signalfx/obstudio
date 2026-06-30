@@ -35,7 +35,7 @@ export function makePanel(overrides: Partial<PreviewPanel> = {}): PreviewPanel {
     chartType: "time_series",
     layout: { column: 0, row: 0, width: 6, height: 3 },
     matched: true,
-    query: { metricName: "http.server.request.duration", filters: { "service.name": "checkout" }, aggregation: "percentile", percentile: 99 },
+    query: { metricName: "http.server.request.duration", filters: { "service.name": ["checkout"] }, aggregation: "percentile", percentile: 99 },
     metrics: [makeMetricGroup()],
     ...overrides,
   };

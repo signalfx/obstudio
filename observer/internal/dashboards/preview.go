@@ -109,12 +109,24 @@ func (r *Resolver) resolvePanel(c SpecChart) PreviewPanel {
 		return panel
 	}
 
-	// service.name is the OTel key; sf_service is the legacy SignalFx alias.
-	serviceName := q.Filters["service.name"]
-	if serviceName == "" {
-		serviceName = q.Filters["sf_service"]
+	// Resolve the service filter through the canonical alias helper so
+	// service.name and sf_service are treated as one dimension. A conflicting
+	// pair (both keys present, disjoint values) means the panel's intent is
+	// self-contradictory — return unmatched with no store query.
+	svcValues, hasSvc, conflict := canonicalServiceFilter(q.Filters)
+	if conflict {
+		return panel
 	}
-	groups := r.store.QueryMetricsFiltered(q.MetricName, serviceName, "", "", "", 50, 10_000)
+
+	// QueryMetricsFiltered accepts a single service name. When the filter has
+	// multiple accepted service values we use a blank service to get all series
+	// for the metric and let applyDimensionFilters narrow by OR-semantics.
+	svcArg := ""
+	if hasSvc && len(svcValues) == 1 {
+		svcArg = svcValues[0]
+	}
+
+	groups := r.store.QueryMetricsFiltered(q.MetricName, svcArg, "", "", "", 50, 10_000)
 	groups = applyDimensionFilters(groups, q.Filters)
 	panel.Metrics = groups
 	panel.Matched = len(groups) > 0
@@ -122,20 +134,27 @@ func (r *Resolver) resolvePanel(c SpecChart) PreviewPanel {
 	return panel
 }
 
-// applyDimensionFilters narrows resolved groups by every filter other than
-// service.name (already applied by the store query). A group is kept when at
-// least one of its data points satisfies all remaining filters on either its
-// own attributes or its resource attributes (case-insensitive). Filters whose
-// key is service.name are skipped here.
-func applyDimensionFilters(groups []store.MetricGroup, filters map[string]string) []store.MetricGroup {
-	extra := make(map[string]string)
+// isServiceKey reports whether a filter key is the service.name / sf_service
+// alias pair that is handled at the store-query level.
+func isServiceKey(k string) bool {
+	return strings.EqualFold(k, "service.name") || strings.EqualFold(k, "sf_service")
+}
 
-	for k, v := range filters {
-		if strings.EqualFold(k, "service.name") || strings.EqualFold(k, "sf_service") {
+// applyDimensionFilters narrows resolved groups by every filter other than the
+// service dimension (already applied by the store query). A group is kept when
+// at least one of its data points satisfies all remaining filters on either its
+// own attributes or its resource attributes (case-insensitive).
+// Filters use OR-semantics per key: a data point satisfies a key's constraint
+// if its attribute value matches any one of the listed values.
+func applyDimensionFilters(groups []store.MetricGroup, filters map[string][]string) []store.MetricGroup {
+	extra := make(map[string][]string)
+
+	for k, vs := range filters {
+		if isServiceKey(k) {
 			continue
 		}
 
-		extra[k] = v
+		extra[k] = vs
 	}
 
 	if len(extra) == 0 {
@@ -158,15 +177,16 @@ func applyDimensionFilters(groups []store.MetricGroup, filters map[string]string
 		}
 
 		g.DataPoints = matchedPoints
+		g.DataPointCount = len(matchedPoints)
 		kept = append(kept, g)
 	}
 
 	return kept
 }
 
-func dataPointMatches(dp store.MetricDataPoint, filters map[string]string) bool {
-	for k, v := range filters {
-		if !attrEquals(dp.Attributes, k, v) && !attrEquals(dp.Resource.Attributes, k, v) {
+func dataPointMatches(dp store.MetricDataPoint, filters map[string][]string) bool {
+	for k, wantVals := range filters {
+		if !attrMatchesAny(dp.Attributes, k, wantVals) && !attrMatchesAny(dp.Resource.Attributes, k, wantVals) {
 			return false
 		}
 	}
@@ -174,14 +194,21 @@ func dataPointMatches(dp store.MetricDataPoint, filters map[string]string) bool 
 	return true
 }
 
-func attrEquals(attrs map[string]any, key, want string) bool {
+// attrMatchesAny reports whether any attribute in attrs whose key
+// case-insensitively matches key has a value equal to at least one of wantVals.
+// Attribute values are serialized via store.StringifyMetricValue to match the
+// store's canonical representation (strings as-is, composites JSON-marshalled).
+func attrMatchesAny(attrs map[string]any, key string, wantVals []string) bool {
 	for ak, av := range attrs {
 		if !strings.EqualFold(ak, key) {
 			continue
 		}
 
-		if strings.EqualFold(fmt.Sprintf("%v", av), want) {
-			return true
+		got := store.StringifyMetricValue(av)
+		for _, want := range wantVals {
+			if strings.EqualFold(got, want) {
+				return true
+			}
 		}
 	}
 

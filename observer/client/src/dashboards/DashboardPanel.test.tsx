@@ -21,7 +21,7 @@ describe("DashboardPanel", () => {
     const panel = makePanel({
       matched: false,
       metrics: [],
-      query: { metricName: "http.server.request.duration", filters: { "service.name": "checkout" } },
+      query: { metricName: "http.server.request.duration", filters: { "service.name": ["checkout"] } },
     });
     render(<DashboardPanel panel={panel} />);
 

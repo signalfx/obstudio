@@ -1,13 +1,17 @@
 package dashboards
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
-func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driven test with 11 cases; complexity is inherent
+func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driven test; complexity is inherent
 	tests := []struct {
 		name        string
 		program     string
 		wantMetric  string
-		wantFilters map[string]string
+		wantFilters map[string][]string
+		wantIgnored []string
 		wantAgg     string
 		wantPct     *float64
 		wantErr     bool
@@ -16,7 +20,7 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			name:        "percentile latency",
 			program:     "data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish(label='p99')",
 			wantMetric:  "http.server.request.duration",
-			wantFilters: map[string]string{"service.name": "checkout"},
+			wantFilters: map[string][]string{"service.name": {"checkout"}},
 			wantAgg:     "percentile",
 			wantPct:     floatPtr(99),
 		},
@@ -24,30 +28,30 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			name:        "sum rate",
 			program:     "data('http.server.request.count', filter=filter('service.name','checkout')).sum().publish()",
 			wantMetric:  "http.server.request.count",
-			wantFilters: map[string]string{"service.name": "checkout"},
+			wantFilters: map[string][]string{"service.name": {"checkout"}},
 			wantAgg:     "sum",
 		},
 		{
 			name:        "mean gauge",
 			program:     "data('process.runtime.memory').mean().publish()",
 			wantMetric:  "process.runtime.memory",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "mean",
 		},
 		{
 			name:        "count agg",
 			program:     "data('events.total').count().publish()",
 			wantMetric:  "events.total",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "count",
 		},
 		{
 			name:       "two filters AND-combined",
 			program:    "data('http.server.request.duration', filter=filter('service.name','checkout') and filter('http.route','/cart')).percentile(pct=50).publish()",
 			wantMetric: "http.server.request.duration",
-			wantFilters: map[string]string{
-				"service.name": "checkout",
-				"http.route":   "/cart",
+			wantFilters: map[string][]string{
+				"service.name": {"checkout"},
+				"http.route":   {"/cart"},
 			},
 			wantAgg: "percentile",
 			wantPct: floatPtr(50),
@@ -56,14 +60,14 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			name:        "no aggregation raw data",
 			program:     "data('cpu.utilization').publish()",
 			wantMetric:  "cpu.utilization",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "",
 		},
 		{
 			name:        "unresolved variable filter is skipped",
 			program:     "data('http.server.request.duration', filter=filter('service.name','${var.service_name}')).percentile(pct=95).publish()",
 			wantMetric:  "http.server.request.duration",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "percentile",
 			wantPct:     floatPtr(95),
 		},
@@ -71,7 +75,7 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			name:        "empty filter value is skipped",
 			program:     "data('m', filter=filter('env','')).sum().publish()",
 			wantMetric:  "m",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "sum",
 		},
 		{
@@ -83,32 +87,57 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			name:        "whitespace variants",
 			program:     "data( 'http.requests' ,  filter = filter( 'service.name' , 'api' ) ).mean( ).publish()",
 			wantMetric:  "http.requests",
-			wantFilters: map[string]string{"service.name": "api"},
+			wantFilters: map[string][]string{"service.name": {"api"}},
 			wantAgg:     "mean",
 		},
 		{
 			name:        "percentile takes precedence over agg hints",
 			program:     "data('lat').sum().percentile(pct=99.9).publish()",
 			wantMetric:  "lat",
-			wantFilters: map[string]string{},
+			wantFilters: map[string][]string{},
 			wantAgg:     "percentile",
 			wantPct:     floatPtr(99.9),
 		},
 		{
-			// m3: negated filter must not be captured as a positive constraint.
-			name:        "not filter is skipped",
+			// negated filter must not be captured as a positive constraint.
+			name:        "not filter is skipped (single space)",
 			program:     "data('m', filter=not filter('env','prod') and filter('service.name','api')).sum().publish()",
 			wantMetric:  "m",
-			wantFilters: map[string]string{"service.name": "api"},
+			wantFilters: map[string][]string{"service.name": {"api"}},
 			wantAgg:     "sum",
 		},
 		{
-			// m3: multi-value filter is silently skipped (regex requires single value).
-			name:        "multi-value filter is skipped",
-			program:     "data('m', filter=filter('region','a','b') and filter('service.name','svc')).mean().publish()",
+			// multi-value filter is now parsed and OR-semantics applied.
+			name:       "multi-value filter captured as OR slice",
+			program:    "data('m', filter=filter('region','a','b') and filter('service.name','svc')).mean().publish()",
+			wantMetric: "m",
+			wantFilters: map[string][]string{
+				"region":       {"a", "b"},
+				"service.name": {"svc"},
+			},
+			wantAgg: "mean",
+		},
+		// New cases for negation robustness fixes.
+		{
+			name:        "not filter with 12+ spaces is still negated",
+			program:     "data('m', filter=not            filter('env','prod') and filter('service.name','api')).sum().publish()",
 			wantMetric:  "m",
-			wantFilters: map[string]string{"service.name": "svc"},
-			wantAgg:     "mean",
+			wantFilters: map[string][]string{"service.name": {"api"}},
+			wantAgg:     "sum",
+		},
+		{
+			name:        "not filter with newline between not and filter",
+			program:     "data('m', filter=not\nfilter('env','prod') and filter('service.name','api')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{"service.name": {"api"}},
+			wantAgg:     "sum",
+		},
+		{
+			name:        "identifier ending in 'not' does not suppress positive filter",
+			program:     "data('m', filter=cannot filter('service.name','api')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{"service.name": {"api"}},
+			wantAgg:     "sum",
 		},
 	}
 
@@ -131,9 +160,24 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			if len(got.Filters) != len(tt.wantFilters) {
 				t.Errorf("filters = %v, want %v", got.Filters, tt.wantFilters)
 			}
-			for k, v := range tt.wantFilters {
-				if got.Filters[k] != v {
-					t.Errorf("filter[%q] = %q, want %q", k, got.Filters[k], v)
+			for k, wantVals := range tt.wantFilters {
+				gotVals := got.Filters[k]
+				if len(gotVals) != len(wantVals) {
+					t.Errorf("filter[%q] = %v, want %v", k, gotVals, wantVals)
+					continue
+				}
+				for _, v := range wantVals {
+					if !slices.Contains(gotVals, v) {
+						t.Errorf("filter[%q] missing value %q (got %v)", k, v, gotVals)
+					}
+				}
+			}
+
+			if len(tt.wantIgnored) > 0 {
+				for _, k := range tt.wantIgnored {
+					if !slices.Contains(got.IgnoredFilters, k) {
+						t.Errorf("expected %q in IgnoredFilters, got %v", k, got.IgnoredFilters)
+					}
 				}
 			}
 
@@ -150,6 +194,56 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 				t.Errorf("percentile = %v, want %v", *got.Percentile, *tt.wantPct)
 			}
 		})
+	}
+}
+
+func TestCanonicalServiceFilterNoServiceKeys(t *testing.T) {
+	_, ok, conflict := canonicalServiceFilter(map[string][]string{"region": {"us1"}})
+	if ok || conflict {
+		t.Errorf("expected ok=false conflict=false, got ok=%v conflict=%v", ok, conflict)
+	}
+}
+
+func TestCanonicalServiceFilterServiceNameOnly(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{"service.name": {"checkout"}})
+	if !ok || conflict {
+		t.Errorf("expected ok=true conflict=false, got ok=%v conflict=%v", ok, conflict)
+	}
+	if !slices.Contains(vals, "checkout") {
+		t.Errorf("expected checkout in values, got %v", vals)
+	}
+}
+
+func TestCanonicalServiceFilterSfServiceOnly(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{"sf_service": {"legacy"}})
+	if !ok || conflict {
+		t.Errorf("expected ok=true conflict=false, got ok=%v conflict=%v", ok, conflict)
+	}
+	if !slices.Contains(vals, "legacy") {
+		t.Errorf("expected legacy in values, got %v", vals)
+	}
+}
+
+func TestCanonicalServiceFilterSameValueBoth(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{
+		"service.name": {"checkout"},
+		"sf_service":   {"checkout"},
+	})
+	if !ok || conflict {
+		t.Errorf("expected ok=true conflict=false, got ok=%v conflict=%v", ok, conflict)
+	}
+	if !slices.Contains(vals, "checkout") {
+		t.Errorf("expected checkout in values, got %v", vals)
+	}
+}
+
+func TestCanonicalServiceFilterConflict(t *testing.T) {
+	_, ok, conflict := canonicalServiceFilter(map[string][]string{
+		"service.name": {"checkout"},
+		"sf_service":   {"legacy-checkout"},
+	})
+	if !ok || !conflict {
+		t.Errorf("expected ok=true conflict=true, got ok=%v conflict=%v", ok, conflict)
 	}
 }
 

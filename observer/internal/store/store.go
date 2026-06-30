@@ -1931,6 +1931,14 @@ func stringifyMetricValue(v any) string {
 	}
 }
 
+// StringifyMetricValue is the exported form of stringifyMetricValue. It
+// serializes a metric attribute value to the same string representation used
+// for series keying and dedup inside the store — strings are returned as-is,
+// everything else is JSON-marshalled. External packages (e.g. dashboards) must
+// use this rather than fmt.Sprintf so composite OTLP attributes (arrays, maps)
+// compare consistently.
+func StringifyMetricValue(v any) string { return stringifyMetricValue(v) }
+
 func minInt(a, b int) int {
 	if a < b {
 		return a

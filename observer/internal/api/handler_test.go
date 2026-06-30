@@ -2437,7 +2437,7 @@ func TestQueryDashboardPreview(t *testing.T) {
 	    }]
 	  }]
 	}`
-	if err := os.WriteFile(specPath, []byte(spec), 0o644); err != nil {
+	if err := os.WriteFile(specPath, []byte(spec), 0o600); err != nil {
 		t.Fatalf("write spec: %v", err)
 	}
 
