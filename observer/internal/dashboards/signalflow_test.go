@@ -335,6 +335,43 @@ func TestParseProgramMultiDataCallScopesFiltersToFirst(t *testing.T) {
 	}
 }
 
+// A ')' inside a quoted filter value must NOT be counted as the data() call's
+// closing paren. Before the quote-aware scan, firstDataCallSpan closed the span
+// at the ')' in 'a)b', truncating the span before the region filter and dropping
+// it entirely.
+func TestParseProgramCloseParenInFilterValueDoesNotTruncateSpan(t *testing.T) {
+	got := ParseProgramText("data('cpu', filter=filter('host','a)b') and filter('region','us')).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if hosts := got.Filters["host"]; len(hosts) != 1 || !slices.Contains(hosts, "a)b") {
+		t.Errorf("host filter = %v, want [a)b]", hosts)
+	}
+	if regions := got.Filters["region"]; len(regions) != 1 || !slices.Contains(regions, "us") {
+		t.Errorf("region filter dropped by a ')' inside the host value: got %v, want [us]", regions)
+	}
+}
+
+// A '(' inside a quoted filter value must NOT extend the first data() call's span
+// past its real closing paren. Before the quote-aware scan, an unbalanced '(' in
+// the numerator value ran the span on into the denominator data() call, folding
+// the denominator's svc filter onto the numerator metric.
+func TestParseProgramOpenParenInFilterValueDoesNotOverExtendSpan(t *testing.T) {
+	got := ParseProgramText("A = data('errors', filter=filter('k','a(b')); B = data('total', filter=filter('svc','db')); (A/B).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if got.MetricName != "errors" {
+		t.Errorf("metric = %q, want %q", got.MetricName, "errors")
+	}
+	if ks := got.Filters["k"]; len(ks) != 1 || !slices.Contains(ks, "a(b") {
+		t.Errorf("k filter = %v, want [a(b]", ks)
+	}
+	if svc, ok := got.Filters["svc"]; ok {
+		t.Errorf("denominator svc filter leaked into numerator via a '(' in the value: got svc=%v", svc)
+	}
+}
+
 func TestCanonicalServiceFilterNoServiceKeys(t *testing.T) {
 	_, ok, conflict := canonicalServiceFilter(map[string][]string{"region": {"us1"}})
 	if ok || conflict {

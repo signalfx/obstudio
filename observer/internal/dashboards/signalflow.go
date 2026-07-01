@@ -77,6 +77,39 @@ type negatedSpan struct {
 	end   int
 }
 
+// matchingCloseParen returns the index just past the balanced closing paren for
+// the opener at index open (which must point at a '('), or -1 when the group is
+// unbalanced. Parentheses inside single-quoted filter values (e.g.
+// filter('path','/f(x)')) are ignored so a paren in a value string cannot
+// prematurely close or over-extend the span. SignalFlow filter values are matched
+// elsewhere with '([^']*)' (no escaped quotes), so a lone ' always toggles quote
+// state — mirror that here.
+func matchingCloseParen(program string, open int) int {
+	depth := 0
+	inQuote := false
+	for i := open; i < len(program); i++ {
+		c := program[i]
+		if c == '\'' {
+			inQuote = !inQuote
+			continue
+		}
+		if inQuote {
+			continue
+		}
+		switch c {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+
+	return -1
+}
+
 // negatedGroupSpans returns the byte spans of every parenthesized negation
 // group ("not ( ... )") in program. A filter() whose start falls inside any of
 // these spans is negated even when it is not the first filter in the group —
@@ -88,23 +121,7 @@ func negatedGroupSpans(program string) []negatedSpan {
 	for _, loc := range reNotGroup.FindAllStringIndex(program, -1) {
 		// loc[1]-1 is the index of the opening paren that begins the group.
 		open := loc[1] - 1
-		depth := 0
-		end := len(program)
-		for i := open; i < len(program); i++ {
-			switch program[i] {
-			case '(':
-				depth++
-			case ')':
-				depth--
-				if depth == 0 {
-					end = i + 1
-				}
-			}
-			if depth == 0 {
-				break
-			}
-		}
-		spans = append(spans, negatedSpan{start: loc[0], end: end})
+		spans = append(spans, negatedSpan{start: loc[0], end: matchingCloseParen(program, open)})
 	}
 
 	return spans
@@ -272,17 +289,10 @@ func firstDataCallSpan(program string) string {
 	}
 	open = loc[0] + open + len("data(") - 1 // index of '('
 
-	depth := 0
-	for i := open; i < len(program); i++ {
-		switch program[i] {
-		case '(':
-			depth++
-		case ')':
-			depth--
-			if depth == 0 {
-				return program[loc[0] : i+1]
-			}
-		}
+	// Scan for the balanced close paren, ignoring parens inside quoted filter
+	// values so a value like filter('path','/f(x)') cannot mis-scope the span.
+	if end := matchingCloseParen(program, open); end <= len(program) && end > loc[0] {
+		return program[loc[0]:end]
 	}
 
 	return program
