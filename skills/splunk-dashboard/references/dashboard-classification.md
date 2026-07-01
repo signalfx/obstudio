@@ -40,16 +40,30 @@ A metric is a **latency time-series panel** candidate when its name contains
 
 ### Error
 
-A metric is an **error time-series panel** candidate when its name ends in
-`.total`/`.count` AND contains an error keyword (`error`, `errors`, `failure`,
-`failures`, `failed`, `invalid`, `rejected`, `timeout`, `exception`). Chart type
+A metric is an **error time-series panel** candidate when it is a **counter** AND
+its name contains an error keyword (`error`, `errors`, `failure`, `failures`,
+`failed`, `invalid`, `rejected`, `timeout`, `timeouts`, `exception`,
+`exceptions`). Treat a metric as a counter when its name ends in a counter-ish
+suffix (`.total`, `.count`, `.processed`) OR its name contains any error keyword
+from that **same full family** — singular and plural alike (`error`, `errors`,
+`failure`, `failures`, `failed`, `invalid`, `rejected`, `timeout`, `timeouts`,
+`exception`, `exceptions`) — the `.total`/`.count` suffix is **not** required, and
+the otel-audit report never emits a literal "counter" Type (it records Type =
+auto/custom), so the classification never gates on an audit Type of counter. The
+counter test uses the same bare-word family the Error rule lists, so both singular
+and plural forms qualify: `checkout.payment.errors`, `checkout.payment.error`,
+`http.server.errors.total`, `rpc.failures`, `rpc.timeout`, `auth.rejected`,
+`auth.failure`, `worker.exception`, and `db.query.timeouts` all qualify. Chart type
 `time_series`; aggregation `.sum()`.
 
 ### Throughput
 
-A metric is a **throughput time-series panel** candidate when its name ends in
-`.total`/`.count` AND contains no error keyword (`http.server.requests.total`,
-`orders.processed.count`). Chart type `time_series`; aggregation `.sum()`.
+A metric is a **throughput time-series panel** candidate when it is a **counter**
+(same counter test as Error: name ends in a counter-ish suffix `.total`/`.count`/
+`.processed`, or its name contains any error keyword from the same full bare-word
+family — singular and plural alike) AND its name contains no error keyword
+(`http.server.requests.total`, `orders.processed.count`,
+`checkout.orders.processed`). Chart type `time_series`; aggregation `.sum()`.
 
 ### Saturation
 
@@ -107,8 +121,12 @@ metric name contains ".duration" (histogram)?
   -> YES -> time_series percentile panel (+ single_value KPI in overview row)
   -> NO
 
-metric name ends with ".total"/".count"?
-  -> YES -> error keyword?
+metric is a counter? (name ends with ".total"/".count"/".processed", OR name
+  contains any error keyword from the full bare-word family — singular and plural
+  alike: "error"/"errors"/"failure"/"failures"/"failed"/"invalid"/"rejected"/
+  "timeout"/"timeouts"/"exception"/"exceptions" — never gated on an audit Type of
+  counter)
+  -> YES -> error keyword in name?
     -> YES -> error-rate time_series panel (+ single_value KPI)
     -> NO  -> throughput time_series panel (+ single_value KPI)
   -> NO

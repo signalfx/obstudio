@@ -19,7 +19,7 @@
     "Places each chart on the real 12-column Splunk grid via the chart blocks (column 0-11, width 1-12, row >= 0, height >= 1) so no panel overflows 12 columns.",
     "Chart program_text reuses the data('<metric>', filter=filter('service.name', ...)).<agg>().publish(...) SignalFlow pattern with a visualization aggregation (percentile for latency, sum for rate/errors) and carries NO detect()/when()/threshold() alerting tail.",
     "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus a terraform.tfvars.example, and never hard-codes a real token.",
-    "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|event vocabulary and whose layout matches the Terraform grid placement.",
+    "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|table vocabulary and whose layout matches the Terraform grid placement.",
     "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or $splunk-dashboard-sync without performing any network call."
   ]
 }

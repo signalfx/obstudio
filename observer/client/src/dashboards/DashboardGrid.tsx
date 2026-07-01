@@ -10,11 +10,16 @@ interface DashboardGridProps {
 
 export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps): React.ReactElement {
   const clamped = panels.map((p) => ({ panel: p, layout: clampLayout(p.layout) }));
-  const rowMap = buildRowMap(clamped.map((c) => c.layout));
+  // Splunk `row` is an absolute y-coordinate, so pass it through unchanged as the
+  // grid-row START line and let `height` drive the span. Combined with the
+  // grid's `grid-auto-rows`, this keeps stacked panels (e.g. a KPI at row=0 h=2
+  // ABOVE a chart at row=2 h=3 in the same column) from overlapping — the KPI
+  // occupies lines 1-2 and the chart lines 3-5. Remapping distinct rows to
+  // consecutive ordinals (the old behaviour) ignored height and made a height-2
+  // panel above a row=2 panel collide on grid line 2.
   return (
     <div className="dashboard-grid" role="list">
       {clamped.map(({ panel, layout }, i) => {
-        const packedRow = rowMap.get(layout.row) ?? layout.row;
         return (
           <div
             key={`${panel.label}-${i}`}
@@ -22,7 +27,7 @@ export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps
             className="dashboard-grid__cell"
             style={{
               gridColumn: `${layout.column + 1} / span ${layout.width}`,
-              gridRow: `${packedRow + 1} / span ${layout.height}`,
+              gridRow: `${layout.row + 1} / span ${layout.height}`,
             }}
           >
             <DashboardPanel panel={panel} windowMs={windowMs} onExpand={onExpand} />
@@ -31,19 +36,6 @@ export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps
       })}
     </div>
   );
-}
-
-/**
- * Build a mapping from original row index → packed row index. Splunk packs
- * rows so the first used row maps to 0; each distinct original row maps to the
- * next consecutive packed row. Non-contiguous rows (e.g. rows 0, 5, 10) are
- * remapped to 0, 1, 2 so no blank vertical space appears in the local preview.
- */
-function buildRowMap(layouts: Array<{ row: number }>): Map<number, number> {
-  const distinctRows = [...new Set(layouts.map((l) => l.row))].sort((a, b) => a - b);
-  const map = new Map<number, number>();
-  distinctRows.forEach((orig, packed) => map.set(orig, packed));
-  return map;
 }
 
 /** Clamp a layout into the valid 12-column grid: column 0-11, width 1-12 without overflow, row ≥0, height ≥1. */

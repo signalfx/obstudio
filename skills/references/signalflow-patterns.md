@@ -27,11 +27,15 @@ A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).
 | Latency / duration | histogram | `.percentile(pct=99)` | `.percentile(pct=99).publish(label='P99 Latency')` |
 | Error rate | counter (error/failure/invalid) | `.sum()` | `.sum().publish(label='Error Rate')` |
 | Throughput | counter (no error keyword) | `.sum()` | `.sum().publish(label='Throughput')` |
-| Saturation | gauge (connections, queues, buffers, lag) | raw / `.mean()` / `.last()` | `.publish(label='Saturation')` |
+| Saturation | gauge (connections, queues, buffers, lag) | raw / `.mean()` | `.mean().publish(label='Saturation')` |
 
-For a single-value KPI panel, prefer the latest value: `.mean()` or `.last()`
-over a short window. For a time-series panel, publish the stream directly and let
-the chart's `plot_type` render it.
+For a single-value KPI panel, prefer `.mean()` as the safe no-argument
+aggregation. Do **not** use bare `.last()` — SignalFlow's `.last()` requires an
+explicit window duration (e.g. `.last('1m')`), and a windowless `.last()` is
+rejected with an HTTP 400 at chart-create time (see
+`splunk-dashboard/references/dashboard-templates.md` and
+`splunk-dashboard-sync/SKILL.md`). For a time-series panel, publish the stream
+directly and let the chart's `plot_type` render it.
 
 ## Worked fragments
 
@@ -45,9 +49,9 @@ Error rate (sum of an error counter):
 A = data('http.server.request.errors', filter=filter('service.name', '${var.service_name}')).sum().publish(label='Error Rate')
 ```
 
-Saturation (raw gauge):
+Saturation (gauge, mean):
 ```
-A = data('db.pool.connections.active', filter=filter('service.name', '${var.service_name}')).publish(label='Active Connections')
+A = data('db.pool.connections.active', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Active Connections')
 ```
 
 ## Detector tail vs chart tail

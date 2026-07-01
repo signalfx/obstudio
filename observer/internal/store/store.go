@@ -1280,18 +1280,81 @@ func traceHasGenAISignal(spans []Span) bool {
 	return false
 }
 
+// SnapshotMetrics returns a point-in-time copy of the metric ring buffer in
+// insertion order (oldest first). Callers that need to resolve many independent
+// queries against the same point set should take one snapshot and feed it to
+// QueryMetricsFilteredFromSnapshot rather than calling QueryMetricsFiltered
+// repeatedly, which re-snapshots the whole ring each time.
+func (s *Store) SnapshotMetrics() []MetricDataPoint {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.metrics.snapshot()
+}
+
+// MetricFilter groups the optional match constraints applied by
+// QueryMetricsFiltered / QueryMetricsFilteredFromSnapshot. An empty field is
+// treated as "match anything" for that dimension.
+type MetricFilter struct {
+	MetricName        string
+	ServiceName       string
+	ScopeName         string
+	MetricType        string
+	ResourceAttribute string
+}
+
+// matches reports whether a single metric datapoint satisfies every non-empty
+// constraint in the filter.
+func (f MetricFilter) matches(dp MetricDataPoint) bool {
+	// Case-insensitive equality constraints on plain string dimensions. An empty
+	// want is "match anything" for that dimension.
+	eq := []struct{ want, have string }{
+		{f.MetricName, dp.Name},
+		{f.ServiceName, dp.Resource.ServiceName},
+		{f.ScopeName, dp.Scope.Name},
+	}
+	for _, c := range eq {
+		if !matchesEqualFold(c.want, c.have) {
+			return false
+		}
+	}
+	if f.MetricType != "" && dp.Type != normalizeMetricType(f.MetricType) {
+		return false
+	}
+	return matchesResourceAttribute(f.ResourceAttribute, dp.Resource.Attributes)
+}
+
+// matchesEqualFold reports whether have matches want case-insensitively, treating
+// an empty want as "match anything".
+func matchesEqualFold(want, have string) bool {
+	return want == "" || strings.EqualFold(have, want)
+}
+
+// matchesResourceAttribute reports whether the serialized resource attributes
+// contain the (optional) substring filter.
+func matchesResourceAttribute(want string, attrs map[string]any) bool {
+	if want == "" {
+		return true
+	}
+	serialized, _ := json.Marshal(attrs)
+	return strings.Contains(string(serialized), want)
+}
+
 // QueryMetricsFiltered is used by MCP tools that need filtering.
-func (s *Store) QueryMetricsFiltered(metricName, serviceName, scopeName, metricType, resourceAttribute string, limit, dataPointLimit int) []MetricGroup {
+func (s *Store) QueryMetricsFiltered(filter MetricFilter, limit, dataPointLimit int) []MetricGroup {
+	return QueryMetricsFilteredFromSnapshot(s.SnapshotMetrics(), filter, limit, dataPointLimit)
+}
+
+// QueryMetricsFilteredFromSnapshot applies the same filtering and grouping as
+// QueryMetricsFiltered against a caller-supplied snapshot (e.g. from
+// SnapshotMetrics). This lets a caller resolve many queries against one
+// point-in-time copy of the ring buffer instead of re-snapshotting per call.
+func QueryMetricsFilteredFromSnapshot(points []MetricDataPoint, filter MetricFilter, limit, dataPointLimit int) []MetricGroup {
 	if limit <= 0 {
 		limit = 20
 	}
 	if dataPointLimit <= 0 {
 		dataPointLimit = 3
 	}
-
-	s.mu.RLock()
-	points := s.metrics.snapshot()
-	s.mu.RUnlock()
 
 	type groupKey struct{ name, svc, scope string }
 	groups := make(map[groupKey]*MetricGroup)
@@ -1300,23 +1363,8 @@ func (s *Store) QueryMetricsFiltered(metricName, serviceName, scopeName, metricT
 	// Iterate newest-first so we keep the most recent datapoints.
 	for i := len(points) - 1; i >= 0; i-- {
 		dp := points[i]
-		if metricName != "" && !strings.EqualFold(dp.Name, metricName) {
+		if !filter.matches(dp) {
 			continue
-		}
-		if serviceName != "" && !strings.EqualFold(dp.Resource.ServiceName, serviceName) {
-			continue
-		}
-		if scopeName != "" && !strings.EqualFold(dp.Scope.Name, scopeName) {
-			continue
-		}
-		if metricType != "" && dp.Type != normalizeMetricType(metricType) {
-			continue
-		}
-		if resourceAttribute != "" {
-			serialized, _ := json.Marshal(dp.Resource.Attributes)
-			if !strings.Contains(string(serialized), resourceAttribute) {
-				continue
-			}
 		}
 
 		key := groupKey{dp.Name, dp.Resource.ServiceName, dp.Scope.Name}

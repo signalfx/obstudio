@@ -100,7 +100,11 @@ function renderState({
   if (loading && !data) {
     return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
   }
-  if (error) {
+  // Only replace the whole view with the error message when there is no data to
+  // show. A transient auto-refresh failure with data already rendered surfaces
+  // as a small inline banner above the existing grid (see below) instead of
+  // blanking a valid dashboard.
+  if (error && !data) {
     return <div className="dashboards-tab__message dashboards-tab__message--error">Failed to load preview: {error}</div>;
   }
   if (!data || !data.available) {
@@ -116,6 +120,11 @@ function renderState({
 
   return (
     <div className="dashboards-tab__groups">
+      {error ? (
+        <div className="dashboards-tab__refresh-error" role="status">
+          Refresh failed (showing last result): {error}
+        </div>
+      ) : null}
       {data.groups.map((group, gi) => (
         <section key={`${group.name}-${gi}`} className="dashboards-tab__group">
           <h2 className="dashboards-tab__group-name">{group.name}</h2>

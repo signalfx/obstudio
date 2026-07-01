@@ -66,6 +66,32 @@ describe("DashboardsTab", () => {
     expect(screen.getByText("ingest stalled")).toBeTruthy();
   });
 
+  it("F7: a failing refresh keeps the grid and surfaces the error inline (does not blank the dashboard)", async () => {
+    // First fetch succeeds (renders the grid); the next fetch (the Refresh
+    // click) rejects. The grid must stay rendered with a small inline error.
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK", json: async () => makePreviewResponse() })
+      .mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", fetchFn);
+
+    const { container } = render(<DashboardsTab paused />);
+
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    expect(container.querySelector(".dashboard-grid")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    // The inline refresh-error banner appears...
+    await waitFor(() => expect(container.querySelector(".dashboards-tab__refresh-error")).not.toBeNull());
+    expect(screen.getByText(/network down/i)).toBeTruthy();
+
+    // ...and the grid is STILL rendered (not replaced by the full-page error).
+    expect(container.querySelector(".dashboard-grid")).not.toBeNull();
+    expect(screen.getByText("Checkout RED")).toBeTruthy();
+    expect(screen.queryByText(/Failed to load preview/i)).toBeNull();
+  });
+
   it("M1: keeps the grid mounted during background auto-refresh (no teardown flash)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -420,5 +421,293 @@ func TestBuildDataPointCountSyncedAfterFilter(t *testing.T) {
 			t.Errorf("DataPointCount=%d but len(DataPoints)=%d: they must stay in sync after filtering",
 				g.DataPointCount, len(g.DataPoints))
 		}
+	}
+}
+
+// TestBuildMultiValueServiceFilterExcludesUnrelated verifies that a multi-value
+// service filter (filter('service.name','checkout','payments')) excludes a third
+// unrelated service in the store (finding F2). Before the fix, a multi-value
+// service filter left svcArg="" so the store returned ALL services and
+// applyDimensionFilters skipped service keys, leaking billing into the panel.
+func TestBuildMultiValueServiceFilterExcludesUnrelated(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "checkout", 10, nil),
+		metricPoint("req.duration", "payments", 20, nil),
+		metricPoint("req.duration", "billing", 30, nil),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "svc_or",
+					ChartType:   "time_series",
+					ProgramText: "data('req.duration', filter=filter('service.name','checkout','payments')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: checkout and payments are in the store")
+	}
+	sawCheckout, sawPayments := false, false
+	for _, g := range panel.Metrics {
+		switch g.ServiceName {
+		case "checkout":
+			sawCheckout = true
+		case "payments":
+			sawPayments = true
+		case "billing":
+			t.Errorf("billing must be excluded by the multi-value service filter")
+		default:
+			t.Errorf("unexpected service %q in resolved groups", g.ServiceName)
+		}
+	}
+	if !sawCheckout || !sawPayments {
+		t.Errorf("expected both checkout and payments groups, got checkout=%v payments=%v", sawCheckout, sawPayments)
+	}
+}
+
+// TestBuildMultiValueServiceFilterMixedCase verifies the multi-value service
+// constraint is case-insensitive against MetricGroup.ServiceName (finding
+// F2/F5): a filter value 'CHECKOUT' matches a stored service 'checkout'.
+func TestBuildMultiValueServiceFilterMixedCase(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "checkout", 10, nil),
+		metricPoint("req.duration", "billing", 30, nil),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "svc_or_case",
+					ChartType:   "time_series",
+					ProgramText: "data('req.duration', filter=filter('service.name','CHECKOUT','PAYMENTS')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: CHECKOUT must match stored checkout case-insensitively")
+	}
+	for _, g := range panel.Metrics {
+		if g.ServiceName == "billing" {
+			t.Errorf("billing must be excluded by the multi-value service filter")
+		}
+	}
+}
+
+// TestBuildFilterBeforeCap verifies that dimension filtering runs before the
+// display cap so a matching series in a group beyond the cap is not dropped
+// (finding F4). The store would otherwise truncate to maxResolvedGroups before
+// applyDimensionFilters and falsely report the panel unmatched.
+func TestBuildFilterBeforeCap(t *testing.T) {
+	var points []store.MetricDataPoint
+	// The matching group is ingested FIRST so it is the oldest point. The store
+	// query iterates newest-first, so the matching group sorts to the END of the
+	// group order and lands beyond maxResolvedGroups. If the store cap is applied
+	// before dimension filtering (the bug), this group is truncated away and the
+	// panel falsely reports unmatched.
+	points = append(points, metricPoint("m", "svc-match", 999, map[string]any{"env": "target"}))
+	// Then more than maxResolvedGroups distinct groups (one service each) that do
+	// NOT match the env=target filter.
+	for i := 0; i < maxResolvedGroups+20; i++ {
+		svc := "svc-noise-" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		points = append(points, metricPoint("m", svc, float64(i), map[string]any{"env": "other"}))
+	}
+
+	s := seededStore(t, points)
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "env_target",
+					ChartType:   "time_series",
+					ProgramText: "data('m', filter=filter('env','target')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: env=target group must survive even though it is beyond the display cap")
+	}
+	if len(panel.Metrics) > maxResolvedGroups {
+		t.Errorf("expected at most %d groups after cap, got %d", maxResolvedGroups, len(panel.Metrics))
+	}
+	for _, g := range panel.Metrics {
+		for _, dp := range g.DataPoints {
+			if dp.Attributes["env"] != "target" {
+				t.Errorf("expected only env=target points, got %v", dp.Attributes["env"])
+			}
+		}
+	}
+}
+
+// TestBuildFilterBeyondQueryFanout verifies that dimension filtering is not
+// defeated by the store-side group cap (metricGroupQueryFanout) when a metric
+// fans out into more distinct groups than the old 1000-group fanout (R1-207).
+// The single env=target group is ingested FIRST (oldest), so the store's
+// newest-first group order sorts it LAST — beyond the previous 1000-group cap,
+// which would truncate it away before applyDimensionFilters and falsely report
+// the panel unmatched. With the fanout raised to the ring capacity, the group
+// survives.
+func TestBuildFilterBeyondQueryFanout(t *testing.T) {
+	var points []store.MetricDataPoint
+	// Matching group first => oldest => sorts last in newest-first group order.
+	points = append(points, metricPoint("m", "svc-match", 999, map[string]any{"env": "target"}))
+	// More than the old metricGroupQueryFanout (1000) distinct non-matching groups.
+	const noise = 1200
+	for i := 0; i < noise; i++ {
+		svc := "svc-noise-" + string(rune('a'+i%26)) + string(rune('a'+(i/26)%26)) + string(rune('a'+i/676))
+		points = append(points, metricPoint("m", svc, float64(i), map[string]any{"env": "other"}))
+	}
+
+	s := seededStore(t, points)
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "env_target",
+					ChartType:   "time_series",
+					ProgramText: "data('m', filter=filter('env','target')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: env=target group must survive even though it sorts beyond the old 1000-group fanout")
+	}
+	for _, g := range panel.Metrics {
+		for _, dp := range g.DataPoints {
+			if dp.Attributes["env"] != "target" {
+				t.Errorf("expected only env=target points, got %v", dp.Attributes["env"])
+			}
+		}
+	}
+}
+
+// TestBuildPanelCap verifies that the number of panels resolved against the
+// store per request is capped (finding F6): panels beyond maxPanelsPerBuild
+// report their parsed query but skip store resolution.
+func TestBuildPanelCap(t *testing.T) {
+	prev := maxPanelsPerBuild
+	maxPanelsPerBuild = 2
+	defer func() { maxPanelsPerBuild = prev }()
+
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("m", "svc", 1, nil),
+	})
+
+	chart := func(label string) SpecChart {
+		return SpecChart{
+			Label:       label,
+			ChartType:   "time_series",
+			ProgramText: "data('m', filter=filter('service.name','svc')).mean().publish()",
+			Layout:      SpecLayout{Width: 6, Height: 3},
+		}
+	}
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name:   "d",
+				Charts: []SpecChart{chart("p0"), chart("p1"), chart("p2"), chart("p3")},
+			}},
+		}},
+	}
+	r := NewResolver(s, writeSpec(t, spec))
+
+	panels := r.Build().Groups[0].Dashboards[0].Panels
+	matched := 0
+	for _, p := range panels {
+		if p.Query == nil {
+			t.Errorf("every non-text panel should still report its parsed query")
+		}
+		if p.Matched {
+			matched++
+		}
+	}
+	if matched != 2 {
+		t.Errorf("expected exactly 2 panels resolved against the store (cap), got %d", matched)
+	}
+}
+
+// TestBuildSourceHidesAbsolutePath verifies the cross-origin PreviewResponse
+// does not disclose the absolute resolved sidecar path in Source or Message
+// (finding F11).
+func TestBuildSourceHidesAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dashboards.preview.json")
+	if err := os.WriteFile(path, []byte("{ not json"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	r := NewResolver(store.New(), path)
+
+	resp := r.Build()
+
+	if resp.Source != "dashboards.preview.json" {
+		t.Errorf("Source = %q, want basename only", resp.Source)
+	}
+	if filepath.IsAbs(resp.Source) {
+		t.Errorf("Source must not be an absolute path: %q", resp.Source)
+	}
+	if strings.Contains(resp.Source, dir) || strings.Contains(resp.Message, dir) {
+		t.Errorf("response must not contain the absolute repo path %q (source=%q message=%q)", dir, resp.Source, resp.Message)
+	}
+}
+
+// TestBuildOversizedFileRejected verifies that a sidecar exceeding the size cap
+// is rejected without unmarshalling (finding P1).
+func TestBuildOversizedFileRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dashboards.preview.json")
+	big := make([]byte, maxSpecFileBytes+1)
+	for i := range big {
+		big[i] = ' '
+	}
+	if err := os.WriteFile(path, big, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	r := NewResolver(store.New(), path)
+
+	resp := r.Build()
+
+	if resp.Available {
+		t.Errorf("expected available=false for oversized sidecar")
+	}
+	if !strings.Contains(strings.ToLower(resp.Message), "too large") {
+		t.Errorf("expected an oversize message, got %q", resp.Message)
 	}
 }

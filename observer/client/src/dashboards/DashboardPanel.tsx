@@ -11,7 +11,7 @@ interface DashboardPanelProps {
 }
 
 export function DashboardPanel({ panel, windowMs = 0, onExpand }: DashboardPanelProps): React.ReactElement {
-  const prepared = usePreparedMetrics(panel.metrics ?? [], windowMs, panel.query);
+  const prepared = usePreparedMetrics(panel.metrics ?? [], windowMs, panel.query, panel.chartType);
   const { allSeries } = useMetricTimeSeries(prepared);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
@@ -110,6 +110,31 @@ function renderBody(
     );
   }
 
+  if (panel.chartType === "table") {
+    // Tabular rendering of the matched series' latest values. The generator
+    // templates/classification emit chartType "table" (handled by the sync
+    // skill as a TableChart); without this branch it fell through to the
+    // time_series SVG line chart and showed a raw "table" type badge.
+    return (
+      <table className="dashboard-panel__table">
+        <thead>
+          <tr>
+            <th className="dashboard-panel__table-label">Series</th>
+            <th className="dashboard-panel__table-value">Latest</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allSeries.map((s) => (
+            <tr key={s.key}>
+              <td className="dashboard-panel__table-label">{seriesLabel(s.resource?.serviceName, s.attributes)}</td>
+              <td className="dashboard-panel__table-value">{formatNumber(s.latest)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
   if (panel.chartType === "heatmap") {
     const latest = allSeries.length > 0 ? allSeries[allSeries.length - 1].latest : 0;
     return (
@@ -136,6 +161,7 @@ const CHART_TYPE_LABELS: Record<string, string> = {
   time_series: "Time series",
   single_value: "Single value",
   list: "List",
+  table: "Table",
   heatmap: "Heatmap",
   text: "Text",
   event: "Events",
@@ -203,30 +229,98 @@ function formatNumber(v: number): string {
  *   - "mean": Δsum/Δcount per interval.
  *   - anything else (or no aggregation): Δsum/Δcount (mean, safe fallback).
  */
-function usePreparedMetrics(groups: MetricGroup[], windowMs: number, query?: ParsedQuery): MetricGroup[] {
+const LATEST_VALUE_CHART_TYPES = new Set(["single_value", "list", "heatmap", "table"]);
+
+/**
+ * Per-series identity within a single MetricGroup.
+ *
+ * The backend (QueryMetricsFilteredFromSnapshot) groups only by
+ * (name, service, scope), so a metric with a dimension (e.g. `endpoint`) lands
+ * multiple distinct series in one MetricGroup.dataPoints. group.name/service/
+ * scope are constant within a group, so the intra-group series identity is the
+ * resource+point attribute pair — matching the resource/point components of
+ * useMetricTimeSeries.seriesKey, so the split here lines up with how the series
+ * are later split back into individual lines.
+ */
+function pointSeriesKey(dp: MetricDataPoint): string {
+  const resourceAttrs = serializeAttrsForKey(dp.resource?.attributes ?? {});
+  const pointAttrs = serializeAttrsForKey(dp.attributes ?? {});
+  return `resource:${resourceAttrs}|point:${pointAttrs}`;
+}
+
+function serializeAttrsForKey(attributes: Record<string, unknown>): string {
+  return Object.entries(attributes)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v) ?? String(v)}`)
+    .join(",");
+}
+
+/** Group points by per-series identity, preserving first-seen series order. */
+function splitPointsBySeries(points: MetricDataPoint[]): MetricDataPoint[][] {
+  const bySeries = new Map<string, MetricDataPoint[]>();
+  for (const dp of points) {
+    const key = pointSeriesKey(dp);
+    const bucket = bySeries.get(key);
+    if (bucket) bucket.push(dp);
+    else bySeries.set(key, [dp]);
+  }
+  return [...bySeries.values()];
+}
+
+function usePreparedMetrics(
+  groups: MetricGroup[],
+  windowMs: number,
+  query?: ParsedQuery,
+  chartType?: string,
+): MetricGroup[] {
   const cutoffMs = windowMs > 0 ? Date.now() - windowMs : 0;
+  const isLatestValue = chartType != null && LATEST_VALUE_CHART_TYPES.has(chartType);
 
   return groups.map((g): MetricGroup => {
-    const raw = (g.dataPoints ?? [])
-      .filter((dp) => {
-        if (!cutoffMs) return true;
-        const t = new Date(dp.timeUnixNano).getTime();
-        return !isNaN(t) && t >= cutoffMs;
-      })
-      .sort((a, b) => new Date(a.timeUnixNano).getTime() - new Date(b.timeUnixNano).getTime());
+    const filtered = (g.dataPoints ?? []).filter((dp) => {
+      if (!cutoffMs) return true;
+      const t = new Date(dp.timeUnixNano).getTime();
+      return !isNaN(t) && t >= cutoffMs;
+    });
 
-    const isMonotonicCounter = g.type === "sum" && raw.length > 0 && raw[0].isMonotonic === true;
+    const isMonotonicCounter = g.type === "sum" && filtered.length > 0 && filtered.some((dp) => dp.isMonotonic === true);
     const isHistogram = g.type === "histogram";
+
+    // Split the group's interleaved points into per-series buckets BEFORE the
+    // counter rate / histogram delta math, so cumulative-counter and bucket
+    // deltas are only ever taken between consecutive points of the SAME series
+    // (a dimensioned metric lands >1 series in a single group; see
+    // pointSeriesKey). Each bucket is sorted by timestamp ascending on its own.
+    const seriesBuckets = (isMonotonicCounter || isHistogram)
+      ? splitPointsBySeries(filtered)
+      : [filtered];
+    for (const bucket of seriesBuckets) {
+      bucket.sort((a, b) => new Date(a.timeUnixNano).getTime() - new Date(b.timeUnixNano).getTime());
+    }
 
     if (isMonotonicCounter) {
       const rateDps: MetricDataPoint[] = [];
-      for (let i = 1; i < raw.length; i++) {
-        const prev = raw[i - 1];
-        const curr = raw[i];
-        const dt = (new Date(curr.timeUnixNano).getTime() - new Date(prev.timeUnixNano).getTime()) / 1000;
-        if (dt <= 0) continue;
-        const rate = Math.max(0, ((curr.value ?? 0) - (prev.value ?? 0)) / dt);
-        rateDps.push({ ...curr, value: rate });
+      for (const raw of seriesBuckets) {
+        for (let i = 1; i < raw.length; i++) {
+          const prev = raw[i - 1];
+          const curr = raw[i];
+          const dt = (new Date(curr.timeUnixNano).getTime() - new Date(prev.timeUnixNano).getTime()) / 1000;
+          if (dt <= 0) continue;
+          const rate = Math.max(0, ((curr.value ?? 0) - (prev.value ?? 0)) / dt);
+          rateDps.push({ ...curr, value: rate });
+        }
+      }
+      // A single raw point (or back-to-back equal timestamps) yields zero rate
+      // points, which would drop the whole group via the trailing filter and
+      // render a matched single_value/list/heatmap panel as blank/0. Fall back
+      // to the latest raw value (per series) so the latest-value renderings
+      // still show a number. For non-latest (time_series) panels we keep the
+      // empty rate series — a single point cannot form a rate line.
+      if (rateDps.length === 0 && isLatestValue) {
+        const latestPerSeries = seriesBuckets
+          .filter((b) => b.length > 0)
+          .map((b) => ({ ...b[b.length - 1] }));
+        if (latestPerSeries.length > 0) return { ...g, dataPoints: latestPerSeries };
       }
       return { ...g, dataPoints: rateDps };
     }
@@ -236,30 +330,47 @@ function usePreparedMetrics(groups: MetricGroup[], windowMs: number, query?: Par
       const pct = query?.percentile;
 
       const outDps: MetricDataPoint[] = [];
-      for (let i = 1; i < raw.length; i++) {
-        const prev = raw[i - 1];
-        const curr = raw[i];
-        const dCount = (curr.count ?? 0) - (prev.count ?? 0);
-        if (dCount <= 0) continue;
+      for (const raw of seriesBuckets) {
+        for (let i = 1; i < raw.length; i++) {
+          const prev = raw[i - 1];
+          const curr = raw[i];
+          const dCount = (curr.count ?? 0) - (prev.count ?? 0);
+          if (dCount <= 0) continue;
 
-        let value: number;
-        if (agg === "percentile" && pct != null && curr.bucketCounts && curr.explicitBounds) {
-          value = interpolatePercentile(
-            curr.bucketCounts.map((c, j) => c - (prev.bucketCounts?.[j] ?? 0)),
-            curr.explicitBounds,
-            pct / 100,
-          );
-        } else {
-          // mean fallback
-          const dSum = (curr.sum ?? 0) - (prev.sum ?? 0);
-          value = dSum / dCount;
+          let value: number;
+          if (agg === "percentile" && pct != null && curr.bucketCounts && curr.explicitBounds && curr.explicitBounds.length > 0) {
+            value = interpolatePercentile(
+              curr.bucketCounts.map((c, j) => c - (prev.bucketCounts?.[j] ?? 0)),
+              curr.explicitBounds,
+              pct / 100,
+            );
+          } else {
+            // mean fallback
+            const dSum = (curr.sum ?? 0) - (prev.sum ?? 0);
+            value = dSum / dCount;
+          }
+          outDps.push({ ...curr, value, sum: undefined, count: undefined });
         }
-        outDps.push({ ...curr, value, sum: undefined, count: undefined });
+      }
+      // Same single-point collapse as the counter branch: a histogram with one
+      // raw point produces zero delta points. For latest-value renderings fall
+      // back to the latest raw mean (sum/count) per series so the panel is not
+      // blanked.
+      if (outDps.length === 0 && isLatestValue) {
+        const latestPerSeries = seriesBuckets
+          .filter((b) => b.length > 0)
+          .map((b) => {
+            const last = b[b.length - 1];
+            const cnt = last.count ?? 0;
+            const mean = cnt > 0 ? (last.sum ?? 0) / cnt : (last.value ?? 0);
+            return { ...last, value: mean, sum: undefined, count: undefined };
+          });
+        if (latestPerSeries.length > 0) return { ...g, dataPoints: latestPerSeries };
       }
       return { ...g, dataPoints: outDps };
     }
 
-    return { ...g, dataPoints: raw };
+    return { ...g, dataPoints: seriesBuckets[0] ?? [] };
   }).filter((g) => (g.dataPoints ?? []).length > 0);
 }
 
@@ -278,7 +389,10 @@ function interpolatePercentile(deltaCounts: number[], bounds: number[], frac: nu
     const count = Math.max(0, deltaCounts[b]);
     if (count <= 0) continue;
     const lo = b === 0 ? 0 : bounds[b - 1];
-    const hi = b < bounds.length ? bounds[b] : bounds[bounds.length - 1] * 2; // +Inf bucket: double last bound
+    // +Inf bucket: double the last bound. With no explicit bounds at all
+    // (single (-Inf,+Inf) bucket) there is nothing to double, so pin hi to lo
+    // rather than computing bounds[-1]*2 = NaN.
+    const hi = b < bounds.length ? bounds[b] : bounds.length > 0 ? bounds[bounds.length - 1] * 2 : lo;
     const prev = cumulative;
     cumulative += count;
     if (cumulative >= target) {

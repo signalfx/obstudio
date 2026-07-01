@@ -30,6 +30,10 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
     if (data === null) {
       setLoading(true);
     }
+    // Clear any prior error at the start of each fetch/refresh so a stale
+    // failure banner does not linger once a new attempt is in flight. Note we
+    // never clear `data` here, so a failing refresh keeps the last good preview.
+    setError(null);
 
     fetchDashboardPreview(controller.signal)
       .then((resp) => {

@@ -82,8 +82,12 @@ placement:
   signal that exists (p99 latency, error rate, throughput) plus key saturation
   gauges — giving an at-a-glance service summary.
 - **Latency** (duration histograms) → a `time_series` percentile panel.
-- **Error** (error/failure counters) → a `time_series` error-rate panel.
-- **Throughput** (non-error counters) → a `time_series` rate panel.
+- **Error** (counters whose name carries an error keyword — e.g.
+  `checkout.payment.errors`, `http.server.errors.total` — keyed on counter-ness,
+  not a required `.total`/`.count` suffix) → a `time_series` error-rate panel.
+- **Throughput** (non-error counters — e.g. `checkout.orders.processed`,
+  `http.server.requests.total` — same counter test, no error keyword) → a
+  `time_series` rate panel.
 - **Saturation** (gauges: connections, queues, buffers, lag) → a `single_value`
   panel (and optionally a `time_series` trend panel).
 - **GenAI** metrics (when present) → their own `signalfx_dashboard` inside a
@@ -183,7 +187,7 @@ while writing HCL (per `../references/terraform-normalization.md`), write the
 }
 ```
 
-- `chartType` ∈ `time_series | single_value | list | heatmap | text | event`.
+- `chartType` ∈ `time_series | single_value | list | heatmap | text | table`.
 - `programText` carries the resolved SignalFlow (no `${var.*}`, dedented). For a
   `text` panel, set `programText: null` and put the markdown in `text`.
 - `layout` mirrors the HCL `chart {}` block exactly: `column` 0-11, `row` ≥0,

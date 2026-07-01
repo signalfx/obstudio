@@ -70,6 +70,42 @@ describe("DashboardGrid", () => {
     expect(cell?.style.gridColumn).toBe("1 / span 12");
   });
 
+  it("F1: stacks two same-column panels height-aware without overlap (KPI above chart)", () => {
+    // Canonical template: KPI at row=0 h=2 directly above a chart at row=2 h=3,
+    // same column. The old ordinal packing collapsed rows 0 and 2 to start
+    // lines 0 and 1, overlapping on grid line 2. The lower panel's start line
+    // must be strictly past the upper panel's last occupied line.
+    const { container } = render(
+      <DashboardGrid
+        windowMs={0}
+        onExpand={noExpand}
+        panels={[
+          makePanel({ label: "kpi", chartType: "single_value", layout: { column: 0, row: 0, width: 6, height: 2 } }),
+          makePanel({ label: "chart", layout: { column: 0, row: 2, width: 6, height: 3 } }),
+        ]}
+      />,
+    );
+
+    const cells = container.querySelectorAll<HTMLElement>(".dashboard-grid__cell");
+    expect(cells).toHaveLength(2);
+
+    // Parse "<start> / span <span>" for each panel.
+    const parse = (gridRow: string) => {
+      const [start, , , span] = gridRow.split(" ");
+      return { start: Number(start), span: Number(span) };
+    };
+    const upper = parse(cells[0].style.gridRow);
+    const lower = parse(cells[1].style.gridRow);
+
+    // Upper KPI: start line 1, spans 2 → occupies grid lines [1, 3).
+    expect(upper.start).toBe(1);
+    expect(upper.span).toBe(2);
+
+    // Lower chart's start line must be at or past the upper panel's last
+    // occupied line (upper.start + upper.span), so the spans never overlap.
+    expect(lower.start).toBeGreaterThanOrEqual(upper.start + upper.span);
+  });
+
   it("exposes list semantics for assistive tech", () => {
     const { container } = render(<DashboardGrid windowMs={0} onExpand={noExpand} panels={[makePanel()]} />);
     expect(container.querySelector('[role="list"]')).toBeTruthy();

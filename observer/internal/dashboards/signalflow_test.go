@@ -2,6 +2,7 @@ package dashboards
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -139,6 +140,32 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			wantFilters: map[string][]string{"service.name": {"api"}},
 			wantAgg:     "sum",
 		},
+		// F10: dropped template/empty filters are recorded in IgnoredFilters.
+		{
+			name:        "unresolved variable filter is recorded as ignored",
+			program:     "data('http.server.request.duration', filter=filter('http.route','${var.route}')).percentile(pct=95).publish()",
+			wantMetric:  "http.server.request.duration",
+			wantFilters: map[string][]string{},
+			wantIgnored: []string{"http.route"},
+			wantAgg:     "percentile",
+			wantPct:     floatPtr(95),
+		},
+		{
+			name:        "empty filter value is recorded as ignored",
+			program:     "data('m', filter=filter('env','')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{},
+			wantIgnored: []string{"env"},
+			wantAgg:     "sum",
+		},
+		{
+			name:        "multi-value filter with all templated values is recorded as ignored",
+			program:     "data('m', filter=filter('region','${var.r1}','${var.r2}')).mean().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{},
+			wantIgnored: []string{"region"},
+			wantAgg:     "mean",
+		},
 	}
 
 	for _, tt := range tests {
@@ -197,6 +224,117 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 	}
 }
 
+// TestParseProgramNotParenthesizedFilter verifies that a filter wrapped in a
+// parenthesized group after "not" — "not (filter('env','prod'))" — is recognized
+// as negated and therefore NOT applied as a positive constraint (R1-67). Before
+// the fix the prefix ended in "(" so the word-boundary "not" check failed and
+// env=prod was captured, inverting the panel's intent.
+func TestParseProgramNotParenthesizedFilter(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not (filter('env','prod'))).sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if vals := got.Filters["env"]; len(vals) != 0 {
+		t.Errorf("negated filter should not be applied, got Filters[env]=%v", vals)
+	}
+}
+
+// TestParseProgramTemplatedThenPositiveSameKey verifies that when a key is first
+// seen as a templated (ignored) filter and later as a positive filter, the key
+// ends up in Filters and NOT in IgnoredFilters (R1-255). Before the fix the
+// result was the contradictory Filters={env:[prod]} + IgnoredFilters=[env].
+func TestParseProgramTemplatedThenPositiveSameKey(t *testing.T) {
+	got := ParseProgramText("data('m', filter=filter('env','${var}') and filter('env','prod')).sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if vals := got.Filters["env"]; !slices.Contains(vals, "prod") {
+		t.Errorf("expected env=prod applied, got Filters[env]=%v", vals)
+	}
+	if slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("env was applied, so it must not remain in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+}
+
+// TestParseProgramMetadataDoesNotShadowMetric verifies that a metadata('foo')
+// call does not shadow the real metric from a later data() call. Before the fix
+// the unanchored `data\(` regex matched the "data(" substring inside
+// "metadata('foo'", returning MetricName="foo" (R3-go-signalflow-13).
+func TestParseProgramMetadataDoesNotShadowMetric(t *testing.T) {
+	got := ParseProgramText("m = metadata('foo'); d = data('http.requests').sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if got.MetricName != "http.requests" {
+		t.Errorf("metric = %q, want %q", got.MetricName, "http.requests")
+	}
+}
+
+// TestParseProgramPureMetadataYieldsParseError verifies that a program with only
+// a metadata() call (no data() call) is reported as unresolvable rather than
+// treating "sf_service" as a metric (R3-go-signalflow-13).
+func TestParseProgramPureMetadataYieldsParseError(t *testing.T) {
+	got := ParseProgramText("metadata('sf_service').publish()")
+	if got.ParseError == "" {
+		t.Fatalf("expected ParseError for metadata-only program, got metric=%q", got.MetricName)
+	}
+}
+
+// TestParseProgramDoubleParenNotFilter verifies that a filter wrapped in two
+// parens after "not" — "not ((filter('env','prod')))" — is still recognized as
+// negated. Before the fix the single optional-paren prefix regex failed on the
+// second "(" and env=prod was captured (R3-go-signalflow-28).
+func TestParseProgramDoubleParenNotFilter(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not ((filter('env','prod')))).sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if vals := got.Filters["env"]; len(vals) != 0 {
+		t.Errorf("negated filter should not be applied, got Filters[env]=%v", vals)
+	}
+}
+
+// TestParseProgramNotMultiFilterGroupAllNegated verifies that EVERY filter in a
+// parenthesized negation group is treated as negated, not just the first — so
+// "not (filter('env','prod') and filter('region','us'))" applies neither
+// constraint. Before the fix only the first filter of the group was negated and
+// region=us was applied as a positive constraint, inverting the panel's intent
+// (R3-go-preview-28).
+func TestParseProgramNotMultiFilterGroupAllNegated(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not (filter('env','prod') and filter('region','us'))).sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if vals := got.Filters["env"]; len(vals) != 0 {
+		t.Errorf("first negated filter should not be applied, got Filters[env]=%v", vals)
+	}
+	if vals := got.Filters["region"]; len(vals) != 0 {
+		t.Errorf("second negated filter should not be applied, got Filters[region]=%v", vals)
+	}
+}
+
+// TestParseProgramMultiDataCallScopesFiltersToFirst verifies that in a
+// multi-stream ratio program only the first data() call's filters are attached
+// to the metric. Before the fix the whole program was scanned and the
+// denominator's service.name=db was unioned in with the numerator's
+// service.name=api (R3-go-signalflow-180).
+func TestParseProgramMultiDataCallScopesFiltersToFirst(t *testing.T) {
+	got := ParseProgramText("A = data('errors', filter=filter('service.name','api')); B = data('total', filter=filter('service.name','db')); (A/B).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if got.MetricName != "errors" {
+		t.Errorf("metric = %q, want %q", got.MetricName, "errors")
+	}
+	vals := got.Filters["service.name"]
+	if len(vals) != 1 || !slices.Contains(vals, "api") {
+		t.Errorf("expected only numerator service.name=[api], got %v", vals)
+	}
+	if slices.Contains(vals, "db") {
+		t.Errorf("denominator service.name=db leaked into first data() call's filters: %v", vals)
+	}
+}
+
 func TestCanonicalServiceFilterNoServiceKeys(t *testing.T) {
 	_, ok, conflict := canonicalServiceFilter(map[string][]string{"region": {"us1"}})
 	if ok || conflict {
@@ -244,6 +382,105 @@ func TestCanonicalServiceFilterConflict(t *testing.T) {
 	})
 	if !ok || !conflict {
 		t.Errorf("expected ok=true conflict=true, got ok=%v conflict=%v", ok, conflict)
+	}
+}
+
+// TestCanonicalServiceFilterMixedCaseKey verifies that a mixed-case alias key
+// (SERVICE.NAME) is recognized rather than dropped (finding F5). A dropped key
+// would yield ok=false and over-match all services.
+func TestCanonicalServiceFilterMixedCaseKey(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{"SERVICE.NAME": {"checkout"}})
+	if !ok || conflict {
+		t.Errorf("expected ok=true conflict=false for mixed-case key, got ok=%v conflict=%v", ok, conflict)
+	}
+	if !slices.Contains(vals, "checkout") {
+		t.Errorf("expected checkout in values, got %v", vals)
+	}
+}
+
+// TestCanonicalServiceFilterMixedCaseAliasValuesNoConflict verifies that
+// service.name=Checkout and sf_service=checkout are NOT flagged as a conflict
+// because the values compare case-insensitively (finding F5).
+func TestCanonicalServiceFilterMixedCaseAliasValuesNoConflict(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{
+		"service.name": {"Checkout"},
+		"sf_service":   {"checkout"},
+	})
+	if !ok || conflict {
+		t.Errorf("expected ok=true conflict=false for case-differing alias values, got ok=%v conflict=%v", ok, conflict)
+	}
+	// Union must be deduped case-insensitively to a single value.
+	if len(vals) != 1 {
+		t.Errorf("expected a single deduped service value, got %v", vals)
+	}
+}
+
+// TestParseProgramCaseVariantNonServiceKeysMerge verifies that case-variant
+// spellings of the same non-service dimension key are folded into a single
+// Filters entry whose values are the union (finding D1). Before the fix
+// filter('Region','us') and filter('region','eu') produced two distinct map
+// entries {"Region":["us"], "region":["eu"]}; because applyDimensionFilters
+// AND-combines every key while attrMatchesAny compares case-insensitively, no
+// data point could satisfy both contradictory constraints and every group was
+// wrongly dropped.
+func TestParseProgramCaseVariantNonServiceKeysMerge(t *testing.T) {
+	got := ParseProgramText("data('m', filter=filter('Region','us') and filter('region','eu')).sum().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+
+	// The two case-variant keys must merge into exactly one Filters entry.
+	nonEmpty := 0
+	var mergedKey string
+	for k, vs := range got.Filters {
+		if len(vs) > 0 {
+			nonEmpty++
+			mergedKey = k
+		}
+	}
+	if nonEmpty != 1 {
+		t.Fatalf("expected a single merged region key, got Filters=%v", got.Filters)
+	}
+
+	vals := got.Filters[mergedKey]
+	if !slices.Contains(vals, "us") || !slices.Contains(vals, "eu") {
+		t.Errorf("merged key %q should hold the union [us eu], got %v", mergedKey, vals)
+	}
+
+	// Simulate the downstream case-insensitive OR-per-key match: a data point
+	// tagged region=us must satisfy the merged constraint rather than being
+	// dropped by a contradictory case-variant twin.
+	matched := false
+	for _, v := range vals {
+		if strings.EqualFold(v, "us") {
+			matched = true
+		}
+	}
+	if !matched {
+		t.Errorf("data point region=us should match merged constraint %v", vals)
+	}
+}
+
+// TestParseProgramAggregationScopedToFirstDataCall verifies that resolveAggregation
+// is scoped to the first data() call span, matching the filter/metric extraction
+// (finding D2). For a ratio program whose denominator carries .sum(), the first
+// stream's aggregation must be empty, not "sum" borrowed from the denominator.
+func TestParseProgramAggregationScopedToFirstDataCall(t *testing.T) {
+	got := ParseProgramText("A = data('errors'); B = data('total').sum(); (A/B).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if got.MetricName != "errors" {
+		t.Errorf("metric = %q, want %q", got.MetricName, "errors")
+	}
+	if got.Aggregation != "" {
+		t.Errorf("aggregation = %q, want %q (the .sum() belongs to denominator 'total')", got.Aggregation, "")
+	}
+
+	// A single-stream program must still report its own aggregation.
+	single := ParseProgramText("data('x').sum().publish()")
+	if single.Aggregation != "sum" {
+		t.Errorf("single-stream aggregation = %q, want %q", single.Aggregation, "sum")
 	}
 }
 

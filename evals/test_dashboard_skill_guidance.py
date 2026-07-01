@@ -11,6 +11,7 @@ guard in ``test_genai_skill_guidance.py``. That guard remains scoped to the GenA
 readiness reference + detector skills, where concrete names do not belong.
 """
 
+import json
 from pathlib import Path
 
 
@@ -154,6 +155,30 @@ def test_dashboard_skills_reach_shared_references():
         assert (SPLUNK_DASHBOARD_SYNC.parent / relpath).resolve() == target.resolve()
 
 
+def test_shared_signalflow_worked_fragments_all_aggregate_before_publish():
+    """Regression guard (R2-skills-evals-54): every worked ``data(...).publish(...)`` fragment
+    in signalflow-patterns.md must apply an aggregation (``.mean()``/``.sum()``/``.percentile(...)``)
+    before ``.publish(...)``. A bare ``.publish()`` with no preceding aggregation renders no value
+    in a single_value KPI panel (see dashboard-templates.md) — the Saturation worked example used to
+    ship a bare publish that contradicted the file's own aggregation table and the SingleValue rule."""
+    import re
+
+    text = _read(SIGNALFLOW_PATTERNS_REF)
+    # Every concrete fragment binds a stream from a real metric name (quoted, no angle brackets).
+    fragment_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if "data('" in line and ".publish(" in line and "<metric_name>" not in line
+    ]
+    assert fragment_lines, "expected at least one concrete worked SignalFlow fragment"
+
+    agg_before_publish = re.compile(r"\.(?:mean|sum|percentile|count|max|min)\([^)]*\)\.publish\(")
+    for line in fragment_lines:
+        assert agg_before_publish.search(line), (
+            f"worked fragment has a bare .publish() with no preceding aggregation: {line!r}"
+        )
+
+
 def test_shared_signalflow_reference_omits_detector_tail_for_charts():
     """Dashboard charts reuse the data().agg().publish() fragment but must stop before the
     detector-only detect()/when()/threshold() tail."""
@@ -186,13 +211,77 @@ def test_dashboard_skill_marks_api_token_sensitive():
     assert "sensitive = true" in text, "api_token Terraform variable must be sensitive = true"
 
 
+# The single source of truth for the preview chartType vocabulary: the types the
+# generator emits AND the Observer renderer understands. "event" was never emitted
+# by any generator artifact and is intentionally excluded; "table" is emitted by the
+# classification/templates and rendered by DashboardPanel.tsx, so it is included.
+PREVIEW_CHART_TYPES = ("time_series", "single_value", "list", "heatmap", "text", "table")
+
+# Renderer that must support every emitted chartType.
+DASHBOARD_PANEL_TSX = REPO_ROOT / "observer" / "client" / "src" / "dashboards" / "DashboardPanel.tsx"
+
+# The qual eval rubric that instructs the LLM judge which preview chartType vocabulary
+# is valid. It must match PREVIEW_CHART_TYPES exactly or the judge penalizes correct
+# 'table' panels and rewards a never-emitted 'event' panel (the F8/F9 drift).
+CHECKOUT_RED_QUAL_RUBRIC = (
+    REPO_ROOT / "evals" / "dashboards" / "checkout-red" / "eval" / "qual" / "dashboard.json"
+)
+
+
 def test_dashboard_skill_emits_preview_sidecar_contract():
     text = _read(SPLUNK_DASHBOARD)
     assert ".observe/dashboards.preview.json" in text, "must write the Observer preview sidecar"
     assert "schemaVersion" in text, "preview sidecar must declare schemaVersion"
-    # The six chart types the Observer renderer understands.
-    for chart_type in ("time_series", "single_value", "list", "heatmap", "text", "event"):
+    # The chart types the generator emits and the Observer renderer understands.
+    for chart_type in PREVIEW_CHART_TYPES:
         assert chart_type in text, f"preview sidecar chartType vocabulary missing: {chart_type}"
+    # "event" is never produced by any generator artifact: it must not reappear in the
+    # generate contract vocabulary line.
+    assert "| text | event" not in text and "text | event" not in text, (
+        "SKILL.md preview vocabulary must not list the never-emitted 'event' chartType"
+    )
+
+
+def test_preview_chart_vocabulary_is_internally_consistent():
+    """Vocabulary parity: every chartType the generate contract (SKILL.md) lists must
+    also be the preview type in dashboard-templates.md's REST mapping and a rendered
+    branch in DashboardPanel.tsx. Guards against the F8/F9 drift where SKILL.md listed
+    the unused 'event' and templates/renderer emitted/rendered 'table' instead."""
+    skill = _read(SPLUNK_DASHBOARD)
+    templates = _read(DASHBOARD_TEMPLATES)
+    renderer = _read(DASHBOARD_PANEL_TSX)
+
+    for chart_type in PREVIEW_CHART_TYPES:
+        # SKILL.md generate-contract vocabulary line.
+        assert chart_type in skill, f"SKILL.md missing preview chartType: {chart_type}"
+        # dashboard-templates.md REST mapping column lists the preview type.
+        assert chart_type in templates, f"dashboard-templates.md REST mapping missing: {chart_type}"
+        # DashboardPanel.tsx renders the type (string literal appears in the renderer).
+        assert chart_type in renderer, f"DashboardPanel.tsx does not render chartType: {chart_type}"
+
+    # The templates REST mapping must NOT advertise an "event" preview type.
+    assert "| `event` |" not in templates and "`event`" not in templates, (
+        "dashboard-templates.md REST mapping must not list the never-emitted 'event' chartType"
+    )
+
+
+def test_checkout_red_qual_rubric_matches_preview_chart_vocabulary():
+    """The checkout-red qual rubric tells the LLM judge which preview chartType vocabulary
+    is valid. It must list exactly PREVIEW_CHART_TYPES (includes 'table', excludes the
+    never-emitted 'event'); otherwise the judge penalizes a correct 'table' panel and would
+    reward an 'event' panel the generator never emits — the same F8/F9 drift the deterministic
+    guard prevents in SKILL.md/templates/renderer but did not cover in the eval."""
+    rubric = json.loads(_read(CHECKOUT_RED_QUAL_RUBRIC))
+    joined = " ".join(rubric["rubric"])
+    # The exact pipe-delimited vocabulary string the judge is handed.
+    expected_vocab = "|".join(PREVIEW_CHART_TYPES)
+    assert expected_vocab in joined, (
+        f"qual rubric must list the preview vocabulary as {expected_vocab!r}"
+    )
+    # 'event' is never emitted by any generator artifact and must not appear in the vocabulary.
+    assert "|event" not in joined and "event vocabulary" not in joined, (
+        "qual rubric must not list the never-emitted 'event' chartType"
+    )
 
 
 def test_dashboard_classification_defines_grid_and_chart_vocabulary():
@@ -202,6 +291,73 @@ def test_dashboard_classification_defines_grid_and_chart_vocabulary():
         assert chart_type in text
     for signal in ("Latency", "Error", "Throughput", "Saturation"):
         assert signal in text, f"classification missing RED/saturation signal: {signal}"
+
+
+def test_dashboard_classification_counter_test_covers_error_keyword_family():
+    """Regression guard (R3-skills-evals-46): the counter gate in dashboard-classification.md
+    must recognize the same error-keyword family the Error rule advertises. An audit report
+    lists error counters with names like `checkout.payment.failures`/`rpc.failures`/
+    `auth.rejected`/`db.query.timeouts` and a Type of auto/custom (the otel-audit report never
+    emits a literal "counter" Type). If the counter suffix list only covers
+    `.total`/`.count`/`.errors`/`.processed` and the gate leans on an "audit Type is a counter"
+    signal, exactly the error signals a RED dashboard most needs fall through to skip, even
+    though the Error rule's keyword list and SKILL.md both say they qualify."""
+    text = _read(DASHBOARD_CLASSIFICATION)
+    normalized = " ".join(text.split())
+
+    # The counter gate must not depend on an "audit Type is a counter" signal the report
+    # format (Type = auto/custom) never emits.
+    assert "audit Type is a counter" not in normalized, (
+        "counter gate must not rely on an 'audit Type is a counter' signal the otel-audit "
+        "report (Type = auto/custom) does not emit"
+    )
+
+    # The counter test must recognize the same full bare-word error-keyword family the Error
+    # rule lists (plural forms included), so error counters carrying those keywords classify
+    # as counters. Bare words also subsume any dot-prefixed spelling (e.g. ".failures").
+    for keyword in ("errors", "failures", "failed", "rejected", "timeouts", "exceptions", "invalid"):
+        assert keyword in normalized, (
+            f"counter test must recognize the error keyword {keyword!r}"
+        )
+
+    # The concrete plural error-counter examples from the audit report must appear as qualifying
+    # error signals (they carry an error keyword, so the counter gate matches).
+    for example in ("rpc.failures", "auth.rejected", "db.query.timeouts"):
+        assert example in normalized, (
+            f"classification must show {example} as a qualifying error counter"
+        )
+
+
+def test_dashboard_classification_counter_test_covers_singular_error_keywords():
+    """Regression guard: the Error rule advertises bare SINGULAR error keywords
+    (`error`, `failure`, `timeout`, `exception`), so the counter gate must recognize the
+    SINGULAR forms too — not only the plural subset. A custom (Type=auto/custom) metric named
+    `checkout.payment.error` / `rpc.timeout` / `auth.failure` / `worker.exception` contains an
+    error keyword and no counter suffix; if the counter gate only recognizes plural forms, such
+    a metric fails the counter test, falls through Latency/Error/Throughput/Saturation to skip,
+    and the RED dashboard silently omits its core error panel. The gate must treat the counter
+    test's error keywords as the SAME bare-word family the Error rule lists (singular + plural)."""
+    text = _read(DASHBOARD_CLASSIFICATION)
+    normalized = " ".join(text.split())
+
+    # The counter test must recognize the singular bare error keywords, not only their plurals.
+    for keyword in ("error", "failure", "timeout", "exception"):
+        assert keyword in normalized, (
+            f"counter test must recognize the singular error keyword {keyword!r}"
+        )
+
+    # The doc must state the counter test uses the SAME full family the Error rule advertises,
+    # singular and plural alike — not only the dot-prefixed plural subset.
+    assert "singular and plural" in normalized, (
+        "classification must state the counter test recognizes singular and plural error "
+        "keywords alike, matching the Error rule's full family"
+    )
+
+    # A concrete SINGULAR error-counter example must appear as a qualifying error signal.
+    for example in ("checkout.payment.error", "rpc.timeout", "auth.failure", "worker.exception"):
+        assert example in normalized, (
+            f"classification must show {example} as a qualifying (singular) error counter"
+        )
 
 
 def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
