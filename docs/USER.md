@@ -296,8 +296,9 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 | `HOST` | `127.0.0.1` | Bind address for all servers |
 | `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
 | `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
+| `OBSTUDIO_WORKSPACE_ROOT` | process CWD | Absolute path to the workspace directory. The VS Code extension sets this automatically to the open workspace folder. When set, `.observe/dashboards.preview.json` and similar workspace-relative paths are resolved relative to this root rather than the binary's install directory. Explicit `OBSTUDIO_DASHBOARDS_PREVIEW` paths are validated to be within this root. |
 | `SPLUNK_REALM` / `OBSTUDIO_SPLUNK_REALM` | unset | Splunk Observability Cloud realm — used for both metrics and trace export endpoints |
-| `SPLUNK_ACCESS_TOKEN` | unset | Splunk org ingest token (metrics and traces `X-SF-Token` header) |
+| `SPLUNK_ACCESS_TOKEN` | unset | Splunk org access token (`X-SF-Token` header). **For metrics and traces forwarding**, use an org ingest token. **For `$splunk-detector-publish` and `$splunk-dashboard-publish`**, the token must have **API write** permissions (the ability to create and update detectors and dashboards via the Splunk Observability Cloud REST API) — an ingest-only token is not sufficient for those skills. |
 | `OBSTUDIO_SPLUNK_METRICS_EXPORT` / `SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |
 | `OBSTUDIO_SPLUNK_METRICS_ENDPOINT` | unset | Full OTLP/HTTP metrics endpoint override |
 | `OBSTUDIO_SPLUNK_METRICS_TIMEOUT` | `5s` | Splunk metrics export request timeout |

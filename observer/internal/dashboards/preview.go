@@ -2,7 +2,9 @@ package dashboards
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +12,10 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/store"
 )
 
-// DefaultSpecPath is the sidecar location relative to the working directory.
-var DefaultSpecPath = filepath.Join(".observe", "dashboards.preview.json")
+// DefaultSpecRelPath is the sidecar location relative to the workspace root.
+// It is intentionally relative; callers must combine it with an explicit
+// workspace root (see Config.WorkspaceRoot) rather than the process CWD.
+var DefaultSpecRelPath = filepath.Join(".observe", "dashboards.preview.json")
 
 // maxSpecFileBytes caps the sidecar size read per request. The file is fed into
 // a cross-origin network handler, so an oversized file is rejected rather than
@@ -23,6 +27,12 @@ const maxSpecFileBytes = 4 << 20 // 4 MiB
 // can trigger. Panels beyond the cap are reported with their grid placement and
 // parsed query but no store resolution. It is a var so tests can lower it.
 var maxPanelsPerBuild = 500
+
+// maxResponseDataPoints is the build-wide total datapoint budget across all
+// panels and all metric groups in a single preview response. Once reached,
+// further groups are returned without datapoints to keep JSON payload size and
+// auto-refresh allocation bounded. It is a var so tests can lower it.
+var maxResponseDataPoints = 50_000
 
 // metricGroupQueryFanout is the number of metric groups requested from the store
 // before dimension filters and the display cap are applied. It is set to the ring
@@ -39,6 +49,14 @@ const maxResolvedGroups = 50
 
 // Config carries optional dashboards-preview settings into api.Register.
 type Config struct {
+	// WorkspaceRoot is the absolute workspace directory used to locate the
+	// sidecar. When empty, the process CWD is used as a fallback (CLI use
+	// only). The VS Code extension must always supply an explicit root.
+	WorkspaceRoot string
+	// SpecPath is an optional override for the full absolute path to the
+	// preview sidecar. When set it takes precedence over WorkspaceRoot.
+	// The path must be relative or within a known safe root; absolute paths
+	// pointing outside the workspace are rejected.
 	SpecPath string
 }
 
@@ -48,13 +66,70 @@ type Resolver struct {
 	specPath string
 }
 
-// NewResolver returns a Resolver. An empty specPath falls back to DefaultSpecPath.
-func NewResolver(s *store.Store, specPath string) *Resolver {
-	if specPath == "" {
-		specPath = DefaultSpecPath
-	}
-
+// NewResolver returns a Resolver. specPath is resolved as follows:
+//  1. If cfg.SpecPath is set: validate it is not an absolute path outside
+//     cfg.WorkspaceRoot, reject path traversal (absolute paths and ".." components).
+//  2. Otherwise: join cfg.WorkspaceRoot + DefaultSpecRelPath.
+//  3. If cfg.WorkspaceRoot is also empty: fall back to DefaultSpecRelPath
+//     relative to the process CWD (CLI/test use only).
+func NewResolver(s *store.Store, cfg Config) *Resolver {
+	specPath := resolveSpecPath(cfg)
 	return &Resolver{store: s, specPath: specPath}
+}
+
+// resolveSpecPath computes the final spec path from cfg, enforcing:
+//   - No absolute paths that escape the workspace root.
+//   - No ".." path components.
+//   - Fall back to workspace-relative DefaultSpecRelPath when no override given.
+func resolveSpecPath(cfg Config) string {
+	if cfg.SpecPath != "" {
+		p := cfg.SpecPath
+		// Reject ".." components to prevent traversal.
+		if strings.Contains(filepath.ToSlash(p), "..") {
+			log.Printf("[dashboards] rejected spec path with traversal component: %s", p)
+			return safeDefaultPath(cfg.WorkspaceRoot)
+		}
+		// If the path is absolute and a workspace root is configured, verify the
+		// path is contained within the workspace. When no workspace root is set
+		// (e.g. plain CLI use), an absolute SpecPath is accepted as-is — the user
+		// supplied it explicitly via OBSTUDIO_DASHBOARDS_PREVIEW.
+		if filepath.IsAbs(p) {
+			if cfg.WorkspaceRoot != "" {
+				rel, err := filepath.Rel(cfg.WorkspaceRoot, p)
+				if err != nil || strings.HasPrefix(rel, "..") {
+					log.Printf("[dashboards] rejected spec path outside workspace root: %s", p)
+					return safeDefaultPath(cfg.WorkspaceRoot)
+				}
+			}
+			return p
+		}
+		// Relative path — join with workspace root when provided.
+		if cfg.WorkspaceRoot != "" {
+			return filepath.Join(cfg.WorkspaceRoot, p)
+		}
+		return p
+	}
+	return safeDefaultPath(cfg.WorkspaceRoot)
+}
+
+func safeDefaultPath(workspaceRoot string) string {
+	if workspaceRoot != "" {
+		return filepath.Join(workspaceRoot, DefaultSpecRelPath)
+	}
+	return DefaultSpecRelPath
+}
+
+// pathErrMsg returns a safe error message for an *os.PathError that excludes
+// the absolute file-system path (which would be served through the
+// Access-Control-Allow-Origin:* endpoint and leak the local FS layout).
+func pathErrMsg(err error) string {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		// pe.Err is the underlying syscall error (e.g. "no such file or
+		// directory") with no path embedded — safe to expose.
+		return pe.Err.Error()
+	}
+	return err.Error()
 }
 
 // Build reads the sidecar and resolves every panel against local telemetry. It
@@ -77,7 +152,10 @@ func (r *Resolver) Build() PreviewResponse {
 			return resp
 		}
 
-		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %v", source, err)
+		// Log the detailed path error server-side; return only the OS message
+		// to callers (the endpoint carries Access-Control-Allow-Origin:*).
+		log.Printf("[dashboards] stat %s: %v", r.specPath, err)
+		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
 
 		return resp
 	}
@@ -96,7 +174,9 @@ func (r *Resolver) Build() PreviewResponse {
 			return resp
 		}
 
-		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %v", source, err)
+		// Log the detailed path error server-side; return only the OS message.
+		log.Printf("[dashboards] read %s: %v", r.specPath, err)
+		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
 
 		return resp
 	}
@@ -118,6 +198,10 @@ func (r *Resolver) Build() PreviewResponse {
 	// resolved counts non-text panels resolved against the store so the per-
 	// request work is bounded regardless of how many panels the spec declares.
 	resolved := 0
+	// totalDataPoints tracks the build-wide datapoint count across all resolved
+	// groups. Once it reaches maxResponseDataPoints, further groups are returned
+	// without datapoints to keep the JSON payload bounded.
+	totalDataPoints := 0
 
 	for _, g := range spec.Groups {
 		pg := PreviewGroup{Name: g.Name, Description: g.Description, Dashboards: []PreviewDashboard{}}
@@ -126,7 +210,7 @@ func (r *Resolver) Build() PreviewResponse {
 			pd := PreviewDashboard{Name: d.Name, Description: d.Description, Panels: []PreviewPanel{}}
 
 			for _, c := range d.Charts {
-				pd.Panels = append(pd.Panels, r.resolvePanel(c, points, &resolved))
+				pd.Panels = append(pd.Panels, r.resolvePanel(c, points, &resolved, &totalDataPoints))
 			}
 
 			pg.Dashboards = append(pg.Dashboards, pd)
@@ -141,8 +225,10 @@ func (r *Resolver) Build() PreviewResponse {
 // resolvePanel resolves one chart spec into a PreviewPanel against the supplied
 // metric snapshot. resolved tracks the running count of non-text panels resolved
 // against the store this build; once it reaches maxPanelsPerBuild further panels
-// report their query/placement but skip the store resolution.
-func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, resolved *int) PreviewPanel {
+// report their query/placement but skip the store resolution. totalDataPoints
+// is the build-wide datapoint accumulator; groups are stripped of their points
+// once the budget is reached.
+func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, resolved, totalDataPoints *int) PreviewPanel {
 	panel := PreviewPanel{
 		Label:     c.Label,
 		Title:     c.Title,
@@ -172,6 +258,24 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 	groups, ok := resolveMetricGroups(points, q)
 	if !ok {
 		return panel
+	}
+
+	// Apply the build-wide datapoint budget. Groups that would push the total
+	// over the limit are included in the response (so the panel shows as
+	// matched) but their DataPoints slice is trimmed to zero.
+	for i := range groups {
+		dp := groups[i].DataPoints
+		if *totalDataPoints >= maxResponseDataPoints {
+			groups[i].DataPoints = nil
+		} else {
+			remaining := maxResponseDataPoints - *totalDataPoints
+			if len(dp) > remaining {
+				groups[i].DataPoints = dp[:remaining]
+				*totalDataPoints += remaining
+			} else {
+				*totalDataPoints += len(dp)
+			}
+		}
 	}
 
 	panel.Metrics = groups

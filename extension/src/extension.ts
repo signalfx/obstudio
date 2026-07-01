@@ -66,6 +66,7 @@ const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
+const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
@@ -350,6 +351,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			recentAgentIntegrationPrompts = [];
 			for (const spec of agentIntegrationSpecs) {
 				await context.globalState.update(integrationPromptDismissalKey(spec.target), undefined);
+				await context.globalState.update(`${agentSkillsBundleVersionPrefix}${spec.target}`, undefined);
 			}
 		},
 	);
@@ -535,6 +537,12 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					OTLP_HTTP_PORT: String(otlpHttpPort),
 					OTLP_GRPC_PORT: String(otlpGrpcPort),
 					PORT: String(observerPort),
+					// Pass the workspace root so the preview resolver locates
+					// .observe/dashboards.preview.json relative to the open
+					// workspace rather than the binary's install directory.
+					...(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+						? { OBSTUDIO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders[0].uri.fsPath }
+						: {}),
 				},
 				stdio: ['ignore', 'pipe', 'pipe'],
 			});
@@ -1214,8 +1222,36 @@ function hasInstalledAgentSkills(spec: AgentIntegrationSpec): boolean {
 	return fs.existsSync(spec.skillsSentinelPath(os.homedir()));
 }
 
-function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string): boolean {
-	return getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching' || !hasInstalledAgentSkills(spec);
+function getBundleVersion(context: vscode.ExtensionContext): string {
+	return context.extension.packageJSON.version as string ?? '0.0.0';
+}
+
+function getStoredSkillsBundleVersion(context: vscode.ExtensionContext, target: AgentIntegrationTarget): string | undefined {
+	return context.globalState.get<string>(`${agentSkillsBundleVersionPrefix}${target}`);
+}
+
+async function recordSkillsBundleVersion(context: vscode.ExtensionContext, target: AgentIntegrationTarget): Promise<void> {
+	await context.globalState.update(`${agentSkillsBundleVersionPrefix}${target}`, getBundleVersion(context));
+}
+
+function skillsBundleVersionChanged(context: vscode.ExtensionContext, target: AgentIntegrationTarget): boolean {
+	const stored = getStoredSkillsBundleVersion(context, target);
+	return stored !== getBundleVersion(context);
+}
+
+function needsAgentIntegrationUpdate(spec: AgentIntegrationSpec, mcpUrl: string, context?: vscode.ExtensionContext): boolean {
+	if (getAgentIntegrationConfigState(spec, mcpUrl) !== 'matching') {
+		return true;
+	}
+	if (!hasInstalledAgentSkills(spec)) {
+		return true;
+	}
+	// Re-install skills when the extension bundle version has changed since the
+	// last successful install, so updated skill files are always deployed.
+	if (context !== undefined && skillsBundleVersionChanged(context, spec.target)) {
+		return true;
+	}
+	return false;
 }
 
 async function configureDetectedAgentIntegrations(
@@ -1232,7 +1268,7 @@ async function configureDetectedAgentIntegrations(
 	const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
 	const configured: string[] = [];
 	for (const spec of specs) {
-		if (!forceAll && !needsAgentIntegrationUpdate(spec, mcpUrl)) {
+		if (!forceAll && !needsAgentIntegrationUpdate(spec, mcpUrl, context)) {
 			continue;
 		}
 
@@ -1271,7 +1307,7 @@ async function maybeOfferDetectedAgentIntegrations(context: vscode.ExtensionCont
 		if (shownSpecs.length === 0) {
 			return;
 		}
-		const needsUpdate = shownSpecs.some((spec) => needsAgentIntegrationUpdate(spec, mcpUrl));
+		const needsUpdate = shownSpecs.some((spec) => needsAgentIntegrationUpdate(spec, mcpUrl, context));
 		if (!needsUpdate) {
 			return;
 		}
@@ -1337,6 +1373,8 @@ async function configureAgentMCP(
 		observerOutputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
 		await execFile(backend.command, ['install', '--target', target, '--shared-url', mcpUrl], backend.cwd);
 		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
+		// Record the bundle version so that future version changes trigger a re-install.
+		await recordSkillsBundleVersion(context, target);
 		observerOutputChannel.appendLine(`${label} integration enabled for ${mcpUrl}`);
 		if (showSuccessMessage) {
 			void vscode.window.showInformationMessage(

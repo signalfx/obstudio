@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "generate",
-      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform (group + dashboard + per-panel chart resources), variables.tf, terraform.tfvars.example, the .observe/dashboards.md report, and the .observe/dashboards.preview.json Observer sidecar. Do not call any network and do not run terraform."
+      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN generate dashboard Terraform for ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform (group + dashboard + per-panel chart resources), variables.tf, terraform.tfvars.example, the .observe/dashboards.md report, and the .observe/dashboards.preview.json Observer sidecar. Do not call any network and do not run terraform."
     }
   ],
   "judge_inputs": [
@@ -20,6 +20,6 @@
     "Chart program_text reuses the data('<metric>', filter=filter('service.name', ...)).<agg>().publish(...) SignalFlow pattern with a visualization aggregation (percentile for latency, sum for rate/errors) and carries NO detect()/when()/threshold() alerting tail.",
     "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus a terraform.tfvars.example, and never hard-codes a real token.",
     "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|table vocabulary and whose layout matches the Terraform grid placement.",
-    "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or $splunk-dashboard-sync without performing any network call."
+    "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or the dashboard publish skill without performing any network call."
   ]
 }

@@ -521,4 +521,55 @@ func TestParseProgramAggregationScopedToFirstDataCall(t *testing.T) {
 	}
 }
 
+// TestParseProgramNegatedFilterRecordedAsIgnored verifies that a negated filter
+// is recorded in IgnoredFilters rather than silently dropped (issue #4). Before
+// the fix, isNegatedFilter triggered a bare `continue` in both collect functions
+// so the filter key was not added to IgnoredFilters, and callers had no way to
+// surface the "⚠ filters partial" warning.
+func TestParseProgramNegatedFilterRecordedAsIgnored(t *testing.T) {
+	// Single negated filter — should appear in IgnoredFilters, NOT in Filters.
+	got := ParseProgramText("data('m', filter=not filter('env','prod')).mean().publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if len(got.Filters["env"]) > 0 {
+		t.Errorf("negated filter must not be in Filters, got %v", got.Filters["env"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("negated filter key must be recorded in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+
+	// Negated multi-value filter inside a group — key must land in IgnoredFilters.
+	got2 := ParseProgramText("data('m', filter=not (filter('region','us1','us2'))).sum().publish()")
+	if got2.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got2.ParseError)
+	}
+	if len(got2.Filters["region"]) > 0 {
+		t.Errorf("negated multi-value filter must not be in Filters, got %v", got2.Filters["region"])
+	}
+	if !slices.Contains(got2.IgnoredFilters, "region") {
+		t.Errorf("negated multi-value filter key must be in IgnoredFilters, got %v", got2.IgnoredFilters)
+	}
+}
+
+// TestParseProgramUnbalancedNegationGroup verifies that a negated group with no
+// matching closing paren still marks its filters as negated (issue #25). Before
+// the fix, matchingCloseParen returned -1 and the span was stored as
+// negatedSpan{end:-1}; since isNegatedFilter checks matchStart < span.end, no
+// positive matchStart could satisfy matchStart < -1, so filters inside the
+// unbalanced group were treated as positive constraints.
+func TestParseProgramUnbalancedNegationGroup(t *testing.T) {
+	// Unbalanced "not (" — the outer data() paren closes before the negation group.
+	got := ParseProgramText("data('m', filter=not (filter('env','prod'))")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if len(got.Filters["env"]) > 0 {
+		t.Errorf("filter inside unbalanced negation group must not be a positive constraint, got %v", got.Filters["env"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("filter inside unbalanced negation group must be in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+}
+
 func floatPtr(f float64) *float64 { return &f }

@@ -35,8 +35,19 @@ A local `signalfx_dashboard` is:
   `matched live dashboard "<name>" (id D-123): name match + N/N panel metrics present`.
 - **GAP** when no live dashboard with that name exists in the group. Reason:
   `no live dashboard named "<name>" in group "<group>"; will create`.
-- **UNCERTAIN** when a same-named live dashboard exists but its panel set or
-  metrics differ from the local spec. Reason names the divergence:
+- **COVERED (with chart-level GAPs)** when a same-named live dashboard exists
+  and every live panel title/label matches a local panel, but the live dashboard
+  has **fewer panels** than the local spec (i.e. the live panel set is a strict
+  subset of the local panel set). Classify the dashboard as COVERED and emit a
+  chart-level GAP entry for each panel present locally but absent in the live
+  dashboard. This enables the chart-level GAP repair path: create only the
+  missing charts and append them to the existing dashboard via
+  `PUT /v2/dashboard/{id}` — do **not** recreate the whole dashboard. Reason
+  example:
+  `live dashboard "<name>" (D-123): name match; live panels are a strict subset — local has p99_latency + error_rate + throughput; live has p99_latency + error_rate only; throughput chart is a GAP`.
+- **UNCERTAIN** when a same-named live dashboard exists and the live dashboard
+  contains panels that do not correspond to any local panel (genuinely different
+  content, not just missing panels). Reason names the divergence:
   `live dashboard "<name>" exists but panels differ: local has p99_latency + error_rate; live has p50_latency only — needs human review`.
   Do not auto-create and do not auto-cover; surface for manual review.
 
@@ -112,12 +123,26 @@ Live: no group or dashboard by those names.
 → group GAP, dashboard GAP, every chart GAP. Create group, then charts, then the
 dashboard referencing them.
 
-### Example 4 — dashboard UNCERTAIN
+### Example 4 — dashboard COVERED (subset), chart GAPs
+
+Local: "Checkout RED" with p99_latency + error_rate + throughput.
+
+Live: a same-named "Checkout RED" exists with p99_latency + error_rate but no
+throughput chart (every live panel matches a local panel; the live set is a
+strict subset of the local set).
+
+→ dashboard COVERED (`live panels are a strict subset`); throughput chart is a
+GAP. Create only the throughput chart via `POST /v2/chart`, then
+`PUT /v2/dashboard/{id}` appending it to the existing charts[]. Do not recreate
+the whole dashboard.
+
+### Example 5 — dashboard UNCERTAIN
 
 Local: "Checkout RED" with p99_latency + error_rate.
 
 Live: a same-named "Checkout RED" exists but contains only a single p50 latency
-chart and an unrelated metric.
+chart and an unrelated metric (the live dashboard has panels that don't
+correspond to any local panel).
 
 → dashboard UNCERTAIN (`panels differ`); do not auto-create. Surface for the user
 to reconcile.

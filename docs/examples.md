@@ -33,7 +33,7 @@
 |----------|--------|-------|
 | See which local detector specs are already live vs. missing | Show me which of my local detectors already exist in Splunk | `$splunk-sync` |
 | Create only the missing detectors, skip existing ones | Sync my local detector Terraform to Splunk -- create only the gaps | `$splunk-sync` |
-| Dry-run the create before writing anything | Preview what would be created without making any API calls | `$splunk-sync` |
+| Dry-run the create before writing anything | Preview what would be created without creating or modifying resources (read-only API calls are still made to check existing state) | `$splunk-sync` |
 | Re-run after a partial sync to fill in what failed | Resume the detector sync -- pick up where it left off | `$splunk-sync` |
 | Full end-to-end pipeline: audit → configure → sync | Audit this service, generate detectors, then push the gaps to Splunk | `$otel-audit` → `$splunk-configure` → `$splunk-sync` |
 
@@ -54,7 +54,7 @@
 | See which local dashboards/charts are already live vs. missing | Show me which of my local dashboards already exist in Splunk | `$splunk-dashboard-sync` |
 | Create only the missing dashboards and charts, skip existing ones | Sync my local dashboard Terraform to Splunk -- create only the gaps | `$splunk-dashboard-sync` |
 | Understand why each chart is COVERED/GAP/UNCERTAIN | Show the dashboard sync diff with a reason for every chart | `$splunk-dashboard-sync` |
-| Dry-run the create before writing anything | Preview the dashboard payloads without making any API calls | `$splunk-dashboard-sync` |
+| Dry-run the create before writing anything | Preview the dashboard payloads without creating or modifying resources (read-only API calls are still made to check existing state) | `$splunk-dashboard-sync` |
 | Re-run after a partial sync to fill in what failed | Resume the dashboard sync -- pick up where it left off | `$splunk-dashboard-sync` |
 | Full end-to-end pipeline: audit → dashboard → sync | Audit this service, generate a dashboard, then push the gaps to Splunk | `$otel-audit` → `$splunk-dashboard` → `$splunk-dashboard-sync` |
 

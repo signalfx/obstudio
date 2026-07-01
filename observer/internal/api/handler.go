@@ -70,7 +70,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
-	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig.SpecPath)
+	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))

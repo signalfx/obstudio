@@ -2,7 +2,20 @@ import React, { useEffect, useState } from "react";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel } from "./DashboardPanel";
 import { useDashboardPreview } from "./useDashboardPreview";
-import type { PreviewPanel } from "./types";
+import type { PreviewPanel, PreviewResponse } from "./types";
+
+/** Stable panel identity — stored instead of the panel object to avoid stale data. */
+interface PanelId {
+  groupIdx: number;
+  dashIdx: number;
+  panelLabel: string;
+}
+
+function resolvePanel(data: PreviewResponse | null, id: PanelId): PreviewPanel | null {
+  const group = data?.groups[id.groupIdx];
+  const dash = group?.dashboards[id.dashIdx];
+  return dash?.panels.find((p) => p.label === id.panelLabel) ?? null;
+}
 
 const TIME_WINDOWS = [
   { label: "1 min",  ms: 60_000 },
@@ -21,16 +34,17 @@ interface DashboardsTabProps {
 
 export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabProps): React.ReactElement {
   const { data, loading, error, refresh } = useDashboardPreview(paused);
-  const [expandedPanel, setExpandedPanel] = useState<PreviewPanel | null>(null);
+  const [expandedId, setExpandedId] = useState<PanelId | null>(null);
+  const expandedPanel = expandedId ? resolvePanel(data, expandedId) : null;
   const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
 
   // Close expanded panel on Escape.
   useEffect(() => {
-    if (!expandedPanel) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpandedPanel(null); };
+    if (!expandedId) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpandedId(null); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expandedPanel]);
+  }, [expandedId]);
 
   return (
     <div className="dashboards-tab">
@@ -63,16 +77,16 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
 
       {telemetryError ? <div className="pill pill--error">{telemetryError}</div> : null}
 
-      {renderState({ data, loading, error, windowMs, onExpand: setExpandedPanel })}
+      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
 
       {expandedPanel ? (
-        <div className="dashboard-expand-overlay" role="dialog" aria-modal="true" onClick={() => setExpandedPanel(null)}>
+        <div className="dashboard-expand-overlay" role="dialog" aria-modal="true" onClick={() => setExpandedId(null)}>
           <div className="dashboard-expand-panel" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="dashboard-expand-close"
               aria-label="Close"
-              onClick={() => setExpandedPanel(null)}
+              onClick={() => setExpandedId(null)}
             >
               ✕
             </button>
@@ -95,7 +109,7 @@ function renderState({
   loading: boolean;
   error: string | null;
   windowMs: number;
-  onExpand: (panel: PreviewPanel) => void;
+  onExpand: (id: PanelId) => void;
 }): React.ReactElement {
   if (loading && !data) {
     return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
@@ -135,7 +149,11 @@ function renderState({
               {dashboard.description ? (
                 <p className="dashboards-tab__dashboard-desc">{dashboard.description}</p>
               ) : null}
-              <DashboardGrid panels={dashboard.panels} windowMs={windowMs} onExpand={onExpand} />
+              <DashboardGrid
+                panels={dashboard.panels}
+                windowMs={windowMs}
+                onExpand={(panel) => onExpand({ groupIdx: gi, dashIdx: di, panelLabel: panel.label })}
+              />
             </div>
           ))}
         </section>

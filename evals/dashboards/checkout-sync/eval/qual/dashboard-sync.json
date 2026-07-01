@@ -2,10 +2,16 @@
   "skill": "splunk-dashboard-sync",
   "language": "dashboards",
   "service": "checkout-sync",
+  "config": {
+    "env": {
+      "SPLUNK_ACCESS_TOKEN": "dummy-token-for-eval",
+      "SPLUNK_REALM": "us0"
+    }
+  },
   "prompts": [
     {
       "id": "offline-plan",
-      "task": "Treat ./service as the project root. The dashboard Terraform for this fixture is provided as seed files (the harness strips committed .observe/ inputs, so they are shipped with a .seed suffix instead): ./service/dashboards.tf.seed, ./service/variables.tf.seed, and ./service/terraform.tfvars.seed. FIRST create ./service/.observe/terraform/ and copy dashboards.tf.seed -> .observe/terraform/dashboards.tf, variables.tf.seed -> .observe/terraform/variables.tf, and terraform.tfvars.seed -> .observe/terraform/terraform.tfvars. THEN run the $splunk-dashboard-sync skill against ./service. This sandbox has NO network and NO SPLUNK_ACCESS_TOKEN / SPLUNK_REALM, so the live-fetch step is unavailable: go as far as you can OFFLINE and then stop. Produce the offline sync plan only -- parse the group/dashboards/charts, normalize each program_text (dedent the <<-EOF heredoc and resolve every ${var.*}), present the COVERED/GAP/UNCERTAIN confirmation diff with a concrete non-empty Reason on every group/dashboard/chart row, and describe the chart-first creation order you WOULD run. Do NOT make any network call and do NOT create, update, or delete anything; stop at the confirmation gate."
+      "task": "Treat ./service as the project root. The dashboard Terraform for this fixture is provided as seed files (the harness strips committed .observe/ inputs, so they are shipped with a .seed suffix instead): ./service/dashboards.tf.seed, ./service/variables.tf.seed, and ./service/terraform.tfvars.seed. FIRST create ./service/.observe/terraform/ and copy dashboards.tf.seed -> .observe/terraform/dashboards.tf, variables.tf.seed -> .observe/terraform/variables.tf, and terraform.tfvars.seed -> .observe/terraform/terraform.tfvars. THEN run the $splunk-dashboard-sync skill against ./service. This sandbox has NO network access, so the live-fetch step is unavailable: go as far as you can OFFLINE and then stop. Produce the offline sync plan only -- parse the group/dashboards/charts, normalize each program_text (dedent the <<-EOF heredoc and resolve every ${var.*}), present the COVERED/GAP/UNCERTAIN confirmation diff with a concrete non-empty Reason on every group/dashboard/chart row, and describe the chart-first creation order you WOULD run. Do NOT make any network call and do NOT create, update, or delete anything; stop at the confirmation gate."
     }
   ],
   "judge_inputs": [

@@ -84,12 +84,22 @@ function renderBody(
   }
 
   if (panel.chartType === "single_value") {
-    const latest = allSeries.length > 0 ? allSeries[allSeries.length - 1].latest : 0;
+    if (allSeries.length === 0) {
+      return (
+        <div className="dashboard-panel__empty dashboard-panel__empty--no-data">
+          <span className="dashboard-panel__empty-title">No data in window</span>
+        </div>
+      );
+    }
+    // Deterministic pick: sort by key so the displayed series is stable across
+    // refreshes regardless of insertion order (#24).
+    const sorted = [...allSeries].sort((a, b) => a.key.localeCompare(b.key));
+    const latest = sorted[0].latest;
     return (
       <div className="dashboard-panel__single-value">
         <span className="dashboard-panel__single-value-number">{formatNumber(latest)}</span>
         {allSeries.length > 1 ? (
-          <span className="dashboard-panel__single-value-note">{allSeries.length} series · latest shown</span>
+          <span className="dashboard-panel__single-value-note">{allSeries.length} series · first by key shown</span>
         ) : null}
       </div>
     );
@@ -136,7 +146,15 @@ function renderBody(
   }
 
   if (panel.chartType === "heatmap") {
-    const latest = allSeries.length > 0 ? allSeries[allSeries.length - 1].latest : 0;
+    if (allSeries.length === 0) {
+      return (
+        <div className="dashboard-panel__empty dashboard-panel__empty--no-data">
+          <span className="dashboard-panel__empty-title">No data in window</span>
+        </div>
+      );
+    }
+    const sorted = [...allSeries].sort((a, b) => a.key.localeCompare(b.key));
+    const latest = sorted[0].latest;
     return (
       <div className="dashboard-panel__single-value">
         <span className="dashboard-panel__single-value-number">{formatNumber(latest)}</span>
@@ -283,7 +301,11 @@ function usePreparedMetrics(
       return !isNaN(t) && t >= cutoffMs;
     });
 
-    const isMonotonicCounter = g.type === "sum" && filtered.length > 0 && filtered.some((dp) => dp.isMonotonic === true);
+    // A sum with isMonotonic=true and cumulative (or unspecified) temporality needs
+    // differentiation to produce a rate. Delta sums are already per-interval values
+    // and must not be differentiated (#5).
+    const isMonotonicCounter = g.type === "sum" && filtered.length > 0 &&
+      filtered.some((dp) => dp.isMonotonic === true && dp.temporality !== "delta");
     const isHistogram = g.type === "histogram";
 
     // Split the group's interleaved points into per-series buckets BEFORE the

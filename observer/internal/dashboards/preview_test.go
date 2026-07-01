@@ -54,7 +54,7 @@ func metricPoint(name, service string, value float64, attrs map[string]any) stor
 func TestBuildMissingSpec(t *testing.T) {
 	s := store.New()
 	// Point at a path that does not exist.
-	r := NewResolver(s, filepath.Join(t.TempDir(), "nope.json"))
+	r := NewResolver(s, Config{SpecPath: filepath.Join(t.TempDir(), "nope.json")})
 
 	resp := r.Build()
 
@@ -79,7 +79,7 @@ func TestBuildMalformedJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ not json"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	r := NewResolver(store.New(), path)
+	r := NewResolver(store.New(), Config{SpecPath: path})
 
 	resp := r.Build()
 
@@ -112,7 +112,7 @@ func TestBuildMatchedPanel(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	resp := r.Build()
 
@@ -156,7 +156,7 @@ func TestBuildUnmatchedPanel(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -190,7 +190,7 @@ func TestBuildDimensionFilterNarrows(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -224,7 +224,7 @@ func TestBuildTextPanelPassthrough(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(store.New(), writeSpec(t, spec))
+	r := NewResolver(store.New(), Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -255,7 +255,7 @@ func TestBuildParseErrorPanel(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(store.New(), writeSpec(t, spec))
+	r := NewResolver(store.New(), Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -268,7 +268,7 @@ func TestBuildParseErrorPanel(t *testing.T) {
 }
 
 func TestNewResolverDefaultsSpecPath(t *testing.T) {
-	r := NewResolver(store.New(), "")
+	r := NewResolver(store.New(), Config{})
 	// Build should not panic; it reports the default path in the message/source.
 	resp := r.Build()
 	if resp.Source == "" {
@@ -299,7 +299,7 @@ func TestBuildConflictingServiceAlias(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -336,7 +336,7 @@ func TestBuildOTLPArrayAttributeMatch(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -368,7 +368,7 @@ func TestBuildMultiValueFilterMatchesAny(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -409,7 +409,7 @@ func TestBuildDataPointCountSyncedAfterFilter(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -450,7 +450,7 @@ func TestBuildMultiValueServiceFilterExcludesUnrelated(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -498,7 +498,7 @@ func TestBuildMultiValueServiceFilterMixedCase(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -547,7 +547,7 @@ func TestBuildFilterBeforeCap(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -601,7 +601,7 @@ func TestBuildFilterBeyondQueryFanout(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
 
@@ -647,7 +647,7 @@ func TestBuildPanelCap(t *testing.T) {
 			}},
 		}},
 	}
-	r := NewResolver(s, writeSpec(t, spec))
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
 
 	panels := r.Build().Groups[0].Dashboards[0].Panels
 	matched := 0
@@ -673,7 +673,7 @@ func TestBuildSourceHidesAbsolutePath(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ not json"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	r := NewResolver(store.New(), path)
+	r := NewResolver(store.New(), Config{SpecPath: path})
 
 	resp := r.Build()
 
@@ -700,7 +700,7 @@ func TestBuildOversizedFileRejected(t *testing.T) {
 	if err := os.WriteFile(path, big, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	r := NewResolver(store.New(), path)
+	r := NewResolver(store.New(), Config{SpecPath: path})
 
 	resp := r.Build()
 

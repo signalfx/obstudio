@@ -121,7 +121,13 @@ func negatedGroupSpans(program string) []negatedSpan {
 	for _, loc := range reNotGroup.FindAllStringIndex(program, -1) {
 		// loc[1]-1 is the index of the opening paren that begins the group.
 		open := loc[1] - 1
-		spans = append(spans, negatedSpan{start: loc[0], end: matchingCloseParen(program, open)})
+		end := matchingCloseParen(program, open)
+		if end < 0 {
+			// Unbalanced group: extend to end-of-string (best effort) so every
+			// filter inside it is still recognised as negated.
+			end = len(program)
+		}
+		spans = append(spans, negatedSpan{start: loc[0], end: end})
 	}
 
 	return spans
@@ -360,7 +366,11 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 
 		handled[start] = true
 
-		if key == "" || isNegatedFilter(program, start, negated) {
+		if key == "" {
+			continue
+		}
+		if isNegatedFilter(program, start, negated) {
+			recordIgnoredFilter(q, key)
 			continue
 		}
 
@@ -393,7 +403,11 @@ func collectSingleValueFilters(program string, q *ParsedQuery, handled map[int]b
 		key := program[loc[2]:loc[3]]
 		val := program[loc[4]:loc[5]]
 
-		if key == "" || isNegatedFilter(program, start, negated) {
+		if key == "" {
+			continue
+		}
+		if isNegatedFilter(program, start, negated) {
+			recordIgnoredFilter(q, key)
 			continue
 		}
 

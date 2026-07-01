@@ -37,8 +37,10 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
   // X-axis always spans the full selected window, matching O11y's behaviour.
   // NOTE: no useMemo — fresh Date.now() every render so the axis scrolls live.
   const now = Date.now();
-  const minT = windowMs && windowMs > 0 ? now - windowMs : Math.min(...timestamps);
-  const maxT = windowMs && windowMs > 0 ? now : Math.max(...timestamps);
+  // Guard the spread to avoid Math.min/max of an empty array returning ±Infinity
+  // when all timestamps are unparseable (#23).
+  const minT = windowMs && windowMs > 0 ? now - windowMs : (timestamps.length > 0 ? Math.min(...timestamps) : now - 60_000);
+  const maxT = windowMs && windowMs > 0 ? now : (timestamps.length > 0 ? Math.max(...timestamps) : now);
 
   const minV = Math.min(0, ...values);
   const maxV = Math.max(...values) || 1;
