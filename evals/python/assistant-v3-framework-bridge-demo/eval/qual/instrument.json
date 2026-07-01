@@ -16,6 +16,8 @@
     "For app-owned canonical spans, suppresses overlapping LangChain/OpenAI GenAI instrumentors in the Makefile or another real startup surface before opentelemetry-instrument bootstraps.",
     "Keeps baseline HTTP/database/runtime auto-instrumentation active while suppressing only overlapping GenAI framework emitters.",
     "Preserves assistant_v3_turn and deepagents exactly; it does not invent assistant_v3_session_turn, assistant_v3_agent, or POST /v2/assistant/sessions as GenAI names.",
-    "Requires runtime/static proof that Obstudio would show one workflow node, one agent node, expected LLM/tool counts, stable model/tool names, and no wrapper-only LangGraph or step nodes."
+    "Requires runtime/static proof that Obstudio would show one workflow node, one agent node, expected LLM/tool counts, stable model/tool names, and no wrapper-only LangGraph or step nodes.",
+    "Writes a separate instrumentation report with Signals Changed. When a source audit exists, it preserves every Audit Gap Closure and GenAI Readiness Closure surface and required-signal cell; otherwise it records that no source audit was available.",
+    "Runs otel-verify against exact app-owned span names and duplicate-span expectations, or records the exact blocker; unexecuted full-runtime or explorer claims remain Not proven rather than Working."
   ]
 }

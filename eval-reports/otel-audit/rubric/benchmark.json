@@ -7,33 +7,33 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-audit",
-    "run_id": "20260430T171007325917Z",
+    "run_id": "20260629T193514000000Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
     "runtime_enabled": false,
-    "workers": "1",
+    "workers": "merged",
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 7,
-    "prompt_count": 14,
-    "failure_count": 1,
+    "eval_count": 4,
+    "prompt_count": 7,
+    "failure_count": 0,
     "with_skill": {
-      "prompt_count": 14,
-      "command_count": 370,
-      "duration_seconds": 1473.729,
-      "agent_duration_seconds": 897.2,
-      "tokens": 3370524,
-      "agent_tokens": 2186485,
+      "prompt_count": 7,
+      "command_count": 424,
+      "duration_seconds": 3648.375,
+      "agent_duration_seconds": 3110.884,
+      "tokens": 10789692,
+      "agent_tokens": 10064071,
       "error_count": 0,
       "rubric": {
-        "passed": 70,
-        "total": 71,
-        "average_score": 63.785714285714285
+        "passed": 42,
+        "total": 42,
+        "average_score": 98.25
       },
-      "rubric_tokens": 1184039,
-      "rubric_duration_seconds": 576.229
+      "rubric_tokens": 725621,
+      "rubric_duration_seconds": 537.059
     },
     "with_baseline": null
   },
@@ -50,242 +50,129 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 40,
-        "duration_seconds": 202.889,
-        "agent_duration_seconds": 104.149,
-        "tokens": 401161,
-        "agent_tokens": 247322,
+        "command_count": 98,
+        "duration_seconds": 1090.019,
+        "agent_duration_seconds": 931.862,
+        "tokens": 1874051,
+        "agent_tokens": 1702446,
         "error_count": 0,
         "rubric": {
-          "passed": 11,
-          "total": 11,
+          "passed": 12,
+          "total": 12,
           "average_score": 100.0
         },
-        "rubric_tokens": 153839,
-        "rubric_duration_seconds": 98.708
+        "rubric_tokens": 171605,
+        "rubric_duration_seconds": 157.851
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-basic/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-basic/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-basic/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/with_baseline.json"
       }
     },
     {
-      "id": "go/chi-partial/qual/audit",
-      "case": "go/chi-partial",
-      "language": "go",
-      "service": "chi-partial",
+      "id": "python/ai-assistant-demo/qual/audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
       "prompt_count": 2,
       "prompts": [
         "direct",
-        "readiness-review"
+        "genai-readiness"
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 40,
-        "duration_seconds": 231.647,
-        "agent_duration_seconds": 152.326,
-        "tokens": 422327,
-        "agent_tokens": 258582,
+        "command_count": 126,
+        "duration_seconds": 1005.906,
+        "agent_duration_seconds": 856.799,
+        "tokens": 3747402,
+        "agent_tokens": 3540854,
         "error_count": 0,
         "rubric": {
-          "passed": 10,
-          "total": 10,
+          "passed": 12,
+          "total": 12,
+          "average_score": 98.0
+        },
+        "rubric_tokens": 206548,
+        "rubric_duration_seconds": 149.055
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/assistant-v3-framework-bridge-demo/qual/audit",
+      "case": "python/assistant-v3-framework-bridge-demo",
+      "language": "python",
+      "service": "assistant-v3-framework-bridge-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "framework-bridge"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 62,
+        "duration_seconds": 533.296,
+        "agent_duration_seconds": 430.276,
+        "tokens": 1603835,
+        "agent_tokens": 1464068,
+        "error_count": 0,
+        "rubric": {
+          "passed": 6,
+          "total": 6,
+          "average_score": 95.0
+        },
+        "rubric_tokens": 139767,
+        "rubric_duration_seconds": 102.986
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/mcp-ai-tool-demo/qual/audit",
+      "case": "python/mcp-ai-tool-demo",
+      "language": "python",
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "mcp-readiness"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 138,
+        "duration_seconds": 1019.154,
+        "agent_duration_seconds": 891.947,
+        "tokens": 3564404,
+        "agent_tokens": 3356703,
+        "error_count": 0,
+        "rubric": {
+          "passed": 12,
+          "total": 12,
           "average_score": 100.0
         },
-        "rubric_tokens": 163745,
-        "rubric_duration_seconds": 79.277
+        "rubric_tokens": 207701,
+        "rubric_duration_seconds": 127.167
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-partial/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-partial/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/chi-partial/qual-audit/with_baseline.json"
-      }
-    },
-    {
-      "id": "go/kvstore/qual/audit",
-      "case": "go/kvstore",
-      "language": "go",
-      "service": "kvstore",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "readiness-review"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 78,
-        "duration_seconds": 254.182,
-        "agent_duration_seconds": 165.879,
-        "tokens": 773436,
-        "agent_tokens": 526955,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 50.5
-        },
-        "rubric_tokens": 246481,
-        "rubric_duration_seconds": 88.25
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/kvstore/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/kvstore/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/go/kvstore/qual-audit/with_baseline.json"
-      }
-    },
-    {
-      "id": "java/springboot-basic/qual/audit",
-      "case": "java/springboot-basic",
-      "language": "java",
-      "service": "springboot-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "readiness-review"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 66,
-        "duration_seconds": 221.722,
-        "agent_duration_seconds": 124.925,
-        "tokens": 428336,
-        "agent_tokens": 247007,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 52.5
-        },
-        "rubric_tokens": 181329,
-        "rubric_duration_seconds": 96.738
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/java/springboot-basic/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/java/springboot-basic/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/java/springboot-basic/qual-audit/with_baseline.json"
-      }
-    },
-    {
-      "id": "node/express-basic/qual/audit",
-      "case": "node/express-basic",
-      "language": "node",
-      "service": "express-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "readiness-review"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 38,
-        "duration_seconds": 168.126,
-        "agent_duration_seconds": 105.529,
-        "tokens": 426802,
-        "agent_tokens": 271926,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 52.5
-        },
-        "rubric_tokens": 154876,
-        "rubric_duration_seconds": 62.558
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/node/express-basic/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/node/express-basic/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/node/express-basic/qual-audit/with_baseline.json"
-      }
-    },
-    {
-      "id": "python/fastapi-celery/qual/audit",
-      "case": "python/fastapi-celery",
-      "language": "python",
-      "service": "fastapi-celery",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "readiness-review"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 66,
-        "duration_seconds": 241.225,
-        "agent_duration_seconds": 143.368,
-        "tokens": 464394,
-        "agent_tokens": 281027,
-        "error_count": 0,
-        "rubric": {
-          "passed": 9,
-          "total": 10,
-          "average_score": 86.0
-        },
-        "rubric_tokens": 183367,
-        "rubric_duration_seconds": 97.813
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/fastapi-celery/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/fastapi-celery/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/fastapi-celery/qual-audit/with_baseline.json"
-      }
-    },
-    {
-      "id": "python/flask-basic/qual/audit",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
-      "prompt_count": 2,
-      "prompts": [
-        "direct",
-        "readiness-review"
-      ],
-      "with_skill": {
-        "prompt_count": 2,
-        "command_count": 42,
-        "duration_seconds": 153.938,
-        "agent_duration_seconds": 101.024,
-        "tokens": 454068,
-        "agent_tokens": 353666,
-        "error_count": 0,
-        "rubric": {
-          "passed": 10,
-          "total": 10,
-          "average_score": 5.0
-        },
-        "rubric_tokens": 100402,
-        "rubric_duration_seconds": 52.885
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/flask-basic/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/flask-basic/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260430T171007325917Z/results/python/flask-basic/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/with_baseline.json"
       }
     }
   ],
-  "failures": [
-    {
-      "service": "python/fastapi-celery",
-      "side": "with_skill",
-      "prompt": "direct",
-      "category": "rubric",
-      "result": "rubric:rubric-4 FAIL",
-      "evidence": "The response says there are no `OTEL_*` env vars/exporter/resource config, but it does not explicitly identify that the `api` and `worker` docker-compose start commands are not wrapped/configured for instrumentation.",
-      "mode": "with_skill"
-    }
-  ]
+  "failures": []
 }

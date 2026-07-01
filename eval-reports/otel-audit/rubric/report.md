@@ -7,30 +7,25 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20260430T171007325917Z |
+| Run ID | 20260629T193514000000Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
-| Workers | 1 |
+| Workers | merged |
 | Config | evals/codex-evals.toml |
 
 ## Rubric Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/audit | go/chi-basic | 2 | 100% (11/11), avg score 100 | 401.2K | 3.4m | - | - | - |
-| with_skill | go/chi-partial/qual/audit | go/chi-partial | 2 | 100% (10/10), avg score 100 | 422.3K | 3.9m | - | - | - |
-| with_skill | go/kvstore/qual/audit | go/kvstore | 2 | 100% (10/10), avg score 50 | 773.4K | 4.2m | - | - | - |
-| with_skill | java/springboot-basic/qual/audit | java/springboot-basic | 2 | 100% (10/10), avg score 52 | 428.3K | 3.7m | - | - | - |
-| with_skill | node/express-basic/qual/audit | node/express-basic | 2 | 100% (10/10), avg score 52 | 426.8K | 2.8m | - | - | - |
-| with_skill | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | 90% (9/10), avg score 86 | 464.4K | 4.0m | - | - | - |
-| with_skill | python/flask-basic/qual/audit | python/flask-basic | 2 | 100% (10/10), avg score 5 | 454.1K | 2.6m | - | - | - |
+| with_skill | go/chi-basic/qual/audit | go/chi-basic | 2 | 100% (12/12), avg score 100 | 1.9M | 18.2m | - | - | - |
+| with_skill | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | 100% (12/12), avg score 98 | 3.7M | 16.8m | - | - | - |
+| with_skill | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | 100% (6/6), avg score 95 | 1.6M | 8.9m | - | - | - |
+| with_skill | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | 100% (12/12), avg score 100 | 3.6M | 17.0m | - | - | - |
 
 ## Rubric Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | python/fastapi-celery | with_skill | direct | rubric:rubric-4 FAIL | The response says there are no `OTEL_*` env vars/exporter/resource config, but it does not explicitly identify that the `api` and `worker` docker-compose start commands are not wrapped/configured for instrumentation. |
+No rubric failures.
 
 ## Result JSON
 

@@ -6,6 +6,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 GENAI_REF = SKILLS_DIR / "references" / "genai-readiness.md"
+REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
+OTEL_VERIFY = SKILLS_DIR / "otel-verify" / "SKILL.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 SPLUNK_SYNC = SKILLS_DIR / "splunk-sync" / "SKILL.md"
@@ -552,34 +554,25 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     configure = _read(SPLUNK_CONFIGURE)
+    audit_normalized = " ".join(audit.split())
+    instrument_normalized = " ".join(instrument.split())
     required_audit_terms = [
         "GenAI readiness contract",
-        "Do not require a separate",
-        "do not require opaque IDs such as `GR8`",
+        "complete instrumentation contract",
         "surface`, `evidence`, `current_status`, `required_signals`",
-        "surface name, not an opaque ID",
+        "the surface name as the human-facing identifier",
     ]
     required_instrument_terms = [
         "GenAI Readiness Contract",
         "Parse each row by human-readable `surface`",
-        "Do not require opaque row IDs such as `GR8`",
-        "surface name in human-facing summaries",
+        "Use the surface name as the human-facing identifier",
         "surface -> required_signals -> implemented_signals -> tests",
     ]
-    assert not [term for term in required_audit_terms if term not in audit]
-    assert not [term for term in required_instrument_terms if term not in instrument]
-    assert "separate GenAI gap-contract section" in instrument
-    blocked_contract_terms = [
-        "| Gap ID |",
-        "`gap_id -> required_signals",
-        "Every GenAI-related `## Gaps` bullet must map back to a Gap ID",
-        "Use stable IDs such as",
-        "GenAI Gap Contract",
+    assert not [term for term in required_audit_terms if term not in audit_normalized]
+    assert not [
+        term for term in required_instrument_terms if term not in instrument_normalized
     ]
-    for text in (audit, instrument, configure):
-        bad = [term for term in blocked_contract_terms if term in text]
-        assert not bad
-    assert "legacy GenAI gap-contract" in configure
+    assert "every independently actionable surface row" in configure
     assert "| Surface | Audit Status | Missing Signal |" in configure
 
 
@@ -588,28 +581,11 @@ def test_audit_requires_single_deterministic_gap_section():
     normalized = " ".join(audit.split())
     required_terms = [
         "Deterministic gap section contract",
-        "one top-level gap section, named exactly `## Gaps`",
-        "Do not emit `## Gap Register`",
-        "`## Gaps and Recommendations`",
-        "`Gaps:`",
-        "or any GenAI-local gap subsection",
-        "record the contract in `## GenAI Readiness` table rows",
+        "exactly one top-level gap section, named `## Gaps`",
+        "Record GenAI detail in `## GenAI Readiness` table rows",
         "point back to the human-readable readiness surface name",
     ]
     assert not [term for term in required_terms if term not in normalized]
-
-    forbidden_normalized_terms = [
-        "Add `## GenAI Readiness` rows and `## Gaps` entries",
-        "GenAI Gap Contract",
-    ]
-    assert not [term for term in forbidden_normalized_terms if term in normalized]
-
-    forbidden_headings = [
-        "\n## Gap Register\n",
-        "\n## Gaps and Recommendations\n",
-        "\nGaps:\n",
-    ]
-    assert not [term for term in forbidden_headings if term in audit]
 
 
 def test_assistant_v3_framework_bridge_eval_covers_duplicate_span_risk():
@@ -747,6 +723,7 @@ def test_instrument_requires_token_pressure_residuals_in_final_closure():
         "do not close prompt/tool schema size pressure",
         "remaining_signals",
         "For every GenAI instrumentation run, include a concise closure summary",
+        "For GenAI work without a source audit",
         "Remaining signals: none",
         "Final summaries, PR descriptions, and audit updates must not omit",
         "LLM-call fanout",
@@ -814,72 +791,136 @@ def test_instrument_requires_mcp_safe_dimensions_send_failure_and_tests():
         "tool-specific duration histogram",
         "tool error/timeout counter",
         "owner-map the missing source explicitly",
-        "focused pytest file",
-        "Do not rely on unrun compile targets",
+        "focused repo-native test",
+        "Do not finalize with a compile",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
 
 
-def test_audit_places_genai_readiness_after_red_without_incident_readiness():
+def test_audit_places_genai_readiness_before_gaps_when_owned():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     assert "Use this template for `.observe/otel.md`:" in audit
     report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
     assert "Report requirements:" in report_template
     report_template = report_template.split("Report requirements:")[0]
-    assert "## RED Signals" in report_template
+    assert "## Current Instrumentation" in report_template
     assert "## GenAI Readiness" in report_template
-    red_index = report_template.index("## RED Signals")
+    assert "## Gaps" in report_template
+    current_index = report_template.index("## Current Instrumentation")
     genai_index = report_template.index("## GenAI Readiness")
-    assert red_index < genai_index
-    assert "## Incident Readiness" not in report_template
+    gaps_index = report_template.index("## Gaps")
+    assert current_index < genai_index < gaps_index
 
 
-def test_audit_requires_generic_instrumentation_delta_section():
+def test_audit_requires_reader_first_current_state_baseline():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    audit_normalized = " ".join(audit.split())
     assert "Use this template for `.observe/otel.md`:" in audit
     report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
     assert "Report requirements:" in report_template
     report_template = report_template.split("Report requirements:")[0]
 
+    evidence_index = report_template.index("## Audit Evidence")
     current_index = report_template.index("## Current Instrumentation")
-    delta_index = report_template.index("## Instrumentation Delta")
-    red_index = report_template.index("## RED Signals")
-    assert current_index < delta_index < red_index
+    gaps_index = report_template.index("## Gaps")
+    verification_index = report_template.index("## Verification Plan")
+    assert evidence_index < current_index < gaps_index < verification_index
 
     required_terms = [
-        "Baseline audit: no previous instrumentation report found; no delta computed.",
-        "| Signal Type | Added | Modified | Deleted | Evidence |",
-        "| Traces/spans |",
-        "| Metrics |",
-        "| Logs/events |",
-        "| Runtime/config |",
-        "| Dependencies |",
-        "This section is generic across observability signals",
+        "**GenAI ownership detected:** Yes | No",
+        "| GenAI ownership |",
+        "Always emit `**GenAI ownership detected:** Yes` or `No`",
+        "Use only the top-level sections shown in the report template",
+        "validator rejects additional top-level sections",
+        "python3 scripts/validate_audit_report.py .observe/otel.md",
+    ]
+    missing = [term for term in required_terms if term not in audit_normalized]
+    assert not missing
+
+
+def test_audit_read_only_scope_still_writes_the_report_artifact():
+    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    required_terms = [
+        "Read-only for application code",
+        "writes `.observe/otel.md`",
+        "does not modify service code",
+        "Write the report to `.observe/otel.md`",
     ]
     missing = [term for term in required_terms if term not in audit]
     assert not missing
-    assert "Only list a deleted signal when prior-report evidence" in " ".join(audit.split())
 
 
-def test_instrument_requires_generic_instrumentation_delta_update():
+def test_audit_keeps_genai_readiness_surfaces_independently_actionable():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    required_terms = [
+        "each telemetry-distinct owned surface, write one separate readiness row",
+        "Keep workflow, provider/model, tool/function, token/context, stream/session",
+        "distinct surfaces independently actionable for instrumentation closure",
+    ]
+    missing = [term for term in required_terms if term not in audit]
+    assert not missing
+
+
+def test_instrument_requires_signals_changed_and_gap_closure():
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     required_terms = [
-        "Generic Instrumentation Delta Contract",
-        "`## Instrumentation Delta`",
-        "This section is not GenAI-specific",
-        "Before editing, capture the baseline",
-        "| Signal Type | Added | Modified | Deleted | Evidence |",
-        "| Traces/spans | exact span names |",
-        "| Metrics | exact metric names |",
-        "| Logs/events | log bridges or span events |",
-        "| Runtime/config | service/exporter/env/startup settings |",
-        "| Dependencies | OTel packages |",
-        "Do not claim a deletion unless the previous report or git diff proves",
-        "The final response must summarize the same delta by signal type",
+        "## Signals Changed",
+        "## Audit Gap Closure",
+        "## GenAI Readiness Closure",
+        "`Signals Changed` is the implementation-change inventory",
+        "| Signal type | Added | Modified | Removed | Evidence | Verification status |",
+        "Do not claim a removal unless the previous report or git diff proves",
+        "Use one row per prioritized audit gap",
+        "Derive the report-level `**Result:**` from both closure tables",
+        "python3 scripts/validate_gap_closure.py",
     ]
     missing = [term for term in required_terms if term not in instrument]
     assert not missing
+
+
+def test_instrument_requires_route_aware_http_proof_and_source_owned_closure():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    required_terms = [
+        "route-aware server spans are required",
+        "low-cardinality route pattern",
+        "do not emit duplicate server spans",
+        "When no source audit exists, do not create `## GenAI Readiness Closure`",
+        "do not create a `GenAI Readiness Closure` table without source-audit rows",
+    ]
+    missing = [term for term in required_terms if term not in instrument]
+    assert not missing
+
+
+def test_instrument_requires_attempt_or_exact_full_runtime_blocker():
+    instrument = " ".join(
+        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
+    )
+    required_terms = [
+        "`Not run` or `no collector was run` alone is not an acceptable blocker",
+        "record either the executed command and direct result or the concrete unavailable runtime",
+        "Do not finalize while a safe local profile exists",
+    ]
+    missing = [term for term in required_terms if term not in instrument]
+    assert not missing
+
+
+def test_verify_requires_reader_first_individual_results():
+    verify = _read(OTEL_VERIFY)
+    report_flow = _read(REPORT_FLOW)
+    required_terms = [
+        "## What Changed",
+        "## Tested And Working",
+        "## Not Working Or Not Proven",
+        "## Proof",
+        "**Individual result:** <working>/<total> working",
+    ]
+    for text in (verify, report_flow):
+        missing = [term for term in required_terms if term not in text]
+        assert not missing
+    assert "validate_reader_report.py" in verify
 
 
 def test_splunk_configure_generates_genai_readiness_categories():
@@ -927,22 +968,26 @@ def test_splunk_configure_consumes_all_genai_readiness_rows():
     skill = _read(SPLUNK_CONFIGURE)
     required_terms = [
         "GenAI Readiness",
-        "workflow trace shape",
-        "semantic-convention completeness",
-        "metrics and detectors",
-        "AI pathway surfaces",
+        "every independently actionable surface row",
+        "provider/model",
+        "workflow/agent",
+        "tool/function",
+        "token/context",
+        "stream/session",
+        "retrieval",
         "memory/context",
-        "evaluation quality",
+        "evaluation/data export",
         "content governance",
-        "cost source or owner mapping",
+        "cost ownership",
         "privacy/cardinality",
+        "Do not merge distinct readiness surfaces",
         "Missing or partial GenAI areas become instrumentation prerequisites",
     ]
     missing = [term for term in required_terms if term not in skill]
     assert not missing
 
 
-def test_splunk_configure_prioritizes_genai_before_generic_red():
+def test_splunk_configure_prioritizes_genai_before_generic_categories():
     classification = _read(SPLUNK_CONFIGURE_REFS / "detector-classification.md")
     assert "Classify GenAI metrics before generic latency" in classification
     assert "metric name starts with \"gen_ai.\"" in classification

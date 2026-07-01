@@ -85,7 +85,10 @@ Severity is intentionally simple:
 
 The extension can point supported AI coding agents at the same local Observer instance used by the VS Code webview.
 
-It does not add new skills inside the webview itself. Instead, it installs the bundled `otel-audit` and `otel-instrument` skills for supported agents and updates their MCP config to use the shared local Observer.
+It does not add new skills inside the webview itself. Instead, it installs all
+bundled skills, including `otel-audit`, `otel-instrument`, and `otel-verify`,
+for supported agents and updates their MCP config to use the shared local
+Observer.
 
 Use it like this:
 
@@ -93,12 +96,13 @@ Use it like this:
 2. Accept the one-time integration prompt when Codex, Claude Code, or Cursor is detected, or run one of the `Enable ... Integration` commands from the Command Palette.
 3. Restart that agent so it reloads the bundled skills and MCP settings.
 4. In the agent, use the syntax that agent expects for the bundled skills:
-   - Codex-style examples: `$otel-audit`, `$otel-instrument`
-   - Slash-command style examples: `/otel-audit`, `/otel-instrument`
+   - Codex-style examples: `$otel-audit`, `$otel-instrument`, `$otel-verify`
+   - Slash-command style examples: `/otel-audit`, `/otel-instrument`, `/otel-verify`
 
 For the full skill reference, use the repo docs:
 
 - [Core skills overview](https://github.com/signalfx/obstudio/blob/main/README.md#core-skills)
+- [OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
 - [README: Using The Skills](https://github.com/signalfx/obstudio/blob/main/README.md#using-the-skills)
 - [User guide: Using Skills](https://github.com/signalfx/obstudio/blob/main/docs/USER.md#using-skills)
 
@@ -132,7 +136,7 @@ If the managed endpoint or either OTLP port is already in use by an incompatible
 
 ## Requirements
 
-- VS Code `^1.110.0`
+- VS Code `^1.82.0`
 - No additional runtime setup is required for normal extension use.
 - To build the extension from source, install Node.js, `npm`, and the Go toolchain, and make sure `go version` works in your shell before running the build scripts.
 

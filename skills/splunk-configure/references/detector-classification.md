@@ -216,7 +216,7 @@ metric type is gauge AND name matches saturation keywords?
 
 When a metric could match multiple categories (rare), use this priority:
 
-1. GenAI categories (provider/model/tool/retrieval/memory/evaluation/token/fanout/cost signals before generic RED)
+1. GenAI categories (provider/model/tool/retrieval/memory/evaluation/token/fanout/cost signals before generic request-rate, error, latency, and saturation categories)
 2. Latency (duration histograms are unambiguous)
 3. Error (error counters are high-value signals)
 4. Throughput (general counters)

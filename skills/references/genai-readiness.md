@@ -84,6 +84,13 @@ operation: workflow, model call, tool call, retrieval, memory operation, or
 evaluation result, not both a framework wrapper span and an app-owned duplicate
 for the same work.
 
+The audit handoff must name the intended canonical owner for each discovered
+logical-operation family: workflow, agent, model call, tool call, retrieval,
+memory, and evaluation when present. It must also name the startup/config
+surface that suppresses overlapping bridges before bootstrap. If source
+evidence is insufficient to choose, classify ownership as a `manual decision`
+instead of leaving a `default` instrumentation row ambiguous.
+
 If the framework/vendor bridge is the canonical source, keep it and add only
 missing app-owned workflow/agent context, safe aggregate attributes, metrics,
 or owner mappings. Do not add duplicate app-owned `chat` or `execute_tool`
