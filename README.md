@@ -35,8 +35,8 @@ cd obstudio_*_darwin_arm64
 After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
 to `obstudio`. It stores the managed bundle under `~/.<agent>/skills/obstudio/`
-and creates top-level discoverable skill entries such as `otel-audit` and
-`otel-verify` in the agent skills root.
+and creates top-level discoverable skill entries such as `otel-audit`,
+`otel-instrument`, and `otel-verify` in the agent skills root.
 
 ### Build From Source
 
