@@ -135,6 +135,9 @@
     "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
     "test": "vscode-test"
   },
+  "overrides": {
+    "serialize-javascript": ">=7.0.5"
+  },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
