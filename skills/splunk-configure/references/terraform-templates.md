@@ -97,7 +97,7 @@ resource "signalfx_detector" "saturation_<metric_id>" {
   description = "Detects high saturation for <metric_name>"
 
   program_text = <<-EOF
-    A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).publish(label='Saturation')
+    A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Saturation')
     detect(when(A > threshold(${var.saturation_<metric_id>_threshold}))).publish('Saturation Too High')
   EOF
 

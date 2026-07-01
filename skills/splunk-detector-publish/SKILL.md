@@ -249,12 +249,27 @@ The metric name appears in a live detector's programText but the service filter
 is absent, uses a different dimension key, or the filter value is ambiguous
 (e.g. a wildcard). Show to the user; do not auto-create and do not auto-cover.
 
+**Offline / fetch-unavailable fallback**
+If the live detector list cannot be fetched (no network access, auth unavailable,
+or the API is unreachable), treat every local spec as **GAP** — not UNCERTAIN.
+UNCERTAIN requires evidence that the metric exists somewhere in a live detector
+with an ambiguous filter; without a live list there is no such evidence, so the
+safe default is GAP. Describe the POST /v2/detector payload you would send for
+each, stop at the confirmation gate, and note that the user must confirm once
+the API is reachable.
+
 **AutoDetect advisory (informational only)**
 For latency or error specs: note any live detector with
 `detectorOrigin == "AutoDetect"` that references `service.request` metrics as a
 *possible overlap* advisory line. AutoDetect detectors are org-wide and never
 filter by `service.name`, so they cannot count as COVERED for a specific service.
 They are advisory only and do NOT change the spec's classification.
+
+Always include the `### AutoDetect Advisory` section in the confirmation diff,
+even when offline or when no AutoDetect detectors were fetched. In offline
+context, write: "Live inventory not fetched — AutoDetect detectors (if any)
+are org-wide and advisory only; they would not count as COVERED for
+service-specific specs." This section is required in every diff output.
 
 See `references/coverage-model.md` for worked examples and edge cases.
 

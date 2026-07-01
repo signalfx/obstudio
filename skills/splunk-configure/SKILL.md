@@ -489,7 +489,18 @@ Use this report shape:
 **Terraform:** `.observe/terraform/`
 
 ## Executive Summary
+
+<1-2 sentence overall verdict>
+
 ## What Was Added
+
+| Resource Label | Metric | Detect Condition | Severity |
+|----------------|--------|-----------------|----------|
+| latency_<id> | <metric_name> | P99 > threshold | Warning |
+| error_<id> | <metric_name> | rate anomaly (mean+stddev) | Critical |
+| saturation_<id> | <metric_name> | mean > threshold | Warning |
+| throughput_<id> | <metric_name> | rate anomaly (out-of-band) | Major |
+
 ## Tested And Working
 ## Not Yet Proven
 ## Validation Notes
