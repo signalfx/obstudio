@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260701T163815793363Z",
+    "run_id": "20260701T175624671458Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -21,54 +21,54 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 54,
-      "duration_seconds": 370.813,
-      "agent_duration_seconds": 239.474,
-      "tokens": 576476,
-      "agent_tokens": 443195,
+      "command_count": 34,
+      "duration_seconds": 317.639,
+      "agent_duration_seconds": 198.665,
+      "tokens": 499522,
+      "agent_tokens": 310676,
       "error_count": 0,
       "rubric": {
-        "passed": 7,
-        "total": 7,
-        "average_score": 100.0
+        "passed": 6,
+        "total": 6,
+        "average_score": 96.0
       },
-      "rubric_tokens": 133281,
-      "rubric_duration_seconds": 131.325
+      "rubric_tokens": 188846,
+      "rubric_duration_seconds": 118.961
     },
     "with_baseline": null
   },
   "evals": [
     {
-      "id": "dashboards/checkout-red/qual/dashboard",
-      "case": "dashboards/checkout-red",
+      "id": "dashboards/checkout-sync/qual/dashboard-publish",
+      "case": "dashboards/checkout-sync",
       "language": "dashboards",
-      "service": "checkout-red",
+      "service": "checkout-sync",
       "prompt_count": 1,
       "prompts": [
-        "generate"
+        "offline-plan"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 54,
-        "duration_seconds": 370.813,
-        "agent_duration_seconds": 239.474,
-        "tokens": 576476,
-        "agent_tokens": 443195,
+        "command_count": 34,
+        "duration_seconds": 317.639,
+        "agent_duration_seconds": 198.665,
+        "tokens": 499522,
+        "agent_tokens": 310676,
         "error_count": 0,
         "rubric": {
-          "passed": 7,
-          "total": 7,
-          "average_score": 100.0
+          "passed": 6,
+          "total": 6,
+          "average_score": 96.0
         },
-        "rubric_tokens": 133281,
-        "rubric_duration_seconds": 131.325
+        "rubric_tokens": 188846,
+        "rubric_duration_seconds": 118.961
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260701T163815793363Z/results/dashboards/checkout-red/qual-dashboard/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260701T163815793363Z/results/dashboards/checkout-red/qual-dashboard/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260701T163815793363Z/results/dashboards/checkout-red/qual-dashboard/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_baseline.json"
       }
     }
   ],

@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-dashboard-publish |
-| Run ID | 20260701T171151588060Z |
+| Run ID | 20260701T180204690504Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -16,7 +16,7 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/dashboard-publish | sanity/skill-smoke | 2 | 100% (4/4) | 36.9K | 34.6s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard-publish | sanity/skill-smoke | 2 | 100% (4/4) | 37.2K | 33.5s | - | - | - |
 
 ## Sanity Failures
 

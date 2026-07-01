@@ -130,7 +130,7 @@ variable "realm" {
 variable "api_token" {
   description = "Splunk Observability Cloud API token"
   type        = string
-  sensitive   = true
+  sensitive   = true   # REQUIRED — must always be present
 }
 
 variable "service_name" {
@@ -254,6 +254,7 @@ Dashboards tab, then `$splunk-dashboard-sync` or `terraform apply`.
 
 ## Red Flags
 
+- `api_token` variable in `variables.tf` is missing `sensitive = true` — this is a hard requirement; the token is a secret and must never be logged or committed as plaintext.
 - Audit report has no metrics section and no GenAI readiness — nothing to chart.
 - A chart's resolved `programText` still contains a literal `${var.*}` — the
   preview sidecar and any future POST will fail; resolve every variable per

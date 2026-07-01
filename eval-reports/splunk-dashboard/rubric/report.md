@@ -1,4 +1,4 @@
-# splunk-dashboard-publish Rubric Codex Eval Report
+# splunk-dashboard Rubric Codex Eval Report
 
 ## Environment
 
@@ -6,8 +6,8 @@
 |---|---|
 | Mode | with_skill |
 | Eval kind | rubric |
-| Skill | splunk-dashboard-publish |
-| Run ID | 20260701T175624671458Z |
+| Skill | splunk-dashboard |
+| Run ID | 20260701T174402099641Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,7 +18,7 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-sync/qual/dashboard-publish | dashboards/checkout-sync | 1 | 100% (6/6), avg score 96 | 499.5K | 5.3m | - | - | - |
+| with_skill | dashboards/checkout-red/qual/dashboard | dashboards/checkout-red | 1 | 100% (7/7), avg score 100 | 597.1K | 6.5m | - | - | - |
 
 ## Rubric Failures
 

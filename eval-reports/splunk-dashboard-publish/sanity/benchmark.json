@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260701T171151588060Z",
+    "run_id": "20260701T180204690504Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 0,
-      "duration_seconds": 34.589,
-      "agent_duration_seconds": 34.578,
-      "tokens": 36853,
-      "agent_tokens": 36853,
+      "duration_seconds": 33.501,
+      "agent_duration_seconds": 33.479,
+      "tokens": 37178,
+      "agent_tokens": 37178,
       "error_count": 0,
       "checks": {
         "passed": 4,
@@ -49,10 +49,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 0,
-        "duration_seconds": 34.589,
-        "agent_duration_seconds": 34.578,
-        "tokens": 36853,
-        "agent_tokens": 36853,
+        "duration_seconds": 33.501,
+        "agent_duration_seconds": 33.479,
+        "tokens": 37178,
+        "agent_tokens": 37178,
         "error_count": 0,
         "checks": {
           "passed": 4,
@@ -63,9 +63,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260701T171151588060Z/results/sanity/skill-smoke/sanity-dashboard-publish/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260701T171151588060Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260701T171151588060Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260701T180204690504Z/results/sanity/skill-smoke/sanity-dashboard-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260701T180204690504Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260701T180204690504Z/results/sanity/skill-smoke/sanity-dashboard-publish/with_baseline.json"
       }
     }
   ],

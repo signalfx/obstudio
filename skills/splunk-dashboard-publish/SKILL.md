@@ -132,6 +132,16 @@ Print a structured diff before any writes, **with a non-empty Reason on every
 row**. Do not proceed until the user explicitly confirms (yes/no). Offer a dry
 run via `POST /v2/dashboard/validate` + `POST /v2/chart/validate`.
 
+**When network is unavailable (offline):** still produce the full confirmation
+diff and describe the creation plan you would execute. Explicitly state:
+1. Chart-first ordering — `POST /v2/chart` for each GAP chart to collect chart
+   IDs, then `POST /v2/dashboard` referencing those `chartId` values with grid
+   placement, then `POST /v2/dashboardgroup` if the group is also a GAP.
+2. Orphan-chart recovery — if the dashboard POST fails after charts were
+   already created, those charts exist but reference nothing; record their IDs
+   in the ledger so a re-run can reuse or delete them via `DELETE /v2/chart/{id}`
+   before recreating, never silently leaving orphans.
+
 ```
 ## Dashboard Publish Diff — <service-name>
 
