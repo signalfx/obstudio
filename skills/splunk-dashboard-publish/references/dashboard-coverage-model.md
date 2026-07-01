@@ -1,6 +1,6 @@
-# Coverage Model — splunk-dashboard-sync
+# Coverage Model — splunk-dashboard-publish
 
-How `splunk-dashboard-sync` decides whether a local dashboard Terraform spec is
+How `splunk-dashboard-publish` decides whether a local dashboard Terraform spec is
 already covered by live Splunk Observability Cloud objects. Builds on the shared
 `../../references/coverage-decision-tree.md` (the COVERED / GAP / UNCERTAIN
 vocabulary and the record-every-criterion-that-fired rule). A dashboard is a

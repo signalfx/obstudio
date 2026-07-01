@@ -276,6 +276,9 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 				*totalDataPoints += len(dp)
 			}
 		}
+		// Keep DataPointCount in sync with the (possibly trimmed) DataPoints slice
+		// so the reported count never claims more points than the payload carries.
+		groups[i].DataPointCount = len(groups[i].DataPoints)
 	}
 
 	panel.Metrics = groups
@@ -320,6 +323,13 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store
 		groups = filterGroupsByService(groups, svcValues)
 	}
 
+	// Drop groups whose ServiceName matches a negated service value. Service
+	// identity lives in the dedicated MetricGroup.ServiceName field, which the
+	// attribute-based applyDimensionFilters does not inspect (it skips the
+	// service key on both the positive and negated branches), so a negated
+	// service constraint must be enforced here against ServiceName.
+	groups = excludeNegatedServices(groups, q.NegatedFilters)
+
 	groups = applyDimensionFilters(groups, q.Filters, q.NegatedFilters)
 
 	// Apply the display cap AFTER dimension filtering so the cap counts matching
@@ -329,6 +339,40 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store
 	}
 
 	return groups, true
+}
+
+// negatedServiceValues collects the excluded service values from the negated
+// filter map under either service-alias key (service.name / sf_service), looked
+// up case-insensitively to mirror the parser's folded key spelling.
+func negatedServiceValues(negated map[string][]string) []string {
+	var out []string
+	for k, vs := range negated {
+		if isServiceKey(k) {
+			out = append(out, vs...)
+		}
+	}
+
+	return out
+}
+
+// excludeNegatedServices removes any group whose ServiceName matches (case-
+// insensitively) a negated service value. When no negated service constraint is
+// present the input slice is returned unchanged.
+func excludeNegatedServices(groups []store.MetricGroup, negated map[string][]string) []store.MetricGroup {
+	excluded := negatedServiceValues(negated)
+	if len(excluded) == 0 {
+		return groups
+	}
+
+	kept := make([]store.MetricGroup, 0, len(groups))
+	for _, g := range groups {
+		if containsStr(excluded, g.ServiceName) {
+			continue
+		}
+		kept = append(kept, g)
+	}
+
+	return kept
 }
 
 // filterGroupsByService keeps only groups whose ServiceName matches one of the
@@ -356,27 +400,33 @@ func isServiceKey(k string) bool {
 	return strings.EqualFold(k, "service.name") || strings.EqualFold(k, "sf_service")
 }
 
+// withoutServiceKeys returns a copy of the filter map with the service-alias
+// keys (service.name / sf_service) removed. Those are resolved against
+// MetricGroup.ServiceName by the store query and excludeNegatedServices, not as
+// data-point attributes, so they must not be re-applied by attribute matching.
+func withoutServiceKeys(filters map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(filters))
+	for k, vs := range filters {
+		if isServiceKey(k) {
+			continue
+		}
+		out[k] = vs
+	}
+
+	return out
+}
+
 // applyDimensionFilters narrows resolved groups by positive and negated filters,
 // skipping the service dimension (already applied by the store query). A group
 // is kept when at least one of its data points satisfies all positive filters
 // AND fails all negated exclusions on either its own attributes or its resource
 // attributes (case-insensitive). Positive filters use OR-semantics per key.
 func applyDimensionFilters(groups []store.MetricGroup, filters, negated map[string][]string) []store.MetricGroup {
-	extra := make(map[string][]string)
-	for k, vs := range filters {
-		if isServiceKey(k) {
-			continue
-		}
-		extra[k] = vs
-	}
-
-	negExtra := make(map[string][]string)
-	for k, vs := range negated {
-		if isServiceKey(k) {
-			continue
-		}
-		negExtra[k] = vs
-	}
+	// The service dimension is applied at the store-query level (positive) and in
+	// excludeNegatedServices (negated) against MetricGroup.ServiceName, which is
+	// not an attribute — drop the service key from both maps here.
+	extra := withoutServiceKeys(filters)
+	negExtra := withoutServiceKeys(negated)
 
 	if len(extra) == 0 && len(negExtra) == 0 {
 		return groups

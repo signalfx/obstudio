@@ -181,12 +181,34 @@ def test_shared_signalflow_worked_fragments_all_aggregate_before_publish():
 
 def test_shared_signalflow_reference_omits_detector_tail_for_charts():
     """Dashboard charts reuse the data().agg().publish() fragment but must stop before the
-    detector-only detect()/when()/threshold() tail."""
+    detector-only detect()/when()/threshold() tail. The concrete chart worked fragments must
+    therefore END at .publish(...) and carry NO detect(when(...)) or threshold(...) clause;
+    the detector tail may only appear in the prose contrast, never inside a chart fragment."""
     text = _read(SIGNALFLOW_PATTERNS_REF)
     assert "data('<metric_name>'" in text, "shared fragment must show the data('<metric>') call"
     assert ".publish(" in text
     assert "service.name" in text and "sf_service" in text
-    assert "detect()" in text or "detect(" in text, "must contrast against the detector detect() tail"
+    # The file must still contrast against the detector tail somewhere (prose section).
+    assert "detect(" in text, "must contrast against the detector detect() tail"
+
+    # The concrete chart fragments (a bound stream from a real metric that ends at
+    # .publish(...)) must NOT contain the detector-only tail. This is the real check:
+    # a chart fragment that carried detect(when(...)) / threshold(...) would render as a
+    # detector program, not a chart, and this test previously only asserted detect() was
+    # present anywhere in the file — which a chart fragment leaking the tail would pass.
+    chart_fragment_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if "data('" in line and ".publish(" in line and "<metric_name>" not in line
+    ]
+    assert chart_fragment_lines, "expected at least one concrete worked chart fragment"
+    for line in chart_fragment_lines:
+        assert "detect(when(" not in line, (
+            f"chart fragment must not carry the detector detect(when(...)) tail: {line!r}"
+        )
+        assert "threshold(" not in line, (
+            f"chart fragment must not carry the detector threshold(...) tail: {line!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -251,13 +273,31 @@ def test_preview_chart_vocabulary_is_internally_consistent():
     templates = _read(DASHBOARD_TEMPLATES)
     renderer = _read(DASHBOARD_PANEL_TSX)
 
+    # time_series is the renderer's implicit fallback branch (any unknown chartType
+    # falls through to the shared SVG chart), so it has no `chartType === "time_series"`
+    # dispatch token. Every other preview type is dispatched by an exact equality
+    # branch, so it must appear as that exact token — a bare-substring check like
+    # `"list" in renderer` / `"text" in renderer` / `"table" in renderer` is too loose
+    # (those words occur in class names, comments, and labels) and would pass even if
+    # the renderer never actually dispatched on the type.
     for chart_type in PREVIEW_CHART_TYPES:
         # SKILL.md generate-contract vocabulary line.
         assert chart_type in skill, f"SKILL.md missing preview chartType: {chart_type}"
         # dashboard-templates.md REST mapping column lists the preview type.
         assert chart_type in templates, f"dashboard-templates.md REST mapping missing: {chart_type}"
-        # DashboardPanel.tsx renders the type (string literal appears in the renderer).
-        assert chart_type in renderer, f"DashboardPanel.tsx does not render chartType: {chart_type}"
+        # DashboardPanel.tsx dispatches on the type.
+        if chart_type == "time_series":
+            # Documented fallback: no explicit equality branch. Assert the label map
+            # still knows the type so the badge renders, rather than a loose substring.
+            assert f"{chart_type}:" in renderer, (
+                f"DashboardPanel.tsx label map missing fallback chartType: {chart_type}"
+            )
+        else:
+            dispatch_token = f'chartType === "{chart_type}"'
+            assert dispatch_token in renderer, (
+                f"DashboardPanel.tsx must dispatch on {dispatch_token!r} (exact token, "
+                f"not a loose substring match on {chart_type!r})"
+            )
 
     # The templates REST mapping must NOT advertise an "event" preview type.
     assert "| `event` |" not in templates and "`event`" not in templates, (

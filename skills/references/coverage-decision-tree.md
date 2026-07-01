@@ -3,8 +3,8 @@
 Shared meta-pattern for how every sync skill decides whether a local Terraform
 spec is already covered by a live Splunk Observability Cloud object. The
 object-specific matching criteria live in each skill's own `references/`
-(`splunk-sync/references/coverage-model.md` for detectors;
-`splunk-dashboard-sync/references/dashboard-coverage-model.md` for dashboards,
+(`splunk-detector-publish/references/coverage-model.md` for detectors;
+`splunk-dashboard-publish/references/dashboard-coverage-model.md` for dashboards,
 charts, and groups). This file defines the shared verdict vocabulary and the
 **record-every-criterion-that-fired** rule those models build on.
 

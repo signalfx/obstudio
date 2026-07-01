@@ -34,7 +34,7 @@ aggregation. Do **not** use bare `.last()` — SignalFlow's `.last()` requires a
 explicit window duration (e.g. `.last('1m')`), and a windowless `.last()` is
 rejected with an HTTP 400 at chart-create time (see
 `splunk-dashboard/references/dashboard-templates.md` and
-`splunk-dashboard-sync/SKILL.md`). For a time-series panel, publish the stream
+`splunk-dashboard-publish/SKILL.md`). For a time-series panel, publish the stream
 directly and let the chart's `plot_type` render it.
 
 ## Worked fragments

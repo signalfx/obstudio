@@ -512,6 +512,95 @@ func TestBuildMultiValueServiceFilterMixedCase(t *testing.T) {
 	}
 }
 
+// TestBuildNegatedServiceFilterExcludesService verifies that a negated service
+// filter (not filter('service.name','billing')) drops the excluded service's
+// groups from the result (finding H1). Before the fix, applyDimensionFilters
+// skipped the service key on BOTH the positive and negated branches, so a
+// negated service value was a silent no-op and billing leaked into the panel.
+func TestBuildNegatedServiceFilterExcludesService(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "checkout", 10, nil),
+		metricPoint("req.duration", "payments", 20, nil),
+		metricPoint("req.duration", "billing", 30, nil),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:     "not_billing",
+					ChartType: "time_series",
+					// Exclude billing; checkout and payments must remain.
+					ProgramText: "data('req.duration', filter=not filter('service.name','billing')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: checkout and payments survive the negated service filter")
+	}
+	sawCheckout, sawPayments := false, false
+	for _, g := range panel.Metrics {
+		switch g.ServiceName {
+		case "checkout":
+			sawCheckout = true
+		case "payments":
+			sawPayments = true
+		case "billing":
+			t.Errorf("billing must be excluded by the negated service filter")
+		default:
+			t.Errorf("unexpected service %q in resolved groups", g.ServiceName)
+		}
+	}
+	if !sawCheckout || !sawPayments {
+		t.Errorf("expected both checkout and payments groups, got checkout=%v payments=%v", sawCheckout, sawPayments)
+	}
+}
+
+// TestBuildNegatedServiceFilterMixedCase verifies the negated service exclusion
+// is case-insensitive against MetricGroup.ServiceName (finding H1): a negated
+// value 'BILLING' still drops a stored service 'billing'.
+func TestBuildNegatedServiceFilterMixedCase(t *testing.T) {
+	s := seededStore(t, []store.MetricDataPoint{
+		metricPoint("req.duration", "checkout", 10, nil),
+		metricPoint("req.duration", "billing", 30, nil),
+	})
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "not_billing_case",
+					ChartType:   "time_series",
+					ProgramText: "data('req.duration', filter=not filter('sf_service','BILLING')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true: checkout survives the negated service filter")
+	}
+	for _, g := range panel.Metrics {
+		if strings.EqualFold(g.ServiceName, "billing") {
+			t.Errorf("billing must be excluded by the negated service filter (case-insensitive)")
+		}
+	}
+}
+
 // TestBuildFilterBeforeCap verifies that dimension filtering runs before the
 // display cap so a matching series in a group beyond the cap is not dropped
 // (finding F4). The store would otherwise truncate to maxResolvedGroups before

@@ -1,8 +1,9 @@
 # Normalizing Terraform `program_text` to valid SignalFlow
 
 Shared reference for every skill that POSTs a Terraform-authored `program_text`
-(detector or chart) to the Splunk Observability Cloud REST API: `splunk-sync`,
-`splunk-dashboard-sync`, and `splunk-dashboard` (which writes already-normalized
+(detector or chart) to the Splunk Observability Cloud REST API:
+`splunk-detector-publish`, `splunk-dashboard-publish`, and `splunk-dashboard`
+(which writes already-normalized
 `programText` into its preview sidecar).
 
 The raw `program_text` value extracted from HCL is **not** valid SignalFlow and

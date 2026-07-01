@@ -6,7 +6,8 @@ description: >-
   .observe/terraform/detectors.tf, fetches live detectors for the service via
   the Splunk O11y REST API (GET /v2/detector), classifies each local spec as
   COVERED / GAP / UNCERTAIN / AutoDetect-advisory, shows a confirmation diff,
-  and creates only the GAPs using POST /v2/detector with if_not_exists logic.
+  and creates only the confirmed GAPs via POST /v2/detector (idempotent by
+  diffing local specs against the live detector set and tolerating a 409).
   Writes .observe/detector-sync.md as an idempotent resume ledger. Use when the
   user types $splunk-detector-publish, asks to "sync detectors", "check which detectors are
   missing", "create missing monitors", or "push detector gaps to Splunk".

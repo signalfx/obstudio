@@ -1,8 +1,8 @@
 # Splunk Observability Cloud REST API — auth, paginated fetch, status handling
 
 Shared reference for every skill that talks to the Splunk Observability Cloud
-REST API directly (no MCP tool required): `splunk-sync`, `splunk-dashboard-sync`,
-and any future sync skill. The auth, pagination, and HTTP-status rules are
+REST API directly (no MCP tool required): `splunk-detector-publish`,
+`splunk-dashboard-publish`, and any future publish skill. The auth, pagination, and HTTP-status rules are
 identical regardless of which object type (detector, dashboard, chart, group) is
 being synced — this file is the single source of truth for them.
 

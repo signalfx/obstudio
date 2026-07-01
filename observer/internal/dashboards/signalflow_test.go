@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driven test; complexity is inherent
+func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive,maintidx // table-driven test; complexity is inherent
 	tests := []struct {
 		name        string
 		program     string

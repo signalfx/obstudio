@@ -99,11 +99,11 @@ type PreviewPanel struct {
 // IgnoredFilters lists dimension keys whose constraints could not be applied
 // (e.g. a nested-function value that the regex could not parse).
 type ParsedQuery struct {
-	MetricName      string              `json:"metricName,omitempty"`
-	Filters         map[string][]string `json:"filters,omitempty"`
-	NegatedFilters  map[string][]string `json:"negatedFilters,omitempty"`
-	IgnoredFilters  []string            `json:"ignoredFilters,omitempty"`
-	Aggregation     string              `json:"aggregation,omitempty"`
-	Percentile      *float64            `json:"percentile,omitempty"`
-	ParseError      string              `json:"parseError,omitempty"`
+	MetricName     string              `json:"metricName,omitempty"`
+	Filters        map[string][]string `json:"filters,omitempty"`
+	NegatedFilters map[string][]string `json:"negatedFilters,omitempty"`
+	IgnoredFilters []string            `json:"ignoredFilters,omitempty"`
+	Aggregation    string              `json:"aggregation,omitempty"`
+	Percentile     *float64            `json:"percentile,omitempty"`
+	ParseError     string              `json:"parseError,omitempty"`
 }

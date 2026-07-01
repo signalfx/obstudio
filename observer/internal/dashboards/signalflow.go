@@ -370,35 +370,32 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 		if key == "" {
 			continue
 		}
+
 		if isNegatedFilter(program, start, negated) {
-			// Record parseable values as exclusion constraints.
-			applied := false
-			for _, v := range reQuotedVal.FindAllStringSubmatch(argList, -1) {
-				if val := v[1]; val != "" && !strings.Contains(val, "${") {
-					appendNegatedFilterValue(q, key, val)
-					applied = true
-				}
-			}
-			if !applied {
-				recordIgnoredFilter(q, key)
-			}
-			continue
-		}
-
-		applied := false
-		for _, v := range reQuotedVal.FindAllStringSubmatch(argList, -1) {
-			if val := v[1]; val != "" && !strings.Contains(val, "${") {
-				appendFilterValue(q, key, val)
-				applied = true
-			}
-		}
-
-		if !applied {
-			recordIgnoredFilter(q, key)
+			applyMultiValues(q, key, argList, appendNegatedFilterValue)
+		} else {
+			applyMultiValues(q, key, argList, appendFilterValue)
 		}
 	}
 
 	return handled
+}
+
+// applyMultiValues records every parseable (non-empty, non-templated) value in a
+// multi-value filter arg list via apply. When no value is parseable the key is
+// recorded in q.IgnoredFilters instead.
+func applyMultiValues(q *ParsedQuery, key, argList string, apply func(*ParsedQuery, string, string)) {
+	applied := false
+	for _, v := range reQuotedVal.FindAllStringSubmatch(argList, -1) {
+		if val := v[1]; val != "" && !strings.Contains(val, "${") {
+			apply(q, key, val)
+			applied = true
+		}
+	}
+
+	if !applied {
+		recordIgnoredFilter(q, key)
+	}
 }
 
 // collectSingleValueFilters handles filter('key','val') forms, skipping

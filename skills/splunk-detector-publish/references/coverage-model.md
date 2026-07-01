@@ -1,7 +1,9 @@
-# Coverage Model — splunk-sync
+# Coverage Model — splunk-detector-publish
 
-How `splunk-sync` determines whether a local `signalfx_detector` spec is already
-covered by a live Splunk Observability Cloud detector.
+How `splunk-detector-publish` determines whether a local `signalfx_detector` spec
+is already covered by a live Splunk Observability Cloud detector. Builds on the
+shared `../../references/coverage-decision-tree.md` (the COVERED / GAP /
+UNCERTAIN vocabulary and the record-every-criterion-that-fired rule).
 
 ## The Matching Rule
 
@@ -47,10 +49,12 @@ A live Standard detector's `programText` contains:
 ### GAP
 No live Standard detector matches on both metric name AND service filter.
 
-**Action:** create via `POST /v2/detector` (Splunk REST API). There is no
-server-side `if_not_exists` flag; idempotency comes from diffing local specs
-against the live detector set fetched that run (only GAPs are created) and
-treating a 409 Conflict from a concurrently-created detector as already-covered.
+**Action:** create via `POST /v2/detector` (Splunk REST API). Only the confirmed
+gaps are created; existing detectors are never modified. See
+`../../references/splunk-api.md` for the request shape. The create step is
+idempotent by construction — the diff runs against the live detector set fetched
+that same run, and a 409 Conflict from a concurrently-created detector is treated
+as already-covered rather than an error (see Idempotency below).
 
 ### UNCERTAIN
 At least one live Standard detector references the same metric name, but the
@@ -79,6 +83,26 @@ service, they cannot substitute for a custom detector in this analysis.
 and error specs. The local spec's classification (COVERED / GAP / UNCERTAIN)
 is determined solely by Standard detectors. AutoDetect status never changes that
 classification.
+
+## Idempotency
+
+There is no server-side `if_not_exists` flag on `POST /v2/detector`; the Splunk
+O11y REST API does not offer one. Idempotency is achieved locally:
+
+1. **Diff before create.** Every local spec is classified against the live
+   detector set fetched at the start of the run. Only specs classified as GAP are
+   sent to `POST /v2/detector`; COVERED and UNCERTAIN specs are never created.
+2. **409 Conflict tolerance.** If a detector with the same name/scope was created
+   concurrently (another run, another user) between the diff and the create, the
+   API returns HTTP 409. Treat that 409 as "already covered" — record it in the
+   ledger as COVERED-on-conflict rather than surfacing it as a failure.
+3. **Resumable ledger.** `.observe/detector-sync.md` records each spec's verdict
+   and create result, so a re-run skips already-created detectors and only
+   retries genuine failures.
+
+This diff + 409 approach gives the same "create only the confirmed gaps" behavior
+that a hypothetical `if_not_exists` flag would, without depending on an API
+feature that does not exist.
 
 ## Worked Examples
 

@@ -1,9 +1,9 @@
 # Sync ledger template
 
 Shared reference for the resumable, auditable ledger written by every sync skill
-after every run (success, partial failure, or zero-gap no-op): `splunk-sync`
-writes `.observe/detector-sync.md`; `splunk-dashboard-sync` writes
-`.observe/dashboard-sync.md`. The shape is the same; only the object nouns and
+after every run (success, partial failure, or zero-gap no-op):
+`splunk-detector-publish` writes `.observe/detector-sync.md`;
+`splunk-dashboard-publish` writes `.observe/dashboard-sync.md`. The shape is the same; only the object nouns and
 the per-item columns differ.
 
 A sync ledger makes a re-run idempotent: it re-reads live state, re-evaluates
