@@ -1236,6 +1236,12 @@ async function recordSkillsBundleVersion(context: vscode.ExtensionContext, targe
 
 function skillsBundleVersionChanged(context: vscode.ExtensionContext, target: AgentIntegrationTarget): boolean {
 	const stored = getStoredSkillsBundleVersion(context, target);
+	// Treat a missing stored version as "not changed": skills may have been
+	// installed by an older extension version that predates this feature.
+	// We only re-prompt on an explicit version change (stored → new value).
+	if (stored === undefined) {
+		return false;
+	}
 	return stored !== getBundleVersion(context);
 }
 
