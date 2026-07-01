@@ -39,7 +39,7 @@ each chart is a separate resource placed on a 12-column grid.
 
 **When NOT to use:** If no audit report exists yet, instruct the user to run
 `$otel-audit` first. For alerting/detection Terraform, use `$splunk-configure`.
-To push the generated dashboards to a live org, use `$splunk-dashboard-sync`.
+To push the generated dashboards to a live org, use `$splunk-dashboard-publish`.
 
 ## Process
 
@@ -237,7 +237,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
 2. Fill in `realm` and `api_token`
 3. Preview locally: open the Observer **Dashboards** tab (localhost:3000)
-4. Push to Splunk: `$splunk-dashboard-sync` (REST-direct, creates only gaps)
+4. Push to Splunk: `$splunk-dashboard-publish` (REST-direct, creates only gaps)
    or `cd .observe/terraform && terraform init && terraform apply`
 
 ---
@@ -250,7 +250,7 @@ After all files are written, present a concise summary: the dashboards/panels
 generated, the files written (`dashboards.tf`, `variables.tf`,
 `terraform.tfvars.example`, `.observe/dashboards.md`,
 `.observe/dashboards.preview.json`), and the next steps — preview in the Observer
-Dashboards tab, then `$splunk-dashboard-sync` or `terraform apply`.
+Dashboards tab, then `$splunk-dashboard-publish` or `terraform apply`.
 
 ## Red Flags
 

@@ -1,7 +1,7 @@
-"""Deterministic checks for the splunk-dashboard and splunk-dashboard-sync skills.
+"""Deterministic checks for the splunk-dashboard and splunk-dashboard-publish skills.
 
 Sibling to ``test_genai_skill_guidance.py`` (same helpers, same style). These tests
-pin the invariants of the dashboard generate/sync skill pair and the shared
+pin the invariants of the dashboard generate/publish skill pair and the shared
 ``skills/references/`` files the detector skills were light-refactored onto.
 
 NOTE: the dashboard skills and the shared reference files legitimately use a
@@ -32,13 +32,13 @@ SPLUNK_DASHBOARD_REFS = SKILLS_DIR / "splunk-dashboard" / "references"
 DASHBOARD_CLASSIFICATION = SPLUNK_DASHBOARD_REFS / "dashboard-classification.md"
 DASHBOARD_TEMPLATES = SPLUNK_DASHBOARD_REFS / "dashboard-templates.md"
 
-# Dashboard sync skill.
-SPLUNK_DASHBOARD_SYNC = SKILLS_DIR / "splunk-dashboard-sync" / "SKILL.md"
-SPLUNK_DASHBOARD_SYNC_REFS = SKILLS_DIR / "splunk-dashboard-sync" / "references"
-DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_SYNC_REFS / "dashboard-coverage-model.md"
+# Dashboard publish skill (canonical; splunk-dashboard-sync is the deprecated stub).
+SPLUNK_DASHBOARD_PUBLISH = SKILLS_DIR / "splunk-dashboard-publish" / "SKILL.md"
+SPLUNK_DASHBOARD_PUBLISH_REFS = SKILLS_DIR / "splunk-dashboard-publish" / "references"
+DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-model.md"
 
-# Detector skills the shared refs were extracted from (light-refactor guards).
-SPLUNK_SYNC = SKILLS_DIR / "splunk-sync" / "SKILL.md"
+# Detector publish skill (canonical; splunk-sync is the deprecated stub).
+SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 
 
@@ -59,7 +59,7 @@ def _normalized(path: Path) -> str:
 
 def test_dashboard_skills_exist_with_references():
     assert SPLUNK_DASHBOARD.exists(), "skills/splunk-dashboard/SKILL.md not found"
-    assert SPLUNK_DASHBOARD_SYNC.exists(), "skills/splunk-dashboard-sync/SKILL.md not found"
+    assert SPLUNK_DASHBOARD_PUBLISH.exists(), "skills/splunk-dashboard-publish/SKILL.md not found"
     assert DASHBOARD_CLASSIFICATION.exists(), "dashboard-classification.md not found"
     assert DASHBOARD_TEMPLATES.exists(), "dashboard-templates.md not found"
     assert DASHBOARD_COVERAGE_MODEL.exists(), "dashboard-coverage-model.md not found"
@@ -80,9 +80,9 @@ def test_dashboard_skill_frontmatter():
         assert trigger in text, f"description missing routing trigger: {trigger}"
 
 
-def test_dashboard_sync_skill_frontmatter():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
-    assert "name: splunk-dashboard-sync" in text, "SKILL.md must declare name: splunk-dashboard-sync"
+def test_dashboard_publish_skill_frontmatter():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
+    assert "name: splunk-dashboard-publish" in text, "SKILL.md must declare name: splunk-dashboard-publish"
     assert "author: otel-studio" in text
     assert "category: observability" in text
     for trigger in (
@@ -110,18 +110,18 @@ def test_shared_references_exist():
         assert ref.exists(), f"shared reference not found: {ref}"
 
 
-def test_detector_sync_skill_still_reaches_shared_references():
-    """Light refactor: splunk-sync/SKILL.md now includes the shared refs by a plain
+def test_detector_publish_skill_reaches_shared_references():
+    """Light refactor: splunk-detector-publish/SKILL.md includes the shared refs by a plain
     relative path, and that path must resolve to the real shared file."""
-    text = _read(SPLUNK_SYNC)
+    text = _read(SPLUNK_DETECTOR_PUBLISH)
     for relpath, target in (
         ("../references/splunk-api.md", SPLUNK_API_REF),
         ("../references/terraform-normalization.md", TERRAFORM_NORMALIZATION_REF),
         ("../references/ledger-template.md", LEDGER_TEMPLATE_REF),
         ("../references/coverage-decision-tree.md", COVERAGE_DECISION_TREE_REF),
     ):
-        assert relpath in text, f"splunk-sync/SKILL.md must include {relpath}"
-        assert (SPLUNK_SYNC.parent / relpath).resolve() == target.resolve()
+        assert relpath in text, f"splunk-detector-publish/SKILL.md must include {relpath}"
+        assert (SPLUNK_DETECTOR_PUBLISH.parent / relpath).resolve() == target.resolve()
 
 
 def test_detector_templates_still_reach_shared_signalflow_reference():
@@ -144,15 +144,15 @@ def test_dashboard_skills_reach_shared_references():
         assert relpath in gen, f"splunk-dashboard/SKILL.md must include {relpath}"
         assert (SPLUNK_DASHBOARD.parent / relpath).resolve() == target.resolve()
 
-    sync = _read(SPLUNK_DASHBOARD_SYNC)
+    publish = _read(SPLUNK_DASHBOARD_PUBLISH)
     for relpath, target in (
         ("../references/splunk-api.md", SPLUNK_API_REF),
         ("../references/terraform-normalization.md", TERRAFORM_NORMALIZATION_REF),
         ("../references/ledger-template.md", LEDGER_TEMPLATE_REF),
         ("../references/coverage-decision-tree.md", COVERAGE_DECISION_TREE_REF),
     ):
-        assert relpath in sync, f"splunk-dashboard-sync/SKILL.md must include {relpath}"
-        assert (SPLUNK_DASHBOARD_SYNC.parent / relpath).resolve() == target.resolve()
+        assert relpath in publish, f"splunk-dashboard-publish/SKILL.md must include {relpath}"
+        assert (SPLUNK_DASHBOARD_PUBLISH.parent / relpath).resolve() == target.resolve()
 
 
 def test_shared_signalflow_worked_fragments_all_aggregate_before_publish():
@@ -203,7 +203,7 @@ def test_dashboard_skill_reads_audit_and_emits_three_level_terraform():
     assert "signalfx_dashboard" in text
     assert "signalfx_" in text and "_chart" in text
     assert "dashboards.tf" in text
-    assert "$splunk-dashboard-sync" in text, "must hand off to the sync skill"
+    assert "$splunk-dashboard-publish" in text, "must hand off to the publish skill"
 
 
 def test_dashboard_skill_marks_api_token_sensitive():
@@ -362,7 +362,7 @@ def test_dashboard_classification_counter_test_covers_singular_error_keywords():
 
 def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
     text = _read(DASHBOARD_TEMPLATES)
-    # The HCL resource name vs the REST options.type — the chart-first sync depends on this.
+    # The HCL resource name vs the REST options.type — the chart-first publish depends on this.
     for hcl, rest in (
         ("signalfx_time_chart", "TimeSeriesChart"),
         ("signalfx_single_value_chart", "SingleValue"),
@@ -376,31 +376,31 @@ def test_dashboard_templates_map_hcl_chart_resources_to_rest_types():
 
 
 # ---------------------------------------------------------------------------
-# Sync skill — wire casing, chart-first ordering, orphan recovery
+# Publish skill — wire casing, chart-first ordering, orphan recovery
 # ---------------------------------------------------------------------------
 
 
-def test_dashboard_sync_reads_terraform_dashboards_tf():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_reads_terraform_dashboards_tf():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "dashboards.tf" in text, "must parse .observe/terraform/dashboards.tf"
     assert "program_text" in text or "programText" in text
 
 
-def test_dashboard_sync_uses_camel_case_rest_wire_names():
+def test_dashboard_publish_uses_camel_case_rest_wire_names():
     """REST bodies use camelCase; HCL attributes stay snake_case. Both appear by design,
     so this asserts the camelCase wire names exist (mirrors the detectorOrigin casing test)
     and that the skill distinguishes the HCL spelling from the REST spelling."""
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     for wire in ("programText", "chartId", "groupId"):
-        assert wire in text, f"sync SKILL.md must use camelCase REST wire name: {wire}"
+        assert wire in text, f"publish SKILL.md must use camelCase REST wire name: {wire}"
     # The HCL spellings coexist (parsed from Terraform), and the skill must call out the mapping.
     assert "program_text" in text and "dashboard_group" in text, (
-        "sync SKILL.md must show the HCL snake_case spellings it parses"
+        "publish SKILL.md must show the HCL snake_case spellings it parses"
     )
 
 
-def test_dashboard_sync_documents_chart_first_ordering():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_documents_chart_first_ordering():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "chart-first" in text, "must document chart-first creation ordering"
     assert "POST /v2/chart" in text, "must POST charts first to collect IDs"
     assert "POST /v2/dashboard" in text, "must POST the dashboard referencing chart IDs"
@@ -409,36 +409,36 @@ def test_dashboard_sync_documents_chart_first_ordering():
     assert "TimeSeriesChart" in text or "SingleValue" in text
 
 
-def test_dashboard_sync_documents_orphan_chart_recovery():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_documents_orphan_chart_recovery():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "Orphan-chart recovery" in text or "orphan" in text.lower(), (
         "must document orphan-chart recovery when the dashboard POST fails after charts exist"
     )
     assert "DELETE /v2/chart" in text, "orphan recovery must clean up created charts"
 
 
-def test_dashboard_sync_classifies_three_levels():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_classifies_three_levels():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     for status in ("COVERED", "GAP", "UNCERTAIN"):
-        assert status in text, f"sync SKILL.md missing verdict status: {status}"
+        assert status in text, f"publish SKILL.md missing verdict status: {status}"
     coverage = _read(DASHBOARD_COVERAGE_MODEL)
     assert "three levels" in coverage, "coverage model must classify group/dashboard/chart"
     for status in ("COVERED", "GAP", "UNCERTAIN"):
         assert status in coverage
 
 
-def test_dashboard_sync_requires_service_filter_for_chart_covered():
+def test_dashboard_publish_requires_service_filter_for_chart_covered():
     coverage = _read(DASHBOARD_COVERAGE_MODEL)
     assert "service.name" in coverage, "chart COVERED must require the service.name filter"
     assert "sf_service" in coverage, "must treat sf_service as equivalent to service.name"
     assert "options.type" in coverage, "chart match must compare the live options.type"
 
 
-def test_dashboard_sync_only_skips_http_500_and_forbids_bare_except():
-    """Inverse of the detector test: the dashboard skill + shared splunk-api.md carry the
+def test_dashboard_publish_only_skips_http_500_and_forbids_bare_except():
+    """Inverse of the detector test: the dashboard publish skill + shared splunk-api.md carry the
     explicit prohibition string ("never a bare except Exception"), so assert the guidance is
     PRESENT here rather than absent."""
-    skill = _read(SPLUNK_DASHBOARD_SYNC)
+    skill = _read(SPLUNK_DASHBOARD_PUBLISH)
     api = _read(SPLUNK_API_REF)
     assert "500" in skill and "500" in api, "skip-on-500 behavior must be documented"
     assert "Only HTTP 500 is skipped" in api, "splunk-api.md must state only 500 is skipped"
@@ -449,19 +449,19 @@ def test_dashboard_sync_only_skips_http_500_and_forbids_bare_except():
     )
 
 
-def test_dashboard_sync_requires_confirmation_before_create():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_requires_confirmation_before_create():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "confirm" in text.lower() or "confirmation" in text.lower(), (
-        "sync SKILL.md must require explicit user confirmation before any create"
+        "publish SKILL.md must require explicit user confirmation before any create"
     )
     # The confirmation diff is shown before writes.
     assert "before any write" in text.lower() or "before any writes" in text.lower(), (
-        "sync SKILL.md must gate the confirmation diff before any write"
+        "publish SKILL.md must gate the confirmation diff before any write"
     )
 
 
-def test_dashboard_sync_normalizes_program_text_before_create():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_normalizes_program_text_before_create():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "dedent" in text.lower(), "must dedent the <<-EOF heredoc before POSTing programText"
     assert "<<-EOF" in text or "<<-eof" in text.lower(), "must call out the indented-heredoc hazard"
     assert "${var." in text, "must resolve every ${var.*} before the POST"
@@ -472,8 +472,8 @@ def test_dashboard_sync_normalizes_program_text_before_create():
     assert "programText" in norm and "program_text" in norm
 
 
-def test_dashboard_sync_writes_resumable_ledger():
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+def test_dashboard_publish_writes_resumable_ledger():
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     assert "dashboard-sync.md" in text, "must write .observe/dashboard-sync.md as the resume ledger"
     ledger = _read(LEDGER_TEMPLATE_REF)
     assert "dashboard-sync.md" in ledger, "shared ledger template must cover dashboard-sync.md"
@@ -488,11 +488,11 @@ def test_explicit_reason_required_per_verdict():
     """User requirement: every group/dashboard/chart COVERED/GAP/UNCERTAIN verdict must
     record a concrete, non-empty Reason, shown in the confirmation diff and persisted in the
     ledger Reason column. Asserted across all four files that carry the contract."""
-    sync = _normalized(SPLUNK_DASHBOARD_SYNC)
-    assert "non-empty Reason on every row" in sync, (
+    publish = _normalized(SPLUNK_DASHBOARD_PUBLISH)
+    assert "non-empty Reason on every row" in publish, (
         "confirmation diff must require a non-empty Reason on every row"
     )
-    assert "Reason" in sync
+    assert "Reason" in publish
 
     ledger = _read(LEDGER_TEMPLATE_REF)
     assert "Reason column is required and must be non-empty" in ledger, (
@@ -510,12 +510,12 @@ def test_explicit_reason_required_per_verdict():
 
 def test_reason_examples_are_concrete_not_generic():
     """The reasons must name the live object + the exact match basis, not a bare 'matched'."""
-    sync = _normalized(SPLUNK_DASHBOARD_SYNC)
+    publish = _normalized(SPLUNK_DASHBOARD_PUBLISH)
     # A concrete COVERED reason cites metric + filter + type + the live chart id.
-    assert "all matched live chart" in sync, "COVERED reason example must cite the matched live chart"
+    assert "all matched live chart" in publish, "COVERED reason example must cite the matched live chart"
     # The skill must explicitly reject a generic reason note.
-    assert "generic note" in sync.lower(), (
-        "sync SKILL.md must explicitly reject a generic reason note"
+    assert "generic note" in publish.lower(), (
+        "publish SKILL.md must explicitly reject a generic reason note"
     )
 
     coverage = _normalized(DASHBOARD_COVERAGE_MODEL)
@@ -544,15 +544,15 @@ def test_splunk_access_token_secrecy_prose_in_shared_api_ref():
     assert "X-SF-Token" in text, "secrecy prose must name the header X-SF-Token"
 
 
-def test_splunk_dashboard_sync_skill_references_token_secrecy():
-    """The sync skill itself must repeat the token-secrecy instruction so it is
+def test_splunk_dashboard_publish_skill_references_token_secrecy():
+    """The publish skill itself must repeat the token-secrecy instruction so it is
     present in the model's loaded skill context, not only in the shared ref."""
-    text = _read(SPLUNK_DASHBOARD_SYNC)
+    text = _read(SPLUNK_DASHBOARD_PUBLISH)
     # The skill must instruct the agent to never log or write the token.
     assert "never log" in text.lower() or "never write it to the ledger" in text.lower(), (
-        "splunk-dashboard-sync/SKILL.md must explicitly forbid logging/writing SPLUNK_ACCESS_TOKEN"
+        "splunk-dashboard-publish/SKILL.md must explicitly forbid logging/writing SPLUNK_ACCESS_TOKEN"
     )
-    assert "SPLUNK_ACCESS_TOKEN" in text, "sync SKILL.md must name SPLUNK_ACCESS_TOKEN"
+    assert "SPLUNK_ACCESS_TOKEN" in text, "publish SKILL.md must name SPLUNK_ACCESS_TOKEN"
 
 
 def test_m6_500_counter_separate_from_empty_counter():
@@ -593,9 +593,9 @@ def test_m2_put_dashboard_documented_for_chart_gap():
         "splunk-api.md PUT section must warn against recreating (would produce a duplicate)"
     )
 
-    sync_text = _read(SPLUNK_DASHBOARD_SYNC)
-    assert "PUT /v2/dashboard" in sync_text, (
-        "sync SKILL.md Step 6 must reference PUT /v2/dashboard for chart-level GAPs in covered dashboards"
+    publish_text = _read(SPLUNK_DASHBOARD_PUBLISH)
+    assert "PUT /v2/dashboard" in publish_text, (
+        "publish SKILL.md Step 6 must reference PUT /v2/dashboard for chart-level GAPs in covered dashboards"
     )
 
     coverage_text = _read(DASHBOARD_COVERAGE_MODEL)
