@@ -79,6 +79,7 @@ codebase and which semantic conventions to follow.
 skills/
 ├── otel-audit/        # Scan a service for observability coverage gaps
 ├── otel-instrument/   # Add OTel auto-instrumentation and custom signals
+├── otel-verify/       # Prove app instrumentation and local OTLP visibility
 ├── splunk-configure/  # Generate Splunk O11y detector Terraform from an audit
 └── splunk-sync/       # Diff local detector specs against live Splunk detectors;
                        # create only the confirmed gaps via the Splunk REST API
@@ -119,10 +120,10 @@ Together they form a closed loop:
 ┌──────────────────────────────────────────────────────────────┐
 │  1. Agent reads $otel-audit → finds coverage gaps            │
 │  2. Agent reads $otel-instrument → adds OTel SDK + signals   │
-│  3. Developer runs the app                                   │
-│  4. App sends OTLP to Observer (localhost:4318)              │
-│  5. Observer forwards metrics + traces to Splunk O11y Cloud  │
-│  6. Agent calls MCP tools → inspects local telemetry         │
+│  3. $otel-verify runs app-code and runtime scenarios         │
+│  4. App may send OTLP to Observer for local runtime proof    │
+│  5. Observer stores telemetry and may forward it to Splunk   │
+│  6. $otel-verify queries evidence and writes its report      │
 │  7. Agent reads $splunk-configure → generates detectors.tf   │
 │  8. Agent reads $splunk-sync → creates only the gap detectors│
 │  9. Agent fixes instrumentation issues → go to step 3        │
@@ -522,7 +523,7 @@ are shown explicitly so engineers can work independently.
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
 | **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
-| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$splunk-configure`, `$splunk-sync` (REST-direct) | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-sync` (REST-direct) | —          |
 
 
 Observer and Skills have no dependency on each other. They can be developed,

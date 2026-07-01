@@ -7,6 +7,15 @@
 | Identify observability gaps without making code changes | `$otel-audit` this service and show me the gaps | `$otel-audit` |
 | Assess a legacy service before planning instrumentation work | Run `$otel-audit` on this service -- I need a gap report before the sprint planning | `$otel-audit` |
 
+## Verify -- Prove Existing Instrumentation
+
+| Use Case | Prompt | Skill |
+|----------|--------|-------|
+| Verify every signal and path from the audit and instrumentation reports | Run `$otel-verify` and tell me exactly what is working or unproven | `$otel-verify` |
+| Prove route-aware HTTP spans, request duration, and duplicate prevention | Verify the HTTP server instrumentation in the real local runtime | `$otel-verify` |
+| Capture local OTLP evidence in the Telemetry Explorer | Verify this instrumentation against my local Obstudio collector | `$otel-verify` |
+| Recheck instrumentation without changing application code | Rerun the OTel verification report for this service | `$otel-verify` |
+
 ## Detect -- Generate Alerts
 
 | Use Case | Prompt | Skill |
