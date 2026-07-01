@@ -320,7 +320,7 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store
 		groups = filterGroupsByService(groups, svcValues)
 	}
 
-	groups = applyDimensionFilters(groups, q.Filters)
+	groups = applyDimensionFilters(groups, q.Filters, q.NegatedFilters)
 
 	// Apply the display cap AFTER dimension filtering so the cap counts matching
 	// groups, not pre-filter groups.
@@ -356,24 +356,29 @@ func isServiceKey(k string) bool {
 	return strings.EqualFold(k, "service.name") || strings.EqualFold(k, "sf_service")
 }
 
-// applyDimensionFilters narrows resolved groups by every filter other than the
-// service dimension (already applied by the store query). A group is kept when
-// at least one of its data points satisfies all remaining filters on either its
-// own attributes or its resource attributes (case-insensitive).
-// Filters use OR-semantics per key: a data point satisfies a key's constraint
-// if its attribute value matches any one of the listed values.
-func applyDimensionFilters(groups []store.MetricGroup, filters map[string][]string) []store.MetricGroup {
+// applyDimensionFilters narrows resolved groups by positive and negated filters,
+// skipping the service dimension (already applied by the store query). A group
+// is kept when at least one of its data points satisfies all positive filters
+// AND fails all negated exclusions on either its own attributes or its resource
+// attributes (case-insensitive). Positive filters use OR-semantics per key.
+func applyDimensionFilters(groups []store.MetricGroup, filters, negated map[string][]string) []store.MetricGroup {
 	extra := make(map[string][]string)
-
 	for k, vs := range filters {
 		if isServiceKey(k) {
 			continue
 		}
-
 		extra[k] = vs
 	}
 
-	if len(extra) == 0 {
+	negExtra := make(map[string][]string)
+	for k, vs := range negated {
+		if isServiceKey(k) {
+			continue
+		}
+		negExtra[k] = vs
+	}
+
+	if len(extra) == 0 && len(negExtra) == 0 {
 		return groups
 	}
 
@@ -383,7 +388,7 @@ func applyDimensionFilters(groups []store.MetricGroup, filters map[string][]stri
 		matchedPoints := make([]store.MetricDataPoint, 0, len(g.DataPoints))
 
 		for _, dp := range g.DataPoints {
-			if dataPointMatches(dp, extra) {
+			if dataPointMatches(dp, extra, negExtra) {
 				matchedPoints = append(matchedPoints, dp)
 			}
 		}
@@ -400,13 +405,17 @@ func applyDimensionFilters(groups []store.MetricGroup, filters map[string][]stri
 	return kept
 }
 
-func dataPointMatches(dp store.MetricDataPoint, filters map[string][]string) bool {
+func dataPointMatches(dp store.MetricDataPoint, filters, negated map[string][]string) bool {
 	for k, wantVals := range filters {
 		if !attrMatchesAny(dp.Attributes, k, wantVals) && !attrMatchesAny(dp.Resource.Attributes, k, wantVals) {
 			return false
 		}
 	}
-
+	for k, excludeVals := range negated {
+		if attrMatchesAny(dp.Attributes, k, excludeVals) || attrMatchesAny(dp.Resource.Attributes, k, excludeVals) {
+			return false
+		}
+	}
 	return true
 }
 

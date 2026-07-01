@@ -323,6 +323,7 @@ function usePreparedMetrics(
     if (isMonotonicCounter) {
       const rateDps: MetricDataPoint[] = [];
       for (const raw of seriesBuckets) {
+        let bucketHasRate = false;
         for (let i = 1; i < raw.length; i++) {
           const prev = raw[i - 1];
           const curr = raw[i];
@@ -330,19 +331,14 @@ function usePreparedMetrics(
           if (dt <= 0) continue;
           const rate = Math.max(0, ((curr.value ?? 0) - (prev.value ?? 0)) / dt);
           rateDps.push({ ...curr, value: rate });
+          bucketHasRate = true;
         }
-      }
-      // A single raw point (or back-to-back equal timestamps) yields zero rate
-      // points, which would drop the whole group via the trailing filter and
-      // render a matched single_value/list/heatmap panel as blank/0. Fall back
-      // to the latest raw value (per series) so the latest-value renderings
-      // still show a number. For non-latest (time_series) panels we keep the
-      // empty rate series — a single point cannot form a rate line.
-      if (rateDps.length === 0 && isLatestValue) {
-        const latestPerSeries = seriesBuckets
-          .filter((b) => b.length > 0)
-          .map((b) => ({ ...b[b.length - 1] }));
-        if (latestPerSeries.length > 0) return { ...g, dataPoints: latestPerSeries };
+        // Per-series fallback: if this bucket produced no rate points (single
+        // point or equal timestamps) and we're in a latest-value context, use
+        // the last raw value so this series is not silently dropped (#319).
+        if (!bucketHasRate && isLatestValue && raw.length > 0) {
+          rateDps.push({ ...raw[raw.length - 1] });
+        }
       }
       return { ...g, dataPoints: rateDps };
     }
@@ -353,6 +349,7 @@ function usePreparedMetrics(
 
       const outDps: MetricDataPoint[] = [];
       for (const raw of seriesBuckets) {
+        let bucketHasDelta = false;
         for (let i = 1; i < raw.length; i++) {
           const prev = raw[i - 1];
           const curr = raw[i];
@@ -372,22 +369,16 @@ function usePreparedMetrics(
             value = dSum / dCount;
           }
           outDps.push({ ...curr, value, sum: undefined, count: undefined });
+          bucketHasDelta = true;
         }
-      }
-      // Same single-point collapse as the counter branch: a histogram with one
-      // raw point produces zero delta points. For latest-value renderings fall
-      // back to the latest raw mean (sum/count) per series so the panel is not
-      // blanked.
-      if (outDps.length === 0 && isLatestValue) {
-        const latestPerSeries = seriesBuckets
-          .filter((b) => b.length > 0)
-          .map((b) => {
-            const last = b[b.length - 1];
-            const cnt = last.count ?? 0;
-            const mean = cnt > 0 ? (last.sum ?? 0) / cnt : (last.value ?? 0);
-            return { ...last, value: mean, sum: undefined, count: undefined };
-          });
-        if (latestPerSeries.length > 0) return { ...g, dataPoints: latestPerSeries };
+        // Per-series fallback: a single-point bucket produces no delta. Use
+        // the latest raw mean so this series is not silently dropped (#319).
+        if (!bucketHasDelta && isLatestValue && raw.length > 0) {
+          const last = raw[raw.length - 1];
+          const cnt = last.count ?? 0;
+          const mean = cnt > 0 ? (last.sum ?? 0) / cnt : (last.value ?? 0);
+          outDps.push({ ...last, value: mean, sum: undefined, count: undefined });
+        }
       }
       return { ...g, dataPoints: outDps };
     }

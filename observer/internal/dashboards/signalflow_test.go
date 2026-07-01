@@ -12,6 +12,7 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 		program     string
 		wantMetric  string
 		wantFilters map[string][]string
+		wantNegated map[string][]string
 		wantIgnored []string
 		wantAgg     string
 		wantPct     *float64
@@ -100,11 +101,37 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 			wantPct:     floatPtr(99.9),
 		},
 		{
-			// negated filter must not be captured as a positive constraint.
+			// negated filter must not be captured as a positive constraint,
+			// and its value must appear in NegatedFilters.
 			name:        "not filter is skipped (single space)",
 			program:     "data('m', filter=not filter('env','prod') and filter('service.name','api')).sum().publish()",
 			wantMetric:  "m",
 			wantFilters: map[string][]string{"service.name": {"api"}},
+			wantNegated: map[string][]string{"env": {"prod"}},
+			wantAgg:     "sum",
+		},
+		{
+			name:        "negated filter value captured in NegatedFilters",
+			program:     "data('m', filter=not filter('env','prod')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{},
+			wantNegated: map[string][]string{"env": {"prod"}},
+			wantAgg:     "sum",
+		},
+		{
+			name:        "negated multi-value filter captured in NegatedFilters",
+			program:     "data('m', filter=not filter('region','us-east','eu-west')).mean().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{},
+			wantNegated: map[string][]string{"region": {"us-east", "eu-west"}},
+			wantAgg:     "mean",
+		},
+		{
+			name:        "negated filter with templated value recorded as ignored",
+			program:     "data('m', filter=not filter('env','${var.e}')).sum().publish()",
+			wantMetric:  "m",
+			wantFilters: map[string][]string{},
+			wantIgnored: []string{"env"},
 			wantAgg:     "sum",
 		},
 		{
@@ -208,6 +235,19 @@ func TestParseProgramText(t *testing.T) { //nolint:gocognit,revive // table-driv
 				}
 			}
 
+			for k, wantVals := range tt.wantNegated {
+				gotVals := got.NegatedFilters[k]
+				if len(gotVals) != len(wantVals) {
+					t.Errorf("negatedFilter[%q] = %v, want %v", k, gotVals, wantVals)
+					continue
+				}
+				for _, v := range wantVals {
+					if !slices.Contains(gotVals, v) {
+						t.Errorf("negatedFilter[%q] missing value %q (got %v)", k, v, gotVals)
+					}
+				}
+			}
+
 			if got.Aggregation != tt.wantAgg {
 				t.Errorf("aggregation = %q, want %q", got.Aggregation, tt.wantAgg)
 			}
@@ -236,6 +276,9 @@ func TestParseProgramNotParenthesizedFilter(t *testing.T) {
 	}
 	if vals := got.Filters["env"]; len(vals) != 0 {
 		t.Errorf("negated filter should not be applied, got Filters[env]=%v", vals)
+	}
+	if !slices.Contains(got.NegatedFilters["env"], "prod") {
+		t.Errorf("expected env=prod in NegatedFilters, got %v", got.NegatedFilters)
 	}
 }
 
@@ -521,13 +564,11 @@ func TestParseProgramAggregationScopedToFirstDataCall(t *testing.T) {
 	}
 }
 
-// TestParseProgramNegatedFilterRecordedAsIgnored verifies that a negated filter
-// is recorded in IgnoredFilters rather than silently dropped (issue #4). Before
-// the fix, isNegatedFilter triggered a bare `continue` in both collect functions
-// so the filter key was not added to IgnoredFilters, and callers had no way to
-// surface the "⚠ filters partial" warning.
-func TestParseProgramNegatedFilterRecordedAsIgnored(t *testing.T) {
-	// Single negated filter — should appear in IgnoredFilters, NOT in Filters.
+// TestParseProgramNegatedFilterRecordedAsNegated verifies that a negated filter
+// with a parseable value lands in NegatedFilters (not IgnoredFilters and not
+// Filters) so applyDimensionFilters can actively exclude matching series.
+func TestParseProgramNegatedFilterRecordedAsNegated(t *testing.T) {
+	// Single negated filter — must appear in NegatedFilters, NOT in Filters.
 	got := ParseProgramText("data('m', filter=not filter('env','prod')).mean().publish()")
 	if got.ParseError != "" {
 		t.Fatalf("unexpected ParseError: %s", got.ParseError)
@@ -535,11 +576,11 @@ func TestParseProgramNegatedFilterRecordedAsIgnored(t *testing.T) {
 	if len(got.Filters["env"]) > 0 {
 		t.Errorf("negated filter must not be in Filters, got %v", got.Filters["env"])
 	}
-	if !slices.Contains(got.IgnoredFilters, "env") {
-		t.Errorf("negated filter key must be recorded in IgnoredFilters, got %v", got.IgnoredFilters)
+	if !slices.Contains(got.NegatedFilters["env"], "prod") {
+		t.Errorf("negated filter value must be in NegatedFilters[env], got %v", got.NegatedFilters)
 	}
 
-	// Negated multi-value filter inside a group — key must land in IgnoredFilters.
+	// Negated multi-value filter inside a group — values must land in NegatedFilters.
 	got2 := ParseProgramText("data('m', filter=not (filter('region','us1','us2'))).sum().publish()")
 	if got2.ParseError != "" {
 		t.Fatalf("unexpected ParseError: %s", got2.ParseError)
@@ -547,8 +588,8 @@ func TestParseProgramNegatedFilterRecordedAsIgnored(t *testing.T) {
 	if len(got2.Filters["region"]) > 0 {
 		t.Errorf("negated multi-value filter must not be in Filters, got %v", got2.Filters["region"])
 	}
-	if !slices.Contains(got2.IgnoredFilters, "region") {
-		t.Errorf("negated multi-value filter key must be in IgnoredFilters, got %v", got2.IgnoredFilters)
+	if !slices.Contains(got2.NegatedFilters["region"], "us1") || !slices.Contains(got2.NegatedFilters["region"], "us2") {
+		t.Errorf("negated multi-value filter values must be in NegatedFilters[region], got %v", got2.NegatedFilters)
 	}
 }
 
@@ -567,8 +608,8 @@ func TestParseProgramUnbalancedNegationGroup(t *testing.T) {
 	if len(got.Filters["env"]) > 0 {
 		t.Errorf("filter inside unbalanced negation group must not be a positive constraint, got %v", got.Filters["env"])
 	}
-	if !slices.Contains(got.IgnoredFilters, "env") {
-		t.Errorf("filter inside unbalanced negation group must be in IgnoredFilters, got %v", got.IgnoredFilters)
+	if !slices.Contains(got.NegatedFilters["env"], "prod") {
+		t.Errorf("filter inside unbalanced negation group must be in NegatedFilters, got %v", got.NegatedFilters)
 	}
 }
 

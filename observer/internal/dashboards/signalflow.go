@@ -355,7 +355,8 @@ func collectFilters(program string, q *ParsedQuery) {
 // collectMultiValueFilters handles filter('key','a','b',...) forms and returns
 // the set of match start positions that were processed. A non-negated filter
 // whose every value is empty or templated (${...}) contributes nothing to
-// q.Filters and is recorded in q.IgnoredFilters.
+// q.Filters and is recorded in q.IgnoredFilters. A negated filter with
+// parseable values is recorded in q.NegatedFilters for exclusion.
 func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedSpan) map[int]bool {
 	handled := make(map[int]bool)
 
@@ -370,7 +371,17 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 			continue
 		}
 		if isNegatedFilter(program, start, negated) {
-			recordIgnoredFilter(q, key)
+			// Record parseable values as exclusion constraints.
+			applied := false
+			for _, v := range reQuotedVal.FindAllStringSubmatch(argList, -1) {
+				if val := v[1]; val != "" && !strings.Contains(val, "${") {
+					appendNegatedFilterValue(q, key, val)
+					applied = true
+				}
+			}
+			if !applied {
+				recordIgnoredFilter(q, key)
+			}
 			continue
 		}
 
@@ -393,6 +404,7 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 // collectSingleValueFilters handles filter('key','val') forms, skipping
 // positions already covered by collectMultiValueFilters. A non-negated filter
 // whose value is empty or templated (${...}) is recorded in q.IgnoredFilters.
+// A negated filter with a parseable value is recorded in q.NegatedFilters.
 func collectSingleValueFilters(program string, q *ParsedQuery, handled map[int]bool, negated []negatedSpan) {
 	for _, loc := range reFilter.FindAllStringSubmatchIndex(program, -1) {
 		start := loc[0]
@@ -407,7 +419,10 @@ func collectSingleValueFilters(program string, q *ParsedQuery, handled map[int]b
 			continue
 		}
 		if isNegatedFilter(program, start, negated) {
-			recordIgnoredFilter(q, key)
+			appendNegatedFilterValue(q, key, val)
+			if val == "" || strings.Contains(val, "${") {
+				recordIgnoredFilter(q, key)
+			}
 			continue
 		}
 
@@ -463,4 +478,23 @@ func recordIgnoredFilter(q *ParsedQuery, key string) {
 		}
 	}
 	q.IgnoredFilters = append(q.IgnoredFilters, key)
+}
+
+// appendNegatedFilterValue records an exclusion constraint: data points whose
+// attribute for key equals val will be excluded by applyDimensionFilters.
+func appendNegatedFilterValue(q *ParsedQuery, key, val string) {
+	if val == "" || strings.Contains(val, "${") {
+		return
+	}
+	if q.NegatedFilters == nil {
+		q.NegatedFilters = map[string][]string{}
+	}
+	// Fold to the canonical case-variant already in NegatedFilters if present.
+	for existing := range q.NegatedFilters {
+		if strings.EqualFold(existing, key) {
+			q.NegatedFilters[existing] = append(q.NegatedFilters[existing], val)
+			return
+		}
+	}
+	q.NegatedFilters[key] = append(q.NegatedFilters[key], val)
 }
