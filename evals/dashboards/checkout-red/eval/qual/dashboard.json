@@ -1,5 +1,5 @@
 {
-  "skill": "splunk-dashboard",
+  "skill": "splunk-dashboard-publish",
   "language": "dashboards",
   "service": "checkout-red",
   "prompts": [

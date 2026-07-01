@@ -1,0 +1,24 @@
+{
+  "skill": "splunk-configure",
+  "language": "dashboards",
+  "service": "checkout-configure",
+  "prompts": [
+    {
+      "id": "generate",
+      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN generate detector Terraform for ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the detector Terraform (one signalfx_detector resource per classified metric), variables.tf, terraform.tfvars.example, the .observe/detectors.md report, and the .observe/splunk-configure-verify.md verification file. Do not call any network and do not run terraform."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe for the resulting files when present, especially ./service/.observe/terraform/detectors.tf, ./service/.observe/terraform/variables.tf, ./service/.observe/detectors.md, and ./service/.observe/splunk-configure-verify.md.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Reads the audit at .observe/otel.md and classifies the checkout metrics into detector categories: latency (http.server.request.duration → P99 threshold), error (checkout.payment.errors → rate threshold), and at least one of throughput or saturation (http.server.request.duration count or http.server.active_requests).",
+    "Writes signalfx_detector resources to .observe/terraform/detectors.tf: each resource has a name, program_text with a valid detect(when(...)) SignalFlow expression referencing the correct metric and a filter('service.name', '${var.service_name}') constraint, and at least one rule block with a severity (Critical/Major/Minor/Warning).",
+    "Each detector program_text uses the data('<metric>', filter=filter('service.name', ...)).<agg>().publish() pattern with a detect(when(... > threshold)) or detect(when(... < threshold)) tail appropriate for the detector category — no plain publish() without a detect().",
+    "Writes variables.tf with realm, api_token marked sensitive = true, and service_name, plus threshold variables for each detector, and a terraform.tfvars.example; never hard-codes a real token or a literal service name in program_text.",
+    "Writes .observe/detectors.md summarising the classified detectors, their metrics, severities, and rationale, and hands off to terraform apply or $splunk-detector-publish without performing any network call.",
+    "Writes .observe/splunk-configure-verify.md listing each generated detector's resource label, metric, detect condition, and severity as a verification checklist."
+  ]
+}
