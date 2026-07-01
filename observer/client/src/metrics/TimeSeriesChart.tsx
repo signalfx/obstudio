@@ -57,7 +57,7 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
 
   return (
     <div className="ts-chart">
-      <svg className="ts-chart__svg" viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none">
+      <svg className="ts-chart__svg" viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet">
         {/* Grid lines + Y labels */}
         {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
           const val = minV + frac * rangeV;

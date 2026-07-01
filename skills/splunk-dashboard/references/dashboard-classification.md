@@ -1,9 +1,19 @@
 # Dashboard Classification Rules
 
 Rules for grouping metrics from an otel-audit report into dashboard panels. The
-dashboard analogue of `splunk-configure/references/detector-classification.md` —
-same metric taxonomy, but each metric maps to a **panel** (chart type + grid
-placement) instead of a detector. Apply in order; the first match wins.
+dashboard analogue of `splunk-configure/references/detector-classification.md`:
+the same signal categories (latency / error / throughput / saturation), but each
+metric maps to a **panel** (chart type + grid placement) instead of a detector.
+
+The counter/error gate here is deliberately **broader** than the detector skill's,
+so the two are not identical: this doc treats a name ending in `.processed` as a
+counter suffix (the detector skill recognizes only `.total`/`.count`), and its
+error-keyword family includes the plurals `timeouts` and `exceptions` (the
+detector skill's family stops at the singular `timeout`/`exception`). The wider
+gate is intentional — a dashboard should still surface a custom counter like
+`checkout.orders.processed` or an error counter like `db.query.timeouts` as a
+panel even when the detector skill would not open a detector for it. Apply in
+order; the first match wins.
 
 ## Chart-type vocabulary
 
