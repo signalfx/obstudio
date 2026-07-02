@@ -21,6 +21,7 @@ export interface PanelLayout {
 export interface ParsedQuery {
   metricName?: string;
   filters?: Record<string, string[]>;
+  negatedFilters?: Record<string, string[]>;
   ignoredFilters?: string[];
   aggregation?: string;
   percentile?: number;

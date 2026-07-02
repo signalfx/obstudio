@@ -190,9 +190,10 @@ limit = 50          # keep small; large limits hit the 500 bug more often
 offset = 0
 all_detectors = []
 seen_ids = set()
-consecutive_empty = 0
+consecutive_empty = 0   # counts genuinely empty pages (real end-of-list signal)
+consecutive_500 = 0     # counts 500 pages separately — does NOT advance empty counter
 
-while consecutive_empty < 5:
+while consecutive_empty < 5 and consecutive_500 < 10:
     url = f"{base}?limit={limit}&offset={offset}"
     req = urllib.request.Request(url, headers={"X-SF-Token": token})
     try:
@@ -201,13 +202,17 @@ while consecutive_empty < 5:
     except urllib.error.HTTPError as e:
         if e.code == 500:
             # Skip-on-500: the API has a known bug at certain offsets.
+            # Do NOT increment consecutive_empty here — a 500 is not an empty
+            # page; incrementing it would stop the loop after just 5 bad offsets
+            # and hide detectors on later pages.
             offset += limit
-            consecutive_empty += 1
+            consecutive_500 += 1
             continue
         raise RuntimeError(f"Splunk API error {e.code} fetching detectors: {e}") from e
     except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
         raise RuntimeError(f"Failed to fetch detectors: {e}") from e
 
+    consecutive_500 = 0  # a successful response resets the 500 streak
     batch = data.get("results", [])
     if not batch:
         consecutive_empty += 1
@@ -251,15 +256,17 @@ is absent, uses a different dimension key, or the filter value is ambiguous
 (e.g. a wildcard). Show to the user; do not auto-create and do not auto-cover.
 
 **Offline / fetch-unavailable fallback**
-Always attempt the live detector fetch (Step 3) before declaring any spec a GAP.
-Do NOT skip the fetch and jump straight to all-GAP — the fetch itself is the
-authoritative signal. Only treat every local spec as **GAP** — not UNCERTAIN —
-when the fetch genuinely fails (network error, auth failure, API unreachable, or
-a non-500 HTTP error). UNCERTAIN requires evidence that the metric exists
-somewhere in a live detector with an ambiguous filter; without a live list there
-is no such evidence, so the safe default for a genuine failure is GAP. Describe
-the POST /v2/detector payload you would send for each, stop at the confirmation
-gate, and note that the user must confirm once the API is reachable.
+Always attempt the live detector fetch (Step 3) before declaring any verdict.
+Do NOT skip the fetch and jump straight to any classification — the fetch is the
+authoritative signal. When the fetch genuinely fails (network error, auth
+failure, API unreachable, or a non-500 HTTP error), mark every local spec
+**UNCERTAIN** (not GAP). A failed fetch proves neither absence nor presence of a
+live detector: classifying as GAP when the fetch fails would cause duplicate
+creates once connectivity returns. Show the UNCERTAIN specs in the confirmation
+diff, stop at the confirmation gate, explicitly state that the live inventory
+could not be fetched, and require the user to re-run once the API is reachable
+before any POST is attempted. Do not create detectors from an incomplete
+inventory.
 
 **AutoDetect advisory (informational only)**
 For latency or error specs: note any live detector with

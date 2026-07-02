@@ -69,6 +69,16 @@ Look for `.observe/terraform/dashboards.tf` in the repository root.
 Also read `.observe/dashboards.md` if present for the panel rationale that helps
 resolve ambiguous UNCERTAIN cases.
 
+Also read `.observe/dashboard-sync.md` (the ledger from any prior run) if it
+exists. Collect any chart IDs listed under **Orphan charts** — these are charts
+that were successfully POSTed in a previous run but whose dashboard POST/PUT
+failed, leaving them unreferenced. Before classifying any panel as GAP and
+creating a new chart, check whether a matching orphan ID exists (match by
+`name`, `programText` fingerprint, or metric+filter+type). If a match is found,
+reuse the orphan chart ID instead of creating a duplicate, then clear it from
+the orphan list. After the full run, explicitly delete any remaining unmatched
+orphan chart IDs via `DELETE /v2/chart/{id}` so they do not accumulate.
+
 ### Step 2 -- Parse Local Specs
 
 Parse each block in `dashboards.tf`:
@@ -130,7 +140,7 @@ check; `program_text` (HCL) and `programText` (REST) are the same field.
 
 Print a structured diff before any writes, **with a non-empty Reason on every
 row**. Do not proceed until the user explicitly confirms (yes/no). Offer a dry
-run via `POST /v2/dashboard/validate` + `POST /v2/chart/validate`.
+run by checking the payload locally (SignalFlow normalization, required fields, chart-type constraints) before any POST — the Charts and Dashboards APIs have no `/validate` endpoint; only detectors do.
 
 **When network is unavailable (offline):** still produce the full confirmation
 diff and describe the creation plan you would execute. Explicitly state:
@@ -181,12 +191,26 @@ detector publish — a dashboard cannot be created before the charts it referenc
 2. **Create each GAP chart first.** For each GAP panel,
    `POST /v2/chart` with:
    ```python
+   # Convert the Terraform/preview resource type to the REST API type name FIRST.
+   # The local spec stores snake_case names from the HCL resource type; the REST
+   # API requires PascalCase. Map before building options:
+   CHART_TYPE_MAP = {
+       "time_series":   "TimeSeriesChart",
+       "single_value":  "SingleValue",
+       "list":          "List",
+       "heatmap":       "Heatmap",
+       "text":          "Text",
+       "table":         "TableChart",
+       "event":         "EventFeed",
+   }
+   rest_type = CHART_TYPE_MAP.get(chart_type, chart_type)  # fall back to raw if unknown
+
    # options body is TYPE-DEPENDENT — see constraints below
-   if chart_type == "TimeSeriesChart":
+   if rest_type == "TimeSeriesChart":
        options = {"type": "TimeSeriesChart", "defaultPlotType": "LineChart", "colorBy": "Dimension"}
    else:
        # SingleValue, List, Heatmap, Text, TableChart: do NOT include defaultPlotType
-       options = {"type": chart_type, "colorBy": "Dimension"}
+       options = {"type": rest_type, "colorBy": "Dimension"}
 
    body = {
        "name": chart_name,

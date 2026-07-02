@@ -188,6 +188,21 @@ func (r *Resolver) Build() PreviewResponse {
 		return resp
 	}
 
+	if spec.SchemaVersion != 1 {
+		resp.Message = fmt.Sprintf(
+			"Dashboard preview at %s has unsupported schemaVersion %d (expected 1). Re-run $splunk-dashboard to regenerate it.",
+			source, spec.SchemaVersion,
+		)
+
+		return resp
+	}
+
+	if len(spec.Groups) == 0 {
+		resp.Message = fmt.Sprintf("Dashboard preview at %s is empty or malformed (no groups found). Re-run $splunk-dashboard to regenerate it.", source)
+
+		return resp
+	}
+
 	resp.Available = true
 	resp.GeneratedAt = spec.GeneratedAt
 

@@ -1223,7 +1223,8 @@ function hasInstalledAgentSkills(spec: AgentIntegrationSpec): boolean {
 }
 
 function getBundleVersion(context: vscode.ExtensionContext): string {
-	return context.extension.packageJSON.version as string ?? '0.0.0';
+	const v: unknown = context.extension.packageJSON.version;
+	return typeof v === 'string' && v.length > 0 ? v : '0.0.0';
 }
 
 function getStoredSkillsBundleVersion(context: vscode.ExtensionContext, target: AgentIntegrationTarget): string | undefined {
@@ -1236,11 +1237,11 @@ async function recordSkillsBundleVersion(context: vscode.ExtensionContext, targe
 
 function skillsBundleVersionChanged(context: vscode.ExtensionContext, target: AgentIntegrationTarget): boolean {
 	const stored = getStoredSkillsBundleVersion(context, target);
-	// Treat a missing stored version as "not changed": skills may have been
-	// installed by an older extension version that predates this feature.
-	// We only re-prompt on an explicit version change (stored → new value).
+	// A missing stored version means this install predates bundle-version tracking.
+	// Treat it as "changed" so the new skills (dashboard/publish etc.) are deployed
+	// to users who installed before this feature was added.
 	if (stored === undefined) {
-		return false;
+		return true;
 	}
 	return stored !== getBundleVersion(context);
 }

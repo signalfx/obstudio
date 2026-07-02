@@ -425,13 +425,15 @@ function usePreparedMetrics(
     const isMonotonicCounter = g.type === "sum" && filtered.length > 0 &&
       filtered.some((dp) => dp.isMonotonic === true && dp.temporality !== "delta");
     const isHistogram = g.type === "histogram";
+    const isSummary = g.type === "summary";
+    const isExponentialHistogram = g.type === "exponential_histogram";
 
     // Split the group's interleaved points into per-series buckets BEFORE the
     // counter rate / histogram delta math, so cumulative-counter and bucket
     // deltas are only ever taken between consecutive points of the SAME series
     // (a dimensioned metric lands >1 series in a single group; see
     // pointSeriesKey). Each bucket is sorted by timestamp ascending on its own.
-    const seriesBuckets = (isMonotonicCounter || isHistogram)
+    const seriesBuckets = (isMonotonicCounter || isHistogram || isSummary || isExponentialHistogram)
       ? splitPointsBySeries(filtered)
       : [filtered];
     for (const bucket of seriesBuckets) {
@@ -496,6 +498,53 @@ function usePreparedMetrics(
           const cnt = last.count ?? 0;
           const mean = cnt > 0 ? (last.sum ?? 0) / cnt : (last.value ?? 0);
           outDps.push({ ...last, value: mean, sum: undefined, count: undefined });
+        }
+      }
+      return { ...g, dataPoints: outDps };
+    }
+
+    if (isSummary) {
+      const agg = query?.aggregation ?? "mean";
+      const pct = query?.percentile;
+      const outDps: MetricDataPoint[] = [];
+      for (const raw of seriesBuckets) {
+        for (const dp of raw) {
+          let value: number;
+          if (agg === "percentile" && pct != null && dp.quantiles && dp.quantiles.length > 0) {
+            // Find the quantile entry closest to the requested percentile (e.g. 0.99 for P99).
+            const target = pct / 100;
+            const closest = dp.quantiles.reduce((best, q) =>
+              Math.abs(q.quantile - target) < Math.abs(best.quantile - target) ? q : best,
+            );
+            value = closest.value;
+          } else {
+            const cnt = dp.count ?? 0;
+            value = cnt > 0 ? (dp.sum ?? 0) / cnt : (dp.value ?? 0);
+          }
+          outDps.push({ ...dp, value, sum: undefined, count: undefined });
+        }
+      }
+      return { ...g, dataPoints: outDps };
+    }
+
+    if (isExponentialHistogram) {
+      const agg = query?.aggregation ?? "mean";
+      const pct = query?.percentile;
+      if (agg === "percentile" && pct != null) {
+        // Exponential histogram buckets require a scale-aware reconstruction
+        // not yet implemented; return no points so the panel shows "no data"
+        // rather than silently displaying a mean under the percentile title.
+        return { ...g, dataPoints: [] };
+      }
+      const outDps: MetricDataPoint[] = [];
+      for (const raw of seriesBuckets) {
+        for (let i = 1; i < raw.length; i++) {
+          const prev = raw[i - 1];
+          const curr = raw[i];
+          const dCount = (curr.count ?? 0) - (prev.count ?? 0);
+          if (dCount <= 0) continue;
+          const dSum = (curr.sum ?? 0) - (prev.sum ?? 0);
+          outDps.push({ ...curr, value: dSum / dCount, sum: undefined, count: undefined });
         }
       }
       return { ...g, dataPoints: outDps };
