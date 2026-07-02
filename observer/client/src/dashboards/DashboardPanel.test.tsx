@@ -3,7 +3,7 @@
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { DashboardPanel } from "./DashboardPanel";
+import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
 import { makePanel } from "./testFixtures";
 import type { MetricGroup, MetricDataPoint } from "../api/types";
 
@@ -24,7 +24,11 @@ describe("DashboardPanel", () => {
       metrics: [],
       query: { metricName: "http.server.request.duration", filters: { "service.name": ["checkout"] } },
     });
-    render(<DashboardPanel panel={panel} />);
+    render(
+      <OtlpEndpointContext.Provider value="http://localhost:4318">
+        <DashboardPanel panel={panel} />
+      </OtlpEndpointContext.Provider>,
+    );
 
     expect(screen.getByText(/No local series matches/i)).toBeTruthy();
     expect(screen.getByText("http.server.request.duration")).toBeTruthy();

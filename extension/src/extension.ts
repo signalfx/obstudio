@@ -1238,10 +1238,12 @@ async function recordSkillsBundleVersion(context: vscode.ExtensionContext, targe
 function skillsBundleVersionChanged(context: vscode.ExtensionContext, target: AgentIntegrationTarget): boolean {
 	const stored = getStoredSkillsBundleVersion(context, target);
 	// A missing stored version means this install predates bundle-version tracking.
-	// Treat it as "changed" so the new skills (dashboard/publish etc.) are deployed
-	// to users who installed before this feature was added.
+	// Treat it as "not changed" so we don't re-prompt on the first activation after
+	// this feature was added — but stamp the current version so that future upgrades
+	// correctly trigger re-installs via the explicit version-change path.
 	if (stored === undefined) {
-		return true;
+		void recordSkillsBundleVersion(context, target);
+		return false;
 	}
 	return stored !== getBundleVersion(context);
 }
