@@ -89,6 +89,13 @@ type PreviewPanel struct {
 	Query     *ParsedQuery        `json:"query,omitempty"`
 	Matched   bool                `json:"matched"`
 	Metrics   []store.MetricGroup `json:"metrics,omitempty"`
+	// Truncated is set when the build-wide datapoint budget
+	// (maxResponseDataPoints) cut this panel's series: either some group's
+	// newest points were dropped to fit the remaining budget, or the panel was
+	// skipped entirely because the budget was already exhausted before it was
+	// reached. The client uses this to distinguish "budget-limited" from a
+	// genuine "No data in window", which look identical when DataPoints is empty.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // ParsedQuery is the focused extraction from a panel's SignalFlow program_text.

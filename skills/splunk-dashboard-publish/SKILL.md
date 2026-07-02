@@ -79,7 +79,7 @@ Parse each block in `dashboards.tf`:
 3. **`signalfx_*_chart`** — for each chart resource: HCL label, `name`,
    `program_text`, and the chart type (from the resource type —
    `signalfx_time_chart` → `time_series`, `signalfx_single_value_chart` →
-   `single_value`, etc.; see `splunk-dashboard/references/dashboard-templates.md`
+   `single_value`, etc.; see `../splunk-dashboard/references/dashboard-templates.md`
    for the full mapping).
 
 **Normalize every chart `program_text` before any POST or comparison** per
@@ -134,9 +134,11 @@ run via `POST /v2/dashboard/validate` + `POST /v2/chart/validate`.
 
 **When network is unavailable (offline):** still produce the full confirmation
 diff and describe the creation plan you would execute. Explicitly state:
-1. Chart-first ordering — `POST /v2/chart` for each GAP chart to collect chart
+1. Creation order — `POST /v2/dashboardgroup` first (if the group is a GAP) to
+   obtain the group ID, then `POST /v2/chart` for each GAP chart to collect chart
    IDs, then `POST /v2/dashboard` referencing those `chartId` values with grid
-   placement, then `POST /v2/dashboardgroup` if the group is also a GAP.
+   placement. Charts must precede the dashboard that references them; the group
+   must precede the dashboard that belongs to it.
 2. Orphan-chart recovery — if the dashboard POST fails after charts were
    already created, those charts exist but reference nothing; record their IDs
    in the ledger so a re-run can reuse or delete them via `DELETE /v2/chart/{id}`

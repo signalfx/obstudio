@@ -52,7 +52,7 @@ of them change what the product does.
 ## Who Is the Customer?
 
 Developers who use **AI agents** to write, instrument, and debug code. The
-Instrumenter, Terraformer, and Splunk-sync skills are agent skills. The Telemetry
+Instrumenter, Terraformer, and Splunk-publish skills are agent skills. The Telemetry
 Explorer and Validator produce data that agents consume via MCP, but the
 Telemetry Explorer also stands on its own as a live telemetry viewer — no agent
 workflow required.
@@ -81,12 +81,14 @@ skills/
 ├── otel-instrument/       # Add OTel auto-instrumentation and custom signals
 ├── otel-verify/           # Prove app instrumentation and local OTLP visibility
 ├── splunk-configure/      # Generate Splunk O11y detector Terraform from an audit
-├── splunk-sync/           # Diff local detector specs against live Splunk detectors;
-│                          # create only the confirmed gaps via the Splunk REST API
-├── splunk-dashboard/      # Generate Splunk O11y dashboard Terraform from an audit
-│                          # (group + dashboards + per-panel charts) and a preview sidecar
-├── splunk-dashboard-sync/ # Diff local dashboards/charts against live Splunk dashboards;
-│                          # create only the confirmed gaps (chart-first) via the REST API
+├── splunk-detector-publish/ # Diff local detector specs against live Splunk detectors;
+│                            # create only the confirmed gaps via the Splunk REST API
+│                            # (replaces deprecated $splunk-sync)
+├── splunk-dashboard/        # Generate Splunk O11y dashboard Terraform from an audit
+│                            # (group + dashboards + per-panel charts) and a preview sidecar
+├── splunk-dashboard-publish/ # Diff local dashboards/charts against live Splunk dashboards;
+│                             # create only the confirmed gaps (chart-first) via the REST API
+│                             # (replaces deprecated $splunk-dashboard-sync)
 └── references/            # Shared skill prose (Splunk API, normalization, SignalFlow,
                            # ledger, coverage decision tree) included by the skills above
 ```
@@ -541,7 +543,7 @@ are shown explicitly so engineers can work independently.
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
 | **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
-| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-sync`, `$splunk-dashboard`, `$splunk-dashboard-sync` (REST-direct) | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-detector-publish` (~~`$splunk-sync`~~ deprecated), `$splunk-dashboard`, `$splunk-dashboard-publish` (~~`$splunk-dashboard-sync`~~ deprecated) (REST-direct) | —          |
 
 
 Observer and Skills have no dependency on each other. They can be developed,

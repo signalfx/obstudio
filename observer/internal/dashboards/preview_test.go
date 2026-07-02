@@ -777,6 +777,138 @@ func TestBuildSourceHidesAbsolutePath(t *testing.T) {
 	}
 }
 
+// TestBuildBudgetKeepsNewestPointsAndFlagsTruncation verifies the datapoint
+// budget keeps the freshest samples (not the oldest) and marks the panel
+// Truncated when it clips a group. The store collects newest-first then reverses
+// each group to ascending order, so a naive dp[:remaining] would keep the OLDEST
+// points and drop the freshest — the opposite of what a live preview wants.
+func TestBuildBudgetKeepsNewestPointsAndFlagsTruncation(t *testing.T) {
+	prev := maxResponseDataPoints
+	maxResponseDataPoints = 3
+	defer func() { maxResponseDataPoints = prev }()
+
+	// Five points for one series, pushed oldest→newest with the value encoding
+	// recency (0 oldest, 4 newest).
+	var points []store.MetricDataPoint
+	for i := 0; i < 5; i++ {
+		points = append(points, metricPoint("m", "svc", float64(i), nil))
+	}
+	s := seededStore(t, points)
+
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name: "d",
+				Charts: []SpecChart{{
+					Label:       "p",
+					ChartType:   "time_series",
+					ProgramText: "data('m', filter=filter('service.name','svc')).mean().publish()",
+					Layout:      SpecLayout{Width: 6, Height: 3},
+				}},
+			}},
+		}},
+	}
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
+
+	panel := r.Build().Groups[0].Dashboards[0].Panels[0]
+
+	if !panel.Matched {
+		t.Fatalf("expected matched=true")
+	}
+	if !panel.Truncated {
+		t.Errorf("expected Truncated=true when the budget clips the series")
+	}
+	if len(panel.Metrics) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(panel.Metrics))
+	}
+	g := panel.Metrics[0]
+	if len(g.DataPoints) != 3 {
+		t.Fatalf("expected 3 datapoints kept under a budget of 3, got %d", len(g.DataPoints))
+	}
+	if g.DataPointCount != len(g.DataPoints) {
+		t.Errorf("DataPointCount=%d must equal len(DataPoints)=%d after trimming", g.DataPointCount, len(g.DataPoints))
+	}
+	// The kept points must be the NEWEST three (values 2,3,4), in ascending order.
+	wantNewest := []float64{2, 3, 4}
+	for i, dp := range g.DataPoints {
+		if dp.Value != wantNewest[i] {
+			t.Errorf("kept points must be the newest suffix %v (ascending), got value %v at index %d",
+				wantNewest, dp.Value, i)
+		}
+	}
+}
+
+// TestBuildBudgetExhaustionSkipsLaterPanels verifies that once the build-wide
+// datapoint budget is spent, later panels are neither resolved against the store
+// nor reported as empty "No data" — they are flagged Truncated so the client can
+// show a budget-reached state. This is the abuse-vector fix: a sidecar repeating
+// a populated metric across many panels must not scan and copy the ring per panel
+// after the budget is gone.
+func TestBuildBudgetExhaustionSkipsLaterPanels(t *testing.T) {
+	prev := maxResponseDataPoints
+	maxResponseDataPoints = 2
+	defer func() { maxResponseDataPoints = prev }()
+
+	// Two distinct metrics, each with points in the store, one panel each.
+	var points []store.MetricDataPoint
+	for i := 0; i < 5; i++ {
+		points = append(points, metricPoint("m0", "svc", float64(i), nil))
+		points = append(points, metricPoint("m1", "svc", float64(i), nil))
+	}
+	s := seededStore(t, points)
+
+	chart := func(label, metric string) SpecChart {
+		return SpecChart{
+			Label:       label,
+			ChartType:   "time_series",
+			ProgramText: "data('" + metric + "', filter=filter('service.name','svc')).mean().publish()",
+			Layout:      SpecLayout{Width: 6, Height: 3},
+		}
+	}
+	spec := SpecFile{
+		SchemaVersion: 1,
+		Groups: []SpecGroup{{
+			Name: "g",
+			Dashboards: []SpecDashboard{{
+				Name:   "d",
+				Charts: []SpecChart{chart("p0", "m0"), chart("p1", "m1")},
+			}},
+		}},
+	}
+	r := NewResolver(s, Config{SpecPath: writeSpec(t, spec)})
+
+	panels := r.Build().Groups[0].Dashboards[0].Panels
+	if len(panels) != 2 {
+		t.Fatalf("expected 2 panels, got %d", len(panels))
+	}
+
+	// First panel consumes the whole budget and is truncated.
+	if !panels[0].Matched {
+		t.Errorf("expected first panel matched=true")
+	}
+	if !panels[0].Truncated {
+		t.Errorf("expected first panel Truncated=true (budget of 2 < 5 points)")
+	}
+
+	// Second panel is skipped: budget exhausted, so it is flagged Truncated
+	// rather than resolved-but-empty (which would render as a false "No data").
+	if panels[1].Matched {
+		t.Errorf("expected second panel matched=false when the budget is exhausted")
+	}
+	if !panels[1].Truncated {
+		t.Errorf("expected second panel Truncated=true when the budget is exhausted")
+	}
+	if len(panels[1].Metrics) != 0 {
+		t.Errorf("expected no metrics on the budget-skipped panel, got %d groups", len(panels[1].Metrics))
+	}
+	// The parsed query must still be reported so the client can show the intent.
+	if panels[1].Query == nil {
+		t.Errorf("budget-skipped panel should still report its parsed query")
+	}
+}
+
 // TestBuildOversizedFileRejected verifies that a sidecar exceeding the size cap
 // is rejected without unmarshalling (finding P1).
 func TestBuildOversizedFileRejected(t *testing.T) {

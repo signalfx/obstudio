@@ -6524,6 +6524,15 @@ code {
   opacity: 1;
 }
 
+/* Keep the expand button reachable for keyboard users: show it when it
+   receives focus so Tab navigation can reach it even without a mouse hover. */
+.dashboard-panel__expand:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent, #4f8ef7);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
 .dashboard-panel__expand:hover {
   color: var(--text);
 }
@@ -6532,9 +6541,10 @@ code {
   font-size: var(--font-meta);
   font-weight: 500;
   color: var(--row-primary-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Allow the title to wrap at narrow/extended widths (#20) so it is never
+     clipped into illegibility. Overflow-hidden would silently drop text. */
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 
 .dashboard-panel__type {
@@ -6557,6 +6567,16 @@ code {
 .dashboard-panel__body > svg {
   width: 100%;
   height: 100%;
+}
+
+/* Scroll wrapper used by list and table panel bodies so rows beyond the fixed
+   panel height are reachable by scroll rather than clipped (#13). The parent
+   body keeps overflow:hidden for the SVG chart; this inner wrapper opts list
+   and table rows back in. */
+.dashboard-panel__scroll {
+  overflow-y: auto;
+  width: 100%;
+  max-height: 100%;
 }
 
 .dashboard-panel__text {
@@ -6647,7 +6667,11 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 0;
+  /* max-width:0 + width:100% on the table gives the label column available
+     space without a fixed pixel cap; this works in narrow panels but also
+     expands properly in the full-size expand modal (#17). */
+  max-width: 1px;
+  width: 100%;
 }
 
 .dashboard-panel__list-value {
@@ -6682,7 +6706,11 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 0;
+  /* Same pattern as list-label: max-width:0 alone collapses labels in the
+     expanded modal; width:100% lets the column grow to fill available space
+     while still ellipsing in narrow panels (#17). */
+  max-width: 1px;
+  width: 100%;
 }
 
 .dashboard-panel__table-value {
@@ -6718,11 +6746,18 @@ code {
   overflow: hidden;
 }
 
+/* Header bar inside the expand panel — holds the close button in normal flow
+   so it does not overlap the panel-type badge (#21). */
+.dashboard-expand-panel__head {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 10px 4px;
+  flex-shrink: 0;
+}
+
 .dashboard-expand-close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  z-index: 1;
+  /* Removed position:absolute — button now lives in .dashboard-expand-panel__head
+     flow so it cannot overlap the inner DashboardPanel's type badge (#21). */
   padding: 2px 7px;
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -6736,6 +6771,11 @@ code {
 .dashboard-expand-close:hover {
   color: var(--text);
   background: var(--chrome-2);
+}
+
+.dashboard-expand-close:focus-visible {
+  outline: 2px solid var(--accent, #4f8ef7);
+  outline-offset: 1px;
 }
 
 /* The panel inside the overlay fills the whole box */

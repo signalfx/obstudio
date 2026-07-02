@@ -337,22 +337,42 @@ func TestParseProgramDoubleParenNotFilter(t *testing.T) {
 	}
 }
 
-// TestParseProgramNotMultiFilterGroupAllNegated verifies that EVERY filter in a
-// parenthesized negation group is treated as negated, not just the first — so
-// "not (filter('env','prod') and filter('region','us'))" applies neither
-// constraint. Before the fix only the first filter of the group was negated and
-// region=us was applied as a positive constraint, inverting the panel's intent
-// (R3-go-preview-28).
+// TestParseProgramNotMultiFilterGroupAllNegated verifies that a compound
+// negation group "not (filter('env','prod') and filter('region','us'))" routes
+// BOTH keys to IgnoredFilters rather than NegatedFilters.
+//
+// NOT(A AND B) = NOT A OR NOT B — only one condition must fail, so flattening
+// each filter key into NegatedFilters would wrongly apply NOT A AND NOT B
+// (requiring both to fail simultaneously). The correct handling is to surface
+// the compound group as ignored so the preview stays conservative and shows the
+// user the constraint was not applied, rather than silently misapplying it.
 func TestParseProgramNotMultiFilterGroupAllNegated(t *testing.T) {
 	got := ParseProgramText("data('m', filter=not (filter('env','prod') and filter('region','us'))).sum().publish()")
 	if got.ParseError != "" {
 		t.Fatalf("unexpected ParseError: %s", got.ParseError)
 	}
+	// Neither key should appear in positive Filters.
 	if vals := got.Filters["env"]; len(vals) != 0 {
-		t.Errorf("first negated filter should not be applied, got Filters[env]=%v", vals)
+		t.Errorf("compound negated filter must not be a positive constraint, got Filters[env]=%v", vals)
 	}
 	if vals := got.Filters["region"]; len(vals) != 0 {
-		t.Errorf("second negated filter should not be applied, got Filters[region]=%v", vals)
+		t.Errorf("compound negated filter must not be a positive constraint, got Filters[region]=%v", vals)
+	}
+	// Neither key should appear in NegatedFilters — compound NOT cannot be
+	// safely flattened to per-key exclusions.
+	if len(got.NegatedFilters["env"]) != 0 {
+		t.Errorf("compound negated filter must not land in NegatedFilters, got NegatedFilters[env]=%v", got.NegatedFilters["env"])
+	}
+	if len(got.NegatedFilters["region"]) != 0 {
+		t.Errorf("compound negated filter must not land in NegatedFilters, got NegatedFilters[region]=%v", got.NegatedFilters["region"])
+	}
+	// Both keys must be surfaced in IgnoredFilters so the caller knows the
+	// constraint was not applied.
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("compound negated filter key 'env' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+	if !slices.Contains(got.IgnoredFilters, "region") {
+		t.Errorf("compound negated filter key 'region' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
 	}
 }
 
@@ -465,6 +485,38 @@ func TestCanonicalServiceFilterConflict(t *testing.T) {
 	}
 }
 
+// TestCanonicalServiceFilterIntersectionDisjoint verifies that when both alias
+// keys are present with non-overlapping value sets the result is conflict=true
+// (the intersection is empty) rather than a union that over-matches.
+func TestCanonicalServiceFilterIntersectionDisjoint(t *testing.T) {
+	_, ok, conflict := canonicalServiceFilter(map[string][]string{
+		"service.name": {"checkout", "payments"},
+		"sf_service":   {"legacy", "auth"},
+	})
+	if !ok || !conflict {
+		t.Errorf("disjoint alias values must conflict (empty intersection), got ok=%v conflict=%v", ok, conflict)
+	}
+}
+
+// TestCanonicalServiceFilterIntersectionPartialOverlap verifies that when both
+// alias keys are present with partially-overlapping value sets, only the
+// intersection is returned (not the union).
+func TestCanonicalServiceFilterIntersectionPartialOverlap(t *testing.T) {
+	vals, ok, conflict := canonicalServiceFilter(map[string][]string{
+		"service.name": {"checkout", "payments"},
+		"sf_service":   {"payments", "auth"},
+	})
+	if !ok || conflict {
+		t.Errorf("partial overlap must not conflict, got ok=%v conflict=%v", ok, conflict)
+	}
+	if len(vals) != 1 || !slices.Contains(vals, "payments") {
+		t.Errorf("intersection must contain only 'payments', got %v", vals)
+	}
+	if slices.Contains(vals, "checkout") || slices.Contains(vals, "auth") {
+		t.Errorf("union members 'checkout'/'auth' must not appear in intersection, got %v", vals)
+	}
+}
+
 // TestCanonicalServiceFilterMixedCaseKey verifies that a mixed-case alias key
 // (SERVICE.NAME) is recognized rather than dropped (finding F5). A dropped key
 // would yield ok=false and over-match all services.
@@ -561,6 +613,43 @@ func TestParseProgramAggregationScopedToFirstDataCall(t *testing.T) {
 	single := ParseProgramText("data('x').sum().publish()")
 	if single.Aggregation != "sum" {
 		t.Errorf("single-stream aggregation = %q, want %q", single.Aggregation, "sum")
+	}
+}
+
+// TestParseProgramCompoundNegationOrGroupRoutesToIgnored verifies that a
+// compound "not (... or ...)" group also routes to IgnoredFilters, not
+// NegatedFilters. The or-form has the same unsupported boolean structure as the
+// and-form: NOT(A OR B) = NOT A AND NOT B, which also cannot be expressed as
+// per-key NegatedFilters.
+func TestParseProgramCompoundNegationOrGroupRoutesToIgnored(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not (filter('env','prod') or filter('env','staging'))).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if len(got.NegatedFilters["env"]) != 0 {
+		t.Errorf("compound or-negation must not land in NegatedFilters, got %v", got.NegatedFilters["env"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("compound or-negation key must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+}
+
+// TestParseProgramSingleNegatedFilterStillNegated verifies that a non-compound
+// negated group (exactly one filter call) is still correctly routed to
+// NegatedFilters and not to IgnoredFilters.
+func TestParseProgramSingleNegatedFilterStillNegated(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not (filter('env','prod'))).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if len(got.Filters["env"]) != 0 {
+		t.Errorf("single negated filter must not be in Filters, got %v", got.Filters["env"])
+	}
+	if !slices.Contains(got.NegatedFilters["env"], "prod") {
+		t.Errorf("single negated filter must be in NegatedFilters[env], got %v", got.NegatedFilters)
+	}
+	if slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("single negated filter must NOT be in IgnoredFilters, got %v", got.IgnoredFilters)
 	}
 }
 

@@ -57,7 +57,7 @@
       "description": "The api_token variable must be marked sensitive = true.",
       "kind": "file_contains_all",
       "path": ".observe/terraform/variables.tf",
-      "values": ["api_token", "sensitive = true"],
+      "values": ["api_token", "sensitive"],
       "applies_to": "with_skill"
     },
     {

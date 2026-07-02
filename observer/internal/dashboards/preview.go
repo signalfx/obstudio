@@ -253,25 +253,54 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 	if *resolved >= maxPanelsPerBuild {
 		return panel
 	}
+
+	// Build-wide datapoint budget still available for this panel. When it is
+	// already spent by earlier panels, skip store resolution entirely: resolving
+	// would rescan and copy the whole metric snapshot for this panel only to
+	// discard every point. That is the abuse vector on this wildcard-CORS
+	// endpoint the UI polls every 5s — a sidecar repeating one populated metric
+	// across up to maxPanelsPerBuild panels would otherwise scan and copy
+	// millions of MetricDataPoint structs per request before the cap trimmed
+	// them away. Mark the panel truncated so the client shows "preview budget
+	// reached" rather than a misleading "No data in window".
+	remaining := maxResponseDataPoints - *totalDataPoints
+	if remaining <= 0 {
+		panel.Truncated = true
+		return panel
+	}
 	*resolved++
 
-	groups, ok := resolveMetricGroups(points, q)
+	// Pass the remaining budget into resolution so the store copies at most that
+	// many datapoints per group (the store collects newest-first, so this keeps
+	// the freshest samples). This bounds the per-panel copy by the budget instead
+	// of the full ring even before the budget is fully exhausted.
+	groups, groupsTruncated, ok := resolveMetricGroups(points, q, remaining)
 	if !ok {
 		return panel
 	}
 
-	// Apply the build-wide datapoint budget. Groups that would push the total
-	// over the limit are included in the response (so the panel shows as
-	// matched) but their DataPoints slice is trimmed to zero.
+	// Apply the build-wide datapoint budget across this panel's groups. A group
+	// that would push the total over the limit is still included (so the panel
+	// shows as matched) but its DataPoints slice is trimmed — keeping the NEWEST
+	// points — or dropped when the budget is fully spent.
+	truncated := groupsTruncated
 	for i := range groups {
 		dp := groups[i].DataPoints
 		if *totalDataPoints >= maxResponseDataPoints {
+			// Budget fully spent by earlier groups: drop this group's points but
+			// flag the truncation so the empty series is not misread as no data.
 			groups[i].DataPoints = nil
+			truncated = true
 		} else {
 			remaining := maxResponseDataPoints - *totalDataPoints
 			if len(dp) > remaining {
-				groups[i].DataPoints = dp[:remaining]
+				// Keep the newest suffix. DataPoints is ascending (oldest→newest)
+				// after the store's newest-first collect + reverse, so dp[:remaining]
+				// would keep the oldest and drop the freshest — the opposite of what
+				// a live preview wants. Keep dp[len-remaining:] instead.
+				groups[i].DataPoints = dp[len(dp)-remaining:]
 				*totalDataPoints += remaining
+				truncated = true
 			} else {
 				*totalDataPoints += len(dp)
 			}
@@ -283,22 +312,29 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 
 	panel.Metrics = groups
 	panel.Matched = len(groups) > 0
+	panel.Truncated = truncated
 
 	return panel
 }
 
 // resolveMetricGroups resolves the metric groups matching a parsed query
-// against a metric snapshot. The bool result is false when the query is
-// self-contradictory (conflicting service alias values), in which case no store
-// query is run and the panel stays unmatched.
-func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store.MetricGroup, bool) {
+// against a metric snapshot. dataPointBudget caps the datapoints the store
+// collects per group (the store collects newest-first, so the cap keeps the
+// freshest samples); it should be the build-wide budget remaining for this
+// panel so a single panel cannot copy the whole ring when little budget is
+// left. The first bool is false when the query is self-contradictory
+// (conflicting service alias values), in which case no store query is run and
+// the panel stays unmatched. The second bool reports whether the per-group cap
+// actually clipped a group (points were dropped), so the caller can flag the
+// panel as truncated.
+func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPointBudget int) (groups []store.MetricGroup, truncated bool, ok bool) {
 	// Resolve the service filter through the canonical alias helper so
 	// service.name and sf_service are treated as one dimension. A conflicting
 	// pair (both keys present, disjoint values) means the panel's intent is
 	// self-contradictory — return unmatched with no store query.
 	svcValues, hasSvc, conflict := canonicalServiceFilter(q.Filters)
 	if conflict {
-		return nil, false
+		return nil, false, false
 	}
 
 	// QueryMetricsFilteredFromSnapshot accepts a single service name, applied
@@ -312,12 +348,32 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store
 		svcArg = svcValues[0]
 	}
 
+	// Cap per-group datapoint collection at the remaining budget rather than the
+	// full ring capacity. The store keeps only the newest dataPointLimit points
+	// per group, so an over-budget panel copies at most budget points per group
+	// instead of up to DefaultMetricCap. A per-group cap of at least 1 keeps the
+	// group discoverable (matched) even when no point budget remains for its data.
+	perGroupLimit := dataPointBudget
+	if perGroupLimit < 1 {
+		perGroupLimit = 1
+	}
+
 	// Request a larger group set than the display cap so a series in a group
 	// beyond maxResolvedGroups is not truncated before applyDimensionFilters runs.
-	groups := store.QueryMetricsFilteredFromSnapshot(points, store.MetricFilter{
+	groups = store.QueryMetricsFilteredFromSnapshot(points, store.MetricFilter{
 		MetricName:  q.MetricName,
 		ServiceName: svcArg,
-	}, metricGroupQueryFanout, 10_000)
+	}, metricGroupQueryFanout, perGroupLimit)
+
+	// The store reports the true pre-cap count in DataPointCount while capping
+	// the copied DataPoints slice. A shortfall means the per-group budget cap
+	// dropped points, so the panel is truncated.
+	for i := range groups {
+		if groups[i].DataPointCount > len(groups[i].DataPoints) {
+			truncated = true
+			break
+		}
+	}
 
 	if hasSvc && len(svcValues) > 1 {
 		groups = filterGroupsByService(groups, svcValues)
@@ -338,7 +394,7 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery) ([]store
 		groups = groups[:maxResolvedGroups]
 	}
 
-	return groups, true
+	return groups, truncated, true
 }
 
 // negatedServiceValues collects the excluded service values from the negated
