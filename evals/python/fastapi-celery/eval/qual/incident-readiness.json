@@ -1,0 +1,23 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "mttd",
+      "task": "Instrument the FastAPI and Celery order service in ./service to reduce mean time to detect order-enqueue failures, stuck or delayed fulfillment work, and worker task failures. Add safe app-owned detector-ready OpenTelemetry signals as well as baseline FastAPI, Celery, and Redis coverage. Preserve the Docker Compose runtime and do not invent broker/worker signals the application cannot observe."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting source, configuration, tests, and .observe reports.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Preserves the Docker Compose runtime and instruments both the FastAPI process and Celery worker with distinct configurable service identities, OTLP export, propagation, and FastAPI/Celery/Redis auto-instrumentation without duplicate SDK initialization.",
+    "Adds detector-ready app-owned metrics for order enqueue outcome/failure and fulfillment task outcome/failure, plus an accurately measured queue-delay, task-age, duration, last-success, or pending-work signal that can reveal stuck work before users manually inspect an order.",
+    "Handles send_task and worker exception paths explicitly and keeps trace/error status useful; it does not report a successful enqueue or task completion when the underlying operation failed.",
+    "Keeps metric attributes bounded to workflow, operation, outcome, or reason family and never uses order ID, product, request/session ID, raw exception message, or payload content as metric dimensions.",
+    "Owner-maps unavailable Redis queue depth, Celery fleet health, or broker/platform metrics instead of emitting placeholders or claiming complete coverage from app-local state.",
+    "Adds focused tests for successful and failed enqueue/task telemetry paths and runs the existing Python test/import checks or records a concrete blocker with command evidence.",
+    "Writes proof-aware instrumentation and verification handoff material that names exact signals, distinguishes MTTD-improving detector inputs from localization-only telemetry, and lists remaining broker or deployment prerequisites."
+  ]
+}
