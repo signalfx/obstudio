@@ -4611,7 +4611,10 @@ code {
 /* Chart area */
 
 .metrics-explorer__chart {
+  display: flex;
+  flex-direction: column;
   padding: 12px 14px 8px;
+  height: 240px;
 }
 
 .metrics-explorer__chart-title {
@@ -4726,6 +4729,11 @@ code {
 
 .ts-chart {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .ts-chart--empty {
@@ -4748,8 +4756,8 @@ code {
 .ts-chart__svg {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 320px;
+  flex: 1;
+  min-height: 0;
 }
 
 .ts-chart__axis-label {
@@ -6317,4 +6325,455 @@ code {
   .findings-tab__summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ── Dashboards tab (approximate local-data preview of $splunk-dashboard output) ── */
+.dashboards-tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--app-bg);
+  padding: 12px;
+  gap: 12px;
+}
+
+.dashboards-tab__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboards-tab__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboards-tab__badge {
+  padding: 4px 10px;
+  border: 1px solid rgba(244, 145, 6, 0.35);
+  border-radius: 999px;
+  background: rgba(244, 145, 6, 0.12);
+  color: var(--yellow);
+  font-size: var(--font-meta);
+  font-weight: 500;
+  cursor: help;
+}
+
+.dashboards-tab__hint {
+  color: var(--text-soft);
+  font-size: var(--font-mono);
+  font-family: var(--font-family-mono);
+}
+
+.dashboards-tab__message {
+  margin: 12px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--chrome);
+  font-size: var(--font-body);
+  color: var(--text);
+}
+
+.dashboards-tab__message--error {
+  color: var(--red);
+  border-color: rgba(255, 82, 82, 0.35);
+}
+
+.dashboards-tab__refresh-error {
+  padding: 6px 10px;
+  font-size: var(--font-meta);
+  color: var(--red);
+  border: 1px solid rgba(255, 82, 82, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 82, 82, 0.08);
+}
+
+.dashboards-tab__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 40px auto;
+  padding: 24px;
+  max-width: 480px;
+  text-align: center;
+}
+
+.dashboards-tab__empty-title {
+  font-size: var(--font-title);
+  font-weight: 600;
+  color: var(--row-primary-text);
+}
+
+.dashboards-tab__empty-hint {
+  font-size: var(--font-meta);
+  color: var(--text-soft);
+}
+
+.dashboards-tab__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboards-tab__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboards-tab__group-name {
+  margin: 0;
+  font-size: var(--font-title);
+  font-weight: 600;
+  color: var(--row-primary-text);
+}
+
+.dashboards-tab__group-desc {
+  margin: 0;
+  font-size: var(--font-meta);
+  color: var(--text-soft);
+}
+
+.dashboards-tab__dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--chrome);
+}
+
+.dashboards-tab__dashboard-name {
+  margin: 0;
+  font-size: var(--font-title-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dashboards-tab__dashboard-desc {
+  margin: 0;
+  font-size: var(--font-mono);
+  color: var(--text-soft);
+}
+
+/* 12-column Splunk dashboard grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 140px;
+  gap: 10px;
+}
+
+.dashboard-grid__cell {
+  min-width: 0;
+  min-height: 0;
+}
+
+.dashboard-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--chrome-2);
+  overflow: hidden;
+}
+
+.dashboard-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.dashboard-panel__head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dashboard-panel__expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.dashboard-panel:hover .dashboard-panel__expand {
+  opacity: 1;
+}
+
+.dashboard-panel__expand:hover {
+  color: var(--text);
+}
+
+.dashboard-panel__title {
+  font-size: var(--font-meta);
+  font-weight: 500;
+  color: var(--row-primary-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-panel__type {
+  font-size: var(--font-mono);
+  font-family: var(--font-family-mono);
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.dashboard-panel__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px 6px;
+  overflow: hidden;
+}
+
+.dashboard-panel__body > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dashboard-panel__text {
+  font-size: var(--font-meta);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.dashboard-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  text-align: center;
+  color: var(--text-soft);
+}
+
+.dashboard-panel__empty-title {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
+.dashboard-panel__empty-title code,
+.dashboard-panel__empty--parse code {
+  font-family: var(--font-family-mono);
+  color: var(--text);
+}
+
+.dashboard-panel__empty-hint {
+  font-size: var(--font-mono);
+  color: var(--text-soft);
+}
+
+.dashboard-panel__empty--parse .dashboard-panel__empty-title {
+  color: var(--yellow);
+}
+
+.dashboard-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.dashboard-panel__chip {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: var(--font-mono);
+  font-family: var(--font-family-mono);
+  color: var(--text-soft);
+}
+
+.dashboard-panel__single-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.dashboard-panel__single-value-number {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--row-primary-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-panel__single-value-note {
+  font-size: var(--font-mono);
+  color: var(--text-soft);
+}
+
+.dashboard-panel__list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-mono);
+}
+
+.dashboard-panel__list-label {
+  padding: 2px 6px 2px 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.dashboard-panel__list-value {
+  padding: 2px 0;
+  text-align: right;
+  color: var(--row-numeric-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dashboard-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-mono);
+}
+
+.dashboard-panel__table th {
+  padding: 2px 6px 4px 0;
+  text-align: left;
+  color: var(--text-soft);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-panel__table th.dashboard-panel__table-value {
+  text-align: right;
+}
+
+.dashboard-panel__table-label {
+  padding: 2px 6px 2px 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.dashboard-panel__table-value {
+  padding: 2px 0;
+  text-align: right;
+  color: var(--row-numeric-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- Expand overlay ---- */
+
+.dashboard-expand-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.dashboard-expand-panel {
+  position: relative;
+  width: min(1100px, 100%);
+  height: min(600px, 100%);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--chrome-2);
+  overflow: hidden;
+}
+
+.dashboard-expand-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--chrome);
+  color: var(--text-soft);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.dashboard-expand-close:hover {
+  color: var(--text);
+  background: var(--chrome-2);
+}
+
+/* The panel inside the overlay fills the whole box */
+.dashboard-expand-panel > .dashboard-panel {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+
+/* ---- Live hint ---- */
+
+.dashboards-tab__hint--live {
+  font-size: var(--font-mono);
+  color: var(--text-dim);
+  font-family: var(--font-family-mono);
+}
+
+/* ---- Time-window dropdown ---- */
+
+.dashboards-tab__window-select {
+  appearance: none;
+  padding: 3px 22px 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--chrome) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E") no-repeat right 6px center;
+  background-size: 8px 5px;
+  color: var(--text);
+  font-size: var(--font-meta);
+  font-family: var(--font-family-mono);
+  cursor: pointer;
+  outline: none;
+}
+
+.dashboards-tab__window-select:hover {
+  border-color: var(--border-accent, var(--text-dim));
+}
+
+.dashboards-tab__window-select:focus {
+  border-color: var(--accent, #7c6af7);
+  box-shadow: 0 0 0 2px rgba(124, 106, 247, 0.2);
 }

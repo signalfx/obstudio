@@ -47,7 +47,10 @@ A live Standard detector's `programText` contains:
 ### GAP
 No live Standard detector matches on both metric name AND service filter.
 
-**Action:** create via `POST /v2/detector` (Splunk REST API) with `if_not_exists` semantics.
+**Action:** create via `POST /v2/detector` (Splunk REST API). There is no
+server-side `if_not_exists` flag; idempotency comes from diffing local specs
+against the live detector set fetched that run (only GAPs are created) and
+treating a 409 Conflict from a concurrently-created detector as already-covered.
 
 ### UNCERTAIN
 At least one live Standard detector references the same metric name, but the

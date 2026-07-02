@@ -1,0 +1,81 @@
+terraform {
+  required_providers {
+    signalfx = {
+      source  = "splunk-terraform/signalfx"
+      version = "~> 9.0"
+    }
+  }
+}
+
+provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+
+resource "signalfx_dashboard_group" "service_overview" {
+  name        = "${var.service_name} Overview"
+  description = "RED + saturation dashboards for ${var.service_name}"
+}
+
+resource "signalfx_dashboard" "red" {
+  name            = "${var.service_name} RED"
+  description     = "Rate, errors, duration"
+  dashboard_group = signalfx_dashboard_group.service_overview.id
+
+  chart {
+    chart_id = signalfx_single_value_chart.kpi_p99_latency.id
+    column   = 0
+    row      = 0
+    width    = 3
+    height   = 2
+  }
+
+  chart {
+    chart_id = signalfx_time_chart.p99_latency.id
+    column   = 0
+    row      = 2
+    width    = 6
+    height   = 3
+  }
+
+  chart {
+    chart_id = signalfx_time_chart.error_rate.id
+    column   = 6
+    row      = 2
+    width    = 6
+    height   = 3
+  }
+}
+
+resource "signalfx_single_value_chart" "kpi_p99_latency" {
+  name         = "P99 Latency"
+  color_by     = "Scale"
+
+  program_text = <<-EOF
+    A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99 Latency')
+  EOF
+
+  is_timestamp_hidden = true
+}
+
+resource "signalfx_time_chart" "p99_latency" {
+  name      = "P99 Latency - http.server.request.duration"
+  plot_type = "LineChart"
+
+  program_text = <<-EOF
+    A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99 Latency')
+  EOF
+
+  axis_left {
+    label = "seconds"
+  }
+}
+
+resource "signalfx_time_chart" "error_rate" {
+  name      = "Error Rate - checkout.payment.errors"
+  plot_type = "LineChart"
+
+  program_text = <<-EOF
+    A = data('checkout.payment.errors', filter=filter('service.name', '${var.service_name}')).sum().publish(label='Error Rate')
+  EOF
+}

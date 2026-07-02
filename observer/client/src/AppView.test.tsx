@@ -338,3 +338,46 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
   });
 });
+
+describe("AppView dashboards tab", () => {
+  function stubPreviewFetch(): void {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ available: false, approximate: true, source: "/x", groups: [], message: "Run $splunk-dashboard." }),
+    }));
+  }
+
+  it("renders a Dashboards tab button and keyboard hint", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    const dialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
+    const keys = Array.from(dialog.querySelectorAll(".keyboard-help__key")).map((el) => el.textContent);
+    const descs = Array.from(dialog.querySelectorAll(".keyboard-help__desc")).map((el) => el.textContent);
+    const helpMap = Object.fromEntries(keys.map((k, i) => [k, descs[i]]));
+    expect(helpMap["6"]).toMatch(/dashboards/i);
+  });
+
+  it("mounts the Dashboards panel when the tab is clicked", async () => {
+    stubPreviewFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /dashboards/i }));
+
+    await waitFor(() => expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy());
+  });
+
+  it("deep-links to the dashboards tab via ?tab=dashboards", async () => {
+    window.history.replaceState({}, "", "/?tab=dashboards");
+    stubPreviewFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    expect(screen.getByRole("tab", { name: /dashboards/i }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy());
+  });
+});

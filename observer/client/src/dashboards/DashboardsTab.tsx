@@ -1,0 +1,163 @@
+import React, { useEffect, useState } from "react";
+import { DashboardGrid } from "./DashboardGrid";
+import { DashboardPanel } from "./DashboardPanel";
+import { useDashboardPreview } from "./useDashboardPreview";
+import type { PreviewPanel, PreviewResponse } from "./types";
+
+/** Stable panel identity — stored instead of the panel object to avoid stale data. */
+interface PanelId {
+  groupIdx: number;
+  dashIdx: number;
+  panelLabel: string;
+}
+
+function resolvePanel(data: PreviewResponse | null, id: PanelId): PreviewPanel | null {
+  const group = data?.groups[id.groupIdx];
+  const dash = group?.dashboards[id.dashIdx];
+  return dash?.panels.find((p) => p.label === id.panelLabel) ?? null;
+}
+
+const TIME_WINDOWS = [
+  { label: "1 min",  ms: 60_000 },
+  { label: "5 min",  ms: 5 * 60_000 },
+  { label: "1 hour", ms: 60 * 60_000 },
+  { label: "24 hrs", ms: 24 * 60 * 60_000 },
+  { label: "All",    ms: 0 },
+] as const;
+
+const DEFAULT_WINDOW_MS = 60_000;
+
+interface DashboardsTabProps {
+  telemetryError?: string | null;
+  paused?: boolean;
+}
+
+export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabProps): React.ReactElement {
+  const { data, loading, error, refresh } = useDashboardPreview(paused);
+  const [expandedId, setExpandedId] = useState<PanelId | null>(null);
+  const expandedPanel = expandedId ? resolvePanel(data, expandedId) : null;
+  const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
+
+  // Close expanded panel on Escape.
+  useEffect(() => {
+    if (!expandedId) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpandedId(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedId]);
+
+  return (
+    <div className="dashboards-tab">
+      <div className="dashboards-tab__bar">
+        <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
+          Approximate · local-data preview
+        </span>
+        <div className="dashboards-tab__bar-actions">
+          {data?.generatedAt ? (
+            <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
+          ) : null}
+          <span className="dashboards-tab__hint dashboards-tab__hint--live">
+            {paused ? "⏸ paused" : "↻ auto-refresh 5s"}
+          </span>
+          <select
+            className="dashboards-tab__window-select"
+            value={windowMs}
+            onChange={(e) => setWindowMs(Number(e.target.value))}
+            aria-label="Time window"
+          >
+            {TIME_WINDOWS.map((w) => (
+              <option key={w.ms} value={w.ms}>{w.label}</option>
+            ))}
+          </select>
+          <button type="button" className="pill pill--small pill--muted" onClick={refresh}>
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {telemetryError ? <div className="pill pill--error">{telemetryError}</div> : null}
+
+      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
+
+      {expandedPanel ? (
+        <div className="dashboard-expand-overlay" role="dialog" aria-modal="true" onClick={() => setExpandedId(null)}>
+          <div className="dashboard-expand-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="dashboard-expand-close"
+              aria-label="Close"
+              onClick={() => setExpandedId(null)}
+            >
+              ✕
+            </button>
+            <DashboardPanel panel={expandedPanel} windowMs={windowMs} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderState({
+  data,
+  loading,
+  error,
+  windowMs,
+  onExpand,
+}: {
+  data: ReturnType<typeof useDashboardPreview>["data"];
+  loading: boolean;
+  error: string | null;
+  windowMs: number;
+  onExpand: (id: PanelId) => void;
+}): React.ReactElement {
+  if (loading && !data) {
+    return <div className="dashboards-tab__message">Loading dashboard preview…</div>;
+  }
+  // Only replace the whole view with the error message when there is no data to
+  // show. A transient auto-refresh failure with data already rendered surfaces
+  // as a small inline banner above the existing grid (see below) instead of
+  // blanking a valid dashboard.
+  if (error && !data) {
+    return <div className="dashboards-tab__message dashboards-tab__message--error">Failed to load preview: {error}</div>;
+  }
+  if (!data || !data.available) {
+    return (
+      <div className="dashboards-tab__empty">
+        <span className="dashboards-tab__empty-title">No dashboard preview yet</span>
+        <span className="dashboards-tab__empty-hint">
+          {data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboards-tab__groups">
+      {error ? (
+        <div className="dashboards-tab__refresh-error" role="status">
+          Refresh failed (showing last result): {error}
+        </div>
+      ) : null}
+      {data.groups.map((group, gi) => (
+        <section key={`${group.name}-${gi}`} className="dashboards-tab__group">
+          <h2 className="dashboards-tab__group-name">{group.name}</h2>
+          {group.description ? <p className="dashboards-tab__group-desc">{group.description}</p> : null}
+          {group.dashboards.map((dashboard, di) => (
+            <div key={`${dashboard.name}-${di}`} className="dashboards-tab__dashboard">
+              <h3 className="dashboards-tab__dashboard-name">{dashboard.name}</h3>
+              {dashboard.description ? (
+                <p className="dashboards-tab__dashboard-desc">{dashboard.description}</p>
+              ) : null}
+              <DashboardGrid
+                panels={dashboard.panels}
+                windowMs={windowMs}
+                onExpand={(panel) => onExpand({ groupIdx: gi, dashIdx: di, panelLabel: panel.label })}
+              />
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}

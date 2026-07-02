@@ -1,0 +1,24 @@
+{
+  "skill": "splunk-detector-publish",
+  "language": "dashboards",
+  "service": "checkout-detectors",
+  "prompts": [
+    {
+      "id": "offline-plan",
+      "task": "Treat ./service as the project root. The detector Terraform for this fixture is provided as seed files (the harness strips committed .observe/ inputs, so they are shipped with a .seed suffix instead): ./service/detectors.tf.seed, ./service/variables.tf.seed, and ./service/terraform.tfvars.seed. FIRST create ./service/.observe/terraform/ and copy detectors.tf.seed -> .observe/terraform/detectors.tf, variables.tf.seed -> .observe/terraform/variables.tf, and terraform.tfvars.seed -> .observe/terraform/terraform.tfvars. THEN run the $splunk-detector-publish skill against ./service. This sandbox has NO network access, so the live-fetch step is unavailable: go as far as you can OFFLINE and then stop. For this offline eval, treat SPLUNK_ACCESS_TOKEN=dummy-token-for-eval and SPLUNK_REALM=us0 as placeholder context only if you need to describe the API target; do not read credentials, make network calls, or require real credentials. Produce the offline publish plan only -- parse the three signalfx_detector resources (high_latency, high_error_rate, low_throughput), normalize each program_text (dedent the <<-EOF heredoc and resolve every ${var.*} using the tfvars values), present the COVERED/GAP/UNCERTAIN confirmation diff with a concrete non-empty Reason on every detector row, and describe the POST /v2/detector creation order you WOULD run. Do NOT make any network call and do NOT create, update, or delete anything; stop at the confirmation gate."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for the placed inputs under ./service/.observe/terraform/ and any plan or ledger the agent wrote.",
+    "Read ./last_message.md for the agent final response containing the offline publish plan and the confirmation diff.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Parses all three signalfx_detector resources from detectors.tf: high_latency (metric: http.server.request.duration, severity: Major), high_error_rate (metric: checkout.payment.errors, severity: Critical), and low_throughput (metric: http.server.request.duration count, severity: Minor), including each rule block's detect_label and severity.",
+    "Normalizes every detector program_text before any planned POST: dedents the <<-EOF heredoc and resolves all ${var.*} references (service_name=checkout, latency_threshold_s=1.0, error_rate_threshold=5, throughput_min_threshold=10) from terraform.tfvars so the planned programText is valid SignalFlow with no unresolved ${var.*} tokens.",
+    "Renders a COVERED/GAP/UNCERTAIN confirmation diff covering all three detectors, with a concrete non-empty Reason on every row that names the detector, the metric, and the service filter basis (e.g. 'no live Standard detector for checkout.payment.errors with service.name=checkout'). With no live data available (offline), every detector that does not already exist must be classified as GAP — not UNCERTAIN — because UNCERTAIN implies ambiguous coverage from existing live detectors, and no live detectors were fetched here.",
+    "Correctly classifies all three detectors as GAP (not COVERED, not UNCERTAIN) given the offline context where no live detector list was fetched, and describes the POST /v2/detector creation order for each detector, including the normalized programText, name, and rule severity that would be sent in the API payload.",
+    "Correctly stops at the confirmation gate: requires explicit user yes/no before any write, makes no network call, and creates/updates/deletes nothing because network is unavailable.",
+    "Correctly handles the HCL-to-API field mapping: program_text (HCL) -> programText (API), and notes that AutoDetect detectors (Splunk's built-in advisories) are advisory-only and would NOT count as COVERED for a service-specific Terraform-managed detector spec — they are mentioned as advisory context only."
+  ]
+}

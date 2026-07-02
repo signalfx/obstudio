@@ -1,0 +1,91 @@
+version: "2"
+
+linters:
+  enable:
+    # Correctness
+    - errcheck        # unchecked errors
+    - staticcheck     # comprehensive static analysis (SA*, S*, ST*, gosimple, unused absorbed here)
+    - ineffassign     # useless assignments
+
+    # SOLID / clean architecture
+    - revive          # configurable; enforces single-responsibility via function length + complexity
+    - cyclop          # cyclomatic complexity per function (Open/Closed: high complexity = rigid code)
+    - gocognit        # cognitive complexity (readability proxy)
+    - funlen          # max function length (forces single-responsibility)
+    - maintidx        # maintainability index (composite score)
+
+    # Code hygiene
+    - govet           # go vet
+    - godot           # comment punctuation
+    - misspell        # typos in comments/strings
+    - whitespace      # trailing whitespace
+    - wsl_v5          # whitespace linter (blank lines around blocks)
+
+    # Security
+    - gosec           # common security issues (G101-G601)
+
+    # Interface discipline (Liskov / Interface Segregation proxies)
+    - ireturn         # functions should return interfaces, not concrete types
+    - forcetypeassert # unchecked type assertions are fragile
+
+    # Dependency hygiene
+    - gomodguard_v2   # module-level import restrictions
+
+  settings:
+    cyclop:
+      max-complexity: 10      # above 10 → likely violates SRP
+
+    gocognit:
+      min-complexity: 15      # flag anything cognitively complex
+
+    funlen:
+      lines: 80               # functions > 80 lines likely doing too much
+      statements: 50
+
+    revive:
+      rules:
+        - name: exported                        # all exported symbols documented
+        - name: var-naming                      # consistent naming
+        - name: unexported-return               # don't return unexported types
+        - name: error-return                    # error last in return list
+        - name: error-naming                    # error variables named err/Err*
+        - name: if-return                       # simplify if-return patterns
+        - name: indent-error-flow               # keep happy path left-aligned
+        - name: argument-limit
+          arguments: [5]                        # > 5 args → extract a struct (SRP)
+        - name: function-result-limit
+          arguments: [3]                        # > 3 return values → smell
+        - name: cognitive-complexity
+          arguments: [15]
+
+    gosec:
+      excludes:
+        - G104   # errors unhandled in defer (covered by errcheck)
+
+    ireturn:
+      allow:
+        - error
+        - stdlib
+        - generic
+
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+
+  exclusions:
+    rules:
+      # Tests are allowed to be longer, more complex, and have relaxed whitespace.
+      - path: ".*_test\\.go"
+        linters: [funlen, cyclop, gocognit, wsl_v5]
+      # wsl_v5 is new to this codebase; suppress until existing code is cleaned.
+      - linters: [wsl_v5]
+        text: "missing whitespace"
+
+formatters:
+  enable:
+    - gofmt           # formatting
+    - goimports       # import organisation
+
+issues:
+  max-same-issues: 5

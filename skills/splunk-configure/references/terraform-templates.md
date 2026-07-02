@@ -3,6 +3,12 @@
 SignalFlow + HCL templates for each detector category. The agent uses these
 templates to generate `.observe/terraform/detectors.tf` resources.
 
+> Shared reference: the generic `data('<metric>', filter=filter('service.name',
+> '${var.service_name}')).<agg>().publish(...)` fragment and aggregation guidance
+> live once in `../../references/signalflow-patterns.md` (shared with the
+> dashboard chart generator). The detector templates below add the
+> `detect()/when()/threshold()` tail to that base fragment.
+
 ## Latency Detector
 
 Monitors p99 latency using a static threshold on histogram percentile data.
@@ -91,7 +97,7 @@ resource "signalfx_detector" "saturation_<metric_id>" {
   description = "Detects high saturation for <metric_name>"
 
   program_text = <<-EOF
-    A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).publish(label='Saturation')
+    A = data('<metric_name>', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Saturation')
     detect(when(A > threshold(${var.saturation_<metric_id>_threshold}))).publish('Saturation Too High')
   EOF
 
