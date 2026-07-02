@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-dashboard |
-| Run ID | 20260701T180943833397Z |
+| Run ID | 20260702T194810597252Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -16,15 +16,13 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 90% (9/10) | 249.9K | 3.5m | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (4/4) | 34.5K | 32.6s | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (4/4) | 59.3K | 35.5s | - | - | - |
+| with_skill | dashboards/checkout-red/sanity/dashboard | dashboards/checkout-red | 1 | 100% (10/10) | 342.8K | 5.8m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard | sanity/skill-smoke | 2 | 100% (4/4) | 35.1K | 4.7m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/dashboard-no-audit | sanity/skill-smoke | 1 | 100% (4/4) | 81.7K | 3.3m | - | - | - |
 
 ## Sanity Failures
 
-| Mode | Service | Side | Prompt | Result | Evidence |
-|---|---|---|---|---|---|
-| with_skill | dashboards/checkout-red | with_skill | generate | sanity:api-token-sensitive FAIL | Missing: sensitive = true |
+No sanity failures.
 
 ## Result JSON
 

@@ -121,6 +121,11 @@ underscores, strip leading digits.
 
 #### `.observe/terraform/variables.tf`
 
+> **REQUIRED: `sensitive = true` on `api_token` — no exceptions.**
+> The `api_token` variable MUST include `sensitive   = true`. Omitting it is a
+> hard failure: Terraform will log the value in plaintext. Copy the block below
+> exactly; do not remove `sensitive = true`.
+
 ```hcl
 variable "realm" {
   description = "Splunk Observability Cloud realm (e.g. us1, eu0)"

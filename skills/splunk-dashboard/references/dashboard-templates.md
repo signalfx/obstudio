@@ -139,7 +139,7 @@ Also available from the provider when a panel needs them:
 same `name` + `program_text` shape; the preview `chartType` is `list`, `heatmap`,
 or `table` respectively.
 
-## Chart resource ↔ REST mapping (used by `$splunk-dashboard-sync`)
+## Chart resource ↔ REST mapping (used by `$splunk-dashboard-publish`)
 
 | HCL resource | preview `chartType` | REST `options.type` |
 |---|---|---|

@@ -72,9 +72,17 @@ func resolveAggregation(program string) (string, *float64) {
 }
 
 // negatedSpan is the [start, end) byte range of a "not ( ... )" negation group.
+// compound is true when the span contains ≥2 filter() calls — e.g.
+// "not (filter('env','prod') and filter('region','us'))". A compound span cannot
+// be safely flattened to per-key NegatedFilters because NOT(A AND B) = NOT A OR
+// NOT B (only one condition must fail), whereas NegatedFilters applies NOT A AND
+// NOT B (every condition must fail). Keys inside compound spans are therefore
+// routed to IgnoredFilters instead so they are surfaced rather than silently
+// misapplied.
 type negatedSpan struct {
-	start int
-	end   int
+	start    int
+	end      int
+	compound bool
 }
 
 // matchingCloseParen returns the index just past the balanced closing paren for
@@ -116,6 +124,8 @@ func matchingCloseParen(program string, open int) int {
 // e.g. the second filter of "not (filter('env','prod') and filter('region','us'))".
 // Spans are matched by scanning for the balanced closing paren of the group's
 // opener; an unbalanced group extends to end-of-string (best effort).
+// Spans containing ≥2 filter() calls are marked compound=true; callers must
+// route those to IgnoredFilters rather than NegatedFilters (see negatedSpan).
 func negatedGroupSpans(program string) []negatedSpan {
 	var spans []negatedSpan
 	for _, loc := range reNotGroup.FindAllStringIndex(program, -1) {
@@ -127,7 +137,9 @@ func negatedGroupSpans(program string) []negatedSpan {
 			// filter inside it is still recognised as negated.
 			end = len(program)
 		}
-		spans = append(spans, negatedSpan{start: loc[0], end: end})
+		body := program[open:end]
+		compound := len(reFilter.FindAllStringIndex(body, -1)) >= 2
+		spans = append(spans, negatedSpan{start: loc[0], end: end, compound: compound})
 	}
 
 	return spans
@@ -151,14 +163,30 @@ func isNegatedFilter(program string, matchStart int, negated []negatedSpan) bool
 	return false
 }
 
+// isCompoundNegatedFilter reports whether the filter match at matchStart falls
+// inside a compound negation group (≥2 filter() calls under one "not(...)").
+// Those groups cannot be safely flattened to per-key NegatedFilters because
+// NOT(A AND B) ≠ NOT A AND NOT B; callers must route them to IgnoredFilters.
+func isCompoundNegatedFilter(matchStart int, negated []negatedSpan) bool {
+	for _, span := range negated {
+		if span.compound && matchStart >= span.start && matchStart < span.end {
+			return true
+		}
+	}
+	return false
+}
+
 // canonicalServiceFilter resolves the service.name / sf_service alias pair from
 // a filter map and returns the effective service name to pass to the store query.
 //
 //   - ok=false: neither key is present → no service filter.
-//   - conflict=true: both keys present but their value sets are disjoint →
-//     the panel's intent is self-contradictory; the caller should treat it as
-//     unmatched with no store query.
-//   - otherwise: returns the union of values found under either key.
+//   - conflict=true: both keys present but their case-insensitive intersection is
+//     empty → the panel's intent is self-contradictory; the caller should treat it
+//     as unmatched with no store query.
+//   - otherwise: when only one alias key is present, returns its values; when both
+//     are present, returns their case-insensitive intersection so the query matches
+//     only services that satisfy BOTH aliases simultaneously (they must agree on the
+//     target service, not expand the match set by union).
 func canonicalServiceFilter(filters map[string][]string) (values []string, ok, conflict bool) {
 	// Look up the alias keys case-insensitively so a mixed-case SERVICE.NAME /
 	// SF_SERVICE key is not dropped (isServiceKey, attrMatchesAny, and the store
@@ -177,11 +205,21 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 		return nil, false, false
 	}
 
-	if svcAliasConflict(sn, sf) {
-		return nil, true, true
+	// When only one alias is present, use its values directly — no intersection
+	// needed.
+	if len(sn) == 0 {
+		return sf, true, false
+	}
+	if len(sf) == 0 {
+		return sn, true, false
 	}
 
-	seen := svcUnion(sn, sf)
+	// Both aliases present: return the case-insensitive intersection.  An empty
+	// intersection means the panel is self-contradictory (conflict).
+	seen := svcIntersection(sn, sf)
+	if len(seen) == 0 {
+		return nil, true, true
+	}
 	out := make([]string, 0, len(seen))
 	for v := range seen {
 		out = append(out, v)
@@ -189,34 +227,18 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 	return out, true, false
 }
 
-// svcAliasConflict reports true when both service-alias slices are non-empty
-// and share no common value (i.e. the filter is self-contradictory). Values are
-// compared case-insensitively to match the store query and attribute matching,
-// so service.name=Checkout + sf_service=checkout is NOT flagged as a conflict.
-func svcAliasConflict(sn, sf []string) bool {
-	if len(sn) == 0 || len(sf) == 0 {
-		return false
-	}
-	for _, v := range sf {
-		if containsStr(sn, v) {
-			return false
+// svcIntersection returns the case-insensitive intersection of two service-alias
+// value slices. The spelling from sn is preserved for each matching pair.
+// Returns an empty map when the sets are disjoint (signals a conflict to the
+// caller).
+func svcIntersection(sn, sf []string) map[string]bool {
+	out := make(map[string]bool, len(sn))
+	for _, v := range sn {
+		if containsStr(sf, v) {
+			addFolded(out, v)
 		}
 	}
-	return true
-}
-
-// svcUnion returns the case-insensitive set union of two service-alias value
-// slices. The first-seen spelling of each value is preserved; later values that
-// differ only in case are folded into it.
-func svcUnion(sn, sf []string) map[string]bool {
-	seen := make(map[string]bool, len(sn)+len(sf))
-	for _, v := range sn {
-		addFolded(seen, v)
-	}
-	for _, v := range sf {
-		addFolded(seen, v)
-	}
-	return seen
+	return out
 }
 
 // addFolded adds v to seen unless a case-insensitively equal value is already
@@ -372,7 +394,13 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 		}
 
 		if isNegatedFilter(program, start, negated) {
-			applyMultiValues(q, key, argList, appendNegatedFilterValue)
+			if isCompoundNegatedFilter(start, negated) {
+				// Compound negation: NOT(A AND B) cannot be safely flattened to
+				// per-key exclusions. Surface as ignored so the caller knows.
+				recordIgnoredFilter(q, key)
+			} else {
+				applyMultiValues(q, key, argList, appendNegatedFilterValue)
+			}
 		} else {
 			applyMultiValues(q, key, argList, appendFilterValue)
 		}
@@ -416,9 +444,15 @@ func collectSingleValueFilters(program string, q *ParsedQuery, handled map[int]b
 			continue
 		}
 		if isNegatedFilter(program, start, negated) {
-			appendNegatedFilterValue(q, key, val)
-			if val == "" || strings.Contains(val, "${") {
+			if isCompoundNegatedFilter(start, negated) {
+				// Compound negation: NOT(A AND B) cannot be safely flattened to
+				// per-key exclusions. Surface as ignored so the caller knows.
 				recordIgnoredFilter(q, key)
+			} else {
+				appendNegatedFilterValue(q, key, val)
+				if val == "" || strings.Contains(val, "${") {
+					recordIgnoredFilter(q, key)
+				}
 			}
 			continue
 		}

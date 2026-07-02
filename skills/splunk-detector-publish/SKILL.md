@@ -251,13 +251,15 @@ is absent, uses a different dimension key, or the filter value is ambiguous
 (e.g. a wildcard). Show to the user; do not auto-create and do not auto-cover.
 
 **Offline / fetch-unavailable fallback**
-If the live detector list cannot be fetched (no network access, auth unavailable,
-or the API is unreachable), treat every local spec as **GAP** — not UNCERTAIN.
-UNCERTAIN requires evidence that the metric exists somewhere in a live detector
-with an ambiguous filter; without a live list there is no such evidence, so the
-safe default is GAP. Describe the POST /v2/detector payload you would send for
-each, stop at the confirmation gate, and note that the user must confirm once
-the API is reachable.
+Always attempt the live detector fetch (Step 3) before declaring any spec a GAP.
+Do NOT skip the fetch and jump straight to all-GAP — the fetch itself is the
+authoritative signal. Only treat every local spec as **GAP** — not UNCERTAIN —
+when the fetch genuinely fails (network error, auth failure, API unreachable, or
+a non-500 HTTP error). UNCERTAIN requires evidence that the metric exists
+somewhere in a live detector with an ambiguous filter; without a live list there
+is no such evidence, so the safe default for a genuine failure is GAP. Describe
+the POST /v2/detector payload you would send for each, stop at the confirmation
+gate, and note that the user must confirm once the API is reachable.
 
 **AutoDetect advisory (informational only)**
 For latency or error specs: note any live detector with

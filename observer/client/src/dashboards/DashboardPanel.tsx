@@ -1,8 +1,29 @@
-import React, { useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { TimeSeriesChart } from "../metrics/TimeSeriesChart";
+import type { MetricSeries } from "../metrics/useMetricTimeSeries";
 import { useMetricTimeSeries } from "../metrics/useMetricTimeSeries";
 import type { MetricGroup, MetricDataPoint } from "../api/types";
 import type { PreviewPanel, ParsedQuery } from "./types";
+
+/**
+ * OTLP/HTTP receiver endpoint (e.g. `http://0.0.0.0:4318`) as reported by
+ * `/api/health`, provided by DashboardsTab so the unmatched-panel hint names the
+ * actually-configured receiver instead of a hardcoded port (#19). `null` until
+ * loaded / on failure — the hint then falls back to a port-free message.
+ *
+ * Defined here (not in DashboardsTab) so DashboardsTab, which already imports
+ * DashboardPanel, can import the context without creating a new import cycle.
+ */
+export const OtlpEndpointContext = createContext<string | null>(null);
+
+// Time-series render caps. The query API can return up to 50,000 points across
+// many series; drawing a <circle> per point plus a path + annotation per series
+// on every 5s refresh can rebuild tens of thousands of SVG/React nodes and
+// freeze the tab (#8). Cap the series count and decimate points-per-series
+// (keeping the newest) before handing the data to TimeSeriesChart, and surface a
+// visible truncation indicator when either cap trips.
+const MAX_CHART_SERIES = 20;
+const MAX_POINTS_PER_SERIES = 400;
 
 interface DashboardPanelProps {
   panel: PreviewPanel;
@@ -14,6 +35,7 @@ export function DashboardPanel({ panel, windowMs = 0, onExpand }: DashboardPanel
   const prepared = usePreparedMetrics(panel.metrics ?? [], windowMs, panel.query, panel.chartType);
   const { allSeries } = useMetricTimeSeries(prepared);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const otlpEndpoint = useContext(OtlpEndpointContext);
 
   return (
     <div className="dashboard-panel" data-chart-type={panel.chartType}>
@@ -42,7 +64,7 @@ export function DashboardPanel({ panel, windowMs = 0, onExpand }: DashboardPanel
           ) : null}
         </div>
       </div>
-      <div className="dashboard-panel__body">{renderBody(panel, allSeries, selectedKey, setSelectedKey, windowMs)}</div>
+      <div className="dashboard-panel__body">{renderBody(panel, allSeries, selectedKey, setSelectedKey, windowMs, otlpEndpoint)}</div>
     </div>
   );
 }
@@ -53,6 +75,7 @@ function renderBody(
   selectedKey: string | null,
   setSelectedKey: (key: string) => void,
   windowMs: number,
+  otlpEndpoint: string | null,
 ): React.ReactElement {
   // Text / event panels carry markdown, not a query.
   if (panel.chartType === "text" || panel.chartType === "event") {
@@ -78,7 +101,7 @@ function renderBody(
         </span>
         <FilterChips filters={panel.query?.filters} />
         <IgnoredFilterChips keys={panel.query?.ignoredFilters} />
-        <span className="dashboard-panel__empty-hint">Emit it to localhost:4318 to preview this panel.</span>
+        <span className="dashboard-panel__empty-hint">{emitHint(otlpEndpoint)}</span>
       </div>
     );
   }
@@ -106,17 +129,31 @@ function renderBody(
   }
 
   if (panel.chartType === "list") {
+    // Match the single-value / time-series no-data state so an empty window
+    // reads as "No data in window" instead of a blank body mistaken for a
+    // rendering failure (#18).
+    if (allSeries.length === 0) {
+      return <NoDataInWindow />;
+    }
     return (
-      <table className="dashboard-panel__list">
-        <tbody>
-          {allSeries.map((s) => (
-            <tr key={s.key}>
-              <td className="dashboard-panel__list-label">{seriesLabel(s.resource?.serviceName, s.attributes)}</td>
-              <td className="dashboard-panel__list-value">{formatNumber(s.latest)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      // Scroll wrapper so rows beyond the fixed panel height stay reachable
+      // (#13) instead of being clipped by the panel body's overflow:hidden.
+      <div className="dashboard-panel__scroll">
+        <table className="dashboard-panel__list">
+          <tbody>
+            {allSeries.map((s) => {
+              const label = seriesLabel(s.resource?.serviceName, s.attributes);
+              return (
+                <tr key={s.key}>
+                  {/* title exposes the full label; the cell truncates (#17). */}
+                  <td className="dashboard-panel__list-label" title={label}>{label}</td>
+                  <td className="dashboard-panel__list-value">{formatNumber(s.latest)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
@@ -125,23 +162,35 @@ function renderBody(
     // templates/classification emit chartType "table" (handled by the sync
     // skill as a TableChart); without this branch it fell through to the
     // time_series SVG line chart and showed a raw "table" type badge.
+    // Match the single-value / time-series no-data state (#18).
+    if (allSeries.length === 0) {
+      return <NoDataInWindow />;
+    }
     return (
-      <table className="dashboard-panel__table">
-        <thead>
-          <tr>
-            <th className="dashboard-panel__table-label">Series</th>
-            <th className="dashboard-panel__table-value">Latest</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allSeries.map((s) => (
-            <tr key={s.key}>
-              <td className="dashboard-panel__table-label">{seriesLabel(s.resource?.serviceName, s.attributes)}</td>
-              <td className="dashboard-panel__table-value">{formatNumber(s.latest)}</td>
+      // Scroll wrapper so rows beyond the fixed panel height stay reachable
+      // (#13) instead of being clipped by the panel body's overflow:hidden.
+      <div className="dashboard-panel__scroll">
+        <table className="dashboard-panel__table">
+          <thead>
+            <tr>
+              <th className="dashboard-panel__table-label">Series</th>
+              <th className="dashboard-panel__table-value">Latest</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {allSeries.map((s) => {
+              const label = seriesLabel(s.resource?.serviceName, s.attributes);
+              return (
+                <tr key={s.key}>
+                  {/* title exposes the full label; the cell can wrap/widen (#17). */}
+                  <td className="dashboard-panel__table-label" title={label}>{label}</td>
+                  <td className="dashboard-panel__table-value">{formatNumber(s.latest)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
@@ -164,15 +213,84 @@ function renderBody(
   }
 
   // time_series (and any unknown chart type) → the shared SVG chart.
+  // Cap series + decimate points-per-series first so a valid preview cannot
+  // rebuild tens of thousands of SVG/React nodes on every 5s refresh (#8).
+  const { series: cappedSeries, truncated } = capSeriesForChart(allSeries);
   return (
-    <TimeSeriesChart
-      series={allSeries}
-      displayType="lines"
-      selectedKey={selectedKey}
-      onSelectSeries={setSelectedKey}
-      windowMs={windowMs}
-    />
+    <div className="dashboard-panel__chart-wrap">
+      {truncated ? (
+        <span
+          className="dashboard-panel__truncation"
+          title={`Showing at most ${MAX_CHART_SERIES} series and the newest ${MAX_POINTS_PER_SERIES} points per series for performance. Narrow the window or add filters to see the full set.`}
+        >
+          ⚠ view truncated for performance
+        </span>
+      ) : null}
+      <TimeSeriesChart
+        series={cappedSeries}
+        displayType="lines"
+        selectedKey={selectedKey}
+        onSelectSeries={setSelectedKey}
+        windowMs={windowMs}
+      />
+    </div>
   );
+}
+
+/** Shared post-window "No data in window" state so the list/table branches read
+ *  the same as the single-value / time-series no-data states (#18). */
+function NoDataInWindow(): React.ReactElement {
+  return (
+    <div className="dashboard-panel__empty dashboard-panel__empty--no-data">
+      <span className="dashboard-panel__empty-title">No data in window</span>
+    </div>
+  );
+}
+
+/**
+ * Cap the series count and decimate points-per-series before rendering the SVG
+ * chart (#8). Keeps the first MAX_CHART_SERIES series and, for any series with
+ * more than MAX_POINTS_PER_SERIES points, strides across the series keeping the
+ * NEWEST point (last, assumed appended in time order by useMetricTimeSeries) so
+ * the most recent value is always visible. Returns whether anything was dropped
+ * so the caller can show a truncation indicator.
+ */
+function capSeriesForChart(series: MetricSeries[]): { series: MetricSeries[]; truncated: boolean } {
+  let truncated = series.length > MAX_CHART_SERIES;
+  const capped = series.slice(0, MAX_CHART_SERIES).map((s) => {
+    if (s.points.length <= MAX_POINTS_PER_SERIES) return s;
+    truncated = true;
+    return { ...s, points: decimateKeepNewest(s.points, MAX_POINTS_PER_SERIES) };
+  });
+  return { series: capped, truncated };
+}
+
+/** Evenly stride `points` down to at most `max`, always keeping the last
+ *  (newest) point so the live value is preserved. */
+function decimateKeepNewest<T>(points: T[], max: number): T[] {
+  if (points.length <= max) return points;
+  const stride = points.length / max;
+  const out: T[] = [];
+  for (let i = 0; i < max - 1; i++) {
+    out.push(points[Math.floor(i * stride)]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function emitHint(otlpEndpoint: string | null): string {
+  // Prefer the configured OTLP/HTTP receiver from /api/health so the hint names
+  // the real port; fall back to a port-free message when it is unknown (#19).
+  const target = normalizeOtlpEndpoint(otlpEndpoint);
+  if (target) return `Emit it to ${target} to preview this panel.`;
+  return "Emit it to this collector's OTLP endpoint to preview this panel.";
+}
+
+/** Strip the scheme so the hint reads `host:port` (e.g. `0.0.0.0:4318`),
+ *  matching how a user configures an OTLP exporter target. */
+function normalizeOtlpEndpoint(endpoint: string | null): string | null {
+  if (!endpoint) return null;
+  return endpoint.replace(/^https?:\/\//, "").trim() || null;
 }
 
 const CHART_TYPE_LABELS: Record<string, string> = {

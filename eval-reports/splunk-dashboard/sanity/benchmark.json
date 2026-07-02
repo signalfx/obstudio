@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-dashboard",
-    "run_id": "20260701T180943833397Z",
+    "run_id": "20260702T194810597252Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -18,17 +18,17 @@
   "summary": {
     "eval_count": 3,
     "prompt_count": 4,
-    "failure_count": 1,
+    "failure_count": 0,
     "with_skill": {
       "prompt_count": 4,
-      "command_count": 40,
-      "duration_seconds": 276.143,
-      "agent_duration_seconds": 276.093,
-      "tokens": 343714,
-      "agent_tokens": 343714,
+      "command_count": 42,
+      "duration_seconds": 826.2,
+      "agent_duration_seconds": 826.132,
+      "tokens": 459569,
+      "agent_tokens": 459569,
       "error_count": 0,
       "checks": {
-        "passed": 17,
+        "passed": 18,
         "total": 18,
         "skipped": 0
       }
@@ -48,13 +48,13 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 36,
-        "duration_seconds": 208.007,
-        "agent_duration_seconds": 207.973,
-        "tokens": 249928,
-        "agent_tokens": 249928,
+        "duration_seconds": 350.885,
+        "agent_duration_seconds": 350.837,
+        "tokens": 342801,
+        "agent_tokens": 342801,
         "error_count": 0,
         "checks": {
-          "passed": 9,
+          "passed": 10,
           "total": 10,
           "skipped": 0
         }
@@ -62,9 +62,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/dashboards/checkout-red/sanity-dashboard/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/dashboards/checkout-red/sanity-dashboard/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/dashboards/checkout-red/sanity-dashboard/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/dashboards/checkout-red/sanity-dashboard/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/dashboards/checkout-red/sanity-dashboard/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/dashboards/checkout-red/sanity-dashboard/with_baseline.json"
       }
     },
     {
@@ -80,10 +80,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 0,
-        "duration_seconds": 32.593,
-        "agent_duration_seconds": 32.582,
-        "tokens": 34485,
-        "agent_tokens": 34485,
+        "duration_seconds": 280.212,
+        "agent_duration_seconds": 280.198,
+        "tokens": 35059,
+        "agent_tokens": 35059,
         "error_count": 0,
         "checks": {
           "passed": 4,
@@ -94,9 +94,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard/with_baseline.json"
       }
     },
     {
@@ -110,11 +110,11 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 4,
-        "duration_seconds": 35.543,
-        "agent_duration_seconds": 35.538,
-        "tokens": 59301,
-        "agent_tokens": 59301,
+        "command_count": 6,
+        "duration_seconds": 195.103,
+        "agent_duration_seconds": 195.097,
+        "tokens": 81709,
+        "agent_tokens": 81709,
         "error_count": 0,
         "checks": {
           "passed": 4,
@@ -125,21 +125,11 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260701T180943833397Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard/20260702T194810597252Z/results/sanity/skill-smoke/sanity-dashboard-no-audit/with_baseline.json"
       }
     }
   ],
-  "failures": [
-    {
-      "service": "dashboards/checkout-red",
-      "side": "with_skill",
-      "prompt": "generate",
-      "category": "sanity",
-      "result": "sanity:api-token-sensitive FAIL",
-      "evidence": "Missing: sensitive = true",
-      "mode": "with_skill"
-    }
-  ]
+  "failures": []
 }

@@ -150,6 +150,9 @@ def test_dashboard_skills_reach_shared_references():
         ("../references/terraform-normalization.md", TERRAFORM_NORMALIZATION_REF),
         ("../references/ledger-template.md", LEDGER_TEMPLATE_REF),
         ("../references/coverage-decision-tree.md", COVERAGE_DECISION_TREE_REF),
+        # The chart-type ↔ REST mapping lives in the shared splunk-dashboard skill;
+        # publish references it by relative path — verify the path actually resolves.
+        ("../splunk-dashboard/references/dashboard-templates.md", DASHBOARD_TEMPLATES),
     ):
         assert relpath in publish, f"splunk-dashboard-publish/SKILL.md must include {relpath}"
         assert (SPLUNK_DASHBOARD_PUBLISH.parent / relpath).resolve() == target.resolve()

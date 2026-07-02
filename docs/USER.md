@@ -192,10 +192,10 @@ After spans flow in, Splunk APM materialises:
 ### Detector sync
 
 Once your service is live in Splunk APM and you have local detector Terraform
-from `$splunk-configure`, use `$splunk-sync` to close the loop:
+from `$splunk-configure`, use `$splunk-detector-publish` to close the loop:
 
 ```
-$splunk-sync
+$splunk-detector-publish
 ```
 
 This diffs `.observe/terraform/detectors.tf` against live Splunk Observability
@@ -204,11 +204,11 @@ GAP / UNCERTAIN, shows a confirmation diff, and creates only the genuine gaps
 via the Splunk Observability Cloud REST API (`POST /v2/detector`). A resume
 ledger is written to `.observe/detector-sync.md` so re-runs are idempotent.
 
-`$splunk-sync` calls the Splunk REST API directly using `SPLUNK_ACCESS_TOKEN`
-and `SPLUNK_REALM` — the same variables already required for metrics and traces
-forwarding. No additional configuration is needed.
+`$splunk-detector-publish` calls the Splunk REST API directly using
+`SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` — the same variables already required
+for metrics and traces forwarding. No additional configuration is needed.
 
-See the `$splunk-sync` skill for the full process and coverage model.
+See the `$splunk-detector-publish` skill for the full process and coverage model.
 
 ### Dashboard generation
 
@@ -227,7 +227,7 @@ single-value tiles), and writes dashboard Terraform to
 the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a
 `.observe/dashboards.md` report, and a `.observe/dashboards.preview.json`
 sidecar consumed by the Observer's Dashboards tab. No network call is made; the
-output is ready for `terraform apply` or `$splunk-dashboard-sync`.
+output is ready for `terraform apply` or `$splunk-dashboard-publish`.
 
 ### Dashboard preview (Dashboards tab)
 
@@ -245,10 +245,10 @@ dashboard and pressing Refresh updates the preview.
 ### Dashboard sync
 
 Once you have local dashboard Terraform from `$splunk-dashboard`, use
-`$splunk-dashboard-sync` to push only the gaps:
+`$splunk-dashboard-publish` to push only the gaps:
 
 ```
-$splunk-dashboard-sync
+$splunk-dashboard-publish
 ```
 
 This diffs `.observe/terraform/dashboards.tf` against live Splunk Observability
@@ -260,10 +260,10 @@ referencing those IDs with grid placement (creating the group via `POST
 /v2/dashboardgroup` first when it is missing) — and recovers orphaned charts if
 the dashboard create fails. A resume ledger is written to
 `.observe/dashboard-sync.md` (with the per-verdict reason and app links) so
-re-runs are idempotent. Like `$splunk-sync`, it uses `SPLUNK_ACCESS_TOKEN` and
-`SPLUNK_REALM` directly and needs no extra configuration.
+re-runs are idempotent. It uses `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM`
+directly and needs no extra configuration.
 
-See the `$splunk-dashboard` and `$splunk-dashboard-sync` skills for the full
+See the `$splunk-dashboard` and `$splunk-dashboard-publish` skills for the full
 classification and coverage model.
 
 ## Validation

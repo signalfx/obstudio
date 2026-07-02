@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { DashboardGrid } from "./DashboardGrid";
-import { DashboardPanel } from "./DashboardPanel";
+import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
 import { useDashboardPreview } from "./useDashboardPreview";
 import type { PreviewPanel, PreviewResponse } from "./types";
 
@@ -27,6 +27,35 @@ const TIME_WINDOWS = [
 
 const DEFAULT_WINDOW_MS = 60_000;
 
+/** Shape of the fields we read from GET /api/health. */
+interface HealthResponse {
+  endpoints?: { otlpHttp?: string; otlpGrpc?: string; rest?: string; mcp?: string };
+}
+
+/**
+ * Fetch the OTLP/HTTP receiver endpoint from /api/health once on mount so the
+ * unmatched-panel hint names the actually-configured receiver instead of a
+ * hardcoded port (#19). Returns `null` until loaded or on failure; the hint
+ * falls back to a port-free message in that case.
+ */
+function useOtlpEndpoint(): string | null {
+  const [endpoint, setEndpoint] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/health", { signal: controller.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<HealthResponse>) : null))
+      .then((health) => {
+        const otlpHttp = health?.endpoints?.otlpHttp;
+        if (otlpHttp) setEndpoint(otlpHttp);
+      })
+      .catch(() => {
+        /* leave null → hint uses the port-free fallback */
+      });
+    return () => controller.abort();
+  }, []);
+  return endpoint;
+}
+
 interface DashboardsTabProps {
   telemetryError?: string | null;
   paused?: boolean;
@@ -34,9 +63,14 @@ interface DashboardsTabProps {
 
 export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabProps): React.ReactElement {
   const { data, loading, error, refresh } = useDashboardPreview(paused);
+  const otlpEndpoint = useOtlpEndpoint();
   const [expandedId, setExpandedId] = useState<PanelId | null>(null);
   const expandedPanel = expandedId ? resolvePanel(data, expandedId) : null;
   const [windowMs, setWindowMs] = useState(DEFAULT_WINDOW_MS);
+  // Refs for modal focus management (#5): the dialog element to trap focus
+  // within, and the trigger to restore focus to on close.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const lastTriggerRef = useRef<HTMLElement | null>(null);
 
   // Close expanded panel on Escape.
   useEffect(() => {
@@ -46,8 +80,56 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
     return () => window.removeEventListener("keydown", onKey);
   }, [expandedId]);
 
+  // Focus management for the expand modal (#5): remember the trigger, move
+  // focus into the dialog on open, and restore it to the trigger on close so
+  // keyboard users are not stranded.
+  useEffect(() => {
+    if (!expandedPanel) return;
+    lastTriggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
+    // Focus the dialog itself (tabindex=-1) so the next Tab lands on the first
+    // control inside it.
+    dialogRef.current?.focus();
+    const trigger = lastTriggerRef.current;
+    return () => {
+      // Restore focus to the element that opened the modal.
+      if (trigger && typeof trigger.focus === "function") trigger.focus();
+    };
+  }, [expandedPanel]);
+
+  // Trap Tab focus within the dialog while it is open (#5).
+  const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) {
+      e.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === dialog)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
-    <div className="dashboards-tab">
+    // role="tabpanel" mirrors the Metrics/Traces/Logs/Services tabs so the
+    // Dashboards content is exposed as a tab panel to assistive tech (#22). The
+    // sibling tab buttons in AppView carry no ids, so we match their pattern
+    // (role only) rather than reference a non-existent tab id via aria-labelledby.
+    // The OTLP endpoint from /api/health is provided to every panel so the
+    // unmatched-panel hint names the real receiver (#19).
+    <OtlpEndpointContext.Provider value={otlpEndpoint}>
+    <section className="dashboards-tab" role="tabpanel">
       <div className="dashboards-tab__bar">
         <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
           Approximate · local-data preview
@@ -80,21 +162,39 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
       {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
 
       {expandedPanel ? (
-        <div className="dashboard-expand-overlay" role="dialog" aria-modal="true" onClick={() => setExpandedId(null)}>
-          <div className="dashboard-expand-panel" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="dashboard-expand-close"
-              aria-label="Close"
-              onClick={() => setExpandedId(null)}
-            >
-              ✕
-            </button>
+        <div className="dashboard-expand-overlay" onClick={() => setExpandedId(null)}>
+          {/* The dialog carries the modal role + an accessible name from the
+              panel title, is focusable (tabindex=-1) so focus can move into it
+              on open, and traps Tab within itself; focus is restored to the
+              trigger on close by the effect above (#5). */}
+          <div
+            ref={dialogRef}
+            className="dashboard-expand-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Expanded panel: ${expandedPanel.title || expandedPanel.label}`}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={onDialogKeyDown}
+          >
+            {/* Close button lives in the header flow (not absolutely positioned)
+                so it no longer overlaps the panel-type badge (#21). */}
+            <div className="dashboard-expand-panel__head">
+              <button
+                type="button"
+                className="dashboard-expand-close"
+                aria-label="Close expanded panel"
+                onClick={() => setExpandedId(null)}
+              >
+                ✕
+              </button>
+            </div>
             <DashboardPanel panel={expandedPanel} windowMs={windowMs} />
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
+    </OtlpEndpointContext.Provider>
   );
 }
 
