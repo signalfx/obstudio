@@ -246,6 +246,8 @@ class CodexEvalItem(pytest.Item):
             eval_kind=kind,
             sides=sides,
             backend=get_backend(self.config),
+            agent_timeout=agent_timeout(self.config),
+            judge_timeout=judge_timeout(self.config),
         )
         run["results"].append(result)
         validate_live_result(result)
@@ -420,6 +422,14 @@ def judge_model(config: pytest.Config) -> str | None:
     return settings(config).judge_model
 
 
+def agent_timeout(config: pytest.Config) -> int:
+    return int(config.getoption("--agent-timeout") or settings(config).agent_timeout)
+
+
+def judge_timeout(config: pytest.Config) -> int:
+    return settings(config).judge_timeout
+
+
 def get_backend(config: pytest.Config) -> AgentBackend:
     return getattr(config, BACKEND_ATTR)
 
@@ -478,6 +488,8 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "agent_model": agent_model(config) or "",
         "judge_model": judge_model(config) or "",
         "agent_backend": backend.name,
+        "agent_timeout": str(agent_timeout(config)),
+        "judge_timeout": str(judge_timeout(config)),
         "rubric_enabled": rubric_enabled(config),
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),

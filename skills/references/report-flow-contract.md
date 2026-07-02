@@ -119,6 +119,19 @@ the prioritized `## Gaps` table after that baseline and before
 `## Verification Plan`. The executive summary remains responsible for keeping
 the most important gaps visible on the first screen.
 
+When source evidence shows incident-readiness ownership, `## Current
+Instrumentation` may contain one `### Incident Readiness` subsection with this
+table:
+
+```markdown
+| Area | Status | Evidence | Required Signals / Gap | Detection / Localization Impact |
+|---|---|---|---|---|
+```
+
+Every `partial` or `missing` row must have a prioritized `## Gaps` row whose
+`Area` cell is identical and whose verification-scenario IDs define the proof
+handoff. This is a nested current-state view, not a second top-level gap ledger.
+
 `## Verification Plan` has two non-overlapping parts:
 
 1. `### Test Environments` defines reusable runtime, toolchain, scope, and
@@ -177,6 +190,11 @@ implement `manual decision` rows; record the owner, prerequisite, or decision
 needed. An explicit narrower user scope takes precedence, but untouched audit
 rows must remain visible.
 
+When the source audit includes `### Incident Readiness`, reconcile those rows
+through the matching prioritized gaps and `## Audit Gap Closure`. Do not create
+a parallel incident closure section or claim a readiness surface is working
+while one of its required signals remains missing or unproven.
+
 The instrumentation report must reconcile every consumed audit row under
 `## Audit Gap Closure`:
 
@@ -217,6 +235,26 @@ The instrumentation report must include:
 
 `Signals Changed` is the instrumentation report's implementation-change
 inventory and belongs only in `.observe/otel-instrumentation.md`.
+
+When incident readiness applies because the user requested faster detection or
+localization, incident evidence was supplied, or the audit contains
+`### Incident Readiness`, add this nested inventory inside
+`## Signals Changed`:
+
+```markdown
+### Incident Readiness Signal Roles
+
+| Surface | Exact signal | Role | Detector use / reason | Proof | Remaining owner / prerequisite |
+|---|---|---|---|---|---|
+```
+
+Use exactly `MTTD-improving`, `localization-only`,
+`provider/platform-owned`, or `uncovered` in `Role`. Write one row per exact
+added or proven signal; do not group several metric names into one row. Use
+`None` for `Exact signal` only for an owner-mapped or uncovered prerequisite.
+This is the signal-role inventory, not another gap ledger or a second closure
+section: every row must still reconcile through `## Audit Gap Closure` when a
+source audit exists.
 
 Include `## GenAI Readiness Closure` only when the source audit declares
 `GenAI ownership detected: Yes`. Put it after `## Audit Gap Closure` and use

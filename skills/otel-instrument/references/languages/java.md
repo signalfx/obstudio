@@ -94,7 +94,7 @@ Prefer the existing JVM startup path. For host-based services, `JAVA_TOOL_OPTION
 java -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
   -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
-  -Dotel.resource.attributes=deployment.environment=production \
+  -Dotel.resource.attributes=deployment.environment.name=production \
   -jar my-app.jar
 ```
 

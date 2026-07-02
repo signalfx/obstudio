@@ -7,80 +7,136 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20260629T192245327834Z",
+    "run_id": "20260702T053425175067Z-mttd-summary",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": ".workspace/codex-evals-gpt55-high.toml, .workspace/codex-evals-local-xhigh.toml, .workspace/codex-evals-xhigh.toml"
   },
   "summary": {
-    "eval_count": 1,
-    "prompt_count": 1,
-    "failure_count": 1,
+    "eval_count": 3,
+    "prompt_count": 3,
+    "failure_count": 0,
     "with_skill": {
-      "prompt_count": 1,
-      "command_count": 116,
-      "duration_seconds": 1088.092,
-      "agent_duration_seconds": 890.005,
-      "tokens": 3039601,
-      "agent_tokens": 2568943,
+      "prompt_count": 3,
+      "command_count": 602,
+      "duration_seconds": 4200.351,
+      "agent_duration_seconds": 3575.758,
+      "tokens": 25440826,
+      "agent_tokens": 24295989,
       "error_count": 0,
       "rubric": {
-        "passed": 6,
-        "total": 7,
-        "average_score": 84.0
+        "passed": 19,
+        "total": 19,
+        "average_score": 88.66666666666667
       },
-      "rubric_tokens": 470658,
-      "rubric_duration_seconds": 195.361
+      "rubric_tokens": 1144837,
+      "rubric_duration_seconds": 619.339
     },
     "with_baseline": null
   },
   "evals": [
     {
-      "id": "python/mcp-ai-tool-demo/qual/instrument",
-      "case": "python/mcp-ai-tool-demo",
-      "language": "python",
-      "service": "mcp-ai-tool-demo",
+      "id": "java/kafka-streams/qual/incident-readiness",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
       "prompt_count": 1,
       "prompts": [
-        "direct"
+        "mttd"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 116,
-        "duration_seconds": 1088.092,
-        "agent_duration_seconds": 890.005,
-        "tokens": 3039601,
-        "agent_tokens": 2568943,
+        "command_count": 160,
+        "duration_seconds": 1172.628,
+        "agent_duration_seconds": 987.057,
+        "tokens": 4932348,
+        "agent_tokens": 4437513,
         "error_count": 0,
         "rubric": {
           "passed": 6,
-          "total": 7,
-          "average_score": 84.0
+          "total": 6,
+          "average_score": 92.0
         },
-        "rubric_tokens": 470658,
-        "rubric_duration_seconds": 195.361
+        "rubric_tokens": 494835,
+        "rubric_duration_seconds": 185.473
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260629T192245327834Z/results/python/mcp-ai-tool-demo/qual-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260702T024911171868Z/results/java/kafka-streams/qual-incident-readiness/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260702T024911171868Z/results/java/kafka-streams/qual-incident-readiness/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260702T024911171868Z/results/java/kafka-streams/qual-incident-readiness/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/kvstore/qual/incident-readiness",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "mttd"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 310,
+        "duration_seconds": 2202.116,
+        "agent_duration_seconds": 1926.158,
+        "tokens": 17754578,
+        "agent_tokens": 17262409,
+        "error_count": 0,
+        "rubric": {
+          "passed": 6,
+          "total": 6,
+          "average_score": 90.0
+        },
+        "rubric_tokens": 492169,
+        "rubric_duration_seconds": 275.908
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260702T053425175067Z/results/go/kvstore/qual-incident-readiness/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260702T053425175067Z/results/go/kvstore/qual-incident-readiness/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260702T053425175067Z/results/go/kvstore/qual-incident-readiness/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/fastapi-celery/qual/incident-readiness",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 1,
+      "prompts": [
+        "mttd"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 132,
+        "duration_seconds": 825.607,
+        "agent_duration_seconds": 662.543,
+        "tokens": 2753900,
+        "agent_tokens": 2596067,
+        "error_count": 0,
+        "rubric": {
+          "passed": 7,
+          "total": 7,
+          "average_score": 84.0
+        },
+        "rubric_tokens": 157833,
+        "rubric_duration_seconds": 157.958
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260702T031925134912Z/results/python/fastapi-celery/qual-incident-readiness/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260702T031925134912Z/results/python/fastapi-celery/qual-incident-readiness/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260702T031925134912Z/results/python/fastapi-celery/qual-incident-readiness/with_baseline.json"
       }
     }
   ],
-  "failures": [
-    {
-      "service": "python/mcp-ai-tool-demo",
-      "side": "with_skill",
-      "prompt": "direct",
-      "category": "rubric",
-      "result": "rubric:rubric-7 FAIL",
-      "evidence": ".observe/otel-verify.md reports 24/26 working with OTLP HTTP exporter defaults and FastAPI automatic HTTP server spans/request metrics Not proven; trace.jsonl shows unittest/make test and validate_reader_report, not a live collector or uvicorn acceptance run. grade.json sanity checks passed.",
-      "mode": "with_skill"
-    }
-  ]
+  "failures": []
 }

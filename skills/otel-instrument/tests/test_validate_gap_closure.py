@@ -61,6 +61,28 @@ INSTRUMENT_GENAI = INSTRUMENT_NO_GENAI.replace(
     "**Result:** Partial",
 ).replace("## Validation Gates", f"{GENAI_CLOSURE}\n## Validation Gates")
 
+AUDIT_INCIDENT = AUDIT_NO_GENAI.replace(
+    "## Gaps",
+    """## Current Instrumentation
+### Incident Readiness
+| Area | Status | Evidence | Required Signals / Gap | Detection / Localization Impact |
+|---|---|---|---|---|
+| runtime bootstrap | partial | Exporter configured | Runtime export failures | MTTD-improving |
+
+## Gaps""",
+)
+
+INCIDENT_SIGNAL_ROLES = """## Signals Changed
+### Incident Readiness Signal Roles
+| Surface | Exact signal | Role | Detector use / reason | Proof | Remaining owner / prerequisite |
+|---|---|---|---|---|---|
+| runtime bootstrap | `otel.exporter.failures` | MTTD-improving | Detect export failure | runtime.export passed | None |
+"""
+
+INSTRUMENT_INCIDENT = INSTRUMENT_NO_GENAI.replace(
+    "## Audit Gap Closure", f"{INCIDENT_SIGNAL_ROLES}\n## Audit Gap Closure"
+)
+
 
 class ValidateGapClosureTest(unittest.TestCase):
     def validate(
@@ -281,6 +303,21 @@ class ValidateGapClosureTest(unittest.TestCase):
         result = self.validate(AUDIT_GENAI, report)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("extra=['Evaluation quality']", result.stderr)
+
+    def test_accepts_incident_readiness_signal_role_inventory(self) -> None:
+        result = self.validate(AUDIT_INCIDENT, INSTRUMENT_INCIDENT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_incident_readiness_requires_signal_role_inventory(self) -> None:
+        result = self.validate(AUDIT_INCIDENT, INSTRUMENT_NO_GENAI)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires ## Signals Changed", result.stderr)
+
+    def test_incident_readiness_rejects_unknown_signal_role(self) -> None:
+        report = INSTRUMENT_INCIDENT.replace("MTTD-improving", "diagnostic")
+        result = self.validate(AUDIT_INCIDENT, report)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid Incident Readiness signal role", result.stderr)
 
 
 if __name__ == "__main__":
