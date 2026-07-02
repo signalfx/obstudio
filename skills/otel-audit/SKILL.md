@@ -7,9 +7,10 @@ description: >-
   Use when the user types $otel-audit, asks about observability gaps,
   wants to assess instrumentation coverage, says "what signals am I
   missing", "scan this service for observability", asks about
-  "observability readiness", or asks whether GenAI/LLM workflows follow
-  OpenTelemetry semantic conventions. Do NOT use for implementing code
-  changes -- use $otel-instrument instead.
+  "observability readiness", asks whether instrumentation can make incidents
+  faster to detect or localize, or asks whether GenAI/LLM workflows follow
+  OpenTelemetry semantic conventions. Do NOT use for implementing code changes
+  -- use $otel-instrument instead.
 ---
 
 # Audit -- Observability Coverage Scan
@@ -42,7 +43,15 @@ Scan the repository to determine language, framework, and existing instrumentati
 2. Identify entry points (`main`, `cmd/`, `app.py`, `index.ts`, etc.)
 3. Enumerate all HTTP routes with method and path pattern (e.g. `GET /tasks`, `POST /tasks`, `GET /tasks/{id}`). List them explicitly in the report.
 4. Use the Auto-Instrumentation Library Map below to identify which packages should be present for each detected dependency.
-5. Detect GenAI/LLM ownership: provider clients/model gateways, agents or
+5. Detect incident-readiness ownership: user-visible workflows, dependency
+  calls, background processing, queues/streams, data freshness, auth/edge
+  paths, capacity limits, and release/config context. When any are present or
+  when the user asks for faster incident detection/localization, load
+  `../references/incident-readiness.md`. When incidents, postmortems, tickets,
+  alerts, or failure examples are supplied, use its Incident-Evidence Mode and
+  map each failure mechanism to its owning code or platform surface before
+  scoring coverage.
+6. Detect GenAI/LLM ownership: provider clients/model gateways, agents or
   workflows, tool/function dispatch, MCP when present, retrieval/RAG,
   model/deployment config, fallback/readiness checks, token accounting, call
   counts, prompt/response assembly, AI-derived data jobs, AI-path synthetic/canary checks, or usage logging. When any are present, load
@@ -56,14 +65,14 @@ Scan the repository to determine language, framework, and existing instrumentati
   AI-owned session/stream including MCP when present, retrieval/RAG, streaming,
   token/context, prompt/response parser, safety/policy, AI-derived data,
   model/config rollout, or AI-owned cache/session evidence.
-6. Record exact evidence paths that should appear in the report:
+7. Record exact evidence paths that should appear in the report:
   - Dependency manifest: `go.mod`, `package.json`, `pyproject.toml`, `pom.xml`, etc.
   - Process entry point: `main.go`, `cmd/.../main.go`, `app.py`, `app.js`, `TasksApplication.java`, etc.
   - Route source: router/controller files such as `TaskController.java`, `app.py`, `app.js`, or `kvstore/http.go`.
   - Traffic and readiness clients when they exercise a GenAI path: demo, load, eval, or replay scripts, plus AI-path synthetic or canary scripts such as `load_demo.py`,
     `smoke.py`, `scripts/check-*`, or `tests/e2e/*`.
   - Runtime/startup files when present: `Dockerfile`, `docker-compose.yml`, `Makefile`, `package.json` scripts, launch configs, worker files.
-7. Inventory project runtime and verification evidence without installing or
+8. Inventory project runtime and verification evidence without installing or
    changing anything:
   - wrappers and task runners such as `mvnw`, `gradlew`, Make, package scripts,
     tox/nox, Cargo, or solution test projects
@@ -71,7 +80,7 @@ Scan the repository to determine language, framework, and existing instrumentati
   - lockfiles, CI test commands, devcontainer config, and existing test layout
   - locally safe compile/type/import/test commands implied by project config
   Record configured requirements, not the shell's accidental default runtime.
-8. Make one explicit GenAI ownership decision from the completed source scan:
+9. Make one explicit GenAI ownership decision from the completed source scan:
   - `Yes` when any provider/model, agent/workflow, tool/MCP, retrieval/RAG,
     memory/context, evaluation, prompt/response, model/config, token usage, or
     other AI-path surface is owned by the repository.
@@ -224,6 +233,35 @@ proof.
 **Operational signal assessment** -- express rate, error, latency, and
 saturation coverage as ordinary entries in `## Current Instrumentation`,
 `## Gaps`, or `## Verification Plan` with exact source paths and signal names.
+
+**Incident readiness assessment** -- when the repository owns incident-relevant
+surfaces or the user asks for faster detection/localization, use
+`../references/incident-readiness.md` to assess API/workflow and customer
+impact, dependencies, input complexity, freshness, backpressure,
+synthetic/canary checks, auth/edge, capacity, and release/config context. For
+incident evidence, classify each proposed signal as `MTTD-improving` only when
+it can support a detector before or at first customer impact,
+`localization-only` when it mainly narrows an already-detected fault,
+`provider/platform-owned`, or `unknown owner`.
+
+Record current readiness as `### Incident Readiness` under
+`## Current Instrumentation`; do not add another top-level report section.
+Record every missing or partial owned surface in the single prioritized
+`## Gaps` table. The prioritized gap row and its mapped acceptance scenarios
+form the closure contract for `$otel-instrument` and `$splunk-configure`:
+
+- `Area` is the stable human-readable gap identity used downstream.
+- `Required fix` names every required signal or exact owner mapping; it must not
+  use a vague label such as `add observability`.
+- `Instrument mode` records whether safe app-owned work is `default`, broader
+  safe work is `fix all`, or an external/unsafe choice is `manual decision`.
+- The mapped scenario provides the code surface, expected telemetry, proof
+  level, and acceptance criteria.
+
+Split a gap when required signals have different owners, instrument modes, or
+acceptance criteria. Do not mark a partial surface covered because one span or
+metric exists, and do not imply that detector configuration can compensate for
+an absent detector-critical metric.
 
 **GenAI readiness assessment** -- when GenAI/LLM evidence exists, use
 `../references/genai-readiness.md` to check baseline trace continuity,
@@ -552,6 +590,22 @@ If no OTel log integrations are found, write: "No OTel log instrumentation detec
 If no OTel packages or setup are found across all three signal types, include
 the phrase: "OpenTelemetry instrumentation is missing."
 
+### Incident Readiness
+
+Include this subsection only when incident-readiness ownership exists or the
+user asks for faster incident detection/localization.
+
+| Area | Status | Evidence | Required Signals / Gap | Detection / Localization Impact |
+|------|--------|----------|------------------------|---------------------------------|
+| API/workflow impact | {covered / partial / missing / owner-mapped} | {route/workflow spans and latency/error/outcome metrics} | {missing workflow outcome, status, error class, or latency signal} | {MTTD-improving / localization-only / owner} |
+| Dependencies | {covered / partial / missing / owner-mapped} | {client spans/metrics by dependency and operation} | {missing timeout, retry, rate-limit, circuit-breaker, endpoint/target health, or availability signal} | {MTTD-improving / localization-only / owner} |
+| Freshness/backpressure | {covered / partial / missing / owner-mapped} | {lag, age, queue depth, consumer lag, dropped count} | {missing freshness, oldest age, drop reason, paused consumer, or saturation signal} | {MTTD-improving / localization-only / owner} |
+| Auth/edge/capacity/release | {covered / partial / missing / owner-mapped} | {auth/edge, runtime capacity, health/readiness, and low-cardinality release/config evidence} | {missing failure class, saturation, desired-vs-healthy, readiness/healthcheck, target-health, or rollout context} | {MTTD-improving / localization-only / owner} |
+
+Add, split, or omit example rows to match source-owned surfaces. Every partial
+or missing row must map to a prioritized gap-table row and one or more
+acceptance scenarios below.
+
 ## GenAI Readiness
 
 Include only when GenAI/LLM ownership evidence exists.
@@ -649,6 +703,23 @@ Report requirements:
 - Put `## Gaps` after `## Current Instrumentation` and optional
   `## GenAI Readiness`, so the reader sees the source-derived baseline before
   the prioritized remediation queue.
+- When incident-readiness ownership exists or faster detection/localization is
+  requested, include `### Incident Readiness` inside
+  `## Current Instrumentation`; do not create a second top-level gap or ledger
+  section. Map every partial or missing readiness row to the exact `Area` value
+  in `## Gaps` and to its verification scenario IDs.
+- Keep incident-readiness guidance generic: do not include organization-specific
+  service names, incident IDs, customer names, realms, or product-specific
+  workflow names unless they are source evidence necessary to identify the
+  audited service. Treat workflow outcome, dependency health, freshness,
+  backpressure, auth/edge, capacity, health/readiness, and release/config
+  context as gaps only when source or runtime configuration shows the service
+  owns or can accurately observe that surface.
+- For incident-evidence requests, include the generic mapping `incident class
+  -> failure mechanism -> repo/service owner -> code surface -> signal -> MTTD
+  impact -> remaining owner`. Endpoint RED metrics alone do not close a gap
+  whose mechanism is auth handshake, secret expiry, stale output, rollout
+  skew, dependency target loss, stream lifecycle failure, or pool saturation.
 - The report must have exactly one top-level `## Gaps` section.
 - Use the exact prioritized gap-table columns and allowed priority/instrument
   mode values from `report-flow-contract.md`. Every gap row must name user

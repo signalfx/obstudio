@@ -8,8 +8,8 @@ description: >-
   "implement observability", "wire up telemetry", "instrument this service",
   asks to add a specific custom signal like "add a metric to track queue
   depth", "add a span for payment processing", "track error rate for X", or
-  asks to instrument GenAI/LLM workflows with OpenTelemetry semantic
-  conventions.
+  asks to add signals that make incidents faster to detect or localize, or asks
+  to instrument GenAI/LLM workflows with OpenTelemetry semantic conventions.
 ---
 
 # Instrument
@@ -55,6 +55,17 @@ Before editing anything, ground the plan with repo evidence:
   `Verification scenarios`. Reconcile each row with current source and the
   verification contract before editing. If the table is malformed or missing,
   stop and regenerate the audit rather than inferring an implementation queue.
+- Detect incident-readiness surfaces. Search source and configuration for
+  user-visible workflows, dependency clients, background jobs, queues/streams,
+  data freshness, input complexity, synthetic/canary checks, auth/edge paths,
+  capacity limits, and release/config context. When any are present or when the
+  user asks for faster incident detection/localization, load
+  `../references/incident-readiness.md`.
+- When incidents, postmortems, tickets, alerts, or failure examples are supplied,
+  use Incident-Evidence Mode from `../references/incident-readiness.md`: map
+  each failure mechanism to the owning code or platform surface and classify
+  the proposed signal as MTTD-improving, localization-only, or still uncovered
+  before editing.
 - Detect GenAI/LLM ownership. Search dependencies, config, and source for
   provider clients, model gateways, agent/workflow orchestration, tool/function
   dispatch, MCP when present, retrieval/RAG, model/deployment config, fallback,
@@ -72,7 +83,15 @@ Before editing anything, ground the plan with repo evidence:
   token/context, prompt/response parser, safety/policy, AI-derived data,
   model/config rollout, or AI-owned state surface before editing.
 - For Java projects, build a trace wiring inventory per `./references/languages/java.md` (Preflight section) and classify as `auto-only`, `custom-with-provider`, `custom-provider-external`, or `missing` before editing.
-- Confirm the planned `service.name` source and `deployment.environment` source
+- Confirm the planned `service.name`, `service.version`, and environment source.
+  Also record available low-cardinality region, platform, image/artifact,
+  config, and rollout sources. Prefer existing OTel semantic-convention or
+  platform resource attribute names, including `deployment.environment.name`,
+  `cloud.region`, `cloud.platform`, `container.image.name`, and
+  `container.image.tags`. Treat `deployment.environment`,
+  `deployment.region`, `deployment.platform`, and `container.image.tag` as
+  legacy or custom input aliases only, not names to newly emit or reasons to
+  duplicate the standard attributes.
 - Distinguish between application repos and tooling repos such as CLIs, MCP servers, workers, libraries, installers, and build tools. Instrument the executable path users or operators actually run today. Do not invent a web app, Docker path, or entrypoint that is not present.
 - If the repo has multiple runnable surfaces, instrument the one the user actually cares about; otherwise ask which one matters
 - If the repo is primarily tooling or library code and no runnable surface is obvious, stop and ask instead of inventing an app shell
@@ -90,6 +109,12 @@ Do not proceed until you can state all of these clearly:
 - audit gap closure plan: rows in scope now, rows deferred by mode or explicit
   user scope, and the scenario IDs that will prove each in-scope row
 - for Java, trace source of truth (see `./references/languages/java.md` Preflight section)
+- incident-readiness surfaces and the workflow, dependency, input complexity,
+  freshness, backpressure, synthetic/canary, auth/edge, capacity, and
+  release/config signals to add or prove when the repo owns those surfaces
+- incident-evidence coverage when failure examples are supplied: failure
+  mechanism, owner, code surface, signal to add or prove, expected MTTD or
+  localization impact, and remaining external owner
 - GenAI workflow surfaces and the GenAI semantic-convention plus service-owned
   readiness signals to add, when the repo owns LLM, agent, tool/function, MCP,
   retrieval, streaming, model/config, token/context, prompt/response,
@@ -117,6 +142,88 @@ preflight scan finds OTel SDK already initialized:
 
 If the preflight scan finds no OTel SDK, tell the user auto-instrumentation
 needs to be set up first and continue with the full workflow (Steps 2-3).
+
+### Audit-Driven Incident Readiness
+
+When the source audit contains `### Incident Readiness` under
+`## Current Instrumentation`, treat each partial or missing readiness row and
+its matching prioritized `## Gaps` row as one implementation contract. The
+readiness row names the surface and detection/localization impact; the gap row
+names the complete required fix and instrument mode; its acceptance scenarios
+name the code path, expected telemetry, proof level, and acceptance criteria.
+Do not create a second gap ledger or silently synthesize missing fields. If an
+older audit lacks the current prioritized gaps or verification plan, regenerate
+the audit before claiming one-to-one closure.
+
+If the user broadly asks to improve incident readiness or MTTD, address every
+safe app-owned incident gap allowed by the audit modes: all `required` /
+`default` rows and all `recommended` / `fix all` rows. Do not choose one
+representative gap unless the user explicitly narrows scope. Never silently
+implement a `manual decision` row; record the exact external owner, unsafe
+boundary, missing source, or choice required.
+
+Use `../references/incident-readiness.md` to turn each owned gap into concrete,
+low-cardinality signals. In particular, add or prove the applicable surfaces:
+
+- API/workflow outcome, errors, latency, and detector-ready request/job counts;
+- dependency timeout, retry, rate-limit, circuit-breaker, endpoint/target
+  health, availability, and operation outcome;
+- input complexity, freshness/age, queue depth/lag/oldest age, dropped or
+  rejected work, worker/pool saturation, and scheduled-job last success;
+- stream/long-lived connection open, auth, active count, duration, close reason,
+  timeout, cancellation, and send/write failure;
+- auth/identity/token/secret/certificate/edge failure reason, expiry/rotation,
+  route/config mismatch, and synthetic/canary result when owned;
+- CPU, memory, disk, inflight/concurrency, desired-vs-healthy,
+  startup/readiness/healthcheck, target-health, and autoscaling saturation when
+  observable by the app or its checked-in runtime configuration; and
+- low-cardinality service/artifact/config/schema/feature-flag/rollout context,
+  expected-vs-running state, compatibility failure, and rollout outcome.
+
+Do not treat a bare time-since-last-update or time-since-last-success gauge as
+detector-ready staleness when healthy idle periods are possible. Require a
+source-backed expected cadence, pending/backlogged work, or accepted input that
+should have produced the update. Without that evidence, classify the age gauge
+as context or `localization-only` and use backlog, queue delay, or missed
+schedule as the MTTD-improving detector input.
+
+For repositories with both web/API and background-worker processes, apply the
+Multi-Process Web And Worker Services contract in
+`../references/incident-readiness.md`. Each process needs a distinct,
+operator-overridable `service.name` default. Initialize its provider and
+framework instrumentations only from that process's actual entrypoint or
+startup hook; importing a worker/task module from the API must not configure
+worker telemetry. Instrument enqueue and task success/failure at their owning
+call sites, and explicitly record worker exception status before rethrowing.
+Framework hooks or assumed auto-instrumentation are not a substitute for an
+app-owned failure path when the readiness gap requires one.
+
+Focused incident-readiness tests must execute the success and failure call
+sites and assert emitted telemetry through an in-memory exporter or equivalent
+app-code seam. AST, grep, source-string, or compile-only checks are not telemetry
+proof. If dependencies cannot be restored or imported, keep the executable
+tests, report the exact blocker, and mark dynamic verification `Blocked` or
+`Not proven`; do not replace the tests with static assertions.
+
+For Go changes involving goroutines, channels, queues, asynchronous persistence
+or indexing, eviction, or observable callbacks, run `go test -race` for every
+changed package. If that cannot run, record the exact toolchain/platform blocker;
+a normal `go test` pass does not satisfy this concurrency gate.
+
+For incident evidence, target the failure mechanism rather than its endpoint
+symptom. Mark a signal `MTTD-improving` only when it can support a detector
+before or at first customer impact; mark it `localization-only` when it mainly
+narrows an already-detected fault. Endpoint RED metrics alone do not close an
+auth handshake, secret expiry, stale output, rollout skew, dependency target
+loss, stream lifecycle, or pool-saturation gap.
+
+Extend the internal Audit-Driven Gap Closure matrix with the readiness surface,
+required signals, MTTD/localization classification, implemented or proven
+signals, tests, remaining signals, and owner. A row cannot be `Working` while
+any required signal is absent, merely listed as a follow-up, or supported only
+by an unexecuted test. If no app-owned candidate can be patched accurately and
+safely, add no placeholder instrument; owner-map the exact prerequisite and
+keep the row `Deferred`, `Not configured`, or `Not proven` as appropriate.
 
 ### Audit-Driven GenAI Readiness
 
@@ -252,6 +359,24 @@ signal-level table:
 | Logs/events | bridge/event names or `None` | exact changes or `None` | exact removals or `None` | source paths + tests/harnesses | verified/partial/not run/blocked |
 | Runtime/config | service/exporter/env/startup settings or `None` | exact changes or `None` | exact removals or `None` | startup/config paths | verified/partial/not run/blocked |
 | Dependencies | OTel packages or `None` | version/package changes or `None` | removed packages or `None` | manifest/lockfile paths | verified/partial/not run/blocked |
+
+For incident-readiness work, add this nested table inside `## Signals Changed`
+even when no source audit exists:
+
+```markdown
+### Incident Readiness Signal Roles
+
+| Surface | Exact signal | Role | Detector use / reason | Proof | Remaining owner / prerequisite |
+|---|---|---|---|---|---|
+```
+
+Use exactly `MTTD-improving`, `localization-only`,
+`provider/platform-owned`, or `uncovered` in `Role`. Write one row per exact
+added or proven signal; do not group multiple metric names. Use `None` for
+`Exact signal` only when owner-mapping an unavailable prerequisite, and name
+that owner or prerequisite in the final column. The table is a signal-role
+inventory, not another gap ledger; reconcile audited surfaces through the
+existing `Audit Gap Closure` rows.
 
 Do not claim a removal unless the previous report or git diff proves the signal
 or config existed and the current source proves it was removed. Use `None` for
@@ -476,7 +601,22 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   alternate name and record that exact runtime evidence; never claim both names.
 - For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
-- For domains where OTel semantic conventions exist, emit required spans and metrics only, with required attributes only. Do not emit spans or metrics that are marked optional, do not include attributes that are marked optional. Do not invent custom spans, metrics or attributes in domains where OTel semantic conventions exist.
+- For domains where OTel semantic conventions exist, use semantic-convention
+  names and attributes. Start with required spans, metrics, and attributes; add
+  recommended optional signals only when an approved readiness or verification
+  requirement depends on them, the service can observe the value accurately,
+  and privacy/cardinality rules permit it. Do not invent custom spans, metrics,
+  or attributes where a semantic-convention signal satisfies the requirement.
+- For incident-readiness work, follow
+  `../references/incident-readiness.md`. Instrument only source-evidenced
+  workflow, dependency, input-complexity, freshness, backpressure,
+  synthetic/canary, auth/edge, capacity, health/readiness, and release/config
+  surfaces. Prefer semantic-convention HTTP, RPC, database, messaging, process,
+  and runtime signals; add custom outcome, lag, freshness, queue, retry,
+  timeout, rate-limit, endpoint/target-health, drop/reject, circuit-breaker,
+  saturation, desired-vs-healthy, startup/readiness/healthcheck, compatibility,
+  and rollout signals only when the service owns and can observe them
+  accurately.
 - For GenAI/LLM code, follow `../references/genai-readiness.md`: create
   baseline distributed tracing plus OTel GenAI spans for inference,
   `invoke_agent`, `invoke_workflow`, `plan`, `execute_tool`, `retrieval`, and
@@ -718,8 +858,8 @@ After auto-instrumentation is wired up, prompt the user:
 
 Then wait for the user's answer.
 
-Skip this prompt when the user already asked for GenAI/LLM workflow
-instrumentation, a specific GenAI custom signal, when the Audit-Driven GenAI
+Skip this prompt when the user already asked for incident-readiness or GenAI/LLM
+workflow instrumentation, a specific custom signal, when an Audit-Driven
 Readiness path applies, or when prioritized audit rows are already in scope by
 the Audit-Driven Gap Closure rules. In those cases, the user's request and
 audit gaps are the approval context; implement the safe scoped signals and
@@ -732,6 +872,17 @@ clearly list any unpatched prerequisites.
   - External calls not covered by auto-instrumentation libraries
   - Background workers and scheduled jobs
   - Cache interactions without auto-instrumentation support
+  - Incident-readiness boundaries: customer-impact workflow outcome,
+    dependency timeout/retry/rate-limit/error and endpoint/target health, input
+    complexity, freshness, queue/backpressure, synthetic/canary result,
+    auth/edge failure, capacity saturation, desired-vs-healthy,
+    startup/readiness/healthcheck, traffic target health, and release/config
+    context when code evidence exists
+  - Incident-evidence boundaries: every supplied failure mechanism must map to
+    an added or proven code-owned signal or an explicit external owner; generic
+    endpoint metrics are insufficient when the mechanism is auth handshake,
+    secret expiry, stale output, rollout skew, dependency target health, stream
+    lifecycle, or pool saturation
   - GenAI/LLM workflow boundaries: workflow span, agent/workflow invocation,
     LLM inference, tool/function execution, MCP method dispatch when present,
     retrieval, fallback, token usage, model/config readiness, prompt/response
@@ -761,7 +912,11 @@ At minimum:
    Build an exact signal closure matrix and execute every added or modified
    span name and metric call site. Do not infer coverage for create, batch,
    update, delete, route, tool, or workflow names solely from a shared helper's
-   test. Parameterize tests when those call sites share setup.
+   test. Parameterize tests when those call sites share setup. For
+   detector-critical counters, histograms, and observable gauges, drive each
+   incident state to a non-default value and assert its emitted datapoint and
+   bounded dimensions; metric registration, name presence, or a zero-value
+   observation alone is not incident-readiness proof.
    Map these executions back to every in-scope `Audit Gap Closure` row and its
    declared verification scenarios.
 5. Confirm filtered tests actually ran by checking test output or generated
@@ -830,6 +985,13 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include `Audit Gap Closure` counts by `Working`, `Not working`, `Not proven`,
   `Not configured`, and `Deferred`. Keep every source-audit gap visible even
   when the user narrowed scope.
+- For incident-readiness work, summarize each in-scope workflow, dependency,
+  input-complexity, freshness, backpressure, synthetic/canary, auth/edge,
+  capacity, health/readiness, and release/config surface as MTTD-improving,
+  localization-only, provider/platform-owned, or uncovered. Name every
+  remaining detector prerequisite and its owner; do not call the pass complete
+  while an app-owned required signal is only a follow-up unless the user
+  explicitly narrowed scope.
 - When the source audit declares GenAI ownership, include the complete
   `GenAI Readiness Closure` matrix and list every non-`Working` remaining signal
   in the final response.

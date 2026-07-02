@@ -63,7 +63,7 @@ Reuse the current app command and wrap it with the OTel auto-instrumentation age
 opentelemetry-instrument \
   --service_name my-service \
   --exporter_otlp_endpoint http://localhost:4318 \
-  --resource_attributes deployment.environment=production \
+  --resource_attributes deployment.environment.name=production \
   python app.py
 ```
 

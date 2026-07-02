@@ -17,13 +17,14 @@ def run_rubric_grade(
     schema_path: Path | None = None,
     model: str | None,
     backend: AgentBackend | None = None,
+    timeout: int = 900,
 ) -> Path:
     if backend is None:
         backend = CodexBackend()
     if schema_path is None:
         with packaged_schema_path("rubric_grade.schema.json") as path:
-            return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=path, model=model, backend=backend)
-    return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=schema_path, model=model, backend=backend)
+            return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=path, model=model, backend=backend, timeout=timeout)
+    return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=schema_path, model=model, backend=backend, timeout=timeout)
 
 
 def _run_rubric_grade(
@@ -33,12 +34,14 @@ def _run_rubric_grade(
     schema_path: Path,
     model: str | None,
     backend: AgentBackend,
+    timeout: int,
 ) -> Path:
     result = backend.run_judge(
         prompt=rubric_prompt(case),
         exec_dir=side_dir,
         model=model,
         schema_path=schema_path,
+        timeout=timeout,
     )
     output_path = result.final_message_path
     validate_rubric_output(output_path, schema_path)

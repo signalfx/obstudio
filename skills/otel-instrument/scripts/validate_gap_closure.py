@@ -52,6 +52,20 @@ GENAI_RESULTS = {
     "Deferred",
     "Owner-mapped",
 }
+INCIDENT_SIGNAL_ROLE_HEADER = [
+    "Surface",
+    "Exact signal",
+    "Role",
+    "Detector use / reason",
+    "Proof",
+    "Remaining owner / prerequisite",
+]
+INCIDENT_SIGNAL_ROLES = {
+    "MTTD-improving",
+    "localization-only",
+    "provider/platform-owned",
+    "uncovered",
+}
 UNPROVEN_PROOF = re.compile(
     r"(?:^\s*(?:none|unproven|blocked|pending|skipped|n/?a)\b|"
     r"\b(?:not proven|not configured|not run|not tested)\b|"
@@ -75,6 +89,16 @@ def section(text: str, heading: str) -> str:
     start = heading_match(text, heading).end()
     match = re.search(r"^## ", text[start:], re.MULTILINE)
     return text[start : start + match.start()] if match else text[start:]
+
+
+def subsection(text: str, heading: str) -> str:
+    marker = f"### {heading}"
+    match = re.search(rf"^{re.escape(marker)}\s*$", text, re.MULTILINE)
+    if not match:
+        fail(f"missing subsection {marker}")
+    start = match.end()
+    next_heading = re.search(r"^### ", text[start:], re.MULTILINE)
+    return text[start : start + next_heading.start()] if next_heading else text[start:]
 
 
 def table(body: str, label: str) -> tuple[list[str], list[list[str]]]:
@@ -134,6 +158,54 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
     gap_result_blockers = {
         row[4] for row in closure_rows if row[4] in {"Not working", "Not proven", "Not configured"}
     }
+
+    audit_current_instrumentation = re.search(
+        r"^## Current Instrumentation\s*$", audit, re.MULTILINE
+    )
+    audit_incident_readiness = False
+    if audit_current_instrumentation:
+        current_body = section(audit, "## Current Instrumentation")
+        audit_incident_readiness = bool(
+            re.search(r"^### Incident Readiness\s*$", current_body, re.MULTILINE)
+        )
+
+    if audit_incident_readiness:
+        if not re.search(r"^## Signals Changed\s*$", instrumentation, re.MULTILINE):
+            fail(
+                "incident-readiness audit requires ## Signals Changed with an "
+                "Incident Readiness Signal Roles inventory"
+            )
+        signals_changed = section(instrumentation, "## Signals Changed")
+        role_headings = list(
+            re.finditer(
+                r"^### Incident Readiness Signal Roles\s*$",
+                signals_changed,
+                re.MULTILINE,
+            )
+        )
+        if len(role_headings) != 1:
+            fail(
+                "incident-readiness audit requires exactly one "
+                "### Incident Readiness Signal Roles subsection under ## Signals Changed"
+            )
+        role_header, role_rows = table(
+            subsection(signals_changed, "Incident Readiness Signal Roles"),
+            "Incident Readiness Signal Roles",
+        )
+        if role_header != INCIDENT_SIGNAL_ROLE_HEADER:
+            fail(
+                "Incident Readiness Signal Roles header must be "
+                f"{INCIDENT_SIGNAL_ROLE_HEADER}"
+            )
+        if not role_rows:
+            fail("Incident Readiness Signal Roles must contain at least one signal row")
+        for row in role_rows:
+            if len(row) != len(INCIDENT_SIGNAL_ROLE_HEADER) or any(
+                not cell for cell in row
+            ):
+                fail(f"malformed Incident Readiness Signal Roles row: {row}")
+            if row[2] not in INCIDENT_SIGNAL_ROLES:
+                fail(f"invalid Incident Readiness signal role: {row[2]}")
 
     ownership_matches = list(
         re.finditer(

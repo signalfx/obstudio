@@ -81,6 +81,29 @@ def with_genai_readiness() -> str:
     )
 
 
+def with_incident_readiness(
+    *,
+    readiness_area: str = "Queue pressure",
+    gap_area: str = "Queue pressure",
+    verification_scenarios: str = "http.search.success",
+) -> str:
+    current = "## Current Instrumentation\nNo spans detected."
+    readiness = f"""{current}
+
+### Incident Readiness
+| Area | Status | Evidence | Required Signals / Gap | Detection / Localization Impact |
+|---|---|---|---|---|
+| {readiness_area} | partial | Queue depth is present | Oldest message age | MTTD-improving |"""
+    gap_table = """| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |
+|---|---|---|---|---|---|---|
+
+No gaps found."""
+    gap_row = f"""| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |
+|---|---|---|---|---|---|---|
+| required | {gap_area} | Oldest message age is missing | Backlog can age silently | Add oldest message age | default | {verification_scenarios} |"""
+    return VALID_REPORT.replace(current, readiness).replace(gap_table, gap_row)
+
+
 class ValidateAuditReportTest(unittest.TestCase):
     def validate(self, report: str) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
@@ -212,6 +235,22 @@ No gaps found."""
         )
         result = self.validate(report)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_accepts_incident_readiness_with_matching_gap_and_scenario(self) -> None:
+        result = self.validate(with_incident_readiness())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_incident_readiness_without_identical_gap_area(self) -> None:
+        result = self.validate(with_incident_readiness(gap_area="Different area"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no identical prioritized Gaps Area", result.stderr)
+
+    def test_rejects_incident_readiness_with_undefined_scenario(self) -> None:
+        result = self.validate(
+            with_incident_readiness(verification_scenarios="queue.pressure")
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("undefined verification scenario IDs", result.stderr)
 
 
 if __name__ == "__main__":

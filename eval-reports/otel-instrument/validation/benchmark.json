@@ -6,12 +6,14 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260629T201954223762Z",
-    "repo_root": "/Users/tithumma/code/splunk/obstudio-genai-readiness-pr",
+    "run_id": "20260702T062929008621Z",
+    "repo_root": "/private/tmp/obstudio-pr111",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "agent_backend": "codex",
+    "agent_timeout": "1200",
+    "judge_timeout": "900",
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1"
@@ -82,6 +84,22 @@
       "sanity_check_count": 0,
       "rubric_check_count": 0,
       "runtime_check_count": 1
+    },
+    {
+      "id": "go/kvstore/qual/incident-readiness",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 1,
+      "prompts": [
+        "mttd"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/incident-readiness.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
     },
     {
       "id": "go/kvstore/qual/instrument",
@@ -165,6 +183,22 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-streams/qual/incident-readiness",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 1,
+      "prompts": [
+        "mttd"
+      ],
+      "definition_path": "evals/java/kafka-streams/eval/qual/incident-readiness.json",
+      "eval_dir": "evals/java/kafka-streams",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -261,6 +295,22 @@
       ],
       "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json",
       "eval_dir": "evals/python/assistant-v3-framework-bridge-demo",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/fastapi-celery/qual/incident-readiness",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 1,
+      "prompts": [
+        "mttd"
+      ],
+      "definition_path": "evals/python/fastapi-celery/eval/qual/incident-readiness.json",
+      "eval_dir": "evals/python/fastapi-celery",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 7,
@@ -367,11 +417,11 @@
     }
   ],
   "summary": {
-    "eval_count": 21,
-    "case_count": 33,
-    "prompt_count": 33,
+    "eval_count": 24,
+    "case_count": 36,
+    "prompt_count": 36,
     "sanity_check_count": 0,
-    "rubric_check_count": 135,
+    "rubric_check_count": 154,
     "runtime_check_count": 6
   }
 }
