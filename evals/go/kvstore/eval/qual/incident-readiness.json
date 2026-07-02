@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "mttd",
+      "task": "Instrument the Go key-value store in ./service to reduce mean time to detect asynchronous persistence failures, search-index backpressure or staleness, and capacity eviction. Add safe app-owned detector-ready OpenTelemetry signals in addition to baseline HTTP/runtime telemetry. Preserve the existing cmd/kvstore-server startup path and package APIs, and do not invent filesystem or platform signals the service cannot observe."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting source, configuration, tests, and .observe reports.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Preserves cmd/kvstore-server and the kvstore package boundary while adding baseline OTLP setup, low-cardinality otelhttp server telemetry, resource identity, propagation, shutdown, and the existing launch/runtime integration.",
+    "Adds detector-ready app-owned signals for asynchronous persistence failures and outcomes, index queue pressure or active backlog, and capacity eviction; where useful it also exposes bounded persistence duration or active work without spawning telemetry goroutines per observation.",
+    "Uses accurate observable state such as channel depth/capacity, active persistence work, and explicit failure/eviction events; it does not claim filesystem capacity, durable-write success, or index freshness that the code cannot actually observe.",
+    "Keeps metric attributes bounded to operation, outcome, reason family, or component and never uses key, value, search term, raw path, request ID, goroutine ID, or error text as metric attributes.",
+    "Adds focused tests for the custom metric-producing persistence, queue/backpressure, and eviction paths and runs go test with the race detector or records a concrete blocker with command evidence.",
+    "Writes proof-aware instrumentation and verification handoff material that names exact signals, distinguishes MTTD-improving detector inputs from localization-only telemetry, and identifies any remaining filesystem/platform prerequisite."
+  ]
+}

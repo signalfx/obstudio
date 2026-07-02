@@ -48,6 +48,14 @@ PRIORITIES = {"required", "recommended", "deferred"}
 INSTRUMENT_MODES = {"default", "fix all", "manual decision"}
 PROOF_LEVELS = {"focused call-site", "full runtime", "either"}
 GENAI_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
+INCIDENT_READINESS_HEADER = [
+    "Area",
+    "Status",
+    "Evidence",
+    "Required Signals / Gap",
+    "Detection / Localization Impact",
+]
+INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 REQUIRED_TOP_LEVEL_HEADINGS = [
     "## Executive Summary",
@@ -214,6 +222,7 @@ def validate(path: Path) -> None:
         fail("an empty Gaps table must be followed by 'No gaps found.'")
 
     areas = set()
+    gap_rows_by_area: dict[str, list[list[str]]] = {}
     for row in gap_rows:
         if len(row) != len(GAP_HEADER):
             fail(f"malformed Gaps row: {row}")
@@ -241,6 +250,40 @@ def validate(path: Path) -> None:
                     f"or use manual decision: {row[1]}"
                 )
         areas.add(row[1])
+        gap_rows_by_area.setdefault(row[1], []).append(row)
+
+    current_instrumentation = section(text, "## Current Instrumentation")
+    incident_headings = list(
+        re.finditer(r"^### Incident Readiness\s*$", current_instrumentation, re.MULTILINE)
+    )
+    if len(incident_headings) > 1:
+        fail("Current Instrumentation must contain at most one Incident Readiness subsection")
+
+    incident_rows: list[list[str]] = []
+    if incident_headings:
+        incident_header, incident_rows = table(
+            subsection(current_instrumentation, "Incident Readiness"),
+            "Incident Readiness",
+        )
+        if incident_header != INCIDENT_READINESS_HEADER:
+            fail(f"Incident Readiness header must be {INCIDENT_READINESS_HEADER}")
+        if not incident_rows:
+            fail("Incident Readiness must contain at least one area row")
+
+        incident_areas = set()
+        for row in incident_rows:
+            if len(row) != len(INCIDENT_READINESS_HEADER) or any(not cell for cell in row):
+                fail(f"malformed Incident Readiness row: {row}")
+            if row[1] not in INCIDENT_READINESS_STATUSES:
+                fail(f"invalid Incident Readiness status: {row[1]}")
+            if row[0] in incident_areas:
+                fail(f"duplicate Incident Readiness area: {row[0]}")
+            incident_areas.add(row[0])
+            if row[1] in {"partial", "missing"} and row[0] not in gap_rows_by_area:
+                fail(
+                    "partial or missing Incident Readiness area has no identical "
+                    f"prioritized Gaps Area: {row[0]}"
+                )
 
     flow = section(text, "## Signal Flow")
     if "### Component Flow Map" not in flow:
@@ -313,6 +356,28 @@ def validate(path: Path) -> None:
                 f"Acceptance Scenario {scenario_id} references undefined "
                 f"environment IDs: {sorted(unknown)}"
             )
+
+    for incident_row in incident_rows:
+        area, status = incident_row[0], incident_row[1]
+        if status not in {"partial", "missing"}:
+            continue
+        for gap_row in gap_rows_by_area[area]:
+            references = [
+                value.strip().strip("`")
+                for value in re.split(r"\s*(?:,|<br\s*/?>)\s*", gap_row[6])
+                if value.strip()
+            ]
+            if not references or any(not STABLE_ID.fullmatch(value) for value in references):
+                fail(
+                    "Verification scenarios for Incident Readiness area "
+                    f"{area} must contain only stable scenario IDs"
+                )
+            unknown = set(references) - scenario_ids
+            if unknown:
+                fail(
+                    "Incident Readiness area references undefined verification "
+                    f"scenario IDs: {area}: {sorted(unknown)}"
+                )
 
     if not environment_rows and "No runnable surface detected" not in verification_plan:
         fail("Test Environments must define a profile or state no runnable surface")

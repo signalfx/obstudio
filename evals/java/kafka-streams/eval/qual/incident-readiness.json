@@ -1,0 +1,22 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "mttd",
+      "task": "Instrument the Java Kafka Streams service in ./service to reduce mean time to detect silent malformed/null record drops, stream-processing failures, and output-flow degradation. Add the safe app-owned custom OpenTelemetry metrics needed for detector-ready coverage as well as the standard Java-agent path. Preserve the Kafka topology and Guice structure, do not create a second SDK or Guice Tracer binding, and do not invent broker/platform signals the application cannot observe."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting source, configuration, tests, and .observe reports.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Preserves KafkaStreamsApplication.java, StreamProcessingModule.java, OrderStreamTopology.java, and the orders to orders.enriched plus orders.fraud-alerts topology while using the OpenTelemetry Java agent as the primary Kafka client/Streams instrumentation path.",
+    "Adds detector-ready app-owned metrics that distinguish successful records from null or malformed parse drops and expose stream-processing failure or lifecycle outcomes; metric attributes are bounded reason, outcome, or workflow values rather than payloads, record keys, order IDs, or exception messages.",
+    "Adds a meaningful latency, lag, age, or freshness signal only where the application can measure it accurately, and explicitly owner-maps broker lag, topic availability, or other unavailable platform signals instead of creating placeholders.",
+    "Avoids OpenTelemetrySdk construction, duplicate providers, broad per-record manual spans, and a Guice Tracer binding; custom instrumentation uses the agent-provided/global API boundary without changing application ownership.",
+    "Adds focused tests that exercise valid, null, and malformed records plus the custom telemetry path, and runs the existing Maven tests or records a concrete blocker with commands and evidence.",
+    "Writes proof-aware instrumentation and verification handoff material that names the exact signals added, identifies which are MTTD-improving versus localization-only, and leaves every unimplemented dependency or broker signal as an explicit prerequisite."
+  ]
+}

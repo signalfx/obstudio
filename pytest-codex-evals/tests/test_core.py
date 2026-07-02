@@ -21,7 +21,7 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
-from pytest_codex_evals.backends import _codex_subprocess_env, run_streamed_command
+from pytest_codex_evals.backends import AgentResult, _codex_subprocess_env, run_streamed_command
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
     grade_runtime,
@@ -36,6 +36,7 @@ from pytest_codex_evals.report import (
     render_reports_for_run_root,
     write_session_results,
 )
+from pytest_codex_evals.runner import run_case
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -653,6 +654,43 @@ def test_runtime_expectations_generic_endpoints():
     assert expectations.endpoints[0].url == "/api/users"
 
 
+def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills" / "sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct",
+        base_id="sample/service/rubric",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Evaluate the answer.",
+        fixture_dir=fixture_dir,
+        rubric=["Must pass."],
+    )
+    backend = RecordingBackend()
+
+    run_case(
+        repo_root=tmp_path,
+        run_root=tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run",
+        case=case,
+        skill_dir=skill_dir,
+        model="agent-model",
+        judge_model="judge-model",
+        rubric=True,
+        sides=("with_skill",),
+        backend=backend,
+        agent_timeout=2400,
+        judge_timeout=1200,
+    )
+
+    assert backend.agent_timeouts == [2400]
+    assert backend.judge_timeouts == [1200]
+
+
 def write_loaded_skill(root: Path, skill: str) -> None:
     skill_dir = root / ".agents" / "skills" / skill
     skill_dir.mkdir(parents=True)
@@ -663,3 +701,51 @@ def empty_trace(tmp_path: Path) -> Path:
     path = tmp_path / "trace.jsonl"
     path.write_text("", encoding="utf-8")
     return path
+
+
+class RecordingBackend:
+    name = "recording"
+
+    def __init__(self) -> None:
+        self.agent_timeouts: list[int] = []
+        self.judge_timeouts: list[int] = []
+
+    def run_agent(self, *, prompt: str, exec_dir: Path, model: str | None = None, timeout: int = 1200) -> AgentResult:
+        self.agent_timeouts.append(timeout)
+        trace_path = exec_dir / "trace.jsonl"
+        final_path = exec_dir / "last_message.md"
+        stderr_path = exec_dir / "stderr.txt"
+        trace_path.write_text(json.dumps({"type": "turn.completed", "usage": {"total_tokens": 1}}) + "\n", encoding="utf-8")
+        final_path.write_text("done", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+        return AgentResult(returncode=0, trace_path=trace_path, final_message_path=final_path, stderr_path=stderr_path)
+
+    def run_judge(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        schema_path: Path | None = None,
+        timeout: int = 900,
+    ) -> AgentResult:
+        self.judge_timeouts.append(timeout)
+        trace_path = exec_dir / "rubric_trace.jsonl"
+        output_path = exec_dir / "rubric_grade.json"
+        stderr_path = exec_dir / "rubric_stderr.txt"
+        trace_path.write_text(json.dumps({"type": "turn.completed", "usage": {"total_tokens": 1}}) + "\n", encoding="utf-8")
+        output_path.write_text(
+            json.dumps(
+                {
+                    "overall_pass": True,
+                    "score": 100,
+                    "checks": [{"id": "rubric-1", "pass": True, "notes": "ok", "evidence": "recorded"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        stderr_path.write_text("", encoding="utf-8")
+        return AgentResult(returncode=0, trace_path=trace_path, final_message_path=output_path, stderr_path=stderr_path)
+
+    def parse_trace(self, trace_path: Path):
+        return parse_trace(trace_path)

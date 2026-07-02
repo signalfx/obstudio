@@ -36,6 +36,8 @@ def run_case(
     eval_kind: str = "standard",
     sides: tuple[str, ...] = ("with_skill", "baseline"),
     backend: AgentBackend | None = None,
+    agent_timeout: int = 1200,
+    judge_timeout: int = 900,
 ) -> CaseResult:
     if backend is None:
         backend = CodexBackend()
@@ -59,6 +61,8 @@ def run_case(
                 runtime=runtime,
                 eval_kind=eval_kind,
                 backend=backend,
+                agent_timeout=agent_timeout,
+                judge_timeout=judge_timeout,
             )
         if "baseline" in sides:
             baseline = run_side(
@@ -75,6 +79,8 @@ def run_case(
                 runtime=runtime,
                 eval_kind=eval_kind,
                 backend=backend,
+                agent_timeout=agent_timeout,
+                judge_timeout=judge_timeout,
             )
         return CaseResult(
             id=case.id,
@@ -105,6 +111,8 @@ def run_side(
     runtime: bool,
     eval_kind: str,
     backend: AgentBackend,
+    agent_timeout: int,
+    judge_timeout: int,
 ) -> SideResult:
     side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
@@ -114,6 +122,7 @@ def run_side(
         prompt=prompt,
         exec_dir=exec_dir,
         model=model,
+        timeout=agent_timeout,
     )
     agent_duration_seconds = time.monotonic() - agent_start
 
@@ -146,6 +155,7 @@ def run_side(
                 side_dir=exec_dir,
                 model=judge_model or model,
                 backend=backend,
+                timeout=judge_timeout,
             )
         except Exception as exc:  # pragma: no cover - preserved in run artifacts
             errors.append(f"rubric grading failed: {exc}")
