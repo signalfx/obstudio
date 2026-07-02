@@ -541,7 +541,7 @@ are shown explicitly so engineers can work independently.
 | Component    | Layer | Deliverable                                                                          | Depends On |
 | ------------ | ----- | ------------------------------------------------------------------------------------ | ---------- |
 | **Observer** | 1     | OTLP ingest, web UI, MCP server, Splunk metrics/traces forwarding                   | —          |
-| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-sync`, `$splunk-dashboard`, `$splunk-dashboard-sync` (REST-direct) | —          |
+| **Skills**   | 1     | `$otel-audit`, `$otel-instrument`, `$otel-verify`, `$splunk-configure`, `$splunk-detector-publish`, `$splunk-dashboard`, `$splunk-dashboard-publish` (REST-direct) | —          |
 
 
 Observer and Skills have no dependency on each other. They can be developed,
