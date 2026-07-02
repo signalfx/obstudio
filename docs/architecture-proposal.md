@@ -109,9 +109,9 @@ data. It provides four surfaces:
 | Web UI              | HTTP on `:3000`                | Visual trace/metric/log explorer                        |
 
 Splunk forwarding is optional. Set `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` to
-enable it. The same token is used by `$splunk-sync` to read and create detectors
-(`GET`/`POST /v2/detector`) and by `$splunk-dashboard-sync` to read and create
-dashboards and charts (`GET`/`POST /v2/dashboard`, `/v2/chart`,
+enable it. The same token is used by `$splunk-detector-publish` to read and
+create detectors (`GET`/`POST /v2/detector`) and by `$splunk-dashboard-publish`
+to read and create dashboards and charts (`GET`/`POST /v2/dashboard`, `/v2/chart`,
 `/v2/dashboardgroup`) via the Splunk REST API.
 
 
@@ -133,9 +133,9 @@ Together they form a closed loop:
 │  5. Observer stores telemetry and may forward it to Splunk       │
 │  6. $otel-verify queries evidence and writes its report          │
 │  7. Agent reads $splunk-configure → generates detectors.tf       │
-│  8. Agent reads $splunk-sync → creates only the gap detectors    │
+│  8. Agent reads $splunk-detector-publish → creates gap detectors │
 │  9. Agent reads $splunk-dashboard → generates dashboards.tf      │
-│  10. Agent reads $splunk-dashboard-sync → creates the gap charts │
+│  10. Agent reads $splunk-dashboard-publish → creates gap charts  │
 │  11. Agent fixes instrumentation issues → go to step 3           │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -174,8 +174,8 @@ telemetry and validate instrumentation results.
 | Lifecycle management     | None                | Start, stop, restart, health check         |
 | Cross-platform binary    | Source code         | Single binary, zero deps                   |
 | Forward to Splunk O11y   | None                | `SPLUNK_ACCESS_TOKEN` + `SPLUNK_REALM`     |
-| Sync detectors to Splunk | None                | `$splunk-sync` via Splunk REST API         |
-| Sync dashboards to Splunk | None               | `$splunk-dashboard-sync` via Splunk REST API |
+| Sync detectors to Splunk | None                | `$splunk-detector-publish` via Splunk REST API  |
+| Sync dashboards to Splunk | None               | `$splunk-dashboard-publish` via Splunk REST API |
 | Preview dashboards locally | None              | Observer **Dashboards** tab + `GET /api/dashboards/preview` |
 
 
@@ -207,9 +207,10 @@ Every AI tool talks to the same endpoint: `http://localhost:3000/mcp`. No
 editor-specific protocol, no custom integration. Standard MCP over Streamable
 HTTP.
 
-Splunk detector operations (`$splunk-sync`) call the Splunk REST API directly
-(`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP server.
-Dashboard sync (`$splunk-dashboard-sync`) likewise calls the REST API directly
+Splunk detector operations (`$splunk-detector-publish`) call the Splunk REST API
+directly (`GET`/`POST /v2/detector`) — they do not go through the obstudio MCP
+server. Dashboard publish (`$splunk-dashboard-publish`) likewise calls the REST
+API directly
 (`GET`/`POST /v2/dashboard`, `/v2/chart`, `/v2/dashboardgroup`). The Observer's
 read-only `GET /api/dashboards/preview` endpoint is the one exception that *is*
 served by obstudio: it reads the `.observe/dashboards.preview.json` sidecar and

@@ -1,13 +1,13 @@
 {
-  "skill": "splunk-dashboard-sync",
+  "skill": "splunk-dashboard-publish",
   "prompts": [
     {
       "id": "direct",
-      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard-sync skill loaded."
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard-publish skill loaded."
     },
     {
       "id": "sync",
-      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard-sync ready."
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard-publish ready."
     }
   ]
 }
