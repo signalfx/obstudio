@@ -736,3 +736,50 @@ func TestParseProgramNotMultiValueFilterGroupIsCompound(t *testing.T) {
 }
 
 func floatPtr(f float64) *float64 { return &f }
+
+// TestParseProgramSingleValueFilterInCompoundNegationIsIgnored verifies that a
+// single-value filter inside a compound negated group is routed to IgnoredFilters
+// (not NegatedFilters), because the compound context makes safe negation
+// impossible via a simple per-key filter.
+func TestParseProgramSingleValueFilterInCompoundNegationIsIgnored(t *testing.T) {
+	// Two single-value filters in a NOT(...) group — both keys should be Ignored.
+	// Filters must live inside data(...) to be scoped by firstDataCallSpan.
+	got := ParseProgramText("data('cpu.util', filter=not (filter('region','us-east-1') and filter('env','prod'))).mean().publish()")
+	if len(got.NegatedFilters["region"]) != 0 {
+		t.Errorf("compound negated single-value filter 'region' must not land in NegatedFilters, got %v", got.NegatedFilters["region"])
+	}
+	if len(got.NegatedFilters["env"]) != 0 {
+		t.Errorf("compound negated single-value filter 'env' must not land in NegatedFilters, got %v", got.NegatedFilters["env"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "region") {
+		t.Errorf("compound negated single-value filter key 'region' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("compound negated single-value filter key 'env' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+}
+
+// TestParseProgramNegatedSingleValueTemplatedValueIsIgnored verifies that a
+// negated single-value filter whose value is a template expression (${...})
+// lands in both NegatedFilters and IgnoredFilters.
+func TestParseProgramNegatedSingleValueTemplatedValueIsIgnored(t *testing.T) {
+	// collectSingleValueFilters: a negated filter with a templated value (${...})
+	// records the key in NegatedFilters (so the caller sees the exclusion intent)
+	// AND in IgnoredFilters (because the value can't be rendered as a concrete
+	// panel filter). Filters must be inside data(...) for firstDataCallSpan to see them.
+	got := ParseProgramText("data('cpu.util', filter=not filter('region','${var.region}')).mean().publish()")
+	// Must appear in NegatedFilters — appendNegatedFilterValue is called but the
+	// value is empty/templated so it skips (see appendNegatedFilterValue line 524).
+	// Therefore: key does NOT land in NegatedFilters (the val is dropped), but it
+	// DOES land in IgnoredFilters so the UI knows the key was present but unusable.
+	if len(got.NegatedFilters["region"]) != 0 {
+		t.Errorf("templated negated filter value should be dropped from NegatedFilters, got %v", got.NegatedFilters["region"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "region") {
+		t.Errorf("negated single-value templated filter key should appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+	// Must not appear as a positive (allow) filter.
+	if len(got.Filters["region"]) != 0 {
+		t.Errorf("templated negated filter must not be a positive filter, got Filters[region]=%v", got.Filters["region"])
+	}
+}

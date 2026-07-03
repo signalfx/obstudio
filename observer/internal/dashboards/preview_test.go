@@ -933,4 +933,63 @@ func TestBuildOversizedFileRejected(t *testing.T) {
 	}
 }
 
+// TestResolveSpecPathTraversalRejected verifies that a SpecPath containing ".."
+// components is rejected and falls back to the workspace-relative default.
+func TestResolveSpecPathTraversalRejected(t *testing.T) {
+	root := t.TempDir()
+	got := resolveSpecPath(Config{
+		WorkspaceRoot: root,
+		SpecPath:      "../outside/dashboards.preview.json",
+	})
+	want := filepath.Join(root, DefaultSpecRelPath)
+	if got != want {
+		t.Errorf("traversal path not rejected: got %q, want %q", got, want)
+	}
+}
+
+// TestResolveSpecPathAbsoluteOutsideWorkspaceRejected verifies that an absolute
+// SpecPath that escapes the configured WorkspaceRoot falls back to the default.
+func TestResolveSpecPathAbsoluteOutsideWorkspaceRejected(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "evil.json") // a different temp dir
+	got := resolveSpecPath(Config{
+		WorkspaceRoot: root,
+		SpecPath:      outside,
+	})
+	want := filepath.Join(root, DefaultSpecRelPath)
+	if got != want {
+		t.Errorf("absolute path outside workspace not rejected: got %q, want %q", got, want)
+	}
+}
+
+// TestResolveSpecPathAbsoluteNoWorkspaceAccepted verifies that an absolute
+// SpecPath is accepted as-is when no WorkspaceRoot is configured (plain CLI use).
+func TestResolveSpecPathAbsoluteNoWorkspaceAccepted(t *testing.T) {
+	abs := filepath.Join(t.TempDir(), "dashboards.preview.json")
+	got := resolveSpecPath(Config{SpecPath: abs})
+	if got != abs {
+		t.Errorf("absolute path without workspace root should be accepted: got %q, want %q", got, abs)
+	}
+}
+
+// TestPathErrMsgStripsPath verifies that pathErrMsg returns only the syscall
+// error text (e.g. "no such file or directory") and not the absolute file path,
+// so it is safe to serve through the cross-origin endpoint.
+func TestPathErrMsgStripsPath(t *testing.T) {
+	// Trigger a real *os.PathError by reading a nonexistent file.
+	_, err := os.ReadFile(filepath.Join(t.TempDir(), "nonexistent.json"))
+	if err == nil {
+		t.Fatal("expected an error reading a nonexistent file")
+	}
+	msg := pathErrMsg(err)
+	// The message must not contain the temp-dir path.
+	if strings.Contains(msg, t.TempDir()) {
+		t.Errorf("pathErrMsg leaked filesystem path: %q", msg)
+	}
+	// It must still be non-empty and carry a useful syscall message.
+	if msg == "" {
+		t.Errorf("pathErrMsg returned empty string")
+	}
+}
+
 func strPtr(s string) *string { return &s }
