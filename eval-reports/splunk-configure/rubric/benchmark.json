@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-configure",
-    "run_id": "20260701T171952987919Z",
+    "run_id": "20260703T005240819871Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -21,19 +21,19 @@
     "failure_count": 0,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 36,
-      "duration_seconds": 336.199,
-      "agent_duration_seconds": 230.753,
-      "tokens": 457956,
-      "agent_tokens": 383020,
+      "command_count": 32,
+      "duration_seconds": 243.662,
+      "agent_duration_seconds": 183.628,
+      "tokens": 416161,
+      "agent_tokens": 341121,
       "error_count": 0,
       "rubric": {
         "passed": 6,
         "total": 6,
-        "average_score": 94.0
+        "average_score": 93.0
       },
-      "rubric_tokens": 74936,
-      "rubric_duration_seconds": 105.436
+      "rubric_tokens": 75040,
+      "rubric_duration_seconds": 60.02
     },
     "with_baseline": null
   },
@@ -49,26 +49,26 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 36,
-        "duration_seconds": 336.199,
-        "agent_duration_seconds": 230.753,
-        "tokens": 457956,
-        "agent_tokens": 383020,
+        "command_count": 32,
+        "duration_seconds": 243.662,
+        "agent_duration_seconds": 183.628,
+        "tokens": 416161,
+        "agent_tokens": 341121,
         "error_count": 0,
         "rubric": {
           "passed": 6,
           "total": 6,
-          "average_score": 94.0
+          "average_score": 93.0
         },
-        "rubric_tokens": 74936,
-        "rubric_duration_seconds": 105.436
+        "rubric_tokens": 75040,
+        "rubric_duration_seconds": 60.02
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20260703T005240819871Z/results/dashboards/checkout-configure/qual-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260703T005240819871Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260703T005240819871Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
       }
     }
   ],

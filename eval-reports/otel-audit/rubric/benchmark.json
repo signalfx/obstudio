@@ -7,33 +7,33 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-audit",
-    "run_id": "20260629T193514000000Z",
+    "run_id": "20260703T005240819871Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
     "runtime_enabled": false,
-    "workers": "merged",
+    "workers": "1",
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 4,
-    "prompt_count": 7,
-    "failure_count": 0,
+    "eval_count": 14,
+    "prompt_count": 27,
+    "failure_count": 21,
     "with_skill": {
-      "prompt_count": 7,
-      "command_count": 424,
-      "duration_seconds": 3648.375,
-      "agent_duration_seconds": 3110.884,
-      "tokens": 10789692,
-      "agent_tokens": 10064071,
+      "prompt_count": 27,
+      "command_count": 984,
+      "duration_seconds": 5663.623,
+      "agent_duration_seconds": 3980.499,
+      "tokens": 8708877,
+      "agent_tokens": 7173404,
       "error_count": 0,
       "rubric": {
-        "passed": 42,
-        "total": 42,
-        "average_score": 98.25
+        "passed": 132,
+        "total": 153,
+        "average_score": 89.46428571428571
       },
-      "rubric_tokens": 725621,
-      "rubric_duration_seconds": 537.059
+      "rubric_tokens": 1535473,
+      "rubric_duration_seconds": 1682.645
     },
     "with_baseline": null
   },
@@ -50,26 +50,298 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 98,
-        "duration_seconds": 1090.019,
-        "agent_duration_seconds": 931.862,
-        "tokens": 1874051,
-        "agent_tokens": 1702446,
+        "command_count": 64,
+        "duration_seconds": 393.445,
+        "agent_duration_seconds": 299.271,
+        "tokens": 585559,
+        "agent_tokens": 481105,
         "error_count": 0,
         "rubric": {
-          "passed": 12,
+          "passed": 11,
           "total": 12,
-          "average_score": 100.0
+          "average_score": 92.0
         },
-        "rubric_tokens": 171605,
-        "rubric_duration_seconds": 157.851
+        "rubric_tokens": 104454,
+        "rubric_duration_seconds": 94.149
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/go/chi-basic/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-basic/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/chi-partial/qual/audit",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 40,
+        "duration_seconds": 345.775,
+        "agent_duration_seconds": 255.246,
+        "tokens": 445746,
+        "agent_tokens": 339059,
+        "error_count": 0,
+        "rubric": {
+          "passed": 8,
+          "total": 10,
+          "average_score": 89.0
+        },
+        "rubric_tokens": 106687,
+        "rubric_duration_seconds": 90.499
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-partial/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-partial/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/chi-partial/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/kvstore/qual/audit",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 84,
+        "duration_seconds": 368.791,
+        "agent_duration_seconds": 253.624,
+        "tokens": 561256,
+        "agent_tokens": 431395,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 91.0
+        },
+        "rubric_tokens": 129861,
+        "rubric_duration_seconds": 115.126
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/kvstore/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/kvstore/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/go/kvstore/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/kafka-batch-consumer/qual/audit",
+      "case": "java/kafka-batch-consumer",
+      "language": "java",
+      "service": "kafka-batch-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 86,
+        "duration_seconds": 931.4,
+        "agent_duration_seconds": 508.868,
+        "tokens": 617693,
+        "agent_tokens": 512119,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 12,
+          "average_score": 87.0
+        },
+        "rubric_tokens": 105574,
+        "rubric_duration_seconds": 422.486
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-batch-consumer/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-batch-consumer/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-batch-consumer/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/kafka-listener-container/qual/audit",
+      "case": "java/kafka-listener-container",
+      "language": "java",
+      "service": "kafka-listener-container",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 82,
+        "duration_seconds": 314.99,
+        "agent_duration_seconds": 202.048,
+        "tokens": 421283,
+        "agent_tokens": 296181,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 12,
+          "average_score": 88.0
+        },
+        "rubric_tokens": 125102,
+        "rubric_duration_seconds": 112.903
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-listener-container/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-listener-container/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-listener-container/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/kafka-producer-consumer/qual/audit",
+      "case": "java/kafka-producer-consumer",
+      "language": "java",
+      "service": "kafka-producer-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 72,
+        "duration_seconds": 267.405,
+        "agent_duration_seconds": 172.354,
+        "tokens": 486619,
+        "agent_tokens": 383295,
+        "error_count": 0,
+        "rubric": {
+          "passed": 7,
+          "total": 12,
+          "average_score": 79.0
+        },
+        "rubric_tokens": 103324,
+        "rubric_duration_seconds": 95.004
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-producer-consumer/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-producer-consumer/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-producer-consumer/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/kafka-streams/qual/audit",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 116,
+        "duration_seconds": 348.91,
+        "agent_duration_seconds": 236.814,
+        "tokens": 711611,
+        "agent_tokens": 608688,
+        "error_count": 0,
+        "rubric": {
+          "passed": 13,
+          "total": 14,
+          "average_score": 88.5
+        },
+        "rubric_tokens": 102923,
+        "rubric_duration_seconds": 112.046
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-streams/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-streams/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/kafka-streams/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/springboot-basic/qual/audit",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 56,
+        "duration_seconds": 465.858,
+        "agent_duration_seconds": 374.437,
+        "tokens": 494955,
+        "agent_tokens": 392183,
+        "error_count": 0,
+        "rubric": {
+          "passed": 9,
+          "total": 10,
+          "average_score": 90.0
+        },
+        "rubric_tokens": 102772,
+        "rubric_duration_seconds": 91.383
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/springboot-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/springboot-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/java/springboot-basic/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "node/express-basic/qual/audit",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 54,
+        "duration_seconds": 283.043,
+        "agent_duration_seconds": 190.828,
+        "tokens": 530672,
+        "agent_tokens": 428389,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 10,
+          "average_score": 96.0
+        },
+        "rubric_tokens": 102283,
+        "rubric_duration_seconds": 92.189
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/node/express-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/node/express-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/node/express-basic/qual-audit/with_baseline.json"
       }
     },
     {
@@ -84,26 +356,26 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 126,
-        "duration_seconds": 1005.906,
-        "agent_duration_seconds": 856.799,
-        "tokens": 3747402,
-        "agent_tokens": 3540854,
+        "command_count": 76,
+        "duration_seconds": 584.743,
+        "agent_duration_seconds": 478.293,
+        "tokens": 1444638,
+        "agent_tokens": 1311878,
         "error_count": 0,
         "rubric": {
-          "passed": 12,
+          "passed": 10,
           "total": 12,
-          "average_score": 98.0
+          "average_score": 88.0
         },
-        "rubric_tokens": 206548,
-        "rubric_duration_seconds": 149.055
+        "rubric_tokens": 132760,
+        "rubric_duration_seconds": 106.42
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T192551050228Z/results/python/ai-assistant-demo/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/ai-assistant-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/ai-assistant-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/ai-assistant-demo/qual-audit/with_baseline.json"
       }
     },
     {
@@ -117,26 +389,94 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 62,
-        "duration_seconds": 533.296,
-        "agent_duration_seconds": 430.276,
-        "tokens": 1603835,
-        "agent_tokens": 1464068,
+        "command_count": 42,
+        "duration_seconds": 216.299,
+        "agent_duration_seconds": 165.917,
+        "tokens": 374813,
+        "agent_tokens": 320731,
         "error_count": 0,
         "rubric": {
           "passed": 6,
           "total": 6,
-          "average_score": 95.0
+          "average_score": 96.0
         },
-        "rubric_tokens": 139767,
-        "rubric_duration_seconds": 102.986
+        "rubric_tokens": 54082,
+        "rubric_duration_seconds": 50.367
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/assistant-v3-framework-bridge-demo/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/fastapi-celery/qual/audit",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 66,
+        "duration_seconds": 353.511,
+        "agent_duration_seconds": 255.43,
+        "tokens": 548966,
+        "agent_tokens": 444322,
+        "error_count": 0,
+        "rubric": {
+          "passed": 6,
+          "total": 10,
+          "average_score": 82.0
+        },
+        "rubric_tokens": 104644,
+        "rubric_duration_seconds": 98.049
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/fastapi-celery/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/fastapi-celery/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/fastapi-celery/qual-audit/with_baseline.json"
+      }
+    },
+    {
+      "id": "python/flask-basic/qual/audit",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 58,
+        "duration_seconds": 239.153,
+        "agent_duration_seconds": 163.36,
+        "tokens": 410874,
+        "agent_tokens": 328519,
+        "error_count": 0,
+        "rubric": {
+          "passed": 10,
+          "total": 11,
+          "average_score": 92.0
+        },
+        "rubric_tokens": 82355,
+        "rubric_duration_seconds": 75.767
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/flask-basic/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/flask-basic/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/flask-basic/qual-audit/with_baseline.json"
       }
     },
     {
@@ -151,28 +491,218 @@
       ],
       "with_skill": {
         "prompt_count": 2,
-        "command_count": 138,
-        "duration_seconds": 1019.154,
-        "agent_duration_seconds": 891.947,
-        "tokens": 3564404,
-        "agent_tokens": 3356703,
+        "command_count": 88,
+        "duration_seconds": 550.3,
+        "agent_duration_seconds": 424.009,
+        "tokens": 1074192,
+        "agent_tokens": 895540,
         "error_count": 0,
         "rubric": {
           "passed": 12,
           "total": 12,
-          "average_score": 100.0
+          "average_score": 94.0
         },
-        "rubric_tokens": 207701,
-        "rubric_duration_seconds": 127.167
+        "rubric_tokens": 178652,
+        "rubric_duration_seconds": 126.257
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20260629T185827725543Z/results/python/mcp-ai-tool-demo/qual-audit/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/mcp-ai-tool-demo/qual-audit/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/mcp-ai-tool-demo/qual-audit/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20260703T005240819871Z/results/python/mcp-ai-tool-demo/qual-audit/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "service": "go/chi-basic",
+      "side": "with_skill",
+      "prompt": "readiness-review",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "Recommendation says 'official chi/net/http request instrumentation'; no occurrence of 'otelhttp' or 'otelchi' in service/.observe/otel.md or final response.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "last_message.md and .observe/otel.md identify dynamic span name GetTask-%d / fmt.Sprintf(\"GetTask-%d\", id). .observe/otel.md notes the custom tracer at service/main.go:54, but does not explicitly flag creating otel.Tracer inside the handler as a gap or anti-pattern.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": ".observe/otel.md says no active meter provider, no explicit service.name/resource identity, and no tracer provider shutdown. No mention of TextMapPropagator or propagation configuration was found.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-batch-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "Final response says no OTel dependencies, SDK setup, Java agent startup config, OTLP exporter config, spans, metrics, or log correlation; it does not mention Tracer/custom Tracer.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-batch-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Final response says to use Java agent Kafka client instrumentation, but lists batch workflow outcome metrics as required and app-owned/default rather than optional custom signals.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-listener-container",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Final response says there is no Java agent startup path and no matching OTel Java agent configuration for Kafka consumer/listener spans, but contains no explicit recommendation section and no manual Kafka client avoidance guidance.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-listener-container",
+      "side": "with_skill",
+      "prompt": "readiness-review",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "Final response calls out missing Kafka listener consume telemetry/spans, malformed parse/drop visibility, processed counts, critical alert counts, listener error status/exception visibility, and consumer lag/backpressure. It omits explicit null payload visibility and explicit consumer offset visibility.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-producer-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "Final response: \"Entry point | `ProducerConsumerApplication.main` creates Kafka producer/consumer and runs forever\". KafkaClientConfig is not called out as the configuration surface.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-producer-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "Final response says \"consumed order to produced shipment\" but does not mention `orders` or `shipments`.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-producer-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "Final response: \"No OTel SDK, Java agent startup config, OTLP exporter config, resource attributes, custom spans, metrics, or log correlation were found.\"",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-producer-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "Final response lists gaps for \"Kafka consume/process/produce trace continuity\", \"Dropped malformed/null orders\", \"Kafka backpressure/lag\", and \"Producer send outcome\".",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-producer-consumer",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Final response says \"Add Java agent startup or SDK bootstrap\" and \"Enable official Java Kafka client instrumentation\", which is weaker and less specific than the rubric requirement.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/kafka-streams",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "Final response says: \"Framework: Kafka Streams with Guice\" and mentions Kafka workflow, but omits both KafkaStreamsApplication.java and StreamProcessingModule.java.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "Final response says \"No route-level request spans, latency, count, status, or error metrics exist\" and mentions \"HTTP duration/count metrics,\" but does not name exact signals such as route-level server spans and HTTP server request duration/count metrics with status/error attributes.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/ai-assistant-demo",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Top-level sections include `Executive Summary`, `Flow`, `Audit Evidence`, `Routes`, `Signal Flow`, `Current Instrumentation`, `GenAI Readiness`, `Gaps`, `Verification Plan`, `Anti-Patterns`, and `Recommendation`, rather than only `Current Instrumentation`, `GenAI Readiness`, `Gaps`, and `Verification Plan`.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/ai-assistant-demo",
+      "side": "with_skill",
+      "prompt": "genai-readiness",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Additional top-level headings include Executive Summary, Flow, Audit Evidence, Routes, Signal Flow, Anti-Patterns, and Recommendation.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-2 FAIL",
+      "evidence": "The audit evidence references `pyproject.toml`, `app.py`, `worker.py`, `docker-compose.yml`, and `Makefile`; no `Dockerfile` reference appears in `last_message.md`.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "The response says FastAPI routes lack server spans and Celery task paths lack telemetry, but contains no explicit `ASGI` or HTTP client instrumentation finding.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "readiness-review",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "Gaps include `API request telemetry`, `Queue publish and context propagation`, and `Worker task telemetry`; no explicit `ASGI` or `HTTP client` instrumentation finding appears.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "readiness-review",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "It says API starts `uvicorn app:app`, worker starts `celery -A worker worker`, and notes missing service names/OTLP config, but does not tie these concretely to docker-compose environment and command wiring.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "Final response says no SDK/provider setup and no Flask instrumentation/exporters, while pyproject.toml only declares Flask.",
+      "mode": "with_skill"
+    }
+  ]
 }

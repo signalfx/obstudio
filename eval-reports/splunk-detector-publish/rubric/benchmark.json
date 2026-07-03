@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-detector-publish",
-    "run_id": "20260701T172243033759Z",
+    "run_id": "20260703T005240819871Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -18,22 +18,22 @@
   "summary": {
     "eval_count": 1,
     "prompt_count": 1,
-    "failure_count": 0,
+    "failure_count": 3,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 30,
-      "duration_seconds": 289.444,
-      "agent_duration_seconds": 163.756,
-      "tokens": 419770,
-      "agent_tokens": 267590,
+      "command_count": 16,
+      "duration_seconds": 141.995,
+      "agent_duration_seconds": 85.668,
+      "tokens": 227201,
+      "agent_tokens": 127669,
       "error_count": 0,
       "rubric": {
-        "passed": 6,
+        "passed": 3,
         "total": 6,
-        "average_score": 92.0
+        "average_score": 48.0
       },
-      "rubric_tokens": 152180,
-      "rubric_duration_seconds": 125.677
+      "rubric_tokens": 99532,
+      "rubric_duration_seconds": 56.314
     },
     "with_baseline": null
   },
@@ -49,28 +49,56 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 30,
-        "duration_seconds": 289.444,
-        "agent_duration_seconds": 163.756,
-        "tokens": 419770,
-        "agent_tokens": 267590,
+        "command_count": 16,
+        "duration_seconds": 141.995,
+        "agent_duration_seconds": 85.668,
+        "tokens": 227201,
+        "agent_tokens": 127669,
         "error_count": 0,
         "rubric": {
-          "passed": 6,
+          "passed": 3,
           "total": 6,
-          "average_score": 92.0
+          "average_score": 48.0
         },
-        "rubric_tokens": 152180,
-        "rubric_duration_seconds": 125.677
+        "rubric_tokens": 99532,
+        "rubric_duration_seconds": 56.314
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-detector-publish/20260703T005240819871Z/results/dashboards/checkout-detectors/qual-detector-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260703T005240819871Z/results/dashboards/checkout-detectors/qual-detector-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260703T005240819871Z/results/dashboards/checkout-detectors/qual-detector-publish/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "service": "dashboards/checkout-detectors",
+      "side": "with_skill",
+      "prompt": "offline-plan",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "Final says 'UNCERTAIN (3)' and 'GAP (0)'; Reason text is 'Sandbox has no network access, so absence or presence of a matching live detector cannot be proven.'",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-detectors",
+      "side": "with_skill",
+      "prompt": "offline-plan",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "Final: 'No POST /v2/detector would run from this offline plan because there are zero confirmed GAP specs.'",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-detectors",
+      "side": "with_skill",
+      "prompt": "offline-plan",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "Final includes an AutoDetect Advisory section, but the POST section lacks payload bodies and does not show programText or detectLabel fields.",
+      "mode": "with_skill"
+    }
+  ]
 }

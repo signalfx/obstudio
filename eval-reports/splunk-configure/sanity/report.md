@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-configure |
-| Run ID | 20260701T171200957051Z |
+| Run ID | 20260703T004610819508Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
 | Config | evals/codex-evals.toml |
@@ -16,7 +16,7 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/configure | sanity/skill-smoke | 2 | 100% (4/4) | 41.0K | 1.0m | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/configure | sanity/skill-smoke | 2 | 100% (4/4) | 50.6K | 29.2s | - | - | - |
 
 ## Sanity Failures
 

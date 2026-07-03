@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260701T175624671458Z",
+    "run_id": "20260703T005240819871Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
@@ -18,22 +18,22 @@
   "summary": {
     "eval_count": 1,
     "prompt_count": 1,
-    "failure_count": 0,
+    "failure_count": 2,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 34,
-      "duration_seconds": 317.639,
-      "agent_duration_seconds": 198.665,
-      "tokens": 499522,
-      "agent_tokens": 310676,
+      "command_count": 22,
+      "duration_seconds": 159.746,
+      "agent_duration_seconds": 97.892,
+      "tokens": 234754,
+      "agent_tokens": 132795,
       "error_count": 0,
       "rubric": {
-        "passed": 6,
+        "passed": 4,
         "total": 6,
-        "average_score": 96.0
+        "average_score": 82.0
       },
-      "rubric_tokens": 188846,
-      "rubric_duration_seconds": 118.961
+      "rubric_tokens": 101959,
+      "rubric_duration_seconds": 61.839
     },
     "with_baseline": null
   },
@@ -49,28 +49,47 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 34,
-        "duration_seconds": 317.639,
-        "agent_duration_seconds": 198.665,
-        "tokens": 499522,
-        "agent_tokens": 310676,
+        "command_count": 22,
+        "duration_seconds": 159.746,
+        "agent_duration_seconds": 97.892,
+        "tokens": 234754,
+        "agent_tokens": 132795,
         "error_count": 0,
         "rubric": {
-          "passed": 6,
+          "passed": 4,
           "total": 6,
-          "average_score": 96.0
+          "average_score": 82.0
         },
-        "rubric_tokens": 188846,
-        "rubric_duration_seconds": 118.961
+        "rubric_tokens": 101959,
+        "rubric_duration_seconds": 61.839
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260701T175624671458Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-dashboard-publish/20260703T005240819871Z/results/dashboards/checkout-sync/qual-dashboard-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-dashboard-publish/20260703T005240819871Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-dashboard-publish/20260703T005240819871Z/results/dashboards/checkout-sync/qual-dashboard-publish/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "service": "dashboards/checkout-sync",
+      "side": "with_skill",
+      "prompt": "offline-plan",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "Final diff includes checkout Overview, checkout RED, and charts kpi_p99_latency, p99_latency, error_rate. Creation order says: \"referencing the returned chartId values with the Terraform grid placements\" but omits column/row/width/height values.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-sync",
+      "side": "with_skill",
+      "prompt": "offline-plan",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "Final says no network calls, no credential reads, no create/update/delete, and no ledger. It does not include a \"Confirm? (yes/no)\" or equivalent explicit confirmation prompt.",
+      "mode": "with_skill"
+    }
+  ]
 }

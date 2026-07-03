@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "splunk-detector-publish",
-    "run_id": "20260701T171156660896Z",
+    "run_id": "20260703T004610819508Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,10 +22,10 @@
     "with_skill": {
       "prompt_count": 2,
       "command_count": 0,
-      "duration_seconds": 35.765,
-      "agent_duration_seconds": 35.753,
-      "tokens": 38262,
-      "agent_tokens": 38262,
+      "duration_seconds": 29.9,
+      "agent_duration_seconds": 29.888,
+      "tokens": 39182,
+      "agent_tokens": 39182,
       "error_count": 0,
       "checks": {
         "passed": 4,
@@ -49,10 +49,10 @@
       "with_skill": {
         "prompt_count": 2,
         "command_count": 0,
-        "duration_seconds": 35.765,
-        "agent_duration_seconds": 35.753,
-        "tokens": 38262,
-        "agent_tokens": 38262,
+        "duration_seconds": 29.9,
+        "agent_duration_seconds": 29.888,
+        "tokens": 39182,
+        "agent_tokens": 39182,
         "error_count": 0,
         "checks": {
           "passed": 4,
@@ -63,9 +63,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-detector-publish/20260703T004610819508Z/results/sanity/skill-smoke/sanity-detector-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260703T004610819508Z/results/sanity/skill-smoke/sanity-detector-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260703T004610819508Z/results/sanity/skill-smoke/sanity-detector-publish/with_baseline.json"
       }
     }
   ],

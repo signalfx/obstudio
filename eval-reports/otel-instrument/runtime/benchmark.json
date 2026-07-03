@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "runtime",
     "skill": "otel-instrument",
-    "run_id": "20260430T170207539067Z",
+    "run_id": "20260703T070947771518Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -18,17 +18,17 @@
   "summary": {
     "eval_count": 6,
     "prompt_count": 6,
-    "failure_count": 0,
+    "failure_count": 6,
     "with_skill": {
       "prompt_count": 6,
-      "command_count": 500,
-      "duration_seconds": 1635.874,
-      "agent_duration_seconds": 1529.577,
-      "tokens": 7459751,
-      "agent_tokens": 7459751,
+      "command_count": 580,
+      "duration_seconds": 2163.813,
+      "agent_duration_seconds": 2163.228,
+      "tokens": 9208580,
+      "agent_tokens": 9208580,
       "error_count": 0,
       "checks": {
-        "passed": 6,
+        "passed": 0,
         "total": 6,
         "skipped": 0
       }
@@ -47,14 +47,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 142,
-        "duration_seconds": 367.622,
-        "agent_duration_seconds": 346.386,
-        "tokens": 3174728,
-        "agent_tokens": 3174728,
+        "command_count": 104,
+        "duration_seconds": 318.917,
+        "agent_duration_seconds": 318.83,
+        "tokens": 1847965,
+        "agent_tokens": 1847965,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -62,9 +62,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-basic/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-basic/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-basic/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-basic/runtime-instrument/with_baseline.json"
       }
     },
     {
@@ -78,14 +78,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 90,
-        "duration_seconds": 274.173,
-        "agent_duration_seconds": 256.11,
-        "tokens": 1108951,
-        "agent_tokens": 1108951,
+        "command_count": 110,
+        "duration_seconds": 349.187,
+        "agent_duration_seconds": 349.093,
+        "tokens": 1992506,
+        "agent_tokens": 1992506,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -93,9 +93,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-partial/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-partial/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/chi-partial/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-partial/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-partial/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/chi-partial/runtime-instrument/with_baseline.json"
       }
     },
     {
@@ -109,14 +109,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 132,
-        "duration_seconds": 305.485,
-        "agent_duration_seconds": 288.313,
-        "tokens": 1653416,
-        "agent_tokens": 1653416,
+        "command_count": 136,
+        "duration_seconds": 487.842,
+        "agent_duration_seconds": 487.741,
+        "tokens": 2782328,
+        "agent_tokens": 2782328,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -124,9 +124,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/kvstore/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/kvstore/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/go/kvstore/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/kvstore/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/kvstore/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/go/kvstore/runtime-instrument/with_baseline.json"
       }
     },
     {
@@ -140,14 +140,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 32,
-        "duration_seconds": 276.599,
-        "agent_duration_seconds": 256.293,
-        "tokens": 415571,
-        "agent_tokens": 415571,
+        "command_count": 60,
+        "duration_seconds": 400.151,
+        "agent_duration_seconds": 400.051,
+        "tokens": 898201,
+        "agent_tokens": 898201,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -155,9 +155,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/node/express-basic/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/node/express-basic/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/node/express-basic/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/node/express-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/node/express-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/node/express-basic/runtime-instrument/with_baseline.json"
       }
     },
     {
@@ -171,14 +171,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 64,
-        "duration_seconds": 235.736,
-        "agent_duration_seconds": 224.663,
-        "tokens": 616708,
-        "agent_tokens": 616708,
+        "command_count": 88,
+        "duration_seconds": 320.151,
+        "agent_duration_seconds": 320.043,
+        "tokens": 778135,
+        "agent_tokens": 778135,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -186,9 +186,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/fastapi-celery/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/fastapi-celery/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/fastapi-celery/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/fastapi-celery/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/fastapi-celery/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/fastapi-celery/runtime-instrument/with_baseline.json"
       }
     },
     {
@@ -202,14 +202,14 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 40,
-        "duration_seconds": 176.259,
-        "agent_duration_seconds": 157.812,
-        "tokens": 490377,
-        "agent_tokens": 490377,
+        "command_count": 82,
+        "duration_seconds": 287.565,
+        "agent_duration_seconds": 287.47,
+        "tokens": 909445,
+        "agent_tokens": 909445,
         "error_count": 0,
         "checks": {
-          "passed": 1,
+          "passed": 0,
           "total": 1,
           "skipped": 0
         }
@@ -217,11 +217,66 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/flask-basic/runtime-instrument/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/flask-basic/runtime-instrument/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20260430T170207539067Z/results/python/flask-basic/runtime-instrument/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/flask-basic/runtime-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/flask-basic/runtime-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260703T070947771518Z/results/python/flask-basic/runtime-instrument/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "service": "go/chi-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-fa1d834fab90 -f /Users/btiwana/obstudio/evals/go/chi-basic/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-fda0f6c07909 -f /Users/btiwana/obstudio/evals/go/chi-partial/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/kvstore",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-e301479ca1f3 -f /Users/btiwana/obstudio/evals/go/kvstore/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    },
+    {
+      "service": "node/express-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-9cb9bedba866 -f /Users/btiwana/obstudio/evals/node/express-basic/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/fastapi-celery",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-d1f09e4b9234 -f /Users/btiwana/obstudio/evals/python/fastapi-celery/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    },
+    {
+      "service": "python/flask-basic",
+      "side": "with_skill",
+      "prompt": "runtime-preserving",
+      "category": "runtime",
+      "result": "runtime:observer-runtime-telemetry FAIL",
+      "evidence": "Runtime check failed: docker compose -p codex-eval-7c54f3f1ad45 -f /Users/btiwana/obstudio/evals/python/flask-basic/eval/runtime/docker-compose.yml up -d --build exited 125: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information; compose logs: unknown shorthand flag: 'p' in -p Usage: docker [OPTIONS] COMMAND [ARG...] Run 'docker --help' for more information",
+      "mode": "with_skill"
+    }
+  ]
 }

@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | splunk-configure |
-| Run ID | 20260701T171952987919Z |
+| Run ID | 20260703T005240819871Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
@@ -18,7 +18,7 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | dashboards/checkout-configure/qual/configure | dashboards/checkout-configure | 1 | 100% (6/6), avg score 94 | 458.0K | 5.6m | - | - | - |
+| with_skill | dashboards/checkout-configure/qual/configure | dashboards/checkout-configure | 1 | 100% (6/6), avg score 93 | 416.2K | 4.1m | - | - | - |
 
 ## Rubric Failures
 
