@@ -42,6 +42,14 @@ export function DashboardPanel({ panel, windowMs = 0, onExpand }: DashboardPanel
       <div className="dashboard-panel__head">
         <span className="dashboard-panel__title">{panel.title || panel.label}</span>
         <div className="dashboard-panel__head-right">
+          {panel.truncated && panel.matched ? (
+            <span
+              className="dashboard-panel__chip dashboard-panel__chip--truncated"
+              title="Some data points were dropped to fit the preview budget. The panel shows partial data — narrow the time window for complete results."
+            >
+              ⚠ data trimmed
+            </span>
+          ) : null}
           {(panel.query?.ignoredFilters?.length ?? 0) > 0 ? (
             <span
               className="dashboard-panel__chip dashboard-panel__chip--ignored"
@@ -82,9 +90,11 @@ function renderBody(
     return <div className="dashboard-panel__text">{panel.text ?? ""}</div>;
   }
 
-  // Budget exhausted before this panel could be resolved — show a distinct state
-  // rather than the misleading "No local series" or "No data" empty state.
-  if (panel.truncated) {
+  // Budget exhausted AND panel was skipped entirely (no data resolved at all) —
+  // show a distinct empty state rather than the misleading "No local series" card.
+  // When truncated=true but matched=true the panel has partial data; fall through
+  // to the normal render path and let the header chip surface the warning there.
+  if (panel.truncated && !panel.matched) {
     return (
       <div className="dashboard-panel__empty dashboard-panel__empty--truncated">
         <span className="dashboard-panel__empty-title">Preview budget exhausted</span>

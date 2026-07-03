@@ -48,10 +48,9 @@ describe("DashboardPanel", () => {
     expect(screen.getByText(/no data/i)).toBeTruthy();
   });
 
-  it("shows a budget-exhausted card (not 'No local series') when panel.truncated is set", () => {
-    // A truncated panel has matched:false and no metrics because the backend
-    // dropped it before resolving — it must show the budget-exhausted state, not
-    // the misleading "No local series matches" empty state.
+  it("shows a budget-exhausted card (not 'No local series') when truncated=true and matched=false", () => {
+    // Panel was skipped entirely (budget spent before it was reached): matched=false,
+    // no metrics. Must show the budget-exhausted empty state, not "No local series".
     const panel = makePanel({ matched: false, metrics: [], truncated: true });
     render(
       <OtlpEndpointContext.Provider value="http://localhost:4318">
@@ -61,6 +60,21 @@ describe("DashboardPanel", () => {
 
     expect(screen.getByText(/Preview budget exhausted/i)).toBeTruthy();
     expect(screen.queryByText(/No local series/i)).toBeNull();
+  });
+
+  it("renders panel data with a 'data trimmed' chip when truncated=true and matched=true", () => {
+    // Partial-trim case: the backend resolved metrics but dropped some points to
+    // fit the budget. The panel should still render its data (SVG chart) and show
+    // a warning chip — NOT the "budget exhausted" empty state.
+    const panel = makePanel({ truncated: true });
+    const { container } = render(<DashboardPanel panel={panel} />);
+
+    // Chart data is still rendered.
+    expect(container.querySelector("svg")).toBeTruthy();
+    // Warning chip is present.
+    expect(container.querySelector(".dashboard-panel__chip--truncated")).toBeTruthy();
+    // Empty-state card is NOT shown.
+    expect(screen.queryByText(/Preview budget exhausted/i)).toBeNull();
   });
 
   it("passes markdown through for a text panel", () => {
