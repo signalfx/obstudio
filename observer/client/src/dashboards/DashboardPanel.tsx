@@ -82,6 +82,17 @@ function renderBody(
     return <div className="dashboard-panel__text">{panel.text ?? ""}</div>;
   }
 
+  // Budget exhausted before this panel could be resolved — show a distinct state
+  // rather than the misleading "No local series" or "No data" empty state.
+  if (panel.truncated) {
+    return (
+      <div className="dashboard-panel__empty dashboard-panel__empty--truncated">
+        <span className="dashboard-panel__empty-title">Preview budget exhausted</span>
+        <span className="dashboard-panel__empty-hint">Earlier panels used the available data budget. Narrow the time window or reload to see this panel.</span>
+      </div>
+    );
+  }
+
   // Couldn't recover a metric from the SignalFlow.
   if (panel.query?.parseError) {
     return (

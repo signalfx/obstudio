@@ -48,6 +48,21 @@ describe("DashboardPanel", () => {
     expect(screen.getByText(/no data/i)).toBeTruthy();
   });
 
+  it("shows a budget-exhausted card (not 'No local series') when panel.truncated is set", () => {
+    // A truncated panel has matched:false and no metrics because the backend
+    // dropped it before resolving — it must show the budget-exhausted state, not
+    // the misleading "No local series matches" empty state.
+    const panel = makePanel({ matched: false, metrics: [], truncated: true });
+    render(
+      <OtlpEndpointContext.Provider value="http://localhost:4318">
+        <DashboardPanel panel={panel} />
+      </OtlpEndpointContext.Provider>
+    );
+
+    expect(screen.getByText(/Preview budget exhausted/i)).toBeTruthy();
+    expect(screen.queryByText(/No local series/i)).toBeNull();
+  });
+
   it("passes markdown through for a text panel", () => {
     const panel = makePanel({
       chartType: "text",

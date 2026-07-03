@@ -138,7 +138,14 @@ func negatedGroupSpans(program string) []negatedSpan {
 			end = len(program)
 		}
 		body := program[open:end]
-		compound := len(reFilter.FindAllStringIndex(body, -1)) >= 2
+		// Use reFilterMulti (not reFilter) for compound detection: reFilterMulti
+		// matches both single-value filter('k','v') and multi-value
+		// filter('k','v1','v2') forms, so a group like
+		// not (filter('region','us1','us2') and filter('env','prod')) is correctly
+		// counted as 2 and classified compound. reFilter only matches the
+		// single-value form, so it would see only 1 match in that group and
+		// incorrectly flatten it to per-key NegatedFilters.
+		compound := len(reFilterMulti.FindAllStringIndex(body, -1)) >= 2
 		spans = append(spans, negatedSpan{start: loc[0], end: end, compound: compound})
 	}
 

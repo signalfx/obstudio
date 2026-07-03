@@ -702,4 +702,37 @@ func TestParseProgramUnbalancedNegationGroup(t *testing.T) {
 	}
 }
 
+// TestParseProgramNotMultiValueFilterGroupIsCompound verifies that a negation
+// group containing a multi-value filter() call and a single-value filter() call
+// is correctly classified as compound and routes both keys to IgnoredFilters.
+//
+// Before the fix, negatedGroupSpans() counted only reFilter (single-value)
+// matches: filter('region','us1','us2') is only matched by reFilterMulti, so
+// the group was seen as having 1 filter() and classified non-compound, causing
+// the keys to be incorrectly flattened into per-key NegatedFilters.
+func TestParseProgramNotMultiValueFilterGroupIsCompound(t *testing.T) {
+	got := ParseProgramText("data('m', filter=not (filter('region','us1','us2') and filter('env','prod'))).publish()")
+	if got.ParseError != "" {
+		t.Fatalf("unexpected ParseError: %s", got.ParseError)
+	}
+	if len(got.Filters["region"]) != 0 {
+		t.Errorf("compound negated filter must not be a positive constraint, got Filters[region]=%v", got.Filters["region"])
+	}
+	if len(got.Filters["env"]) != 0 {
+		t.Errorf("compound negated filter must not be a positive constraint, got Filters[env]=%v", got.Filters["env"])
+	}
+	if len(got.NegatedFilters["region"]) != 0 {
+		t.Errorf("compound negated multi-value filter must not land in NegatedFilters, got NegatedFilters[region]=%v", got.NegatedFilters["region"])
+	}
+	if len(got.NegatedFilters["env"]) != 0 {
+		t.Errorf("compound negated filter must not land in NegatedFilters, got NegatedFilters[env]=%v", got.NegatedFilters["env"])
+	}
+	if !slices.Contains(got.IgnoredFilters, "region") {
+		t.Errorf("compound negated filter key 'region' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+	if !slices.Contains(got.IgnoredFilters, "env") {
+		t.Errorf("compound negated filter key 'env' must appear in IgnoredFilters, got %v", got.IgnoredFilters)
+	}
+}
+
 func floatPtr(f float64) *float64 { return &f }
