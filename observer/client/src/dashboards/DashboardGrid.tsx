@@ -5,7 +5,7 @@ import type { PreviewPanel } from "./types";
 interface DashboardGridProps {
   panels: PreviewPanel[];
   windowMs: number;
-  onExpand: (panel: PreviewPanel) => void;
+  onExpand: (panel: PreviewPanel, panelIdx: number) => void;
 }
 
 export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps): React.ReactElement {
@@ -30,7 +30,7 @@ export function DashboardGrid({ panels, windowMs, onExpand }: DashboardGridProps
               gridRow: `${layout.row + 1} / span ${layout.height}`,
             }}
           >
-            <DashboardPanel panel={panel} windowMs={windowMs} onExpand={onExpand} />
+            <DashboardPanel panel={panel} windowMs={windowMs} onExpand={(p) => onExpand(p, i)} />
           </div>
         );
       })}

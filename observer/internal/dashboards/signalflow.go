@@ -154,17 +154,29 @@ func negatedGroupSpans(program string) []negatedSpan {
 
 // isNegatedFilter reports whether the filter match at matchStart is negated,
 // either by an immediately preceding "not" keyword (with optional wrapping
-// parens) or by falling inside a "not ( ... )" negation group. Uses a
-// full-prefix regex with a word boundary so any amount of whitespace (including
-// newlines) and identifiers ending in "not" are handled correctly.
+// parens) or by falling inside an odd number of "not ( ... )" negation groups.
+// The odd-depth rule handles double negation: not (not (filter(...))) wraps
+// the filter in two spans; even nesting depth cancels out to a positive filter.
+// Uses a full-prefix regex with a word boundary so any amount of whitespace
+// (including newlines) and identifiers ending in "not" are handled correctly.
 func isNegatedFilter(program string, matchStart int, negated []negatedSpan) bool {
-	if reNot.MatchString(program[:matchStart]) {
-		return true
-	}
+	// Count how many negated spans contain this position. Even depth = positive
+	// (double negation cancels); odd depth = negated.
+	depth := 0
 	for _, span := range negated {
 		if matchStart >= span.start && matchStart < span.end {
-			return true
+			depth++
 		}
+	}
+	if depth%2 == 1 {
+		return true
+	}
+	// Span-based check was non-negative; fall back to the inline "not" prefix
+	// only when the filter is not inside any span at all (depth == 0). This
+	// avoids misclassifying a depth-2 (double-negated) filter that also happens
+	// to have a reNot prefix match.
+	if depth == 0 && reNot.MatchString(program[:matchStart]) {
+		return true
 	}
 
 	return false

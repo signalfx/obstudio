@@ -6,15 +6,21 @@ import type { PreviewPanel, PreviewResponse } from "./types";
 
 /** Stable panel identity — stored instead of the panel object to avoid stale data. */
 interface PanelId {
-  groupIdx: number;
-  dashIdx: number;
+  groupName: string;
+  dashName: string;
   panelLabel: string;
+  /** Index within the dashboard's panels array; used to disambiguate duplicate labels. */
+  panelIdx: number;
 }
 
 function resolvePanel(data: PreviewResponse | null, id: PanelId): PreviewPanel | null {
-  const group = data?.groups[id.groupIdx];
-  const dash = group?.dashboards[id.dashIdx];
-  return dash?.panels.find((p) => p.label === id.panelLabel) ?? null;
+  const group = data?.groups.find((g) => g.name === id.groupName);
+  const dash = group?.dashboards.find((d) => d.name === id.dashName);
+  if (!dash) return null;
+  // Prefer index-matched panel (stable across refreshes that don't reorder panels).
+  const byIdx = dash.panels[id.panelIdx];
+  if (byIdx?.label === id.panelLabel) return byIdx;
+  return dash.panels.find((p) => p.label === id.panelLabel) ?? null;
 }
 
 const TIME_WINDOWS = [
@@ -83,6 +89,8 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
   // Focus management for the expand modal (#5): remember the trigger, move
   // focus into the dialog on open, and restore it to the trigger on close so
   // keyboard users are not stranded.
+  // Keyed on expandedId (stable primitive identity) rather than expandedPanel
+  // (re-derived object) to avoid spurious re-runs on every 5s auto-refresh tick.
   useEffect(() => {
     if (!expandedPanel) return;
     lastTriggerRef.current = (document.activeElement as HTMLElement | null) ?? null;
@@ -94,7 +102,8 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
       // Restore focus to the element that opened the modal.
       if (trigger && typeof trigger.focus === "function") trigger.focus();
     };
-  }, [expandedPanel]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedId]);
 
   // Trap Tab focus within the dialog while it is open (#5).
   const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -252,7 +261,12 @@ function renderState({
               <DashboardGrid
                 panels={dashboard.panels}
                 windowMs={windowMs}
-                onExpand={(panel) => onExpand({ groupIdx: gi, dashIdx: di, panelLabel: panel.label })}
+                onExpand={(panel, panelIdx) => onExpand({
+                  groupName: group.name,
+                  dashName: dashboard.name,
+                  panelLabel: panel.label,
+                  panelIdx,
+                })}
               />
             </div>
           ))}

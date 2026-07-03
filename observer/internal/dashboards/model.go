@@ -96,6 +96,12 @@ type PreviewPanel struct {
 	// reached. The client uses this to distinguish "budget-limited" from a
 	// genuine "No data in window", which look identical when DataPoints is empty.
 	Truncated bool `json:"truncated,omitempty"`
+	// GroupsCapped is set when the number of matching metric groups exceeded the
+	// per-panel display cap (maxResolvedGroups) and the result was silently
+	// trimmed to the first 50 matching (name, service, scope) combinations.
+	// The panel shows partial data — not the complete match set — so consumers
+	// should treat it as a sample rather than a coverage verdict.
+	GroupsCapped bool `json:"groupsCapped,omitempty"`
 }
 
 // ParsedQuery is the focused extraction from a panel's SignalFlow program_text.

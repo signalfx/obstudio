@@ -40,6 +40,8 @@ export interface PreviewPanel {
   metrics?: MetricGroup[];
   /** Set when the build-wide datapoint budget was exhausted before this panel could be resolved. */
   truncated?: boolean;
+  /** Set when the number of matching metric groups exceeded the per-panel display cap. */
+  groupsCapped?: boolean;
 }
 
 /** A resolved dashboard. */

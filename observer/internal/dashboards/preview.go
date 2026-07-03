@@ -294,7 +294,7 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 	// many datapoints per group (the store collects newest-first, so this keeps
 	// the freshest samples). This bounds the per-panel copy by the budget instead
 	// of the full ring even before the budget is fully exhausted.
-	groups, groupsTruncated, ok := resolveMetricGroups(points, q, remaining)
+	groups, groupsTruncated, groupsCapped, ok := resolveMetricGroups(points, q, remaining)
 	if !ok {
 		return panel
 	}
@@ -333,6 +333,7 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 	panel.Metrics = groups
 	panel.Matched = len(groups) > 0
 	panel.Truncated = truncated
+	panel.GroupsCapped = groupsCapped
 
 	return panel
 }
@@ -347,14 +348,14 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 // the panel stays unmatched. The second bool reports whether the per-group cap
 // actually clipped a group (points were dropped), so the caller can flag the
 // panel as truncated.
-func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPointBudget int) (groups []store.MetricGroup, truncated bool, ok bool) {
+func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPointBudget int) (groups []store.MetricGroup, truncated bool, groupsCapped bool, ok bool) {
 	// Resolve the service filter through the canonical alias helper so
 	// service.name and sf_service are treated as one dimension. A conflicting
 	// pair (both keys present, disjoint values) means the panel's intent is
 	// self-contradictory — return unmatched with no store query.
 	svcValues, hasSvc, conflict := canonicalServiceFilter(q.Filters)
 	if conflict {
-		return nil, false, false
+		return nil, false, false, false
 	}
 
 	// QueryMetricsFilteredFromSnapshot accepts a single service name, applied
@@ -409,12 +410,14 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPoin
 	groups = applyDimensionFilters(groups, q.Filters, q.NegatedFilters)
 
 	// Apply the display cap AFTER dimension filtering so the cap counts matching
-	// groups, not pre-filter groups.
-	if len(groups) > maxResolvedGroups {
+	// groups, not pre-filter groups. Report whether the cap fired so callers can
+	// signal that the result is a sample, not the complete match set.
+	groupsCapped = len(groups) > maxResolvedGroups
+	if groupsCapped {
 		groups = groups[:maxResolvedGroups]
 	}
 
-	return groups, truncated, true
+	return groups, truncated, groupsCapped, true
 }
 
 // negatedServiceValues collects the excluded service values from the negated
