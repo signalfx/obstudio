@@ -92,3 +92,7 @@ Outputs:
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |
 | `$otel-verify` | Prove instrumentation with project-runtime, app-code, and optional OTLP checks |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from audit report |
+| `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
+| `$splunk-dashboard-publish` | Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
+| `$splunk-sync` | (deprecated, use `$splunk-detector-publish`) Backward-compatible alias |
+| `$splunk-dashboard-sync` | (deprecated, use `$splunk-dashboard-publish`) Backward-compatible alias |

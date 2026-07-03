@@ -1,0 +1,34 @@
+variable "realm" {
+  description = "Splunk Observability Cloud realm (e.g. us1, eu0, lab0)."
+  type        = string
+}
+
+variable "api_token" {
+  description = "Splunk O11y API token with detector write scope."
+  type        = string
+  sensitive   = true
+}
+
+variable "service_name" {
+  description = "Service name used in detector filters and names."
+  type        = string
+  default     = "checkout"
+}
+
+variable "latency_threshold_s" {
+  description = "P99 latency threshold in seconds above which the detector fires."
+  type        = number
+  default     = 1.0
+}
+
+variable "error_rate_threshold" {
+  description = "Payment error count per minute above which the detector fires."
+  type        = number
+  default     = 5
+}
+
+variable "throughput_min_threshold" {
+  description = "Minimum request count per minute below which the detector fires."
+  type        = number
+  default     = 10
+}

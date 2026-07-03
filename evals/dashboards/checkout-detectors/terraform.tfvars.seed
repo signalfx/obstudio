@@ -1,0 +1,5 @@
+realm                    = "us0"
+service_name             = "checkout"
+latency_threshold_s      = 1.0
+error_rate_threshold     = 5
+throughput_min_threshold = 10

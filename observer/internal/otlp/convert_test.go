@@ -1180,7 +1180,7 @@ func BenchmarkConvertMetrics(b *testing.B) {
 		gauge := m.SetEmptyGauge()
 		for j := 0; j < 10; j++ {
 			dp := gauge.DataPoints().AppendEmpty()
-			dp.SetDoubleValue(float64(i*j))
+			dp.SetDoubleValue(float64(i * j))
 		}
 	}
 

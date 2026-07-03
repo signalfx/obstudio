@@ -1,0 +1,16 @@
+variable "realm" {
+  description = "Splunk Observability Cloud realm (e.g. us1, eu0, lab0)."
+  type        = string
+}
+
+variable "api_token" {
+  description = "Splunk O11y API token with dashboard write scope."
+  type        = string
+  sensitive   = true
+}
+
+variable "service_name" {
+  description = "Service name used in chart filters and dashboard titles."
+  type        = string
+  default     = "checkout"
+}

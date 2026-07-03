@@ -1,0 +1,13 @@
+{
+  "skill": "splunk-configure",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-configure skill loaded."
+    },
+    {
+      "id": "configure",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-configure ready."
+    }
+  ]
+}

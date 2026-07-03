@@ -206,11 +206,13 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 
 func (d *Dispatcher) metricsOverview(args map[string]any) toolResult {
 	groups := d.store.QueryMetricsFiltered(
-		strArg(args, "metricName"),
-		strArg(args, "serviceName"),
-		strArg(args, "scopeName"),
-		strArg(args, "type"),
-		strArg(args, "resourceAttribute"),
+		store.MetricFilter{
+			MetricName:        strArg(args, "metricName"),
+			ServiceName:       strArg(args, "serviceName"),
+			ScopeName:         strArg(args, "scopeName"),
+			MetricType:        strArg(args, "type"),
+			ResourceAttribute: strArg(args, "resourceAttribute"),
+		},
 		intArg(args, "limit", 20),
 		intArg(args, "dataPointLimit", 3),
 	)
@@ -223,10 +225,12 @@ func (d *Dispatcher) metricDetail(args map[string]any) toolResult {
 		return errorResult("metricName is required")
 	}
 	groups := d.store.QueryMetricsFiltered(
-		name,
-		strArg(args, "serviceName"),
-		strArg(args, "scopeName"),
-		"", "", 1,
+		store.MetricFilter{
+			MetricName:  name,
+			ServiceName: strArg(args, "serviceName"),
+			ScopeName:   strArg(args, "scopeName"),
+		},
+		1,
 		intArg(args, "dataPointLimit", 50),
 	)
 	if len(groups) == 0 {

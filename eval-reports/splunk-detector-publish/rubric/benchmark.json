@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "kind": "rubric",
+  "mode": "with_skill",
+  "skill": "splunk-detector-publish",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "rubric",
+    "skill": "splunk-detector-publish",
+    "run_id": "20260701T172243033759Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 0,
+    "with_skill": {
+      "prompt_count": 1,
+      "command_count": 30,
+      "duration_seconds": 289.444,
+      "agent_duration_seconds": 163.756,
+      "tokens": 419770,
+      "agent_tokens": 267590,
+      "error_count": 0,
+      "rubric": {
+        "passed": 6,
+        "total": 6,
+        "average_score": 92.0
+      },
+      "rubric_tokens": 152180,
+      "rubric_duration_seconds": 125.677
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "dashboards/checkout-detectors/qual/detector-publish",
+      "case": "dashboards/checkout-detectors",
+      "language": "dashboards",
+      "service": "checkout-detectors",
+      "prompt_count": 1,
+      "prompts": [
+        "offline-plan"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 30,
+        "duration_seconds": 289.444,
+        "agent_duration_seconds": 163.756,
+        "tokens": 419770,
+        "agent_tokens": 267590,
+        "error_count": 0,
+        "rubric": {
+          "passed": 6,
+          "total": 6,
+          "average_score": 92.0
+        },
+        "rubric_tokens": 152180,
+        "rubric_duration_seconds": 125.677
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260701T172243033759Z/results/dashboards/checkout-detectors/qual-detector-publish/with_baseline.json"
+      }
+    }
+  ],
+  "failures": []
+}

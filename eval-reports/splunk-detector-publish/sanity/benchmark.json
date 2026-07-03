@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "kind": "sanity",
+  "mode": "with_skill",
+  "skill": "splunk-detector-publish",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "sanity",
+    "skill": "splunk-detector-publish",
+    "run_id": "20260701T171156660896Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": false,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml"
+  },
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 2,
+    "failure_count": 0,
+    "with_skill": {
+      "prompt_count": 2,
+      "command_count": 0,
+      "duration_seconds": 35.765,
+      "agent_duration_seconds": 35.753,
+      "tokens": 38262,
+      "agent_tokens": 38262,
+      "error_count": 0,
+      "checks": {
+        "passed": 4,
+        "total": 4,
+        "skipped": 0
+      }
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "sanity/skill-smoke/sanity/detector-publish",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "publish"
+      ],
+      "with_skill": {
+        "prompt_count": 2,
+        "command_count": 0,
+        "duration_seconds": 35.765,
+        "agent_duration_seconds": 35.753,
+        "tokens": 38262,
+        "agent_tokens": 38262,
+        "error_count": 0,
+        "checks": {
+          "passed": 4,
+          "total": 4,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-detector-publish/20260701T171156660896Z/results/sanity/skill-smoke/sanity-detector-publish/with_baseline.json"
+      }
+    }
+  ],
+  "failures": []
+}

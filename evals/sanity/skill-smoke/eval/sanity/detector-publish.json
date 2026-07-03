@@ -1,0 +1,13 @@
+{
+  "skill": "splunk-detector-publish",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-detector-publish skill loaded."
+    },
+    {
+      "id": "publish",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-detector-publish ready."
+    }
+  ]
+}

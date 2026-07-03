@@ -1,0 +1,62 @@
+{
+  "mode": "validation",
+  "skill": "splunk-detector-publish",
+  "metadata": {
+    "mode": "validation",
+    "eval_kind": "validation",
+    "ab_enabled": false,
+    "skill": "splunk-detector-publish",
+    "run_id": "20260701T172548033321Z",
+    "repo_root": "/Users/btiwana/obstudio",
+    "config_path": "evals/codex-evals.validation.toml",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "agent_backend": "codex",
+    "rubric_enabled": false,
+    "runtime_enabled": false,
+    "workers": "1"
+  },
+  "evals": [
+    {
+      "id": "dashboards/checkout-detectors/qual/detector-publish",
+      "case": "dashboards/checkout-detectors",
+      "language": "dashboards",
+      "service": "checkout-detectors",
+      "prompt_count": 1,
+      "prompts": [
+        "offline-plan"
+      ],
+      "definition_path": "evals/dashboards/checkout-detectors/eval/qual/detector-publish.json",
+      "eval_dir": "evals/dashboards/checkout-detectors",
+      "skill_path": "skills/splunk-detector-publish",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/detector-publish",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "publish"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/detector-publish.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/splunk-detector-publish",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
+    }
+  ],
+  "summary": {
+    "eval_count": 2,
+    "case_count": 3,
+    "prompt_count": 3,
+    "sanity_check_count": 0,
+    "rubric_check_count": 6,
+    "runtime_check_count": 0
+  }
+}

@@ -2432,7 +2432,7 @@ func TestQueryMetricsFiltered_FilterByMetricName(t *testing.T) {
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m1})
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m2})
 
-	results := s.QueryMetricsFiltered("cpu.usage", "", "", "", "", 10, 3)
+	results := s.QueryMetricsFiltered(MetricFilter{MetricName: "cpu.usage"}, 10, 3)
 	if len(results) != 1 {
 		t.Errorf("expected 1 result, got %d", len(results))
 	}
@@ -2454,7 +2454,7 @@ func TestQueryMetricsFiltered_FilterByServiceName(t *testing.T) {
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m1})
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m2})
 
-	results := s.QueryMetricsFiltered("", "service-a", "", "", "", 10, 3)
+	results := s.QueryMetricsFiltered(MetricFilter{ServiceName: "service-a"}, 10, 3)
 	if len(results) != 1 {
 		t.Errorf("expected 1 result, got %d", len(results))
 	}
@@ -2476,7 +2476,7 @@ func TestQueryMetricsFiltered_FilterByScopeName(t *testing.T) {
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m1})
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m2})
 
-	results := s.QueryMetricsFiltered("", "", "scope-a", "", "", 10, 3)
+	results := s.QueryMetricsFiltered(MetricFilter{ScopeName: "scope-a"}, 10, 3)
 	if len(results) != 1 {
 		t.Errorf("expected 1 result, got %d", len(results))
 	}
@@ -2498,7 +2498,7 @@ func TestQueryMetricsFiltered_FilterByType(t *testing.T) {
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m1})
 	s.AddMetricsForConnection("conn-1", []MetricDataPoint{m2})
 
-	results := s.QueryMetricsFiltered("", "", "", "gauge", "", 10, 3)
+	results := s.QueryMetricsFiltered(MetricFilter{MetricType: "gauge"}, 10, 3)
 	if len(results) != 1 {
 		t.Errorf("expected 1 gauge result, got %d", len(results))
 	}
@@ -2516,7 +2516,7 @@ func TestQueryMetricsFiltered_RespectsLimit(t *testing.T) {
 		s.AddMetricsForConnection("conn-1", []MetricDataPoint{m})
 	}
 
-	results := s.QueryMetricsFiltered("", "", "", "", "", 5, 3)
+	results := s.QueryMetricsFiltered(MetricFilter{}, 5, 3)
 	if len(results) != 5 {
 		t.Errorf("expected 5 results, got %d", len(results))
 	}

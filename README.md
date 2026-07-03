@@ -13,7 +13,10 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
-| `$splunk-sync` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
+| `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
+| `$splunk-dashboard-publish` | Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
+| `$splunk-sync` | (deprecated, use `$splunk-detector-publish`) Diff local detector Terraform against live Splunk detectors and create only the gaps |
+| `$splunk-dashboard-sync` | (deprecated, use `$splunk-dashboard-publish`) Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
 
 The canonical skill sources live under `skills/`. Codex discovers repo-local
 entries through `.agents/skills/`, which points at those source directories.
@@ -170,7 +173,10 @@ obstudio/
 │   ├── otel-instrument/
 │   ├── otel-verify/
 │   ├── splunk-configure/
-│   ├── splunk-sync/
+│   ├── splunk-detector-publish/
+│   ├── splunk-sync/   # deprecated alias → splunk-detector-publish
+│   ├── splunk-dashboard-publish/
+│   ├── splunk-dashboard-sync/ # deprecated alias → splunk-dashboard-publish
 │   └── references/    # Shared language guides and signal references
 ├── .agents/skills/    # Repo-scoped Codex skill entries
 ├── evals/             # Fixture services and JSON eval cases

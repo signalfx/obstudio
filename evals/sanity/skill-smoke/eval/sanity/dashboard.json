@@ -1,0 +1,13 @@
+{
+  "skill": "splunk-dashboard",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard skill loaded."
+    },
+    {
+      "id": "visualize",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: splunk-dashboard ready."
+    }
+  ]
+}

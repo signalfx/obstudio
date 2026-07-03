@@ -1,0 +1,78 @@
+{
+  "mode": "validation",
+  "skill": "splunk-dashboard",
+  "metadata": {
+    "mode": "validation",
+    "eval_kind": "validation",
+    "ab_enabled": false,
+    "skill": "splunk-dashboard",
+    "run_id": "20260701T180200306628Z",
+    "repo_root": "/Users/btiwana/obstudio",
+    "config_path": "evals/codex-evals.toml",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "agent_backend": "codex",
+    "rubric_enabled": false,
+    "runtime_enabled": false,
+    "workers": "1"
+  },
+  "evals": [
+    {
+      "id": "dashboards/checkout-red/sanity/dashboard",
+      "case": "dashboards/checkout-red",
+      "language": "dashboards",
+      "service": "checkout-red",
+      "prompt_count": 1,
+      "prompts": [
+        "generate"
+      ],
+      "definition_path": "evals/dashboards/checkout-red/eval/sanity/dashboard.json",
+      "eval_dir": "evals/dashboards/checkout-red",
+      "skill_path": "skills/splunk-dashboard",
+      "sanity_check_count": 8,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/dashboard",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "visualize"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/splunk-dashboard",
+      "sanity_check_count": 0,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "sanity/skill-smoke/sanity/dashboard-no-audit",
+      "case": "sanity/skill-smoke",
+      "language": "sanity",
+      "service": "skill-smoke",
+      "prompt_count": 1,
+      "prompts": [
+        "missing-audit"
+      ],
+      "definition_path": "evals/sanity/skill-smoke/eval/sanity/dashboard-no-audit.json",
+      "eval_dir": "evals/sanity/skill-smoke",
+      "skill_path": "skills/splunk-dashboard",
+      "sanity_check_count": 2,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
+    }
+  ],
+  "summary": {
+    "eval_count": 3,
+    "case_count": 4,
+    "prompt_count": 4,
+    "sanity_check_count": 10,
+    "rubric_check_count": 0,
+    "runtime_check_count": 0
+  }
+}

@@ -80,6 +80,9 @@ fmt: ## Format Go source
 vet: stage-skills ## Vet Go source
 	cd $(GO_DIR) && $(GO) vet ./...
 
+lint: stage-skills ## Run golangci-lint (requires golangci-lint on PATH)
+	cd $(GO_DIR) && golangci-lint run ./...
+
 # --- Release ---
 
 release-prep: stage-skills build-client stage-release-weaver ## Prepare assets for GoReleaser (skills + client + validator runtimes)

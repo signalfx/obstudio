@@ -1,0 +1,61 @@
+terraform {
+  required_providers {
+    signalfx = {
+      source  = "splunk-terraform/signalfx"
+      version = "~> 9.0"
+    }
+  }
+}
+
+provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+
+resource "signalfx_detector" "high_latency" {
+  name        = "${var.service_name} - High P99 Latency"
+  description = "Fires when P99 latency exceeds ${var.latency_threshold_s}s"
+
+  program_text = <<-EOF
+    A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).percentile(pct=99).publish(label='P99')
+    detect(when(A > ${var.latency_threshold_s})).publish('High P99 Latency')
+  EOF
+
+  rule {
+    detect_label  = "High P99 Latency"
+    severity      = "Major"
+    notifications = []
+  }
+}
+
+resource "signalfx_detector" "high_error_rate" {
+  name        = "${var.service_name} - High Payment Error Rate"
+  description = "Fires when payment errors exceed ${var.error_rate_threshold} per minute"
+
+  program_text = <<-EOF
+    A = data('checkout.payment.errors', filter=filter('service.name', '${var.service_name}')).sum().publish(label='Errors')
+    detect(when(A > ${var.error_rate_threshold})).publish('High Payment Error Rate')
+  EOF
+
+  rule {
+    detect_label  = "High Payment Error Rate"
+    severity      = "Critical"
+    notifications = []
+  }
+}
+
+resource "signalfx_detector" "low_throughput" {
+  name        = "${var.service_name} - Low Request Throughput"
+  description = "Fires when request rate drops below ${var.throughput_min_threshold} per minute"
+
+  program_text = <<-EOF
+    A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}')).count().publish(label='RPS')
+    detect(when(A < ${var.throughput_min_threshold})).publish('Low Request Throughput')
+  EOF
+
+  rule {
+    detect_label  = "Low Request Throughput"
+    severity      = "Minor"
+    notifications = []
+  }
+}
