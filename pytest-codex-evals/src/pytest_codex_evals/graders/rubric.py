@@ -23,8 +23,14 @@ def run_rubric_grade(
         backend = CodexBackend()
     if schema_path is None:
         with packaged_schema_path("rubric_grade.schema.json") as path:
-            return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=path, model=model, backend=backend, timeout=timeout)
-    return _run_rubric_grade(case=case, side_dir=side_dir, schema_path=schema_path, model=model, backend=backend, timeout=timeout)
+            return _run_rubric_grade(
+                case=case, side_dir=side_dir, schema_path=path,
+                model=model, backend=backend, timeout=timeout,
+            )
+    return _run_rubric_grade(
+        case=case, side_dir=side_dir, schema_path=schema_path,
+        model=model, backend=backend, timeout=timeout,
+    )
 
 
 def _run_rubric_grade(

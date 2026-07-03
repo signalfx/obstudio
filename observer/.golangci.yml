@@ -74,9 +74,19 @@ linters:
       # Tests are allowed to be longer, more complex, and have relaxed whitespace.
       - path: ".*_test\\.go"
         linters: [funlen, cyclop, gocognit, wsl]
-      # wsl is new to this codebase; suppress until existing code is cleaned.
+      # wsl cuddle rules are new to this codebase; suppress until existing code is cleaned.
       - linters: [wsl]
         text: "missing whitespace"
+      - linters: [wsl]
+        text: "should not be cuddled"
+      - linters: [wsl]
+        text: "should only be cuddled"
+      - linters: [wsl]
+        text: "only allowed to cuddle"
+      - linters: [wsl]
+        text: "only one cuddle"
+      - linters: [wsl]
+        text: "never be cuddled"
 
 formatters:
   enable:

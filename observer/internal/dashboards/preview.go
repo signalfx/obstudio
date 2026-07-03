@@ -101,14 +101,18 @@ func resolveSpecPath(cfg Config) string {
 					return safeDefaultPath(cfg.WorkspaceRoot)
 				}
 			}
+
 			return p
 		}
+
 		// Relative path — join with workspace root when provided.
 		if cfg.WorkspaceRoot != "" {
 			return filepath.Join(cfg.WorkspaceRoot, p)
 		}
+
 		return p
 	}
+
 	return safeDefaultPath(cfg.WorkspaceRoot)
 }
 
@@ -116,6 +120,7 @@ func safeDefaultPath(workspaceRoot string) string {
 	if workspaceRoot != "" {
 		return filepath.Join(workspaceRoot, DefaultSpecRelPath)
 	}
+
 	return DefaultSpecRelPath
 }
 
@@ -129,77 +134,70 @@ func pathErrMsg(err error) string {
 		// directory") with no path embedded — safe to expose.
 		return pe.Err.Error()
 	}
+
 	return err.Error()
+}
+
+// loadSpec reads and validates the sidecar file. On success it returns the
+// parsed SpecFile and a nil errMsg. On failure it returns an empty SpecFile and
+// the human-readable error message to embed in the response (the absolute path
+// is withheld because the endpoint carries Access-Control-Allow-Origin:*).
+func (r *Resolver) loadSpec(source string) (SpecFile, string) {
+	info, err := os.Stat(r.specPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return SpecFile{}, fmt.Sprintf("No dashboard preview found at %s. Run $splunk-dashboard to generate it.", source)
+		}
+		log.Printf("[dashboards] stat %s: %v", r.specPath, err)
+		return SpecFile{}, fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
+	}
+
+	if info.Size() > maxSpecFileBytes {
+		return SpecFile{}, fmt.Sprintf("Dashboard preview at %s is too large (%d bytes, limit %d).", source, info.Size(), maxSpecFileBytes)
+	}
+
+	raw, err := os.ReadFile(r.specPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return SpecFile{}, fmt.Sprintf("No dashboard preview found at %s. Run $splunk-dashboard to generate it.", source)
+		}
+		log.Printf("[dashboards] read %s: %v", r.specPath, err)
+		return SpecFile{}, fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
+	}
+
+	var spec SpecFile
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return SpecFile{}, fmt.Sprintf("Dashboard preview at %s is not valid JSON: %v", source, err)
+	}
+
+	if spec.SchemaVersion != 1 {
+		return SpecFile{}, fmt.Sprintf(
+			"Dashboard preview at %s has unsupported schemaVersion %d (expected 1). Re-run $splunk-dashboard to regenerate it.",
+			source, spec.SchemaVersion,
+		)
+	}
+
+	if len(spec.Groups) == 0 {
+		return SpecFile{}, fmt.Sprintf("Dashboard preview at %s is empty or malformed (no groups found). Re-run $splunk-dashboard to regenerate it.", source)
+	}
+
+	return spec, ""
 }
 
 // Build reads the sidecar and resolves every panel against local telemetry. It
 // is called per request (one file read + an in-memory scan), so sidecar edits
 // appear on refresh with no caching.
 func (r *Resolver) Build() PreviewResponse {
-	// Source is reported as the basename only. The sidecar is served through a
-	// cross-origin (Access-Control-Allow-Origin:*) endpoint, so the absolute
-	// resolved path is withheld to avoid disclosing OS username/home/working-dir
-	// layout to any origin.
+	// Source is reported as the basename only. The absolute resolved path is
+	// withheld to avoid disclosing OS username/home/working-dir layout to any
+	// origin (the endpoint carries Access-Control-Allow-Origin:*).
 	source := filepath.Base(r.specPath)
 
 	resp := PreviewResponse{Approximate: true, Source: source, Groups: []PreviewGroup{}}
 
-	info, err := os.Stat(r.specPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			resp.Message = fmt.Sprintf("No dashboard preview found at %s. Run $splunk-dashboard to generate it.", source)
-
-			return resp
-		}
-
-		// Log the detailed path error server-side; return only the OS message
-		// to callers (the endpoint carries Access-Control-Allow-Origin:*).
-		log.Printf("[dashboards] stat %s: %v", r.specPath, err)
-		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
-
-		return resp
-	}
-
-	if info.Size() > maxSpecFileBytes {
-		resp.Message = fmt.Sprintf("Dashboard preview at %s is too large (%d bytes, limit %d).", source, info.Size(), maxSpecFileBytes)
-
-		return resp
-	}
-
-	raw, err := os.ReadFile(r.specPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			resp.Message = fmt.Sprintf("No dashboard preview found at %s. Run $splunk-dashboard to generate it.", source)
-
-			return resp
-		}
-
-		// Log the detailed path error server-side; return only the OS message.
-		log.Printf("[dashboards] read %s: %v", r.specPath, err)
-		resp.Message = fmt.Sprintf("Could not read dashboard preview at %s: %s", source, pathErrMsg(err))
-
-		return resp
-	}
-
-	var spec SpecFile
-	if err := json.Unmarshal(raw, &spec); err != nil {
-		resp.Message = fmt.Sprintf("Dashboard preview at %s is not valid JSON: %v", source, err)
-
-		return resp
-	}
-
-	if spec.SchemaVersion != 1 {
-		resp.Message = fmt.Sprintf(
-			"Dashboard preview at %s has unsupported schemaVersion %d (expected 1). Re-run $splunk-dashboard to regenerate it.",
-			source, spec.SchemaVersion,
-		)
-
-		return resp
-	}
-
-	if len(spec.Groups) == 0 {
-		resp.Message = fmt.Sprintf("Dashboard preview at %s is empty or malformed (no groups found). Re-run $splunk-dashboard to regenerate it.", source)
-
+	spec, errMsg := r.loadSpec(source)
+	if errMsg != "" {
+		resp.Message = errMsg
 		return resp
 	}
 
@@ -288,24 +286,39 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 		panel.Truncated = true
 		return panel
 	}
+
 	*resolved++
 
 	// Pass the remaining budget into resolution so the store copies at most that
 	// many datapoints per group (the store collects newest-first, so this keeps
 	// the freshest samples). This bounds the per-panel copy by the budget instead
 	// of the full ring even before the budget is fully exhausted.
-	groups, groupsTruncated, groupsCapped, ok := resolveMetricGroups(points, q, remaining)
-	if !ok {
+	mgr := resolveMetricGroups(points, q, remaining)
+	if !mgr.ok {
 		return panel
 	}
 
-	// Apply the build-wide datapoint budget across this panel's groups. A group
-	// that would push the total over the limit is still included (so the panel
-	// shows as matched) but its DataPoints slice is trimmed — keeping the NEWEST
-	// points — or dropped when the budget is fully spent.
-	truncated := groupsTruncated
+	groups, budgetTruncated := applyDataPointBudget(mgr.groups, totalDataPoints)
+
+	panel.Metrics = groups
+	panel.Matched = len(groups) > 0
+	panel.Truncated = budgetTruncated || mgr.truncated
+	panel.GroupsCapped = mgr.groupsCapped
+
+	return panel
+}
+
+// applyDataPointBudget trims datapoints across groups so the build-wide total
+// does not exceed maxResponseDataPoints. Groups beyond the budget have their
+// DataPoints dropped (but are still included so the panel shows as matched).
+// DataPointCount is kept in sync with the trimmed slice. Returns the (possibly
+// modified) groups and whether any trimming occurred.
+func applyDataPointBudget(groups []store.MetricGroup, totalDataPoints *int) ([]store.MetricGroup, bool) {
+	truncated := false
+
 	for i := range groups {
 		dp := groups[i].DataPoints
+
 		if *totalDataPoints >= maxResponseDataPoints {
 			// Budget fully spent by earlier groups: drop this group's points but
 			// flag the truncation so the empty series is not misread as no data.
@@ -330,12 +343,15 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 		groups[i].DataPointCount = len(groups[i].DataPoints)
 	}
 
-	panel.Metrics = groups
-	panel.Matched = len(groups) > 0
-	panel.Truncated = truncated
-	panel.GroupsCapped = groupsCapped
+	return groups, truncated
+}
 
-	return panel
+// metricGroupResult is the result of resolveMetricGroups.
+type metricGroupResult struct {
+	groups       []store.MetricGroup
+	truncated    bool
+	groupsCapped bool
+	ok           bool
 }
 
 // resolveMetricGroups resolves the metric groups matching a parsed query
@@ -343,19 +359,18 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 // collects per group (the store collects newest-first, so the cap keeps the
 // freshest samples); it should be the build-wide budget remaining for this
 // panel so a single panel cannot copy the whole ring when little budget is
-// left. The first bool is false when the query is self-contradictory
-// (conflicting service alias values), in which case no store query is run and
-// the panel stays unmatched. The second bool reports whether the per-group cap
-// actually clipped a group (points were dropped), so the caller can flag the
-// panel as truncated.
-func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPointBudget int) (groups []store.MetricGroup, truncated bool, groupsCapped bool, ok bool) {
+// left. ok is false when the query is self-contradictory (conflicting service
+// alias values), in which case no store query is run and the panel stays
+// unmatched.
+func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPointBudget int) metricGroupResult {
+	var res metricGroupResult
 	// Resolve the service filter through the canonical alias helper so
 	// service.name and sf_service are treated as one dimension. A conflicting
 	// pair (both keys present, disjoint values) means the panel's intent is
 	// self-contradictory — return unmatched with no store query.
 	svcValues, hasSvc, conflict := canonicalServiceFilter(q.Filters)
 	if conflict {
-		return nil, false, false, false
+		return res
 	}
 
 	// QueryMetricsFilteredFromSnapshot accepts a single service name, applied
@@ -381,7 +396,7 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPoin
 
 	// Request a larger group set than the display cap so a series in a group
 	// beyond maxResolvedGroups is not truncated before applyDimensionFilters runs.
-	groups = store.QueryMetricsFilteredFromSnapshot(points, store.MetricFilter{
+	res.groups = store.QueryMetricsFilteredFromSnapshot(points, store.MetricFilter{
 		MetricName:  q.MetricName,
 		ServiceName: svcArg,
 	}, metricGroupQueryFanout, perGroupLimit)
@@ -389,15 +404,15 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPoin
 	// The store reports the true pre-cap count in DataPointCount while capping
 	// the copied DataPoints slice. A shortfall means the per-group budget cap
 	// dropped points, so the panel is truncated.
-	for i := range groups {
-		if groups[i].DataPointCount > len(groups[i].DataPoints) {
-			truncated = true
+	for i := range res.groups {
+		if res.groups[i].DataPointCount > len(res.groups[i].DataPoints) {
+			res.truncated = true
 			break
 		}
 	}
 
 	if hasSvc && len(svcValues) > 1 {
-		groups = filterGroupsByService(groups, svcValues)
+		res.groups = filterGroupsByService(res.groups, svcValues)
 	}
 
 	// Drop groups whose ServiceName matches a negated service value. Service
@@ -405,19 +420,21 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPoin
 	// attribute-based applyDimensionFilters does not inspect (it skips the
 	// service key on both the positive and negated branches), so a negated
 	// service constraint must be enforced here against ServiceName.
-	groups = excludeNegatedServices(groups, q.NegatedFilters)
+	res.groups = excludeNegatedServices(res.groups, q.NegatedFilters)
 
-	groups = applyDimensionFilters(groups, q.Filters, q.NegatedFilters)
+	res.groups = applyDimensionFilters(res.groups, q.Filters, q.NegatedFilters)
 
 	// Apply the display cap AFTER dimension filtering so the cap counts matching
 	// groups, not pre-filter groups. Report whether the cap fired so callers can
 	// signal that the result is a sample, not the complete match set.
-	groupsCapped = len(groups) > maxResolvedGroups
-	if groupsCapped {
-		groups = groups[:maxResolvedGroups]
+	res.groupsCapped = len(res.groups) > maxResolvedGroups
+	if res.groupsCapped {
+		res.groups = res.groups[:maxResolvedGroups]
 	}
 
-	return groups, truncated, groupsCapped, true
+	res.ok = true
+
+	return res
 }
 
 // negatedServiceValues collects the excluded service values from the negated
@@ -425,6 +442,7 @@ func resolveMetricGroups(points []store.MetricDataPoint, q ParsedQuery, dataPoin
 // up case-insensitively to mirror the parser's folded key spelling.
 func negatedServiceValues(negated map[string][]string) []string {
 	var out []string
+
 	for k, vs := range negated {
 		if isServiceKey(k) {
 			out = append(out, vs...)
@@ -444,10 +462,12 @@ func excludeNegatedServices(groups []store.MetricGroup, negated map[string][]str
 	}
 
 	kept := make([]store.MetricGroup, 0, len(groups))
+
 	for _, g := range groups {
 		if containsStr(excluded, g.ServiceName) {
 			continue
 		}
+
 		kept = append(kept, g)
 	}
 
@@ -461,6 +481,7 @@ func excludeNegatedServices(groups []store.MetricGroup, negated map[string][]str
 // multi-value service constraint is enforced here.
 func filterGroupsByService(groups []store.MetricGroup, svcValues []string) []store.MetricGroup {
 	kept := make([]store.MetricGroup, 0, len(groups))
+
 	for _, g := range groups {
 		for _, want := range svcValues {
 			if strings.EqualFold(g.ServiceName, want) {
@@ -485,10 +506,12 @@ func isServiceKey(k string) bool {
 // data-point attributes, so they must not be re-applied by attribute matching.
 func withoutServiceKeys(filters map[string][]string) map[string][]string {
 	out := make(map[string][]string, len(filters))
+
 	for k, vs := range filters {
 		if isServiceKey(k) {
 			continue
 		}
+
 		out[k] = vs
 	}
 
@@ -540,11 +563,13 @@ func dataPointMatches(dp store.MetricDataPoint, filters, negated map[string][]st
 			return false
 		}
 	}
+
 	for k, excludeVals := range negated {
 		if attrMatchesAny(dp.Attributes, k, excludeVals) || attrMatchesAny(dp.Resource.Attributes, k, excludeVals) {
 			return false
 		}
 	}
+
 	return true
 }
 

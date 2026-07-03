@@ -95,15 +95,18 @@ type negatedSpan struct {
 func matchingCloseParen(program string, open int) int {
 	depth := 0
 	inQuote := false
+
 	for i := open; i < len(program); i++ {
 		c := program[i]
 		if c == '\'' {
 			inQuote = !inQuote
 			continue
 		}
+
 		if inQuote {
 			continue
 		}
+
 		switch c {
 		case '(':
 			depth++
@@ -128,15 +131,18 @@ func matchingCloseParen(program string, open int) int {
 // route those to IgnoredFilters rather than NegatedFilters (see negatedSpan).
 func negatedGroupSpans(program string) []negatedSpan {
 	var spans []negatedSpan
+
 	for _, loc := range reNotGroup.FindAllStringIndex(program, -1) {
 		// loc[1]-1 is the index of the opening paren that begins the group.
 		open := loc[1] - 1
+
 		end := matchingCloseParen(program, open)
 		if end < 0 {
 			// Unbalanced group: extend to end-of-string (best effort) so every
 			// filter inside it is still recognised as negated.
 			end = len(program)
 		}
+
 		body := program[open:end]
 		// Use reFilterMulti (not reFilter) for compound detection: reFilterMulti
 		// matches both single-value filter('k','v') and multi-value
@@ -163,11 +169,13 @@ func isNegatedFilter(program string, matchStart int, negated []negatedSpan) bool
 	// Count how many negated spans contain this position. Even depth = positive
 	// (double negation cancels); odd depth = negated.
 	depth := 0
+
 	for _, span := range negated {
 		if matchStart >= span.start && matchStart < span.end {
 			depth++
 		}
 	}
+
 	if depth%2 == 1 {
 		return true
 	}
@@ -192,6 +200,7 @@ func isCompoundNegatedFilter(matchStart int, negated []negatedSpan) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -211,6 +220,7 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 	// SF_SERVICE key is not dropped (isServiceKey, attrMatchesAny, and the store
 	// query all use EqualFold; this must match).
 	var sn, sf []string
+
 	for k, vs := range filters {
 		switch {
 		case strings.EqualFold(k, "service.name"):
@@ -229,6 +239,7 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 	if len(sn) == 0 {
 		return sf, true, false
 	}
+
 	if len(sf) == 0 {
 		return sn, true, false
 	}
@@ -239,10 +250,12 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 	if len(seen) == 0 {
 		return nil, true, true
 	}
+
 	out := make([]string, 0, len(seen))
 	for v := range seen {
 		out = append(out, v)
 	}
+
 	return out, true, false
 }
 
@@ -252,11 +265,13 @@ func canonicalServiceFilter(filters map[string][]string) (values []string, ok, c
 // caller).
 func svcIntersection(sn, sf []string) map[string]bool {
 	out := make(map[string]bool, len(sn))
+
 	for _, v := range sn {
 		if containsStr(sf, v) {
 			addFolded(out, v)
 		}
 	}
+
 	return out
 }
 
@@ -268,6 +283,7 @@ func addFolded(seen map[string]bool, v string) {
 			return
 		}
 	}
+
 	seen[v] = true
 }
 
@@ -277,6 +293,7 @@ func containsStr(ss []string, s string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -334,6 +351,7 @@ func firstDataCallSpan(program string) string {
 	if open < 0 {
 		return program
 	}
+
 	open = loc[0] + open + len("data(") - 1 // index of '('
 
 	// Scan for the balanced close paren, ignoring parens inside quoted filter
@@ -358,6 +376,7 @@ func firstStreamSpan(program string) string {
 	if len(locs) == 0 {
 		return program
 	}
+
 	start := locs[0][0]
 	if len(locs) >= 2 {
 		return program[start:locs[1][0]]
@@ -382,6 +401,7 @@ func collectFilters(program string, q *ParsedQuery) {
 	// contradictory Filters={env:[prod]} + IgnoredFilters=[env] result.
 	if len(q.IgnoredFilters) > 0 {
 		kept := q.IgnoredFilters[:0]
+
 		for _, key := range q.IgnoredFilters {
 			// Fold to any applied case-variant so an ignored 'Region' is dropped
 			// once 'region' ended up populated (keys compare case-insensitively).
@@ -389,6 +409,7 @@ func collectFilters(program string, q *ParsedQuery) {
 				kept = append(kept, key)
 			}
 		}
+
 		q.IgnoredFilters = kept
 	}
 }
@@ -433,9 +454,11 @@ func collectMultiValueFilters(program string, q *ParsedQuery, negated []negatedS
 // recorded in q.IgnoredFilters instead.
 func applyMultiValues(q *ParsedQuery, key, argList string, apply func(*ParsedQuery, string, string)) {
 	applied := false
+
 	for _, v := range reQuotedVal.FindAllStringSubmatch(argList, -1) {
 		if val := v[1]; val != "" && !strings.Contains(val, "${") {
 			apply(q, key, val)
+
 			applied = true
 		}
 	}
@@ -462,27 +485,42 @@ func collectSingleValueFilters(program string, q *ParsedQuery, handled map[int]b
 		if key == "" {
 			continue
 		}
-		if isNegatedFilter(program, start, negated) {
-			if isCompoundNegatedFilter(start, negated) {
-				// Compound negation: NOT(A AND B) cannot be safely flattened to
-				// per-key exclusions. Surface as ignored so the caller knows.
-				recordIgnoredFilter(q, key)
-			} else {
-				appendNegatedFilterValue(q, key, val)
-				if val == "" || strings.Contains(val, "${") {
-					recordIgnoredFilter(q, key)
-				}
-			}
-			continue
-		}
 
-		if val == "" || strings.Contains(val, "${") {
-			recordIgnoredFilter(q, key)
-			continue
-		}
-
-		appendFilterValue(q, key, val)
+		applySingleValueFilter(filterCtx{program: program, negated: negated}, q, key, val, start)
 	}
+}
+
+// filterCtx bundles the immutable per-call context for applySingleValueFilter,
+// keeping the argument count within the project's revive argument-limit of 5.
+type filterCtx struct {
+	program string
+	negated []negatedSpan
+}
+
+// applySingleValueFilter records one resolved filter('key','val') match into q.
+func applySingleValueFilter(ctx filterCtx, q *ParsedQuery, key, val string, start int) {
+	if isNegatedFilter(ctx.program, start, ctx.negated) {
+		if isCompoundNegatedFilter(start, ctx.negated) {
+			// Compound negation: NOT(A AND B) cannot be safely flattened to
+			// per-key exclusions. Surface as ignored so the caller knows.
+			recordIgnoredFilter(q, key)
+		} else {
+			appendNegatedFilterValue(q, key, val)
+
+			if val == "" || strings.Contains(val, "${") {
+				recordIgnoredFilter(q, key)
+			}
+		}
+
+		return
+	}
+
+	if val == "" || strings.Contains(val, "${") {
+		recordIgnoredFilter(q, key)
+		return
+	}
+
+	appendFilterValue(q, key, val)
 }
 
 // appendFilterValue records val under key in q.Filters, folding case-variant
@@ -497,6 +535,7 @@ func appendFilterValue(q *ParsedQuery, key, val string) {
 	if existing := foldedFilterKey(q, key); existing != "" {
 		key = existing
 	}
+
 	q.Filters[key] = append(q.Filters[key], val)
 }
 
@@ -506,11 +545,13 @@ func foldedFilterKey(q *ParsedQuery, key string) string {
 	if _, ok := q.Filters[key]; ok {
 		return key
 	}
+
 	for existing := range q.Filters {
 		if strings.EqualFold(existing, key) {
 			return existing
 		}
 	}
+
 	return ""
 }
 
@@ -522,11 +563,13 @@ func recordIgnoredFilter(q *ParsedQuery, key string) {
 	if folded := foldedFilterKey(q, key); folded != "" && len(q.Filters[folded]) > 0 {
 		return
 	}
+
 	for _, existing := range q.IgnoredFilters {
 		if strings.EqualFold(existing, key) {
 			return
 		}
 	}
+
 	q.IgnoredFilters = append(q.IgnoredFilters, key)
 }
 
@@ -536,6 +579,7 @@ func appendNegatedFilterValue(q *ParsedQuery, key, val string) {
 	if val == "" || strings.Contains(val, "${") {
 		return
 	}
+
 	if q.NegatedFilters == nil {
 		q.NegatedFilters = map[string][]string{}
 	}
@@ -546,5 +590,6 @@ func appendNegatedFilterValue(q *ParsedQuery, key, val string) {
 			return
 		}
 	}
+
 	q.NegatedFilters[key] = append(q.NegatedFilters[key], val)
 }
