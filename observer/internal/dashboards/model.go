@@ -40,7 +40,7 @@ type SpecChart struct {
 	Label       string     `json:"label"`
 	Title       string     `json:"title"`
 	ChartType   string     `json:"chartType"`
-	ProgramText string     `json:"programText"`
+	ProgramText *string    `json:"programText"`
 	Text        *string    `json:"text"`
 	Layout      SpecLayout `json:"layout"`
 }

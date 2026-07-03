@@ -106,7 +106,7 @@ func TestBuildMatchedPanel(t *testing.T) {
 					Label:       "p99_latency",
 					Title:       "P99 Latency",
 					ChartType:   "time_series",
-					ProgramText: "data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish()",
+					ProgramText: strPtr("data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish()"),
 					Layout:      SpecLayout{Column: 0, Row: 0, Width: 6, Height: 3},
 				}},
 			}},
@@ -150,7 +150,7 @@ func TestBuildUnmatchedPanel(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "p99_latency",
 					ChartType:   "time_series",
-					ProgramText: "data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish()",
+					ProgramText: strPtr("data('http.server.request.duration', filter=filter('service.name','checkout')).percentile(pct=99).publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -184,7 +184,7 @@ func TestBuildDimensionFilterNarrows(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "cart_latency",
 					ChartType:   "time_series",
-					ProgramText: "data('http.server.request.duration', filter=filter('service.name','checkout') and filter('http.route','/cart')).percentile(pct=99).publish()",
+					ProgramText: strPtr("data('http.server.request.duration', filter=filter('service.name','checkout') and filter('http.route','/cart')).percentile(pct=99).publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -249,7 +249,7 @@ func TestBuildParseErrorPanel(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "broken",
 					ChartType:   "time_series",
-					ProgramText: "const(42).publish()",
+					ProgramText: strPtr("const(42).publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -293,7 +293,7 @@ func TestBuildConflictingServiceAlias(t *testing.T) {
 					Label:     "conflict",
 					ChartType: "time_series",
 					// service.name=checkout AND sf_service=legacy-checkout → contradiction
-					ProgramText: "data('http.server.request.duration', filter=filter('service.name','checkout') and filter('sf_service','legacy-checkout')).sum().publish()",
+					ProgramText: strPtr("data('http.server.request.duration', filter=filter('service.name','checkout') and filter('sf_service','legacy-checkout')).sum().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -330,7 +330,7 @@ func TestBuildOTLPArrayAttributeMatch(t *testing.T) {
 					Label:     "region_panel",
 					ChartType: "time_series",
 					// The filter value is the JSON-serialized form of the array element.
-					ProgramText: `data('req.duration', filter=filter('service.name','svc') and filter('region','["us-east"]')).mean().publish()`,
+					ProgramText: strPtr(`data('req.duration', filter=filter('service.name','svc') and filter('region','["us-east"]')).mean().publish()`),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -362,7 +362,7 @@ func TestBuildMultiValueFilterMatchesAny(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "region_or",
 					ChartType:   "time_series",
-					ProgramText: "data('req.duration', filter=filter('service.name','svc') and filter('region','us1','us2')).mean().publish()",
+					ProgramText: strPtr("data('req.duration', filter=filter('service.name','svc') and filter('region','us1','us2')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -403,7 +403,7 @@ func TestBuildDataPointCountSyncedAfterFilter(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "prod_only",
 					ChartType:   "time_series",
-					ProgramText: "data('m', filter=filter('service.name','svc') and filter('env','prod')).mean().publish()",
+					ProgramText: strPtr("data('m', filter=filter('service.name','svc') and filter('env','prod')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -444,7 +444,7 @@ func TestBuildMultiValueServiceFilterExcludesUnrelated(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "svc_or",
 					ChartType:   "time_series",
-					ProgramText: "data('req.duration', filter=filter('service.name','checkout','payments')).mean().publish()",
+					ProgramText: strPtr("data('req.duration', filter=filter('service.name','checkout','payments')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -492,7 +492,7 @@ func TestBuildMultiValueServiceFilterMixedCase(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "svc_or_case",
 					ChartType:   "time_series",
-					ProgramText: "data('req.duration', filter=filter('service.name','CHECKOUT','PAYMENTS')).mean().publish()",
+					ProgramText: strPtr("data('req.duration', filter=filter('service.name','CHECKOUT','PAYMENTS')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -533,7 +533,7 @@ func TestBuildNegatedServiceFilterExcludesService(t *testing.T) {
 					Label:     "not_billing",
 					ChartType: "time_series",
 					// Exclude billing; checkout and payments must remain.
-					ProgramText: "data('req.duration', filter=not filter('service.name','billing')).mean().publish()",
+					ProgramText: strPtr("data('req.duration', filter=not filter('service.name','billing')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -581,7 +581,7 @@ func TestBuildNegatedServiceFilterMixedCase(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "not_billing_case",
 					ChartType:   "time_series",
-					ProgramText: "data('req.duration', filter=not filter('sf_service','BILLING')).mean().publish()",
+					ProgramText: strPtr("data('req.duration', filter=not filter('sf_service','BILLING')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -630,7 +630,7 @@ func TestBuildFilterBeforeCap(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "env_target",
 					ChartType:   "time_series",
-					ProgramText: "data('m', filter=filter('env','target')).mean().publish()",
+					ProgramText: strPtr("data('m', filter=filter('env','target')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -684,7 +684,7 @@ func TestBuildFilterBeyondQueryFanout(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "env_target",
 					ChartType:   "time_series",
-					ProgramText: "data('m', filter=filter('env','target')).mean().publish()",
+					ProgramText: strPtr("data('m', filter=filter('env','target')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -722,7 +722,7 @@ func TestBuildPanelCap(t *testing.T) {
 		return SpecChart{
 			Label:       label,
 			ChartType:   "time_series",
-			ProgramText: "data('m', filter=filter('service.name','svc')).mean().publish()",
+			ProgramText: strPtr("data('m', filter=filter('service.name','svc')).mean().publish()"),
 			Layout:      SpecLayout{Width: 6, Height: 3},
 		}
 	}
@@ -804,7 +804,7 @@ func TestBuildBudgetKeepsNewestPointsAndFlagsTruncation(t *testing.T) {
 				Charts: []SpecChart{{
 					Label:       "p",
 					ChartType:   "time_series",
-					ProgramText: "data('m', filter=filter('service.name','svc')).mean().publish()",
+					ProgramText: strPtr("data('m', filter=filter('service.name','svc')).mean().publish()"),
 					Layout:      SpecLayout{Width: 6, Height: 3},
 				}},
 			}},
@@ -863,7 +863,7 @@ func TestBuildBudgetExhaustionSkipsLaterPanels(t *testing.T) {
 		return SpecChart{
 			Label:       label,
 			ChartType:   "time_series",
-			ProgramText: "data('" + metric + "', filter=filter('service.name','svc')).mean().publish()",
+			ProgramText: strPtr("data('" + metric + "', filter=filter('service.name','svc')).mean().publish()"),
 			Layout:      SpecLayout{Width: 6, Height: 3},
 		}
 	}
@@ -932,3 +932,5 @@ func TestBuildOversizedFileRejected(t *testing.T) {
 		t.Errorf("expected an oversize message, got %q", resp.Message)
 	}
 }
+
+func strPtr(s string) *string { return &s }

@@ -38,6 +38,8 @@ export interface PreviewPanel {
   query?: ParsedQuery;
   matched: boolean;
   metrics?: MetricGroup[];
+  /** Set when the build-wide datapoint budget was exhausted before this panel could be resolved. */
+  truncated?: boolean;
 }
 
 /** A resolved dashboard. */

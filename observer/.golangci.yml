@@ -19,7 +19,7 @@ linters:
     - godot           # comment punctuation
     - misspell        # typos in comments/strings
     - whitespace      # trailing whitespace
-    - wsl_v5          # whitespace linter (blank lines around blocks)
+    - wsl          # whitespace linter (blank lines around blocks)
 
     # Security
     - gosec           # common security issues (G101-G601)
@@ -29,7 +29,7 @@ linters:
     - forcetypeassert # unchecked type assertions are fragile
 
     # Dependency hygiene
-    - gomodguard_v2   # module-level import restrictions
+    - gomodguard   # module-level import restrictions
 
   settings:
     cyclop:
@@ -68,18 +68,14 @@ linters:
         - stdlib
         - generic
 
-    wsl_v5:
-      allow-first-in-block: true
-      allow-whole-block: false
-      branch-max-lines: 2
 
   exclusions:
     rules:
       # Tests are allowed to be longer, more complex, and have relaxed whitespace.
       - path: ".*_test\\.go"
-        linters: [funlen, cyclop, gocognit, wsl_v5]
-      # wsl_v5 is new to this codebase; suppress until existing code is cleaned.
-      - linters: [wsl_v5]
+        linters: [funlen, cyclop, gocognit, wsl]
+      # wsl is new to this codebase; suppress until existing code is cleaned.
+      - linters: [wsl]
         text: "missing whitespace"
 
 formatters:

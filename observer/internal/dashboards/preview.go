@@ -258,7 +258,12 @@ func (r *Resolver) resolvePanel(c SpecChart, points []store.MetricDataPoint, res
 		return panel
 	}
 
-	q := ParseProgramText(c.ProgramText)
+	pt := ""
+	if c.ProgramText != nil {
+		pt = *c.ProgramText
+	}
+
+	q := ParseProgramText(pt)
 	panel.Query = &q
 
 	if q.ParseError != "" || q.MetricName == "" {

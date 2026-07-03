@@ -1281,10 +1281,13 @@ func traceHasGenAISignal(spans []Span) bool {
 }
 
 // SnapshotMetrics returns a point-in-time copy of the metric ring buffer in
-// insertion order (oldest first). Callers that need to resolve many independent
-// queries against the same point set should take one snapshot and feed it to
-// QueryMetricsFilteredFromSnapshot rather than calling QueryMetricsFiltered
-// repeatedly, which re-snapshots the whole ring each time.
+// insertion order (oldest first). The returned slice is a shallow copy: the
+// top-level slice is safe to append to, but the nested maps and slices inside
+// each MetricDataPoint (Attributes, Resource.Attributes, etc.) are shared with
+// the store's live data and must be treated as read-only. Callers that need to
+// resolve many independent queries against the same point set should take one
+// snapshot and feed it to QueryMetricsFilteredFromSnapshot rather than calling
+// QueryMetricsFiltered repeatedly, which re-snapshots the whole ring each time.
 func (s *Store) SnapshotMetrics() []MetricDataPoint {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
