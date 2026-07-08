@@ -11,7 +11,8 @@ export function useKeyboardShortcuts(shortcuts: Record<string, () => void>): voi
       const tag = (event.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      const fn = shortcuts[event.key];
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const fn = shortcuts[key];
       if (fn) {
         event.preventDefault();
         fn();

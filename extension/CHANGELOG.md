@@ -2,11 +2,6 @@
 
 All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
-## Unreleased
-
-### Fixed
-- Keep VS Code modifier shortcuts, including `Cmd+P` and `Ctrl+P`, from triggering the Explorer's pause action
-
 ## 0.0.2 - 2026-06-23
 
 ### Fixed

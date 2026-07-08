@@ -291,7 +291,7 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
-  it("leaves modified P shortcuts to VS Code", () => {
+  it("leaves modified P shortcuts to VS Code and handles unmodified P case-insensitively", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
@@ -302,8 +302,9 @@ describe("AppView validation tab", () => {
     expect(telemetry.toggle).not.toHaveBeenCalled();
 
     fireEvent.keyDown(window, { key: "p" });
+    fireEvent.keyDown(window, { key: "P" });
 
-    expect(telemetry.toggle).toHaveBeenCalledOnce();
+    expect(telemetry.toggle).toHaveBeenCalledTimes(2);
   });
 
   it("keyboard help lists shortcuts that match AppView key bindings", () => {
