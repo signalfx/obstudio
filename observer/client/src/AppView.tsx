@@ -126,7 +126,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             <button
               className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
               onClick={toggle}
-              title={paused ? "Resume live updates (p)" : "Pause live updates (p)"}
+              title={paused ? "Resume live updates (P)" : "Pause live updates (P)"}
             >
               <span className="stream-toggle__icon" aria-hidden="true">
                 {paused ? "▶" : "❚❚"}

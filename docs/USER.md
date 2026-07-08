@@ -128,6 +128,10 @@ to point an agent at a different already-running Observer explicitly.
 | OTLP/gRPC receiver | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
+In the Telemetry Explorer, use the `Live` button or press `P` while the Explorer
+is focused to pause or resume live updates. Keyboard shortcuts with `Cmd`,
+`Ctrl`, or `Alt` remain available to the host application.
+
 Configure your app to send telemetry:
 
 ```bash

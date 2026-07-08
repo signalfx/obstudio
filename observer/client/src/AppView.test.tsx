@@ -291,6 +291,21 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
+  it("leaves modified P shortcuts to VS Code", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.keyDown(window, { key: "p", metaKey: true });
+    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "p", altKey: true });
+
+    expect(telemetry.toggle).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "p" });
+
+    expect(telemetry.toggle).toHaveBeenCalledOnce();
+  });
+
   it("keyboard help lists shortcuts that match AppView key bindings", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
@@ -307,6 +322,7 @@ describe("AppView validation tab", () => {
     expect(helpMap["1"]).toMatch(/metrics/i);
     expect(helpMap["2"]).toMatch(/traces/i);
     expect(helpMap["3"]).toMatch(/logs/i);
+    expect(helpMap["P"]).toMatch(/pause/i);
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {

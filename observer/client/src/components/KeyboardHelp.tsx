@@ -6,7 +6,7 @@ interface KeyboardHelpProps {
 
 const shortcuts = [
   { key: "?", description: "Toggle keyboard shortcuts" },
-  { key: "p", description: "Pause / resume live updates" },
+  { key: "P", description: "Pause / resume live updates" },
   { key: "Escape", description: "Close help or deselect trace (Traces tab)" },
   { key: "1", description: "Switch to Metrics tab" },
   { key: "2", description: "Switch to Traces tab" },
