@@ -32,7 +32,9 @@ the skills and MCP config for your agent:
 ```bash
 unzip obstudio_*_darwin_arm64.zip
 cd obstudio_*_darwin_arm64
-./obstudio install --target=<agent>
+
+# Choose one target: codex, claude-code, or cursor
+./obstudio install --target=codex
 ```
 
 After unzipping the release, run `obstudio install` from that extracted
