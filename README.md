@@ -33,15 +33,17 @@ the skills and MCP config for your agent:
 unzip obstudio_*_darwin_arm64.zip
 cd obstudio_*_darwin_arm64
 
-# Choose one target: codex, claude-code, or cursor
-./obstudio install --target=codex
+# Install for all supported agents (or pass just one target)
+./obstudio install --target=codex,claude-code,cursor
 ```
 
 After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`. It stores the managed bundle under `~/.<agent>/skills/obstudio/`
-and creates top-level discoverable skill entries such as `otel-audit`,
-`otel-instrument`, and `otel-verify` in the agent skills root.
+to `obstudio`. `--target` accepts `codex`, `claude-code`, `cursor`, or a
+comma-separated list of those values. For each selected agent, the installer
+stores the managed bundle under its skills directory and creates top-level
+discoverable skill entries such as `otel-audit`, `otel-instrument`, and
+`otel-verify` in the agent skills root.
 
 ### Build From Source
 
@@ -238,7 +240,7 @@ report locations.
 | Command | Description |
 |---|---|
 | `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
-| `obstudio install --target=<agent>` | Install skills and configure MCP for a supported agent |
+| `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP for one or more supported agents |
 | `obstudio --version` | Print version |
 
 ## Contributing

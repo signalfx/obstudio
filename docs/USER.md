@@ -23,10 +23,12 @@ run the installer:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
-./obstudio install --target=<agent>
+./obstudio install --target=codex,claude-code,cursor
 ```
 
-This installs the included skills and configures the MCP server.
+This installs the included skills and configures the MCP server for all three
+agents. Pass a single `codex`, `claude-code`, or `cursor` value when you only
+want to configure one agent.
 
 ### Supported Targets
 
@@ -66,7 +68,7 @@ Restart your agent to activate.
 | Command | Description |
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
-| `obstudio install --target=<agent>` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
+| `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
 | `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
 | `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
