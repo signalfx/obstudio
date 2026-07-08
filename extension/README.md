@@ -11,7 +11,7 @@ When the extension activates, it reuses or starts a bundled `obstudio` backend a
 3. Send telemetry to `127.0.0.1:4318` (OTLP/HTTP) or `127.0.0.1:4317` (OTLP/gRPC).
 4. Use the Metrics, Traces, Logs, and Validation tabs to inspect what arrived.
 
-Use the `Live` button in the top-right corner of the Explorer to pause the stream while you inspect a trace, metric, or log. Pause freezes traces, metrics, logs, and summary counts on the current view. Validation continues to update.
+Use the `Live` button in the top-right corner of the Explorer, or press `P` while the Explorer is focused, to pause the stream while you inspect a trace, metric, or log. Pause freezes traces, metrics, logs, and summary counts on the current view. Validation continues to update. Modified shortcuts remain available to VS Code, so `Cmd+P` on macOS and `Ctrl+P` on Windows or Linux still open Quick Open.
 
 ## Metrics Explorer
 

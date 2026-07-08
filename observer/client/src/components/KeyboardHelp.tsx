@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 
 interface KeyboardHelpProps {
   onClose: () => void;
@@ -6,7 +7,7 @@ interface KeyboardHelpProps {
 
 const shortcuts = [
   { key: "?", description: "Toggle keyboard shortcuts" },
-  { key: "p", description: "Pause / resume live updates" },
+  { key: "P", description: "Pause / resume live updates" },
   { key: "Escape", description: "Close help or deselect trace (Traces tab)" },
   { key: "1", description: "Switch to Metrics tab" },
   { key: "2", description: "Switch to Traces tab" },
@@ -20,7 +21,7 @@ const shortcuts = [
 export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || hasHostCommandModifier(event)) {
         return;
       }
       event.preventDefault();

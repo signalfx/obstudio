@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
 import { useDashboardPreview } from "./useDashboardPreview";
@@ -75,7 +76,9 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
   // Close expanded panel on Escape.
   useEffect(() => {
     if (!expandedId) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpandedId(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !hasHostCommandModifier(e)) setExpandedId(null);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [expandedId]);
@@ -98,7 +101,7 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
 
   // Trap Tab focus within the dialog while it is open (#5).
   const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (e.key !== "Tab") return;
+    if (e.key !== "Tab" || hasHostCommandModifier(e.nativeEvent)) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     const focusable = dialog.querySelectorAll<HTMLElement>(
