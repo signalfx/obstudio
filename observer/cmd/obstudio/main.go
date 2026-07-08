@@ -457,7 +457,7 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
-			"  Agent setup:         obstudio install --target=<agent>\n\n",
+			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n\n",
 		mainAddr,
 		otlpHTTPAddr,
 		otlpGRPCAddr,

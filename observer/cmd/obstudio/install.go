@@ -101,22 +101,58 @@ func supportedTargets() string {
 }
 
 func newInstallCmd() *cobra.Command {
-	var target string
+	var requestedTargets []string
 	var sharedURL string
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install skills and configure MCP for an AI coding agent",
+		Short: "Install skills and configure MCP for one or more AI coding agents",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runInstall(target, sharedURL)
+			return runInstallTargets(requestedTargets, sharedURL)
 		},
 	}
 
-	cmd.Flags().StringVar(&target, "target", "", "Agent target ("+supportedTargets()+")")
+	cmd.Flags().StringSliceVar(&requestedTargets, "target", nil, "Agent target or comma-separated targets ("+supportedTargets()+")")
 	cmd.Flags().StringVar(&sharedURL, "shared-url", "", "Use an existing HTTP MCP endpoint instead of auto-starting a local obstudio binary")
 	cmd.MarkFlagRequired("target")
 
 	return cmd
+}
+
+func normalizeInstallTargets(requested []string) ([]string, error) {
+	normalized := make([]string, 0, len(requested))
+	seen := make(map[string]struct{}, len(requested))
+	for _, rawTarget := range requested {
+		target := strings.TrimSpace(rawTarget)
+		if target == "" {
+			return nil, fmt.Errorf("target cannot be empty (supported: %s)", supportedTargets())
+		}
+		if _, ok := targets[target]; !ok {
+			return nil, fmt.Errorf("unknown target: %s (supported: %s)", target, supportedTargets())
+		}
+		if _, duplicate := seen[target]; duplicate {
+			continue
+		}
+		seen[target] = struct{}{}
+		normalized = append(normalized, target)
+	}
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("at least one target is required (supported: %s)", supportedTargets())
+	}
+	return normalized, nil
+}
+
+func runInstallTargets(requested []string, sharedURL string) error {
+	targetNames, err := normalizeInstallTargets(requested)
+	if err != nil {
+		return err
+	}
+	for _, target := range targetNames {
+		if err := runInstall(target, sharedURL); err != nil {
+			return fmt.Errorf("install target %s: %w", target, err)
+		}
+	}
+	return nil
 }
 
 func runInstall(target, sharedURL string) error {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -45,6 +46,61 @@ func TestCodexTargetUsesConfigTOML(t *testing.T) {
 	path := target.mcpConfig.path()
 	if !strings.HasSuffix(path, filepath.Join(".codex", "config.toml")) {
 		t.Fatalf("expected Codex MCP config path to end with .codex/config.toml, got %q", path)
+	}
+}
+
+func TestInstallTargetFlagAcceptsCommaSeparatedValues(t *testing.T) {
+	t.Parallel()
+
+	cmd := newInstallCmd()
+	if err := cmd.ParseFlags([]string{"--target", "codex,claude-code,cursor"}); err != nil {
+		t.Fatalf("parse comma-separated targets: %v", err)
+	}
+	got, err := cmd.Flags().GetStringSlice("target")
+	if err != nil {
+		t.Fatalf("read parsed targets: %v", err)
+	}
+	if joined := strings.Join(got, ","); joined != "codex,claude-code,cursor" {
+		t.Fatalf("parsed targets = %q, want %q", joined, "codex,claude-code,cursor")
+	}
+}
+
+func TestNormalizeInstallTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		requested     []string
+		want          string
+		errorContains string
+	}{
+		{name: "single", requested: []string{"codex"}, want: "codex"},
+		{name: "all", requested: []string{"codex", "claude-code", "cursor"}, want: "codex,claude-code,cursor"},
+		{name: "trim and deduplicate", requested: []string{" codex ", "cursor", "codex"}, want: "codex,cursor"},
+		{name: "missing", errorContains: "at least one target is required"},
+		{name: "empty", requested: []string{"codex", " "}, errorContains: "target cannot be empty"},
+		{name: "unknown", requested: []string{"codex", "other"}, errorContains: "unknown target: other"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := normalizeInstallTargets(tc.requested)
+			if tc.errorContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.errorContains) {
+					t.Fatalf("normalizeInstallTargets() error = %v, want containing %q", err, tc.errorContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("normalizeInstallTargets() error = %v", err)
+			}
+			if joined := strings.Join(got, ","); joined != tc.want {
+				t.Fatalf("normalizeInstallTargets() = %q, want %q", joined, tc.want)
+			}
+		})
 	}
 }
 
@@ -813,6 +869,7 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	if err := buildutil.StageEmbeddedSkills(isolatedRepoRoot, isolatedObserverRoot); err != nil {
 		t.Fatalf("stage embedded skills: %v", err)
 	}
+	expectedSkills := smokeSkillContents(t, filepath.Join(isolatedRepoRoot, "skills"))
 
 	build := exec.Command("go", "build", "-o", bundledBinary, "./cmd/obstudio")
 	build.Dir = isolatedObserverRoot
@@ -826,20 +883,21 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 		t.Fatalf("chmod sibling weaver runtime: %v", err)
 	}
 
-	install := exec.Command(bundledBinary, "install", "--target", "codex")
+	install := exec.Command(bundledBinary, "install", "--target", "codex,claude-code,cursor")
 	install.Env = append(os.Environ(), smokeHomeEnv(homeDir)...)
 	if output, err := install.CombinedOutput(); err != nil {
 		t.Fatalf("run obstudio install smoke test: %v\n%s", err, strings.TrimSpace(string(output)))
 	}
 
-	installedDir := filepath.Join(homeDir, ".codex", "skills", "obstudio")
+	installedDirs := map[string]string{}
+	for _, targetName := range []string{"codex", "claude-code", "cursor"} {
+		installedDir := targets[targetName].skillsDir(homeDir)
+		installedDirs[targetName] = installedDir
+		assertSmokeTargetInstalled(t, targetName, installedDir, binaryName, weaverName, expectedSkills)
+	}
+
+	installedDir := installedDirs["codex"]
 	installedBinary := filepath.Join(installedDir, binaryName)
-	if _, err := os.Stat(installedBinary); err != nil {
-		t.Fatalf("expected installed binary at %s: %v", installedBinary, err)
-	}
-	if _, err := os.Stat(filepath.Join(installedDir, weaverName)); err != nil {
-		t.Fatalf("expected installed weaver runtime at %s: %v", filepath.Join(installedDir, weaverName), err)
-	}
 
 	configPath := filepath.Join(homeDir, ".codex", "config.toml")
 	config, err := os.ReadFile(configPath)
@@ -863,6 +921,8 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	if !hasURLConfig && !hasCommandConfig {
 		t.Fatalf("expected generated codex config to contain either local URL or installed command, got:\n%s", configText)
 	}
+	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".claude.json"), filepath.Join(installedDirs["claude-code"], binaryName))
+	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".cursor", "mcp.json"), filepath.Join(installedDirs["cursor"], binaryName))
 
 	observerPort := pickSmokePort(t)
 	otlpHTTPPort := pickSmokePort(t)
@@ -1042,6 +1102,90 @@ func smokeHomeEnv(homeDir string) []string {
 		}
 	}
 	return env
+}
+
+func smokeSkillContents(t *testing.T, skillsDir string) map[string][]byte {
+	t.Helper()
+
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		t.Fatalf("read source skills: %v", err)
+	}
+	expected := map[string][]byte{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		skillPath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+		content, err := os.ReadFile(skillPath)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read source skill %s: %v", skillPath, err)
+		}
+		expected[entry.Name()] = content
+	}
+	if len(expected) == 0 {
+		t.Fatal("expected source skills to contain at least one SKILL.md")
+	}
+	return expected
+}
+
+func assertSmokeTargetInstalled(t *testing.T, targetName, installedDir, binaryName, weaverName string, expectedSkills map[string][]byte) {
+	t.Helper()
+
+	for _, name := range []string{binaryName, weaverName} {
+		path := filepath.Join(installedDir, name)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s: expected installed file at %s: %v", targetName, path, err)
+		}
+	}
+
+	skillsRoot := filepath.Dir(installedDir)
+	for skillName, expectedContent := range expectedSkills {
+		skillPath := filepath.Join(installedDir, skillName, "SKILL.md")
+		installedContent, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Fatalf("%s: read installed skill at %s: %v", targetName, skillPath, err)
+		}
+		if !bytes.Equal(installedContent, expectedContent) {
+			t.Fatalf("%s: installed skill %s does not match embedded source", targetName, skillName)
+		}
+		linkPath := filepath.Join(skillsRoot, skillName)
+		linkTarget, err := os.Readlink(linkPath)
+		if err != nil {
+			t.Fatalf("%s: read discovery link %s: %v", targetName, linkPath, err)
+		}
+		if want := filepath.Join("obstudio", skillName); linkTarget != want {
+			t.Fatalf("%s: discovery link %s = %q, want %q", targetName, linkPath, linkTarget, want)
+		}
+	}
+	t.Logf("%s: verified %d copied skills, discovery links, binary, and Weaver runtime", targetName, len(expectedSkills))
+}
+
+func assertSmokeJSONMCPConfig(t *testing.T, configPath, installedBinary string) {
+	t.Helper()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read generated MCP config %s: %v", configPath, err)
+	}
+	var config struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse generated MCP config %s: %v", configPath, err)
+	}
+	server, ok := config.MCPServers["obstudio"]
+	if !ok {
+		t.Fatalf("generated MCP config %s has no obstudio server", configPath)
+	}
+	hasURLConfig := server["url"] == "http://127.0.0.1:3000/mcp"
+	hasCommandConfig := server["command"] == installedBinary
+	if !hasURLConfig && !hasCommandConfig {
+		t.Fatalf("generated MCP config %s has neither shared URL nor installed command: %#v", configPath, server)
+	}
 }
 
 func pickSmokePort(t *testing.T) int {
