@@ -29,6 +29,9 @@ cd obstudio_<version>_<os>_<arch>
 This installs the included skills and configures the MCP server for all three
 agents. Pass a single `codex`, `claude-code`, or `cursor` value when you only
 want to configure one agent.
+The Codex plugin bootstrapper also expects the release pipeline to publish a
+`checksums.txt` file alongside the zip archives and validates the archive
+before extraction.
 
 ### Supported Targets
 

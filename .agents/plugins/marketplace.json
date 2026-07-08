@@ -1,0 +1,20 @@
+{
+  "name": "obstudio",
+  "interface": {
+    "displayName": "Obstudio"
+  },
+  "plugins": [
+    {
+      "name": "obstudio",
+      "source": {
+        "source": "local",
+        "path": "./plugins/obstudio"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

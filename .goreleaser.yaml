@@ -31,6 +31,10 @@ archives:
       - docs/USER.md
       - docs/examples.md
 
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
 release:
   github:
     owner: signalfx

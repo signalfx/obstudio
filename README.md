@@ -45,6 +45,9 @@ stores the managed bundle under its skills directory and creates top-level
 discoverable skill entries such as `otel-audit`, `otel-instrument`, and
 `otel-verify` in the agent skills root.
 
+Release archives are verified against `checksums.txt` published by the release
+pipeline before the Codex plugin bootstrapper extracts them.
+
 ### Build From Source
 
 ```bash
