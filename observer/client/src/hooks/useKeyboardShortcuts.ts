@@ -1,11 +1,17 @@
 import { useEffect } from "react";
 
+type KeyboardModifierEvent = Pick<KeyboardEvent, "altKey" | "ctrlKey" | "metaKey">;
+
+/** Whether a key event belongs to a host-level Alt, Ctrl, or Cmd shortcut. */
+export function hasHostCommandModifier(event: KeyboardModifierEvent): boolean {
+  return event.altKey || event.ctrlKey || event.metaKey;
+}
+
 /** Register webview-local shortcuts while preserving host modifier commands. */
 export function useKeyboardShortcuts(shortcuts: Record<string, () => void>): void {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      // Leave modified shortcuts (such as VS Code's Cmd/Ctrl+P) to the host.
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (hasHostCommandModifier(event)) return;
 
       // Ignore when typing in an input.
       const tag = (event.target as HTMLElement)?.tagName;

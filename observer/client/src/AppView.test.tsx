@@ -291,15 +291,27 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
-  it("leaves modified P shortcuts to VS Code and handles unmodified P case-insensitively", () => {
+  it("leaves modified Explorer shortcuts to VS Code", () => {
+    window.history.replaceState({}, "", "/?tab=services");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    fireEvent.keyDown(window, { key: "p", metaKey: true });
-    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
-    fireEvent.keyDown(window, { key: "p", altKey: true });
+    const shortcutKeys = ["?", "p", "1", "2", "3", "4", "5", "6"];
+    const modifiers = [{ metaKey: true }, { ctrlKey: true }, { altKey: true }];
+    for (const key of shortcutKeys) {
+      for (const modifier of modifiers) {
+        fireEvent.keyDown(window, { key, ...modifier });
+      }
+    }
 
     expect(telemetry.toggle).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+  });
+
+  it("handles the unmodified P shortcut case-insensitively", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
 
     fireEvent.keyDown(window, { key: "p" });
     fireEvent.keyDown(window, { key: "P" });
@@ -346,6 +358,13 @@ describe("AppView validation tab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     expect(screen.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape", metaKey: true });
+    fireEvent.keyDown(window, { key: "Escape", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "Escape", altKey: true });
+
+    expect(screen.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeTruthy();
+    expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
 
     act(() => {
       fireEvent.keyDown(window, { key: "Escape" });

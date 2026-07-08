@@ -48,6 +48,24 @@ describe("DashboardsTab", () => {
     expect(screen.getByText("P99 Latency")).toBeTruthy();
   });
 
+  it("leaves modified Escape shortcuts to the host", async () => {
+    stubFetchOnce(makePreviewResponse());
+    render(<DashboardsTab />);
+
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand panel" })[0]);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape", metaKey: true });
+    fireEvent.keyDown(window, { key: "Escape", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "Escape", altKey: true });
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("re-fetches when Refresh is clicked", async () => {
     const fetchFn = stubFetchOnce(makePreviewResponse());
     render(<DashboardsTab />);
