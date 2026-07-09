@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
+import { forwardHostKeyboardEvent, hostKeyboardEventMessageType } from "./hooks/useKeyboardShortcuts";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
 
@@ -291,22 +292,128 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
-  it("leaves modified Explorer shortcuts to VS Code", () => {
+  it("does not run Studio commands for VS Code modifier shortcuts", () => {
     window.history.replaceState({}, "", "/?tab=services");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    const shortcutKeys = ["?", "p", "1", "2", "3", "4", "5", "6"];
-    const modifiers = [{ metaKey: true }, { ctrlKey: true }, { altKey: true }];
-    for (const key of shortcutKeys) {
-      for (const modifier of modifiers) {
-        fireEvent.keyDown(window, { key, ...modifier });
-      }
+    const vscodeShortcuts = [
+      { key: "p", metaKey: true },
+      { key: "p", ctrlKey: true },
+      { key: "p", metaKey: true, shiftKey: true },
+      { key: "1", metaKey: true },
+      { key: "c", ctrlKey: true },
+      { key: "v", ctrlKey: true },
+      { key: "z", metaKey: true },
+    ];
+    for (const shortcut of vscodeShortcuts) {
+      fireEvent.keyDown(window, shortcut);
     }
 
     expect(telemetry.toggle).not.toHaveBeenCalled();
     expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+  });
+
+  it("bridges modified keydown and keyup events out of a nested webview", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const commands: Array<{
+      key: string;
+      code: string;
+      keyCode: number;
+      metaKey?: boolean;
+      ctrlKey?: boolean;
+      shiftKey?: boolean;
+      preventsBrowserDefault: boolean;
+    }> = [
+      { key: "p", code: "KeyP", keyCode: 80, metaKey: true, preventsBrowserDefault: true },
+      { key: "p", code: "KeyP", keyCode: 80, ctrlKey: true, preventsBrowserDefault: true },
+      {
+        key: "p",
+        code: "KeyP",
+        keyCode: 80,
+        metaKey: true,
+        shiftKey: true,
+        preventsBrowserDefault: true,
+      },
+      { key: "1", code: "Digit1", keyCode: 49, metaKey: true, preventsBrowserDefault: false },
+      { key: "c", code: "KeyC", keyCode: 67, ctrlKey: true, preventsBrowserDefault: false },
+      { key: "v", code: "KeyV", keyCode: 86, ctrlKey: true, preventsBrowserDefault: false },
+      { key: "z", code: "KeyZ", keyCode: 90, metaKey: true, preventsBrowserDefault: false },
+    ];
+
+    for (const command of commands) {
+      const forwardedCodes = new Set<string>();
+      const keydown = new KeyboardEvent("keydown", {
+        key: command.key,
+        code: command.code,
+        metaKey: command.metaKey,
+        ctrlKey: command.ctrlKey,
+        shiftKey: command.shiftKey,
+        cancelable: true,
+      });
+      Object.defineProperty(keydown, "keyCode", { value: command.keyCode });
+
+      expect(forwardHostKeyboardEvent(keydown, forwardedCodes, parentWindow, window)).toBe(true);
+      expect(keydown.defaultPrevented).toBe(command.preventsBrowserDefault);
+      expect(postMessage).toHaveBeenLastCalledWith({
+        type: hostKeyboardEventMessageType,
+        event: expect.objectContaining({
+          type: "keydown",
+          key: command.key,
+          code: command.code,
+          keyCode: command.keyCode,
+          metaKey: Boolean(command.metaKey),
+          ctrlKey: Boolean(command.ctrlKey),
+          shiftKey: Boolean(command.shiftKey),
+        }),
+      }, "*");
+
+      const keyup = new KeyboardEvent("keyup", { key: command.key, code: command.code });
+      Object.defineProperty(keyup, "keyCode", { value: command.keyCode });
+      expect(forwardHostKeyboardEvent(keyup, forwardedCodes, parentWindow, window)).toBe(true);
+      expect(postMessage).toHaveBeenLastCalledWith({
+        type: hostKeyboardEventMessageType,
+        event: expect.objectContaining({ type: "keyup", code: command.code, metaKey: false }),
+      }, "*");
+      expect(forwardedCodes.size).toBe(0);
+    }
+
+    expect(postMessage).toHaveBeenCalledTimes(commands.length * 2);
+  });
+
+  it("does not bridge host key events outside an iframe", () => {
+    const postMessage = vi.fn();
+    const currentWindow = { postMessage } as unknown as Window;
+    const forwardedCodes = new Set<string>();
+    const keydown = new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true });
+
+    expect(forwardHostKeyboardEvent(keydown, forwardedCodes, currentWindow, currentWindow)).toBe(false);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("clears stale shortcut keys when the host modifier is released first", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const forwardedCodes = new Set<string>();
+    const events = [
+      new KeyboardEvent("keydown", { key: "Meta", code: "MetaLeft", metaKey: true }),
+      new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true }),
+      new KeyboardEvent("keyup", { key: "Meta", code: "MetaLeft" }),
+    ];
+    for (const event of events) {
+      expect(forwardHostKeyboardEvent(event, forwardedCodes, parentWindow, window)).toBe(true);
+    }
+
+    expect(forwardedCodes.size).toBe(0);
+    expect(forwardHostKeyboardEvent(
+      new KeyboardEvent("keyup", { key: "p", code: "KeyP" }),
+      forwardedCodes,
+      parentWindow,
+      window,
+    )).toBe(false);
+    expect(postMessage).toHaveBeenCalledTimes(3);
   });
 
   it("handles the unmodified P shortcut case-insensitively", () => {
