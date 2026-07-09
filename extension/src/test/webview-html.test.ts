@@ -13,23 +13,42 @@ import { getObserverStartupHint } from '../startup-errors';
 
 describe('getObserverWebviewHtml', () => {
 	it('embeds the correct localhost URL with given port', () => {
-		const html = getObserverWebviewHtml(56652);
+		const html = getObserverWebviewHtml('http://127.0.0.1:56652', 'test-nonce');
 		assert.ok(html.includes('http://127.0.0.1:56652'));
 	});
 
 	it('contains an iframe pointing to the observer URL', () => {
-		const html = getObserverWebviewHtml(3000);
-		assert.ok(html.includes('<iframe src="http://127.0.0.1:3000"'));
+		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce');
+		assert.ok(html.includes('src="http://127.0.0.1:3000"'));
 	});
 
 	it('sets Content-Security-Policy with frame-src', () => {
-		const html = getObserverWebviewHtml(8080);
+		const html = getObserverWebviewHtml('http://127.0.0.1:8080', 'test-nonce');
 		assert.ok(html.includes('frame-src http://127.0.0.1:8080'));
 	});
 
 	it('includes sandbox attributes on the iframe', () => {
-		const html = getObserverWebviewHtml(3000);
+		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce');
 		assert.ok(html.includes('sandbox="allow-scripts allow-same-origin allow-forms allow-popups"'));
+	});
+
+	it('bridges keyboard events from the Observer iframe to VS Code', () => {
+		const html = getObserverWebviewHtml('https://observer.example.test/path', 'test-nonce');
+		assert.ok(html.includes("script-src 'nonce-test-nonce'"));
+		assert.ok(html.includes('<script nonce="test-nonce">'));
+		assert.ok(html.includes("message.type !== 'obstudio:host-keyboard-event'"));
+		assert.ok(html.includes("messageEvent.origin !== observerOrigin"));
+		assert.ok(html.includes("messageEvent.source !== observerFrame.contentWindow"));
+		assert.ok(html.includes("const observerOrigin = \"https://observer.example.test\""));
+		assert.ok(html.includes('new KeyboardEvent(eventData.type'));
+		assert.ok(html.includes('keyCode: { get: () => eventData.keyCode }'));
+	});
+
+	it('rejects an unsafe script nonce', () => {
+		assert.throws(
+			() => getObserverWebviewHtml('http://127.0.0.1:3000', "bad' nonce"),
+			/Webview nonce contains invalid characters/,
+		);
 	});
 });
 

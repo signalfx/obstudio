@@ -11,8 +11,12 @@ export function escapeHtml(text: string): string {
 		.replace(/"/g, '&quot;');
 }
 
-export function getObserverWebviewHtml(port: number): string {
-	const observerUrl = `http://127.0.0.1:${port}`;
+export function getObserverWebviewHtml(observerUrl: string, nonce: string): string {
+	if (!/^[A-Za-z0-9+/_=-]+$/.test(nonce)) {
+		throw new Error('Webview nonce contains invalid characters.');
+	}
+	const iframeSrc = escapeHtml(observerUrl);
+	const observerOrigin = JSON.stringify(new URL(observerUrl).origin).replace(/</g, '\\u003c');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -20,7 +24,7 @@ export function getObserverWebviewHtml(port: number): string {
 	<meta charset="UTF-8">
 	<meta
 		http-equiv="Content-Security-Policy"
-		content="default-src 'none'; frame-src ${observerUrl}; style-src 'unsafe-inline'; worker-src 'none';"
+		content="default-src 'none'; frame-src ${iframeSrc}; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; worker-src 'none';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Observer</title>
@@ -42,7 +46,38 @@ export function getObserverWebviewHtml(port: number): string {
 	</style>
 </head>
 <body>
-	<iframe src="${observerUrl}" title="Observer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+	<iframe id="observer-frame" src="${iframeSrc}" title="Observer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+	<script nonce="${nonce}">
+		const observerFrame = document.getElementById('observer-frame');
+		const observerOrigin = ${observerOrigin};
+		window.addEventListener('message', (messageEvent) => {
+			if (messageEvent.source !== observerFrame.contentWindow || messageEvent.origin !== observerOrigin) return;
+			const message = messageEvent.data;
+			if (!message || message.type !== 'obstudio:host-keyboard-event' || !message.event) return;
+			const eventData = message.event;
+			if ((eventData.type !== 'keydown' && eventData.type !== 'keyup')
+				|| typeof eventData.key !== 'string'
+				|| typeof eventData.code !== 'string'
+				|| typeof eventData.keyCode !== 'number') return;
+			const forwardedEvent = new KeyboardEvent(eventData.type, {
+				key: eventData.key,
+				code: eventData.code,
+				location: eventData.location,
+				altKey: eventData.altKey,
+				ctrlKey: eventData.ctrlKey,
+				metaKey: eventData.metaKey,
+				shiftKey: eventData.shiftKey,
+				repeat: eventData.repeat,
+				bubbles: true,
+				cancelable: true,
+			});
+			Object.defineProperties(forwardedEvent, {
+				keyCode: { get: () => eventData.keyCode },
+				which: { get: () => eventData.keyCode },
+			});
+			window.dispatchEvent(forwardedEvent);
+		});
+	</script>
 </body>
 </html>`;
 }

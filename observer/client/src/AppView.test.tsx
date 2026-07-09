@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
+import { forwardHostKeyboardEvent, hostKeyboardEventMessageType } from "./hooks/useKeyboardShortcuts";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
 
@@ -307,6 +308,54 @@ describe("AppView validation tab", () => {
     expect(telemetry.toggle).not.toHaveBeenCalled();
     expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+  });
+
+  it("bridges modified keydown and keyup events out of a nested webview", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const keydown = new KeyboardEvent("keydown", {
+      key: "p",
+      code: "KeyP",
+      metaKey: true,
+      shiftKey: true,
+      cancelable: true,
+    });
+    Object.defineProperty(keydown, "keyCode", { value: 80 });
+
+    expect(forwardHostKeyboardEvent(keydown, parentWindow, window)).toBe(true);
+    expect(keydown.defaultPrevented).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith({
+      type: hostKeyboardEventMessageType,
+      event: expect.objectContaining({
+        type: "keydown",
+        key: "p",
+        code: "KeyP",
+        keyCode: 80,
+        metaKey: true,
+        shiftKey: true,
+      }),
+    }, "*");
+
+    expect(forwardHostKeyboardEvent(keydown, parentWindow, window)).toBe(true);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+
+    const keyup = new KeyboardEvent("keyup", { key: "p", code: "KeyP" });
+    Object.defineProperty(keyup, "keyCode", { value: 80 });
+    expect(forwardHostKeyboardEvent(keyup, parentWindow, window)).toBe(true);
+    expect(postMessage).toHaveBeenLastCalledWith({
+      type: hostKeyboardEventMessageType,
+      event: expect.objectContaining({ type: "keyup", code: "KeyP", metaKey: false }),
+    }, "*");
+    expect(postMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not bridge host key events outside an iframe", () => {
+    const postMessage = vi.fn();
+    const currentWindow = { postMessage } as unknown as Window;
+    const keydown = new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true });
+
+    expect(forwardHostKeyboardEvent(keydown, currentWindow, currentWindow)).toBe(false);
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   it("handles the unmodified P shortcut case-insensitively", () => {

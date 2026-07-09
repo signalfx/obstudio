@@ -1,4 +1,5 @@
 import * as cp from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as https from 'node:https';
@@ -29,6 +30,7 @@ import {
 	getObserverErrorWebviewHtml,
 	getObserverLoadingWebviewHtml,
 	getObserverStoppedWebviewHtml,
+	getObserverWebviewHtml,
 	getStatusBarUpdate,
 	getErrorMessage,
 } from './webview-html';
@@ -1056,38 +1058,7 @@ async function restartObserver(context: vscode.ExtensionContext): Promise<void> 
 
 function getObserverWebviewHtmlForUrl(observerUrl: string): string {
 	const normalizedObserverUrl = normalizeObserverBaseUrl(observerUrl);
-
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta
-		http-equiv="Content-Security-Policy"
-		content="default-src 'none'; frame-src ${normalizedObserverUrl}; style-src 'unsafe-inline'; worker-src 'none';"
-	>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Observer</title>
-	<style>
-		html, body, iframe {
-			height: 100%;
-			margin: 0;
-			padding: 0;
-			width: 100%;
-		}
-
-		body {
-			background: var(--vscode-editor-background);
-		}
-
-		iframe {
-			border: 0;
-		}
-	</style>
-</head>
-<body>
-	<iframe src="${normalizedObserverUrl}" title="Observer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
-</body>
-</html>`;
+	return getObserverWebviewHtml(normalizedObserverUrl, crypto.randomBytes(16).toString('base64'));
 }
 
 function delay(ms: number): Promise<void> {
