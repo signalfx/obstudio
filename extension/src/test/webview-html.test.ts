@@ -42,6 +42,13 @@ describe('getObserverWebviewHtml', () => {
 		assert.ok(html.includes("const observerOrigin = \"https://observer.example.test\""));
 		assert.ok(html.includes('new KeyboardEvent(eventData.type'));
 		assert.ok(html.includes('keyCode: { get: () => eventData.keyCode }'));
+		assert.ok(html.includes('which: { get: () => eventData.keyCode }'));
+		for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey']) {
+			assert.ok(html.includes(`${modifier}: eventData.${modifier}`));
+		}
+		assert.ok(html.includes('bubbles: true'));
+		assert.ok(html.includes('cancelable: true'));
+		assert.ok(html.includes('window.dispatchEvent(forwardedEvent)'));
 	});
 
 	it('rejects an unsafe script nonce', () => {
