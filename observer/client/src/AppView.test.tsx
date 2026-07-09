@@ -346,6 +346,16 @@ describe("AppView validation tab", () => {
     }, "*");
     expect(postMessage).toHaveBeenCalledTimes(2);
     expect(forwardedCodes.size).toBe(0);
+
+    const copyKeydown = new KeyboardEvent("keydown", {
+      key: "c",
+      code: "KeyC",
+      ctrlKey: true,
+      cancelable: true,
+    });
+    Object.defineProperty(copyKeydown, "keyCode", { value: 67 });
+    expect(forwardHostKeyboardEvent(copyKeydown, forwardedCodes, parentWindow, window)).toBe(true);
+    expect(copyKeydown.defaultPrevented).toBe(false);
   });
 
   it("does not bridge host key events outside an iframe", () => {

@@ -20,8 +20,8 @@ export interface HostKeyboardEventMessage {
   };
 }
 
-const browserDefaultShortcutKeyCodes = new Set(
-  ["C", "F", "P", "S", "V", "X", "Y", "Z"].map((key) => key.charCodeAt(0)),
+const suppressedBrowserShortcutKeyCodes = new Set(
+  ["P", "S"].map((key) => key.charCodeAt(0)),
 );
 
 /** Whether a key event belongs to a host-level Alt, Ctrl, or Cmd shortcut. */
@@ -39,7 +39,7 @@ function isHostModifierKey(event: KeyboardEvent): boolean {
 
 function shouldPreventBrowserDefault(event: KeyboardEvent): boolean {
   if (!event.ctrlKey && !event.metaKey) return false;
-  return browserDefaultShortcutKeyCodes.has(event.keyCode);
+  return suppressedBrowserShortcutKeyCodes.has(event.keyCode);
 }
 
 /** Forward a host shortcut out of the nested Observer iframe. */
