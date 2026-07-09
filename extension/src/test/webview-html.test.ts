@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
 import test, { describe, it } from 'node:test';
+import * as vm from 'node:vm';
 import {
 	getObserverWebviewHtml,
 	getObserverLoadingWebviewHtml,
@@ -49,6 +50,87 @@ describe('getObserverWebviewHtml', () => {
 		assert.ok(html.includes('bubbles: true'));
 		assert.ok(html.includes('cancelable: true'));
 		assert.ok(html.includes('window.dispatchEvent(forwardedEvent)'));
+	});
+
+	it('executes the keyboard bridge and rejects untrusted message sources', () => {
+		const html = getObserverWebviewHtml('https://observer.example.test/path', 'test-nonce');
+		const script = html.match(/<script nonce="test-nonce">([\s\S]*?)<\/script>/)?.[1];
+		assert.ok(script, 'expected generated bridge script');
+
+		type MessageListener = (event: {
+			data: unknown;
+			origin: string;
+			source: unknown;
+		}) => void;
+		class FakeKeyboardEvent {
+			readonly type: string;
+			[key: string]: unknown;
+
+			constructor(type: string, init: Record<string, unknown>) {
+				this.type = type;
+				Object.assign(this, init);
+			}
+		}
+
+		const observerContentWindow = {};
+		const dispatchedEvents: FakeKeyboardEvent[] = [];
+		let messageListener: MessageListener | undefined;
+		const windowStub = {
+			addEventListener(type: string, listener: MessageListener) {
+				if (type === 'message') {
+					messageListener = listener;
+				}
+			},
+			dispatchEvent(event: FakeKeyboardEvent) {
+				dispatchedEvents.push(event);
+				return true;
+			},
+		};
+		vm.runInNewContext(script, {
+			document: {
+				getElementById: () => ({ contentWindow: observerContentWindow }),
+			},
+			KeyboardEvent: FakeKeyboardEvent,
+			window: windowStub,
+		});
+		assert.ok(messageListener, 'expected message listener to be registered');
+
+		const message = {
+			data: {
+				type: 'obstudio:host-keyboard-event',
+				event: {
+					type: 'keydown',
+					key: 'p',
+					code: 'KeyP',
+					keyCode: 80,
+					location: 0,
+					altKey: false,
+					ctrlKey: false,
+					metaKey: true,
+					shiftKey: true,
+					repeat: false,
+				},
+			},
+			origin: 'https://observer.example.test',
+			source: observerContentWindow,
+		};
+		messageListener(message);
+
+		assert.equal(dispatchedEvents.length, 1);
+		assert.equal(dispatchedEvents[0].type, 'keydown');
+		assert.equal(dispatchedEvents[0].key, 'p');
+		assert.equal(dispatchedEvents[0].code, 'KeyP');
+		assert.equal(dispatchedEvents[0].keyCode, 80);
+		assert.equal(dispatchedEvents[0].which, 80);
+		assert.equal(dispatchedEvents[0].metaKey, true);
+		assert.equal(dispatchedEvents[0].shiftKey, true);
+		assert.equal(dispatchedEvents[0].bubbles, true);
+		assert.equal(dispatchedEvents[0].cancelable, true);
+
+		messageListener({ ...message, origin: 'https://attacker.example.test' });
+		messageListener({ ...message, source: {} });
+		messageListener({ ...message, data: { type: 'obstudio:host-keyboard-event' } });
+		assert.equal(dispatchedEvents.length, 1);
 	});
 
 	it('rejects an unsafe script nonce', () => {

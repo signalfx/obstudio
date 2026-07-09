@@ -20,6 +20,8 @@ export interface HostKeyboardEventMessage {
   };
 }
 
+// Block only browser UI that competes with host commands. Editing defaults must
+// stay available to focused controls inside the cross-origin Observer iframe.
 const suppressedBrowserShortcutKeyCodes = new Set(
   ["P", "S"].map((key) => key.charCodeAt(0)),
 );
@@ -35,6 +37,12 @@ function eventCode(event: KeyboardEvent): string {
 
 function isHostModifierKey(event: KeyboardEvent): boolean {
   return event.key === "Alt" || event.key === "Control" || event.key === "Meta";
+}
+
+function isModifierCode(code: string): boolean {
+  return ["Alt", "Control", "Meta", "Shift"].some(
+    (modifier) => code === modifier || code.startsWith(modifier),
+  );
 }
 
 function shouldPreventBrowserDefault(event: KeyboardEvent): boolean {
@@ -57,7 +65,16 @@ export function forwardHostKeyboardEvent(
     forwardedCodes.add(code);
   } else if (event.type === "keyup") {
     const wasForwarded = forwardedCodes.delete(code);
-    if (!wasForwarded && !hasHostCommandModifier(event) && !isHostModifierKey(event)) return false;
+    const isReleasedHostModifier = isHostModifierKey(event);
+    if (isReleasedHostModifier) {
+      // macOS may omit a non-modifier keyup while Cmd is held. Drop those stale
+      // entries when the host modifier is released, while retaining any Shift
+      // key that still needs its own forwarded keyup.
+      for (const forwardedCode of forwardedCodes) {
+        if (!isModifierCode(forwardedCode)) forwardedCodes.delete(forwardedCode);
+      }
+    }
+    if (!wasForwarded && !hasHostCommandModifier(event) && !isReleasedHostModifier) return false;
   } else {
     return false;
   }
@@ -78,6 +95,8 @@ export function forwardHostKeyboardEvent(
     },
   };
 
+  // VS Code webview origins are opaque to the nested iframe. The parent still
+  // validates both this window as the source and the Observer origin.
   parentWindow.postMessage(message, "*");
   if (event.type === "keydown" && shouldPreventBrowserDefault(event)) {
     event.preventDefault();
@@ -92,12 +111,15 @@ export function useHostKeyboardForwarding(): void {
     const handler = (event: KeyboardEvent) => {
       forwardHostKeyboardEvent(event, forwardedCodes);
     };
+    const reset = () => forwardedCodes.clear();
 
     window.addEventListener("keydown", handler);
     window.addEventListener("keyup", handler);
+    window.addEventListener("blur", reset);
     return () => {
       window.removeEventListener("keydown", handler);
       window.removeEventListener("keyup", handler);
+      window.removeEventListener("blur", reset);
       forwardedCodes.clear();
     };
   }, []);

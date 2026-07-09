@@ -393,6 +393,29 @@ describe("AppView validation tab", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  it("clears stale shortcut keys when the host modifier is released first", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const forwardedCodes = new Set<string>();
+    const events = [
+      new KeyboardEvent("keydown", { key: "Meta", code: "MetaLeft", metaKey: true }),
+      new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true }),
+      new KeyboardEvent("keyup", { key: "Meta", code: "MetaLeft" }),
+    ];
+    for (const event of events) {
+      expect(forwardHostKeyboardEvent(event, forwardedCodes, parentWindow, window)).toBe(true);
+    }
+
+    expect(forwardedCodes.size).toBe(0);
+    expect(forwardHostKeyboardEvent(
+      new KeyboardEvent("keyup", { key: "p", code: "KeyP" }),
+      forwardedCodes,
+      parentWindow,
+      window,
+    )).toBe(false);
+    expect(postMessage).toHaveBeenCalledTimes(3);
+  });
+
   it("handles the unmodified P shortcut case-insensitively", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
