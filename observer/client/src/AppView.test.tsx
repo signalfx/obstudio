@@ -313,6 +313,7 @@ describe("AppView validation tab", () => {
   it("bridges modified keydown and keyup events out of a nested webview", () => {
     const postMessage = vi.fn();
     const parentWindow = { postMessage } as unknown as Window;
+    const forwardedCodes = new Set<string>();
     const keydown = new KeyboardEvent("keydown", {
       key: "p",
       code: "KeyP",
@@ -322,7 +323,7 @@ describe("AppView validation tab", () => {
     });
     Object.defineProperty(keydown, "keyCode", { value: 80 });
 
-    expect(forwardHostKeyboardEvent(keydown, parentWindow, window)).toBe(true);
+    expect(forwardHostKeyboardEvent(keydown, forwardedCodes, parentWindow, window)).toBe(true);
     expect(keydown.defaultPrevented).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith({
       type: hostKeyboardEventMessageType,
@@ -336,25 +337,24 @@ describe("AppView validation tab", () => {
       }),
     }, "*");
 
-    expect(forwardHostKeyboardEvent(keydown, parentWindow, window)).toBe(true);
-    expect(postMessage).toHaveBeenCalledTimes(1);
-
     const keyup = new KeyboardEvent("keyup", { key: "p", code: "KeyP" });
     Object.defineProperty(keyup, "keyCode", { value: 80 });
-    expect(forwardHostKeyboardEvent(keyup, parentWindow, window)).toBe(true);
+    expect(forwardHostKeyboardEvent(keyup, forwardedCodes, parentWindow, window)).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith({
       type: hostKeyboardEventMessageType,
       event: expect.objectContaining({ type: "keyup", code: "KeyP", metaKey: false }),
     }, "*");
     expect(postMessage).toHaveBeenCalledTimes(2);
+    expect(forwardedCodes.size).toBe(0);
   });
 
   it("does not bridge host key events outside an iframe", () => {
     const postMessage = vi.fn();
     const currentWindow = { postMessage } as unknown as Window;
+    const forwardedCodes = new Set<string>();
     const keydown = new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true });
 
-    expect(forwardHostKeyboardEvent(keydown, currentWindow, currentWindow)).toBe(false);
+    expect(forwardHostKeyboardEvent(keydown, forwardedCodes, currentWindow, currentWindow)).toBe(false);
     expect(postMessage).not.toHaveBeenCalled();
   });
 

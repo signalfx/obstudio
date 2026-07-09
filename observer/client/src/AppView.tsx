@@ -7,7 +7,7 @@ import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { FindingsTab } from "./components/FindingsTab";
-import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useHostKeyboardForwarding, useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { buildValidationIndex, buildValidationIssues } from "./validation/utils";
 
 interface AppViewProps {
@@ -48,6 +48,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "6": () => switchTab("dashboards"),
   }), [toggle, switchTab]);
 
+  useHostKeyboardForwarding();
   useKeyboardShortcuts(shortcuts);
 
   return (

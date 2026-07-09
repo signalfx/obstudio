@@ -20,9 +20,6 @@ export interface HostKeyboardEventMessage {
   };
 }
 
-const forwardedEvents = new WeakSet<KeyboardEvent>();
-const forwardedCodes = new Set<string>();
-
 /** Whether a key event belongs to a host-level Alt, Ctrl, or Cmd shortcut. */
 export function hasHostCommandModifier(event: KeyboardModifierEvent): boolean {
   return event.altKey || event.ctrlKey || event.metaKey;
@@ -44,10 +41,10 @@ function shouldPreventBrowserDefault(event: KeyboardEvent): boolean {
 /** Forward a host shortcut out of the nested Observer iframe. */
 export function forwardHostKeyboardEvent(
   event: KeyboardEvent,
+  forwardedCodes: Set<string>,
   parentWindow: Window = window.parent,
   currentWindow: Window = window,
 ): boolean {
-  if (forwardedEvents.has(event)) return true;
   if (parentWindow === currentWindow) return false;
 
   const code = eventCode(event);
@@ -77,7 +74,6 @@ export function forwardHostKeyboardEvent(
     },
   };
 
-  forwardedEvents.add(event);
   parentWindow.postMessage(message, "*");
   if (event.type === "keydown" && shouldPreventBrowserDefault(event)) {
     event.preventDefault();
@@ -85,14 +81,29 @@ export function forwardHostKeyboardEvent(
   return true;
 }
 
-/** Register webview-local shortcuts and bridge host modifier commands out of the nested iframe. */
+/** Bridge host modifier commands out of the nested iframe once at the app root. */
+export function useHostKeyboardForwarding(): void {
+  useEffect(() => {
+    const forwardedCodes = new Set<string>();
+    const handler = (event: KeyboardEvent) => {
+      forwardHostKeyboardEvent(event, forwardedCodes);
+    };
+
+    window.addEventListener("keydown", handler);
+    window.addEventListener("keyup", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("keyup", handler);
+      forwardedCodes.clear();
+    };
+  }, []);
+}
+
+/** Register webview-local shortcuts while preserving host modifier commands. */
 export function useKeyboardShortcuts(shortcuts: Record<string, () => void>): void {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (hasHostCommandModifier(event)) {
-        forwardHostKeyboardEvent(event);
-        return;
-      }
+      if (hasHostCommandModifier(event)) return;
 
       // Ignore when typing in an input.
       const tag = (event.target as HTMLElement)?.tagName;
@@ -106,15 +117,7 @@ export function useKeyboardShortcuts(shortcuts: Record<string, () => void>): voi
       }
     };
 
-    const keyupHandler = (event: KeyboardEvent) => {
-      forwardHostKeyboardEvent(event);
-    };
-
     window.addEventListener("keydown", handler);
-    window.addEventListener("keyup", keyupHandler);
-    return () => {
-      window.removeEventListener("keydown", handler);
-      window.removeEventListener("keyup", keyupHandler);
-    };
+    return () => window.removeEventListener("keydown", handler);
   }, [shortcuts]);
 }
