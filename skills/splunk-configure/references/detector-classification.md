@@ -17,7 +17,7 @@ two independently tracked metrics.
 A duration histogram and a counter belong to the same route group when:
 
 - Both carry the same `service.name` and the same route/operation dimension
-  value, or the histogram's own attributes already include `error.type`,
+  value, and the histogram's own attributes already include `error.type`,
   `http.response.status_code`, `rpc.response.status_code`, or
   `db.response.status_code` for that route, and
 - The counter's name or dimensions indicate it counts the same outcome the
@@ -28,10 +28,15 @@ A duration histogram and a counter belong to the same route group when:
 When a route group forms:
 
 - Classify the histogram once as **latency**.
-- Generate the **error** and/or **throughput** detector for that route by
-  filtering the *same* histogram on its own attribute (`error.type`, or the
-  appropriate `*.response.status_code`) instead of classifying the redundant
-  counter as a second, independently tracked metric.
+- Generate the **error** detector for that route by filtering the *same*
+  histogram, scoped to the route/operation dimension, on its own outcome
+  attribute (`error.type`, or the appropriate `*.response.status_code`)
+  instead of classifying the redundant counter as a second, independently
+  tracked metric.
+- Generate the **throughput** detector for that route from the *same*
+  histogram's observation count scoped to the route/operation dimension, with
+  no outcome/error/status filter -- throughput must count every request for
+  the route, not just the failing ones.
 - Record the merged counter in the detector output as merged into the route's
   RED group on the histogram's metric name, rather than skipping it silently,
   so the report explains why no standalone detector exists for it.

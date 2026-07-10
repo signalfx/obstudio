@@ -280,6 +280,169 @@ resource "signalfx_detector" "throughput" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 2)
 
+    def test_rejects_two_detectors_differing_only_in_percentile_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "p99" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('P99 latency')
+  EOF
+
+  rule {{
+    detect_label = "P99 latency"
+  }}
+}}
+
+resource "signalfx_detector" "p50" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('P50 latency')
+  EOF
+
+  rule {{
+    detect_label = "P50 latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_accepts_two_detectors_on_same_metric_with_different_percentile_argument(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "p99" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('P99 latency')
+  EOF
+
+  rule {{
+    detect_label = "P99 latency"
+  }}
+}}
+
+resource "signalfx_detector" "p50" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=50)
+    signal.publish('P50 latency')
+  EOF
+
+  rule {{
+    detect_label = "P50 latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
+    def test_accepts_two_detectors_on_same_metric_with_different_by_grouping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "error" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*')).count(by=['error.type'])
+    signal.publish('Error rate')
+  EOF
+
+  rule {{
+    detect_label = "Error rate"
+  }}
+}}
+
+resource "signalfx_detector" "throughput" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*')).count(by=['http.route'])
+    signal.publish('Throughput')
+  EOF
+
+  rule {{
+    detect_label = "Throughput"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
+    def test_accepts_two_detectors_differing_only_in_and_or_filter_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "and_filter" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*'))
+    signal.publish('And filter')
+  EOF
+
+  rule {{
+    detect_label = "And filter"
+  }}
+}}
+
+resource "signalfx_detector" "or_filter" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) or filter('error.type', '*'))
+    signal.publish('Or filter')
+  EOF
+
+  rule {{
+    detect_label = "Or filter"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
     def test_ignores_filter_looking_text_outside_the_data_call(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

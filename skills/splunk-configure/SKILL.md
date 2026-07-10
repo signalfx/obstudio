@@ -354,11 +354,13 @@ resource block. Do not emit standalone detectors for release-context-only
 metadata or categories that the classification reference marks as prerequisite
 or dashboard evidence only. Do not emit a detector for a counter that
 Route-Level De-duplication merged into a histogram's route group -- that
-outcome is already covered by an Error or Throughput detector reading the
-same histogram with an attribute filter. Two detectors legitimately reading
-the same metric name with different attribute filters (for example a Latency
-detector with no filter and an Error detector filtered to `error.type`) are
-not duplicates and are both expected.
+outcome is already covered by an Error detector reading the same histogram
+filtered to its own outcome attribute, and/or a Throughput detector reading
+the same histogram's observation count for the route with no outcome filter.
+Two detectors legitimately reading the same metric name with different
+aggregations or filters (for example a Latency detector with no filter, an
+Error detector filtered to `error.type`, and a Throughput detector with only
+the route filter) are not duplicates and are all expected.
 
 ```hcl
 resource "signalfx_detector" "<category>_<sanitized_metric_name>" {

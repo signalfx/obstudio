@@ -166,6 +166,14 @@ variable "throughput_<metric_id>_stddev" {
 }
 ```
 
+**Merged route-group variant:** when `detector-classification.md`
+Route-Level De-duplication merges a same-route throughput counter into a
+duration histogram, use the histogram's `<metric_name>` in `data(...)`,
+scope it to the route/operation dimension, and use `.count()` with no
+outcome/error filter -- throughput must count every request for the route,
+not just a filtered subset. See `../../references/signalflow-patterns.md`
+"Filtering a merged route-group metric on more than `service.name`".
+
 ## Incident-Readiness Detector Defaults
 
 Use these defaults for APM readiness categories from

@@ -5,15 +5,16 @@ Reproduces the scenario reported against `otel-instrument`: a plain
 request/checkout/payment flow where `/payment` fails with a 5xx a fraction of
 the time.
 
-Use it to reproduce and later fix
-[the otel-instrument custom-metric-vs-RED-attribute issue](../../../docs/otel-instrument-red-vs-custom-metrics.md):
-running `$otel-instrument` against this app should not need to invent
-standalone custom metrics/detectors for "payment errors" or "checkout
-throughput" -- `otelhttp`'s `http.server.request.duration` on `POST /payment`
-and `POST /checkout` already carries `http.status_code`/`error.type`, which is
-what Splunk APM's OOTB RED detectors key off. A per-route/per-outcome
-dimension on that existing metric, not a new `checkout.payment.errors`
-counter, is the correct shape.
+Use it to reproduce and later fix the otel-instrument custom-metric-vs-RED-attribute
+issue described in
+[issue #148](https://github.com/signalfx/obstudio/issues/148): running
+`$otel-instrument` against this app should not need to invent standalone
+custom metrics/detectors for "payment errors" or "checkout throughput" --
+FastAPI/ASGI auto-instrumentation's `http.server.request.duration` on
+`POST /payment` and `POST /checkout` already carries
+`http.response.status_code`/`error.type`, which is what Splunk APM's OOTB RED
+detectors key off. A per-route/per-outcome dimension on that existing metric,
+not a new `checkout.payment.errors` counter, is the correct shape.
 
 ## Run
 

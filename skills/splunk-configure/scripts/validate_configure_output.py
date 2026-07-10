@@ -15,8 +15,9 @@ VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
-FILTER_CLAUSE = re.compile(r"filter\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]")
-AGG_METHOD = re.compile(r"^\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+AGG_CHAIN = re.compile(
+    r"^(?:\s*\.\s*(?!publish\b)[A-Za-z_][A-Za-z0-9_]*\((?:[^()]|\([^()]*\))*\))*"
+)
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
@@ -130,27 +131,38 @@ def data_call_span(block: str) -> tuple[int, int] | None:
     return opening, matching_paren(block, opening)
 
 
-def aggregation_method(block: str) -> str | None:
-    """Return the aggregation method chained directly onto data(...), e.g. 'count' in
-    data('m', filter=...).count(by=[...]).publish(...)."""
+def _normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def data_call_signature(block: str) -> str | None:
+    """Return the normalized argument text of the data(...) call, scoped to
+    the call's own arguments so filter(...)-shaped text inside comments or
+    publish() labels elsewhere in the block is never mistaken for a real
+    filter. Keeping the raw text (rather than extracted key/value pairs)
+    preserves `and`/`or`/`not` boolean structure and any other
+    stream-affecting option such as rollup, so two data(...) calls that
+    select different streams never collapse to the same signature."""
     span = data_call_span(block)
     if span is None:
         return None
-    _, close = span
-    agg_match = AGG_METHOD.match(block[close + 1 :])
-    return agg_match.group(1) if agg_match else None
+    opening, close = span
+    return _normalize_whitespace(block[opening + 1 : close])
 
 
-def data_call_filter_dims(block: str) -> frozenset[tuple[str, str]]:
-    """Return filter(...) key/value pairs scoped to the data(...) call's own
-    arguments, so filter(...)-shaped text inside comments or publish() labels
-    elsewhere in the block is never mistaken for a real filter dimension."""
+def aggregation_signature(block: str) -> str:
+    """Return the normalized chain of aggregation method calls, including
+    their arguments, chained directly onto data(...) and before .publish(...),
+    e.g. '.percentile(pct=99)' or ".count(by=['error.type'])". Including the
+    arguments (not just the method name) distinguishes detectors that read
+    the same metric with the same method but different aggregation
+    arguments, such as different percentiles or different `by=[...]` groupings."""
     span = data_call_span(block)
     if span is None:
-        return frozenset()
-    opening, close = span
-    args = block[opening : close + 1]
-    return frozenset((key, value) for key, value in FILTER_CLAUSE.findall(args) if key != "service.name")
+        return ""
+    _, close = span
+    match = AGG_CHAIN.match(block[close + 1 :])
+    return _normalize_whitespace(match.group(0)) if match else ""
 
 
 def detector_blocks(text: str) -> list[tuple[str, str]]:
@@ -223,7 +235,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     verified = working_metrics(args.verify_report)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
-    detector_signatures: list[tuple[str, str | None, frozenset[tuple[str, str]]]] = []
+    detector_signatures: list[tuple[str, str | None, str]] = []
 
     for resource_id, block in blocks:
         metrics = DATA_METRIC.findall(block)
@@ -232,7 +244,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
-        detector_signatures.append((metric, aggregation_method(block), data_call_filter_dims(block)))
+        detector_signatures.append((metric, data_call_signature(block), aggregation_signature(block)))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:

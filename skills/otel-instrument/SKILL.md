@@ -627,12 +627,20 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     `messaging.client.operation.duration` and `messaging.process.duration`
     carry `error.type` when the operation fails.
 
-  A dedicated custom metric is only correct when the signal does not
-  correlate 1:1 with a single instrumented call — for example a queue-depth
-  gauge or a background job outcome with no inbound request. A failure
-  reason for a call that a RED metric already measures belongs on that
-  metric as an attribute, not as a second, separately-tracked counter with
-  its own detector.
+  Prefer the attribute over a dedicated custom metric only when both hold:
+  the outcome can be faithfully represented by the RED metric's existing
+  `error.type`/`*.response.status_code` attributes, and the language has a
+  supported per-call metric-attribute hook to set them (see
+  `#### Language-Specific Musts` below). A dedicated custom metric is correct
+  when either condition fails — for example a queue-depth gauge or a
+  background job outcome with no inbound request has no call to attach to;
+  a business outcome that occurs once per request but is not expressible as
+  a standard status/error attribute (for example a logical failure returned
+  as HTTP 200) would be silently lost if forced onto the RED metric; and
+  Python and Node.js request/response hooks only set span attributes, not
+  metric attributes, so they cannot add a new dimension to the duration
+  metric at all. In each of those cases, add the dedicated metric instead of
+  suppressing the only detector-ready signal for the outcome.
 - For incident-readiness work, follow
   `../references/incident-readiness.md`. Instrument only source-evidenced
   workflow, dependency, input-complexity, freshness, backpressure,

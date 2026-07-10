@@ -59,26 +59,38 @@ A = data('db.pool.connections.active', filter=filter('service.name', '${var.serv
 When `splunk-configure`'s Route-Level De-duplication merges an error or
 throughput counter into a same-route duration histogram (see
 `splunk-configure/references/detector-classification.md`), express the merged
-Error/Throughput detector by adding a second `filter(...)` on the histogram's
-own outcome attribute rather than reading a second metric:
+Error and Throughput detectors by adding the route/operation dimension
+(`http.route`, `rpc.method`, `db.operation.name`, or equivalent) as a second
+`filter(...)` rather than reading a second metric. Error and Throughput are
+distinct patterns — do not filter Throughput to the error attribute, or it
+reports only failed-request volume for the route instead of total volume:
 
+Error (route-scoped, filtered to the histogram's own outcome attribute):
 ```
-A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('error.type', '*')).count(by=['error.type']).publish(label='Error Rate')
+A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('http.route', '/payment') and filter('error.type', '*')).count(by=['error.type']).publish(label='Error Rate')
+```
+
+Throughput (route-scoped, no outcome/error filter — counts every request for the route):
+```
+A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('http.route', '/payment')).count().publish(label='Throughput')
 ```
 
 - Combine filters with `and filter(...)`; each additional filter narrows the
   same series, it does not add a second metric.
-- Use the histogram's own error/status attribute — `error.type`,
+- Always include the route/operation filter so a counter for one route is not
+  silently replaced by a service-wide stream.
+- For Error, add the histogram's own error/status attribute — `error.type`,
   `http.response.status_code`, `rpc.response.status_code`, or
-  `db.response.status_code` — as the second filter, matching whichever
-  attribute the audit proves the histogram carries for that route.
-- `.count(by=['error.type'])` on a histogram counts the number of recorded
-  events per attribute value, which is the correct aggregation for an error
-  or throughput read off a duration histogram. `.sum()` on a histogram sums
-  the observed *values* (total duration), not the event count, so it is
-  wrong here — it is only correct on a plain counter metric.
-  `.percentile()` remains the correct aggregation for the Latency detector
-  on the same metric.
+  `db.response.status_code` — as an additional filter, matching whichever
+  attribute the audit proves the histogram carries for that route. For
+  Throughput, omit that filter entirely so the count includes every outcome.
+- `.count(by=['error.type'])` and `.count()` on a histogram count the number
+  of recorded events (optionally grouped by attribute), which is the correct
+  aggregation for an error or throughput read off a duration histogram.
+  `.sum()` on a histogram sums the observed *values* (total duration), not
+  the event count, so it is wrong here — it is only correct on a plain
+  counter metric. `.percentile()` remains the correct aggregation for the
+  Latency detector on the same metric.
 
 ## Detector tail vs chart tail
 
