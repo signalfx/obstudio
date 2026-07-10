@@ -233,8 +233,95 @@ resource "signalfx_detector" "latency_dup" {{
 
         self.assertEqual(result["result"], "FAIL")
         self.assertIn(
-            "two detectors read the same metric with the same attribute filters "
-            "(true duplicate; a route-group merge must filter on distinct attributes)",
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_accepts_latency_and_throughput_detectors_on_same_metric_different_aggregation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "throughput" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count()
+    signal.publish('Low throughput')
+  EOF
+
+  rule {{
+    detect_label = "Low throughput"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
+    def test_ignores_filter_looking_text_outside_the_data_call(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    # was filter('error.type', '*') before the route-group merge
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish("was filter('error.type', '*')")
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "latency_dup" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency again')
+  EOF
+
+  rule {{
+    detect_label = "High latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
             result["errors"],
         )
 

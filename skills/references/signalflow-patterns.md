@@ -63,7 +63,7 @@ Error/Throughput detector by adding a second `filter(...)` on the histogram's
 own outcome attribute rather than reading a second metric:
 
 ```
-A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('error.type', '*')).sum(by=['error.type']).publish(label='Error Rate')
+A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('error.type', '*')).count(by=['error.type']).publish(label='Error Rate')
 ```
 
 - Combine filters with `and filter(...)`; each additional filter narrows the
@@ -72,10 +72,13 @@ A = data('http.server.request.duration', filter=filter('service.name', '${var.se
   `http.response.status_code`, `rpc.response.status_code`, or
   `db.response.status_code` — as the second filter, matching whichever
   attribute the audit proves the histogram carries for that route.
-- `.sum(by=['error.type'])` on a histogram counts the number of recorded
+- `.count(by=['error.type'])` on a histogram counts the number of recorded
   events per attribute value, which is the correct aggregation for an error
-  or throughput read off a duration histogram (as opposed to `.percentile()`,
-  which is only correct for the Latency detector on the same metric).
+  or throughput read off a duration histogram. `.sum()` on a histogram sums
+  the observed *values* (total duration), not the event count, so it is
+  wrong here — it is only correct on a plain counter metric.
+  `.percentile()` remains the correct aggregation for the Latency detector
+  on the same metric.
 
 ## Detector tail vs chart tail
 

@@ -13,8 +13,10 @@ from pathlib import Path
 RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
+DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
 FILTER_CLAUSE = re.compile(r"filter\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]")
+AGG_METHOD = re.compile(r"^\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
@@ -94,6 +96,63 @@ def matching_brace(text: str, opening: int) -> int:
     raise ValueError("unbalanced detector resource block")
 
 
+def matching_paren(text: str, opening: int) -> int:
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index in range(opening, len(text)):
+        char = text[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    raise ValueError("unbalanced data(...) call")
+
+
+def data_call_span(block: str) -> tuple[int, int] | None:
+    """Return the (opening, closing) paren indices of the data(...) call in block."""
+    data_match = DATA_CALL.search(block)
+    if data_match is None:
+        return None
+    opening = block.find("(", data_match.start())
+    return opening, matching_paren(block, opening)
+
+
+def aggregation_method(block: str) -> str | None:
+    """Return the aggregation method chained directly onto data(...), e.g. 'count' in
+    data('m', filter=...).count(by=[...]).publish(...)."""
+    span = data_call_span(block)
+    if span is None:
+        return None
+    _, close = span
+    agg_match = AGG_METHOD.match(block[close + 1 :])
+    return agg_match.group(1) if agg_match else None
+
+
+def data_call_filter_dims(block: str) -> frozenset[tuple[str, str]]:
+    """Return filter(...) key/value pairs scoped to the data(...) call's own
+    arguments, so filter(...)-shaped text inside comments or publish() labels
+    elsewhere in the block is never mistaken for a real filter dimension."""
+    span = data_call_span(block)
+    if span is None:
+        return frozenset()
+    opening, close = span
+    args = block[opening : close + 1]
+    return frozenset((key, value) for key, value in FILTER_CLAUSE.findall(args) if key != "service.name")
+
+
 def detector_blocks(text: str) -> list[tuple[str, str]]:
     blocks: list[tuple[str, str]] = []
     for match in RESOURCE_START.finditer(text):
@@ -164,7 +223,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     verified = working_metrics(args.verify_report)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
-    detector_signatures: list[tuple[str, frozenset[tuple[str, str]]]] = []
+    detector_signatures: list[tuple[str, str | None, frozenset[tuple[str, str]]]] = []
 
     for resource_id, block in blocks:
         metrics = DATA_METRIC.findall(block)
@@ -173,10 +232,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
-        filter_dims = frozenset(
-            (key, value) for key, value in FILTER_CLAUSE.findall(block) if key != "service.name"
-        )
-        detector_signatures.append((metric, filter_dims))
+        detector_signatures.append((metric, aggregation_method(block), data_call_filter_dims(block)))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
@@ -197,8 +253,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
 
     if len(detector_signatures) != len(set(detector_signatures)):
         errors.append(
-            "two detectors read the same metric with the same attribute filters "
-            "(true duplicate; a route-group merge must filter on distinct attributes)"
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)"
         )
     if "api_token" not in declared:
         errors.append("variables.tf does not declare sensitive api_token")
