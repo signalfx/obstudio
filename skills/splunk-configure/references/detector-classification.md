@@ -4,6 +4,52 @@ Rules for mapping metrics from an otel-audit report into detector categories.
 Use the priority order below when multiple rules match; the first qualifying
 category in that order wins.
 
+## Route-Level De-duplication
+
+Before classifying individual metrics, group candidate metrics that share the
+same `service.name` and the same route/operation dimension (`http.route`,
+`rpc.method`, `db.operation.name`, or an equivalent low-cardinality operation
+key). A duration histogram for a call and a counter that only restates an
+outcome of that same call (an error count, a status-code count, or a
+throughput count for the identical route/operation) are one RED signal, not
+two independently tracked metrics.
+
+A duration histogram and a counter belong to the same route group when:
+
+- Both carry the same `service.name` and the same route/operation dimension
+  value, or the histogram's own attributes already include `error.type`,
+  `http.response.status_code`, `rpc.response.status_code`, or
+  `db.response.status_code` for that route, and
+- The counter's name or dimensions indicate it counts the same outcome the
+  histogram's attributes already carry, for example a custom
+  `<route>.errors.count` counter next to `http.server.request.duration` that
+  carries an `error.type` attribute for the same route.
+
+When a route group forms:
+
+- Classify the histogram once as **latency**.
+- Generate the **error** and/or **throughput** detector for that route by
+  filtering the *same* histogram on its own attribute (`error.type`, or the
+  appropriate `*.response.status_code`) instead of classifying the redundant
+  counter as a second, independently tracked metric.
+- Record the merged counter in the detector output as merged into the route's
+  RED group on the histogram's metric name, rather than skipping it silently,
+  so the report explains why no standalone detector exists for it.
+- If the counter carries dimensions the histogram does not (for example a
+  specific failure reason with no matching histogram attribute), classify it
+  independently instead of merging it.
+
+One route should produce at most one Latency detector, one Error detector, and
+one Throughput detector -- not one detector per metric that happens to touch
+the route. Detectors in the same route group may read from the same metric
+with different attribute filters; that is expected and is not duplicate
+detector generation.
+
+This mirrors the check `$otel-instrument` performs before adding a new custom
+metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the
+attribute already exists on the RED metric, alert on the attribute rather
+than standing up a second detector for a second metric.
+
 ## Classification Rules
 
 Classify metrics with explicit GenAI context before incident-readiness and
@@ -349,6 +395,9 @@ Skip a metric (do not generate a detector) when:
 
 ## Decision Flowchart
 
+Apply Route-Level De-duplication first. The flowchart below then classifies
+each remaining (non-merged) metric.
+
 ```
 metric name starts with "gen_ai." or audit has GenAI Readiness plus explicit genai/llm/inference/embedding/model-provider/agent/tool-call/retrieval/memory/evaluation keyword?
   -> YES -> genai-* detector using GenAI rules above
@@ -410,6 +459,10 @@ metric or dimension contains service.version/deployment.environment.name/cloud.r
 ```
 
 ## Priority Order
+
+Route-Level De-duplication runs before this priority order and can remove a
+counter from classification entirely by merging it into an already-classified
+histogram's route group.
 
 When a metric could match multiple categories (rare), use this priority:
 

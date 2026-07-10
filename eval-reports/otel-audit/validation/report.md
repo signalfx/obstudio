@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20260702T061224237451Z |
+| Run ID | 20260710T181755103184Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -28,6 +28,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 5 | 0 |
 | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/audit | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json | 0 | 6 | 0 |
+| python/checkout-red-demo/qual/audit | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 5 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |

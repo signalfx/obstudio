@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260702T061224237451Z",
-    "repo_root": "/private/tmp/obstudio-pr111",
+    "run_id": "20260710T181755103184Z",
+    "repo_root": "/Users/btiwana/code/signalfx/obstudio",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -206,6 +206,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/checkout-red-demo/qual/audit",
+      "case": "python/checkout-red-demo",
+      "language": "python",
+      "service": "checkout-red-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "definition_path": "evals/python/checkout-red-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/checkout-red-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/fastapi-celery/qual/audit",
       "case": "python/fastapi-celery",
       "language": "python",
@@ -275,11 +291,11 @@
     }
   ],
   "summary": {
-    "eval_count": 15,
-    "case_count": 29,
-    "prompt_count": 29,
+    "eval_count": 16,
+    "case_count": 30,
+    "prompt_count": 30,
     "sanity_check_count": 0,
-    "rubric_check_count": 152,
+    "rubric_check_count": 157,
     "runtime_check_count": 0
   }
 }

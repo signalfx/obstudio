@@ -227,6 +227,15 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 
 ## Custom Metrics
 
+Before adding a custom counter or histogram for an outcome that happens
+inside a request the Java agent already covers, check whether it belongs as
+an attribute on `http.server.request.duration` instead — see `../../SKILL.md`
+`#### Implementation Rules`. The agent already sets
+`error.type`/`http.response.status_code` on that metric for failed requests
+with no extra code; only define a new instrument when the signal does not
+correlate 1:1 with a single request (a queue-depth gauge, a background job
+outcome).
+
 ```java
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;

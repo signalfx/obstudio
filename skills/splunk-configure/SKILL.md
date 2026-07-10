@@ -215,6 +215,16 @@ specification. Recommend `$otel-instrument` for missing signals and
 When candidate metrics exist, load `references/detector-classification.md` and
 apply the classification rules to each metric from Step 2.
 
+Before classifying individual metrics, apply Route-Level De-duplication from
+`references/detector-classification.md`: group candidate metrics that share
+the same `service.name` and route/operation dimension, and merge a counter
+that only restates an outcome already carried as an attribute on a
+same-route duration histogram into that histogram's route group instead of
+classifying the counter as a second, independently tracked metric. One route
+should produce at most one Latency, one Error, and one Throughput detector,
+each reading dimensions off the smallest set of metrics the route actually
+emits -- not one detector per candidate metric.
+
 Only classify metrics that are present in source evidence and either verified
 by `.observe/otel-verify.md` or explicitly accepted by the user as source-only
 detector inputs. Put unverified metrics in `Skipped Metrics` with the reason
@@ -342,7 +352,13 @@ when enough metric evidence exists.
 For each detector-eligible classified metric, emit a `signalfx_detector`
 resource block. Do not emit standalone detectors for release-context-only
 metadata or categories that the classification reference marks as prerequisite
-or dashboard evidence only.
+or dashboard evidence only. Do not emit a detector for a counter that
+Route-Level De-duplication merged into a histogram's route group -- that
+outcome is already covered by an Error or Throughput detector reading the
+same histogram with an attribute filter. Two detectors legitimately reading
+the same metric name with different attribute filters (for example a Latency
+detector with no filter and an Error detector filtered to `error.type`) are
+not duplicates and are both expected.
 
 ```hcl
 resource "signalfx_detector" "<category>_<sanitized_metric_name>" {

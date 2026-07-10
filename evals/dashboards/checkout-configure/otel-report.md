@@ -32,6 +32,15 @@ set on the resource.
 All metrics carry the `service.name=checkout` resource dimension. The custom
 counters also carry an `endpoint` dimension.
 
+`http.server.request.duration` already carries an `error.type` attribute on
+`POST /payment` (set via the `otelhttp` metric-attribute hook when
+`doPayment` returns the 502 "payment gateway timeout" outcome), in addition
+to its `http.route` attribute. `checkout.payment.errors` is a legacy custom
+counter that was added before this attribute existed: it carries the same
+`endpoint=/payment` dimension and increments on the identical 502 outcome the
+histogram's `error.type` attribute already records, so it duplicates
+coverage the histogram now provides rather than adding a new signal.
+
 ## Instrumentation
 
 - OTel SDK initialized once in `main.go`; tracer + meter providers set.

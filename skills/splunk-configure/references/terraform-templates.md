@@ -84,6 +84,13 @@ variable "error_<metric_id>_stddev" {
 }
 ```
 
+**Merged route-group variant:** when `detector-classification.md`
+Route-Level De-duplication merges a same-route error counter into a duration
+histogram, use the histogram's `<metric_name>` in `data(...)` and add the
+histogram's own outcome attribute as a second filter instead of reading the
+merged counter's metric name -- see `../../references/signalflow-patterns.md`
+"Filtering a merged route-group metric on more than `service.name`".
+
 ## Saturation Detector
 
 Monitors resource saturation using a static threshold on gauge values.

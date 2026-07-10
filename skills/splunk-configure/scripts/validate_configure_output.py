@@ -14,6 +14,7 @@ RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
+FILTER_CLAUSE = re.compile(r"filter\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
@@ -163,6 +164,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     verified = working_metrics(args.verify_report)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
+    detector_signatures: list[tuple[str, frozenset[tuple[str, str]]]] = []
 
     for resource_id, block in blocks:
         metrics = DATA_METRIC.findall(block)
@@ -171,6 +173,10 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
+        filter_dims = frozenset(
+            (key, value) for key, value in FILTER_CLAUSE.findall(block) if key != "service.name"
+        )
+        detector_signatures.append((metric, filter_dims))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
@@ -189,8 +195,11 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             if pattern.search(block):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
 
-    if len(detector_metrics) != len(set(detector_metrics)):
-        errors.append("the same metric is assigned to more than one detector")
+    if len(detector_signatures) != len(set(detector_signatures)):
+        errors.append(
+            "two detectors read the same metric with the same attribute filters "
+            "(true duplicate; a route-group merge must filter on distinct attributes)"
+        )
     if "api_token" not in declared:
         errors.append("variables.tf does not declare sensitive api_token")
     if "realm" not in declared:

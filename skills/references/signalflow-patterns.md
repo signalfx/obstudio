@@ -54,6 +54,29 @@ Saturation (gauge, mean):
 A = data('db.pool.connections.active', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Active Connections')
 ```
 
+## Filtering a merged route-group metric on more than `service.name`
+
+When `splunk-configure`'s Route-Level De-duplication merges an error or
+throughput counter into a same-route duration histogram (see
+`splunk-configure/references/detector-classification.md`), express the merged
+Error/Throughput detector by adding a second `filter(...)` on the histogram's
+own outcome attribute rather than reading a second metric:
+
+```
+A = data('http.server.request.duration', filter=filter('service.name', '${var.service_name}') and filter('error.type', '*')).sum(by=['error.type']).publish(label='Error Rate')
+```
+
+- Combine filters with `and filter(...)`; each additional filter narrows the
+  same series, it does not add a second metric.
+- Use the histogram's own error/status attribute — `error.type`,
+  `http.response.status_code`, `rpc.response.status_code`, or
+  `db.response.status_code` — as the second filter, matching whichever
+  attribute the audit proves the histogram carries for that route.
+- `.sum(by=['error.type'])` on a histogram counts the number of recorded
+  events per attribute value, which is the correct aggregation for an error
+  or throughput read off a duration histogram (as opposed to `.percentile()`,
+  which is only correct for the Latency detector on the same metric).
+
 ## Detector tail vs chart tail
 
 - **Detector** (`signalfx_detector`) appends a detection clause after the

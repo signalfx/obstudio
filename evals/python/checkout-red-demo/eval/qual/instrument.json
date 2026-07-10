@@ -1,0 +1,24 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Instrument the checkout/payment API in ./service: health, cart, checkout, and payment routes, including the POST /payment 502 payment-gateway-timeout outcome. Add safe spans/metrics, focused tests, and the separate reader-first instrumentation report. Run one focused verification pass; after a dependency or environment blocker, record the exact blocker and finish instead of repeatedly retrying setup."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for changed files, tests, and generated .observe output when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
+    "Instruments the FastAPI app with otelhttp/ASGI auto-instrumentation (or an equivalent route-aware HTTP middleware) so http.server.request.duration and related RED metrics are emitted for /health, /cart, /checkout, and /payment.",
+    "Before adding any standalone custom metric for the POST /payment failure outcome (payment gateway timeout), checks whether the outcome can be attached as an attribute (error.type or http.response.status_code) on the existing http.server.request.duration measurement for that same request, and uses the language's metric-attribute hook to do so instead of creating a new counter, per the check in otel-instrument/SKILL.md's Implementation Rules.",
+    "Does not introduce a standalone custom metric (e.g. a checkout.payment.errors-style counter) for the payment-failure outcome when the attribute-on-existing-metric approach is available and sufficient; a custom metric here is only acceptable with an explicit, justified reason why the attribute hook does not cover the signal.",
+    "Keeps raw order_id, card_token, and other request-identifying fields out of metric dimensions.",
+    "Adds or updates tests or compile checks (e.g. via make test) and keeps the instrumentation change safe to import without a live OTLP collector.",
+    "Writes a separate .observe/otel-instrumentation.md with Signals Changed. When a source audit exists, it includes one-to-one Audit Gap Closure rows; otherwise it records that no source audit was available and does not fabricate closure rows.",
+    "Runs otel-verify for the instrumented routes and the payment-failure path, or records the exact blocker; any unexecuted path remains Not proven and prevents a Pass result."
+  ]
+}
