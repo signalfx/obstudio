@@ -190,16 +190,16 @@ def locate_existing_obstudio() -> Path | None:
 
 
 def download_obstudio(plugin_data: Path) -> Path:
-    artifact = resolve_release_artifact()
-    release_dir = plugin_data / "release" / artifact.removesuffix(".zip")
+    artifact_suffix = resolve_release_artifact()
+    release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
     release_dir.mkdir(parents=True, exist_ok=True)
     extracted_dir = release_dir / "extracted"
     binary_name = "obstudio.exe" if is_windows() else "obstudio"
     binary_path = extracted_dir / binary_name
-    archive_path = release_dir / artifact
     checksums_path = release_dir / "checksums.txt"
 
-    expected_checksum = fetch_expected_checksum(artifact, checksums_path)
+    resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
+    archive_path = release_dir / resolved_artifact
     if archive_is_valid(archive_path, expected_checksum) and binary_path.is_file():
         ensure_executable(binary_path)
         return binary_path
@@ -210,7 +210,7 @@ def download_obstudio(plugin_data: Path) -> Path:
         if extracted_dir.exists():
             shutil.rmtree(extracted_dir)
 
-    download_url = f"{RELEASE_BASE_URL}/{artifact}"
+    download_url = f"{RELEASE_BASE_URL}/{resolved_artifact}"
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             if not archive_path.is_file():
@@ -220,7 +220,7 @@ def download_obstudio(plugin_data: Path) -> Path:
         except Exception as exc:  # pragma: no cover - network boundary
             archive_path.unlink(missing_ok=True)
             if attempt == DOWNLOAD_ATTEMPTS:
-                raise RuntimeError(f"failed to download {artifact} after {DOWNLOAD_ATTEMPTS} attempts") from exc
+                raise RuntimeError(f"failed to download {resolved_artifact} after {DOWNLOAD_ATTEMPTS} attempts") from exc
             time.sleep(attempt)
 
     if extracted_dir.exists():
@@ -232,48 +232,50 @@ def download_obstudio(plugin_data: Path) -> Path:
             zf.extractall(extracted_dir)
     except zipfile.BadZipFile as exc:
         archive_path.unlink(missing_ok=True)
-        raise RuntimeError(f"downloaded archive {artifact} is corrupt") from exc
+        raise RuntimeError(f"downloaded archive {resolved_artifact} is corrupt") from exc
 
     verify_checksum(archive_path, expected_checksum)
     binary_path = find_binary(extracted_dir, binary_name)
     if binary_path is None:
-        raise RuntimeError(f"could not find {binary_name} in {artifact}")
+        raise RuntimeError(f"could not find {binary_name} in {resolved_artifact}")
 
     ensure_executable(binary_path)
     return binary_path
 
 
-def fetch_expected_checksum(artifact: str, checksums_path: Path) -> str:
+def fetch_expected_checksum(artifact_suffix: str, checksums_path: Path) -> tuple[str, str]:
     download_url = f"{RELEASE_BASE_URL}/checksums.txt"
     try:
         with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
             text = response.read().decode("utf-8")
         checksums_path.write_text(text, encoding="utf-8")
         try:
-            return parse_checksum(text, artifact)
+            return parse_checksum(text, artifact_suffix)
         except Exception:
             if checksums_path.is_file():
                 cached_text = checksums_path.read_text(encoding="utf-8")
-                return parse_checksum(cached_text, artifact)
+                return parse_checksum(cached_text, artifact_suffix)
             raise
     except Exception as exc:  # pragma: no cover - network boundary
         if checksums_path.is_file():
             cached_text = checksums_path.read_text(encoding="utf-8")
-            return parse_checksum(cached_text, artifact)
+            return parse_checksum(cached_text, artifact_suffix)
         raise RuntimeError("failed to download release checksum manifest") from exc
 
 
-def parse_checksum(checksums_text: str, artifact: str) -> str:
-    target_name = artifact
+def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:
+    target_name = artifact_suffix
     for raw_line in checksums_text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
         for pattern in CHECKSUM_LINE_PATTERNS:
             match = pattern.fullmatch(line)
-            if match and match.group("name") == target_name:
-                return match.group("hash").lower()
-    raise RuntimeError(f"checksum for {artifact} not found in checksums.txt")
+            if match:
+                name = match.group("name")
+                if name == target_name or name.endswith(target_name):
+                    return name, match.group("hash").lower()
+    raise RuntimeError(f"checksum for {artifact_suffix} not found in checksums.txt")
 
 
 def archive_is_valid(archive_path: Path, expected_checksum: str) -> bool:
@@ -306,15 +308,15 @@ def resolve_release_artifact() -> str:
     machine = platform.machine().lower()
     if system == "Darwin":
         if machine in {"arm64", "aarch64"}:
-            return "obstudio_darwin_arm64.zip"
+            return "darwin_arm64.zip"
         if machine in {"x86_64", "amd64"}:
-            return "obstudio_darwin_amd64.zip"
+            return "darwin_amd64.zip"
     elif system == "Linux":
         if machine in {"x86_64", "amd64"}:
-            return "obstudio_linux_amd64.zip"
+            return "linux_amd64.zip"
     elif system == "Windows":
         if machine in {"x86_64", "amd64"}:
-            return "obstudio_windows_amd64.zip"
+            return "windows_amd64.zip"
     raise RuntimeError(f"unsupported platform: {system}/{machine}")
 
 
