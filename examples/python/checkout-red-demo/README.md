@@ -36,7 +36,7 @@ The service listens on `http://localhost:8030`.
 1. Run the baseline app and load generator.
 2. Run `$otel-audit` on this directory and review the reported metrics.
 3. Run `$otel-instrument` on this directory and inspect which metrics it adds
-   beyond the `otelhttp` RED signals -- this is the reproduction step.
+   beyond the ASGI auto-instrumented RED signals -- this is the reproduction step.
 4. Run `$splunk-configure` (or `$otel-audit` -> `$splunk-configure`) and count
    how many detectors it proposes vs. how many are actually not already
    covered by Splunk APM's OOTB RED detectors on `/checkout` and `/payment`.
