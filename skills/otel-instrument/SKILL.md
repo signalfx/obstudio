@@ -627,11 +627,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     `messaging.client.operation.duration` and `messaging.process.duration`
     carry `error.type` when the operation fails.
 
-  Prefer the attribute over a dedicated custom metric only when both hold:
-  the outcome can be faithfully represented by the RED metric's existing
-  `error.type`/`*.response.status_code` attributes, and the language has a
-  supported per-call metric-attribute hook to set them (see
-  `#### Language-Specific Musts` below). A dedicated custom metric is correct
+  Prefer the attribute over a dedicated custom metric when the outcome can be
+  faithfully represented on the RED metric and either auto-instrumentation
+  already emits the relevant `error.type`/`*.response.status_code` attribute
+  or the language has a supported per-call metric-attribute hook to set it
+  (see `#### Language-Specific Musts` below).
   when either condition fails — for example a queue-depth gauge or a
   background job outcome with no inbound request has no call to attach to;
   a business outcome that occurs once per request but is not expressible as

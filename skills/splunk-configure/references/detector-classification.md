@@ -29,10 +29,10 @@ When a route group forms:
 
 - Classify the histogram once as **latency**.
 - Generate the **error** detector for that route by filtering the *same*
-  histogram, scoped to the route/operation dimension, on its own outcome
-  attribute (`error.type`, or the appropriate `*.response.status_code`)
-  instead of classifying the redundant counter as a second, independently
-  tracked metric.
+  histogram, scoped to the route/operation dimension, on `error.type` or only
+  the failing `*.response.status_code` value(s) evidenced for the merged
+  counter. Never wildcard a status-code attribute, because successful
+  responses carry it too.
 - Generate the **throughput** detector for that route from the *same*
   histogram's observation count scoped to the route/operation dimension, with
   no outcome/error/status filter -- throughput must count every request for

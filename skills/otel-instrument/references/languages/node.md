@@ -180,9 +180,9 @@ check whether it belongs as an attribute on `http.server.request.duration`
 instead — see `../../SKILL.md` `#### Implementation Rules` and the
 `Node.js:` entry under `#### Language-Specific Musts`. The instrumentation
 already sets `error.type`/`http.response.status_code` on that metric for
-failed requests with no extra code; only define a new instrument when the
-signal does not correlate 1:1 with a single request (a queue-depth gauge, a
-background job outcome).
+failed requests with no extra code. Define a new instrument when the signal
+does not correlate 1:1 with a single request (a queue-depth gauge or background
+job outcome), or cannot be represented by those automatically emitted attributes.
 
 ```typescript
 import { metrics } from '@opentelemetry/api';

@@ -79,11 +79,11 @@ A = data('http.server.request.duration', filter=filter('service.name', '${var.se
   same series, it does not add a second metric.
 - Always include the route/operation filter so a counter for one route is not
   silently replaced by a service-wide stream.
-- For Error, add the histogram's own error/status attribute — `error.type`,
-  `http.response.status_code`, `rpc.response.status_code`, or
-  `db.response.status_code` — as an additional filter, matching whichever
-  attribute the audit proves the histogram carries for that route. For
-  Throughput, omit that filter entirely so the count includes every outcome.
+- For Error, filter the histogram's proven outcome attribute. An `error.type`
+  existence wildcard is valid; for `http.response.status_code`,
+  `rpc.response.status_code`, or `db.response.status_code`, select only the
+  failing value(s) evidenced by the audit and never use `*`. For Throughput,
+  omit the outcome filter entirely so the count includes every outcome.
 - `.count(by=['error.type'])` and `.count()` on a histogram count the number
   of recorded events (optionally grouped by attribute), which is the correct
   aggregation for an error or throughput read off a duration histogram.
