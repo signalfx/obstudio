@@ -123,12 +123,14 @@ def matching_paren(text: str, opening: int) -> int:
 
 
 def _blank_comment_lines(text: str) -> str:
-    """Return text with every `#` comment -- whether it starts the line or
-    trails real code -- replaced by spaces through the end of that physical
-    line, so a decoy `data(...)` mentioned in a comment can never be matched
-    instead of the real SignalFlow call. A `#` inside a quoted string is left
-    untouched since it is not a comment marker there. Every other character
-    keeps its original index for slicing the block."""
+    """Return text with every `#` line comment, `//` line comment, and
+    `/* ... */` block comment -- whether it starts the line or trails real
+    code -- replaced by spaces (newlines inside a block comment are kept so
+    line numbers do not shift), so a decoy `data(...)` or `resource` block
+    mentioned in a comment can never be matched instead of real HCL/SignalFlow
+    syntax. A comment marker inside a quoted string is left untouched since it
+    is not a comment marker there. Every other character keeps its original
+    index for slicing the block."""
     chars = list(text)
     quote: str | None = None
     escaped = False
@@ -148,10 +150,23 @@ def _blank_comment_lines(text: str) -> str:
             quote = char
             index += 1
             continue
-        if char == "#":
+        if char == "#" or (char == "/" and chars[index + 1 : index + 2] == ["/"]):
             while index < len(chars) and chars[index] not in "\r\n":
                 chars[index] = " "
                 index += 1
+            continue
+        if char == "/" and chars[index + 1 : index + 2] == ["*"]:
+            chars[index] = " "
+            chars[index + 1] = " "
+            index += 2
+            while index < len(chars) and chars[index : index + 2] != ["*", "/"]:
+                if chars[index] not in "\r\n":
+                    chars[index] = " "
+                index += 1
+            if index < len(chars):
+                chars[index] = " "
+                chars[index + 1] = " "
+                index += 2
             continue
         index += 1
     return "".join(chars)
@@ -160,8 +175,8 @@ def _blank_comment_lines(text: str) -> str:
 def data_call_span(block: str) -> tuple[int, int, str] | None:
     """Return the (opening, closing) paren indices of the data(...) call in
     block, plus the comment-blanked view of block those indices are valid
-    against, so a decoy `data(`, `filter(`, or `)` mentioned in a `#` comment
-    -- whether before the real call or on a continuation line inside its own
+    against, so a decoy `data(`, `filter(`, or `)` mentioned in a comment --
+    whether before the real call or on a continuation line inside its own
     argument list -- is never mistaken for real SignalFlow syntax by callers
     that slice the returned span."""
     searchable = _blank_comment_lines(block)
@@ -211,12 +226,59 @@ def _canonicalize_tokens(text: str) -> str:
     return "".join(parts).strip()
 
 
+_STRING_ESCAPE_DECODE = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+
+
+def _decode_string_escapes(body: str) -> str:
+    """Decode only the recognized escape sequences in a string literal body
+    (backslash, quotes, and n/r/t) to their actual character, so an escaped
+    control character (e.g. `\\n`, a newline) is never conflated with the
+    unescaped literal character it merely resembles (e.g. `n`, the letter).
+    An unrecognized `\\x` sequence passes through with its backslash intact
+    since its meaning is not known."""
+    result: list[str] = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char == "\\" and index + 1 < len(body):
+            next_char = body[index + 1]
+            if next_char in _STRING_ESCAPE_DECODE:
+                result.append(_STRING_ESCAPE_DECODE[next_char])
+                index += 2
+                continue
+            result.append(char)
+            result.append(next_char)
+            index += 2
+            continue
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
 def _canonical_token(token: str) -> str:
     """Canonicalize a string literal's quote style to single quotes so
-    `'checkout'` and `"checkout"` compare equal; other tokens pass through."""
+    `'checkout'` and `"checkout"` compare equal; other tokens pass through.
+    Escape sequences are decoded to their actual character (not merely
+    stripped of their backslash) before re-escaping, so a literal character
+    and its similarly-spelled escape sequence -- e.g. the letter `n` in `'n'`
+    versus the newline escape in `'\\n'` -- never canonicalize to the same
+    signature."""
     if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"":
-        unescaped = re.sub(r"\\(.)", r"\1", token[1:-1])
-        escaped = unescaped.replace("\\", "\\\\").replace("'", "\\'")
+        decoded = _decode_string_escapes(token[1:-1])
+        escaped = (
+            decoded.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
         return f"'{escaped}'"
     return token
 
@@ -359,7 +421,7 @@ def detector_blocks(text: str) -> list[tuple[str, str]]:
     `resource "signalfx_detector" "..." { ... }` block. Both the resource
     header and the closing brace are located against a comment-blanked view
     so a decoy `resource "signalfx_detector" "ghost" {` or a stray `{`/`}`
-    inside a `#` comment -- whether at the HCL level or inside a program_text
+    inside a comment -- whether at the HCL level or inside a program_text
     heredoc -- can never be mistaken for a real block boundary; the returned
     block text is still sliced from the original, unblanked `text` since
     `_blank_comment_lines` preserves character indices."""

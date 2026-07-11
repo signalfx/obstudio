@@ -169,9 +169,12 @@ variable "throughput_<metric_id>_stddev" {
 **Merged route-group variant:** when `detector-classification.md`
 Route-Level De-duplication merges a same-route throughput counter into a
 duration histogram, use the histogram's `<metric_name>` in `data(...)`,
-scope it to the route/operation dimension, and use `.count()` with no
+scope it to the route/operation dimension, select the histogram's count
+rollup with `rollup='count'`, and aggregate with `.sum()` with no
 outcome/error filter -- throughput must count every request for the route,
-not just a filtered subset. See `../../references/signalflow-patterns.md`
+not just a filtered subset. A plain `.count()` aggregation counts reporting
+time series, not histogram observations, so it does not measure request
+throughput. See `../../references/signalflow-patterns.md`
 "Filtering a merged route-group metric on more than `service.name`".
 
 ## Incident-Readiness Detector Defaults
