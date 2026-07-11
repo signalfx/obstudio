@@ -231,10 +231,13 @@ Before adding a custom counter or histogram for an outcome that happens
 inside a request the Java agent already covers, check whether it belongs as
 an attribute on `http.server.request.duration` instead — see `../../SKILL.md`
 `#### Implementation Rules`. The agent already sets
-`error.type`/`http.response.status_code` on that metric for failed requests
-with no extra code. Define a new instrument when the signal does not correlate
-1:1 with a single request (a queue-depth gauge or background job outcome), or
-cannot be represented by an attribute on the existing RED metric.
+`http.response.status_code` on that metric for every request, and
+`error.type` for a 5xx (or otherwise invalid) status, with no extra code --
+a plain 4xx client-error response does not set `error.type` on a server
+span. Define a new instrument when the signal does not correlate 1:1 with a
+single request (a queue-depth gauge or background job outcome), or cannot be
+represented by an attribute on the existing RED metric -- for example a 4xx
+outcome that needs its own dimension.
 
 ```java
 import io.opentelemetry.api.GlobalOpenTelemetry;

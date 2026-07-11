@@ -856,12 +856,13 @@ Python:
 - For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
 - Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
 - The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
-  `error.type` and `http.response.status_code` on `http.server.request.duration`
-  for failed requests with no extra code. `server_request_hook`/
-  `response_hook` only set span attributes, not metric attributes; they are
-  not a route to a new dimension on the duration metric itself. Do not add a
-  standalone counter for a request outcome the duration metric already
-  attributes correctly.
+  `http.response.status_code` on `http.server.request.duration` for every
+  request, and `error.type` for a 5xx (or otherwise invalid) status, with no
+  extra code -- a plain 4xx client-error response does not set `error.type`
+  on a server span. `server_request_hook`/`response_hook` only set span
+  attributes, not metric attributes; they are not a route to a new dimension
+  on the duration metric itself. Do not add a standalone counter for a
+  request outcome the duration metric already attributes correctly.
 
 Node.js:
 - Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
@@ -871,12 +872,17 @@ Node.js:
 - Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
 - Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
 - In the final response, name the updated preload command (`--require` or `--import`), the packages added, and that HTTP server spans plus request-duration metrics are expected.
-- `@opentelemetry/instrumentation-http` already sets `error.type` and
-  `http.response.status_code` on `http.server.request.duration` for failed
-  requests with no extra code. Its hooks (`requestHook`, `responseHook`,
+- `@opentelemetry/instrumentation-http` already sets `http.response.status_code`
+  on `http.server.request.duration` from the response for every request with no
+  extra code. It does not set `error.type` from a failing status code:
+  `error.type` there is reserved for a lower-level request/response transport
+  error (for example a socket error before a status was ever sent), not an
+  ordinary 4xx/5xx completion. Its hooks (`requestHook`, `responseHook`,
   `startIncomingSpanHook`) only add span attributes, not metric attributes.
-  Do not add a standalone counter for a request outcome the duration metric
-  already attributes correctly.
+  Do not add a standalone counter for a request outcome that `http.response.status_code`
+  already distinguishes; `@opentelemetry/instrumentation-http` has no per-call
+  metric-attribute hook, so a finer-grained reason dimension that the status
+  code alone cannot express does need its own custom metric here.
 
 Go:
 - For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.
@@ -887,9 +893,11 @@ Go:
   Also prove the combined wrappers do not emit duplicate server spans.
 - Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
 - In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
-- `otelhttp.NewHandler` already sets `error.type` and `http.response.status_code`
-  on `http.server.request.duration` from the response status with no extra
-  code. When a handler needs a dimension `otelhttp` cannot derive from the
+- `otelhttp.NewHandler` already sets `http.response.status_code` on
+  `http.server.request.duration` from the response status with no extra code.
+  It does not set `error.type` from that status: `otelhttp`'s metric
+  attributes never include `error.type` for an ordinary 4xx/5xx completion.
+  When a handler needs a dimension `otelhttp` cannot derive from the
   status code alone (a specific failure reason such as a downstream timeout
   vs. a validation error, both returning the same HTTP status), pull the
   `Labeler` that `otelhttp.NewHandler` already injects into the request

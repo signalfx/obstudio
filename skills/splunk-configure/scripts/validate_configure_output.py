@@ -122,9 +122,29 @@ def matching_paren(text: str, opening: int) -> int:
     raise ValueError("unbalanced data(...) call")
 
 
+def _blank_comment_lines(text: str) -> str:
+    """Return text with every `#`-prefixed comment line replaced by spaces,
+    so a decoy `data(...)` mentioned in a comment can never be matched
+    instead of the real SignalFlow call, while every other character keeps
+    its original index for slicing the block."""
+    lines = text.splitlines(keepends=True)
+    blanked = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            indent = len(line) - len(stripped)
+            blanked.append(line[:indent] + re.sub(r"[^\r\n]", " ", line[indent:]))
+        else:
+            blanked.append(line)
+    return "".join(blanked)
+
+
 def data_call_span(block: str) -> tuple[int, int] | None:
-    """Return the (opening, closing) paren indices of the data(...) call in block."""
-    data_match = DATA_CALL.search(block)
+    """Return the (opening, closing) paren indices of the data(...) call in
+    block, searching a comment-blanked view so a decoy `data(` mentioned in a
+    `#` comment before the real call is never matched instead of it."""
+    searchable = _blank_comment_lines(block)
+    data_match = DATA_CALL.search(searchable)
     if data_match is None:
         return None
     opening = block.find("(", data_match.start())
@@ -167,19 +187,128 @@ def _normalize_whitespace(text: str) -> str:
     return "".join(parts).strip()
 
 
+def _canonical_token(token: str) -> str:
+    """Canonicalize a string literal's quote style to single quotes so
+    `'checkout'` and `"checkout"` compare equal; other tokens pass through."""
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"":
+        unescaped = re.sub(r"\\(.)", r"\1", token[1:-1])
+        escaped = unescaped.replace("\\", "\\\\").replace("'", "\\'")
+        return f"'{escaped}'"
+    return token
+
+
+def _build_group(tokens: list[str], index: int) -> tuple[list, int]:
+    """Parse tokens[index:] into a nested list mirroring parenthesis nesting.
+    Each element is a token string, or a ("(", inner) pair for a paren group.
+    Stops at (and consumes) the first unmatched ')' or the end of tokens."""
+    group: list = []
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "(":
+            inner, index = _build_group(tokens, index + 1)
+            group.append(("(", inner))
+        elif token == ")":
+            return group, index + 1
+        else:
+            group.append(token)
+            index += 1
+    return group, index
+
+
+def _split_boolean_chain(group: list) -> tuple[str | None, list[list]]:
+    """If group is a chain of a single repeated 'and' or 'or' operator (no
+    mixed operators, which would be ambiguous without explicit grouping),
+    return the operator and its operand token-lists. Otherwise return
+    (None, [group]) so the caller renders it unchanged."""
+    operators = {token for token in group if token in ("and", "or")}
+    if len(operators) != 1:
+        return None, [group]
+    operator = operators.pop()
+    operands: list[list] = []
+    current: list = []
+    for token in group:
+        if token == operator:
+            operands.append(current)
+            current = []
+        else:
+            current.append(token)
+    operands.append(current)
+    return operator, operands
+
+
+def _render_tokens(tokens: list) -> str:
+    parts: list[str] = []
+    previous: str | None = None
+    for item in tokens:
+        token = f"({_canonical_group(item[1])})" if isinstance(item, tuple) else _canonical_token(item)
+        if previous is not None and _is_wordlike(previous) and _is_wordlike(token):
+            parts.append(" ")
+        parts.append(token)
+        previous = token
+    return "".join(parts)
+
+
+def _split_top_level_commas(group: list) -> list[list]:
+    """Split group on "," elements that belong to this group's own nesting
+    level. Commas inside a nested paren group are untouched because that
+    nested content is already collapsed into a single ("(", inner) element
+    by `_build_group`, not exposed as top-level "," tokens here."""
+    args: list[list] = []
+    current: list = []
+    for item in group:
+        if item == ",":
+            args.append(current)
+            current = []
+        else:
+            current.append(item)
+    args.append(current)
+    return args
+
+
+def _canonical_argument(tokens: list) -> str:
+    """Render one data(...) argument to a canonical string. A leading
+    `filter=` keyword prefix is set aside before looking for a top-level
+    `and`/`or` chain, so the prefix never ends up attached to whichever
+    operand happens to render first -- that association would otherwise
+    differ between `filter=filter(a) and filter(b)` and the operands
+    reversed, defeating the operand sort below. String-literal quote style
+    is normalized, and the operands of a top-level repeated `and`/`or` chain
+    are sorted, so two filter expressions that are identical except for
+    quote style or commutative operand order render to the same string."""
+    prefix = ""
+    if len(tokens) >= 2 and tokens[0] == "filter" and tokens[1] == "=":
+        prefix, tokens = "filter=", tokens[2:]
+    operator, operands = _split_boolean_chain(tokens)
+    rendered = [_render_tokens(operand) for operand in operands]
+    if operator is None:
+        return prefix + rendered[0]
+    rendered.sort()
+    return prefix + f" {operator} ".join(rendered)
+
+
+def _canonical_group(group: list) -> str:
+    """Render a parsed data(...) argument list to a canonical string by
+    canonicalizing each top-level comma-separated argument independently."""
+    return ",".join(_canonical_argument(arg) for arg in _split_top_level_commas(group))
+
+
 def data_call_signature(block: str) -> str | None:
-    """Return the normalized argument text of the data(...) call, scoped to
+    """Return the canonical argument text of the data(...) call, scoped to
     the call's own arguments so filter(...)-shaped text inside comments or
     publish() labels elsewhere in the block is never mistaken for a real
-    filter. Keeping the raw text (rather than extracted key/value pairs)
+    filter. Canonicalizing (rather than extracting key/value pairs)
     preserves `and`/`or`/`not` boolean structure and any other
     stream-affecting option such as rollup, so two data(...) calls that
-    select different streams never collapse to the same signature."""
+    select different streams never collapse to the same signature -- while
+    quote style and commutative and/or operand order, which do not change
+    which stream is selected, do collapse to the same signature."""
     span = data_call_span(block)
     if span is None:
         return None
     opening, close = span
-    return _normalize_whitespace(block[opening + 1 : close])
+    tokens = TOKEN.findall(block[opening + 1 : close])
+    group, _ = _build_group(tokens, 0)
+    return _canonical_group(group)
 
 
 def aggregation_signature(block: str) -> str:
@@ -270,7 +399,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     detector_signatures: list[tuple[str, str | None, str]] = []
 
     for resource_id, block in blocks:
-        metrics = DATA_METRIC.findall(block)
+        metrics = DATA_METRIC.findall(_blank_comment_lines(block))
         if len(metrics) != 1:
             errors.append(f"{resource_id}: expected exactly one data(...) metric, found {len(metrics)}")
             continue

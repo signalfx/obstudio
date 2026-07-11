@@ -618,5 +618,143 @@ resource "signalfx_detector" "latency_dup" {{
         )
 
 
+    def test_ignores_decoy_data_call_inside_a_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    # previously used data('custom.unverified.metric', filter=filter('x', 'y'))
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "latency_dup" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency again')
+  EOF
+
+  rule {{
+    detect_label = "High latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+        self.assertNotIn(
+            f"latency: metric {METRIC!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_quote_style(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "single_quote" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', 'checkout'))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "double_quote" {{
+  program_text = <<-EOF
+    signal = data("{METRIC}", filter=filter("service.name", "checkout"))
+    signal.publish('High latency again')
+  EOF
+
+  rule {{
+    detect_label = "High latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_and_operand_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "forward" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*'))
+    signal.publish('Error rate')
+  EOF
+
+  rule {{
+    detect_label = "Error rate"
+  }}
+}}
+
+resource "signalfx_detector" "reversed" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('error.type', '*') and filter('service.name', var.service_name))
+    signal.publish('Error rate again')
+  EOF
+
+  rule {{
+    detect_label = "Error rate again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
