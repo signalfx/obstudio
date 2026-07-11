@@ -13,6 +13,7 @@ from pathlib import Path
 RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
+PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<-?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\n')
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
 AGG_CHAIN = re.compile(
@@ -170,6 +171,27 @@ def _blank_comment_lines(text: str) -> str:
             continue
         index += 1
     return "".join(chars)
+
+
+def program_text_body(block: str) -> str:
+    """Return the `program_text = <<-EOF ... EOF` heredoc body of a
+    signalfx_detector resource block, with the resource header and any other
+    HCL fields (`name`, `description`, `rule { ... }`) stripped away, so
+    metric/filter/label discovery scoped to this body can never mistake a
+    `data(...)`- or `publish(...)`-shaped string inside an unrelated quoted
+    HCL value for real SignalFlow syntax. Falls back to the full block when
+    no `program_text` heredoc is found, so the caller still gets a normal
+    validation error (no data(...) call found) rather than silently skipping
+    the resource."""
+    searchable = _blank_comment_lines(block)
+    start_match = PROGRAM_TEXT_HEREDOC.search(searchable)
+    if start_match is None:
+        return block
+    marker = start_match.group(1)
+    end_match = re.search(rf"^[ \t]*{re.escape(marker)}[ \t]*$", searchable[start_match.end() :], re.M)
+    if end_match is None:
+        return block[start_match.end() :]
+    return block[start_match.end() : start_match.end() + end_match.start()]
 
 
 def data_call_span(block: str) -> tuple[int, int, str] | None:
@@ -508,18 +530,20 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
 
     for resource_id, block in blocks:
         searchable = _blank_comment_lines(block)
-        metrics = DATA_METRIC.findall(searchable)
+        program_body = program_text_body(block)
+        program_searchable = _blank_comment_lines(program_body)
+        metrics = DATA_METRIC.findall(program_searchable)
         if len(metrics) != 1:
             errors.append(f"{resource_id}: expected exactly one data(...) metric, found {len(metrics)}")
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
-        detector_signatures.append((metric, data_call_signature(block), aggregation_signature(block)))
+        detector_signatures.append((metric, data_call_signature(program_body), aggregation_signature(program_body)))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
-        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", searchable):
+        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", program_searchable):
             errors.append(f"{resource_id}: missing service.name filter")
         for variable in VARIABLE_REFERENCE.findall(searchable):
             if variable not in declared:
@@ -527,10 +551,10 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         labels = DETECT_LABEL.findall(searchable)
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
-        elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", searchable):
+        elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", program_searchable):
             errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
-            if pattern.search(searchable):
+            if pattern.search(program_searchable):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
 
     if len(detector_signatures) != len(set(detector_signatures)):

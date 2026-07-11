@@ -1292,6 +1292,68 @@ resource "signalfx_detector" "rollup_then_filter" {{
             result["errors"],
         )
 
+    def test_ignores_data_call_looking_text_inside_a_description_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = "Replaces the old data('legacy.metric') detector"
+
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_rejects_two_data_calls_inside_the_same_program_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    a = data('{METRIC}', filter=filter('service.name', var.service_name))
+    b = data('other.metric', filter=filter('service.name', var.service_name))
+    a.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: expected exactly one data(...) metric, found 2",
+            result["errors"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

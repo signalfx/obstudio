@@ -72,11 +72,28 @@ same non-wildcard rule as `*.response.status_code`: never wildcard on
 existence alone unless the evidence proves the attribute is present only on
 failures. This detector is generated directly from the histogram attribute
 and does not require a redundant counter to exist first -- an evidenced
-non-standard outcome attribute is detector-ready on its own. Use this only
-when the route has no `error.type`/`*.response.status_code` attribute to
-classify as Error; when both exist, the standard Error detector still takes
-priority for the standard attribute, and this rule covers the additional
-non-standard dimension as its own outcome detector.
+non-standard outcome attribute is detector-ready on its own.
+
+This rule has two distinct outcomes depending on whether the route also has
+a standard error/status attribute:
+
+- **No standard attribute on the route**: the non-standard attribute *is*
+  the route's Error detector -- generate it in place of the standard Error
+  detector described above.
+- **A standard attribute also exists on the route**: keep the standard
+  Error detector from the Route-Level De-duplication rule above (still at
+  most one per route), and generate this non-standard-attribute detector as
+  an *additional* outcome detector only when the non-standard attribute
+  distinguishes failure causes the standard attribute cannot -- for example
+  two distinct failure reasons that both surface as the same
+  `http.response.status_code` (a 409 for "already done" vs. a 409 for
+  "already reserved"). Do not generate this additional detector when the
+  non-standard attribute's failing values map 1:1 onto the standard
+  attribute's own failing values; that would just restate the standard
+  Error detector under a different name. The "at most one Error detector
+  per route" cap still applies to the standard-attribute Error detector;
+  this additional detector covers a separate, non-standard dimension and is
+  not a second Error detector for the same signal.
 
 This mirrors the check `$otel-instrument` performs before adding a new custom
 metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the

@@ -629,18 +629,26 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     `messaging.client.operation.duration` and `messaging.process.duration`
     carry `error.type` when the operation fails.
 
-  Prefer the attribute over a dedicated custom metric when the outcome can be
-  faithfully represented on the RED metric and either auto-instrumentation
-  already emits the relevant `error.type`/`*.response.status_code` attribute
-  or the language has a supported per-call metric-attribute hook to set it
-  (see `#### Language-Specific Musts` below). A dedicated custom metric is
-  correct when either condition fails — for example a queue-depth gauge or a
-  background job outcome with no inbound request has no call to attach to;
-  or a business outcome that occurs once per request but is not expressible
-  as a standard status/error attribute (for example a logical failure
-  returned as HTTP 200) would be silently lost if forced onto the RED
-  metric. In each of those cases, add the dedicated metric instead of
-  suppressing the only detector-ready signal for the outcome.
+  Prefer the attribute over a dedicated custom metric whenever the language
+  has a way to set it on the RED metric for that call: either
+  auto-instrumentation already emits the relevant `error.type`/
+  `*.response.status_code` attribute, or the language has a supported
+  per-call metric-attribute hook that can set a standard *or custom*
+  attribute on the metric (see `#### Language-Specific Musts` below -- for
+  example Go's `otelhttp.Labeler`, which can attach a custom attribute like
+  `outcome.reason` even when the outcome is not expressible via the standard
+  status/error attributes alone). A dedicated custom metric is correct only
+  when neither applies: a queue-depth gauge or a background job outcome with
+  no inbound request has no call to attach to; or the language's
+  auto-instrumentation has no per-call metric-attribute hook (Python's
+  ASGI/WSGI hooks and Node's `@opentelemetry/instrumentation-http` only add
+  span attributes, not metric attributes) and the outcome is not expressible
+  via the standard status/error attributes alone -- for example a business
+  outcome that occurs once per request but is not distinguishable from the
+  standard attributes (a logical failure returned as HTTP 200, or two
+  distinct failure causes sharing one HTTP status). In each of those cases,
+  add the dedicated metric instead of suppressing the only detector-ready
+  signal for the outcome.
 - For incident-readiness work, follow
   `../references/incident-readiness.md`. Instrument only source-evidenced
   workflow, dependency, input-complexity, freshness, backpressure,
