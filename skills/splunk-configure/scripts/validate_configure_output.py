@@ -131,8 +131,29 @@ def data_call_span(block: str) -> tuple[int, int] | None:
     return opening, matching_paren(block, opening)
 
 
+STRING_LITERAL = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
+PUNCTUATION_SPACING = re.compile(r"\s*([(),=\[\]])\s*")
+
+
+def _canonicalize_segment(segment: str) -> str:
+    segment = re.sub(r"\s+", " ", segment)
+    return PUNCTUATION_SPACING.sub(lambda match: match.group(1), segment)
+
+
 def _normalize_whitespace(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    """Canonicalize insignificant whitespace so equivalent calls such as
+    `filter=filter(...)` and `filter = filter(...)` produce the same
+    signature. Whitespace inside quoted string literals (e.g. a filter
+    value) is left untouched -- only the unquoted structure around
+    `(`, `)`, `,`, `=`, `[`, `]` is canonicalized."""
+    parts: list[str] = []
+    last_end = 0
+    for match in STRING_LITERAL.finditer(text):
+        parts.append(_canonicalize_segment(text[last_end : match.start()]))
+        parts.append(match.group(0))
+        last_end = match.end()
+    parts.append(_canonicalize_segment(text[last_end:]))
+    return "".join(parts).strip()
 
 
 def data_call_signature(block: str) -> str | None:

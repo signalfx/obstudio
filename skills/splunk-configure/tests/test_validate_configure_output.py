@@ -443,6 +443,89 @@ resource "signalfx_detector" "or_filter" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 2)
 
+    def test_rejects_two_detectors_differing_only_in_punctuation_whitespace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "spaced" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter = filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "unspaced" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency again')
+  EOF
+
+  rule {{
+    detect_label = "High latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_preserves_whitespace_inside_quoted_filter_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "one_space" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', 'checkout api'))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+
+resource "signalfx_detector" "two_space" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', 'checkout  api'))
+    signal.publish('High latency again')
+  EOF
+
+  rule {{
+    detect_label = "High latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
     def test_ignores_filter_looking_text_outside_the_data_call(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
