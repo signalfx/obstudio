@@ -6,7 +6,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "splunk-dashboard-publish",
-    "run_id": "20260711T230836007139Z",
+    "run_id": "20260711T231609164685Z",
     "repo_root": "/Users/btiwana/code/signalfx/obstudio",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
