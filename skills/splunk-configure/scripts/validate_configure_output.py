@@ -157,16 +157,20 @@ def _blank_comment_lines(text: str) -> str:
     return "".join(chars)
 
 
-def data_call_span(block: str) -> tuple[int, int] | None:
+def data_call_span(block: str) -> tuple[int, int, str] | None:
     """Return the (opening, closing) paren indices of the data(...) call in
-    block, searching a comment-blanked view so a decoy `data(` mentioned in a
-    `#` comment before the real call is never matched instead of it."""
+    block, plus the comment-blanked view of block those indices are valid
+    against, so a decoy `data(`, `filter(`, or `)` mentioned in a `#` comment
+    -- whether before the real call or on a continuation line inside its own
+    argument list -- is never mistaken for real SignalFlow syntax by callers
+    that slice the returned span."""
     searchable = _blank_comment_lines(block)
     data_match = DATA_CALL.search(searchable)
     if data_match is None:
         return None
     opening = block.find("(", data_match.start())
-    return opening, matching_paren(block, opening)
+    close = matching_paren(searchable, opening)
+    return opening, close, searchable
 
 
 TOKEN = re.compile(
@@ -323,8 +327,8 @@ def data_call_signature(block: str) -> str | None:
     span = data_call_span(block)
     if span is None:
         return None
-    opening, close = span
-    tokens = TOKEN.findall(block[opening + 1 : close])
+    opening, close, searchable = span
+    tokens = TOKEN.findall(searchable[opening + 1 : close])
     group, _ = _build_group(tokens, 0)
     return _canonical_group(group)
 
@@ -339,8 +343,8 @@ def aggregation_signature(block: str) -> str:
     span = data_call_span(block)
     if span is None:
         return ""
-    _, close = span
-    match = AGG_CHAIN.match(block[close + 1 :])
+    _, close, searchable = span
+    match = AGG_CHAIN.match(searchable[close + 1 :])
     return _normalize_whitespace(match.group(0)) if match else ""
 
 
