@@ -217,13 +217,16 @@ apply the classification rules to each metric from Step 2.
 
 Before classifying individual metrics, apply Route-Level De-duplication from
 `references/detector-classification.md`: group candidate metrics that share
-the same `service.name` and route/operation dimension, and merge a counter
-that only restates an outcome already carried as an attribute on a
-same-route duration histogram into that histogram's route group instead of
-classifying the counter as a second, independently tracked metric. One route
-should produce at most one Latency, one Error, and one Throughput detector,
-each reading dimensions off the smallest set of metrics the route actually
-emits -- not one detector per candidate metric.
+the same `service.name` and route/operation dimension, and merge into that
+histogram's route group instead of classifying as a second, independently
+tracked metric: an error/status counter that only restates an outcome
+already carried as an attribute on a same-route duration histogram, or a
+throughput counter whose count is derivable from that histogram's own
+observation count for the route (no matching histogram attribute is
+required for the throughput case). One route should produce at most one
+Latency, one Error, and one Throughput detector, each reading dimensions
+off the smallest set of metrics the route actually emits -- not one
+detector per candidate metric.
 
 Only classify metrics that are present in source evidence and either verified
 by `.observe/otel-verify.md` or explicitly accepted by the user as source-only

@@ -14,16 +14,24 @@ outcome of that same call (an error count, a status-code count, or a
 throughput count for the identical route/operation) are one RED signal, not
 two independently tracked metrics.
 
-A duration histogram and a counter belong to the same route group when:
+A duration histogram and a counter belong to the same route group when both
+carry the same `service.name` and the same route/operation dimension value,
+and one of the following also holds:
 
-- Both carry the same `service.name` and the same route/operation dimension
-  value, and the histogram's own attributes already include `error.type`,
-  `http.response.status_code`, `rpc.response.status_code`, or
-  `db.response.status_code` for that route, and
-- The counter's name or dimensions indicate it counts the same outcome the
-  histogram's attributes already carry, for example a custom
+- **Error or status counter**: the histogram's own attributes already
+  include `error.type`, `http.response.status_code`,
+  `rpc.response.status_code`, or `db.response.status_code` for that route,
+  and the counter's name or dimensions indicate it counts the same outcome
+  those attributes already carry -- for example a custom
   `<route>.errors.count` counter next to `http.server.request.duration` that
   carries an `error.type` attribute for the same route.
+- **Throughput counter**: the counter's name indicates it counts total calls
+  for the route with no outcome/error keyword (see the Throughput
+  classification rule below) and its count is derivable from the histogram's
+  own observation count for that route/operation -- the histogram's
+  attributes do not need to include an error/status attribute for this case,
+  because a throughput counter restates the histogram's call count
+  regardless of whether the histogram carries any outcome dimension.
 
 When a route group forms:
 
@@ -49,6 +57,26 @@ one Throughput detector -- not one detector per metric that happens to touch
 the route. Detectors in the same route group may read from the same metric
 with different attribute filters; that is expected and is not duplicate
 detector generation.
+
+### Evidenced Non-Standard Outcome Attribute
+
+A histogram may carry a custom attribute that is not `error.type` or a
+`*.response.status_code` key (for example `outcome.reason` set via a
+per-call metric-attribute hook, as in `otel-instrument/SKILL.md`'s
+`Labeler` pattern) but that audit or source evidence shows takes on a value
+present only for a failing outcome on that route -- for example
+`outcome.reason` observed as `gateway_timeout` only on non-2xx responses.
+Generate an attribute-filtered outcome detector for that route from the
+histogram filtered to the failing value(s) of that attribute, following the
+same non-wildcard rule as `*.response.status_code`: never wildcard on
+existence alone unless the evidence proves the attribute is present only on
+failures. This detector is generated directly from the histogram attribute
+and does not require a redundant counter to exist first -- an evidenced
+non-standard outcome attribute is detector-ready on its own. Use this only
+when the route has no `error.type`/`*.response.status_code` attribute to
+classify as Error; when both exist, the standard Error detector still takes
+priority for the standard attribute, and this rule covers the additional
+non-standard dimension as its own outcome detector.
 
 This mirrors the check `$otel-instrument` performs before adding a new custom
 metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the
@@ -329,7 +357,7 @@ A metric is a **genai-cost** detector candidate when:
 A metric is a **latency** detector candidate when:
 
 - The metric name contains `.duration` (e.g. `http.server.request.duration`,
-  `rpc.server.duration`, `db.client.operation.duration`)
+  `rpc.server.call.duration`, `db.client.operation.duration`)
 - The metric type is histogram
 
 These metrics measure response time and are best monitored with p99 percentile

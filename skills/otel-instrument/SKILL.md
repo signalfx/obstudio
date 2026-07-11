@@ -618,8 +618,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     `http.server.request.duration` / `http.client.request.duration` carry
     `error.type` and `http.response.status_code`.
   - [RPC server/client metrics](https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/):
-    `rpc.server.duration` / `rpc.client.duration` (or the current installed
-    SDK's stable metric name) carry `error.type` and `rpc.response.status_code`.
+    `rpc.server.call.duration` / `rpc.client.call.duration` carry `error.type`
+    and `rpc.response.status_code`. Only fall back to the legacy
+    `rpc.server.duration` / `rpc.client.duration` names when runtime evidence
+    shows the installed SDK still emits those instead.
   - [Database client metrics](https://opentelemetry.io/docs/specs/semconv/database/database-metrics/):
     `db.client.operation.duration` carries `error.type` and
     `db.response.status_code`.
@@ -900,7 +902,12 @@ Go:
   No extra `otelhttp.NewHandler` option is needed; the labeler is present in
   context for every request the handler already wraps. The older
   `otelhttp.WithMetricAttributesFn` middleware option is deprecated in favor
-  of this per-request `Labeler`.
+  of this per-request `Labeler`. A custom attribute like `outcome.reason` is
+  detector-ready without a standalone counter: see
+  `splunk-configure/references/detector-classification.md`'s "Evidenced
+  Non-Standard Outcome Attribute" rule, which generates an attribute-filtered
+  outcome detector directly from an evidenced non-standard histogram
+  attribute.
 
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.

@@ -131,28 +131,39 @@ def data_call_span(block: str) -> tuple[int, int] | None:
     return opening, matching_paren(block, opening)
 
 
-STRING_LITERAL = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
-PUNCTUATION_SPACING = re.compile(r"\s*([(),=\[\]])\s*")
+TOKEN = re.compile(
+    r"'(?:\\.|[^'\\])*'"
+    r'|"(?:\\.|[^"\\])*"'
+    r"|[A-Za-z_][A-Za-z0-9_.]*"
+    r"|\d+(?:\.\d+)?"
+    r"|\S"
+)
 
 
-def _canonicalize_segment(segment: str) -> str:
-    segment = re.sub(r"\s+", " ", segment)
-    return PUNCTUATION_SPACING.sub(lambda match: match.group(1), segment)
+def _is_wordlike(token: str) -> bool:
+    return token[0].isalnum() or token[0] in "_'\""
 
 
 def _normalize_whitespace(text: str) -> str:
-    """Canonicalize insignificant whitespace so equivalent calls such as
-    `filter=filter(...)` and `filter = filter(...)` produce the same
-    signature. Whitespace inside quoted string literals (e.g. a filter
-    value) is left untouched -- only the unquoted structure around
-    `(`, `)`, `,`, `=`, `[`, `]` is canonicalized."""
+    """Canonicalize insignificant whitespace by re-tokenizing the text (string
+    literals, identifiers/keywords such as `and`/`or`/`not`, numbers, and
+    single-character punctuation/operators) and rejoining with exactly one
+    space wherever two adjacent word-like tokens would otherwise merge into a
+    different token -- e.g. `filter(...) and filter(...)` and
+    `filter(...)and filter(...)` both normalize to the same signature, as do
+    `filter=filter(...)` and `filter = filter(...)`. Any other adjacent pair
+    (punctuation, or punctuation next to a word) is joined tight, since
+    concatenating them cannot change how the text re-tokenizes. Whitespace
+    inside quoted string literals is untouched because they are matched and
+    emitted as single tokens."""
+    tokens = TOKEN.findall(text)
     parts: list[str] = []
-    last_end = 0
-    for match in STRING_LITERAL.finditer(text):
-        parts.append(_canonicalize_segment(text[last_end : match.start()]))
-        parts.append(match.group(0))
-        last_end = match.end()
-    parts.append(_canonicalize_segment(text[last_end:]))
+    previous: str | None = None
+    for token in tokens:
+        if previous is not None and _is_wordlike(previous) and _is_wordlike(token):
+            parts.append(" ")
+        parts.append(token)
+        previous = token
     return "".join(parts).strip()
 
 

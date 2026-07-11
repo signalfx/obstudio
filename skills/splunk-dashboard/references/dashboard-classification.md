@@ -45,7 +45,7 @@ the 12-column grid in one row.
 
 A metric is a **latency time-series panel** candidate when its name contains
 `.duration` and its type is histogram (`http.server.request.duration`,
-`rpc.server.duration`, `db.client.operation.duration`). Chart type
+`rpc.server.call.duration`, `db.client.operation.duration`). Chart type
 `time_series`; aggregation `.percentile(pct=99)`.
 
 ### Error
