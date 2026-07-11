@@ -355,10 +355,19 @@ def aggregation_signature(block: str) -> str:
 
 
 def detector_blocks(text: str) -> list[tuple[str, str]]:
+    """Split text into (resource_id, block) pairs for every top-level
+    `resource "signalfx_detector" "..." { ... }` block. Both the resource
+    header and the closing brace are located against a comment-blanked view
+    so a decoy `resource "signalfx_detector" "ghost" {` or a stray `{`/`}`
+    inside a `#` comment -- whether at the HCL level or inside a program_text
+    heredoc -- can never be mistaken for a real block boundary; the returned
+    block text is still sliced from the original, unblanked `text` since
+    `_blank_comment_lines` preserves character indices."""
+    searchable = _blank_comment_lines(text)
     blocks: list[tuple[str, str]] = []
-    for match in RESOURCE_START.finditer(text):
-        opening = text.find("{", match.start())
-        end = matching_brace(text, opening)
+    for match in RESOURCE_START.finditer(searchable):
+        opening = searchable.find("{", match.start())
+        end = matching_brace(searchable, opening)
         blocks.append((match.group(1), text[match.start() : end + 1]))
     return blocks
 
@@ -463,12 +472,14 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors.append("variables.tf does not declare sensitive api_token")
     if "realm" not in declared:
         errors.append("variables.tf does not declare realm")
-    provider_matches = list(PROVIDER_START.finditer(detectors_text))
+    searchable_detectors_text = _blank_comment_lines(detectors_text)
+    provider_matches = list(PROVIDER_START.finditer(searchable_detectors_text))
     if len(provider_matches) != 1:
         errors.append(f"expected one signalfx provider block, found {len(provider_matches)}")
     else:
-        opening = detectors_text.find("{", provider_matches[0].start())
-        provider = detectors_text[provider_matches[0].start() : matching_brace(detectors_text, opening) + 1]
+        opening = searchable_detectors_text.find("{", provider_matches[0].start())
+        end = matching_brace(searchable_detectors_text, opening)
+        provider = searchable_detectors_text[provider_matches[0].start() : end + 1]
         if not re.search(r"auth_token\s*=\s*var\.api_token\b", provider):
             errors.append("signalfx provider must use var.api_token")
         if not re.search(r'api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider):

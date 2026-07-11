@@ -261,8 +261,9 @@ and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
 span. Define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge or background job outcome), or cannot
 be represented by those automatically emitted attributes -- for example a
-4xx outcome, or a same-status-different-cause outcome (a 200 that is a
-logical failure, or several distinct 5xx causes), that needs its own
+same-status-different-cause outcome (a 200 that is a logical failure, several
+distinct 4xx causes, or several distinct 5xx causes) that `http.response.status_code`
+and `error.type` cannot distinguish on their own and that needs its own
 dimension.
 
 ```python
