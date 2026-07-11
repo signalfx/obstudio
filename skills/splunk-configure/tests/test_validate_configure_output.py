@@ -1608,6 +1608,46 @@ resource "signalfx_detector" "over_pct" {{
             result["errors"],
         )
 
+    def test_accepts_two_detectors_differing_only_in_between_positional_argument_order(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "low_ten_high_twenty" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).between(10, 20)
+    signal.publish('Between 10 and 20')
+  EOF
+
+  rule {{
+    detect_label = "Between 10 and 20"
+  }}
+}}
+
+resource "signalfx_detector" "low_twenty_high_ten" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).between(20, 10)
+    signal.publish('Between 20 and 10')
+  EOF
+
+  rule {{
+    detect_label = "Between 20 and 10"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
     def test_decodes_escaped_newline_in_a_plain_string_program_text(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

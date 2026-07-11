@@ -540,17 +540,31 @@ def data_call_signature(block: str, searchable: str | None = None) -> str | None
     return _canonical_group(group)
 
 
+def _is_keyword_argument(tokens: list) -> bool:
+    return len(tokens) >= 2 and tokens[1] == "=" and bool(re.match(r"^[A-Za-z_]\w*$", str(tokens[0])))
+
+
 def _canonical_aggregation_call(name: str, args_text: str) -> str:
     """Render one aggregation method call's argument list to a canonical
-    string the same way a data(...) argument list is canonicalized -- quote
-    style normalized and, unlike data(...)'s positional metric argument,
-    every argument here sorted (aggregation calls take only keyword
-    arguments, e.g. `pct=99, over='5m'`) -- so two calls to the same method
-    that differ only in keyword-argument order render to the same
-    signature."""
+    string. Aggregation methods can take positional arguments whose order is
+    semantically significant -- e.g. `between(low_limit, high_limit)`,
+    `count_above(value, ...)` -- so positional arguments keep their original
+    order and are never sorted alongside each other; only the keyword
+    arguments (`pct=99`, `over='5m'`, etc.), which the SignalFlow methods
+    referenced here take exclusively via `key=value` and whose relative
+    order does not change which values are passed, are sorted among
+    themselves. Quote style is normalized the same way as a data(...)
+    argument list, so two calls to the same method that differ only in
+    keyword-argument order or quote style -- not positional-argument order --
+    render to the same signature."""
     tokens = TOKEN.findall(args_text)
     group, _ = _build_group(tokens, 0)
-    rendered = sorted(_canonical_argument(arg) for arg in _split_top_level_commas(group))
+    positional: list[str] = []
+    keyword: list[str] = []
+    for arg in _split_top_level_commas(group):
+        rendered_arg = _canonical_argument(arg)
+        (keyword if _is_keyword_argument(arg) else positional).append(rendered_arg)
+    rendered = positional + sorted(keyword)
     return f".{name}({','.join(rendered)})"
 
 
