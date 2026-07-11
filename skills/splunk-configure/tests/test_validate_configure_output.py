@@ -1161,7 +1161,7 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 1)
 
-    def test_rejects_two_detectors_with_escaped_newline_vs_literal_n_filter_value(
+    def test_accepts_two_detectors_with_escaped_newline_vs_literal_n_filter_value(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1231,6 +1231,52 @@ resource "signalfx_detector" "reversed" {{
 
   rule {{
     detect_label = "Error rate again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_keyword_argument_order(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "filter_then_rollup" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name), rollup='count').sum()
+    signal.publish('Throughput')
+  EOF
+
+  rule {{
+    detect_label = "Throughput"
+  }}
+}}
+
+resource "signalfx_detector" "rollup_then_filter" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', rollup='count', filter=filter('service.name', var.service_name)).sum()
+    signal.publish('Throughput again')
+  EOF
+
+  rule {{
+    detect_label = "Throughput again"
   }}
 }}
 ''',

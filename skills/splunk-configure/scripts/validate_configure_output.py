@@ -374,8 +374,17 @@ def _canonical_argument(tokens: list) -> str:
 
 def _canonical_group(group: list) -> str:
     """Render a parsed data(...) argument list to a canonical string by
-    canonicalizing each top-level comma-separated argument independently."""
-    return ",".join(_canonical_argument(arg) for arg in _split_top_level_commas(group))
+    canonicalizing each top-level comma-separated argument independently.
+    The first argument is the positional metric name and keeps its position;
+    every argument after it is a `key=value` keyword argument (`filter=...`,
+    `rollup=...`, etc.) and those are sorted by their canonicalized string, so
+    `data(METRIC, filter=..., rollup='count')` and
+    `data(METRIC, rollup='count', filter=...)` -- which select the identical
+    stream -- render to the same signature regardless of keyword order."""
+    rendered = [_canonical_argument(arg) for arg in _split_top_level_commas(group)]
+    if len(rendered) > 1:
+        rendered = [rendered[0]] + sorted(rendered[1:])
+    return ",".join(rendered)
 
 
 def data_call_signature(block: str) -> str | None:
