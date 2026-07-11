@@ -13,11 +13,16 @@ from pathlib import Path
 RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
-PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<-?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\n')
+PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\n')
+PROGRAM_TEXT_STRING = re.compile(r'\bprogram_text\s*=\s*"((?:\\.|[^"\\])*)"')
+DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
 AGG_CHAIN = re.compile(
     r"^(?:\s*\.\s*(?!publish\b)[A-Za-z_][A-Za-z0-9_]*\((?:[^()]|\([^()]*\))*\))*"
+)
+AGG_CALL = re.compile(
+    r"\.(?!publish\b)(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>(?:[^()]|\([^()]*\))*)\)"
 )
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
@@ -173,35 +178,68 @@ def _blank_comment_lines(text: str) -> str:
     return "".join(chars)
 
 
-def program_text_body(block: str) -> str:
-    """Return the `program_text = <<-EOF ... EOF` heredoc body of a
-    signalfx_detector resource block, with the resource header and any other
-    HCL fields (`name`, `description`, `rule { ... }`) stripped away, so
-    metric/filter/label discovery scoped to this body can never mistake a
-    `data(...)`- or `publish(...)`-shaped string inside an unrelated quoted
-    HCL value for real SignalFlow syntax. Falls back to the full block when
-    no `program_text` heredoc is found, so the caller still gets a normal
-    validation error (no data(...) call found) rather than silently skipping
-    the resource."""
-    searchable = _blank_comment_lines(block)
+def _blank_decoy_fields(searchable: str) -> str:
+    """Return searchable (already comment-blanked) with the quoted value of
+    every top-level `name = "..."` / `description = "..."` field replaced by
+    spaces, so a `var.foo` or `detect_label = "..."`-shaped decoy string
+    placed in one of those free-text fields is never mistaken for a real
+    variable reference or detect label. `rule { ... }` and `program_text`
+    are untouched, since a real `detect_label` legitimately lives in
+    `rule { ... }` and a real `var.foo` reference legitimately lives
+    anywhere else in the block."""
+    chars = list(searchable)
+    for match in DECOY_FIELD.finditer(searchable):
+        start, end = match.span(1)
+        for index in range(start, end):
+            chars[index] = " "
+    return "".join(chars)
+
+
+def program_text_body(block: str, searchable: str | None = None) -> str:
+    """Return the `program_text` value of a signalfx_detector resource block
+    -- the heredoc body of a `<<EOF ... EOF`/`<<-EOF ... EOF` heredoc, or the
+    decoded value of a plain quoted string -- with the resource header and
+    any other HCL fields (`name`, `description`, `rule { ... }`) stripped
+    away, so metric/filter/label discovery scoped to this body can never
+    mistake a `data(...)`- or `publish(...)`-shaped string inside an
+    unrelated quoted HCL value for real SignalFlow syntax. `searchable` lets
+    a caller that already has the comment-blanked view of `block` pass it in
+    instead of paying for `_blank_comment_lines` again. Falls back to the
+    full block only when no `program_text` field is found at all, so the
+    caller still gets a normal validation error (no data(...) call found)
+    rather than silently skipping the resource; a malformed heredoc (no
+    closing marker) instead returns an empty body, since falling back to the
+    full block there would drag the following `rule { ... }` field into
+    scanned scope."""
+    if searchable is None:
+        searchable = _blank_comment_lines(block)
     start_match = PROGRAM_TEXT_HEREDOC.search(searchable)
-    if start_match is None:
-        return block
-    marker = start_match.group(1)
-    end_match = re.search(rf"^[ \t]*{re.escape(marker)}[ \t]*$", searchable[start_match.end() :], re.M)
-    if end_match is None:
-        return block[start_match.end() :]
-    return block[start_match.end() : start_match.end() + end_match.start()]
+    if start_match is not None:
+        dash, marker = start_match.group(1), start_match.group(2)
+        indent = r"[ \t]*" if dash else ""
+        end_match = re.search(
+            rf"^{indent}{re.escape(marker)}[ \t]*$", searchable[start_match.end() :], re.M
+        )
+        if end_match is None:
+            return ""
+        return block[start_match.end() : start_match.end() + end_match.start()]
+    string_match = PROGRAM_TEXT_STRING.search(searchable)
+    if string_match is not None:
+        return string_match.group(1)
+    return block
 
 
-def data_call_span(block: str) -> tuple[int, int, str] | None:
+def data_call_span(block: str, searchable: str | None = None) -> tuple[int, int, str] | None:
     """Return the (opening, closing) paren indices of the data(...) call in
     block, plus the comment-blanked view of block those indices are valid
     against, so a decoy `data(`, `filter(`, or `)` mentioned in a comment --
     whether before the real call or on a continuation line inside its own
     argument list -- is never mistaken for real SignalFlow syntax by callers
-    that slice the returned span."""
-    searchable = _blank_comment_lines(block)
+    that slice the returned span. `searchable` lets a caller that already
+    has the comment-blanked view of `block` pass it in instead of paying for
+    `_blank_comment_lines` again."""
+    if searchable is None:
+        searchable = _blank_comment_lines(block)
     data_match = DATA_CALL.search(searchable)
     if data_match is None:
         return None
@@ -409,7 +447,7 @@ def _canonical_group(group: list) -> str:
     return ",".join(rendered)
 
 
-def data_call_signature(block: str) -> str | None:
+def data_call_signature(block: str, searchable: str | None = None) -> str | None:
     """Return the canonical argument text of the data(...) call, scoped to
     the call's own arguments so filter(...)-shaped text inside comments or
     publish() labels elsewhere in the block is never mistaken for a real
@@ -418,8 +456,10 @@ def data_call_signature(block: str) -> str | None:
     stream-affecting option such as rollup, so two data(...) calls that
     select different streams never collapse to the same signature -- while
     quote style and commutative and/or operand order, which do not change
-    which stream is selected, do collapse to the same signature."""
-    span = data_call_span(block)
+    which stream is selected, do collapse to the same signature. `searchable`
+    lets a caller that already has the comment-blanked view of `block` pass
+    it in instead of paying for `_blank_comment_lines` again."""
+    span = data_call_span(block, searchable)
     if span is None:
         return None
     opening, close, searchable = span
@@ -428,23 +468,48 @@ def data_call_signature(block: str) -> str | None:
     return _canonical_group(group)
 
 
-def aggregation_signature(block: str) -> str:
+def _canonical_aggregation_call(name: str, args_text: str) -> str:
+    """Render one aggregation method call's argument list to a canonical
+    string the same way a data(...) argument list is canonicalized -- quote
+    style normalized and, unlike data(...)'s positional metric argument,
+    every argument here sorted (aggregation calls take only keyword
+    arguments, e.g. `pct=99, over='5m'`) -- so two calls to the same method
+    that differ only in keyword-argument order render to the same
+    signature."""
+    tokens = TOKEN.findall(args_text)
+    group, _ = _build_group(tokens, 0)
+    rendered = sorted(_canonical_argument(arg) for arg in _split_top_level_commas(group))
+    return f".{name}({','.join(rendered)})"
+
+
+def aggregation_signature(block: str, searchable: str | None = None) -> str:
     """Return the normalized chain of aggregation method calls, including
     their arguments, chained directly onto data(...) and before .publish(...),
     e.g. '.percentile(pct=99)' or ".count(by=['error.type'])". Including the
     arguments (not just the method name) distinguishes detectors that read
     the same metric with the same method but different aggregation
     arguments, such as different percentiles or different `by=[...]` groupings.
-    Quote style inside those arguments is canonicalized the same way as the
-    filter signature, so two aggregation chains that are identical except for
-    quote style, e.g. `by=['error.type']` vs `by=["error.type"]`, render to
-    the same signature and are not mistaken for a distinguishing difference."""
-    span = data_call_span(block)
+    Quote style and keyword-argument order inside those arguments are
+    canonicalized the same way as the filter signature, so two aggregation
+    chains that are identical except for quote style or keyword order, e.g.
+    `.percentile(pct=99, over='5m')` vs `.percentile(over='5m', pct=99)`,
+    render to the same signature and are not mistaken for a distinguishing
+    difference; the order of chained methods themselves is preserved since
+    that is semantically significant. `searchable` lets a caller that
+    already has the comment-blanked view of `block` pass it in instead of
+    paying for `_blank_comment_lines` again."""
+    span = data_call_span(block, searchable)
     if span is None:
         return ""
     _, close, searchable = span
-    match = AGG_CHAIN.match(searchable[close + 1 :])
-    return _canonicalize_tokens(match.group(0)) if match else ""
+    chain_match = AGG_CHAIN.match(searchable[close + 1 :])
+    if chain_match is None:
+        return ""
+    calls = [
+        _canonical_aggregation_call(call_match.group("name"), call_match.group("args"))
+        for call_match in AGG_CALL.finditer(chain_match.group(0))
+    ]
+    return "".join(calls)
 
 
 def detector_blocks(text: str) -> list[tuple[str, str]]:
@@ -530,7 +595,8 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
 
     for resource_id, block in blocks:
         searchable = _blank_comment_lines(block)
-        program_body = program_text_body(block)
+        decoy_blanked = _blank_decoy_fields(searchable)
+        program_body = program_text_body(block, searchable)
         program_searchable = _blank_comment_lines(program_body)
         metrics = DATA_METRIC.findall(program_searchable)
         if len(metrics) != 1:
@@ -538,23 +604,29 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
-        detector_signatures.append((metric, data_call_signature(program_body), aggregation_signature(program_body)))
+        detector_signatures.append(
+            (
+                metric,
+                data_call_signature(program_body, program_searchable),
+                aggregation_signature(program_body, program_searchable),
+            )
+        )
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
         if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", program_searchable):
             errors.append(f"{resource_id}: missing service.name filter")
-        for variable in VARIABLE_REFERENCE.findall(searchable):
+        for variable in VARIABLE_REFERENCE.findall(decoy_blanked):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
-        labels = DETECT_LABEL.findall(searchable)
+        labels = DETECT_LABEL.findall(decoy_blanked)
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
         elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", program_searchable):
             errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
-            if pattern.search(program_searchable):
+            if pattern.search(searchable):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
 
     if len(detector_signatures) != len(set(detector_signatures)):

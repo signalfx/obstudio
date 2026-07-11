@@ -430,6 +430,16 @@ Skip a metric (do not generate a detector) when:
    - `otelhttp` metrics when custom HTTP metrics are present
    - `otelgrpc` metrics when custom gRPC metrics are present
 
+   This rule does not apply when the custom metric is a counter that merges
+   into an auto-instrumented histogram's route group under Route-Level
+   De-duplication above (for example a custom `<route>.errors.count` next to
+   `otelhttp`'s `http.server.request.duration` for the same route) -- that
+   rule keeps the histogram as the route's Latency/Error/Throughput source of
+   truth and folds the counter into it, rather than skipping the histogram
+   in favor of a standalone custom-counter detector. Apply Route-Level
+   De-duplication first; only skip the auto-instrumented metric under this
+   rule when no route group forms.
+
 2. **Runtime/host metrics without actionable thresholds** -- Skip generic
    runtime metrics that lack meaningful static thresholds unless the user
    explicitly requests them:

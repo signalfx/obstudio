@@ -1354,6 +1354,200 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_rejects_forbidden_content_hidden_in_a_description_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = "captures raw_prompt text for debugging"
+
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: unsafe raw prompt/content appears in detector program",
+            result["errors"],
+        )
+
+    def test_ignores_data_call_looking_text_inside_a_plain_string_program_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = "Replaces the old data('legacy.metric') detector"
+  program_text = "signal = data('{METRIC}', filter=filter('service.name', var.service_name)); signal.publish('High latency')"
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_rejects_program_text_heredoc_with_no_closing_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: expected exactly one data(...) metric, found 0",
+            result["errors"],
+        )
+
+    def test_does_not_truncate_a_non_dash_heredoc_at_an_indented_lookalike_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<EOF
+signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+  EOF
+signal.publish('High latency')
+EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_ignores_decoy_variable_and_detect_label_hidden_in_a_description_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = "was based on var.undeclared_var and detect_label = \\"Fake Label\\""
+
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_rejects_two_detectors_differing_only_in_aggregation_keyword_order(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "pct_over" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99, over='5m')
+    signal.publish('P99 latency')
+  EOF
+
+  rule {{
+    detect_label = "P99 latency"
+  }}
+}}
+
+resource "signalfx_detector" "over_pct" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(over='5m', pct=99)
+    signal.publish('P99 latency again')
+  EOF
+
+  rule {{
+    detect_label = "P99 latency again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
