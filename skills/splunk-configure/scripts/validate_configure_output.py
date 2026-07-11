@@ -186,22 +186,24 @@ def _is_wordlike(token: str) -> bool:
     return token[0].isalnum() or token[0] in "_'\""
 
 
-def _normalize_whitespace(text: str) -> str:
-    """Canonicalize insignificant whitespace by re-tokenizing the text (string
-    literals, identifiers/keywords such as `and`/`or`/`not`, numbers, and
-    single-character punctuation/operators) and rejoining with exactly one
-    space wherever two adjacent word-like tokens would otherwise merge into a
-    different token -- e.g. `filter(...) and filter(...)` and
-    `filter(...)and filter(...)` both normalize to the same signature, as do
-    `filter=filter(...)` and `filter = filter(...)`. Any other adjacent pair
+def _canonicalize_tokens(text: str) -> str:
+    """Canonicalize insignificant whitespace and string-literal quote style by
+    re-tokenizing text (string literals, identifiers/keywords such as
+    `and`/`or`/`not`, numbers, and single-character punctuation/operators) and
+    rejoining, inserting exactly one space wherever two adjacent word-like
+    tokens would otherwise merge into a different token -- e.g.
+    `filter(...) and filter(...)` and `filter(...)and filter(...)` both
+    normalize to the same signature, as do `filter=filter(...)` and
+    `filter = filter(...)`. Each token also passes through `_canonical_token`
+    so quote style never affects the result, e.g. `by=['error.type']` and
+    `by=["error.type"]` normalize to the same string. Any other adjacent pair
     (punctuation, or punctuation next to a word) is joined tight, since
-    concatenating them cannot change how the text re-tokenizes. Whitespace
-    inside quoted string literals is untouched because they are matched and
-    emitted as single tokens."""
+    concatenating them cannot change how the text re-tokenizes."""
     tokens = TOKEN.findall(text)
     parts: list[str] = []
     previous: str | None = None
-    for token in tokens:
+    for raw_token in tokens:
+        token = _canonical_token(raw_token)
         if previous is not None and _is_wordlike(previous) and _is_wordlike(token):
             parts.append(" ")
         parts.append(token)
@@ -339,13 +341,17 @@ def aggregation_signature(block: str) -> str:
     e.g. '.percentile(pct=99)' or ".count(by=['error.type'])". Including the
     arguments (not just the method name) distinguishes detectors that read
     the same metric with the same method but different aggregation
-    arguments, such as different percentiles or different `by=[...]` groupings."""
+    arguments, such as different percentiles or different `by=[...]` groupings.
+    Quote style inside those arguments is canonicalized the same way as the
+    filter signature, so two aggregation chains that are identical except for
+    quote style, e.g. `by=['error.type']` vs `by=["error.type"]`, render to
+    the same signature and are not mistaken for a distinguishing difference."""
     span = data_call_span(block)
     if span is None:
         return ""
     _, close, searchable = span
     match = AGG_CHAIN.match(searchable[close + 1 :])
-    return _normalize_whitespace(match.group(0)) if match else ""
+    return _canonicalize_tokens(match.group(0)) if match else ""
 
 
 def detector_blocks(text: str) -> list[tuple[str, str]]:
@@ -421,7 +427,8 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     detector_signatures: list[tuple[str, str | None, str]] = []
 
     for resource_id, block in blocks:
-        metrics = DATA_METRIC.findall(_blank_comment_lines(block))
+        searchable = _blank_comment_lines(block)
+        metrics = DATA_METRIC.findall(searchable)
         if len(metrics) != 1:
             errors.append(f"{resource_id}: expected exactly one data(...) metric, found {len(metrics)}")
             continue
@@ -432,18 +439,18 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
-        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", block):
+        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", searchable):
             errors.append(f"{resource_id}: missing service.name filter")
-        for variable in VARIABLE_REFERENCE.findall(block):
+        for variable in VARIABLE_REFERENCE.findall(searchable):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
-        labels = DETECT_LABEL.findall(block)
+        labels = DETECT_LABEL.findall(searchable)
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
-        elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", block):
+        elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", searchable):
             errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
-            if pattern.search(block):
+            if pattern.search(searchable):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
 
     if len(detector_signatures) != len(set(detector_signatures)):
