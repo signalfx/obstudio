@@ -15,3 +15,7 @@ siege -q -b -c 2 -r 3 http://app:8000/tasks
 curl -fsS -X POST http://app:8000/tasks \
   -H 'Content-Type: application/json' \
   -d '{"title":"runtime task"}' >/dev/null
+
+curl -fsS -X POST http://app:8000/tasks/1/reserve >/dev/null || true
+curl -fsS -X POST http://app:8000/tasks/1/reserve >/dev/null || true
+curl -fsS -X POST http://app:8000/tasks/2/reserve >/dev/null || true

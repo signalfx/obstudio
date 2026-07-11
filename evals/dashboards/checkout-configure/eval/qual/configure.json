@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "generate",
-      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN generate detector Terraform for ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the detector Terraform (one signalfx_detector resource per classified metric), variables.tf, terraform.tfvars.example, the .observe/detectors.md report, and the .observe/splunk-configure-verify.md verification file. Do not call any network and do not run terraform."
+      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN generate detector Terraform for ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the detector Terraform (one signalfx_detector resource per classified metric, applying Route-Level De-duplication so a metric merged into another metric's route group does not get its own resource), variables.tf, terraform.tfvars.example, the .observe/detectors.md report, and the .observe/splunk-configure-verify.md verification file. Do not call any network and do not run terraform."
     }
   ],
   "judge_inputs": [

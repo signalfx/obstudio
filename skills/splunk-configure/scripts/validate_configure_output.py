@@ -123,20 +123,38 @@ def matching_paren(text: str, opening: int) -> int:
 
 
 def _blank_comment_lines(text: str) -> str:
-    """Return text with every `#`-prefixed comment line replaced by spaces,
-    so a decoy `data(...)` mentioned in a comment can never be matched
-    instead of the real SignalFlow call, while every other character keeps
-    its original index for slicing the block."""
-    lines = text.splitlines(keepends=True)
-    blanked = []
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("#"):
-            indent = len(line) - len(stripped)
-            blanked.append(line[:indent] + re.sub(r"[^\r\n]", " ", line[indent:]))
-        else:
-            blanked.append(line)
-    return "".join(blanked)
+    """Return text with every `#` comment -- whether it starts the line or
+    trails real code -- replaced by spaces through the end of that physical
+    line, so a decoy `data(...)` mentioned in a comment can never be matched
+    instead of the real SignalFlow call. A `#` inside a quoted string is left
+    untouched since it is not a comment marker there. Every other character
+    keeps its original index for slicing the block."""
+    chars = list(text)
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(chars):
+        char = chars[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {'"', "'"}:
+            quote = char
+            index += 1
+            continue
+        if char == "#":
+            while index < len(chars) and chars[index] not in "\r\n":
+                chars[index] = " "
+                index += 1
+            continue
+        index += 1
+    return "".join(chars)
 
 
 def data_call_span(block: str) -> tuple[int, int] | None:

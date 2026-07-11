@@ -12,10 +12,7 @@ def run(base_url: str, duration: float) -> None:
             client.get("/cart")
             checkout = client.post("/checkout", json={"skus": ["sku-1", "sku-2"]})
             order_id = checkout.json()["id"]
-            try:
-                client.post("/payment", json={"order_id": order_id, "card_token": "tok_demo"})
-            except httpx.HTTPStatusError:
-                pass
+            client.post("/payment", json={"order_id": order_id, "card_token": "tok_demo"})
             time.sleep(random.uniform(0.05, 0.2))
 
 

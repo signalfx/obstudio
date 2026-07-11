@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260710T181755103184Z |
+| Run ID | 20260711T031945277059Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -19,7 +19,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
-| go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 5 | 0 |
+| go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 5 | 0 |

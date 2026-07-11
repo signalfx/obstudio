@@ -237,7 +237,12 @@ a plain 4xx client-error response does not set `error.type` on a server
 span. Define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge or background job outcome), or cannot be
 represented by an attribute on the existing RED metric -- for example a 4xx
-outcome that needs its own dimension.
+outcome, or a same-status-different-cause outcome (a 200 that is a logical
+failure, or several distinct 5xx causes), that needs its own dimension. The
+Java agent has no per-call metric-attribute hook for adding such a dimension
+to `http.server.request.duration` the way Go's `Labeler` can -- a standalone
+custom counter/histogram is the correct fallback here, not a workaround to
+avoid.
 
 ```java
 import io.opentelemetry.api.GlobalOpenTelemetry;
