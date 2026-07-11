@@ -180,13 +180,13 @@ def _blank_comment_lines(text: str) -> str:
 
 def _blank_decoy_fields(searchable: str) -> str:
     """Return searchable (already comment-blanked) with the quoted value of
-    every top-level `name = "..."` / `description = "..."` field replaced by
-    spaces, so a `var.foo` or `detect_label = "..."`-shaped decoy string
-    placed in one of those free-text fields is never mistaken for a real
-    variable reference or detect label. `rule { ... }` and `program_text`
-    are untouched, since a real `detect_label` legitimately lives in
-    `rule { ... }` and a real `var.foo` reference legitimately lives
-    anywhere else in the block."""
+    every `name = "..."` / `description = "..."` field -- wherever it
+    appears in the block, including a `description` inside `rule { ... }` --
+    replaced by spaces, so a `var.foo` or `detect_label = "..."`-shaped decoy
+    string placed in one of those free-text fields is never mistaken for a
+    real variable reference or detect label. This does not narrow the scope
+    of legitimate `var.foo` references or the real `detect_label` field
+    itself, since neither of those is named `name` or `description`."""
     chars = list(searchable)
     for match in DECOY_FIELD.finditer(searchable):
         start, end = match.span(1)
@@ -225,7 +225,7 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
         return block[start_match.end() : start_match.end() + end_match.start()]
     string_match = PROGRAM_TEXT_STRING.search(searchable)
     if string_match is not None:
-        return string_match.group(1)
+        return _decode_string_escapes(string_match.group(1))
     return block
 
 
