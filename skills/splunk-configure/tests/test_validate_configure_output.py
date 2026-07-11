@@ -1354,6 +1354,66 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_ignores_a_data_call_looking_label_inside_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = "old detector called data('legacy.metric') directly"
+    A = data('{METRIC}', filter=filter('service.name', var.service_name))
+    A.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_rejects_an_unbalanced_data_call_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    A = data('{METRIC}', filter=filter('service.name', var.service_name)
+    A.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("latency: malformed data(...) call" in error for error in result["errors"]),
+            result["errors"],
+        )
+
     def test_rejects_forbidden_content_hidden_in_a_description_field(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

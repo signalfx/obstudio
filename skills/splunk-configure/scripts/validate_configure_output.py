@@ -195,6 +195,58 @@ def _blank_decoy_fields(searchable: str) -> str:
     return "".join(chars)
 
 
+def _blank_quoted_content(text: str) -> str:
+    """Return text with the interior of every quoted string blanked (the
+    quote characters themselves are left in place), so a decoy `data(` or
+    `filter(` marker that only appears inside a string literal -- for
+    example a `.publish("replaces data('legacy.metric')")` label -- can
+    never be mistaken by a caller scanning the result for real SignalFlow
+    syntax markers. Every other character, including newlines inside the
+    string, keeps its original index so positions found in this view still
+    locate the real markers in the unblanked text."""
+    chars = list(text)
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(chars):
+        char = chars[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            elif char not in "\r\n":
+                chars[index] = " "
+            index += 1
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        index += 1
+    return "".join(chars)
+
+
+def _iter_data_call_spans(searchable: str) -> list[tuple[int, int, int]]:
+    """Return (start, opening, close) for every top-level `data(...)` call in
+    searchable, in source order. Call markers are located in a
+    quote-blanked view of searchable, so a decoy `data(`-shaped marker
+    inside a string literal (e.g. a `.publish(...)` label) is never found as
+    a call; each call's own closing paren is then found against the real,
+    unblanked searchable text using the existing quote-aware
+    `matching_paren`, so nested strings inside the call's own arguments
+    (which may themselves contain parens) are handled correctly. Raises
+    ValueError, via `matching_paren`, if a real call's parentheses are
+    unbalanced."""
+    masked = _blank_quoted_content(searchable)
+    spans: list[tuple[int, int, int]] = []
+    for match in DATA_CALL.finditer(masked):
+        opening = match.end() - 1
+        close = matching_paren(searchable, opening)
+        spans.append((match.start(), opening, close))
+    return spans
+
+
 def program_text_body(block: str, searchable: str | None = None) -> str:
     """Return the `program_text` value of a signalfx_detector resource block
     -- the heredoc body of a `<<EOF ... EOF`/`<<-EOF ... EOF` heredoc, or the
@@ -230,21 +282,24 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
 
 
 def data_call_span(block: str, searchable: str | None = None) -> tuple[int, int, str] | None:
-    """Return the (opening, closing) paren indices of the data(...) call in
-    block, plus the comment-blanked view of block those indices are valid
-    against, so a decoy `data(`, `filter(`, or `)` mentioned in a comment --
-    whether before the real call or on a continuation line inside its own
-    argument list -- is never mistaken for real SignalFlow syntax by callers
-    that slice the returned span. `searchable` lets a caller that already
-    has the comment-blanked view of `block` pass it in instead of paying for
-    `_blank_comment_lines` again."""
+    """Return the (opening, closing) paren indices of the first data(...)
+    call in block, plus the comment-blanked view of block those indices are
+    valid against, so a decoy `data(`, `filter(`, or `)` mentioned in a
+    comment or inside an unrelated string literal (e.g. a `.publish(...)`
+    label) -- whether before the real call or on a continuation line inside
+    its own argument list -- is never mistaken for real SignalFlow syntax by
+    callers that slice the returned span. `searchable` lets a caller that
+    already has the comment-blanked view of `block` pass it in instead of
+    paying for `_blank_comment_lines` again. Raises ValueError, via
+    `_iter_data_call_spans`, if the real call's parentheses are unbalanced;
+    callers scoped to one resource should catch this and report a
+    resource-scoped error rather than letting it escape validation."""
     if searchable is None:
         searchable = _blank_comment_lines(block)
-    data_match = DATA_CALL.search(searchable)
-    if data_match is None:
+    spans = _iter_data_call_spans(searchable)
+    if not spans:
         return None
-    opening = block.find("(", data_match.start())
-    close = matching_paren(searchable, opening)
+    _, opening, close = spans[0]
     return opening, close, searchable
 
 
@@ -447,6 +502,23 @@ def _canonical_group(group: list) -> str:
     return ",".join(rendered)
 
 
+def data_call_metrics(searchable: str) -> list[str]:
+    """Return the metric-name argument of every top-level data(...) call in
+    searchable (already comment-blanked), found via the quote-aware
+    `_iter_data_call_spans` scanner so a data(...)-shaped decoy that only
+    appears inside a string literal -- for example a
+    `.publish("replaces data('legacy.metric')")` label -- is never counted
+    as a second call the way a plain `DATA_METRIC.findall` over the whole
+    body would. Raises ValueError, via `_iter_data_call_spans`, if a real
+    call's parentheses are unbalanced."""
+    metrics = []
+    for start, _, _ in _iter_data_call_spans(searchable):
+        metric_match = DATA_METRIC.match(searchable, start)
+        if metric_match is not None:
+            metrics.append(metric_match.group(1))
+    return metrics
+
+
 def data_call_signature(block: str, searchable: str | None = None) -> str | None:
     """Return the canonical argument text of the data(...) call, scoped to
     the call's own arguments so filter(...)-shaped text inside comments or
@@ -598,7 +670,11 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         decoy_blanked = _blank_decoy_fields(searchable)
         program_body = program_text_body(block, searchable)
         program_searchable = _blank_comment_lines(program_body)
-        metrics = DATA_METRIC.findall(program_searchable)
+        try:
+            metrics = data_call_metrics(program_searchable)
+        except ValueError as error:
+            errors.append(f"{resource_id}: malformed data(...) call ({error})")
+            continue
         if len(metrics) != 1:
             errors.append(f"{resource_id}: expected exactly one data(...) metric, found {len(metrics)}")
             continue
