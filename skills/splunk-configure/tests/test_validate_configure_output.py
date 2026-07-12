@@ -1734,6 +1734,82 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_rejects_a_second_data_call_with_a_non_literal_metric_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    a = data(dynamic_metric, filter=filter('service.name', var.service_name))
+    b = data('{METRIC}', filter=filter('service.name', var.service_name))
+    b.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("latency: malformed data(...) call" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_associative_paren_grouping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "left_grouped" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=(filter('service.name', var.service_name) and filter('error.type', '*')) and filter('http.route', '/checkout'))
+    signal.publish('Error rate')
+  EOF
+
+  rule {{
+    detect_label = "Error rate"
+  }}
+}}
+
+resource "signalfx_detector" "right_grouped" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and (filter('error.type', '*') and filter('http.route', '/checkout')))
+    signal.publish('Error rate again')
+  EOF
+
+  rule {{
+    detect_label = "Error rate again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -416,24 +416,50 @@ def _build_group(tokens: list[str], index: int) -> tuple[list, int]:
     return group, index
 
 
+def _flatten_matching_operand(operand: list, operator: str) -> list[list]:
+    """If operand is a single explicitly-parenthesized sub-expression whose
+    own top-level boolean operator is the same as operator, dissolve the
+    parens and return its (already-flattened, via recursion) operand
+    token-lists in place of the single wrapped operand, so
+    `(a and b) and c` and `a and (b and c)` -- which are the same
+    associative chain -- collapse to the same flat operand set before
+    sorting instead of comparing the literal string "(a and b)"/"(b and c)"
+    against a bare operand. A parenthesized sub-expression using a different
+    operator (or no operator, i.e. not a chain) is left wrapped, since
+    dissolving it would change which operands the boolean operator applies
+    to."""
+    if len(operand) == 1 and isinstance(operand[0], tuple) and operand[0][0] == "(":
+        inner_operator, inner_operands = _split_boolean_chain(operand[0][1])
+        if inner_operator == operator:
+            return inner_operands
+    return [operand]
+
+
 def _split_boolean_chain(group: list) -> tuple[str | None, list[list]]:
     """If group is a chain of a single repeated 'and' or 'or' operator (no
     mixed operators, which would be ambiguous without explicit grouping),
-    return the operator and its operand token-lists. Otherwise return
-    (None, [group]) so the caller renders it unchanged."""
+    return the operator and its operand token-lists -- with any operand that
+    is itself an explicitly-parenthesized chain of the same operator
+    flattened into the outer chain via `_flatten_matching_operand`, so
+    re-parenthesizing an associative and/or chain never changes its
+    canonical signature. Otherwise return (None, [group]) so the caller
+    renders it unchanged."""
     operators = {token for token in group if token in ("and", "or")}
     if len(operators) != 1:
         return None, [group]
     operator = operators.pop()
-    operands: list[list] = []
+    raw_operands: list[list] = []
     current: list = []
     for token in group:
         if token == operator:
-            operands.append(current)
+            raw_operands.append(current)
             current = []
         else:
             current.append(token)
-    operands.append(current)
+    raw_operands.append(current)
+    operands: list[list] = []
+    for operand in raw_operands:
+        operands.extend(_flatten_matching_operand(operand, operator))
     return operator, operands
 
 
@@ -547,13 +573,18 @@ def data_call_metrics(searchable: str) -> list[str]:
     appears inside a string literal -- for example a
     `.publish("replaces data('legacy.metric')")` label -- is never counted
     as a second call the way a plain `DATA_METRIC.findall` over the whole
-    body would. Raises ValueError, via `_iter_data_call_spans`, if a real
-    call's parentheses are unbalanced."""
+    body would. Every discovered call is counted: one whose metric argument
+    is not a quoted string literal (e.g. `data(dynamic_metric, ...)`) raises
+    ValueError rather than being silently dropped, so it cannot hide behind a
+    second, verified literal call and bypass the one-metric and working-metric
+    evidence checks. Also raises ValueError, via `_iter_data_call_spans`, if a
+    real call's parentheses are unbalanced."""
     metrics = []
     for start, _, _ in _iter_data_call_spans(searchable):
         metric_match = DATA_METRIC.match(searchable, start)
-        if metric_match is not None:
-            metrics.append(metric_match.group(1))
+        if metric_match is None:
+            raise ValueError("data(...) call's metric argument is not a quoted string literal")
+        metrics.append(metric_match.group(1))
     return metrics
 
 
