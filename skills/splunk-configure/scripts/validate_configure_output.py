@@ -23,7 +23,7 @@ HEREDOC_START = re.compile(r'\b([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*<<(-)?\s*"?([A-Za
 HCL_STRING_VALUE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"')
 DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
-DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
+DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]\s*(?=,|\))")
 AGG_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
@@ -754,7 +754,7 @@ PUBLISH_CALL = re.compile(r"\.publish\(")
 # at the apostrophe (and vice versa). Escaped quotes inside the string are
 # consumed so an escaped delimiter does not end the match early.
 PUBLISH_LABEL = re.compile(
-    r"""\.publish\(\s*(?:label\s*=\s*)?(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')"""
+    r"""\.publish\(\s*(?:label\s*=\s*)?(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')\s*(?=,|\))"""
 )
 
 
@@ -1059,7 +1059,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         # `metric in report_text` treats `http.server.duration` as present when
         # the report only mentions the different, longer `http.server.duration.p99`,
         # letting a metric with no real entry pass the evidence check.
-        if not re.search(rf"(?<![\w.]){re.escape(metric)}(?![\w.])", report_text):
+        if not re.search(rf"(?<![\w.-]){re.escape(metric)}(?![\w.-])", report_text):
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
         try:
             data_span = data_call_span(program_body, program_searchable)
