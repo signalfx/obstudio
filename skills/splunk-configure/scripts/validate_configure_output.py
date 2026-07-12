@@ -259,22 +259,28 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
     rather than silently skipping the resource; a malformed heredoc (no
     closing marker) instead returns an empty body, since falling back to the
     full block there would drag the following `rule { ... }` field into
-    scanned scope."""
+    scanned scope. The `program_text` field is located against a view whose
+    other string values (every heredoc body and every `attr = "..."` value)
+    are blanked, so a `program_text = ...`-shaped fragment sitting inside a
+    `description` value or heredoc is never selected ahead of the real field;
+    the returned value is still sliced/decoded from the original `block` at
+    those indices, so the real program content is preserved intact."""
     if searchable is None:
         searchable = _blank_comment_lines(block)
-    start_match = PROGRAM_TEXT_HEREDOC.search(searchable)
+    structural = _blank_hcl_string_values(searchable)
+    start_match = PROGRAM_TEXT_HEREDOC.search(structural)
     if start_match is not None:
         dash, marker = start_match.group(1), start_match.group(2)
         indent = r"[ \t]*" if dash else ""
         end_match = re.search(
-            rf"^{indent}{re.escape(marker)}[ \t]*\r?$", searchable[start_match.end() :], re.M
+            rf"^{indent}{re.escape(marker)}[ \t]*\r?$", structural[start_match.end() :], re.M
         )
         if end_match is None:
             return ""
         return block[start_match.end() : start_match.end() + end_match.start()]
-    string_match = PROGRAM_TEXT_STRING.search(searchable)
+    string_match = PROGRAM_TEXT_STRING.search(structural)
     if string_match is not None:
-        return _decode_string_escapes(string_match.group(1))
+        return _decode_string_escapes(block[string_match.start(1) : string_match.end(1)])
     return block
 
 
@@ -1045,9 +1051,14 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             end = None
         if end is not None:
             provider = searchable_detectors_text[provider_matches[0].start() : end + 1]
-            if not re.search(r"^\s*auth_token\s*=\s*var\.api_token\b", provider, re.M):
+            # Anchor to the whole (comment-blanked) line -- `\b`/an unanchored
+            # tail would accept `auth_token = var.api_token == "x"` or
+            # `api_url = "..." != ""`, passing a boolean expression as the value.
+            # Comments are already blanked to spaces, so `[ \t]*$` also tolerates
+            # a trailing comment without accepting real trailing code.
+            if not re.search(r"^\s*auth_token\s*=\s*var\.api_token[ \t]*$", provider, re.M):
                 errors.append("signalfx provider must use var.api_token")
-            if not re.search(r'^\s*api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider, re.M):
+            if not re.search(r'^\s*api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"[ \t]*$', provider, re.M):
                 errors.append("signalfx provider api_url must derive from var.realm")
     if not re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*sensitive\s*=\s*true', variables_text, re.S):
         errors.append("api_token variable is not marked sensitive")
