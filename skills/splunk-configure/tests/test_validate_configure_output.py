@@ -1563,6 +1563,37 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_rejects_a_chained_aggregation_method_missing_its_argument_list(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    A = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile
+    A.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("latency: malformed aggregation call" in error for error in result["errors"]),
+            result["errors"],
+        )
+
     def test_accepts_a_keyword_form_publish_label(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

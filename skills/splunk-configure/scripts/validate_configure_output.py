@@ -827,7 +827,12 @@ def aggregation_signature(block: str, searchable: str | None = None) -> str:
         while cursor < length and searchable[cursor].isspace():
             cursor += 1
         if cursor >= length or searchable[cursor] != "(":
-            break
+            # A chaining dot and method name were consumed but no argument list
+            # follows -- e.g. `data(...).percentile` with the `(pct=99)` dropped.
+            # That is invalid SignalFlow, so raise (matching the unbalanced-paren
+            # branch below) rather than silently treating it as the end of the
+            # chain, which would let an empty aggregation signature PASS.
+            raise ValueError(f".{name} aggregation call is missing its argument list")
         try:
             call_close = matching_paren(searchable, cursor)
         except ValueError:
