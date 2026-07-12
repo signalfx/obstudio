@@ -228,6 +228,53 @@ def _blank_quoted_content(text: str) -> str:
     return "".join(chars)
 
 
+def _blank_string_prose(text: str) -> str:
+    """Like `_blank_quoted_content`, but preserve the interior of every
+    `${...}` HCL interpolation that appears inside a string. A bare
+    `var.<name>` sitting in prose -- e.g. a publish label
+    `'legacy used var.legacy_threshold'` -- is blanked (it is documentation,
+    not a real reference), but an interpolated `'${var.service_name}'` carries
+    a genuine variable reference and must survive so the undeclared-variable
+    check still catches a typo like `'${var.service_nam}'`. Character indices
+    are preserved so callers can still locate markers in the original text."""
+    chars = list(text)
+    quote: str | None = None
+    escaped = False
+    interp_depth = 0
+    index = 0
+    length = len(chars)
+    while index < length:
+        char = chars[index]
+        if quote is not None:
+            if interp_depth > 0:
+                # Inside a `${...}` interpolation: preserve every character and
+                # track brace nesting so the interpolation ends at its own `}`.
+                if char == "{":
+                    interp_depth += 1
+                elif char == "}":
+                    interp_depth -= 1
+                index += 1
+                continue
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            elif char == "$" and index + 1 < length and chars[index + 1] == "{":
+                interp_depth = 1
+                index += 2
+                continue
+            elif char not in "\r\n":
+                chars[index] = " "
+            index += 1
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        index += 1
+    return "".join(chars)
+
+
 def _iter_data_call_spans(searchable: str) -> list[tuple[int, int, int]]:
     """Return (start, opening, close) for every top-level `data(...)` call in
     searchable, in source order. Call markers are located in a
@@ -702,7 +749,13 @@ def _canonical_group(group: list) -> str:
 
 
 PUBLISH_CALL = re.compile(r"\.publish\(")
-PUBLISH_LABEL = re.compile(r"\.publish\(\s*(?:label\s*=\s*)?['\"]([^'\"]+)['\"]")
+# Terminate the label on the *matching* opening delimiter, not on either quote
+# character: a double-quoted `.publish("API's latency")` must not be truncated
+# at the apostrophe (and vice versa). Escaped quotes inside the string are
+# consumed so an escaped delimiter does not end the match early.
+PUBLISH_LABEL = re.compile(
+    r"""\.publish\(\s*(?:label\s*=\s*)?(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')"""
+)
 
 
 def _iter_publish_call_spans(searchable: str) -> list[tuple[int, int, int]]:
@@ -738,7 +791,8 @@ def published_labels(searchable: str) -> list[str]:
     for start, _, _ in _iter_publish_call_spans(searchable):
         label_match = PUBLISH_LABEL.match(searchable, start)
         if label_match is not None:
-            labels.append(label_match.group(1))
+            raw = label_match.group(1) if label_match.group(1) is not None else label_match.group(2)
+            labels.append(_decode_string_escapes(raw))
     return labels
 
 
@@ -1025,13 +1079,16 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         )
         if not has_service_filter:
             errors.append(f"{resource_id}: missing service.name filter")
-        # Scan a quote-blanked view for real `var.<name>` references: a genuine
-        # reference (e.g. `var.service_name` bare inside the program body, or a
-        # `${var.x}` interpolation) survives, but a `var.<name>` sitting inside a
-        # SignalFlow string literal or an HCL string value -- e.g. a publish
-        # label `'legacy used var.legacy_threshold'` -- is blanked, so it is not
-        # wrongly reported as an undeclared variable.
-        for variable in VARIABLE_REFERENCE.findall(_blank_quoted_content(searchable)):
+        # Scan for real `var.<name>` references on a view that blanks string
+        # prose but preserves `${...}` interpolations: a genuine reference (a
+        # bare `var.service_name` in the program body, or a `'${var.x}'`
+        # interpolation inside a quoted filter value) survives, but a
+        # `var.<name>` sitting in plain string prose -- e.g. a publish label
+        # `'legacy used var.legacy_threshold'` -- is blanked, so it is not
+        # wrongly reported as an undeclared variable. Blanking the whole string
+        # (interpolation included) would instead hide a real typo like
+        # `'${var.service_nam}'` from the undeclared-variable check.
+        for variable in VARIABLE_REFERENCE.findall(_blank_string_prose(searchable)):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
         labels = DETECT_LABEL.findall(
@@ -1097,9 +1154,21 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     # actually sensitive passes. On the masked view only a real unquoted
     # `sensitive = true` attribute (anchored to its own line) survives.
     variables_structural = _blank_hcl_string_values(_blank_comment_lines(variables_text))
-    api_token_block = re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*', variables_structural, re.S)
+    # Bound the api_token block with the brace matcher rather than a `\n}`
+    # regex: an indented closing brace or a CRLF `\r\n}` would otherwise let the
+    # block scan bleed into a later variable declaration, where a `sensitive =
+    # true` on an unrelated variable could falsely satisfy the check.
+    api_token_header = re.search(r'variable\s+"api_token"\s*\{', variables_structural)
+    api_token_block = None
+    if api_token_header is not None:
+        try:
+            block_end = matching_brace(variables_structural, api_token_header.end() - 1)
+        except ValueError:
+            block_end = None
+        if block_end is not None:
+            api_token_block = variables_structural[api_token_header.start() : block_end + 1]
     if api_token_block is None or not re.search(
-        r"^\s*sensitive\s*=\s*true[ \t]*$", api_token_block.group(0), re.M
+        r"^\s*sensitive\s*=\s*true[ \t]*$", api_token_block, re.M
     ):
         errors.append("api_token variable is not marked sensitive")
     if not re.search(r'^\s*api_token\s*=\s*""\s*(?:#.*)?$', tfvars_text, re.M):

@@ -2944,6 +2944,103 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 1)
 
+    def test_rejects_a_typo_in_an_interpolated_var_reference_inside_a_filter_value(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # `'${var.service_nam}'` is a real interpolated reference to an
+            # undeclared variable; blanking the whole string would hide the typo.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', '${{var.service_nam}}'))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: referenced variable 'service_nam' is not declared",
+            result["errors"],
+        )
+
+    def test_rejects_an_api_token_whose_block_lacks_sensitive_despite_a_later_sensitive_var(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # The api_token block closes with an indented brace and has no
+            # `sensitive = true`; a later variable does. The brace matcher must
+            # bound the block so the later flag cannot satisfy the check.
+            fixture.terraform_dir.joinpath("variables.tf").write_text(
+                '''variable "api_token" {
+  type = string
+  }
+
+variable "realm" {
+  type = string
+}
+
+variable "service_name" {
+  type      = string
+  sensitive = true
+}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("api_token variable is not marked sensitive", result["errors"])
+
+    def test_accepts_a_double_quoted_publish_label_containing_an_apostrophe(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # A double-quoted label with an apostrophe must not be truncated at
+            # the apostrophe, so it still matches its detect_label.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish("API's latency")
+  EOF
+
+  rule {{
+    detect_label = "API's latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
     def test_rejects_a_realm_declaration_that_is_only_commented_out(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
