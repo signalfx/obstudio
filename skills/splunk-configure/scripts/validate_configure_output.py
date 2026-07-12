@@ -377,26 +377,36 @@ _BRACKET_OPENERS = {"(": ")", "[": "]", "{": "}"}
 _BRACKET_CLOSERS = set(_BRACKET_OPENERS.values())
 
 
-def _build_group(tokens: list[str], index: int) -> tuple[list, int]:
+def _build_group(tokens: list[str], index: int, closer: str | None = None) -> tuple[list, int]:
     """Parse tokens[index:] into a nested list mirroring bracket nesting.
     Each element is a token string, or an (opener, inner) pair for a `(...)`
     paren group, a `[...]` list, or a `{...}` dict -- so a comma inside any of
     those (e.g. the elements of `by=['a','b']` or the entries of a
     `filter={'a':'x','b':'y'}` dict) is collapsed into one nested element and
-    never leaks out as a top-level comma to `_split_top_level_commas`. Stops
-    at (and consumes) the first unmatched closing bracket or the end of
-    tokens."""
+    never leaks out as a top-level comma to `_split_top_level_commas`.
+
+    `closer` is the closing delimiter this level expects: the matching bracket
+    when recursing into an opener, or None at the top level. A closing bracket
+    that does not match the expected `closer` -- a mismatched delimiter such as
+    the `)` in `by=['http.route')`, or a stray closer at the top level -- and a
+    missing closer (end of tokens reached while a bracket is still open) both
+    raise ValueError, so malformed SignalFlow is rejected rather than
+    canonicalized into a signature that could report PASS."""
     group: list = []
     while index < len(tokens):
         token = tokens[index]
         if token in _BRACKET_OPENERS:
-            inner, index = _build_group(tokens, index + 1)
+            inner, index = _build_group(tokens, index + 1, _BRACKET_OPENERS[token])
             group.append((token, inner))
         elif token in _BRACKET_CLOSERS:
+            if token != closer:
+                raise ValueError(f"mismatched closing delimiter {token!r}")
             return group, index + 1
         else:
             group.append(token)
             index += 1
+    if closer is not None:
+        raise ValueError(f"missing closing delimiter {closer!r}")
     return group, index
 
 
@@ -581,7 +591,7 @@ def _canonical_group(group: list) -> str:
 
 
 PUBLISH_CALL = re.compile(r"\.publish\(")
-PUBLISH_LABEL = re.compile(r"\.publish\(\s*['\"]([^'\"]+)['\"]")
+PUBLISH_LABEL = re.compile(r"\.publish\(\s*(?:label\s*=\s*)?['\"]([^'\"]+)['\"]")
 
 
 def _iter_publish_call_spans(searchable: str) -> list[tuple[int, int, int]]:
@@ -608,8 +618,11 @@ def published_labels(searchable: str) -> list[str]:
     string inside a comment or an unrelated field (e.g. a `description`
     documenting the program) is never mistaken for a real publish call, the
     same way `data_call_metrics` guards against a decoy `data(...)` marker.
-    Raises ValueError, via `_iter_publish_call_spans`, if a real call's
-    parentheses are unbalanced."""
+    Both the positional (`.publish('Label')`) and keyword (`.publish(label=
+    'Label')`) label forms are accepted, since SignalFlow -- and the detector
+    templates in this repository -- use both interchangeably. Raises
+    ValueError, via `_iter_publish_call_spans`, if a real call's parentheses
+    are unbalanced."""
     labels = []
     for start, _, _ in _iter_publish_call_spans(searchable):
         label_match = PUBLISH_LABEL.match(searchable, start)
@@ -852,17 +865,16 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         metric = metrics[0]
         detector_metrics.append(metric)
         try:
+            data_signature = data_call_signature(program_body, program_searchable)
+        except ValueError as error:
+            errors.append(f"{resource_id}: malformed data(...) call ({error})")
+            continue
+        try:
             aggregation = aggregation_signature(program_body, program_searchable)
         except ValueError as error:
             errors.append(f"{resource_id}: malformed aggregation call ({error})")
             continue
-        detector_signatures.append(
-            (
-                metric,
-                data_call_signature(program_body, program_searchable),
-                aggregation,
-            )
-        )
+        detector_signatures.append((metric, data_signature, aggregation))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
