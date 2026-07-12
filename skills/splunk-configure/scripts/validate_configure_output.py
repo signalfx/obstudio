@@ -708,9 +708,14 @@ def aggregation_signature(block: str, searchable: str | None = None) -> str:
     -- does not change the signature, and an argument nested more than one
     paren deep is not truncated. Scanning stops at the first `.publish(`
     (the publish call is not part of the aggregation) or at the first token
-    that is not a `.method(...)` continuation. `searchable` lets a caller
-    that already has the comment-blanked view of `block` pass it in instead
-    of paying for `_blank_comment_lines` again."""
+    that is not a `.method(...)` continuation. An aggregation method call
+    whose own parentheses are unbalanced -- e.g. `data(...).percentile(pct=99`
+    followed by a `signal.publish(...)` on the next line -- raises ValueError
+    rather than being silently treated as no aggregation, so an invalid
+    SignalFlow program cannot bypass validation and report PASS; the same way
+    a malformed `data(...)` or `.publish(...)` call does. `searchable` lets a
+    caller that already has the comment-blanked view of `block` pass it in
+    instead of paying for `_blank_comment_lines` again."""
     span = data_call_span(block, searchable)
     if span is None:
         return ""
@@ -740,7 +745,7 @@ def aggregation_signature(block: str, searchable: str | None = None) -> str:
         try:
             call_close = matching_paren(searchable, cursor)
         except ValueError:
-            break
+            raise ValueError(f".{name}(...) aggregation call's parentheses are unbalanced")
         calls.append(_canonical_aggregation_call(name, searchable[cursor + 1 : call_close]))
         index = call_close + 1
     return "".join(calls)
@@ -846,11 +851,16 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
+        try:
+            aggregation = aggregation_signature(program_body, program_searchable)
+        except ValueError as error:
+            errors.append(f"{resource_id}: malformed aggregation call ({error})")
+            continue
         detector_signatures.append(
             (
                 metric,
                 data_call_signature(program_body, program_searchable),
-                aggregation_signature(program_body, program_searchable),
+                aggregation,
             )
         )
         if metric not in allowed:
