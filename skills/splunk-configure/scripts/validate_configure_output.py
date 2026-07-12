@@ -15,6 +15,8 @@ VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
 PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\r?\n')
 PROGRAM_TEXT_STRING = re.compile(r'\bprogram_text\s*=\s*"((?:\\.|[^"\\])*)"')
+HEREDOC_START = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\r?\n')
+HCL_STRING_VALUE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:\\.|[^"\\])*)"')
 DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
@@ -276,24 +278,32 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
     return block
 
 
-def _blank_program_text_bodies(searchable: str) -> str:
-    """Return searchable (already comment-blanked) with the *body* of every
-    `program_text` heredoc and quoted-string value blanked to spaces -- newline
-    characters and every index preserved -- while the heredoc opening line, its
-    closing marker, and all surrounding real HCL keep their characters. A
-    structural HCL scan (for a `resource "signalfx_detector" "..." {` header, a
-    `provider "signalfx" {` block, or a `rule { detect_label = "..." }` field)
-    run against this view can therefore never mistake an HCL-shaped marker that
-    appears only inside a SignalFlow program -- e.g. a `.publish('previous
-    detect_label = "Old"')` label or a `note = 'resource "signalfx_detector"
-    "ghost" {'` line inside the heredoc -- for a real HCL construct, since the
-    program body those markers live in is blanked. The genuine resource and
-    provider headers, and the real `rule` detect_label, sit outside
-    `program_text` and are left intact. As a side benefit, a `{`/`}` inside a
-    SignalFlow filter dict in the heredoc body no longer perturbs the HCL
-    brace matcher. This must not be used for scans that legitimately read
-    program body content (e.g. the `var.<name>` reference check), which would
-    lose real matches."""
+def _blank_hcl_string_values(searchable: str, keep_attrs: frozenset[str] = frozenset()) -> str:
+    """Return searchable (already comment-blanked) with the *value* of every
+    HCL string-valued attribute blanked to spaces -- newline characters and
+    every index preserved -- so only real HCL structure survives. Two kinds of
+    value are masked: the body of every `attr = <<MARKER ... MARKER` heredoc
+    (its opening line and closing marker are kept), and the interior of every
+    `attr = "..."` quoted string (the surrounding quotes and the `attr =` are
+    kept). A structural HCL scan run against this view -- locating a `resource
+    "signalfx_detector" "..." {` header, a `provider "signalfx" {` block, a
+    `rule { detect_label = "..." }` field, or matching a block's braces -- can
+    therefore never mistake an HCL-shaped marker that lives only inside a
+    string value for a real construct. This covers not just a SignalFlow
+    `program_text` body but any string value: a `description = <<-EOT` heredoc
+    whose text quotes a historical `resource "signalfx_detector" ...` header, a
+    `description = "brace }"` whose brace would otherwise unbalance the block
+    matcher, or a `.publish('previous detect_label = "Old"')` label. The block
+    and resource/provider headers themselves are HCL structure (an unquoted
+    `resource`/`provider` keyword and its bare-string labels), not attribute
+    values, so they are left intact. This must not be used for scans that
+    legitimately read string content (e.g. the `var.<name>` reference check or
+    the provider credential attributes), which would lose real matches; those
+    read their own narrower views. `keep_attrs` names quoted-string attributes
+    whose value must survive because a caller reads it structurally -- e.g. the
+    real `detect_label = "..."` field, which the DETECT_LABEL scan still needs
+    -- so only those exact top-level `attr = "..."` values are left intact while
+    every other string value (and every heredoc body) is still masked."""
     chars = list(searchable)
 
     def blank(start: int, end: int) -> None:
@@ -301,8 +311,13 @@ def _blank_program_text_bodies(searchable: str) -> str:
             if chars[index] not in "\r\n":
                 chars[index] = " "
 
-    for start_match in PROGRAM_TEXT_HEREDOC.finditer(searchable):
-        dash, marker = start_match.group(1), start_match.group(2)
+    heredoc_bodies: list[tuple[int, int]] = []
+    scan_from = 0
+    while True:
+        start_match = HEREDOC_START.search(searchable, scan_from)
+        if start_match is None:
+            break
+        dash, marker = start_match.group(2), start_match.group(3)
         indent = r"[ \t]*" if dash else ""
         end_match = re.search(
             rf"^{indent}{re.escape(marker)}[ \t]*\r?$", searchable[start_match.end() :], re.M
@@ -314,10 +329,22 @@ def _blank_program_text_bodies(searchable: str) -> str:
             # downstream as an empty program body (0 data(...) metrics), and any
             # marker leaking from the unbounded body can only add FAILs to an
             # already-malformed file -- never mask a real construct into a PASS.
+            break
+        body_end = start_match.end() + end_match.start()
+        blank(start_match.end(), body_end)
+        heredoc_bodies.append((start_match.end(), body_end))
+        # Resume the heredoc scan past this body so an `attr = <<X`-shaped line
+        # that is merely text inside the body is not treated as a nested heredoc.
+        scan_from = body_end
+    for string_match in HCL_STRING_VALUE.finditer(searchable):
+        if string_match.group(1) in keep_attrs:
             continue
-        blank(start_match.end(), start_match.end() + end_match.start())
-    for string_match in PROGRAM_TEXT_STRING.finditer(searchable):
-        start, end = string_match.span(1)
+        start, end = string_match.span(2)
+        # A quoted `"..."` sitting inside a heredoc body is part of that body,
+        # not a separate attribute; it is already blanked and must not drive a
+        # second (mis-aligned) masking pass.
+        if any(body_start <= start < body_end for body_start, body_end in heredoc_bodies):
+            continue
         blank(start, end)
     return "".join(chars)
 
@@ -846,13 +873,14 @@ def detector_blocks(text: str) -> list[tuple[str, str]]:
     """Split text into (resource_id, block) pairs for every top-level
     `resource "signalfx_detector" "..." { ... }` block. Both the resource
     header and the closing brace are located against a comment-blanked view
-    whose `program_text` bodies are also blanked, so a decoy `resource
-    "signalfx_detector" "ghost" {` or a stray `{`/`}` -- whether it sits in a
-    comment or inside a program_text heredoc/string -- can never be mistaken
-    for a real block boundary; the returned block text is still sliced from
-    the original, unblanked `text` since both blanking passes preserve
+    whose string values (every heredoc body and every `attr = "..."` value)
+    are also blanked, so a decoy `resource "signalfx_detector" "ghost" {` or a
+    stray `{`/`}` -- whether it sits in a comment, a `program_text`/`description`
+    heredoc, or any quoted value like `description = "brace }"` -- can never be
+    mistaken for a real block boundary; the returned block text is still sliced
+    from the original, unblanked `text` since both blanking passes preserve
     character indices."""
-    searchable = _blank_program_text_bodies(_blank_comment_lines(text))
+    searchable = _blank_hcl_string_values(_blank_comment_lines(text))
     blocks: list[tuple[str, str]] = []
     for match in RESOURCE_START.finditer(searchable):
         opening = searchable.find("{", match.start())
@@ -969,7 +997,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         for variable in VARIABLE_REFERENCE.findall(decoy_blanked):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
-        labels = DETECT_LABEL.findall(_blank_program_text_bodies(decoy_blanked))
+        labels = DETECT_LABEL.findall(
+            _blank_hcl_string_values(decoy_blanked, keep_attrs=frozenset({"detect_label"}))
+        )
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
         else:
@@ -994,7 +1024,15 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors.append("variables.tf does not declare sensitive api_token")
     if "realm" not in declared:
         errors.append("variables.tf does not declare realm")
-    searchable_detectors_text = _blank_program_text_bodies(_blank_comment_lines(detectors_text))
+    # Mask every string value except `api_url`, whose real quoted value the
+    # credential check below must still read. On this view the only `auth_token`
+    # / `api_url` text that survives is a genuine top-level attribute: an
+    # `alias = "auth_token = var.api_token"` decoy has its quoted value blanked
+    # (so it can no longer spoof the credential wiring), and an alias heredoc
+    # body is likewise blanked, while the block braces stay balanced.
+    searchable_detectors_text = _blank_hcl_string_values(
+        _blank_comment_lines(detectors_text), keep_attrs=frozenset({"api_url"})
+    )
     provider_matches = list(PROVIDER_START.finditer(searchable_detectors_text))
     if len(provider_matches) != 1:
         errors.append(f"expected one signalfx provider block, found {len(provider_matches)}")
@@ -1007,9 +1045,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             end = None
         if end is not None:
             provider = searchable_detectors_text[provider_matches[0].start() : end + 1]
-            if not re.search(r"auth_token\s*=\s*var\.api_token\b", provider):
+            if not re.search(r"^\s*auth_token\s*=\s*var\.api_token\b", provider, re.M):
                 errors.append("signalfx provider must use var.api_token")
-            if not re.search(r'api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider):
+            if not re.search(r'^\s*api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider, re.M):
                 errors.append("signalfx provider api_url must derive from var.realm")
     if not re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*sensitive\s*=\s*true', variables_text, re.S):
         errors.append("api_token variable is not marked sensitive")

@@ -943,6 +943,98 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 1)
 
+    def test_ignores_decoy_resource_header_and_brace_inside_a_description_heredoc(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = <<-EOT
+    historical: resource "signalfx_detector" "ghost" {{ stray brace }}
+  EOT
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
+    def test_ignores_decoy_brace_inside_a_quoted_description_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  description = "closing brace }} and detect_label = decoy"
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
+    def test_rejects_a_provider_whose_auth_token_only_appears_in_a_string_value(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  alias      = "auth_token = var.api_token"
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("signalfx provider must use var.api_token", result["errors"])
+
     def test_ignores_decoy_auth_token_inside_a_comment_in_the_provider_block(
         self,
     ) -> None:
