@@ -502,6 +502,44 @@ def _canonical_group(group: list) -> str:
     return ",".join(rendered)
 
 
+PUBLISH_CALL = re.compile(r"\.publish\(")
+PUBLISH_LABEL = re.compile(r"\.publish\(\s*['\"]([^'\"]+)['\"]")
+
+
+def _iter_publish_call_spans(searchable: str) -> list[tuple[int, int, int]]:
+    """Return (start, opening, close) for every top-level `.publish(...)`
+    call in searchable, in source order. Same quote-blanked-marker /
+    unblanked-close-paren technique as `_iter_data_call_spans`, so a decoy
+    `.publish(`-shaped marker inside a string literal (e.g. a `description`
+    field documenting the program) is never found as a call. Raises
+    ValueError, via `matching_paren`, if a real call's parentheses are
+    unbalanced."""
+    masked = _blank_quoted_content(searchable)
+    spans: list[tuple[int, int, int]] = []
+    for match in PUBLISH_CALL.finditer(masked):
+        opening = match.end() - 1
+        close = matching_paren(searchable, opening)
+        spans.append((match.start(), opening, close))
+    return spans
+
+
+def published_labels(searchable: str) -> list[str]:
+    """Return the label argument of every top-level `.publish(...)` call in
+    searchable (already comment-blanked), found via the quote-aware
+    `_iter_publish_call_spans` scanner so a decoy `.publish('label')`-shaped
+    string inside a comment or an unrelated field (e.g. a `description`
+    documenting the program) is never mistaken for a real publish call, the
+    same way `data_call_metrics` guards against a decoy `data(...)` marker.
+    Raises ValueError, via `_iter_publish_call_spans`, if a real call's
+    parentheses are unbalanced."""
+    labels = []
+    for start, _, _ in _iter_publish_call_spans(searchable):
+        label_match = PUBLISH_LABEL.match(searchable, start)
+        if label_match is not None:
+            labels.append(label_match.group(1))
+    return labels
+
+
 def data_call_metrics(searchable: str) -> list[str]:
     """Return the metric-name argument of every top-level data(...) call in
     searchable (already comment-blanked), found via the quote-aware
@@ -705,7 +743,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
-        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", program_searchable):
+        data_span = data_call_span(program_body, program_searchable)
+        data_args = program_searchable[data_span[0] : data_span[1] + 1] if data_span is not None else ""
+        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", data_args):
             errors.append(f"{resource_id}: missing service.name filter")
         for variable in VARIABLE_REFERENCE.findall(decoy_blanked):
             if variable not in declared:
@@ -713,7 +753,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         labels = DETECT_LABEL.findall(decoy_blanked)
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
-        elif not re.search(rf"\.publish\(\s*['\"]{re.escape(labels[0])}['\"]\s*\)", program_searchable):
+        elif labels[0] not in published_labels(program_searchable):
             errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
             if pattern.search(searchable):

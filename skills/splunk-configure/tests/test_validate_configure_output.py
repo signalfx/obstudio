@@ -1673,6 +1673,67 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_metrics"], [METRIC])
 
+    def test_rejects_a_data_call_missing_service_name_filter_despite_a_decoy_elsewhere(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = "old detector used filter('service.name', var.service_name)"
+    A = data('{METRIC}')
+    A.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("latency: missing service.name filter", result["errors"])
+
+    def test_rejects_a_publish_label_mismatch_despite_a_decoy_label_elsewhere(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = ".publish('High latency')"
+    A = data('{METRIC}', filter=filter('service.name', var.service_name))
+    A.publish('Some other label')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: detect_label 'High latency' is not published by SignalFlow",
+            result["errors"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
