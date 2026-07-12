@@ -126,7 +126,11 @@ def matching_paren(text: str, opening: int) -> int:
             depth -= 1
             if depth == 0:
                 return index
-    raise ValueError("unbalanced data(...) call")
+    # Generic wording: this matcher is shared by data(...), .publish(...), and
+    # aggregation-call parsing, so the caller supplies the call-specific prefix
+    # ("malformed .publish(...) call (...)") -- naming data(...) here would be
+    # misleading for the other callers.
+    raise ValueError("unbalanced parentheses")
 
 
 def _blank_comment_lines(text: str) -> str:
@@ -1079,16 +1083,20 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         )
         if not has_service_filter:
             errors.append(f"{resource_id}: missing service.name filter")
-        # Scan for real `var.<name>` references on a view that blanks string
-        # prose but preserves `${...}` interpolations: a genuine reference (a
-        # bare `var.service_name` in the program body, or a `'${var.x}'`
-        # interpolation inside a quoted filter value) survives, but a
-        # `var.<name>` sitting in plain string prose -- e.g. a publish label
-        # `'legacy used var.legacy_threshold'` -- is blanked, so it is not
+        # Scan for real `var.<name>` references in the program body only, on a
+        # view that blanks string prose but preserves `${...}` interpolations:
+        # a genuine reference (a bare `var.service_name` in the program body, or
+        # a `'${var.x}'` interpolation inside a quoted filter value) survives,
+        # but a `var.<name>` sitting in plain string prose -- e.g. a publish
+        # label `'legacy used var.legacy_threshold'` -- is blanked, so it is not
         # wrongly reported as an undeclared variable. Blanking the whole string
         # (interpolation included) would instead hide a real typo like
-        # `'${var.service_nam}'` from the undeclared-variable check.
-        for variable in VARIABLE_REFERENCE.findall(_blank_string_prose(searchable)):
+        # `'${var.service_nam}'` from the undeclared-variable check. Scoping to
+        # the program body (not the whole resource block) keeps a `var.foo`
+        # mention that is only prose inside a `description = <<-EOT ... EOT`
+        # heredoc from being treated as a real reference, matching the rest of
+        # the decoy-proofing that ignores free-text fields.
+        for variable in VARIABLE_REFERENCE.findall(_blank_string_prose(program_searchable)):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
         labels = DETECT_LABEL.findall(

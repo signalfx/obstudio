@@ -1776,6 +1776,12 @@ resource "signalfx_detector" "latency" {{
             any("latency: malformed .publish(...) call" in error for error in result["errors"]),
             result["errors"],
         )
+        # The shared paren matcher must not describe a .publish(...) failure as
+        # an "unbalanced data(...) call".
+        self.assertFalse(
+            any("data(...) call" in error for error in result["errors"]),
+            result["errors"],
+        )
 
     def test_rejects_an_unbalanced_aggregation_call_without_reporting_pass(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2831,6 +2837,47 @@ resource "signalfx_detector" "latency" {{
 
   rule {{
     detect_label = "legacy used var.legacy_threshold before this rewrite"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertNotIn(
+            "latency: referenced variable 'legacy_threshold' is not declared",
+            result["errors"],
+        )
+
+    def test_accepts_a_var_mention_that_is_only_prose_in_a_description_heredoc(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # `var.legacy_threshold` here is documentation prose inside a
+            # description heredoc, not a real reference. Scoping the reference
+            # scan to the program body must keep it from being flagged as an
+            # undeclared variable.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  description = <<-EOT
+    This detector replaces the old var.legacy_threshold approach.
+  EOT
+
+  rule {{
+    detect_label = "High latency"
   }}
 }}
 ''',
