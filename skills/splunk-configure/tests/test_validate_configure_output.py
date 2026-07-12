@@ -1563,6 +1563,35 @@ EOF
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_metrics"], [METRIC])
 
+    def test_parses_a_program_text_heredoc_with_crlf_line_endings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            detectors = fixture.terraform_dir.joinpath("detectors.tf")
+            detectors.write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+'''.replace("\n", "\r\n"),
+                encoding="utf-8",
+                newline="",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
     def test_ignores_decoy_variable_and_detect_label_hidden_in_a_description_field(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

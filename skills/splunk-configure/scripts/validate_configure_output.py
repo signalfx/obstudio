@@ -13,7 +13,7 @@ from pathlib import Path
 RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
-PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\n')
+PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\r?\n')
 PROGRAM_TEXT_STRING = re.compile(r'\bprogram_text\s*=\s*"((?:\\.|[^"\\])*)"')
 DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
@@ -265,7 +265,7 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
         dash, marker = start_match.group(1), start_match.group(2)
         indent = r"[ \t]*" if dash else ""
         end_match = re.search(
-            rf"^{indent}{re.escape(marker)}[ \t]*$", searchable[start_match.end() :], re.M
+            rf"^{indent}{re.escape(marker)}[ \t]*\r?$", searchable[start_match.end() :], re.M
         )
         if end_match is None:
             return ""
