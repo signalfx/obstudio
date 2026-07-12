@@ -13,10 +13,14 @@ from pathlib import Path
 RESOURCE_START = re.compile(r'resource\s+"signalfx_detector"\s+"([^"]+)"\s*\{')
 VARIABLE_DECLARATION = re.compile(r'variable\s+"([^"]+)"\s*\{')
 VARIABLE_REFERENCE = re.compile(r"\bvar\.([A-Za-z_][A-Za-z0-9_]*)")
-PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\r?\n')
+# HCL identifiers (attribute names and heredoc delimiters) permit hyphens, so
+# a real `<<-SIGNAL-FLOW` delimiter or a `foo-bar = "..."` attribute must be
+# recognized -- otherwise its body/value escapes masking and any brace- or
+# resource-shaped text inside it can corrupt block discovery.
+PROGRAM_TEXT_HEREDOC = re.compile(r'\bprogram_text\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_-]*)"?[ \t]*\r?\n')
 PROGRAM_TEXT_STRING = re.compile(r'\bprogram_text\s*=\s*"((?:\\.|[^"\\])*)"')
-HEREDOC_START = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_]*)"?[ \t]*\r?\n')
-HCL_STRING_VALUE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:\\.|[^"\\])*)"')
+HEREDOC_START = re.compile(r'\b([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*<<(-)?\s*"?([A-Za-z_][A-Za-z0-9_-]*)"?[ \t]*\r?\n')
+HCL_STRING_VALUE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"')
 DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
@@ -253,13 +257,14 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
     mistake a `data(...)`- or `publish(...)`-shaped string inside an
     unrelated quoted HCL value for real SignalFlow syntax. `searchable` lets
     a caller that already has the comment-blanked view of `block` pass it in
-    instead of paying for `_blank_comment_lines` again. Falls back to the
-    full block only when no `program_text` field is found at all, so the
-    caller still gets a normal validation error (no data(...) call found)
-    rather than silently skipping the resource; a malformed heredoc (no
-    closing marker) instead returns an empty body, since falling back to the
-    full block there would drag the following `rule { ... }` field into
-    scanned scope. The `program_text` field is located against a view whose
+    instead of paying for `_blank_comment_lines` again. A missing (or
+    non-literal) `program_text` field returns an empty body, so the caller's
+    existing zero-metric check rejects the resource -- falling back to the
+    full block there would let a `data(...)`/`publish(...)`-shaped fragment in
+    an unrelated `description` heredoc or `rule { ... }` field satisfy
+    validation for a detector that has no real program at all. A malformed
+    heredoc (no closing marker) likewise returns an empty body. The
+    `program_text` field is located against a view whose
     other string values (every heredoc body and every `attr = "..."` value)
     are blanked, so a `program_text = ...`-shaped fragment sitting inside a
     `description` value or heredoc is never selected ahead of the real field;
@@ -281,7 +286,7 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
     string_match = PROGRAM_TEXT_STRING.search(structural)
     if string_match is not None:
         return _decode_string_escapes(block[string_match.start(1) : string_match.end(1)])
-    return block
+    return ""
 
 
 def _blank_hcl_string_values(searchable: str, keep_attrs: frozenset[str] = frozenset()) -> str:

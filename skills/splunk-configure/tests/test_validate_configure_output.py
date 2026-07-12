@@ -2844,6 +2844,106 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_rejects_a_resource_whose_only_data_call_lives_in_a_description_heredoc(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # No real program_text: the data(...)/publish(...) SignalFlow lives
+            # only inside a description heredoc. The zero-metric check must
+            # reject it rather than scanning that free text as a program body.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  name        = "Latency"
+  description = <<-EOT
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOT
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "latency: expected exactly one data(...) metric, found 0",
+            result["errors"],
+        )
+
+    def test_accepts_a_program_text_heredoc_with_a_hyphenated_delimiter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # HCL delimiters permit hyphens: `<<-SIGNAL-FLOW` is a valid marker
+            # and its body must be recognized as the real program_text.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-SIGNAL-FLOW
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  SIGNAL-FLOW
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_metrics"], [METRIC])
+
+    def test_ignores_a_decoy_resource_brace_in_a_hyphenated_delimiter_heredoc(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # A resource-shaped decoy inside a hyphenated-delimiter heredoc body
+            # must be masked, not mistaken for a second real resource block.
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-SIGNAL-FLOW
+    note = "resource signalfx_detector decoy {{ oops }}"
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  SIGNAL-FLOW
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
     def test_rejects_a_realm_declaration_that_is_only_commented_out(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
