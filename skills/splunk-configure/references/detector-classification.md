@@ -4,6 +4,102 @@ Rules for mapping metrics from an otel-audit report into detector categories.
 Use the priority order below when multiple rules match; the first qualifying
 category in that order wins.
 
+## Route-Level De-duplication
+
+Before classifying individual metrics, group candidate metrics that share the
+same `service.name` and the same route/operation dimension (`http.route`,
+`rpc.method`, `db.operation.name`, or an equivalent low-cardinality operation
+key). A duration histogram for a call and a counter that only restates an
+outcome of that same call (an error count, a status-code count, or a
+throughput count for the identical route/operation) are one RED signal, not
+two independently tracked metrics.
+
+A duration histogram and a counter belong to the same route group when both
+carry the same `service.name` and the same route/operation dimension value,
+and one of the following also holds:
+
+- **Error or status counter**: the histogram's own attributes already
+  include `error.type`, `http.response.status_code`,
+  `rpc.response.status_code`, or `db.response.status_code` for that route,
+  and the counter's name or dimensions indicate it counts the same outcome
+  those attributes already carry -- for example a custom
+  `<route>.errors.count` counter next to `http.server.request.duration` that
+  carries an `error.type` attribute for the same route.
+- **Throughput counter**: the counter's name indicates it counts total calls
+  for the route with no outcome/error keyword (see the Throughput
+  classification rule below) and its count is derivable from the histogram's
+  own observation count for that route/operation -- the histogram's
+  attributes do not need to include an error/status attribute for this case,
+  because a throughput counter restates the histogram's call count
+  regardless of whether the histogram carries any outcome dimension.
+
+When a route group forms:
+
+- Classify the histogram once as **latency**.
+- Generate the **error** detector for that route by filtering the *same*
+  histogram, scoped to the route/operation dimension, on `error.type` or only
+  the failing `*.response.status_code` value(s) evidenced for the merged
+  counter. Never wildcard a status-code attribute, because successful
+  responses carry it too.
+- Generate the **throughput** detector for that route from the *same*
+  histogram's observation count scoped to the route/operation dimension, with
+  no outcome/error/status filter -- throughput must count every request for
+  the route, not just the failing ones.
+- Record the merged counter in the detector output as merged into the route's
+  RED group on the histogram's metric name, rather than skipping it silently,
+  so the report explains why no standalone detector exists for it.
+- If the counter carries dimensions the histogram does not (for example a
+  specific failure reason with no matching histogram attribute), classify it
+  independently instead of merging it.
+
+One route should produce at most one Latency detector, one Error detector, and
+one Throughput detector -- not one detector per metric that happens to touch
+the route. Detectors in the same route group may read from the same metric
+with different attribute filters; that is expected and is not duplicate
+detector generation.
+
+### Evidenced Non-Standard Outcome Attribute
+
+A histogram may carry a custom attribute that is not `error.type` or a
+`*.response.status_code` key (for example `outcome.reason` set via a
+per-call metric-attribute hook, as in `otel-instrument/SKILL.md`'s
+`Labeler` pattern) but that audit or source evidence shows takes on a value
+present only for a failing outcome on that route -- for example
+`outcome.reason` observed as `gateway_timeout` only on non-2xx responses.
+Generate an attribute-filtered outcome detector for that route from the
+histogram filtered to the failing value(s) of that attribute, following the
+same non-wildcard rule as `*.response.status_code`: never wildcard on
+existence alone unless the evidence proves the attribute is present only on
+failures. This detector is generated directly from the histogram attribute
+and does not require a redundant counter to exist first -- an evidenced
+non-standard outcome attribute is detector-ready on its own.
+
+This rule has two distinct outcomes depending on whether the route also has
+a standard error/status attribute:
+
+- **No standard attribute on the route**: the non-standard attribute *is*
+  the route's Error detector -- generate it in place of the standard Error
+  detector described above.
+- **A standard attribute also exists on the route**: keep the standard
+  Error detector from the Route-Level De-duplication rule above (still at
+  most one per route), and generate this non-standard-attribute detector as
+  an *additional* outcome detector only when the non-standard attribute
+  distinguishes failure causes the standard attribute cannot -- for example
+  two distinct failure reasons that both surface as the same
+  `http.response.status_code` (a 409 for "already done" vs. a 409 for
+  "already reserved"). Do not generate this additional detector when the
+  non-standard attribute's failing values map 1:1 onto the standard
+  attribute's own failing values; that would just restate the standard
+  Error detector under a different name. The "at most one Error detector
+  per route" cap still applies to the standard-attribute Error detector;
+  this additional detector covers a separate, non-standard dimension and is
+  not a second Error detector for the same signal.
+
+This mirrors the check `$otel-instrument` performs before adding a new custom
+metric (see `otel-instrument/SKILL.md` `#### Implementation Rules`): if the
+attribute already exists on the RED metric, alert on the attribute rather
+than standing up a second detector for a second metric.
+
 ## Classification Rules
 
 Classify metrics with explicit GenAI context before incident-readiness and
@@ -278,7 +374,7 @@ A metric is a **genai-cost** detector candidate when:
 A metric is a **latency** detector candidate when:
 
 - The metric name contains `.duration` (e.g. `http.server.request.duration`,
-  `rpc.server.duration`, `db.client.operation.duration`)
+  `rpc.server.call.duration`, `db.client.operation.duration`)
 - The metric type is histogram
 
 These metrics measure response time and are best monitored with p99 percentile
@@ -334,6 +430,16 @@ Skip a metric (do not generate a detector) when:
    - `otelhttp` metrics when custom HTTP metrics are present
    - `otelgrpc` metrics when custom gRPC metrics are present
 
+   This rule does not apply when the custom metric is a counter that merges
+   into an auto-instrumented histogram's route group under Route-Level
+   De-duplication above (for example a custom `<route>.errors.count` next to
+   `otelhttp`'s `http.server.request.duration` for the same route) -- that
+   rule keeps the histogram as the route's Latency/Error/Throughput source of
+   truth and folds the counter into it, rather than skipping the histogram
+   in favor of a standalone custom-counter detector. Apply Route-Level
+   De-duplication first; only skip the auto-instrumented metric under this
+   rule when no route group forms.
+
 2. **Runtime/host metrics without actionable thresholds** -- Skip generic
    runtime metrics that lack meaningful static thresholds unless the user
    explicitly requests them:
@@ -348,6 +454,9 @@ Skip a metric (do not generate a detector) when:
    - Version gauges
 
 ## Decision Flowchart
+
+Apply Route-Level De-duplication first. The flowchart below then classifies
+each remaining (non-merged) metric.
 
 ```
 metric name starts with "gen_ai." or audit has GenAI Readiness plus explicit genai/llm/inference/embedding/model-provider/agent/tool-call/retrieval/memory/evaluation keyword?
@@ -410,6 +519,10 @@ metric or dimension contains service.version/deployment.environment.name/cloud.r
 ```
 
 ## Priority Order
+
+Route-Level De-duplication runs before this priority order and can remove a
+counter from classification entirely by merging it into an already-classified
+histogram's route group.
 
 When a metric could match multiple categories (rare), use this priority:
 

@@ -342,6 +342,14 @@ go func(ctx context.Context) {
 
 ## Custom Metrics
 
+Before adding a custom counter or histogram for an outcome that happens
+inside a request `otelhttp.NewHandler` already wraps, check whether it
+belongs as an attribute on `http.server.request.duration` instead — see
+`../../SKILL.md` `#### Implementation Rules` and the `Go:` entry under
+`#### Language-Specific Musts` for the `otelhttp.LabelerFromContext` pattern.
+Only define a new instrument when the signal does not correlate 1:1 with a
+single request (a queue-depth gauge, a background job outcome).
+
 Define package-level meters. Register metrics at init time.
 
 ```go

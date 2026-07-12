@@ -158,9 +158,10 @@ Record the span name and source file with line number.
 Enumerate every individual metric name the package produces -- one row per
 metric. Never group metrics with vague labels like "(+ related)" or
 parenthetical summaries like "(goroutines, memory, GC)". For example,
-`otelgrpc` emits `rpc.server.duration`, `rpc.server.request.size`,
-`rpc.server.response.size`, `rpc.server.requests_per_rpc`, and
-`rpc.server.responses_per_rpc` -- list each as its own row. Similarly,
+`otelgrpc` emits `rpc.server.call.duration` (or the legacy `rpc.server.duration`
+on older SDK versions), `rpc.server.request.size`, `rpc.server.response.size`,
+`rpc.server.requests_per_rpc`, and `rpc.server.responses_per_rpc` -- list each
+as its own row. Similarly,
 `runtime.Start()` emits `process.runtime.go.goroutines`,
 `process.runtime.go.mem.heap_alloc`, `process.runtime.go.gc.count`, etc. --
 list each individually.

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260702T062929008621Z |
+| Run ID | 20260711T231609164685Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -19,7 +19,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
-| go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 5 | 0 |
+| go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/kvstore/qual/incident-readiness | go/kvstore | 1 | evals/go/kvstore/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | go/kvstore/qual/instrument | go/kvstore | 2 | evals/go/kvstore/eval/qual/instrument.json | 0 | 5 | 0 |
@@ -34,6 +34,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
+| python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |

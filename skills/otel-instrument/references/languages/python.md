@@ -250,6 +250,22 @@ async def process_order(order_id: str) -> Order:
 
 ## Custom Metrics
 
+Before adding a custom counter or histogram for an outcome that happens
+inside a request the ASGI/WSGI instrumentation already covers, check
+whether it belongs as an attribute on `http.server.request.duration`
+instead — see `../../SKILL.md` `#### Implementation Rules` and the
+`Python:` entry under `#### Language-Specific Musts`. The instrumentation
+already sets `http.response.status_code` on that metric for every request,
+and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
+-- a plain 4xx client-error response does not set `error.type` on a server
+span. Define a new instrument when the signal does not correlate 1:1 with a
+single request (a queue-depth gauge or background job outcome), or cannot
+be represented by those automatically emitted attributes -- for example a
+same-status-different-cause outcome (a 200 that is a logical failure, several
+distinct 4xx causes, or several distinct 5xx causes) that `http.response.status_code`
+and `error.type` cannot distinguish on their own and that needs its own
+dimension.
+
 ```python
 from opentelemetry import metrics
 

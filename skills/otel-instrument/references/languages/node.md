@@ -174,6 +174,21 @@ async function processOrder(orderId: string): Promise<Order> {
 
 ## Custom Metrics
 
+Before adding a custom counter or histogram for an outcome that happens
+inside a request `@opentelemetry/instrumentation-http` already covers,
+check whether it belongs as an attribute on `http.server.request.duration`
+instead — see `../../SKILL.md` `#### Implementation Rules` and the
+`Node.js:` entry under `#### Language-Specific Musts`. The instrumentation
+already sets `http.response.status_code` on that metric from the response
+for every request with no extra code, but it does not set `error.type` from
+a failing status: that attribute is reserved there for a lower-level
+request/response transport error, not an ordinary 4xx/5xx completion.
+Define a new instrument when the signal does not correlate 1:1 with a single
+request (a queue-depth gauge or background job outcome), or cannot be
+represented by `http.response.status_code` alone -- `@opentelemetry/instrumentation-http`
+has no per-call metric-attribute hook for adding a finer-grained reason
+dimension the way Go's `Labeler` can.
+
 ```typescript
 import { metrics } from '@opentelemetry/api';
 

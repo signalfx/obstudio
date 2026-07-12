@@ -607,6 +607,49 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   requirement depends on them, the service can observe the value accurately,
   and privacy/cardinality rules permit it. Do not invent custom spans, metrics,
   or attributes where a semantic-convention signal satisfies the requirement.
+- Before adding any custom counter or histogram for an outcome that occurs
+  inside a call already covered by an auto-instrumented RED metric, check
+  whether that outcome can instead be recorded as an attribute on the existing
+  metric via the language's per-call metric-attribute hook (see
+  `#### Language-Specific Musts` below), rather than as a new standalone
+  metric. Each convention below defines its own error/status attributes for
+  exactly this purpose:
+  - [HTTP server/client metrics](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/):
+    `http.server.request.duration` / `http.client.request.duration` carry
+    `error.type` and `http.response.status_code`.
+  - [RPC server/client metrics](https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/):
+    `rpc.server.call.duration` / `rpc.client.call.duration` carry `error.type`
+    and `rpc.response.status_code`. Only fall back to the legacy
+    `rpc.server.duration` / `rpc.client.duration` names when runtime evidence
+    shows the installed SDK still emits those instead.
+  - [Database client metrics](https://opentelemetry.io/docs/specs/semconv/database/database-metrics/):
+    `db.client.operation.duration` carries `error.type` and
+    `db.response.status_code`.
+  - [Messaging metrics](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-metrics/):
+    `messaging.client.operation.duration` and `messaging.process.duration`
+    carry `error.type` when the operation fails.
+
+  Prefer the attribute over a dedicated custom metric whenever the outcome
+  can be faithfully represented on the RED metric for that call *and* the
+  language has a way to set it there: either auto-instrumentation already
+  emits a relevant `error.type`/`*.response.status_code` attribute that
+  actually distinguishes this outcome, or the language has a supported
+  per-call metric-attribute hook that can set a standard *or custom*
+  attribute on the metric (see `#### Language-Specific Musts` below -- for
+  example Go's `otelhttp.Labeler`, which can attach a custom attribute like
+  `outcome.reason` even when the outcome is not expressible via the standard
+  status/error attributes alone). A dedicated custom metric is correct
+  whenever that's not the case: a queue-depth gauge or a background job
+  outcome with no inbound request has no call to attach to; or the outcome
+  is not expressible via the standard status/error attributes alone (for
+  example a business outcome that occurs once per request but is not
+  distinguishable from the standard attributes -- a logical failure returned
+  as HTTP 200, or two distinct failure causes sharing one HTTP status) and
+  the language's auto-instrumentation also has no per-call metric-attribute
+  hook to carry a custom attribute instead (Python's ASGI/WSGI hooks and
+  Node's `@opentelemetry/instrumentation-http` only add span attributes, not
+  metric attributes). In each of those cases, add the dedicated metric
+  instead of suppressing the only detector-ready signal for the outcome.
 - For incident-readiness work, follow
   `../references/incident-readiness.md`. Instrument only source-evidenced
   workflow, dependency, input-complexity, freshness, backpressure,
@@ -821,6 +864,14 @@ Python:
   after the application has started serving.
 - For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
 - Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
+- The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
+  `http.response.status_code` on `http.server.request.duration` for every
+  request, and `error.type` for a 5xx (or otherwise invalid) status, with no
+  extra code -- a plain 4xx client-error response does not set `error.type`
+  on a server span. `server_request_hook`/`response_hook` only set span
+  attributes, not metric attributes; they are not a route to a new dimension
+  on the duration metric itself. Do not add a standalone counter for a
+  request outcome the duration metric already attributes correctly.
 
 Node.js:
 - Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
@@ -830,6 +881,17 @@ Node.js:
 - Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
 - Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
 - In the final response, name the updated preload command (`--require` or `--import`), the packages added, and that HTTP server spans plus request-duration metrics are expected.
+- `@opentelemetry/instrumentation-http` already sets `http.response.status_code`
+  on `http.server.request.duration` from the response for every request with no
+  extra code. It does not set `error.type` from a failing status code:
+  `error.type` there is reserved for a lower-level request/response transport
+  error (for example a socket error before a status was ever sent), not an
+  ordinary 4xx/5xx completion. Its hooks (`requestHook`, `responseHook`,
+  `startIncomingSpanHook`) only add span attributes, not metric attributes.
+  Do not add a standalone counter for a request outcome that `http.response.status_code`
+  already distinguishes; `@opentelemetry/instrumentation-http` has no per-call
+  metric-attribute hook, so a finer-grained reason dimension that the status
+  code alone cannot express does need its own custom metric here.
 
 Go:
 - For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.
@@ -840,6 +902,29 @@ Go:
   Also prove the combined wrappers do not emit duplicate server spans.
 - Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
 - In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
+- `otelhttp.NewHandler` already sets `http.response.status_code` on
+  `http.server.request.duration` from the response status with no extra code.
+  It does not set `error.type` from that status: `otelhttp`'s metric
+  attributes never include `error.type` for an ordinary 4xx/5xx completion.
+  When a handler needs a dimension `otelhttp` cannot derive from the
+  status code alone (a specific failure reason such as a downstream timeout
+  vs. a validation error, both returning the same HTTP status), pull the
+  `Labeler` that `otelhttp.NewHandler` already injects into the request
+  context and add the attribute from inside the handler instead of creating
+  a new counter:
+  ```go
+  labeler, _ := otelhttp.LabelerFromContext(r.Context())
+  labeler.Add(attribute.String("outcome.reason", "gateway_timeout"))
+  ```
+  No extra `otelhttp.NewHandler` option is needed; the labeler is present in
+  context for every request the handler already wraps. The older
+  `otelhttp.WithMetricAttributesFn` middleware option is deprecated in favor
+  of this per-request `Labeler`. A custom attribute like `outcome.reason` is
+  detector-ready without a standalone counter: see
+  `splunk-configure/references/detector-classification.md`'s "Evidenced
+  Non-Standard Outcome Attribute" rule, which generates an attribute-filtered
+  outcome detector directly from an evidenced non-standard histogram
+  attribute.
 
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
@@ -866,7 +951,12 @@ audit gaps are the approval context; implement the safe scoped signals and
 clearly list any unpatched prerequisites.
 
 - **If no**: proceed to the project-runtime validation gate (Step 5).
-- **If yes**: analyze the codebase for high-value custom instrumentation points:
+- **If yes**: for each candidate point below, first check whether it occurs
+  inside a call an auto-instrumented RED metric already measures (HTTP, RPC,
+  DB, or messaging — see `#### Implementation Rules`); if so, prefer adding
+  an attribute to that existing metric via the language's per-call
+  metric-attribute hook over defining a new counter/histogram. Analyze the
+  codebase for high-value custom instrumentation points:
   - Error handling paths that catch and handle exceptions
   - Key business operations (payments, orders, user registration, etc.)
   - External calls not covered by auto-instrumentation libraries

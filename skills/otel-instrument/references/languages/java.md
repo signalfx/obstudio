@@ -227,6 +227,25 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 
 ## Custom Metrics
 
+Before adding a custom counter or histogram for an outcome that happens
+inside a request the Java agent already covers, check whether it belongs as
+an attribute on `http.server.request.duration` instead — see `../../SKILL.md`
+`#### Implementation Rules`. The agent already sets
+`http.response.status_code` on that metric for every request, and
+`error.type` for a 5xx (or otherwise invalid) status, with no extra code --
+a plain 4xx client-error response does not set `error.type` on a server
+span. Define a new instrument when the signal does not correlate 1:1 with a
+single request (a queue-depth gauge or background job outcome), or cannot be
+represented by an attribute on the existing RED metric -- for example a
+same-status-different-cause outcome (a 200 that is a logical failure, several
+distinct 4xx causes, or several distinct 5xx causes) that `http.response.status_code`
+and `error.type` cannot distinguish on their own and that needs its own
+dimension. The
+Java agent has no per-call metric-attribute hook for adding such a dimension
+to `http.server.request.duration` the way Go's `Labeler` can -- a standalone
+custom counter/histogram is the correct fallback here, not a workaround to
+avoid.
+
 ```java
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;

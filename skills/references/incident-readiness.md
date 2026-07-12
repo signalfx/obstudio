@@ -62,7 +62,12 @@ Create traces, metrics, and logs that can answer these questions quickly:
   localization-only and alert on backlog, queue delay, or missed schedule
   instead.
 - Prefer OTel semantic-convention names for HTTP, RPC, database, messaging, and
-  runtime signals. Use custom metrics only when no convention exists.
+  runtime signals. Use a custom metric only when no convention exists, or when
+  a convention exists but cannot faithfully represent the outcome (for example
+  a logical failure returned as a successful status code) and the language has
+  no per-call metric-attribute hook to carry the outcome on the convention
+  metric instead -- see `otel-instrument/SKILL.md`
+  `#### Implementation Rules` for the full attribute-vs-metric test.
 - Use stable dimensions: `service.name`, `service.version`,
   `deployment.environment.name`, `cloud.region`, `cloud.platform`,
   `container.image.name`, `container.image.tags`, route or workflow name,

@@ -18,9 +18,10 @@ import (
 )
 
 type Task struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Done  bool   `json:"done"`
+	ID       int    `json:"id"`
+	Title    string `json:"title"`
+	Done     bool   `json:"done"`
+	Reserved bool   `json:"reserved"`
 }
 
 var (
@@ -102,6 +103,28 @@ func main() {
 				if body.Done != nil {
 					tasks[i].Done = *body.Done
 				}
+				writeJSON(w, http.StatusOK, tasks[i])
+				return
+			}
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	})
+
+	r.Post("/tasks/{id}/reserve", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+		mu.Lock()
+		defer mu.Unlock()
+		for i := range tasks {
+			if tasks[i].ID == id {
+				if tasks[i].Done {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": "already done"})
+					return
+				}
+				if tasks[i].Reserved {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": "already reserved"})
+					return
+				}
+				tasks[i].Reserved = true
 				writeJSON(w, http.StatusOK, tasks[i])
 				return
 			}

@@ -41,3 +41,4 @@ pytest-codex-evals/dist/
 .deepeval/
 .npmrc
 .DS_Store
+.claude/
