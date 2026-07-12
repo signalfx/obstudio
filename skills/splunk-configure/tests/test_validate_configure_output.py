@@ -2213,6 +2213,36 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "FAIL")
         self.assertIn("latency: missing service.name filter", result["errors"])
 
+    def test_rejects_a_service_name_filter_that_only_appears_inside_a_string_argument(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    A = data('{METRIC}', filter=filter('env', "filter('service.name', x)"))
+    A.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("latency: missing service.name filter", result["errors"])
+
     def test_rejects_a_publish_label_mismatch_despite_a_decoy_label_elsewhere(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2731,6 +2761,113 @@ resource "signalfx_detector" "natural_precedence" {{
 
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 2)
+
+    def test_rejects_api_token_whose_sensitive_flag_only_appears_in_a_description(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("variables.tf").write_text(
+                '''variable "api_token" {
+  type        = string
+  description = "Set sensitive = true to hide this token"
+}
+
+variable "realm" {
+  type = string
+}
+
+variable "service_name" {
+  type = string
+}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("api_token variable is not marked sensitive", result["errors"])
+
+    def test_rejects_a_metric_whose_only_report_mention_is_a_longer_metric_name(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            # The detector reads `http.server.request.duration`, but the report
+            # only mentions the different, longer `http.server.request.duration.p99`.
+            # A bare substring test would treat the metric as present; a bounded
+            # match must flag it as absent.
+            fixture.detectors_report.write_text(
+                f"# Detectors\n\n**Result:** Pass\n\nGenerated `{METRIC}.p99` detector.\n",
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {METRIC!r} is absent from detectors report",
+            result["errors"],
+        )
+
+    def test_accepts_a_var_reference_that_only_appears_inside_a_publish_label(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('legacy used var.legacy_threshold before this rewrite')
+  EOF
+
+  rule {{
+    detect_label = "legacy used var.legacy_threshold before this rewrite"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertNotIn(
+            "latency: referenced variable 'legacy_threshold' is not declared",
+            result["errors"],
+        )
+
+    def test_rejects_a_realm_declaration_that_is_only_commented_out(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("variables.tf").write_text(
+                '''variable "api_token" {
+  type      = string
+  sensitive = true
+}
+
+# variable "realm" {
+#   type = string
+# }
+
+variable "service_name" {
+  type = string
+}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("variables.tf does not declare realm", result["errors"])
 
 
 if __name__ == "__main__":

@@ -956,7 +956,13 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if len(ids) != len(set(ids)):
         errors.append("duplicate signalfx_detector resource identifiers")
 
-    declared = set(VARIABLE_DECLARATION.findall(variables_text))
+    # Discover variable declarations on a comment- and string-blanked view so a
+    # commented-out `# variable "realm" {` or a `variable "..." {`-shaped string
+    # value cannot poison the `declared` set -- otherwise a variable that is not
+    # really declared would satisfy the `var.<name>` reference checks and the
+    # api_token/realm presence checks below.
+    variables_searchable = _blank_hcl_string_values(_blank_comment_lines(variables_text))
+    declared = set(VARIABLE_DECLARATION.findall(variables_searchable))
     verified = working_metrics(args.verify_report)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
@@ -990,7 +996,11 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         detector_signatures.append((metric, data_signature, aggregation))
         if metric not in allowed:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
-        if metric not in report_text:
+        # Require a bounded occurrence, not a bare substring: a plain
+        # `metric in report_text` treats `http.server.duration` as present when
+        # the report only mentions the different, longer `http.server.duration.p99`,
+        # letting a metric with no real entry pass the evidence check.
+        if not re.search(rf"(?<![\w.]){re.escape(metric)}(?![\w.])", report_text):
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
         try:
             data_span = data_call_span(program_body, program_searchable)
@@ -998,9 +1008,25 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             errors.append(f"{resource_id}: malformed data(...) call ({error})")
             continue
         data_args = program_searchable[data_span[0] : data_span[1] + 1] if data_span is not None else ""
-        if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", data_args):
+        # Look for a real filter('service.name', ...) call: locate `filter(`
+        # markers on a quote-blanked view so a `filter('service.name', ...)`
+        # fragment sitting inside a nested string value (e.g. a label or a
+        # comment-note argument) is not counted as a real filter, then confirm
+        # the first argument at each real marker against the original text.
+        masked_args = _blank_quoted_content(data_args)
+        has_service_filter = any(
+            re.match(r"filter\(\s*['\"]service\.name['\"]\s*,", data_args[marker.start() :])
+            for marker in re.finditer(r"\bfilter\(", masked_args)
+        )
+        if not has_service_filter:
             errors.append(f"{resource_id}: missing service.name filter")
-        for variable in VARIABLE_REFERENCE.findall(decoy_blanked):
+        # Scan a quote-blanked view for real `var.<name>` references: a genuine
+        # reference (e.g. `var.service_name` bare inside the program body, or a
+        # `${var.x}` interpolation) survives, but a `var.<name>` sitting inside a
+        # SignalFlow string literal or an HCL string value -- e.g. a publish
+        # label `'legacy used var.legacy_threshold'` -- is blanked, so it is not
+        # wrongly reported as an undeclared variable.
+        for variable in VARIABLE_REFERENCE.findall(_blank_quoted_content(searchable)):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
         labels = DETECT_LABEL.findall(
@@ -1060,7 +1086,16 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
                 errors.append("signalfx provider must use var.api_token")
             if not re.search(r'^\s*api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"[ \t]*$', provider, re.M):
                 errors.append("signalfx provider api_url must derive from var.realm")
-    if not re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*sensitive\s*=\s*true', variables_text, re.S):
+    # Mask string values before checking `sensitive = true`: otherwise the
+    # DOTALL block scan walks into a `description = "... set sensitive = true
+    # ..."` value and matches the flag inside prose, so a variable that is not
+    # actually sensitive passes. On the masked view only a real unquoted
+    # `sensitive = true` attribute (anchored to its own line) survives.
+    variables_structural = _blank_hcl_string_values(_blank_comment_lines(variables_text))
+    api_token_block = re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*', variables_structural, re.S)
+    if api_token_block is None or not re.search(
+        r"^\s*sensitive\s*=\s*true[ \t]*$", api_token_block.group(0), re.M
+    ):
         errors.append("api_token variable is not marked sensitive")
     if not re.search(r'^\s*api_token\s*=\s*""\s*(?:#.*)?$', tfvars_text, re.M):
         errors.append("terraform.tfvars.example must leave api_token empty")
