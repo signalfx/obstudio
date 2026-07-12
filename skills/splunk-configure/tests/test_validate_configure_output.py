@@ -264,7 +264,7 @@ resource "signalfx_detector" "latency" {{
 
 resource "signalfx_detector" "throughput" {{
   program_text = <<-EOF
-    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count()
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name), rollup='count').sum()
     signal.publish('Low throughput')
   EOF
 
@@ -1414,6 +1414,37 @@ resource "signalfx_detector" "latency" {{
             result["errors"],
         )
 
+    def test_rejects_an_unbalanced_publish_call_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    A = data('{METRIC}', filter=filter('service.name', var.service_name))
+    A.publish('High latency'
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("latency: malformed .publish(...) call" in error for error in result["errors"]),
+            result["errors"],
+        )
+
     def test_rejects_forbidden_content_hidden_in_a_description_field(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1809,6 +1840,417 @@ resource "signalfx_detector" "right_grouped" {{
             "or filter on distinct attributes)",
             result["errors"],
         )
+
+    def test_rejects_two_detectors_differing_only_in_newline_before_aggregation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "inline" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('P99')
+  EOF
+
+  rule {{
+    detect_label = "P99"
+  }}
+}}
+
+resource "signalfx_detector" "wrapped" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+      .percentile(pct=99)
+    signal.publish('P99 again')
+  EOF
+
+  rule {{
+    detect_label = "P99 again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_distinguishes_aggregations_with_deeply_nested_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "nested_a" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).mean(over=max(percentile(pct=99)))
+    signal.publish('Nested A')
+  EOF
+
+  rule {{
+    detect_label = "Nested A"
+  }}
+}}
+
+resource "signalfx_detector" "nested_b" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).mean(over=max(percentile(pct=50)))
+    signal.publish('Nested B')
+  EOF
+
+  rule {{
+    detect_label = "Nested B"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
+
+    def test_rejects_an_unbalanced_detector_block_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("malformed signalfx_detector block" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_redundant_outer_filter_parens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "wrapped" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=(filter('service.name', var.service_name) and filter('error.type', '*')))
+    signal.publish('Error rate')
+  EOF
+
+  rule {{
+    detect_label = "Error rate"
+  }}
+}}
+
+resource "signalfx_detector" "bare" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*'))
+    signal.publish('Error rate again')
+  EOF
+
+  rule {{
+    detect_label = "Error rate again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_by_grouping_key_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "route_then_error" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by=['http.route', 'error.type'])
+    signal.publish('Error rate')
+  EOF
+
+  rule {{
+    detect_label = "Error rate"
+  }}
+}}
+
+resource "signalfx_detector" "error_then_route" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by=['error.type', 'http.route'])
+    signal.publish('Error rate again')
+  EOF
+
+  rule {{
+    detect_label = "Error rate again"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_accepts_two_detectors_with_distinct_by_grouping_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "by_route" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by=['http.route'])
+    signal.publish('By route')
+  EOF
+
+  rule {{
+    detect_label = "By route"
+  }}
+}}
+
+resource "signalfx_detector" "by_route_and_error" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by=['http.route', 'error.type'])
+    signal.publish('By route and error')
+  EOF
+
+  rule {{
+    detect_label = "By route and error"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_rejects_two_detectors_differing_only_in_scalar_versus_singleton_list_group_by(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "scalar_by" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by='http.route')
+    signal.publish('Scalar by')
+  EOF
+
+  rule {{
+    detect_label = "Scalar by"
+  }}
+}}
+
+resource "signalfx_detector" "singleton_list_by" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).count(by=['http.route'])
+    signal.publish('Singleton list by')
+  EOF
+
+  rule {{
+    detect_label = "Singleton list by"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_numeric_literal_form(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "integer_pct" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99)
+    signal.publish('Integer pct')
+  EOF
+
+  rule {{
+    detect_label = "Integer pct"
+  }}
+}}
+
+resource "signalfx_detector" "float_pct" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name)).percentile(pct=99.0)
+    signal.publish('Float pct')
+  EOF
+
+  rule {{
+    detect_label = "Float pct"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_rejects_two_detectors_differing_only_in_redundant_precedence_parens(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "explicit_precedence" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=(filter('service.name', var.service_name) and filter('error.type', '*')) or filter('http.route', '/checkout'))
+    signal.publish('Explicit precedence')
+  EOF
+
+  rule {{
+    detect_label = "Explicit precedence"
+  }}
+}}
+
+resource "signalfx_detector" "implicit_precedence" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) and filter('error.type', '*') or filter('http.route', '/checkout'))
+    signal.publish('Implicit precedence')
+  EOF
+
+  rule {{
+    detect_label = "Implicit precedence"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "two detectors read the same metric with the same aggregation and attribute "
+            "filters (true duplicate; a route-group merge must use a distinct aggregation "
+            "or filter on distinct attributes)",
+            result["errors"],
+        )
+
+    def test_distinguishes_detectors_whose_precedence_parens_change_the_grouping(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "or_grouped" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=(filter('service.name', var.service_name) or filter('error.type', '*')) and filter('http.route', '/checkout'))
+    signal.publish('Or grouped')
+  EOF
+
+  rule {{
+    detect_label = "Or grouped"
+  }}
+}}
+
+resource "signalfx_detector" "natural_precedence" {{
+  program_text = <<-EOF
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name) or filter('error.type', '*') and filter('http.route', '/checkout'))
+    signal.publish('Natural precedence')
+  EOF
+
+  rule {{
+    detect_label = "Natural precedence"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 2)
 
 
 if __name__ == "__main__":

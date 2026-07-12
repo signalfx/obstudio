@@ -18,12 +18,7 @@ PROGRAM_TEXT_STRING = re.compile(r'\bprogram_text\s*=\s*"((?:\\.|[^"\\])*)"')
 DECOY_FIELD = re.compile(r'\b(?:name|description)\s*=\s*"((?:\\.|[^"\\])*)"')
 DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]")
-AGG_CHAIN = re.compile(
-    r"^(?:\s*\.\s*(?!publish\b)[A-Za-z_][A-Za-z0-9_]*\((?:[^()]|\([^()]*\))*\))*"
-)
-AGG_CALL = re.compile(
-    r"\.(?!publish\b)(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>(?:[^()]|\([^()]*\))*)\)"
-)
+AGG_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
@@ -310,35 +305,11 @@ TOKEN = re.compile(
     r"|\d+(?:\.\d+)?"
     r"|\S"
 )
+NUMERIC = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _is_wordlike(token: str) -> bool:
     return token[0].isalnum() or token[0] in "_'\""
-
-
-def _canonicalize_tokens(text: str) -> str:
-    """Canonicalize insignificant whitespace and string-literal quote style by
-    re-tokenizing text (string literals, identifiers/keywords such as
-    `and`/`or`/`not`, numbers, and single-character punctuation/operators) and
-    rejoining, inserting exactly one space wherever two adjacent word-like
-    tokens would otherwise merge into a different token -- e.g.
-    `filter(...) and filter(...)` and `filter(...)and filter(...)` both
-    normalize to the same signature, as do `filter=filter(...)` and
-    `filter = filter(...)`. Each token also passes through `_canonical_token`
-    so quote style never affects the result, e.g. `by=['error.type']` and
-    `by=["error.type"]` normalize to the same string. Any other adjacent pair
-    (punctuation, or punctuation next to a word) is joined tight, since
-    concatenating them cannot change how the text re-tokenizes."""
-    tokens = TOKEN.findall(text)
-    parts: list[str] = []
-    previous: str | None = None
-    for raw_token in tokens:
-        token = _canonical_token(raw_token)
-        if previous is not None and _is_wordlike(previous) and _is_wordlike(token):
-            parts.append(" ")
-        parts.append(token)
-        previous = token
-    return "".join(parts).strip()
 
 
 _STRING_ESCAPE_DECODE = {
@@ -379,12 +350,14 @@ def _decode_string_escapes(body: str) -> str:
 
 def _canonical_token(token: str) -> str:
     """Canonicalize a string literal's quote style to single quotes so
-    `'checkout'` and `"checkout"` compare equal; other tokens pass through.
-    Escape sequences are decoded to their actual character (not merely
-    stripped of their backslash) before re-escaping, so a literal character
-    and its similarly-spelled escape sequence -- e.g. the letter `n` in `'n'`
-    versus the newline escape in `'\\n'` -- never canonicalize to the same
-    signature."""
+    `'checkout'` and `"checkout"` compare equal; a numeric literal is
+    normalized to its float value so equal numbers written differently -- e.g.
+    `99` versus `99.0`, or `5` versus `5.0` -- render identically; other tokens
+    pass through. Escape sequences are decoded to their actual character (not
+    merely stripped of their backslash) before re-escaping, so a literal
+    character and its similarly-spelled escape sequence -- e.g. the letter `n`
+    in `'n'` versus the newline escape in `'\\n'` -- never canonicalize to the
+    same signature."""
     if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"":
         decoded = _decode_string_escapes(token[1:-1])
         escaped = (
@@ -395,20 +368,31 @@ def _canonical_token(token: str) -> str:
             .replace("\t", "\\t")
         )
         return f"'{escaped}'"
+    if NUMERIC.fullmatch(token):
+        return repr(float(token))
     return token
 
 
+_BRACKET_OPENERS = {"(": ")", "[": "]", "{": "}"}
+_BRACKET_CLOSERS = set(_BRACKET_OPENERS.values())
+
+
 def _build_group(tokens: list[str], index: int) -> tuple[list, int]:
-    """Parse tokens[index:] into a nested list mirroring parenthesis nesting.
-    Each element is a token string, or a ("(", inner) pair for a paren group.
-    Stops at (and consumes) the first unmatched ')' or the end of tokens."""
+    """Parse tokens[index:] into a nested list mirroring bracket nesting.
+    Each element is a token string, or an (opener, inner) pair for a `(...)`
+    paren group, a `[...]` list, or a `{...}` dict -- so a comma inside any of
+    those (e.g. the elements of `by=['a','b']` or the entries of a
+    `filter={'a':'x','b':'y'}` dict) is collapsed into one nested element and
+    never leaks out as a top-level comma to `_split_top_level_commas`. Stops
+    at (and consumes) the first unmatched closing bracket or the end of
+    tokens."""
     group: list = []
     while index < len(tokens):
         token = tokens[index]
-        if token == "(":
+        if token in _BRACKET_OPENERS:
             inner, index = _build_group(tokens, index + 1)
-            group.append(("(", inner))
-        elif token == ")":
+            group.append((token, inner))
+        elif token in _BRACKET_CLOSERS:
             return group, index + 1
         else:
             group.append(token)
@@ -416,58 +400,129 @@ def _build_group(tokens: list[str], index: int) -> tuple[list, int]:
     return group, index
 
 
-def _flatten_matching_operand(operand: list, operator: str) -> list[list]:
-    """If operand is a single explicitly-parenthesized sub-expression whose
-    own top-level boolean operator is the same as operator, dissolve the
-    parens and return its (already-flattened, via recursion) operand
-    token-lists in place of the single wrapped operand, so
-    `(a and b) and c` and `a and (b and c)` -- which are the same
-    associative chain -- collapse to the same flat operand set before
-    sorting instead of comparing the literal string "(a and b)"/"(b and c)"
-    against a bare operand. A parenthesized sub-expression using a different
-    operator (or no operator, i.e. not a chain) is left wrapped, since
-    dissolving it would change which operands the boolean operator applies
-    to."""
-    if len(operand) == 1 and isinstance(operand[0], tuple) and operand[0][0] == "(":
-        inner_operator, inner_operands = _split_boolean_chain(operand[0][1])
-        if inner_operator == operator:
-            return inner_operands
-    return [operand]
+def _unwrap_redundant_parens(tokens: list) -> list:
+    """Strip parentheses that wrap the whole token list. A paren group around
+    an entire (sub)expression never changes how that expression's own boolean
+    operators group -- it has no sibling operator to bind against -- so
+    `(A and B)` and `A and B` (and `((A and B))`) must render identically.
+    Repeats so multiply-nested whole-expression wrappers collapse too. This is
+    only safe on a complete expression; a caller must not use it on an operand
+    sitting beside a different operator, where the parens are significant."""
+    while len(tokens) == 1 and isinstance(tokens[0], tuple) and tokens[0][0] == "(":
+        tokens = tokens[0][1]
+    return tokens
 
 
-def _split_boolean_chain(group: list) -> tuple[str | None, list[list]]:
-    """If group is a chain of a single repeated 'and' or 'or' operator (no
-    mixed operators, which would be ambiguous without explicit grouping),
-    return the operator and its operand token-lists -- with any operand that
-    is itself an explicitly-parenthesized chain of the same operator
-    flattened into the outer chain via `_flatten_matching_operand`, so
-    re-parenthesizing an associative and/or chain never changes its
-    canonical signature. Otherwise return (None, [group]) so the caller
-    renders it unchanged."""
-    operators = {token for token in group if token in ("and", "or")}
-    if len(operators) != 1:
-        return None, [group]
-    operator = operators.pop()
-    raw_operands: list[list] = []
+def _split_top_level_operator(tokens: list, operator: str) -> list[list]:
+    """Split tokens on every top-level occurrence of the `and`/`or` operator
+    string. A boolean operator nested inside a `(...)`/`[...]`/`{...}` group is
+    already collapsed into a single tuple element by `_build_group`, so it is
+    never seen here and stays bound to its own group."""
+    result: list[list] = []
     current: list = []
-    for token in group:
+    for token in tokens:
         if token == operator:
-            raw_operands.append(current)
+            result.append(current)
             current = []
         else:
             current.append(token)
-    raw_operands.append(current)
+    result.append(current)
+    return result
+
+
+def _top_level_operators(tokens: list) -> set[str]:
+    return {token for token in tokens if token in ("and", "or")}
+
+
+def _collect_operands(tokens: list, operator: str) -> list[list]:
+    """Split tokens on top-level `operator`, flattening a single
+    parenthesized operand whose own top-level operator is the *same* into the
+    parent list. This makes the associative regroupings `(a and b) and c`,
+    `a and (b and c)`, and `(a and d) and (b and c)` collapse to the same flat
+    operand set before the caller sorts them -- while an operand parenthesized
+    around a *different* operator (e.g. `(a or b)` inside an `and` chain) is
+    left intact, since its parens are semantically significant."""
+    raw = _split_top_level_operator(tokens, operator)
+    if len(raw) == 1:
+        return raw
     operands: list[list] = []
-    for operand in raw_operands:
-        operands.extend(_flatten_matching_operand(operand, operator))
-    return operator, operands
+    for operand in raw:
+        if len(operand) == 1 and isinstance(operand[0], tuple) and operand[0][0] == "(":
+            inner = _unwrap_redundant_parens(operand[0][1])
+            if _top_level_operators(inner) == {operator}:
+                operands.extend(_collect_operands(inner, operator))
+                continue
+        operands.append(operand)
+    return operands
+
+
+def _render_operand(operand: list, parent_operator: str) -> str:
+    """Render one operand of an `and`/`or` chain, wrapping it in parentheses
+    only when its own top-level operator binds *looser* than the parent -- an
+    `or` sub-expression sitting inside an `and` chain -- since those parens are
+    the only ones that change which stream is selected. An `and` operand of an
+    `or` chain, or a bare primary, needs no parens because `and` already binds
+    tighter than `or`; dropping its parens (`(a and b) or c` -> `a and b or c`)
+    does not change the expression."""
+    rendered, top_operator = _canonical_boolean(operand)
+    if parent_operator == "and" and top_operator == "or":
+        return f"({rendered})"
+    return rendered
+
+
+def _canonical_boolean(tokens: list) -> tuple[str, str | None]:
+    """Canonicalize a boolean (sub)expression, honoring SignalFlow operator
+    precedence (`and` binds tighter than `or`) so that redundant precedence
+    parentheses are dropped while significant ones are kept, and sorting the
+    commutative operands at each level so operand order never changes the
+    signature. Returns (rendered, top_operator) where top_operator is 'or',
+    'and', or None (a primary with no top-level boolean operator), letting a
+    caller decide whether this expression needs wrapping in its own context.
+    `or` is split before `and` so a mixed chain like `a and b or c` groups as
+    `(a and b) or c`, matching how SignalFlow parses it."""
+    tokens = _unwrap_redundant_parens(tokens)
+    or_terms = _collect_operands(tokens, "or")
+    if len(or_terms) > 1:
+        rendered = sorted(_render_operand(term, "or") for term in or_terms)
+        return " or ".join(rendered), "or"
+    and_terms = _collect_operands(tokens, "and")
+    if len(and_terms) > 1:
+        rendered = sorted(_render_operand(term, "and") for term in and_terms)
+        return " and ".join(rendered), "and"
+    return _render_tokens(tokens), None
+
+
+def _canonical_bracket(opener: str, inner: list) -> str:
+    """Render a nested bracket group to a canonical string. A `(...)` group is
+    a positional/keyword argument list or a parenthesized boolean
+    sub-expression, so it is canonicalized by `_canonical_group` (first
+    argument positional, the rest sorted). A `[...]` list and a `{...}` dict,
+    by contrast, are order-insensitive for stream selection -- the group-by
+    keys of `by=['a','b']` and the entries of a `filter={'a':'x','b':'y'}`
+    dict select the same stream regardless of order -- so their
+    comma-separated members are each canonicalized and then sorted, making
+    `by=['a','b']` and `by=['b','a']` (and the two key orderings of a filter
+    dict) render identically. A single-element `[...]` list is unwrapped to
+    that bare element, since the SignalFlow `by=` group-by and the value
+    argument of `filter(...)` accept a scalar or a one-element list
+    interchangeably -- `by=['host']` selects the same stream as `by='host'`,
+    and `filter('k',['a'])` the same as `filter('k','a')` -- so the two forms
+    must render identically. A single-element `{...}` dict is left wrapped,
+    since a dict is not interchangeable with its bare entry."""
+    closer = _BRACKET_OPENERS[opener]
+    if opener == "(":
+        return f"({_canonical_group(inner)})"
+    members = sorted(_canonical_argument(member) for member in _split_top_level_commas(inner))
+    if opener == "[" and len(members) == 1:
+        return members[0]
+    return f"{opener}{','.join(members)}{closer}"
 
 
 def _render_tokens(tokens: list) -> str:
     parts: list[str] = []
     previous: str | None = None
     for item in tokens:
-        token = f"({_canonical_group(item[1])})" if isinstance(item, tuple) else _canonical_token(item)
+        token = _canonical_bracket(item[0], item[1]) if isinstance(item, tuple) else _canonical_token(item)
         if previous is not None and _is_wordlike(previous) and _is_wordlike(token):
             parts.append(" ")
         parts.append(token)
@@ -494,23 +549,20 @@ def _split_top_level_commas(group: list) -> list[list]:
 
 def _canonical_argument(tokens: list) -> str:
     """Render one data(...) argument to a canonical string. A leading
-    `filter=` keyword prefix is set aside before looking for a top-level
-    `and`/`or` chain, so the prefix never ends up attached to whichever
-    operand happens to render first -- that association would otherwise
-    differ between `filter=filter(a) and filter(b)` and the operands
-    reversed, defeating the operand sort below. String-literal quote style
-    is normalized, and the operands of a top-level repeated `and`/`or` chain
-    are sorted, so two filter expressions that are identical except for
-    quote style or commutative operand order render to the same string."""
+    `filter=` keyword prefix is set aside before canonicalizing the boolean
+    expression, so the prefix never ends up attached to whichever operand
+    happens to render first -- that association would otherwise differ between
+    `filter=filter(a) and filter(b)` and the operands reversed, defeating the
+    operand sort inside `_canonical_boolean`. String-literal quote style is
+    normalized, and the operands of each top-level `and`/`or` level are sorted
+    with precedence-redundant parentheses dropped, so two filter expressions
+    that are identical except for quote style, commutative operand order, or
+    redundant/associative parenthesization render to the same string."""
     prefix = ""
     if len(tokens) >= 2 and tokens[0] == "filter" and tokens[1] == "=":
         prefix, tokens = "filter=", tokens[2:]
-    operator, operands = _split_boolean_chain(tokens)
-    rendered = [_render_tokens(operand) for operand in operands]
-    if operator is None:
-        return prefix + rendered[0]
-    rendered.sort()
-    return prefix + f" {operator} ".join(rendered)
+    rendered, _ = _canonical_boolean(tokens)
+    return prefix + rendered
 
 
 def _canonical_group(group: list) -> str:
@@ -650,20 +702,47 @@ def aggregation_signature(block: str, searchable: str | None = None) -> str:
     `.percentile(pct=99, over='5m')` vs `.percentile(over='5m', pct=99)`,
     render to the same signature and are not mistaken for a distinguishing
     difference; the order of chained methods themselves is preserved since
-    that is semantically significant. `searchable` lets a caller that
-    already has the comment-blanked view of `block` pass it in instead of
-    paying for `_blank_comment_lines` again."""
+    that is semantically significant. The chain is walked with a quote-aware
+    scanner (rather than a fixed-depth regex) so whitespace or a newline
+    around the chaining dot -- `data(...).mean()` vs `data(...).\n  mean()`
+    -- does not change the signature, and an argument nested more than one
+    paren deep is not truncated. Scanning stops at the first `.publish(`
+    (the publish call is not part of the aggregation) or at the first token
+    that is not a `.method(...)` continuation. `searchable` lets a caller
+    that already has the comment-blanked view of `block` pass it in instead
+    of paying for `_blank_comment_lines` again."""
     span = data_call_span(block, searchable)
     if span is None:
         return ""
     _, close, searchable = span
-    chain_match = AGG_CHAIN.match(searchable[close + 1 :])
-    if chain_match is None:
-        return ""
-    calls = [
-        _canonical_aggregation_call(call_match.group("name"), call_match.group("args"))
-        for call_match in AGG_CALL.finditer(chain_match.group(0))
-    ]
+    calls: list[str] = []
+    index = close + 1
+    length = len(searchable)
+    while True:
+        while index < length and searchable[index].isspace():
+            index += 1
+        if index >= length or searchable[index] != ".":
+            break
+        index += 1
+        while index < length and searchable[index].isspace():
+            index += 1
+        name_match = AGG_METHOD_NAME.match(searchable, index)
+        if name_match is None:
+            break
+        name = name_match.group(0)
+        if name == "publish":
+            break
+        cursor = name_match.end()
+        while cursor < length and searchable[cursor].isspace():
+            cursor += 1
+        if cursor >= length or searchable[cursor] != "(":
+            break
+        try:
+            call_close = matching_paren(searchable, cursor)
+        except ValueError:
+            break
+        calls.append(_canonical_aggregation_call(name, searchable[cursor + 1 : call_close]))
+        index = call_close + 1
     return "".join(calls)
 
 
@@ -737,7 +816,11 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             f"{detector_status} != {configure_status}"
         )
     validate_heading_order(configure_verify_text, "configure verification report", errors)
-    blocks = detector_blocks(detectors_text)
+    try:
+        blocks = detector_blocks(detectors_text)
+    except ValueError as error:
+        errors.append(f"detectors.tf: malformed signalfx_detector block ({error})")
+        return {"result": "FAIL", "errors": errors}
     ids = [resource_id for resource_id, _ in blocks]
     if len(ids) != len(set(ids)):
         errors.append("duplicate signalfx_detector resource identifiers")
@@ -784,8 +867,14 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         labels = DETECT_LABEL.findall(decoy_blanked)
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
-        elif labels[0] not in published_labels(program_searchable):
-            errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
+        else:
+            try:
+                labels_published = published_labels(program_searchable)
+            except ValueError as error:
+                errors.append(f"{resource_id}: malformed .publish(...) call ({error})")
+            else:
+                if labels[0] not in labels_published:
+                    errors.append(f"{resource_id}: detect_label {labels[0]!r} is not published by SignalFlow")
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
             if pattern.search(searchable):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
@@ -806,12 +895,17 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors.append(f"expected one signalfx provider block, found {len(provider_matches)}")
     else:
         opening = searchable_detectors_text.find("{", provider_matches[0].start())
-        end = matching_brace(searchable_detectors_text, opening)
-        provider = searchable_detectors_text[provider_matches[0].start() : end + 1]
-        if not re.search(r"auth_token\s*=\s*var\.api_token\b", provider):
-            errors.append("signalfx provider must use var.api_token")
-        if not re.search(r'api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider):
-            errors.append("signalfx provider api_url must derive from var.realm")
+        try:
+            end = matching_brace(searchable_detectors_text, opening)
+        except ValueError as error:
+            errors.append(f"detectors.tf: malformed signalfx provider block ({error})")
+            end = None
+        if end is not None:
+            provider = searchable_detectors_text[provider_matches[0].start() : end + 1]
+            if not re.search(r"auth_token\s*=\s*var\.api_token\b", provider):
+                errors.append("signalfx provider must use var.api_token")
+            if not re.search(r'api_url\s*=\s*"https://api\.\$\{var\.realm\}\.(?:signalfx\.com|observability\.splunk\.com)"', provider):
+                errors.append("signalfx provider api_url must derive from var.realm")
     if not re.search(r'variable\s+"api_token"\s*\{(?:(?!\n\}).)*sensitive\s*=\s*true', variables_text, re.S):
         errors.append("api_token variable is not marked sensitive")
     if not re.search(r'^\s*api_token\s*=\s*""\s*(?:#.*)?$', tfvars_text, re.M):
