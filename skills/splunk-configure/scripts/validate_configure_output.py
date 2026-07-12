@@ -276,6 +276,52 @@ def program_text_body(block: str, searchable: str | None = None) -> str:
     return block
 
 
+def _blank_program_text_bodies(searchable: str) -> str:
+    """Return searchable (already comment-blanked) with the *body* of every
+    `program_text` heredoc and quoted-string value blanked to spaces -- newline
+    characters and every index preserved -- while the heredoc opening line, its
+    closing marker, and all surrounding real HCL keep their characters. A
+    structural HCL scan (for a `resource "signalfx_detector" "..." {` header, a
+    `provider "signalfx" {` block, or a `rule { detect_label = "..." }` field)
+    run against this view can therefore never mistake an HCL-shaped marker that
+    appears only inside a SignalFlow program -- e.g. a `.publish('previous
+    detect_label = "Old"')` label or a `note = 'resource "signalfx_detector"
+    "ghost" {'` line inside the heredoc -- for a real HCL construct, since the
+    program body those markers live in is blanked. The genuine resource and
+    provider headers, and the real `rule` detect_label, sit outside
+    `program_text` and are left intact. As a side benefit, a `{`/`}` inside a
+    SignalFlow filter dict in the heredoc body no longer perturbs the HCL
+    brace matcher. This must not be used for scans that legitimately read
+    program body content (e.g. the `var.<name>` reference check), which would
+    lose real matches."""
+    chars = list(searchable)
+
+    def blank(start: int, end: int) -> None:
+        for index in range(start, end):
+            if chars[index] not in "\r\n":
+                chars[index] = " "
+
+    for start_match in PROGRAM_TEXT_HEREDOC.finditer(searchable):
+        dash, marker = start_match.group(1), start_match.group(2)
+        indent = r"[ \t]*" if dash else ""
+        end_match = re.search(
+            rf"^{indent}{re.escape(marker)}[ \t]*\r?$", searchable[start_match.end() :], re.M
+        )
+        if end_match is None:
+            # An unterminated heredoc has no bounded body to blank; leaving it
+            # intact avoids wiping the real trailing HCL (closing braces, other
+            # resources) to end of file. The missing terminator is caught
+            # downstream as an empty program body (0 data(...) metrics), and any
+            # marker leaking from the unbounded body can only add FAILs to an
+            # already-malformed file -- never mask a real construct into a PASS.
+            continue
+        blank(start_match.end(), start_match.end() + end_match.start())
+    for string_match in PROGRAM_TEXT_STRING.finditer(searchable):
+        start, end = string_match.span(1)
+        blank(start, end)
+    return "".join(chars)
+
+
 def data_call_span(block: str, searchable: str | None = None) -> tuple[int, int, str] | None:
     """Return the (opening, closing) paren indices of the first data(...)
     call in block, plus the comment-blanked view of block those indices are
@@ -306,6 +352,25 @@ TOKEN = re.compile(
     r"|\S"
 )
 NUMERIC = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _canonical_number(token: str) -> str:
+    """Normalize a numeric literal's decimal text so equivalent forms collapse
+    without losing precision. Leading zeros on the integer part and trailing
+    zeros on the fractional part are dropped -- so `99`, `99.0`, and `007`
+    canonicalize to `99`/`7` -- but the digits themselves are never routed
+    through `float`, which would round two distinct large integers (e.g.
+    `9007199254740992` and `9007199254740993`) to the same value and wrongly
+    report two different thresholds as duplicates. The token grammar is
+    `\\d+(?:\\.\\d+)?`, so the integer part is always present and there is no
+    exponent or leading-dot form to handle."""
+    if "." in token:
+        int_part, frac_part = token.split(".", 1)
+        frac_part = frac_part.rstrip("0")
+    else:
+        int_part, frac_part = token, ""
+    int_part = int_part.lstrip("0") or "0"
+    return f"{int_part}.{frac_part}" if frac_part else int_part
 
 
 def _is_wordlike(token: str) -> bool:
@@ -351,8 +416,9 @@ def _decode_string_escapes(body: str) -> str:
 def _canonical_token(token: str) -> str:
     """Canonicalize a string literal's quote style to single quotes so
     `'checkout'` and `"checkout"` compare equal; a numeric literal is
-    normalized to its float value so equal numbers written differently -- e.g.
-    `99` versus `99.0`, or `5` versus `5.0` -- render identically; other tokens
+    normalized by decimal text (not through `float`) so equal numbers written
+    differently -- e.g. `99` versus `99.0`, or `5` versus `5.0` -- render
+    identically while two distinct large integers never collide; other tokens
     pass through. Escape sequences are decoded to their actual character (not
     merely stripped of their backslash) before re-escaping, so a literal
     character and its similarly-spelled escape sequence -- e.g. the letter `n`
@@ -369,7 +435,7 @@ def _canonical_token(token: str) -> str:
         )
         return f"'{escaped}'"
     if NUMERIC.fullmatch(token):
-        return repr(float(token))
+        return _canonical_number(token)
     return token
 
 
@@ -576,18 +642,25 @@ def _canonical_argument(tokens: list) -> str:
 
 
 def _canonical_group(group: list) -> str:
-    """Render a parsed data(...) argument list to a canonical string by
-    canonicalizing each top-level comma-separated argument independently.
-    The first argument is the positional metric name and keeps its position;
-    every argument after it is a `key=value` keyword argument (`filter=...`,
-    `rollup=...`, etc.) and those are sorted by their canonicalized string, so
-    `data(METRIC, filter=..., rollup='count')` and
-    `data(METRIC, rollup='count', filter=...)` -- which select the identical
-    stream -- render to the same signature regardless of keyword order."""
-    rendered = [_canonical_argument(arg) for arg in _split_top_level_commas(group)]
-    if len(rendered) > 1:
-        rendered = [rendered[0]] + sorted(rendered[1:])
-    return ",".join(rendered)
+    """Render a parsed argument list (a `data(...)` call, or any nested
+    parenthesized call reached via `_canonical_bracket`) to a canonical string.
+    Arguments are partitioned into positional and `key=value` keyword: every
+    positional argument keeps its original order (positional order is
+    semantically significant -- `data(METRIC, ...)` names the metric first, and
+    a nested call such as `between(low, high)` or `clamp(x, min, max)` means
+    something different when reordered), while keyword arguments are sorted
+    among themselves (`filter=...`, `rollup=...`, `pct=...` select the same
+    stream regardless of order). This partitions by whether each argument is
+    itself `key=value` rather than assuming only the first argument is
+    positional, so `data(METRIC, filter=..., rollup='count')` and
+    `data(METRIC, rollup='count', filter=...)` collapse while
+    `clamp(x, min, max)` and `clamp(x, max, min)` stay distinct."""
+    positional: list[str] = []
+    keyword: list[str] = []
+    for arg in _split_top_level_commas(group):
+        rendered_arg = _canonical_argument(arg)
+        (keyword if _is_keyword_argument(arg) else positional).append(rendered_arg)
+    return ",".join(positional + sorted(keyword))
 
 
 PUBLISH_CALL = re.compile(r"\.publish\(")
@@ -768,12 +841,13 @@ def detector_blocks(text: str) -> list[tuple[str, str]]:
     """Split text into (resource_id, block) pairs for every top-level
     `resource "signalfx_detector" "..." { ... }` block. Both the resource
     header and the closing brace are located against a comment-blanked view
-    so a decoy `resource "signalfx_detector" "ghost" {` or a stray `{`/`}`
-    inside a comment -- whether at the HCL level or inside a program_text
-    heredoc -- can never be mistaken for a real block boundary; the returned
-    block text is still sliced from the original, unblanked `text` since
-    `_blank_comment_lines` preserves character indices."""
-    searchable = _blank_comment_lines(text)
+    whose `program_text` bodies are also blanked, so a decoy `resource
+    "signalfx_detector" "ghost" {` or a stray `{`/`}` -- whether it sits in a
+    comment or inside a program_text heredoc/string -- can never be mistaken
+    for a real block boundary; the returned block text is still sliced from
+    the original, unblanked `text` since both blanking passes preserve
+    character indices."""
+    searchable = _blank_program_text_bodies(_blank_comment_lines(text))
     blocks: list[tuple[str, str]] = []
     for match in RESOURCE_START.finditer(searchable):
         opening = searchable.find("{", match.start())
@@ -879,14 +953,18 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         if metric not in report_text:
             errors.append(f"{resource_id}: metric {metric!r} is absent from detectors report")
-        data_span = data_call_span(program_body, program_searchable)
+        try:
+            data_span = data_call_span(program_body, program_searchable)
+        except ValueError as error:
+            errors.append(f"{resource_id}: malformed data(...) call ({error})")
+            continue
         data_args = program_searchable[data_span[0] : data_span[1] + 1] if data_span is not None else ""
         if not re.search(r"filter\(\s*['\"]service\.name['\"]\s*,", data_args):
             errors.append(f"{resource_id}: missing service.name filter")
         for variable in VARIABLE_REFERENCE.findall(decoy_blanked):
             if variable not in declared:
                 errors.append(f"{resource_id}: referenced variable {variable!r} is not declared")
-        labels = DETECT_LABEL.findall(decoy_blanked)
+        labels = DETECT_LABEL.findall(_blank_program_text_bodies(decoy_blanked))
         if len(labels) != 1:
             errors.append(f"{resource_id}: expected one detect_label, found {len(labels)}")
         else:
@@ -911,7 +989,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors.append("variables.tf does not declare sensitive api_token")
     if "realm" not in declared:
         errors.append("variables.tf does not declare realm")
-    searchable_detectors_text = _blank_comment_lines(detectors_text)
+    searchable_detectors_text = _blank_program_text_bodies(_blank_comment_lines(detectors_text))
     provider_matches = list(PROVIDER_START.finditer(searchable_detectors_text))
     if len(provider_matches) != 1:
         errors.append(f"expected one signalfx provider block, found {len(provider_matches)}")

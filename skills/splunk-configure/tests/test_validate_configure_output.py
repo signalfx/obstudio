@@ -856,6 +856,93 @@ resource "signalfx_detector" "latency" {{
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["detector_count"], 1)
 
+    def test_ignores_decoy_resource_header_inside_a_program_text_heredoc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = 'resource "signalfx_detector" "ghost" {{'
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
+    def test_ignores_decoy_provider_block_inside_a_program_text_heredoc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = 'provider "signalfx" {{ auth_token = "leak" }}'
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
+    def test_ignores_decoy_detect_label_inside_a_program_text_heredoc(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = write_validation_fixture(root)
+            fixture.terraform_dir.joinpath("detectors.tf").write_text(
+                f'''provider "signalfx" {{
+  auth_token = var.api_token
+  api_url    = "https://api.${{var.realm}}.signalfx.com"
+}}
+
+resource "signalfx_detector" "latency" {{
+  program_text = <<-EOF
+    note = 'detect_label = "Ghost label"'
+    signal = data('{METRIC}', filter=filter('service.name', var.service_name))
+    signal.publish('High latency')
+  EOF
+
+  rule {{
+    detect_label = "High latency"
+  }}
+}}
+''',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(fixture)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["detector_count"], 1)
+
     def test_ignores_decoy_auth_token_inside_a_comment_in_the_provider_block(
         self,
     ) -> None:
