@@ -9,6 +9,7 @@ a plugin-root SessionStart hook manifest for first-run bootstrap.
 Current scope:
 
 - bundled skills for audit, instrumentation, verification, and Splunk publish workflows
+- bundled observer control skills for opening, checking, restarting, and stopping the local Observer
 - Codex marketplace entry under [`.agents/plugins/marketplace.json`](../../.agents/plugins/marketplace.json)
 - MCP server configuration for a local Observer at `http://127.0.0.1:3000/mcp`
 - one-time SessionStart hook manifest in [`hooks/hooks.json`](./hooks/hooks.json)
