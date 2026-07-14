@@ -23,7 +23,7 @@ This builds and starts the collector on default ports:
 | OTLP/gRPC receiver | localhost:4317 |
 | MCP endpoint | http://localhost:3000/mcp |
 
-Ports 4317 and 4318 must be free. If the VS Code extension or another
+Ports 4317 and 4318 must be free. If the VS Code or Kiro extension or another
 collector is already running, either stop it first or override with
 environment variables (`PORT`, `OTLP_HTTP_PORT`, `OTLP_GRPC_PORT`).
 

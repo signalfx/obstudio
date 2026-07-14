@@ -38,8 +38,10 @@ const (
 )
 
 type mcpConfigTarget struct {
-	format mcpConfigFormat
-	path   func() string
+	format            mcpConfigFormat
+	path              func() string
+	includeRemoteType bool
+	preserveFields    []string
 }
 
 type agentTarget struct {
@@ -71,15 +73,17 @@ var targets = map[string]agentTarget{
 	"cursor": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".cursor", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format: mcpConfigJSON,
-			path:   func() string { return filepath.Join(userHome(), ".cursor", "mcp.json") },
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".cursor", "mcp.json") },
+			includeRemoteType: true,
 		},
 	},
 	"claude-code": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".claude", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format: mcpConfigJSON,
-			path:   func() string { return filepath.Join(userHome(), ".claude.json") },
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".claude.json") },
+			includeRemoteType: true,
 		},
 	},
 	"codex": {
@@ -87,6 +91,14 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format: mcpConfigTOML,
 			path:   func() string { return filepath.Join(userHome(), ".codex", "config.toml") },
+		},
+	},
+	"kiro": {
+		skillsDir: func(home string) string { return filepath.Join(home, ".kiro", "skills", "obstudio") },
+		mcpConfig: mcpConfigTarget{
+			format:         mcpConfigJSON,
+			path:           func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
+			preserveFields: []string{"autoApprove", "disabled", "disabledTools"},
 		},
 	},
 }
@@ -430,10 +442,12 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 			server["command"] = binaryPath
 			server["args"] = []string{}
 		} else {
-			server["type"] = "http"
+			if target.includeRemoteType {
+				server["type"] = "http"
+			}
 			server["url"] = sharedURL
 		}
-		return upsertJSONMCPServer(target.path(), server)
+		return upsertJSONMCPServer(target.path(), server, target.preserveFields...)
 	case mcpConfigTOML:
 		server := codexMCPServer{}
 		if sharedURL == "" {
@@ -448,7 +462,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	}
 }
 
-func upsertJSONMCPServer(path string, server map[string]any) error {
+func upsertJSONMCPServer(path string, server map[string]any, preserveFields ...string) error {
 	config := map[string]any{}
 
 	data, err := os.ReadFile(path)
@@ -463,6 +477,13 @@ func upsertJSONMCPServer(path string, server map[string]any) error {
 	servers, ok := config["mcpServers"].(map[string]any)
 	if !ok {
 		servers = map[string]any{}
+	}
+	if existing, ok := servers["obstudio"].(map[string]any); ok {
+		for _, field := range preserveFields {
+			if value, exists := existing[field]; exists {
+				server[field] = value
+			}
+		}
 	}
 	servers["obstudio"] = server
 	config["mcpServers"] = servers

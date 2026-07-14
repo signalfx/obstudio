@@ -12,17 +12,18 @@ The Obstudio installer includes `otel-verify` for every supported agent:
 
 ```bash
 ./obstudio install --target=codex
-# Or: --target=claude-code / --target=cursor
+# Or: --target=claude-code / --target=cursor / --target=kiro
 ```
 
-Restart the agent after installation, then invoke the skill using that agent's
-syntax:
+Reload or restart an already-running agent if it does not discover the skill
+after installation, then invoke it using that agent's syntax:
 
 | Agent | Invocation |
 |---|---|
 | Codex | `$otel-verify` |
 | Claude Code | `/otel-verify` |
 | Cursor | `/otel-verify` |
+| Kiro | `/otel-verify` |
 
 Natural-language requests also select the skill, for example:
 

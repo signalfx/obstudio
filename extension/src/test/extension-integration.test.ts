@@ -499,6 +499,7 @@ it('integration: contributed commands are grouped under Splunk Observability Stu
 		'observability-studio.configureCodexMCP',
 		'observability-studio.configureClaudeCodeMCP',
 		'observability-studio.configureCursorMCP',
+		'observability-studio.configureKiroMCP',
 	];
 
 	for (const commandId of expectedCommands) {
