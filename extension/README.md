@@ -143,8 +143,10 @@ If the managed endpoint or either OTLP port is already in use by an incompatible
 
 - VS Code `^1.82.0` or Kiro, which supports compatible Code OSS extensions
   through its Open VSX-based registry.
-- The extension is not currently listed on Open VSX, Kiro's default extension
-  registry. For Kiro, download the platform-specific `.vsix` from the
+- Starting with version `0.0.13`, install the extension from the editor's
+  Extensions view by searching for `Splunk Observability Studio`. VS Code uses
+  Visual Studio Marketplace, while Kiro uses Open VSX. If registry installation
+  is unavailable, download the platform-specific `.vsix` from the
   [GitHub release](https://github.com/signalfx/obstudio/releases/latest) and
   install it with `Extensions: Install from VSIX...`.
 - No additional runtime setup is required for normal extension use.

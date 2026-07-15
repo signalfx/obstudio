@@ -2,7 +2,7 @@
 
 All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
-## Unreleased
+## 0.0.13
 
 ### Added
 - Run the extension in Kiro and configure its Agent Skills and MCP integration
