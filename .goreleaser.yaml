@@ -35,6 +35,7 @@ release:
   github:
     owner: signalfx
     name: obstudio
+  replace_existing_artifacts: true
 
 changelog:
   sort: asc

@@ -129,6 +129,7 @@ jobs:
         run: gh release upload "${GITHUB_REF_NAME}" extension/*.vsix --clobber
 
       - name: Publish VSIX to Marketplace
+        id: publish_marketplace
         working-directory: extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -146,6 +147,7 @@ jobs:
           exit "${failures}"
 
       - name: Publish VSIX to Open VSX
+        if: ${{ !cancelled() && (success() || (failure() && steps.publish_marketplace.outcome == 'failure')) }}
         working-directory: extension
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
