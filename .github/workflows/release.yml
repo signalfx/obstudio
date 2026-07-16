@@ -144,10 +144,13 @@ jobs:
 
       - name: Marketplace manual publish reminder
         if: ${{ success() }}
+        working-directory: extension
         env:
           MARKETPLACE_PUBLISHER_URL: https://marketplace.visualstudio.com/manage/publishers/Splunk
           RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
         run: |
+          set -euo pipefail
+          marketplace_version="$(node -e 'process.stdout.write(require("./build-vsix.js").normalizeReleaseVersion(process.env.GITHUB_REF_NAME))')"
           {
             echo "## Manual Visual Studio Marketplace publish required"
             echo
@@ -155,6 +158,6 @@ jobs:
             echo
             echo "Download the four platform-specific VSIX files from [${GITHUB_REF_NAME}](${RELEASE_URL}) and upload those exact files to the [Splunk publisher](${MARKETPLACE_PUBLISHER_URL}). Do not rebuild them."
             echo
-            echo "Verify \`Splunk.observability-studio\` version \`${GITHUB_REF_NAME#v}\` after publishing."
+            echo "Verify \`Splunk.observability-studio\` version \`${marketplace_version}\` after publishing."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "::notice title=Manual Marketplace publish required::Upload the four VSIX files from ${RELEASE_URL} to ${MARKETPLACE_PUBLISHER_URL}; do not rebuild them."
