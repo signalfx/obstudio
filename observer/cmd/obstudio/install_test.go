@@ -49,19 +49,35 @@ func TestCodexTargetUsesConfigTOML(t *testing.T) {
 	}
 }
 
+func TestKiroTargetUsesSettingsMCPJSON(t *testing.T) {
+	t.Parallel()
+
+	target, ok := targets["kiro"]
+	if !ok {
+		t.Fatal("expected kiro target to exist")
+	}
+
+	if path := target.mcpConfig.path(); !strings.HasSuffix(path, filepath.Join(".kiro", "settings", "mcp.json")) {
+		t.Fatalf("expected Kiro MCP config path to end with .kiro/settings/mcp.json, got %q", path)
+	}
+	if skillsDir := target.skillsDir("/home/test"); !strings.HasSuffix(skillsDir, filepath.Join(".kiro", "skills", "obstudio")) {
+		t.Fatalf("expected Kiro skills path to end with .kiro/skills/obstudio, got %q", skillsDir)
+	}
+}
+
 func TestInstallTargetFlagAcceptsCommaSeparatedValues(t *testing.T) {
 	t.Parallel()
 
 	cmd := newInstallCmd()
-	if err := cmd.ParseFlags([]string{"--target", "codex,claude-code,cursor"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--target", "codex,claude-code,cursor,kiro"}); err != nil {
 		t.Fatalf("parse comma-separated targets: %v", err)
 	}
 	got, err := cmd.Flags().GetStringSlice("target")
 	if err != nil {
 		t.Fatalf("read parsed targets: %v", err)
 	}
-	if joined := strings.Join(got, ","); joined != "codex,claude-code,cursor" {
-		t.Fatalf("parsed targets = %q, want %q", joined, "codex,claude-code,cursor")
+	if joined := strings.Join(got, ","); joined != "codex,claude-code,cursor,kiro" {
+		t.Fatalf("parsed targets = %q, want %q", joined, "codex,claude-code,cursor,kiro")
 	}
 }
 
@@ -75,7 +91,7 @@ func TestNormalizeInstallTargets(t *testing.T) {
 		errorContains string
 	}{
 		{name: "single", requested: []string{"codex"}, want: "codex"},
-		{name: "all", requested: []string{"codex", "claude-code", "cursor"}, want: "codex,claude-code,cursor"},
+		{name: "all", requested: []string{"codex", "claude-code", "cursor", "kiro"}, want: "codex,claude-code,cursor,kiro"},
 		{name: "trim and deduplicate", requested: []string{" codex ", "cursor", "codex"}, want: "codex,cursor"},
 		{name: "missing", errorContains: "at least one target is required"},
 		{name: "empty", requested: []string{"codex", " "}, errorContains: "target cannot be empty"},
@@ -273,7 +289,7 @@ func TestUpsertJSONMCPServerPreservesExistingEntries(t *testing.T) {
 	if err := upsertJSONMCPServer(path, map[string]any{
 		"type": "http",
 		"url":  "http://127.0.0.1:3000/mcp",
-	}); err != nil {
+	}, nil, nil); err != nil {
 		t.Fatalf("upsertJSONMCPServer returned error: %v", err)
 	}
 
@@ -309,6 +325,178 @@ func TestUpsertJSONMCPServerPreservesExistingEntries(t *testing.T) {
 	}
 	if got := obstudio["url"]; got != "http://127.0.0.1:3000/mcp" {
 		t.Fatalf("expected obstudio url to be preserved, got %#v", got)
+	}
+}
+
+func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	initial := map[string]any{
+		"mcpServers": map[string]any{
+			"obstudio": map[string]any{
+				"command":       "/tmp/old-obstudio",
+				"args":          []string{"--old"},
+				"url":           "https://old.example/mcp",
+				"headers":       map[string]string{"Authorization": "stale"},
+				"env":           map[string]string{"OBSERVER_MODE": "stale"},
+				"oauth":         map[string]string{"clientId": "stale"},
+				"oauthScopes":   []string{"stale.scope"},
+				"autoApprove":   []string{"observer_status"},
+				"disabled":      true,
+				"disabledTools": []string{"observer_clear"},
+				"timeout":       45_000,
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial Kiro MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write initial Kiro MCP config: %v", err)
+	}
+
+	target := targets["kiro"].mcpConfig
+	target.path = func() string { return configPath }
+	if err := configureMCP(target, "/tmp/obstudio", "http://127.0.0.1:3000/mcp"); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Kiro MCP config: %v", err)
+	}
+	var config struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Kiro MCP config: %v", err)
+	}
+	server := config.MCPServers["obstudio"]
+	if got := server["url"]; got != "http://127.0.0.1:3000/mcp" {
+		t.Fatalf("Kiro obstudio URL = %#v, want documented remote URL", got)
+	}
+	if got, ok := server["type"]; ok {
+		t.Fatalf("Kiro remote config should omit undocumented type field, got %#v", got)
+	}
+	for _, field := range []string{"command", "args", "headers", "env", "oauth", "oauthScopes"} {
+		if got, ok := server[field]; ok {
+			t.Fatalf("Kiro remote config should remove stale %s field, got %#v", field, got)
+		}
+	}
+	if got := server["disabled"]; got != true {
+		t.Fatalf("Kiro disabled policy = %#v, want true", got)
+	}
+	if got := server["autoApprove"].([]any); len(got) != 1 || got[0] != "observer_status" {
+		t.Fatalf("Kiro autoApprove policy = %#v, want observer_status", got)
+	}
+	if got := server["disabledTools"].([]any); len(got) != 1 || got[0] != "observer_clear" {
+		t.Fatalf("Kiro disabledTools policy = %#v, want observer_clear", got)
+	}
+	if got := server["timeout"]; got != float64(45_000) {
+		t.Fatalf("Kiro timeout policy = %#v, want 45000", got)
+	}
+}
+
+func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
+	t.Parallel()
+
+	const mcpURL = "http://127.0.0.1:3000/mcp"
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	initial := map[string]any{
+		"mcpServers": map[string]any{
+			"obstudio": map[string]any{
+				"command":     "/tmp/old-obstudio",
+				"args":        []string{"--old"},
+				"url":         mcpURL,
+				"headers":     map[string]string{"X-Observer-Test": "preserved"},
+				"env":         map[string]string{"OBSERVER_MODE": "preserved"},
+				"oauth":       map[string]string{"clientId": "preserved"},
+				"oauthScopes": []string{"observer.read"},
+				"timeout":     45_000,
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial Kiro MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write initial Kiro MCP config: %v", err)
+	}
+
+	target := targets["kiro"].mcpConfig
+	target.path = func() string { return configPath }
+	if err := configureMCP(target, "/tmp/obstudio", mcpURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Kiro MCP config: %v", err)
+	}
+	var config struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Kiro MCP config: %v", err)
+	}
+	server := config.MCPServers["obstudio"]
+	if got := server["url"]; got != mcpURL {
+		t.Fatalf("Kiro obstudio URL = %#v, want %q", got, mcpURL)
+	}
+	for _, field := range []string{"command", "args", "type"} {
+		if got, ok := server[field]; ok {
+			t.Fatalf("Kiro remote config should remove stale %s field, got %#v", field, got)
+		}
+	}
+	if got := server["headers"].(map[string]any)["X-Observer-Test"]; got != "preserved" {
+		t.Fatalf("Kiro headers = %#v, want preserved", server["headers"])
+	}
+	if got := server["env"].(map[string]any)["OBSERVER_MODE"]; got != "preserved" {
+		t.Fatalf("Kiro env = %#v, want preserved", server["env"])
+	}
+	if got := server["oauth"].(map[string]any)["clientId"]; got != "preserved" {
+		t.Fatalf("Kiro oauth = %#v, want preserved", server["oauth"])
+	}
+	if got := server["oauthScopes"].([]any); len(got) != 1 || got[0] != "observer.read" {
+		t.Fatalf("Kiro oauthScopes = %#v, want observer.read", got)
+	}
+	if got := server["timeout"]; got != float64(45_000) {
+		t.Fatalf("Kiro timeout policy = %#v, want 45000", got)
+	}
+}
+
+func TestConfigureMCPPreservesTypedRemoteSchemaForExistingTargets(t *testing.T) {
+	t.Parallel()
+
+	for _, targetName := range []string{"claude-code", "cursor"} {
+		targetName := targetName
+		t.Run(targetName, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(t.TempDir(), "mcp.json")
+			target := targets[targetName].mcpConfig
+			target.path = func() string { return configPath }
+			if err := configureMCP(target, "/tmp/obstudio", "http://127.0.0.1:3000/mcp"); err != nil {
+				t.Fatalf("configureMCP returned error: %v", err)
+			}
+
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("read MCP config: %v", err)
+			}
+			var config struct {
+				MCPServers map[string]map[string]any `json:"mcpServers"`
+			}
+			if err := json.Unmarshal(data, &config); err != nil {
+				t.Fatalf("unmarshal MCP config: %v", err)
+			}
+			if got := config.MCPServers["obstudio"]["type"]; got != "http" {
+				t.Fatalf("%s obstudio type = %#v, want http", targetName, got)
+			}
+		})
 	}
 }
 
@@ -883,14 +1071,14 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 		t.Fatalf("chmod sibling weaver runtime: %v", err)
 	}
 
-	install := exec.Command(bundledBinary, "install", "--target", "codex,claude-code,cursor")
+	install := exec.Command(bundledBinary, "install", "--target", "codex,claude-code,cursor,kiro")
 	install.Env = append(os.Environ(), smokeHomeEnv(homeDir)...)
 	if output, err := install.CombinedOutput(); err != nil {
 		t.Fatalf("run obstudio install smoke test: %v\n%s", err, strings.TrimSpace(string(output)))
 	}
 
 	installedDirs := map[string]string{}
-	for _, targetName := range []string{"codex", "claude-code", "cursor"} {
+	for _, targetName := range []string{"codex", "claude-code", "cursor", "kiro"} {
 		installedDir := targets[targetName].skillsDir(homeDir)
 		installedDirs[targetName] = installedDir
 		assertSmokeTargetInstalled(t, targetName, installedDir, binaryName, weaverName, expectedSkills)
@@ -923,6 +1111,7 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	}
 	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".claude.json"), filepath.Join(installedDirs["claude-code"], binaryName))
 	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".cursor", "mcp.json"), filepath.Join(installedDirs["cursor"], binaryName))
+	assertSmokeJSONMCPConfig(t, filepath.Join(homeDir, ".kiro", "settings", "mcp.json"), filepath.Join(installedDirs["kiro"], binaryName))
 
 	observerPort := pickSmokePort(t)
 	otlpHTTPPort := pickSmokePort(t)

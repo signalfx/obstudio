@@ -34,16 +34,23 @@ unzip obstudio_*_darwin_arm64.zip
 cd obstudio_*_darwin_arm64
 
 # Install for all supported agents (or pass just one target)
-./obstudio install --target=codex,claude-code,cursor
+./obstudio install --target=codex,claude-code,cursor,kiro
 ```
 
 After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`. `--target` accepts `codex`, `claude-code`, `cursor`, or a
+to `obstudio`. `--target` accepts `codex`, `claude-code`, `cursor`, `kiro`, or a
 comma-separated list of those values. For each selected agent, the installer
 stores the managed bundle under its skills directory and creates top-level
 discoverable skill entries such as `otel-audit`, `otel-instrument`, and
 `otel-verify` in the agent skills root.
+
+After installation, restart the agent if it does not discover the new skills.
+
+Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
+discoverable skill entries in `~/.kiro/skills`, and configures MCP in
+`~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,
+such as `/otel-audit`.
 
 ### Build From Source
 
@@ -63,7 +70,7 @@ The collector starts on:
 
 Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
-and `4317`, matching the VS Code extension.
+and `4317`; these are also used by the editor extension.
 
 ### Optional Splunk Metrics Forwarding
 
@@ -171,7 +178,7 @@ the bundled `weaver` runtime beside it or make `weaver` available on
 ```text
 obstudio/
 ├── observer/          # Go collector, REST API, MCP server, and embedded web UI
-├── extension/         # VS Code extension that packages the collector
+├── extension/         # VS Code and Kiro extension that packages the collector
 ├── skills/            # Canonical agent skill sources
 │   ├── otel-audit/
 │   ├── otel-instrument/
@@ -197,7 +204,7 @@ obstudio/
 | Tool | Version | Purpose |
 |---|---|---|
 | Go | 1.25+ | Collector and CLI |
-| Node.js | 20+ | React client and VS Code extension |
+| Node.js | 20+ | React client and VS Code/Kiro extension |
 | npm | latest | JavaScript package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |

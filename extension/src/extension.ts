@@ -89,7 +89,7 @@ type InternalRuntimeState = {
 	validatorSummaryUrl?: string;
 };
 
-type AgentIntegrationTarget = 'claude-code' | 'codex' | 'cursor';
+type AgentIntegrationTarget = 'claude-code' | 'codex' | 'cursor' | 'kiro';
 
 type AgentIntegrationConfigFormat = 'json' | 'toml';
 
@@ -97,6 +97,8 @@ type AgentIntegrationSpec = {
 	configFormat: AgentIntegrationConfigFormat;
 	configPath: (home: string) => string;
 	detectPaths: (home: string) => string[];
+	jsonRemoteIncompatibleFields?: ReadonlyArray<'args' | 'command'>;
+	jsonRemoteType?: 'http';
 	label: string;
 	skillsSentinelPath: (home: string) => string;
 	target: AgentIntegrationTarget;
@@ -138,6 +140,7 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 		configFormat: 'json',
 		configPath: (home) => path.join(home, '.claude.json'),
 		detectPaths: (home) => [path.join(home, '.claude'), path.join(home, '.claude.json')],
+		jsonRemoteType: 'http',
 		skillsSentinelPath: (home) => path.join(home, '.claude', 'skills', 'otel-instrument', 'SKILL.md'),
 	},
 	{
@@ -146,7 +149,17 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 		configFormat: 'json',
 		configPath: (home) => path.join(home, '.cursor', 'mcp.json'),
 		detectPaths: (home) => [path.join(home, '.cursor')],
+		jsonRemoteType: 'http',
 		skillsSentinelPath: (home) => path.join(home, '.cursor', 'skills', 'otel-instrument', 'SKILL.md'),
+	},
+	{
+		target: 'kiro',
+		label: 'Kiro',
+		configFormat: 'json',
+		configPath: (home) => path.join(home, '.kiro', 'settings', 'mcp.json'),
+		detectPaths: (home) => [path.join(home, '.kiro')],
+		jsonRemoteIncompatibleFields: ['command', 'args'],
+		skillsSentinelPath: (home) => path.join(home, '.kiro', 'skills', 'otel-instrument', 'SKILL.md'),
 	},
 ];
 
@@ -332,6 +345,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		'observability-studio.configureCursorMCP',
 		() => configureAgentMCP(context, 'cursor', 'Cursor'),
 	);
+	const configureKiroDisposable = vscode.commands.registerCommand(
+		'observability-studio.configureKiroMCP',
+		() => configureAgentMCP(context, 'kiro', 'Kiro'),
+	);
 	const internalConfigureDetectedAgentsDisposable = vscode.commands.registerCommand(
 		'observability-studio.internal.configureDetectedAgentIntegrations',
 		() => configureDetectedAgentIntegrations(context),
@@ -382,6 +399,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(configureCodexDisposable);
 	context.subscriptions.push(configureClaudeDisposable);
 	context.subscriptions.push(configureCursorDisposable);
+	context.subscriptions.push(configureKiroDisposable);
 	context.subscriptions.push(internalConfigureDetectedAgentsDisposable);
 	context.subscriptions.push(internalGetAgentIntegrationPromptsDisposable);
 	context.subscriptions.push(internalClearAgentIntegrationPromptsDisposable);
@@ -1148,13 +1166,26 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 	try {
 		if (spec.configFormat === 'json') {
 			const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
-				mcpServers?: Record<string, { type?: string; url?: string }>;
+				mcpServers?: Record<string, {
+					args?: unknown;
+					command?: unknown;
+					type?: string;
+					url?: string;
+				}>;
 			};
 			const server = config.mcpServers?.obstudio;
 			if (server === undefined) {
 				return 'missing';
 			}
-			return server.type === 'http' && server.url === mcpUrl ? 'matching' : 'different';
+			const remoteTypeMatches = spec.jsonRemoteType === undefined
+				? server.type === undefined
+				: server.type === spec.jsonRemoteType;
+			const hasIncompatibleRemoteFields = spec.jsonRemoteIncompatibleFields?.some(
+				(field) => server[field] !== undefined,
+			) ?? false;
+			return remoteTypeMatches && server.url === mcpUrl && !hasIncompatibleRemoteFields
+				? 'matching'
+				: 'different';
 		}
 
 		const content = fs.readFileSync(configPath, 'utf8');

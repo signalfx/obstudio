@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code.",
+  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code and Kiro.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
@@ -42,6 +42,7 @@
     "codex",
     "cursor",
     "claude",
+    "kiro",
     "splunk"
   ],
   "galleryBanner": {
@@ -94,6 +95,11 @@
       {
         "command": "observability-studio.configureCursorMCP",
         "title": "Enable Cursor Integration",
+        "category": "Splunk Observability Studio"
+      },
+      {
+        "command": "observability-studio.configureKiroMCP",
+        "title": "Enable Kiro Integration",
         "category": "Splunk Observability Studio"
       }
     ],
@@ -148,6 +154,7 @@
     "esbuild": "^0.28.1",
     "eslint": "^9.39.3",
     "npm-run-all": "^4.1.5",
+    "ovsx": "1.0.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   }

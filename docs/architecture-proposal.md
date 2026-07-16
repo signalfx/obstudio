@@ -1,5 +1,9 @@
 # Observability Studio — Layered Architecture
 
+> **Status:** Historical design proposal. For current commands, supported
+> agents, and distribution instructions, use the root `README.md` and
+> `docs/USER.md`.
+
 ## The Layering Principle
 
 Observability Studio is a layered product where each layer is independently useful and the outermost layer

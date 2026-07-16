@@ -23,12 +23,12 @@ run the installer:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
-./obstudio install --target=codex,claude-code,cursor
+./obstudio install --target=codex,claude-code,cursor,kiro
 ```
 
-This installs the included skills and configures the MCP server for all three
-agents. Pass a single `codex`, `claude-code`, or `cursor` value when you only
-want to configure one agent.
+This installs the included skills and configures the MCP server for all four
+agents. Pass a single `codex`, `claude-code`, `cursor`, or `kiro` value when
+you only want to configure one agent.
 
 ### Supported Targets
 
@@ -37,6 +37,7 @@ want to configure one agent.
 | `cursor` | `~/.cursor/skills/obstudio/` | `~/.cursor/mcp.json` |
 | `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude.json` |
 | `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
+| `kiro` | `~/.kiro/skills/obstudio/` | `~/.kiro/settings/mcp.json` |
 
 The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
@@ -44,23 +45,28 @@ The installer:
 3. Creates top-level discoverable skill entries in the agent skills root
 4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
 
-Restart your agent to activate.
+After installation, restart the agent if it does not discover the new skills.
 
-### What Gets Installed
+### Installed Skill Layout
 
-```
-~/.cursor/skills/obstudio/
-  obstudio              # binary (MCP server, auto-started by Cursor)
-  weaver                # validator runtime used by the Validation tab and APIs
-  otel-audit/SKILL.md   # bundled /otel-audit skill file
-  otel-instrument/SKILL.md # bundled /otel-instrument skill file
-  otel-verify/SKILL.md  # bundled /otel-verify skill file
-  references/           # language guides and reference material
+For each target, `<skills-root>` is the parent of the managed `obstudio/`
+directory listed above. The installer copies the same bundle into `obstudio/`
+and creates relative symbolic links for skill discovery.
 
-~/.cursor/skills/
+```text
+<skills-root>/
+  obstudio/
+    obstudio[.exe]             # CLI and MCP server binary
+    weaver[.exe]               # validation runtime
+    otel-audit/SKILL.md        # bundled otel-audit skill
+    otel-instrument/SKILL.md   # bundled otel-instrument skill
+    otel-verify/SKILL.md       # bundled otel-verify skill
+    ...                        # additional bundled skills
+    references/                # shared reference material
   otel-audit -> obstudio/otel-audit
   otel-instrument -> obstudio/otel-instrument
   otel-verify -> obstudio/otel-verify
+  ...                          # one discovery link per bundled skill
 ```
 
 ## CLI Reference
@@ -68,7 +74,7 @@ Restart your agent to activate.
 | Command | Description |
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
-| `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`) |
+| `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`, `kiro`) |
 | `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
 | `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
@@ -92,10 +98,12 @@ audit this service for observability gaps
 verify this service's OpenTelemetry instrumentation
 ```
 
-Codex uses the equivalent `$otel-audit`, `$otel-instrument`, and
-`$otel-verify` syntax. `$otel-instrument` runs the verification workflow by
-default after its implementation gate unless you explicitly opt out or a
-concrete prerequisite blocks it. See the
+Claude Code, Cursor, and Kiro use the slash-command syntax shown above; Kiro
+also discovers the same Agent Skills from natural-language requests. Codex
+uses the equivalent `$otel-audit`, `$otel-instrument`, and `$otel-verify`
+syntax. `$otel-instrument` runs the verification workflow by default after its
+implementation gate unless you explicitly opt out or a concrete prerequisite
+blocks it. See the
 [OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
 for how to run verification directly and read the generated report. The
 complete report schema remains in the canonical
@@ -115,8 +123,8 @@ To override the Observer UI, REST API, and MCP HTTP port explicitly:
 obstudio --observer-http-port 41234
 ```
 
-The OTLP receiver ports stay fixed at `4318` and `4317`, matching the VS Code
-extension.
+The OTLP receiver ports stay fixed at `4318` and `4317`; these are also used by
+the editor extension.
 
 When a standalone Observer is already running, `obstudio install --target=<agent>`
 auto-detects its current HTTP MCP endpoint from local runtime state, including
@@ -131,8 +139,7 @@ to point an agent at a different already-running Observer explicitly.
 | MCP endpoint | http://localhost:3000/mcp |
 
 In the Telemetry Explorer, use the `Live` button or press `P` while the Explorer
-is focused to pause or resume live updates. Keyboard shortcuts with `Cmd`,
-`Ctrl`, or `Alt` remain available to the host application.
+is focused to pause or resume live updates.
 
 Configure your app to send telemetry:
 
@@ -302,7 +309,7 @@ the bundled `weaver` runtime beside it or ensure `weaver` is available on
 | `HOST` | `127.0.0.1` | Bind address for all servers |
 | `PORT` | `3000` | Observer UI, REST API, and MCP HTTP port |
 | `OBSTUDIO_ENV_FILE` | `~/.obstudio/env` if present | Env file to load before startup; ignored when missing unless explicitly set |
-| `OBSTUDIO_WORKSPACE_ROOT` | process CWD | Absolute path to the workspace directory. The VS Code extension sets this automatically to the open workspace folder. When set, `.observe/dashboards.preview.json` and similar workspace-relative paths are resolved relative to this root rather than the binary's install directory. Explicit `OBSTUDIO_DASHBOARDS_PREVIEW` paths are validated to be within this root. |
+| `OBSTUDIO_WORKSPACE_ROOT` | process CWD | Absolute path to the workspace directory. The editor extension sets this automatically to the open workspace folder. When set, `.observe/dashboards.preview.json` and similar workspace-relative paths are resolved relative to this root rather than the binary's install directory. Explicit `OBSTUDIO_DASHBOARDS_PREVIEW` paths are validated to be within this root. |
 | `SPLUNK_REALM` / `OBSTUDIO_SPLUNK_REALM` | unset | Splunk Observability Cloud realm — used for both metrics and trace export endpoints |
 | `SPLUNK_ACCESS_TOKEN` | unset | Splunk org access token (`X-SF-Token` header). **For metrics and traces forwarding**, use an org ingest token. **For `$splunk-detector-publish` and `$splunk-dashboard-publish`**, the token must have **API write** permissions (the ability to create and update detectors and dashboards via the Splunk Observability Cloud REST API) — an ingest-only token is not sufficient for those skills. |
 | `OBSTUDIO_SPLUNK_METRICS_EXPORT` / `SPLUNK_METRICS_EXPORT` | `false` | Forward received OTLP metrics to Splunk Observability Cloud |

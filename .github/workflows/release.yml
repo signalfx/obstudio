@@ -100,6 +100,18 @@ jobs:
         working-directory: extension
         run: npm ci
 
+      - name: Verify registry publish access
+        working-directory: extension
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -euo pipefail
+          : "${OVSX_PAT:?OVSX_PAT secret is not configured}"
+          : "${VSCE_PAT:?VSCE_PAT secret is not configured}"
+          ./node_modules/.bin/ovsx verify-pat Splunk
+          ./node_modules/.bin/vsce verify-pat Splunk
+
       - name: Prepare release assets
         timeout-minutes: 10
         run: make release-prep
@@ -118,7 +130,6 @@ jobs:
 
       - name: Publish VSIX to Marketplace
         id: publish_marketplace
-        continue-on-error: true
         working-directory: extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -128,13 +139,27 @@ jobs:
           ls -1 *.vsix
           for vsix in *.vsix; do
             echo "Publishing ${vsix} to VS Code Marketplace"
-            if ! npx @vscode/vsce publish --packagePath "${vsix}"; then
+            if ! ./node_modules/.bin/vsce publish --skip-duplicate --packagePath "${vsix}"; then
               echo "::error::Failed to publish ${vsix} to the VS Code Marketplace"
               failures=1
             fi
           done
           exit "${failures}"
 
-      - name: Warn on Marketplace publish failure
-        if: steps.publish_marketplace.outcome == 'failure'
-        run: echo "::warning::Marketplace publish failed after the GitHub release completed. Upload the generated VSIX packages manually."
+      - name: Publish VSIX to Open VSX
+        if: ${{ !cancelled() && (success() || (failure() && steps.publish_marketplace.outcome == 'failure')) }}
+        working-directory: extension
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          failures=0
+          ls -1 *.vsix
+          for vsix in *.vsix; do
+            echo "Publishing ${vsix} to Open VSX"
+            if ! ./node_modules/.bin/ovsx publish --skip-duplicate "${vsix}"; then
+              echo "::error::Failed to publish ${vsix} to Open VSX"
+              failures=1
+            fi
+          done
+          exit "${failures}"

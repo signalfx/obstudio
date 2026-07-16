@@ -316,11 +316,16 @@ async function assertCodexPreservesExistingConfig(filePaths: string[], mcpUrl: s
 	throw new Error(`Missing preserved Codex config in any expected path: ${filePaths.join(', ')}`);
 }
 
-async function assertJSONMCPConfigured(filePaths: string[], serverName: string, mcpUrl: string): Promise<void> {
+async function assertJSONMCPConfigured(
+	filePaths: string[],
+	serverName: string,
+	mcpUrl: string,
+	includeRemoteType = true,
+): Promise<void> {
 	for (const filePath of filePaths) {
 		try {
 			const raw = JSON.parse(await waitForFileText(filePath));
-			assert.equal(raw?.mcpServers?.[serverName]?.type, 'http');
+			assert.equal(raw?.mcpServers?.[serverName]?.type, includeRemoteType ? 'http' : undefined);
 			assert.equal(raw?.mcpServers?.[serverName]?.url, mcpUrl);
 			return;
 		} catch {
@@ -350,6 +355,28 @@ async function assertJSONMCPPreservesExistingServer(
 	}
 
 	throw new Error(`Missing preserved JSON MCP config in any expected path: ${filePaths.join(', ')}`);
+}
+
+async function assertKiroMCPPolicyPreserved(
+	filePaths: string[],
+	expectedHeaders?: Record<string, string>,
+): Promise<void> {
+	for (const filePath of filePaths) {
+		try {
+			const raw = JSON.parse(await waitForFileText(filePath));
+			assert.deepEqual(raw?.mcpServers?.obstudio?.autoApprove, ['observer_status']);
+			assert.equal(raw?.mcpServers?.obstudio?.disabled, true);
+			assert.deepEqual(raw?.mcpServers?.obstudio?.disabledTools, ['observer_clear']);
+			assert.equal(raw?.mcpServers?.obstudio?.command, undefined);
+			assert.equal(raw?.mcpServers?.obstudio?.args, undefined);
+			assert.deepEqual(raw?.mcpServers?.obstudio?.headers, expectedHeaders);
+			return;
+		} catch {
+			// Try the next candidate path.
+		}
+	}
+
+	throw new Error(`Missing preserved Kiro MCP policy in any expected path: ${filePaths.join(', ')}`);
 }
 
 function snapshotFile(filePath: string): FileSnapshot {
@@ -704,13 +731,16 @@ suite('VS Code Host', () => {
 		const codexConfigPath = path.join(tempHome, '.codex', 'config.toml');
 		const claudeConfigPath = path.join(tempHome, '.claude.json');
 		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
+		const kiroConfigPath = path.join(tempHome, '.kiro', 'settings', 'mcp.json');
 		const originalCodexConfigPath = originalHome ? path.join(originalHome, '.codex', 'config.toml') : '';
 		const originalClaudeConfigPath = originalHome ? path.join(originalHome, '.claude.json') : '';
 		const originalCursorConfigPath = originalHome ? path.join(originalHome, '.cursor', 'mcp.json') : '';
+		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshots = [
 			snapshotFile(originalCodexConfigPath),
 			snapshotFile(originalClaudeConfigPath),
 			snapshotFile(originalCursorConfigPath),
+			snapshotFile(originalKiroConfigPath),
 		];
 
 		process.env.HOME = tempHome;
@@ -759,10 +789,12 @@ suite('VS Code Host', () => {
 			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
 			await vscode.commands.executeCommand('observability-studio.configureClaudeCodeMCP');
 			await vscode.commands.executeCommand('observability-studio.configureCursorMCP');
+			await vscode.commands.executeCommand('observability-studio.configureKiroMCP');
 
 			await assertCodexConfigured([codexConfigPath, originalCodexConfigPath], sharedMcpUrl);
 			await assertJSONMCPConfigured([claudeConfigPath, originalClaudeConfigPath], 'obstudio', sharedMcpUrl);
 			await assertJSONMCPConfigured([cursorConfigPath, originalCursorConfigPath], 'obstudio', sharedMcpUrl);
+			await assertJSONMCPConfigured([kiroConfigPath, originalKiroConfigPath], 'obstudio', sharedMcpUrl, false);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
@@ -787,11 +819,14 @@ suite('VS Code Host', () => {
 		const originalUserProfile = process.env.USERPROFILE;
 		const claudeConfigPath = path.join(tempHome, '.claude.json');
 		const cursorConfigPath = path.join(tempHome, '.cursor', 'mcp.json');
+		const kiroConfigPath = path.join(tempHome, '.kiro', 'settings', 'mcp.json');
 		const originalClaudeConfigPath = originalHome ? path.join(originalHome, '.claude.json') : '';
 		const originalCursorConfigPath = originalHome ? path.join(originalHome, '.cursor', 'mcp.json') : '';
+		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
 		const originalSnapshots = [
 			snapshotFile(originalClaudeConfigPath),
 			snapshotFile(originalCursorConfigPath),
+			snapshotFile(originalKiroConfigPath),
 		];
 
 		process.env.HOME = tempHome;
@@ -799,6 +834,7 @@ suite('VS Code Host', () => {
 
 		try {
 			fs.mkdirSync(path.dirname(cursorConfigPath), { recursive: true });
+			fs.mkdirSync(path.dirname(kiroConfigPath), { recursive: true });
 			fs.writeFileSync(
 				claudeConfigPath,
 				JSON.stringify({
@@ -831,6 +867,25 @@ suite('VS Code Host', () => {
 					},
 				}, null, 2),
 			);
+			fs.writeFileSync(
+				kiroConfigPath,
+				JSON.stringify({
+					kiroSetting: 'preserved',
+					mcpServers: {
+						obstudio: {
+							url: 'http://127.0.0.1:5999/mcp',
+							headers: { Authorization: 'stale' },
+							autoApprove: ['observer_status'],
+							disabled: true,
+							disabledTools: ['observer_clear'],
+						},
+						existingKiro: {
+							command: 'existing-kiro',
+							args: ['--serve'],
+						},
+					},
+				}, null, 2),
+			);
 
 			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
 			await waitFor(
@@ -841,9 +896,12 @@ suite('VS Code Host', () => {
 
 			await vscode.commands.executeCommand('observability-studio.configureClaudeCodeMCP');
 			await vscode.commands.executeCommand('observability-studio.configureCursorMCP');
+			await vscode.commands.executeCommand('observability-studio.configureKiroMCP');
 
 			await assertJSONMCPConfigured([claudeConfigPath, originalClaudeConfigPath], 'obstudio', sharedMcpUrl);
 			await assertJSONMCPConfigured([cursorConfigPath, originalCursorConfigPath], 'obstudio', sharedMcpUrl);
+			await assertJSONMCPConfigured([kiroConfigPath, originalKiroConfigPath], 'obstudio', sharedMcpUrl, false);
+			await assertKiroMCPPolicyPreserved([kiroConfigPath, originalKiroConfigPath]);
 			await assertJSONMCPPreservesExistingServer(
 				[claudeConfigPath, originalClaudeConfigPath],
 				'existingClaude',
@@ -857,6 +915,13 @@ suite('VS Code Host', () => {
 				'existing-cursor',
 				'theme',
 				'dark',
+			);
+			await assertJSONMCPPreservesExistingServer(
+				[kiroConfigPath, originalKiroConfigPath],
+				'existingKiro',
+				'existing-kiro',
+				'kiroSetting',
+				'preserved',
 			);
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
@@ -1100,7 +1165,7 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('matching Codex, Claude Code, and Cursor MCP config does not prompt when bundled skills are present', async function () {
+	test('matching Codex, Claude Code, Cursor, and Kiro MCP config does not prompt when bundled skills are present', async function () {
 		this.timeout(30_000);
 
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
@@ -1118,13 +1183,17 @@ suite('VS Code Host', () => {
 			fs.mkdirSync(path.join(tempHome, '.codex', 'skills', 'obstudio', 'otel-instrument'), { recursive: true });
 			fs.mkdirSync(path.join(tempHome, '.claude', 'skills', 'obstudio', 'otel-instrument'), { recursive: true });
 			fs.mkdirSync(path.join(tempHome, '.cursor', 'skills', 'obstudio', 'otel-instrument'), { recursive: true });
+			fs.mkdirSync(path.join(tempHome, '.kiro', 'skills', 'obstudio', 'otel-instrument'), { recursive: true });
+			fs.mkdirSync(path.join(tempHome, '.kiro', 'settings'), { recursive: true });
 			fs.writeFileSync(path.join(tempHome, '.codex', 'skills', 'obstudio', 'otel-instrument', 'SKILL.md'), '# Codex skill\n', 'utf8');
 			fs.writeFileSync(path.join(tempHome, '.claude', 'skills', 'obstudio', 'otel-instrument', 'SKILL.md'), '# Claude skill\n', 'utf8');
 			fs.writeFileSync(path.join(tempHome, '.cursor', 'skills', 'obstudio', 'otel-instrument', 'SKILL.md'), '# Cursor skill\n', 'utf8');
+			fs.writeFileSync(path.join(tempHome, '.kiro', 'skills', 'obstudio', 'otel-instrument', 'SKILL.md'), '# Kiro skill\n', 'utf8');
 			fs.symlinkSync(path.join('obstudio', 'otel-instrument'), path.join(tempHome, '.codex', 'skills', 'otel-instrument'));
 			fs.symlinkSync(path.join('obstudio', 'otel-instrument'), path.join(tempHome, '.claude', 'skills', 'otel-instrument'));
 			fs.mkdirSync(path.join(tempHome, '.cursor'), { recursive: true });
 			fs.symlinkSync(path.join('obstudio', 'otel-instrument'), path.join(tempHome, '.cursor', 'skills', 'otel-instrument'));
+			fs.symlinkSync(path.join('obstudio', 'otel-instrument'), path.join(tempHome, '.kiro', 'skills', 'otel-instrument'));
 			fs.writeFileSync(path.join(tempHome, '.codex', 'config.toml'), `model = "gpt-5.4"\n\n[mcp_servers.obstudio]\nurl = "${sharedMcpUrl}"\n`, 'utf8');
 			fs.writeFileSync(
 				path.join(tempHome, '.claude.json'),
@@ -1144,6 +1213,18 @@ suite('VS Code Host', () => {
 				}, null, 2),
 				'utf8',
 			);
+			fs.writeFileSync(
+				path.join(tempHome, '.kiro', 'settings', 'mcp.json'),
+				JSON.stringify({
+					mcpServers: {
+						obstudio: {
+							url: sharedMcpUrl,
+							headers: { 'X-Observer-Test': 'preserved' },
+						},
+					},
+				}, null, 2),
+				'utf8',
+			);
 
 			await vscode.commands.executeCommand('observability-studio.internal.resetAgentIntegrationPromptState');
 			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
@@ -1159,11 +1240,103 @@ suite('VS Code Host', () => {
 				prompts.some((item) => item.message.includes('Enable detected agent integrations for Splunk Observability Studio?')),
 				false,
 			);
+			const kiroConfig = JSON.parse(fs.readFileSync(path.join(tempHome, '.kiro', 'settings', 'mcp.json'), 'utf8'));
+			assert.deepEqual(kiroConfig.mcpServers.obstudio.headers, { 'X-Observer-Test': 'preserved' });
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();
 			process.env.HOME = originalHome;
 			process.env.USERPROFILE = originalUserProfile;
+			cleanupTempDir(tempHome);
+		}
+	});
+
+	test('automatic Kiro integration repairs stale stdio fields without losing policy', async function () {
+		this.timeout(30_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const kiroConfigPath = path.join(tempHome, '.kiro', 'settings', 'mcp.json');
+		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
+		const originalSnapshot = snapshotFile(originalKiroConfigPath);
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+
+		try {
+			const managedSkillDir = path.join(tempHome, '.kiro', 'skills', 'obstudio', 'otel-instrument');
+			fs.mkdirSync(managedSkillDir, { recursive: true });
+			fs.mkdirSync(path.dirname(kiroConfigPath), { recursive: true });
+			fs.writeFileSync(path.join(managedSkillDir, 'SKILL.md'), '# Kiro skill\n', 'utf8');
+			fs.symlinkSync(
+				path.join('obstudio', 'otel-instrument'),
+				path.join(tempHome, '.kiro', 'skills', 'otel-instrument'),
+			);
+			fs.writeFileSync(
+				kiroConfigPath,
+				JSON.stringify({
+					kiroSetting: 'preserved',
+					mcpServers: {
+						obstudio: {
+							url: sharedMcpUrl,
+							command: '/tmp/stale-obstudio',
+							args: ['--stale'],
+							headers: { 'X-Observer-Test': 'preserved' },
+							env: { OBSERVER_MODE: 'preserved' },
+							oauth: { clientId: 'preserved' },
+							oauthScopes: ['observer.read'],
+							autoApprove: ['observer_status'],
+							disabled: true,
+							disabledTools: ['observer_clear'],
+						},
+						existingKiro: {
+							command: 'existing-kiro',
+							args: ['--serve'],
+						},
+					},
+				}, null, 2),
+				'utf8',
+			);
+
+			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value && value.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			const configured = await vscode.commands.executeCommand<string[]>(
+				'observability-studio.internal.configureDetectedAgentIntegrations',
+			);
+			assert.deepEqual(configured, ['Kiro']);
+
+			await assertJSONMCPConfigured([kiroConfigPath], 'obstudio', sharedMcpUrl, false);
+			await assertKiroMCPPolicyPreserved(
+				[kiroConfigPath],
+				{ 'X-Observer-Test': 'preserved' },
+			);
+			const repairedKiroConfig = JSON.parse(await waitForFileText(kiroConfigPath));
+			assert.deepEqual(repairedKiroConfig.mcpServers.obstudio.env, { OBSERVER_MODE: 'preserved' });
+			assert.deepEqual(repairedKiroConfig.mcpServers.obstudio.oauth, { clientId: 'preserved' });
+			assert.deepEqual(repairedKiroConfig.mcpServers.obstudio.oauthScopes, ['observer.read']);
+			await assertJSONMCPPreservesExistingServer(
+				[kiroConfigPath],
+				'existingKiro',
+				'existing-kiro',
+				'kiroSetting',
+				'preserved',
+			);
+		} finally {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await sharedObserver.dispose();
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			restoreSnapshot(originalSnapshot);
 			cleanupTempDir(tempHome);
 		}
 	});

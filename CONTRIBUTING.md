@@ -3,7 +3,7 @@
 This repository contains:
 
 - `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `extension/` -- VS Code extension that packages the Observer
+- `extension/` -- Code OSS extension for VS Code and Kiro that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
 - `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing
 
@@ -12,7 +12,7 @@ This repository contains:
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.25+ | observer collector |
-| Node.js | 20+ | observer client dev/test and VS Code extension |
+| Node.js | 20+ | observer client dev/test and VS Code/Kiro extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |
@@ -27,7 +27,7 @@ make build    # compile the obstudio binary (skills embedded)
 make run      # build and start the collector
 ```
 
-### VS Code Extension
+### Editor Extension (VS Code and Kiro)
 
 ```sh
 cd extension
@@ -49,7 +49,7 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
-### VS Code Extension
+### Editor Extension (VS Code and Kiro)
 
 ```sh
 cd extension
@@ -134,8 +134,16 @@ git push origin v0.2.0
 ```
 
 This triggers [.github/workflows/release.yml](.github/workflows/release.yml),
-which cross-compiles for linux/darwin/windows, creates a GitHub Release,
-and uploads zip archives.
+which cross-compiles for linux/darwin/windows, builds platform-specific VSIX
+packages, creates a GitHub Release, uploads both archive types, and attempts to
+publish the same VSIX packages to the Visual Studio Marketplace and Open VSX.
+
+Kiro uses [Open VSX](https://open-vsx.org/) for extension discovery. The release
+workflow verifies the `VSCE_PAT` and `OVSX_PAT` repository secrets before it
+creates the GitHub Release. Registry publishing failures fail the workflow, and
+duplicate versions are skipped so a partial release can be retried safely. The
+platform-specific VSIX files on the GitHub Release remain the manual-install
+fallback.
 
 See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
