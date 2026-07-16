@@ -45,27 +45,29 @@ The installer:
 3. Creates top-level discoverable skill entries in the agent skills root
 4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
 
-Reload or restart an already-running agent if it does not discover the new
-skills immediately.
+If an already-running agent does not discover the newly installed skills,
+reload or restart it.
 
-### What Gets Installed (Cursor Example)
+### Installed Skill Layout
 
-The same bundle and discovery-link layout is created under the skills directory
-listed for each target above.
+For each target, `<skills-root>` is the parent of the managed `obstudio/`
+directory listed above. The installer copies the same bundle into `obstudio/`
+and creates relative symbolic links for skill discovery.
 
-```
-~/.cursor/skills/obstudio/
-  obstudio              # binary (MCP server, auto-started by Cursor)
-  weaver                # validator runtime used by the Validation tab and APIs
-  otel-audit/SKILL.md   # bundled /otel-audit skill file
-  otel-instrument/SKILL.md # bundled /otel-instrument skill file
-  otel-verify/SKILL.md  # bundled /otel-verify skill file
-  references/           # language guides and reference material
-
-~/.cursor/skills/
+```text
+<skills-root>/
+  obstudio/
+    obstudio[.exe]             # CLI and MCP server binary
+    weaver[.exe]               # validation runtime
+    otel-audit/SKILL.md        # bundled otel-audit skill
+    otel-instrument/SKILL.md   # bundled otel-instrument skill
+    otel-verify/SKILL.md       # bundled otel-verify skill
+    ...                        # additional bundled skills
+    references/                # shared reference material
   otel-audit -> obstudio/otel-audit
   otel-instrument -> obstudio/otel-instrument
   otel-verify -> obstudio/otel-verify
+  ...                          # one discovery link per bundled skill
 ```
 
 ## CLI Reference
@@ -122,8 +124,8 @@ To override the Observer UI, REST API, and MCP HTTP port explicitly:
 obstudio --observer-http-port 41234
 ```
 
-The OTLP receiver ports stay fixed at `4318` and `4317`, matching the VS Code
-and Kiro extension hosts.
+The OTLP receiver ports stay fixed at `4318` and `4317`; these are also used by
+the editor extension.
 
 When a standalone Observer is already running, `obstudio install --target=<agent>`
 auto-detects its current HTTP MCP endpoint from local runtime state, including
@@ -138,8 +140,7 @@ to point an agent at a different already-running Observer explicitly.
 | MCP endpoint | http://localhost:3000/mcp |
 
 In the Telemetry Explorer, use the `Live` button or press `P` while the Explorer
-is focused to pause or resume live updates. Keyboard shortcuts with `Cmd`,
-`Ctrl`, or `Alt` remain available to the host application.
+is focused to pause or resume live updates.
 
 Configure your app to send telemetry:
 

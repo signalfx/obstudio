@@ -45,6 +45,9 @@ stores the managed bundle under its skills directory and creates top-level
 discoverable skill entries such as `otel-audit`, `otel-instrument`, and
 `otel-verify` in the agent skills root.
 
+If an already-running agent does not discover the newly installed skills,
+reload or restart it.
+
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
 discoverable skill entries in `~/.kiro/skills`, and configures MCP in
 `~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,
@@ -68,7 +71,7 @@ The collector starts on:
 
 Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
-and `4317`, matching the VS Code and Kiro extension hosts.
+and `4317`; these are also used by the editor extension.
 
 ### Optional Splunk Metrics Forwarding
 

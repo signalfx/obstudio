@@ -15,8 +15,8 @@ The Obstudio installer includes `otel-verify` for every supported agent:
 # Or: --target=claude-code / --target=cursor / --target=kiro
 ```
 
-Reload or restart an already-running agent if it does not discover the skill
-after installation, then invoke it using that agent's syntax:
+If an already-running agent does not discover the newly installed skill,
+reload or restart it. Then invoke it using that agent's syntax:
 
 | Agent | Invocation |
 |---|---|

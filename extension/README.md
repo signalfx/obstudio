@@ -11,7 +11,10 @@ When the extension activates, it reuses or starts a bundled `obstudio` backend a
 3. Send telemetry to `127.0.0.1:4318` (OTLP/HTTP) or `127.0.0.1:4317` (OTLP/gRPC).
 4. Use the Metrics, Traces, Logs, and Validation tabs to inspect what arrived.
 
-Use the `Live` button in the top-right corner of the Explorer, or press `P` while the Explorer is focused, to pause the stream while you inspect a trace, metric, or log. Pause freezes traces, metrics, logs, and summary counts on the current view. Validation continues to update. Modified shortcuts remain available to the host, so `Cmd+P` on macOS and `Ctrl+P` on Windows or Linux still open Quick Open.
+Use the `Live` button in the top-right corner of the Explorer, or press `P`
+while the Explorer is focused, to pause the stream while you inspect a trace,
+metric, or log. Pause freezes traces, metrics, logs, and summary counts on the
+current view. Validation continues to update.
 
 ## Metrics Explorer
 
@@ -99,7 +102,7 @@ Use it like this:
 
 1. Start the extension-managed Observer, or reuse an existing shared Observer.
 2. Accept the one-time integration prompt when Codex, Claude Code, Cursor, or Kiro is detected, or run one of the `Enable ... Integration` commands from the Command Palette.
-3. Reload or restart that agent if it does not discover the new skills immediately.
+3. If that agent does not discover the newly installed skills, reload or restart it.
 4. In the agent, use the syntax that agent expects for the bundled skills:
    - Codex-style examples: `$otel-audit`, `$otel-instrument`, `$otel-verify`
    - Slash-command style examples for Claude Code, Cursor, and Kiro: `/otel-audit`, `/otel-instrument`, `/otel-verify`
@@ -141,14 +144,14 @@ If the managed endpoint or either OTLP port is already in use by an incompatible
 
 ## Requirements
 
-- VS Code `^1.82.0` or Kiro, which supports compatible Code OSS extensions
-  through its Open VSX-based registry.
-- Starting with version `0.0.13`, install the extension from the editor's
-  Extensions view by searching for `Splunk Observability Studio`. VS Code uses
-  Visual Studio Marketplace, while Kiro uses Open VSX. If registry installation
-  is unavailable, download the platform-specific `.vsix` from the
+- VS Code `^1.82.0` or Kiro.
+- Install the extension from the editor's Extensions view by searching for
+  `Splunk Observability Studio`. VS Code installs it from Visual Studio
+  Marketplace; beginning with extension version `0.0.13`, Kiro installs it
+  from Open VSX. If registry installation is unavailable, download the
+  platform-specific `.vsix` from the
   [GitHub release](https://github.com/signalfx/obstudio/releases/latest) and
-  install it with `Extensions: Install from VSIX...`.
+  run `Extensions: Install from VSIX...`.
 - No additional runtime setup is required for normal extension use.
 - To build the extension from source, install Node.js, `npm`, and the Go toolchain, and make sure `go version` works in your shell before running the build scripts.
 
