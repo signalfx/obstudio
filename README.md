@@ -45,8 +45,7 @@ stores the managed bundle under its skills directory and creates top-level
 discoverable skill entries such as `otel-audit`, `otel-instrument`, and
 `otel-verify` in the agent skills root.
 
-If an already-running agent does not discover the newly installed skills,
-reload or restart it.
+After installation, restart the agent if it does not discover the new skills.
 
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
 discoverable skill entries in `~/.kiro/skills`, and configures MCP in

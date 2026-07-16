@@ -45,8 +45,7 @@ The installer:
 3. Creates top-level discoverable skill entries in the agent skills root
 4. Configures the agent's MCP config to auto-start `obstudio` or reuse a shared Observer
 
-If an already-running agent does not discover the newly installed skills,
-reload or restart it.
+After installation, restart the agent if it does not discover the new skills.
 
 ### Installed Skill Layout
 

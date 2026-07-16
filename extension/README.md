@@ -102,7 +102,7 @@ Use it like this:
 
 1. Start the extension-managed Observer, or reuse an existing shared Observer.
 2. Accept the one-time integration prompt when Codex, Claude Code, Cursor, or Kiro is detected, or run one of the `Enable ... Integration` commands from the Command Palette.
-3. If that agent does not discover the newly installed skills, reload or restart it.
+3. After installation, restart the agent if it does not discover the new skills.
 4. In the agent, use the syntax that agent expects for the bundled skills:
    - Codex-style examples: `$otel-audit`, `$otel-instrument`, `$otel-verify`
    - Slash-command style examples for Claude Code, Cursor, and Kiro: `/otel-audit`, `/otel-instrument`, `/otel-verify`
