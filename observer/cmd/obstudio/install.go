@@ -38,10 +38,11 @@ const (
 )
 
 type mcpConfigTarget struct {
-	format            mcpConfigFormat
-	path              func() string
-	includeRemoteType bool
-	preserveFields    []string
+	format                mcpConfigFormat
+	path                  func() string
+	includeRemoteType     bool
+	preserveFields        []string
+	preserveSameURLFields []string
 }
 
 type agentTarget struct {
@@ -96,9 +97,10 @@ var targets = map[string]agentTarget{
 	"kiro": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".kiro", "skills", "obstudio") },
 		mcpConfig: mcpConfigTarget{
-			format:         mcpConfigJSON,
-			path:           func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
-			preserveFields: []string{"autoApprove", "disabled", "disabledTools"},
+			format:                mcpConfigJSON,
+			path:                  func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
+			preserveFields:        []string{"autoApprove", "disabled", "disabledTools"},
+			preserveSameURLFields: []string{"headers", "env", "oauth", "oauthScopes"},
 		},
 	},
 }
@@ -447,7 +449,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 			}
 			server["url"] = sharedURL
 		}
-		return upsertJSONMCPServer(target.path(), server, target.preserveFields...)
+		return upsertJSONMCPServer(target.path(), server, target.preserveFields, target.preserveSameURLFields)
 	case mcpConfigTOML:
 		server := codexMCPServer{}
 		if sharedURL == "" {
@@ -462,7 +464,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	}
 }
 
-func upsertJSONMCPServer(path string, server map[string]any, preserveFields ...string) error {
+func upsertJSONMCPServer(path string, server map[string]any, preserveFields, preserveSameURLFields []string) error {
 	config := map[string]any{}
 
 	data, err := os.ReadFile(path)
@@ -479,6 +481,15 @@ func upsertJSONMCPServer(path string, server map[string]any, preserveFields ...s
 		servers = map[string]any{}
 	}
 	if existing, ok := servers["obstudio"].(map[string]any); ok {
+		existingURL, existingHasURL := existing["url"].(string)
+		serverURL, serverHasURL := server["url"].(string)
+		if existingHasURL && serverHasURL && existingURL != "" && existingURL == serverURL {
+			for _, field := range preserveSameURLFields {
+				if value, exists := existing[field]; exists {
+					server[field] = value
+				}
+			}
+		}
 		for _, field := range preserveFields {
 			if value, exists := existing[field]; exists {
 				server[field] = value

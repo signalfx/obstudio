@@ -97,6 +97,7 @@ type AgentIntegrationSpec = {
 	configFormat: AgentIntegrationConfigFormat;
 	configPath: (home: string) => string;
 	detectPaths: (home: string) => string[];
+	jsonRemoteIncompatibleFields?: ReadonlyArray<'args' | 'command'>;
 	jsonRemoteType?: 'http';
 	label: string;
 	skillsSentinelPath: (home: string) => string;
@@ -157,6 +158,7 @@ const agentIntegrationSpecs: AgentIntegrationSpec[] = [
 		configFormat: 'json',
 		configPath: (home) => path.join(home, '.kiro', 'settings', 'mcp.json'),
 		detectPaths: (home) => [path.join(home, '.kiro')],
+		jsonRemoteIncompatibleFields: ['command', 'args'],
 		skillsSentinelPath: (home) => path.join(home, '.kiro', 'skills', 'otel-instrument', 'SKILL.md'),
 	},
 ];
@@ -1164,7 +1166,12 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 	try {
 		if (spec.configFormat === 'json') {
 			const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
-				mcpServers?: Record<string, { type?: string; url?: string }>;
+				mcpServers?: Record<string, {
+					args?: unknown;
+					command?: unknown;
+					type?: string;
+					url?: string;
+				}>;
 			};
 			const server = config.mcpServers?.obstudio;
 			if (server === undefined) {
@@ -1173,7 +1180,12 @@ function getAgentIntegrationConfigState(spec: AgentIntegrationSpec, mcpUrl: stri
 			const remoteTypeMatches = spec.jsonRemoteType === undefined
 				? server.type === undefined
 				: server.type === spec.jsonRemoteType;
-			return remoteTypeMatches && server.url === mcpUrl ? 'matching' : 'different';
+			const hasIncompatibleRemoteFields = spec.jsonRemoteIncompatibleFields?.some(
+				(field) => server[field] !== undefined,
+			) ?? false;
+			return remoteTypeMatches && server.url === mcpUrl && !hasIncompatibleRemoteFields
+				? 'matching'
+				: 'different';
 		}
 
 		const content = fs.readFileSync(configPath, 'utf8');

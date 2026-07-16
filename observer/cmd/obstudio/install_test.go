@@ -289,7 +289,7 @@ func TestUpsertJSONMCPServerPreservesExistingEntries(t *testing.T) {
 	if err := upsertJSONMCPServer(path, map[string]any{
 		"type": "http",
 		"url":  "http://127.0.0.1:3000/mcp",
-	}); err != nil {
+	}, nil, nil); err != nil {
 		t.Fatalf("upsertJSONMCPServer returned error: %v", err)
 	}
 
@@ -337,7 +337,11 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 			"obstudio": map[string]any{
 				"command":       "/tmp/old-obstudio",
 				"args":          []string{"--old"},
+				"url":           "https://old.example/mcp",
 				"headers":       map[string]string{"Authorization": "stale"},
+				"env":           map[string]string{"OBSERVER_MODE": "stale"},
+				"oauth":         map[string]string{"clientId": "stale"},
+				"oauthScopes":   []string{"stale.scope"},
 				"autoApprove":   []string{"observer_status"},
 				"disabled":      true,
 				"disabledTools": []string{"observer_clear"},
@@ -375,7 +379,7 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 	if got, ok := server["type"]; ok {
 		t.Fatalf("Kiro remote config should omit undocumented type field, got %#v", got)
 	}
-	for _, field := range []string{"command", "args", "headers"} {
+	for _, field := range []string{"command", "args", "headers", "env", "oauth", "oauthScopes"} {
 		if got, ok := server[field]; ok {
 			t.Fatalf("Kiro remote config should remove stale %s field, got %#v", field, got)
 		}
@@ -388,6 +392,71 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 	}
 	if got := server["disabledTools"].([]any); len(got) != 1 || got[0] != "observer_clear" {
 		t.Fatalf("Kiro disabledTools policy = %#v, want observer_clear", got)
+	}
+}
+
+func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
+	t.Parallel()
+
+	const mcpURL = "http://127.0.0.1:3000/mcp"
+	configPath := filepath.Join(t.TempDir(), "mcp.json")
+	initial := map[string]any{
+		"mcpServers": map[string]any{
+			"obstudio": map[string]any{
+				"command":     "/tmp/old-obstudio",
+				"args":        []string{"--old"},
+				"url":         mcpURL,
+				"headers":     map[string]string{"X-Observer-Test": "preserved"},
+				"env":         map[string]string{"OBSERVER_MODE": "preserved"},
+				"oauth":       map[string]string{"clientId": "preserved"},
+				"oauthScopes": []string{"observer.read"},
+			},
+		},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatalf("marshal initial Kiro MCP config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write initial Kiro MCP config: %v", err)
+	}
+
+	target := targets["kiro"].mcpConfig
+	target.path = func() string { return configPath }
+	if err := configureMCP(target, "/tmp/obstudio", mcpURL); err != nil {
+		t.Fatalf("configureMCP returned error: %v", err)
+	}
+
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Kiro MCP config: %v", err)
+	}
+	var config struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("unmarshal Kiro MCP config: %v", err)
+	}
+	server := config.MCPServers["obstudio"]
+	if got := server["url"]; got != mcpURL {
+		t.Fatalf("Kiro obstudio URL = %#v, want %q", got, mcpURL)
+	}
+	for _, field := range []string{"command", "args", "type"} {
+		if got, ok := server[field]; ok {
+			t.Fatalf("Kiro remote config should remove stale %s field, got %#v", field, got)
+		}
+	}
+	if got := server["headers"].(map[string]any)["X-Observer-Test"]; got != "preserved" {
+		t.Fatalf("Kiro headers = %#v, want preserved", server["headers"])
+	}
+	if got := server["env"].(map[string]any)["OBSERVER_MODE"]; got != "preserved" {
+		t.Fatalf("Kiro env = %#v, want preserved", server["env"])
+	}
+	if got := server["oauth"].(map[string]any)["clientId"]; got != "preserved" {
+		t.Fatalf("Kiro oauth = %#v, want preserved", server["oauth"])
+	}
+	if got := server["oauthScopes"].([]any); len(got) != 1 || got[0] != "observer.read" {
+		t.Fatalf("Kiro oauthScopes = %#v, want observer.read", got)
 	}
 }
 
