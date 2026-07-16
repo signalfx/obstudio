@@ -135,15 +135,21 @@ git push origin v0.2.0
 
 This triggers [.github/workflows/release.yml](.github/workflows/release.yml),
 which cross-compiles for linux/darwin/windows, builds platform-specific VSIX
-packages, creates a GitHub Release, uploads both archive types, and attempts to
-publish the same VSIX packages to the Visual Studio Marketplace and Open VSX.
+packages, creates a GitHub Release, uploads both archive types, and publishes
+the VSIX packages to Open VSX.
 
 Kiro uses [Open VSX](https://open-vsx.org/) for extension discovery. The release
-workflow verifies the `VSCE_PAT` and `OVSX_PAT` repository secrets before it
-creates the GitHub Release. Registry publishing failures fail the workflow, and
-duplicate versions are skipped so a partial release can be retried safely. The
-platform-specific VSIX files on the GitHub Release remain the manual-install
-fallback.
+workflow verifies the `OVSX_PAT` repository secret before it creates the GitHub
+Release. Open VSX publishing failures fail the workflow, and duplicate versions
+are skipped so a partial release can be retried safely.
+
+Visual Studio Marketplace publishing is manual. After the release workflow
+succeeds, download the four platform-specific VSIX files from the GitHub Release
+and upload those exact files to the existing
+[Splunk publisher](https://marketplace.visualstudio.com/manage/publishers/Splunk).
+Do not rebuild the VSIX files for Marketplace publishing. The release workflow
+adds the same reminder to its job summary. The GitHub Release VSIX files also
+remain the manual-install fallback.
 
 See [.goreleaser.yaml](.goreleaser.yaml) for the full release configuration.
 
