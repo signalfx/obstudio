@@ -345,6 +345,7 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 				"autoApprove":   []string{"observer_status"},
 				"disabled":      true,
 				"disabledTools": []string{"observer_clear"},
+				"timeout":       45_000,
 			},
 		},
 	}
@@ -393,6 +394,9 @@ func TestConfigureMCPUsesKiroRemoteURLSchema(t *testing.T) {
 	if got := server["disabledTools"].([]any); len(got) != 1 || got[0] != "observer_clear" {
 		t.Fatalf("Kiro disabledTools policy = %#v, want observer_clear", got)
 	}
+	if got := server["timeout"]; got != float64(45_000) {
+		t.Fatalf("Kiro timeout policy = %#v, want 45000", got)
+	}
 }
 
 func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
@@ -410,6 +414,7 @@ func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
 				"env":         map[string]string{"OBSERVER_MODE": "preserved"},
 				"oauth":       map[string]string{"clientId": "preserved"},
 				"oauthScopes": []string{"observer.read"},
+				"timeout":     45_000,
 			},
 		},
 	}
@@ -457,6 +462,9 @@ func TestConfigureMCPPreservesKiroRemoteOptionsForMatchingURL(t *testing.T) {
 	}
 	if got := server["oauthScopes"].([]any); len(got) != 1 || got[0] != "observer.read" {
 		t.Fatalf("Kiro oauthScopes = %#v, want observer.read", got)
+	}
+	if got := server["timeout"]; got != float64(45_000) {
+		t.Fatalf("Kiro timeout policy = %#v, want 45000", got)
 	}
 }
 

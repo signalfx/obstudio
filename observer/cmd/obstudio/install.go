@@ -99,7 +99,7 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format:                mcpConfigJSON,
 			path:                  func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
-			preserveFields:        []string{"autoApprove", "disabled", "disabledTools"},
+			preserveFields:        []string{"autoApprove", "disabled", "disabledTools", "timeout"},
 			preserveSameURLFields: []string{"headers", "env", "oauth", "oauthScopes"},
 		},
 	},
