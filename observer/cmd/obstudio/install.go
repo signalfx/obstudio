@@ -124,7 +124,7 @@ func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install skills and configure MCP for one or more AI coding agents",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			targetNames, err := normalizeInstallTargets(requestedTargets)
 			if err != nil {
 				return err
@@ -132,7 +132,11 @@ func newInstallCmd() *cobra.Command {
 			if err := runInstallTargets(targetNames, sharedURL); err != nil {
 				return err
 			}
-			return maybeConnectRemoteO11y(targetNames, connectRemoteO11y, os.Stdin, os.Stdout)
+			var connectFlag *bool
+			if cmd.Flags().Changed("connect-remote-o11y") {
+				connectFlag = &connectRemoteO11y
+			}
+			return maybeConnectRemoteO11y(targetNames, connectFlag, os.Stdin, os.Stdout)
 		},
 	}
 
@@ -315,12 +319,16 @@ func unsupportedConnectorTargets(targetNames []string) []string {
 }
 
 // shouldConnectRemoteO11y decides whether to invoke the remote-connect step.
-// The flag always wins; otherwise, on an interactive TTY, it asks the user.
-// A non-TTY session with no flag skips silently -- this step is opt-in and
-// must never block or fail an obstudio install.
-func shouldConnectRemoteO11y(flagSet bool, isInteractive bool, answer string) bool {
-	if flagSet {
-		return true
+// connectFlag is nil when --connect-remote-o11y was never passed, and
+// non-nil with the explicit value otherwise -- an explicit false must
+// suppress both the connection and the interactive prompt, the same as an
+// explicit true skips straight to connecting. Only a nil flag falls through
+// to asking on an interactive TTY; a non-TTY session with a nil flag skips
+// silently, since this step is opt-in and must never block or fail an
+// obstudio install.
+func shouldConnectRemoteO11y(connectFlag *bool, isInteractive bool, answer string) bool {
+	if connectFlag != nil {
+		return *connectFlag
 	}
 	if !isInteractive {
 		return false
@@ -358,10 +366,10 @@ func isInteractiveTerminal(stdin io.Reader) bool {
 // vars, if the caller set them) handles credentials directly. A failure here
 // is reported as a warning, never a failed install -- the local setup this
 // command exists for has already succeeded.
-func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader, stdout io.Writer) error {
+func maybeConnectRemoteO11y(targetNames []string, connectFlag *bool, stdin io.Reader, stdout io.Writer) error {
 	isInteractive := false
 	var answer string
-	if !flagSet {
+	if connectFlag == nil {
 		isInteractive = isInteractiveTerminal(stdin)
 		if isInteractive {
 			fmt.Fprint(stdout, "\nAlso connect to the Splunk Observability remote MCP server? [y/N]: ")
@@ -379,7 +387,7 @@ func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader,
 	// run with no flag skips silently regardless of which targets were
 	// selected -- including a kiro-only selection, which must not print a
 	// note the user never asked to see.
-	if !shouldConnectRemoteO11y(flagSet, isInteractive, answer) {
+	if !shouldConnectRemoteO11y(connectFlag, isInteractive, answer) {
 		return nil
 	}
 

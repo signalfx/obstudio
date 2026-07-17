@@ -1517,21 +1517,25 @@ func TestMapTargetsToConnectorIDEs(t *testing.T) {
 func TestShouldConnectRemoteO11y(t *testing.T) {
 	t.Parallel()
 
+	trueVal, falseVal := true, false
+
 	tests := []struct {
 		name          string
-		flagSet       bool
+		connectFlag   *bool
 		isInteractive bool
 		answer        string
 		want          bool
 	}{
-		{name: "flag set wins even on a non-interactive session", flagSet: true, isInteractive: false, want: true},
-		{name: "flag set wins even with no answer", flagSet: true, isInteractive: true, answer: "n", want: true},
-		{name: "non-interactive with no flag skips silently", flagSet: false, isInteractive: false, want: false},
-		{name: "interactive yes answer", flagSet: false, isInteractive: true, answer: "y\n", want: true},
-		{name: "interactive full yes answer", flagSet: false, isInteractive: true, answer: "yes", want: true},
-		{name: "interactive case-insensitive yes", flagSet: false, isInteractive: true, answer: "Y", want: true},
-		{name: "interactive no answer", flagSet: false, isInteractive: true, answer: "n", want: false},
-		{name: "interactive empty answer defaults to no", flagSet: false, isInteractive: true, answer: "", want: false},
+		{name: "explicit true wins even on a non-interactive session", connectFlag: &trueVal, isInteractive: false, want: true},
+		{name: "explicit true wins even with a no answer", connectFlag: &trueVal, isInteractive: true, answer: "n", want: true},
+		{name: "explicit false suppresses even on an interactive session with a yes answer", connectFlag: &falseVal, isInteractive: true, answer: "y", want: false},
+		{name: "explicit false suppresses on a non-interactive session", connectFlag: &falseVal, isInteractive: false, want: false},
+		{name: "unset flag on non-interactive session skips silently", connectFlag: nil, isInteractive: false, want: false},
+		{name: "unset flag interactive yes answer", connectFlag: nil, isInteractive: true, answer: "y\n", want: true},
+		{name: "unset flag interactive full yes answer", connectFlag: nil, isInteractive: true, answer: "yes", want: true},
+		{name: "unset flag interactive case-insensitive yes", connectFlag: nil, isInteractive: true, answer: "Y", want: true},
+		{name: "unset flag interactive no answer", connectFlag: nil, isInteractive: true, answer: "n", want: false},
+		{name: "unset flag interactive empty answer defaults to no", connectFlag: nil, isInteractive: true, answer: "", want: false},
 	}
 
 	for _, tc := range tests {
@@ -1539,9 +1543,9 @@ func TestShouldConnectRemoteO11y(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := shouldConnectRemoteO11y(tc.flagSet, tc.isInteractive, tc.answer)
+			got := shouldConnectRemoteO11y(tc.connectFlag, tc.isInteractive, tc.answer)
 			if got != tc.want {
-				t.Fatalf("shouldConnectRemoteO11y(%v, %v, %q) = %v, want %v", tc.flagSet, tc.isInteractive, tc.answer, got, tc.want)
+				t.Fatalf("shouldConnectRemoteO11y(%v, %v, %q) = %v, want %v", tc.connectFlag, tc.isInteractive, tc.answer, got, tc.want)
 			}
 		})
 	}
@@ -1565,7 +1569,7 @@ func TestMaybeConnectRemoteO11ySkipsKiroOnlyInstallNonInteractivelyWithoutFlag(t
 	// before target support is considered, so this must not print the
 	// unsupported-target note the user never asked to see.
 	var stdout strings.Builder
-	if err := maybeConnectRemoteO11y([]string{"kiro"}, false, strings.NewReader(""), &stdout); err != nil {
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, nil, strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
 	if stdout.String() != "" {
@@ -1577,7 +1581,7 @@ func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
 	t.Parallel()
 
 	var stdout strings.Builder
-	if err := maybeConnectRemoteO11y([]string{"cursor"}, false, strings.NewReader(""), &stdout); err != nil {
+	if err := maybeConnectRemoteO11y([]string{"cursor"}, nil, strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
 	if stdout.String() != "" {
@@ -1585,11 +1589,15 @@ func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
 	}
 }
 
+// boolPtr returns a pointer to an explicit --connect-remote-o11y value, as
+// opposed to nil, which represents the flag never having been passed.
+func boolPtr(v bool) *bool { return &v }
+
 func TestMaybeConnectRemoteO11yKiroOnlyWithFlagPrintsNoteAndSkipsNpx(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no npx on PATH -- must not matter, since kiro has no --ide to run
 
 	var stdout strings.Builder
-	if err := maybeConnectRemoteO11y([]string{"kiro"}, true, strings.NewReader(""), &stdout); err != nil {
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "doesn't support kiro") {
@@ -1607,7 +1615,7 @@ func TestMaybeConnectRemoteO11yMixedTargetsReportsUnsupportedAndRunsSupported(t 
 	t.Setenv("PATH", binDir)
 
 	var stdout strings.Builder
-	if err := maybeConnectRemoteO11y([]string{"kiro", "cursor"}, true, strings.NewReader(""), &stdout); err != nil {
+	if err := maybeConnectRemoteO11y([]string{"kiro", "cursor"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "doesn't support kiro") {
@@ -1647,7 +1655,7 @@ func TestMaybeConnectRemoteO11yRunsNpxWithExpectedArgvWhenFlagSet(t *testing.T) 
 	t.Setenv("PATH", binDir)
 
 	var stdout strings.Builder
-	if err := maybeConnectRemoteO11y([]string{"cursor", "codex"}, true, strings.NewReader(""), &stdout); err != nil {
+	if err := maybeConnectRemoteO11y([]string{"cursor", "codex"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
 
@@ -1668,7 +1676,7 @@ func TestMaybeConnectRemoteO11yNpxFailureIsWarningNotError(t *testing.T) {
 	t.Setenv("PATH", binDir)
 
 	var stdout strings.Builder
-	err := maybeConnectRemoteO11y([]string{"cursor"}, true, strings.NewReader(""), &stdout)
+	err := maybeConnectRemoteO11y([]string{"cursor"}, boolPtr(true), strings.NewReader(""), &stdout)
 	if err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error for a failed connect: %v", err)
 	}
@@ -1677,6 +1685,21 @@ func TestMaybeConnectRemoteO11yNpxFailureIsWarningNotError(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "manual-setup.md") {
 		t.Fatalf("expected the warning to point at the manual setup fallback, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11yExplicitFalseSuppressesInteractivePrompt(t *testing.T) {
+	t.Parallel()
+
+	// An explicit --connect-remote-o11y=false must skip both the prompt and
+	// the connection, even though stdin would otherwise answer "y" -- an
+	// explicit false is not the same as the flag never being passed.
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor"}, boolPtr(false), strings.NewReader("y\n"), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when explicitly disabled, got: %q", stdout.String())
 	}
 }
 
