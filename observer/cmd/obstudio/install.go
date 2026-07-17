@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 type mcpConfigFormat string
@@ -299,6 +300,20 @@ func mapTargetsToConnectorIDEs(targetNames []string) []string {
 	return ides
 }
 
+// unsupportedConnectorTargets returns the given obstudio targets that have no
+// splunk-o11y-mcp-connect --ide equivalent (currently just kiro), preserving
+// order, so a mixed selection (e.g. cursor,kiro) can still report the gap
+// instead of silently dropping it.
+func unsupportedConnectorTargets(targetNames []string) []string {
+	unsupported := make([]string, 0, len(targetNames))
+	for _, target := range targetNames {
+		if _, ok := connectorIDEByTarget[target]; !ok {
+			unsupported = append(unsupported, target)
+		}
+	}
+	return unsupported
+}
+
 // shouldConnectRemoteO11y decides whether to invoke the remote-connect step.
 // The flag always wins; otherwise, on an interactive TTY, it asks the user.
 // A non-TTY session with no flag skips silently -- this step is opt-in and
@@ -320,6 +335,21 @@ func remoteO11yConnectArgs(ides []string) []string {
 	return []string{"-y", "@splunk/o11y-mcp-connect", "connect", "--ide", strings.Join(ides, ",")}
 }
 
+const manualSetupPointer = "see the manual config snippets in the splunk-o11y-mcp-connect repo's docs/manual-setup.md."
+
+// isInteractiveTerminal reports whether stdin is an actual terminal, not just
+// a character device -- os.ModeCharDevice alone is also set for /dev/null,
+// which would otherwise make a caller that redirects stdin from /dev/null
+// (including exec.Cmd's default) look interactive and print the [y/N]
+// prompt, violating the promised silent non-interactive behavior.
+func isInteractiveTerminal(stdin io.Reader) bool {
+	file, ok := stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(file.Fd()))
+}
+
 // maybeConnectRemoteO11y optionally shells out to the O11Y MCP connector
 // after a local install completes, so the user can also point the same
 // target(s) at the remote Splunk Observability MCP server. obstudio never
@@ -329,20 +359,10 @@ func remoteO11yConnectArgs(ides []string) []string {
 // is reported as a warning, never a failed install -- the local setup this
 // command exists for has already succeeded.
 func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader, stdout io.Writer) error {
-	ides := mapTargetsToConnectorIDEs(targetNames)
-	if len(ides) == 0 {
-		fmt.Fprintln(stdout, "\nNote: the O11Y remote MCP connector doesn't support kiro yet -- see the manual config snippets in the splunk-o11y-mcp-connect repo's docs/manual-setup.md.")
-		return nil
-	}
-
 	isInteractive := false
 	var answer string
 	if !flagSet {
-		if file, ok := stdin.(*os.File); ok {
-			if info, err := file.Stat(); err == nil {
-				isInteractive = (info.Mode() & os.ModeCharDevice) != 0
-			}
-		}
+		isInteractive = isInteractiveTerminal(stdin)
 		if isInteractive {
 			fmt.Fprint(stdout, "\nAlso connect to the Splunk Observability remote MCP server? [y/N]: ")
 			// Read byte-by-byte rather than via bufio.NewReader: a buffered
@@ -355,12 +375,25 @@ func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader,
 		}
 	}
 
+	// Decide opt-in before looking at target support, so a non-interactive
+	// run with no flag skips silently regardless of which targets were
+	// selected -- including a kiro-only selection, which must not print a
+	// note the user never asked to see.
 	if !shouldConnectRemoteO11y(flagSet, isInteractive, answer) {
 		return nil
 	}
 
+	if unsupported := unsupportedConnectorTargets(targetNames); len(unsupported) > 0 {
+		fmt.Fprintf(stdout, "\nNote: the O11Y remote MCP connector doesn't support %s yet -- %s\n", strings.Join(unsupported, ", "), manualSetupPointer)
+	}
+
+	ides := mapTargetsToConnectorIDEs(targetNames)
+	if len(ides) == 0 {
+		return nil
+	}
+
 	if _, err := exec.LookPath("npx"); err != nil {
-		fmt.Fprintln(stdout, "  npx not found on PATH -- see the manual config snippets in the splunk-o11y-mcp-connect repo's docs/manual-setup.md.")
+		fmt.Fprintf(stdout, "  npx not found on PATH -- %s\n", manualSetupPointer)
 		return nil
 	}
 
@@ -370,7 +403,7 @@ func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader,
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(stdout, "  Warning: connecting to the remote O11Y MCP server failed: %v\n", err)
+		fmt.Fprintf(stdout, "  Warning: connecting to the remote O11Y MCP server failed: %v -- %s\n", err, manualSetupPointer)
 	}
 	return nil
 }

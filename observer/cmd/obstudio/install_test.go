@@ -1557,15 +1557,19 @@ func TestRemoteO11yConnectArgs(t *testing.T) {
 	}
 }
 
-func TestMaybeConnectRemoteO11ySkipsKiroOnlyInstallsWithNote(t *testing.T) {
+func TestMaybeConnectRemoteO11ySkipsKiroOnlyInstallNonInteractivelyWithoutFlag(t *testing.T) {
 	t.Parallel()
 
+	// A kiro-only install with no flag and no TTY must skip silently like
+	// any other non-interactive, non-opted-in run -- opt-in is decided
+	// before target support is considered, so this must not print the
+	// unsupported-target note the user never asked to see.
 	var stdout strings.Builder
 	if err := maybeConnectRemoteO11y([]string{"kiro"}, false, strings.NewReader(""), &stdout); err != nil {
 		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "doesn't support kiro") {
-		t.Fatalf("expected a kiro fallback note, got: %q", stdout.String())
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
 	}
 }
 
@@ -1578,6 +1582,101 @@ func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
 	}
 	if stdout.String() != "" {
 		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11yKiroOnlyWithFlagPrintsNoteAndSkipsNpx(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // no npx on PATH -- must not matter, since kiro has no --ide to run
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, true, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "doesn't support kiro") {
+		t.Fatalf("expected a kiro fallback note, got: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "npx not found") {
+		t.Fatalf("did not expect an npx lookup for a kiro-only selection, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11yMixedTargetsReportsUnsupportedAndRunsSupported(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 0)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro", "cursor"}, true, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "doesn't support kiro") {
+		t.Fatalf("expected a kiro fallback note alongside the cursor connect, got: %q", stdout.String())
+	}
+
+	gotArgv, err := os.ReadFile(argvPath)
+	if err != nil {
+		t.Fatalf("reading captured argv: %v", err)
+	}
+	wantArgv := strings.Join(remoteO11yConnectArgs([]string{"cursor"}), "\n")
+	if strings.TrimRight(string(gotArgv), "\n") != wantArgv {
+		t.Fatalf("npx argv = %q, want %q", gotArgv, wantArgv)
+	}
+}
+
+// writeFakeNpx installs an executable named "npx" in binDir that records its
+// argv (one per line) to argvPath and exits with exitCode, standing in for
+// the real npx/@splunk/o11y-mcp-connect child process in tests.
+func writeFakeNpx(t *testing.T, binDir, argvPath string, exitCode int) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("fake PATH executable scripting is not exercised on Windows")
+	}
+
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > %q\nexit %d\n", argvPath, exitCode)
+	if err := os.WriteFile(filepath.Join(binDir, "npx"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake npx: %v", err)
+	}
+}
+
+func TestMaybeConnectRemoteO11yRunsNpxWithExpectedArgvWhenFlagSet(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 0)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor", "codex"}, true, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+
+	gotArgv, err := os.ReadFile(argvPath)
+	if err != nil {
+		t.Fatalf("reading captured argv: %v", err)
+	}
+	wantArgv := strings.Join(remoteO11yConnectArgs([]string{"cursor", "codex"}), "\n")
+	if strings.TrimRight(string(gotArgv), "\n") != wantArgv {
+		t.Fatalf("npx argv = %q, want %q", gotArgv, wantArgv)
+	}
+}
+
+func TestMaybeConnectRemoteO11yNpxFailureIsWarningNotError(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 1)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	err := maybeConnectRemoteO11y([]string{"cursor"}, true, strings.NewReader(""), &stdout)
+	if err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error for a failed connect: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Warning: connecting to the remote O11Y MCP server failed") {
+		t.Fatalf("expected a warning about the failed connect, got: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "manual-setup.md") {
+		t.Fatalf("expected the warning to point at the manual setup fallback, got: %q", stdout.String())
 	}
 }
 
