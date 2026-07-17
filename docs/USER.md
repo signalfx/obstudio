@@ -75,10 +75,33 @@ and creates relative symbolic links for skill discovery.
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`, `kiro`) |
+| `obstudio install --target=<agent>[,<agent>...] --connect-remote-o11y` | Also connect the installed target(s) to the Splunk Observability remote MCP server |
 | `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
 | `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
+
+### Connecting to the Splunk Observability Remote MCP Server
+
+`obstudio install` configures MCP for its own **local** server. If you also want the
+installed target(s) to connect to the **remote** Splunk Observability MCP server, opt in with
+`--connect-remote-o11y`:
+
+```bash
+./obstudio install --target=cursor,codex --connect-remote-o11y
+```
+
+This shells out to `npx @splunk/o11y-mcp-connect connect --ide <targets>` after the local
+install finishes, scoped to only the targets you installed (`kiro` has no connector
+equivalent yet and falls back to the manual snippet). obstudio never sees your realm or
+token — the connector's own prompt collects them directly, or reads
+`SPLUNK_O11Y_REALM`/`SPLUNK_O11Y_TOKEN` from the environment if you've set them. Without the
+flag, in an interactive terminal you'll be asked
+`Also connect to the Splunk Observability remote MCP server? [y/N]`; in a non-interactive
+session it's skipped silently. This step is opt-in and never fails the install — if `npx`
+isn't available, or the connect step itself fails, you'll see a note pointing at the manual
+config snippets in the [`splunk-o11y-mcp-connect`](https://github.com/signalfx/splunk-o11y-mcp-connect)
+repo's `docs/manual-setup.md`.
 
 ## Using Skills
 

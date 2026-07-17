@@ -1480,3 +1480,103 @@ func doSmokeJSONRequest(t *testing.T, client *http.Client, method, url, body str
 	}
 	return resp.StatusCode
 }
+
+func TestMapTargetsToConnectorIDEs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		targets []string
+		want    []string
+	}{
+		{name: "cursor maps to cursor", targets: []string{"cursor"}, want: []string{"cursor"}},
+		{name: "claude-code maps to claude-code", targets: []string{"claude-code"}, want: []string{"claude-code"}},
+		{name: "codex maps to codex", targets: []string{"codex"}, want: []string{"codex"}},
+		{name: "kiro has no connector equivalent", targets: []string{"kiro"}, want: []string{}},
+		{
+			name:    "preserves order and drops kiro from a mixed list",
+			targets: []string{"kiro", "cursor", "codex"},
+			want:    []string{"cursor", "codex"},
+		},
+		{name: "empty input yields empty output", targets: []string{}, want: []string{}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := mapTargetsToConnectorIDEs(tc.targets)
+			if joined, wantJoined := strings.Join(got, ","), strings.Join(tc.want, ","); joined != wantJoined {
+				t.Fatalf("mapTargetsToConnectorIDEs(%v) = %q, want %q", tc.targets, joined, wantJoined)
+			}
+		})
+	}
+}
+
+func TestShouldConnectRemoteO11y(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		flagSet       bool
+		isInteractive bool
+		answer        string
+		want          bool
+	}{
+		{name: "flag set wins even on a non-interactive session", flagSet: true, isInteractive: false, want: true},
+		{name: "flag set wins even with no answer", flagSet: true, isInteractive: true, answer: "n", want: true},
+		{name: "non-interactive with no flag skips silently", flagSet: false, isInteractive: false, want: false},
+		{name: "interactive yes answer", flagSet: false, isInteractive: true, answer: "y\n", want: true},
+		{name: "interactive full yes answer", flagSet: false, isInteractive: true, answer: "yes", want: true},
+		{name: "interactive case-insensitive yes", flagSet: false, isInteractive: true, answer: "Y", want: true},
+		{name: "interactive no answer", flagSet: false, isInteractive: true, answer: "n", want: false},
+		{name: "interactive empty answer defaults to no", flagSet: false, isInteractive: true, answer: "", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldConnectRemoteO11y(tc.flagSet, tc.isInteractive, tc.answer)
+			if got != tc.want {
+				t.Fatalf("shouldConnectRemoteO11y(%v, %v, %q) = %v, want %v", tc.flagSet, tc.isInteractive, tc.answer, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRemoteO11yConnectArgs(t *testing.T) {
+	t.Parallel()
+
+	got := remoteO11yConnectArgs([]string{"cursor", "codex"})
+	want := []string{"-y", "@splunk/o11y-mcp-connect", "connect", "--ide", "cursor,codex"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("remoteO11yConnectArgs() = %v, want %v", got, want)
+	}
+}
+
+func TestMaybeConnectRemoteO11ySkipsKiroOnlyInstallsWithNote(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, false, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "doesn't support kiro") {
+		t.Fatalf("expected a kiro fallback note, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor"}, false, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
+	}
+}

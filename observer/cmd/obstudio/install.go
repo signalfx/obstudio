@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -117,17 +119,26 @@ func supportedTargets() string {
 func newInstallCmd() *cobra.Command {
 	var requestedTargets []string
 	var sharedURL string
+	var connectRemoteO11y bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install skills and configure MCP for one or more AI coding agents",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runInstallTargets(requestedTargets, sharedURL)
+			targetNames, err := normalizeInstallTargets(requestedTargets)
+			if err != nil {
+				return err
+			}
+			if err := runInstallTargets(targetNames, sharedURL); err != nil {
+				return err
+			}
+			return maybeConnectRemoteO11y(targetNames, connectRemoteO11y, os.Stdin, os.Stdout)
 		},
 	}
 
 	cmd.Flags().StringSliceVar(&requestedTargets, "target", nil, "Agent target or comma-separated targets ("+supportedTargets()+")")
 	cmd.Flags().StringVar(&sharedURL, "shared-url", "", "Use an existing HTTP MCP endpoint instead of auto-starting a local obstudio binary")
+	cmd.Flags().BoolVar(&connectRemoteO11y, "connect-remote-o11y", false, "Also connect the installed target(s) to the Splunk Observability remote MCP server (via npx @splunk/o11y-mcp-connect)")
 	cmd.MarkFlagRequired("target")
 
 	return cmd
@@ -265,6 +276,98 @@ func runInstall(target, sharedURL string) error {
 
 	fmt.Printf("\nDone. Start the shared obstudio server before using %s:\n", target)
 	fmt.Println("  obstudio")
+	return nil
+}
+
+// connectorIDEByTarget maps an obstudio install target to the --ide name the
+// splunk-o11y-mcp-connect CLI expects. kiro has no entry: the connector only
+// covers vscode/cursor/codex/claude-code.
+var connectorIDEByTarget = map[string]string{
+	"cursor":      "cursor",
+	"claude-code": "claude-code",
+	"codex":       "codex",
+}
+
+// mapTargetsToConnectorIDEs returns the connector --ide names for the given
+// obstudio targets, preserving order and dropping unsupported targets (kiro).
+func mapTargetsToConnectorIDEs(targetNames []string) []string {
+	ides := make([]string, 0, len(targetNames))
+	for _, target := range targetNames {
+		if ide, ok := connectorIDEByTarget[target]; ok {
+			ides = append(ides, ide)
+		}
+	}
+	return ides
+}
+
+// shouldConnectRemoteO11y decides whether to invoke the remote-connect step.
+// The flag always wins; otherwise, on an interactive TTY, it asks the user.
+// A non-TTY session with no flag skips silently -- this step is opt-in and
+// must never block or fail an obstudio install.
+func shouldConnectRemoteO11y(flagSet bool, isInteractive bool, answer string) bool {
+	if flagSet {
+		return true
+	}
+	if !isInteractive {
+		return false
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	return answer == "y" || answer == "yes"
+}
+
+// remoteO11yConnectArgs builds the argv (excluding the "npx" binary itself)
+// for shelling out to the core connector.
+func remoteO11yConnectArgs(ides []string) []string {
+	return []string{"-y", "@splunk/o11y-mcp-connect", "connect", "--ide", strings.Join(ides, ",")}
+}
+
+// maybeConnectRemoteO11y optionally shells out to the O11Y MCP connector
+// after a local install completes, so the user can also point the same
+// target(s) at the remote Splunk Observability MCP server. obstudio never
+// collects or sees the realm/token itself: stdio is inherited so the
+// connector's own masked prompt (or SPLUNK_O11Y_REALM/SPLUNK_O11Y_TOKEN env
+// vars, if the caller set them) handles credentials directly. A failure here
+// is reported as a warning, never a failed install -- the local setup this
+// command exists for has already succeeded.
+func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader, stdout io.Writer) error {
+	ides := mapTargetsToConnectorIDEs(targetNames)
+	if len(ides) == 0 {
+		fmt.Fprintln(stdout, "\nNote: the O11Y remote MCP connector doesn't support kiro yet -- see the manual config snippets in the splunk-o11y-mcp-connect repo's docs/manual-setup.md.")
+		return nil
+	}
+
+	isInteractive := false
+	var answer string
+	if !flagSet {
+		if file, ok := stdin.(*os.File); ok {
+			if info, err := file.Stat(); err == nil {
+				isInteractive = (info.Mode() & os.ModeCharDevice) != 0
+			}
+		}
+		if isInteractive {
+			fmt.Fprint(stdout, "\nAlso connect to the Splunk Observability remote MCP server? [y/N]: ")
+			line, _ := bufio.NewReader(stdin).ReadString('\n')
+			answer = line
+		}
+	}
+
+	if !shouldConnectRemoteO11y(flagSet, isInteractive, answer) {
+		return nil
+	}
+
+	if _, err := exec.LookPath("npx"); err != nil {
+		fmt.Fprintln(stdout, "  npx not found on PATH -- see the manual config snippets in the splunk-o11y-mcp-connect repo's docs/manual-setup.md.")
+		return nil
+	}
+
+	fmt.Fprintf(stdout, "\nConnecting %s to the Splunk Observability remote MCP server...\n", strings.Join(ides, ", "))
+	cmd := exec.Command("npx", remoteO11yConnectArgs(ides)...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(stdout, "  Warning: connecting to the remote O11Y MCP server failed: %v\n", err)
+	}
 	return nil
 }
 
