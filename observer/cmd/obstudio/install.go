@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -346,8 +345,13 @@ func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader,
 		}
 		if isInteractive {
 			fmt.Fprint(stdout, "\nAlso connect to the Splunk Observability remote MCP server? [y/N]: ")
-			line, _ := bufio.NewReader(stdin).ReadString('\n')
-			answer = line
+			// Read byte-by-byte rather than via bufio.NewReader: a buffered
+			// reader's fill() can slurp already-queued input past this
+			// answer's newline (e.g. a pasted "y\n<realm>\n<token>\n" block)
+			// into its own internal buffer and drop it, since stdin is
+			// handed to the npx child directly afterward rather than
+			// through this same reader.
+			answer, _ = readLine(stdin)
 		}
 	}
 
@@ -369,6 +373,27 @@ func maybeConnectRemoteO11y(targetNames []string, flagSet bool, stdin io.Reader,
 		fmt.Fprintf(stdout, "  Warning: connecting to the remote O11Y MCP server failed: %v\n", err)
 	}
 	return nil
+}
+
+// readLine reads a single newline-terminated line one byte at a time so it
+// never reads past the newline into input meant for a later reader (the npx
+// child process, which is handed the same underlying stdin right after this
+// call returns).
+func readLine(r io.Reader) (string, error) {
+	var line []byte
+	buf := make([]byte, 1)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			if buf[0] == '\n' {
+				return string(line), nil
+			}
+			line = append(line, buf[0])
+		}
+		if err != nil {
+			return string(line), err
+		}
+	}
 }
 
 func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {

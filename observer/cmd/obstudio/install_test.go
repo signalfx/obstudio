@@ -1580,3 +1580,41 @@ func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
 		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
 	}
 }
+
+func TestReadLineLeavesLaterInputUntouched(t *testing.T) {
+	t.Parallel()
+
+	// Regression test: a bufio.Reader wrapping stdin can buffer past the
+	// first newline, silently consuming input meant for a later reader of
+	// the same stdin (here, the npx child process). readLine must consume
+	// exactly one line and leave the rest of r untouched.
+	r := strings.NewReader("y\nus0\nsekrit-token\n")
+
+	line, err := readLine(r)
+	if err != nil {
+		t.Fatalf("readLine returned error: %v", err)
+	}
+	if line != "y" {
+		t.Fatalf("readLine() = %q, want %q", line, "y")
+	}
+
+	rest, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading remainder failed: %v", err)
+	}
+	if string(rest) != "us0\nsekrit-token\n" {
+		t.Fatalf("remaining input = %q, want %q", string(rest), "us0\nsekrit-token\n")
+	}
+}
+
+func TestReadLineHandlesMissingTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	line, err := readLine(strings.NewReader("y"))
+	if line != "y" {
+		t.Fatalf("readLine() = %q, want %q", line, "y")
+	}
+	if err == nil {
+		t.Fatalf("expected an error (EOF) when the input has no trailing newline")
+	}
+}
