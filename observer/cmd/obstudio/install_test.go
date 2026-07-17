@@ -1480,3 +1480,263 @@ func doSmokeJSONRequest(t *testing.T, client *http.Client, method, url, body str
 	}
 	return resp.StatusCode
 }
+
+func TestMapTargetsToConnectorIDEs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		targets []string
+		want    []string
+	}{
+		{name: "cursor maps to cursor", targets: []string{"cursor"}, want: []string{"cursor"}},
+		{name: "claude-code maps to claude-code", targets: []string{"claude-code"}, want: []string{"claude-code"}},
+		{name: "codex maps to codex", targets: []string{"codex"}, want: []string{"codex"}},
+		{name: "kiro has no connector equivalent", targets: []string{"kiro"}, want: []string{}},
+		{
+			name:    "preserves order and drops kiro from a mixed list",
+			targets: []string{"kiro", "cursor", "codex"},
+			want:    []string{"cursor", "codex"},
+		},
+		{name: "empty input yields empty output", targets: []string{}, want: []string{}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := mapTargetsToConnectorIDEs(tc.targets)
+			if joined, wantJoined := strings.Join(got, ","), strings.Join(tc.want, ","); joined != wantJoined {
+				t.Fatalf("mapTargetsToConnectorIDEs(%v) = %q, want %q", tc.targets, joined, wantJoined)
+			}
+		})
+	}
+}
+
+func TestShouldConnectRemoteO11y(t *testing.T) {
+	t.Parallel()
+
+	trueVal, falseVal := true, false
+
+	tests := []struct {
+		name          string
+		connectFlag   *bool
+		isInteractive bool
+		answer        string
+		want          bool
+	}{
+		{name: "explicit true wins even on a non-interactive session", connectFlag: &trueVal, isInteractive: false, want: true},
+		{name: "explicit true wins even with a no answer", connectFlag: &trueVal, isInteractive: true, answer: "n", want: true},
+		{name: "explicit false suppresses even on an interactive session with a yes answer", connectFlag: &falseVal, isInteractive: true, answer: "y", want: false},
+		{name: "explicit false suppresses on a non-interactive session", connectFlag: &falseVal, isInteractive: false, want: false},
+		{name: "unset flag on non-interactive session skips silently", connectFlag: nil, isInteractive: false, want: false},
+		{name: "unset flag interactive yes answer", connectFlag: nil, isInteractive: true, answer: "y\n", want: true},
+		{name: "unset flag interactive full yes answer", connectFlag: nil, isInteractive: true, answer: "yes", want: true},
+		{name: "unset flag interactive case-insensitive yes", connectFlag: nil, isInteractive: true, answer: "Y", want: true},
+		{name: "unset flag interactive no answer", connectFlag: nil, isInteractive: true, answer: "n", want: false},
+		{name: "unset flag interactive empty answer defaults to no", connectFlag: nil, isInteractive: true, answer: "", want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := shouldConnectRemoteO11y(tc.connectFlag, tc.isInteractive, tc.answer)
+			if got != tc.want {
+				t.Fatalf("shouldConnectRemoteO11y(%v, %v, %q) = %v, want %v", tc.connectFlag, tc.isInteractive, tc.answer, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRemoteO11yConnectArgs(t *testing.T) {
+	t.Parallel()
+
+	got := remoteO11yConnectArgs([]string{"cursor", "codex"})
+	want := []string{"-y", "@splunk/o11y-mcp-connect", "connect", "--ide", "cursor,codex"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("remoteO11yConnectArgs() = %v, want %v", got, want)
+	}
+}
+
+func TestMaybeConnectRemoteO11ySkipsKiroOnlyInstallNonInteractivelyWithoutFlag(t *testing.T) {
+	t.Parallel()
+
+	// A kiro-only install with no flag and no TTY must skip silently like
+	// any other non-interactive, non-opted-in run -- opt-in is decided
+	// before target support is considered, so this must not print the
+	// unsupported-target note the user never asked to see.
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, nil, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11ySkipsNonInteractiveWithoutFlag(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor"}, nil, strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when skipping non-interactively, got: %q", stdout.String())
+	}
+}
+
+// boolPtr returns a pointer to an explicit --connect-remote-o11y value, as
+// opposed to nil, which represents the flag never having been passed.
+func boolPtr(v bool) *bool { return &v }
+
+func TestMaybeConnectRemoteO11yKiroOnlyWithFlagPrintsNoteAndSkipsNpx(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // no npx on PATH -- must not matter, since kiro has no --ide to run
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "doesn't support kiro") {
+		t.Fatalf("expected a kiro fallback note, got: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "npx not found") {
+		t.Fatalf("did not expect an npx lookup for a kiro-only selection, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11yMixedTargetsReportsUnsupportedAndRunsSupported(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 0)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"kiro", "cursor"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "doesn't support kiro") {
+		t.Fatalf("expected a kiro fallback note alongside the cursor connect, got: %q", stdout.String())
+	}
+
+	gotArgv, err := os.ReadFile(argvPath)
+	if err != nil {
+		t.Fatalf("reading captured argv: %v", err)
+	}
+	wantArgv := strings.Join(remoteO11yConnectArgs([]string{"cursor"}), "\n")
+	if strings.TrimRight(string(gotArgv), "\n") != wantArgv {
+		t.Fatalf("npx argv = %q, want %q", gotArgv, wantArgv)
+	}
+}
+
+// writeFakeNpx installs an executable named "npx" in binDir that records its
+// argv (one per line) to argvPath and exits with exitCode, standing in for
+// the real npx/@splunk/o11y-mcp-connect child process in tests.
+func writeFakeNpx(t *testing.T, binDir, argvPath string, exitCode int) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("fake PATH executable scripting is not exercised on Windows")
+	}
+
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > %q\nexit %d\n", argvPath, exitCode)
+	if err := os.WriteFile(filepath.Join(binDir, "npx"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake npx: %v", err)
+	}
+}
+
+func TestMaybeConnectRemoteO11yRunsNpxWithExpectedArgvWhenFlagSet(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 0)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor", "codex"}, boolPtr(true), strings.NewReader(""), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+
+	gotArgv, err := os.ReadFile(argvPath)
+	if err != nil {
+		t.Fatalf("reading captured argv: %v", err)
+	}
+	wantArgv := strings.Join(remoteO11yConnectArgs([]string{"cursor", "codex"}), "\n")
+	if strings.TrimRight(string(gotArgv), "\n") != wantArgv {
+		t.Fatalf("npx argv = %q, want %q", gotArgv, wantArgv)
+	}
+}
+
+func TestMaybeConnectRemoteO11yNpxFailureIsWarningNotError(t *testing.T) {
+	binDir := t.TempDir()
+	argvPath := filepath.Join(t.TempDir(), "argv.txt")
+	writeFakeNpx(t, binDir, argvPath, 1)
+	t.Setenv("PATH", binDir)
+
+	var stdout strings.Builder
+	err := maybeConnectRemoteO11y([]string{"cursor"}, boolPtr(true), strings.NewReader(""), &stdout)
+	if err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error for a failed connect: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Warning: connecting to the remote O11Y MCP server failed") {
+		t.Fatalf("expected a warning about the failed connect, got: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "manual-setup.md") {
+		t.Fatalf("expected the warning to point at the manual setup fallback, got: %q", stdout.String())
+	}
+}
+
+func TestMaybeConnectRemoteO11yExplicitFalseSuppressesInteractivePrompt(t *testing.T) {
+	t.Parallel()
+
+	// An explicit --connect-remote-o11y=false must skip both the prompt and
+	// the connection, even though stdin would otherwise answer "y" -- an
+	// explicit false is not the same as the flag never being passed.
+	var stdout strings.Builder
+	if err := maybeConnectRemoteO11y([]string{"cursor"}, boolPtr(false), strings.NewReader("y\n"), &stdout); err != nil {
+		t.Fatalf("maybeConnectRemoteO11y returned error: %v", err)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected no output when explicitly disabled, got: %q", stdout.String())
+	}
+}
+
+func TestReadLineLeavesLaterInputUntouched(t *testing.T) {
+	t.Parallel()
+
+	// Regression test: a bufio.Reader wrapping stdin can buffer past the
+	// first newline, silently consuming input meant for a later reader of
+	// the same stdin (here, the npx child process). readLine must consume
+	// exactly one line and leave the rest of r untouched.
+	r := strings.NewReader("y\nus0\nsekrit-token\n")
+
+	line, err := readLine(r)
+	if err != nil {
+		t.Fatalf("readLine returned error: %v", err)
+	}
+	if line != "y" {
+		t.Fatalf("readLine() = %q, want %q", line, "y")
+	}
+
+	rest, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading remainder failed: %v", err)
+	}
+	if string(rest) != "us0\nsekrit-token\n" {
+		t.Fatalf("remaining input = %q, want %q", string(rest), "us0\nsekrit-token\n")
+	}
+}
+
+func TestReadLineHandlesMissingTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	line, err := readLine(strings.NewReader("y"))
+	if line != "y" {
+		t.Fatalf("readLine() = %q, want %q", line, "y")
+	}
+	if err == nil {
+		t.Fatalf("expected an error (EOF) when the input has no trailing newline")
+	}
+}
