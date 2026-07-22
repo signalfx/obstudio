@@ -114,6 +114,17 @@ PROHIBITED_AUDIT_SECTION_OUTPUT = re.compile(
     r"link validation)\b"
 )
 OWNER_PLACEHOLDER = re.compile(r"^(?:tbd|unknown|owner|someone|team|n/?a)$", re.IGNORECASE)
+EXTERNAL_OWNER_CATEGORY = re.compile(
+    r"(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
+    r"(?:\s*/\s*(?:external|provider|platform|vendor|third[- ]party|"
+    r"managed[- ]service))?(?:[- ]owned|\s+owner)?",
+    re.IGNORECASE,
+)
+GENERIC_EXTERNAL_OWNER_DETAIL = re.compile(
+    r"(?:(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
+    r"(?:[- ]owned)?(?:\s+(?:owner|team))?|owner|team)",
+    re.IGNORECASE,
+)
 DECISION_CHOICE = re.compile(r"\b(?:which|whether|should|choose|select)\b", re.IGNORECASE)
 EXTERNAL_ACTION = re.compile(
     r"\b(?:emit|export|configure|provide|supply|expose|prove|verify)(?:s|d|ed|ing)?\b",
@@ -122,6 +133,45 @@ EXTERNAL_ACTION = re.compile(
 CLOSURE_STATUSES = {"working", "not_working", "not_proven", "not_configured", "deferred"}
 GENAI_CLOSURE_STATUSES = CLOSURE_STATUSES | {"partial", "owner_mapped"}
 GENAI_PASS_STATUSES = {"working", "deferred", "owner_mapped"}
+NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF = re.compile(
+    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
+    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
+    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
+    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
+    r"\btests?\s+(?:are\s+)?blocked\b)",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
+    r"npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"go\s+test|pytest|cargo\s+test|npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+POSITIVE_INSTRUMENTATION_EVIDENCE = re.compile(
+    r"(?:^|/)\.observe/evidence/|"
+    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
+    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
+    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
+    r"exported|recorded|assertion)\b",
+    re.IGNORECASE,
+)
+DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
+    re.IGNORECASE,
+)
+NON_PROOF_INSTRUMENTATION_ARTIFACT_LABEL = re.compile(
+    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
+    r"pending|skipped|unknown)\b",
+    re.IGNORECASE,
+)
 SCENARIO_STATUSES = {"working", "not_working", "not_proven", "not_configured", "blocked"}
 CHANGE_KINDS = {"added", "modified", "removed"}
 PROOF_MODES = {"app_test", "unit", "unit+otlp", "full_runtime", "contract_only", "static", "not_run"}
@@ -196,6 +246,20 @@ class ReportError(ValueError):
 
 def fail(message: str) -> None:
     raise ReportError(message)
+
+
+def has_exact_external_owner(value: str) -> bool:
+    """Require a category-prefixed owner with a concrete named source."""
+
+    category, separator, detail = value.partition(":")
+    detail = detail.strip()
+    return bool(
+        separator
+        and EXTERNAL_OWNER_CATEGORY.fullmatch(category.strip())
+        and detail
+        and not OWNER_PLACEHOLDER.fullmatch(detail)
+        and not GENERIC_EXTERNAL_OWNER_DETAIL.fullmatch(detail)
+    )
 
 
 def as_object(value: Any, path: str) -> dict[str, Any]:
@@ -1439,6 +1503,13 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
             if row["surface"] in genai_surfaces:
                 fail(f"duplicate GenAI readiness surface: {row['surface']}")
             genai_surfaces.add(row["surface"])
+            if row["status"] == "owner-mapped" and not has_exact_external_owner(
+                row["owner"]
+            ):
+                fail(
+                    f"genai_readiness[{index}].owner must name an exact external, "
+                    "provider, or platform owner for owner-mapped status"
+                )
             for field in ("surface", "required_signals", "acceptance_criteria"):
                 validate_otel_closure_text(
                     row[field],
@@ -1446,10 +1517,12 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
                     audit_section=True,
                 )
         if status == "Pass" and any(
-            row["status"] != "covered" for row in genai_readiness
+            row["status"] not in {"covered", "owner-mapped"}
+            for row in genai_readiness
         ):
             fail(
-                "meta.status Pass requires every GenAI readiness surface to be covered"
+                "meta.status Pass requires every GenAI readiness surface to be "
+                "covered or owner-mapped"
             )
 
     incident_readiness = normalize_signal_rows(
@@ -1596,7 +1669,7 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     incomplete_readiness_areas = {
         row["area"]
         for row in report["current_instrumentation"]["incident_readiness"]
-        if row["status"] in {"partial", "missing"}
+        if row["status"] in {"partial", "missing", "owner-mapped"}
     }
     unresolved_findings_by_area = {
         finding["area"]: finding
@@ -1608,7 +1681,7 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     )
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and unmapped_readiness:
         fail(
-            "partial or missing incident readiness areas require identical "
+            "partial, missing, or owner-mapped incident readiness areas require identical "
             "unresolved finding areas: "
             f"{unmapped_readiness}"
         )
@@ -1620,7 +1693,7 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     )
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and readiness_without_scenarios:
         fail(
-            "partial or missing incident readiness findings require verification "
+            "partial, missing, or owner-mapped incident readiness findings require verification "
             f"scenarios: {readiness_without_scenarios}"
         )
     incomplete_genai_surfaces = {
@@ -1648,23 +1721,24 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
             "partial or missing GenAI readiness findings require verification "
             f"scenarios: {genai_without_scenarios}"
         )
-    covered_genai_with_unresolved_findings = sorted(
+    complete_genai_with_unresolved_findings = sorted(
         {
             row["surface"]
             for row in report["genai_readiness"]
-            if row["status"] == "covered"
+            if row["status"] in {"covered", "owner-mapped"}
         }
         & set(unresolved_findings_by_area)
     )
     if (
         audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and covered_genai_with_unresolved_findings
+        and complete_genai_with_unresolved_findings
     ):
         fail(
-            "covered GenAI readiness surfaces must not have unresolved findings: "
-            f"{covered_genai_with_unresolved_findings}"
+            "covered or owner-mapped GenAI readiness surfaces must not have "
+            "unresolved findings: "
+            f"{complete_genai_with_unresolved_findings}"
         )
-    covered_with_unresolved_findings = sorted(
+    complete_with_unresolved_findings = sorted(
         {
             row["area"]
             for row in report["current_instrumentation"]["incident_readiness"]
@@ -1674,11 +1748,12 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     )
     if (
         audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and covered_with_unresolved_findings
+        and complete_with_unresolved_findings
     ):
         fail(
-            "covered incident readiness areas must not have unresolved findings: "
-            f"{covered_with_unresolved_findings}"
+            "covered incident readiness areas must not have "
+            "unresolved findings: "
+            f"{complete_with_unresolved_findings}"
         )
     raw_flow = report["signal_flow"]["component_flow_map"]
     invalid_markers = sorted(
@@ -5055,6 +5130,150 @@ def instrumentation_report_next_steps(
     return ["Run $otel-verify with the same instrumentation selection."]
 
 
+def has_meaningful_instrumentation_proof(
+    instrumentation: dict[str, Any],
+) -> bool:
+    """Return whether implementation-owned scope records completed proof."""
+
+    def affirmative_entries(value: object, pattern: re.Pattern[str]) -> bool:
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(
+                isinstance(item, str)
+                and bool(item.strip())
+                and not NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF.search(
+                    re.sub(r"[._/-]+", " ", item)
+                )
+                and pattern.search(re.sub(r"[._/-]+", " ", item))
+                for item in value
+            )
+        )
+
+    def positive_evidence(value: object) -> bool:
+        def positive_item(item: object) -> bool:
+            if not isinstance(item, str) or not item.strip():
+                return False
+            artifact_refs = list(
+                DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE.finditer(item)
+            )
+            if any(
+                NON_PROOF_INSTRUMENTATION_ARTIFACT_LABEL.search(
+                    re.sub(r"[._/\\-]+", " ", match.group(0))
+                )
+                for match in artifact_refs
+            ):
+                return False
+            outcome_prose = DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE.sub(" ", item)
+            return bool(
+                not NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF.search(
+                    re.sub(r"[._/\\-]+", " ", outcome_prose)
+                )
+                and POSITIVE_INSTRUMENTATION_EVIDENCE.search(item)
+            )
+
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(positive_item(item) for item in value)
+        )
+
+    for finding in instrumentation.get("findings", []):
+        if (
+            finding.get("status") == "working"
+            and affirmative_entries(
+                finding.get("tests"), AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF
+            )
+            and positive_evidence(finding.get("evidence"))
+        ):
+            return True
+    for row in instrumentation.get("genai_closure", []):
+        if (
+            row.get("status") in {"working", "partial"}
+            and affirmative_entries(
+                row.get("implemented_proven"), AFFIRMATIVE_IMPLEMENTATION_PROOF
+            )
+            and affirmative_entries(
+                row.get("tests"), AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF
+            )
+            and positive_evidence(row.get("evidence"))
+        ):
+            return True
+    return False
+
+
+def aggregate_instrumentation_result(
+    instrumentation: dict[str, Any],
+    verify: dict[str, Any] | None,
+) -> str:
+    """Combine verification state with instrumentation-owned GenAI closure."""
+
+    if verify is None:
+        return instrumentation["meta"]["result"]
+    verification_result = verify["meta"]["result"]
+    if verification_result not in RESULT_STATUSES:
+        fail(f"unsupported verification result: {verification_result}")
+    genai_statuses = [
+        row["status"] for row in instrumentation.get("genai_closure", [])
+    ]
+    if verification_result == "Fail" or "not_working" in genai_statuses:
+        return "Fail"
+    if verification_result == "Blocked":
+        return (
+            "Partial"
+            if has_meaningful_instrumentation_proof(instrumentation)
+            else "Blocked"
+        )
+    if verification_result in {"Partial", "Not run"}:
+        return "Partial"
+    if all(status in GENAI_PASS_STATUSES for status in genai_statuses):
+        return "Pass"
+    return "Partial"
+
+
+def render_genai_closure_summary(instrumentation: dict[str, Any]) -> str:
+    """Render the complete GenAI closure inventory as one concise projection."""
+
+    rows = instrumentation.get("genai_closure", [])
+    if not rows:
+        return ""
+    closed = sum(row["status"] in GENAI_PASS_STATUSES for row in rows)
+    status_labels = {
+        "working": "working",
+        "partial": "partial",
+        "not_working": "not working",
+        "not_proven": "not proven",
+        "not_configured": "not configured",
+        "deferred": "deferred",
+        "owner_mapped": "owner mapped",
+    }
+    rendered_rows = []
+    for row in rows:
+        ready = "; ".join(row["implemented_proven"]) or "None recorded"
+        remaining = "; ".join(row["remaining_signals"]) or "None"
+        rendered_rows.append(
+            "<tr>"
+            f'<td><strong>{esc(row["surface"])}</strong></td>'
+            f'<td>{esc(status_labels[row["status"]])}</td>'
+            f'<td>{esc(reader_prose(ready))}</td>'
+            f'<td>{esc(reader_prose(remaining))}<br>'
+            f'<span class="muted">Owner: {esc(row["owner"])}</span></td>'
+            "</tr>"
+        )
+    surface_word = "surface is" if len(rows) == 1 else "surfaces are"
+    return (
+        '<section class="panel" aria-labelledby="genai-closure-heading">'
+        '<h2 id="genai-closure-heading">GenAI telemetry closure</h2>'
+        f'<p><strong>{closed} of {len(rows)} {surface_word} closed.</strong> '
+        "Closed means working, deferred, or assigned to the named external owner.</p>"
+        '<div class="table-wrap"><table><thead><tr>'
+        '<th>Surface</th><th>Status</th><th>What is ready</th>'
+        '<th>What remains / owner</th>'
+        f'</tr></thead><tbody>{"".join(rendered_rows)}</tbody></table></div>'
+        "</section>"
+    )
+
+
 def render_instrumentation_summary(
     selection: dict[str, Any],
     instrumentation: dict[str, Any],
@@ -5062,21 +5281,36 @@ def render_instrumentation_summary(
 ) -> str:
     counts = instrumentation_proof_counts(instrumentation, verify)
     verification_result = verify["meta"]["result"] if verify else "Not run"
+    aggregate_result = aggregate_instrumentation_result(instrumentation, verify)
     total = counts["telemetry_items"]
     failed_findings = counts["findings_failed"]
-    if verification_result == "Pass":
-        heading = "Verification complete"
-    elif verification_result == "Partial" and failed_findings == 0:
-        heading = "Verification incomplete — no observed failures"
-    elif verification_result == "Fail":
+    if verify is None:
+        heading = {
+            "Pass": "Instrumentation complete — verification not run",
+            "Partial": "Instrumentation incomplete — verification not run",
+            "Fail": "Instrumentation failed — verification not run",
+            "Blocked": "Instrumentation blocked — verification not run",
+            "Not run": "Instrumentation and verification not run",
+        }[aggregate_result]
+    elif aggregate_result == "Pass":
+        heading = "Instrumentation and verification complete"
+    elif aggregate_result == "Fail" and verification_result == "Fail":
         failure_word = "failure" if failed_findings == 1 else "failures"
         heading = f"Verification failed — {failed_findings} observed {failure_word}"
-    elif verification_result == "Blocked":
+    elif aggregate_result == "Fail":
+        heading = "Instrumentation failed — GenAI closure has a failed surface"
+    elif aggregate_result == "Partial" and verification_result == "Pass":
+        heading = "Verification complete — GenAI closure remains"
+    elif verification_result == "Partial" and failed_findings == 0:
+        heading = "Verification incomplete — no observed failures"
+    elif aggregate_result == "Partial" and verification_result == "Blocked":
+        heading = "Instrumentation partial — verification blocked"
+    elif aggregate_result == "Blocked":
         heading = "Verification blocked"
     elif verification_result == "Not run":
-        heading = "Verification not run"
+        heading = "Instrumentation partial — verification not run"
     else:
-        heading = verification_result
+        heading = aggregate_result
 
     if total == 0:
         proof_sentence = "No telemetry changes were recorded; this is proof-only scope."
@@ -5107,7 +5341,8 @@ def render_instrumentation_summary(
         )
     return (
         f'<h2 id="instrumentation-status-heading" class="status-heading">{esc(heading)}</h2>'
-        f'<p>{esc(proof_sentence)} {esc(delivery_sentence)}</p>'
+        f'<p><strong>Overall result: {esc(aggregate_result)}.</strong> '
+        f'{esc(proof_sentence)} {esc(delivery_sentence)}</p>'
     )
 
 
@@ -5340,6 +5575,8 @@ def render_instrumentation_html(
 ) -> str:
     title = esc(report["meta"]["service_name"])
     summary = render_instrumentation_summary(selection, instrumentation, verify)
+    genai_closure = render_genai_closure_summary(instrumentation)
+    genai_closure_section = f"  {genai_closure}\n" if genai_closure else ""
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
     selection_sha = selection_digest(selection)
@@ -5467,7 +5704,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
-  <section class="panel" aria-labelledby="selected-issues-heading">
+{genai_closure_section}  <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>
     <p class="review-note">Each issue shows what changed, how observability improves, telemetry-item proof, scenario coverage, and any remaining uncertainty.</p>

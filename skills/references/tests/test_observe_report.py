@@ -371,7 +371,11 @@ def sample_verify(
 
 class ObserveReportTest(unittest.TestCase):
     def test_example_report_companions_are_canonical_and_bound(self) -> None:
-        example_root = Path(__file__).parents[3] / "docs" / "example-reports"
+        repo_root = Path(__file__).parents[3]
+        example_root = repo_root / "docs" / "example-reports"
+        fixture_root = (
+            repo_root / "evals" / "go" / "chi-basic" / "eval" / "inputs"
+        )
         audit_raw = json.loads((example_root / "otel-audit.json").read_text())
         selection_raw = json.loads(
             (example_root / "otel-selection.json").read_text()
@@ -382,6 +386,22 @@ class ObserveReportTest(unittest.TestCase):
         verify_raw = json.loads((example_root / "otel-verify.json").read_text())
 
         report = MODULE.normalize_audit_report(audit_raw)
+        self.assertEqual(
+            report,
+            MODULE.normalize_audit_report(
+                json.loads((fixture_root / "otel-audit.json").read_text())
+            ),
+        )
+        for filename, published in (
+            ("otel-selection.json", selection_raw),
+            ("otel-instrumentation.json", instrumentation_raw),
+            ("otel-verify.json", verify_raw),
+        ):
+            self.assertEqual(
+                published,
+                json.loads((fixture_root / filename).read_text()),
+                f"published {filename} must match its canonical fixture input",
+            )
         self.assertEqual(audit_raw, report)
         selection = MODULE.normalize_selection(selection_raw, report)
         instrumentation = MODULE.normalize_instrumentation(
@@ -403,6 +423,26 @@ class ObserveReportTest(unittest.TestCase):
             verify["instrumentation_sha256"],
             MODULE.instrumentation_digest(instrumentation),
         )
+        self.assertEqual(
+            [
+                item["id"]
+                for finding in instrumentation["findings"]
+                for item in finding["telemetry_changes"]
+            ],
+            ["OTEL-001.http-health-span"],
+        )
+        self.assertEqual(
+            [
+                item["id"]
+                for finding in verify["findings"]
+                for item in finding["item_results"]
+            ],
+            ["OTEL-001.http-health-span"],
+        )
+        recommendation = " ".join(report["recommendation"])
+        self.assertIn(".observe/otel-selection.json", recommendation)
+        self.assertIn("$otel-instrument", recommendation)
+        self.assertNotIn("$otel-instrument --ids", recommendation)
         instrumentation_html = (
             example_root / "otel-instrumentation.html"
         ).read_text()
@@ -410,6 +450,8 @@ class ObserveReportTest(unittest.TestCase):
             f'<meta name="otel-selection-sha256" content="{MODULE.selection_digest(selection)}">',
             instrumentation_html,
         )
+        self.assertIn("1 of 1 telemetry change is proven", instrumentation_html)
+        self.assertNotIn("Removed span: HttpRequest", instrumentation_html)
         self.assertIn("were outside this instrumentation run", instrumentation_html)
         self.assertNotIn("were not implemented in this run", instrumentation_html)
 
@@ -865,6 +907,174 @@ class ObserveReportTest(unittest.TestCase):
 
         self.assertNotEqual(first_digest, MODULE.instrumentation_digest(second))
         self.assertEqual(first["genai_closure"][0]["status"], "partial")
+
+    def test_instrumentation_html_aggregates_and_projects_partial_genai_closure(
+        self,
+    ) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        instrumentation = MODULE.normalize_instrumentation(
+            sample_instrumentation(report, digest, selection),
+            report,
+            selection,
+        )
+        instrumentation["meta"]["result"] = "Partial"
+        instrumentation["genai_closure"] = [
+            {
+                "surface": "Model identity",
+                "required_signals": "model name and version",
+                "owner": "assistant runtime team",
+                "implemented_proven": ["Bounded model name is recorded."],
+                "tests": ["Model-name unit test passed."],
+                "evidence": [".observe/evidence/genai/model-name.json"],
+                "remaining_signals": ["Runtime model-version proof"],
+                "status": "partial",
+            }
+        ]
+        verify = sample_verify(
+            report,
+            digest,
+            MODULE.instrumentation_digest(instrumentation),
+        )
+        verify["meta"]["result"] = "Pass"
+        finding = verify["findings"][0]
+        finding["status"] = "working"
+        finding["remaining"] = []
+        finding["scenarios"][0]["status"] = "working"
+        finding["item_results"][0].update(
+            {
+                "status": "working",
+                "direct_assertion_passed": True,
+                "observed_telemetry": [
+                    "The generated trace contains span GET /checkout with "
+                    "http.route."
+                ],
+                "product_validation": ["The local receiver accepted the span."],
+            }
+        )
+
+        summary = MODULE.render_instrumentation_summary(
+            selection, instrumentation, verify
+        )
+        rendered = MODULE.render_instrumentation_html(
+            report, selection, instrumentation, verify
+        )
+
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Partial",
+        )
+        self.assertIn("Overall result: Partial", summary)
+        self.assertIn("Verification complete — GenAI closure remains", summary)
+        self.assertNotIn("Instrumentation and verification complete", summary)
+        self.assertIn("GenAI telemetry closure", rendered)
+        self.assertIn("0 of 1 surface is closed", rendered)
+        self.assertIn("Model identity", rendered)
+        self.assertIn("Bounded model name is recorded.", rendered)
+        self.assertIn("Runtime model-version proof", rendered)
+        self.assertIn("Owner: assistant runtime team", rendered)
+
+        instrumentation["meta"]["result"] = "Fail"
+        instrumentation["genai_closure"][0]["status"] = "not_working"
+        verify["meta"]["result"] = "Partial"
+        failed_summary = MODULE.render_instrumentation_summary(
+            selection, instrumentation, verify
+        )
+        self.assertIn(
+            "Instrumentation failed — GenAI closure has a failed surface",
+            failed_summary,
+        )
+        self.assertNotIn(
+            "Verification incomplete — no observed failures", failed_summary
+        )
+
+    def test_aggregate_result_keeps_blocked_without_implementation_proof(self) -> None:
+        instrumentation = {
+            "meta": {"result": "Partial"},
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./..."],
+                    "evidence": ["main.go:42"],
+                }
+            ],
+            "genai_closure": [],
+        }
+        verify = {"meta": {"result": "Blocked"}, "findings": []}
+
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Blocked",
+        )
+        instrumentation["findings"][0]["evidence"] = [
+            ".observe/evidence/go-test.txt"
+        ]
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Partial",
+        )
+
+        instrumentation["findings"][0].update(
+            {
+                "tests": ["go test ./... failed"],
+                "evidence": [".observe/evidence/go-test.log"],
+            }
+        )
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Blocked",
+        )
+        instrumentation["findings"] = []
+        instrumentation["genai_closure"] = [
+            {
+                "status": "partial",
+                "implemented_proven": ["Provider span emitted."],
+                "tests": ["not proven"],
+                "evidence": [".observe/evidence/not-proven.log"],
+            }
+        ]
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Blocked",
+        )
+
+        instrumentation["findings"] = [
+            {
+                "status": "working",
+                "tests": ["go test ./... passed"],
+                "evidence": [".observe/evidence/http-failure.json"],
+            }
+        ]
+        instrumentation["genai_closure"] = []
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Partial",
+        )
+
+        instrumentation["findings"] = []
+        instrumentation["genai_closure"] = [
+            {
+                "status": "partial",
+                "implemented_proven": ["span implemented"],
+                "tests": ["collector configured"],
+                "evidence": [".observe/evidence/config.json"],
+            }
+        ]
+        self.assertEqual(
+            MODULE.aggregate_instrumentation_result(instrumentation, verify),
+            "Blocked",
+        )
 
     def test_verify_result_and_failed_repairs_are_semantically_consistent(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -2423,6 +2633,16 @@ class ObserveReportTest(unittest.TestCase):
         ):
             MODULE.normalize_audit_report(missing)
 
+        owner_mapped_without_owner = copy.deepcopy(missing)
+        owner_mapped_without_owner["current_instrumentation"]["incident_readiness"][0][  # type: ignore[index]
+            "status"
+        ] = "owner-mapped"
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            "owner-mapped incident readiness areas require identical unresolved",
+        ):
+            MODULE.normalize_audit_report(owner_mapped_without_owner)
+
         covered = sample_report()
         covered["meta"]["status"] = "Pass"  # type: ignore[index]
         covered["findings"] = []
@@ -2547,8 +2767,45 @@ class ObserveReportTest(unittest.TestCase):
 
         contradictory = copy.deepcopy(invalid)
         contradictory["genai_readiness"] = [{**row, "status": "covered"}]
-        with self.assertRaisesRegex(MODULE.ReportError, "covered GenAI readiness surfaces"):
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "covered or owner-mapped GenAI readiness surfaces"
+        ):
             MODULE.normalize_audit_report(contradictory)
+
+        owner_mapped_contradiction = copy.deepcopy(invalid)
+        owner_mapped_contradiction["genai_readiness"] = [
+            {
+                **row,
+                "status": "owner-mapped",
+                "owner": "Provider/platform-owned: billing API",
+            }
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "covered or owner-mapped GenAI readiness surfaces"
+        ):
+            MODULE.normalize_audit_report(owner_mapped_contradiction)
+
+        app_owned_mapping = copy.deepcopy(invalid)
+        app_owned_mapping["genai_readiness"] = [
+            {
+                **row,
+                "status": "owner-mapped",
+                "owner": "App-owned: assistant.go",
+            }
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "must name an exact external"
+        ):
+            MODULE.normalize_audit_report(app_owned_mapping)
+
+        generic_external_mapping = copy.deepcopy(invalid)
+        generic_external_mapping["genai_readiness"] = [
+            {**row, "status": "owner-mapped", "owner": "external team"}
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "must name an exact external"
+        ):
+            MODULE.normalize_audit_report(generic_external_mapping)
 
         passed = copy.deepcopy(invalid)
         passed["meta"]["status"] = "Pass"  # type: ignore[index]
@@ -2556,6 +2813,30 @@ class ObserveReportTest(unittest.TestCase):
         passed["genai_readiness"] = [{**row, "status": "partial"}]
         with self.assertRaisesRegex(MODULE.ReportError, "every GenAI readiness surface"):
             MODULE.normalize_audit_report(passed)
+
+        owner_mapped_pass = copy.deepcopy(invalid)
+        owner_mapped_pass["meta"]["status"] = "Pass"  # type: ignore[index]
+        owner_mapped_pass["findings"] = []
+        owner_mapped_pass["signal_flow"]["component_flow_map"] = (  # type: ignore[index]
+            "assistant [SOURCE-COVERED] -> provider [SOURCE-COVERED]"
+        )
+        owner_mapped_pass["genai_readiness"] = [
+            {
+                **row,
+                "surface": "Provider billing",
+                "status": "owner-mapped",
+                "evidence": "Provider billing API is outside the repository.",
+                "required_signals": "provider token cost metric",
+                "owner": "Provider/platform-owned: billing API",
+                "acceptance_criteria": "Provider owner exports a bounded token cost metric.",
+            }
+        ]
+        normalized_owner_mapped = MODULE.normalize_audit_report(owner_mapped_pass)
+        self.assertEqual(normalized_owner_mapped["meta"]["status"], "Pass")
+        self.assertEqual(
+            normalized_owner_mapped["genai_readiness"][0]["status"],
+            "owner-mapped",
+        )
 
     def test_audit_rejects_duplicate_finding_scenario_references(self) -> None:
         data = sample_report()

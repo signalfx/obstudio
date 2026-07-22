@@ -116,4 +116,4 @@ None.
 
 ## Recommendation
 
-- Run $otel-instrument --ids OTEL-001; leave OTEL-002 unselected.
+- Save the reviewed selection as .observe/otel-selection.json, then run $otel-instrument; leave OTEL-002 unselected.
