@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,7 +68,7 @@ type httpConn struct {
 const grpcConnIDMetadataKey = "x-obstudio-conn-id"
 
 // StartConnTracker creates a gRPC proxy and an HTTP OTLP handler with connection tracking.
-// The gRPC proxy tracks connections for disconnect detection.
+// The loopback-only gRPC proxy tracks connections for disconnect detection.
 // The HTTP handler resolves PIDs and monitors process liveness.
 // internalGRPCAddr is where the internal gRPC receiver listens.
 func StartConnTracker(
@@ -269,6 +270,10 @@ func (ct *ConnTracker) removeGRPCConn(id string) {
 // --- gRPC proxy ---
 
 func (ct *ConnTracker) startGRPCProxy(listenAddr, backendAddr string) error {
+	if err := validateLoopbackAddress(listenAddr); err != nil {
+		return err
+	}
+
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", listenAddr, err)
@@ -285,12 +290,28 @@ func (ct *ConnTracker) startGRPCProxy(listenAddr, backendAddr string) error {
 	}
 	ct.backendCC = backendConn
 
-	ct.grpcServer = grpc.NewServer(
+	// Plaintext is safe here because validateLoopbackAddress rejects network-facing listeners.
+	ct.grpcServer = grpc.NewServer( // nosemgrep: tools.semgrep.rules.CCF.grpc-server-insecure-connection
 		grpc.StatsHandler(&grpcConnHandler{ct: ct}),
 		grpc.UnknownServiceHandler(newStreamForwarder(backendConn)),
 	)
 
 	go ct.grpcServer.Serve(ln)
+	return nil
+}
+
+func validateLoopbackAddress(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("parse gRPC proxy address %q: %w", address, err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("gRPC proxy address %q must use a loopback host", address)
+	}
 	return nil
 }
 
