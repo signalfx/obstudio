@@ -370,10 +370,16 @@ scenarios form the closure contract for `$otel-instrument` and
 `$splunk-configure`:
 
 - Use only `covered`, `partial`, `missing`, or `owner-mapped` readiness
-  statuses. Areas are unique. Every `partial` or `missing` area must exactly
-  match one finding with at least one verification scenario; a `covered` area
-  must not have an unresolved finding. These invariants prevent a `Pass` audit
-  from hiding missing readiness.
+  statuses. Areas are unique. Every `partial`, `missing`, or Incident Readiness
+  `owner-mapped` area must exactly match one finding with at least one
+  verification scenario; Incident Readiness has no owner field, so its
+  `owner-mapped` state remains unresolved. A GenAI `owner-mapped` row is
+  complete only when its owner names a concrete external/provider/platform
+  source with a category-prefixed value such as `Provider/platform-owned:
+  billing API`. Generic categories or team labels are not exact owners. Only a
+  `covered` Incident Readiness area is complete and must not have an unresolved
+  finding; `covered` and valid `owner-mapped` GenAI areas must not have one.
+  These invariants prevent a `Pass` audit from hiding missing readiness.
 
 - `Area` is the stable human-readable gap identity used downstream.
 - `Gap` is one concise, plain-language sentence that states only the missing or

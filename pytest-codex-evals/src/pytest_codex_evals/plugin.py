@@ -166,6 +166,7 @@ def collect_worker_results(config: pytest.Config) -> list[dict[str, Any]]:
     if not root.is_dir():
         return []
     ensure_safe_output_directory(root, repo_root)
+    root_identity = path_directory_identity(root)
 
     repo_root = repo_root.resolve()
     run_id = getattr(config, RUN_ID_ATTR)
@@ -174,7 +175,13 @@ def collect_worker_results(config: pytest.Config) -> list[dict[str, Any]]:
     for path in sorted(root.glob("*.json")):
         if path.is_symlink():
             raise ValueError(f"worker result must not be a symlink: {path}")
-        payload = json.loads(read_regular_text(path))
+        payload = json.loads(
+            read_regular_text(
+                path,
+                boundary=root,
+                expected_boundary_identity=root_identity,
+            )
+        )
         if not isinstance(payload, dict):
             raise ValueError(f"worker result must be an object: {path}")
         mode = payload.get("mode")

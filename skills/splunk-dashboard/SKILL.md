@@ -98,8 +98,21 @@ In canonical JSON mode:
 
 In legacy fallback mode, extract service metadata, the `### Metrics` table,
 gaps, and `## GenAI Readiness` from `.observe/otel.md`; extract implemented
-signals from `.observe/otel-instrumentation.md` and exact `Working` proof from
-`.observe/otel-verify.md` when present.
+signals from `.observe/otel-instrumentation.md` and exact `Working` metric proof
+from an explicitly supplied `.observe/otel-verify.md`. Never reinterpret legacy
+proof as a source-only exception, and never use it when any canonical JSON
+artifact exists.
+
+Legacy verification is proof only when the report has exactly one overall
+`Result` and its full `## Tested And Working` item table records a stable item
+ID, exact metric name, `Type: Metric`, `Working`, an executed direct
+`proof_mode` with exact scenario IDs, a named product result with explicit
+visibility, and positive durable evidence such as a saved collector response
+or repository evidence artifact. A bare `Working` label, source location,
+`not_run`, `scenarios=none`, `visibility=not_proven`, or a blocked/not-run
+overall result cannot authorize a panel. If that legacy proof is unavailable,
+skip the metric or require an explicit source-only acceptance; do not silently
+promote the row to verified.
 
 Generate panels only for metrics that are source-backed and either verified by
 the authoritative verification overlay or explicitly accepted by the user as
@@ -252,11 +265,14 @@ while writing HCL (per `../references/terraform-normalization.md`), write the
   metric. `productAction` is the item-specific chart or dashboard follow-up;
   both fields are required on every chart.
 - `layout` mirrors the HCL `chart {}` block exactly: `column` 0-11, `row` ≥0,
-  `width` 1-12, `height` ≥1. The grid is 12 columns wide.
+  `width` 1-12, `height` ≥1. All four values and `schemaVersion` must be JSON
+  integers within the signed 64-bit range used by supported Observer binaries;
+  booleans are invalid. The grid is 12 columns wide.
 
-Keep the preview sidecar in lockstep with `dashboards.tf`: every chart in the HCL
-appears exactly once in the sidecar with the same label, type, resolved query,
-and grid placement.
+Keep the preview sidecar in lockstep with `dashboards.tf`: every group,
+dashboard, and chart in the HCL appears exactly once in the sidecar, including
+unused groups and empty dashboards. Charts must retain the same label, type,
+resolved query, and grid placement.
 
 Validate this parity deterministically before reporting success. Also validate
 that every preview chart maps back to a verified telemetry item ID and its
@@ -280,9 +296,12 @@ python3 scripts/validate_dashboard_output.py \
 
 The validator resolves defaults from the sibling `variables.tf` automatically.
 Pass `--tfvars <path>` only when the generated queries intentionally use
-non-secret overrides. In a legacy or explicitly accepted source-only flow, use
+non-secret overrides. In an explicitly accepted source-only flow, use
 `SOURCE-METRIC.<exact-metric-name>` in the chart and pass the same value with
 `--allow-source-only-item`; record that acceptance in `.observe/dashboards.md`.
+For legacy proof instead, pass `--legacy-verification
+<repo>/.observe/otel-verify.md`; this is valid only when no canonical JSON
+artifact exists and does not require a source-only exception.
 Never invent an `OTEL-###` item or use the exception for a new metric that
 should have verification proof. The validator fails on missing/extra
 charts, group/dashboard/chart hierarchy drift, query/type/layout drift,

@@ -583,14 +583,19 @@ telemetry-scoped surfaces with this table:
 |---|---|---|---|---|
 ```
 
-Every telemetry-scoped `partial` or `missing` row must have a prioritized,
-unresolved `## Gaps` row whose `Area` cell is identical and whose
-verification-scenario IDs define the telemetry proof handoff. Use only
-`covered`, `partial`, `missing`, or `owner-mapped`; areas are unique, and
-`covered` must not conflict with an unresolved same-area finding. `done`,
-`rejected`, and `deferred` findings do not satisfy a partial/missing row and do
-not conflict with a covered row. These rules prevent `Pass` from hiding missing
-readiness. Do not add a readiness row solely for API
+Every telemetry-scoped `partial`, `missing`, or `owner-mapped` Incident
+Readiness row must have a prioritized, unresolved `## Gaps` row whose `Area`
+cell is identical and whose verification-scenario IDs define the telemetry
+proof handoff. Incident Readiness has no owner field, so `owner-mapped` remains
+unresolved and only `covered` is complete. Use only `covered`, `partial`,
+`missing`, or `owner-mapped`; areas are unique, and `covered` must not conflict
+with an unresolved same-area finding. For GenAI Readiness, `owner-mapped` is
+complete only when its owner names a concrete external/provider/platform
+source in a category-prefixed value such as `Provider/platform-owned: billing
+API`; generic categories or team labels are not exact owners. `done`,
+`rejected`, and `deferred` findings do not satisfy an unresolved readiness row
+and do not conflict with a complete row. These rules prevent `Pass` from hiding
+missing readiness. Do not add a readiness row solely for API
 behavior, policy, documentation, contract, ownership links, or general test
 hygiene. This is a nested current-state view, not a second top-level gap ledger.
 
@@ -896,6 +901,16 @@ Use these sections before any diagnostic detail:
 |---|---|---|---|---|---|---|---|
 ```
 
+Project the two proof columns mechanically from canonical verification JSON:
+`How it was tested` is `proof_mode=<proof_mode>; scenarios=<comma-separated
+scenario IDs>` (or `scenarios=none`), and `Product result / visibility` is the
+semicolon-joined `product_validation` followed by `visibility=<visibility>`.
+`observed_telemetry` is observation evidence, not the test-mode projection.
+When the bound instrumentation inventory is empty for proof-first findings,
+keep the header with zero rows, report `0/0 working`, and add exactly `No
+telemetry items. Selected findings are proof-first verification scope.` Never
+use that zero-row form without an empty bound instrumentation inventory.
+
 Use one row per exact route/server span, custom span call site, metric, log
 pipeline/category, and runtime/exporter behavior. If multiple modified call
 sites emit the same span name, keep separate rows and identify the call site.
@@ -983,8 +998,8 @@ an exact one-to-one mapping between accepted signal provenance IDs, Terraform
 charts, and preview charts, including resolved query and grid placement. Treat
 implemented items as `OTEL-###.<item>`. Represent an explicitly accepted
 pre-existing metric as `SOURCE-METRIC.<exact-metric-name>` so the source path is
-stable without inventing an instrumentation item ID.
-preview generation, Observer rendering, live value sanity, and live publish as
+stable without inventing an instrumentation item ID. Treat preview generation,
+Observer rendering, live value sanity, and live publish as
 four separate states. A sidecar on disk proves only preview-contract generation;
 never claim the UI rendered it, the query returned plausible data, or a live
 resource exists without direct evidence for that stage.

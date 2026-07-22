@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "otel-instrumentation",
   "audit_id": "go-chi-basic-fixture",
-  "audit_sha256": "sha256:bd62d2d6b4658b64b2639fe92422326944d4f6bd9f9dce569e0d38a749290e54",
-  "selection_sha256": "sha256:1d02d4617237f12ef486ce00d96cc4cbffb1bfff572f65335ce89e59d0f24341",
+  "audit_sha256": "sha256:2d752962918ae1cb1b6461e61e593758db1e7779ef5a340675877d71b6d6ce8e",
+  "selection_sha256": "sha256:ab5d13d717bd848b118b6d82440ea3a93f4d9fbd0f32bf73bc122ea47d369a28",
   "meta": {
     "service_name": "go-chi-basic",
     "date": "2026-07-21",
@@ -14,25 +14,9 @@
       "id": "OTEL-001",
       "status": "working",
       "changes": [
-        "Removed the manual HttpRequest span owner and installed one route-aware GET /health server span owner."
+        "Installed one route-aware GET /health server span owner."
       ],
       "telemetry_changes": [
-        {
-          "id": "OTEL-001.manual-http-span",
-          "change_kind": "removed",
-          "change": "Removed the overlapping manual HttpRequest span owner.",
-          "type": "span",
-          "name": "HttpRequest",
-          "source": "main.go:28",
-          "added_attributes": [],
-          "product_view": "One canonical GET /health server span in the trace waterfall",
-          "follow_up_actions": [
-            "Inspect the generated trace for the canonical route span."
-          ],
-          "verification_scenarios": [
-            "http.health.success"
-          ]
-        },
         {
           "id": "OTEL-001.http-health-span",
           "change_kind": "added",
@@ -59,7 +43,7 @@
         "eval/inputs/canonical-verify-evidence.txt"
       ],
       "follow_up_actions": [
-        "Validate the bound removal and replacement proof packet."
+        "Validate the bound route-span proof packet."
       ],
       "resolved_commit": "fixture"
     }

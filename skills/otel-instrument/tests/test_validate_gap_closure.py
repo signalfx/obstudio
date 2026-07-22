@@ -21,6 +21,12 @@ SHARED = importlib.util.module_from_spec(SHARED_SPEC)
 sys.modules[SHARED_SPEC.name] = SHARED
 SHARED_SPEC.loader.exec_module(SHARED)
 REPORT_MODULE = SHARED.MODULE
+VALIDATOR_SPEC = importlib.util.spec_from_file_location(
+    "validate_gap_closure_module", VALIDATOR
+)
+assert VALIDATOR_SPEC and VALIDATOR_SPEC.loader
+VALIDATOR_MODULE = importlib.util.module_from_spec(VALIDATOR_SPEC)
+VALIDATOR_SPEC.loader.exec_module(VALIDATOR_MODULE)
 
 
 def digest(value: dict) -> str:
@@ -312,6 +318,7 @@ class ValidateGapClosureTest(unittest.TestCase):
         *,
         edit_closure=None,
         write_instrumentation_json: bool = True,
+        use_verify: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -320,6 +327,7 @@ class ValidateGapClosureTest(unittest.TestCase):
             audit_json_path = root / "otel-audit.json"
             selection_json_path = root / "otel-selection.json"
             instrumentation_json_path = root / "otel-instrumentation.json"
+            verify_json_path = root / "otel-verify.json"
             audit_path.write_text(AUDIT_GENAI, encoding="utf-8")
             instrumentation_path.write_text(instrumentation, encoding="utf-8")
             audit_json = self.canonical_audit(genai=True)
@@ -374,6 +382,54 @@ class ValidateGapClosureTest(unittest.TestCase):
                 instrumentation_json_path.write_text(
                     json.dumps(instrumentation_json), encoding="utf-8"
                 )
+            overlay_arguments = [
+                "--instrumentation-json",
+                str(instrumentation_json_path),
+            ]
+            if use_verify:
+                verify_json = SHARED.sample_verify(
+                    audit_json,
+                    REPORT_MODULE.audit_digest(audit_json),
+                    REPORT_MODULE.instrumentation_digest(instrumentation_json),
+                )
+                verify_json["meta"]["result"] = "Pass"
+                verify_finding = verify_json["findings"][0]
+                verify_finding["status"] = "working"
+                verify_finding["remaining"] = []
+                verify_finding["scenarios"][0].update(
+                    {
+                        "status": "working",
+                        "evidence": [".observe/evidence/runtime.json"],
+                        "observed_telemetry": [
+                            "Span GET /checkout emitted with http.route=/checkout"
+                        ],
+                        "product_validation": [
+                            "The local receiver accepted the generated trace."
+                        ],
+                        "proof_mode": "full_runtime",
+                        "visibility": "otlp_accepted",
+                    }
+                )
+                verify_finding["item_results"][0].update(
+                    {
+                        "status": "working",
+                        "direct_assertion_passed": True,
+                        "evidence": [".observe/evidence/runtime.json"],
+                        "observed_telemetry": [
+                            "Span GET /checkout emitted with http.route=/checkout"
+                        ],
+                        "product_validation": [
+                            "The local receiver accepted the generated trace."
+                        ],
+                        "proof_mode": "full_runtime",
+                        "visibility": "otlp_accepted",
+                    }
+                )
+                verify_json = REPORT_MODULE.normalize_verify(
+                    verify_json, audit_json, selection_json, instrumentation_json
+                )
+                verify_json_path.write_text(json.dumps(verify_json), encoding="utf-8")
+                overlay_arguments = ["--verify-json", str(verify_json_path)]
             return subprocess.run(
                 [
                     sys.executable,
@@ -384,8 +440,7 @@ class ValidateGapClosureTest(unittest.TestCase):
                     str(audit_json_path),
                     "--selection-json",
                     str(selection_json_path),
-                    "--instrumentation-json",
-                    str(instrumentation_json_path),
+                    *overlay_arguments,
                 ],
                 check=False,
                 capture_output=True,
@@ -465,6 +520,233 @@ class ValidateGapClosureTest(unittest.TestCase):
         result = self.validate_genai_with_json()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_verify_result_is_aggregated_with_instrumentation_genai_closure(self) -> None:
+        result = self.validate_genai_with_json(use_verify=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_blocked_verify_is_partial_when_implementation_owned_proof_exists(self) -> None:
+        blocked_verify = {"meta": {"result": "Blocked"}}
+        no_proof = {
+            "findings": [
+                {
+                    "status": "not_proven",
+                    "tests": [],
+                    "evidence": [],
+                }
+            ],
+            "genai_closure": [],
+        }
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                no_proof, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
+
+        deferred_without_proof = copy.deepcopy(no_proof)
+        deferred_without_proof["genai_closure"] = [
+            {
+                "status": "deferred",
+                "implemented_proven": [],
+                "tests": [],
+                "evidence": [],
+                "remaining_signals": ["External owner decision"],
+            }
+        ]
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                deferred_without_proof,
+                blocked_verify,
+                verification_overlay=True,
+            ),
+            "Blocked",
+        )
+
+        finding_proof = copy.deepcopy(no_proof)
+        finding_proof["findings"][0].update(
+            {
+                "status": "working",
+                "tests": ["go test ./..."],
+                "evidence": [".observe/evidence/go-test.txt"],
+            }
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                finding_proof, blocked_verify, verification_overlay=True
+            ),
+            "Partial",
+        )
+
+        genai_proof = copy.deepcopy(no_proof)
+        genai_proof["genai_closure"] = [
+            {
+                "status": "working",
+                "implemented_proven": ["Provider span emitted."],
+                "tests": ["provider.success"],
+                "evidence": [".observe/evidence/provider.json"],
+            }
+        ]
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                genai_proof, blocked_verify, verification_overlay=True
+            ),
+            "Partial",
+        )
+
+    def test_blocked_verify_ignores_unproven_source_refs_and_not_run_text(self) -> None:
+        blocked_verify = {"meta": {"result": "Blocked"}}
+        unproven = {
+            "findings": [
+                {
+                    "status": "not_proven",
+                    "tests": ["not run: Docker unavailable"],
+                    "evidence": ["main.go:12"],
+                }
+            ],
+            "genai_closure": [
+                {
+                    "status": "partial",
+                    "implemented_proven": ["Provider call site mapped in app.py"],
+                    "tests": ["tests are blocked by missing credentials"],
+                    "evidence": ["app.py:42"],
+                }
+            ],
+        }
+
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(unproven)
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                unproven, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
+
+        source_only_working_label = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./..."],
+                    "evidence": ["main.go:12"],
+                }
+            ],
+            "genai_closure": [],
+        }
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                source_only_working_label
+            )
+        )
+
+        negative_artifact_label = {
+            "findings": [],
+            "genai_closure": [
+                {
+                    "status": "partial",
+                    "implemented_proven": ["Provider span emitted."],
+                    "tests": ["not proven"],
+                    "evidence": [".observe/evidence/not-proven.log"],
+                }
+            ],
+        }
+        failed_test_label = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./... failed"],
+                    "evidence": [".observe/evidence/go-test.log"],
+                }
+            ],
+            "genai_closure": [],
+        }
+        for candidate in (negative_artifact_label, failed_test_label):
+            self.assertFalse(
+                VALIDATOR_MODULE.has_meaningful_instrumentation_proof(candidate)
+            )
+            self.assertEqual(
+                VALIDATOR_MODULE.expected_report_result(
+                    candidate, blocked_verify, verification_overlay=True
+                ),
+                "Blocked",
+            )
+
+        failure_scenario_artifact = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./... passed"],
+                    "evidence": [".observe/evidence/http-failure.json"],
+                }
+            ],
+            "genai_closure": [],
+        }
+        self.assertTrue(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                failure_scenario_artifact
+            )
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                failure_scenario_artifact,
+                blocked_verify,
+                verification_overlay=True,
+            ),
+            "Partial",
+        )
+
+        configured_only_test = {
+            "findings": [],
+            "genai_closure": [
+                {
+                    "status": "partial",
+                    "implemented_proven": ["span implemented"],
+                    "tests": ["collector configured"],
+                    "evidence": [".observe/evidence/config.json"],
+                }
+            ],
+        }
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                configured_only_test
+            )
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                configured_only_test, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
+
+    def test_blocked_verify_accepts_positive_partial_genai_proof(self) -> None:
+        blocked_verify = {"meta": {"result": "Blocked"}}
+        partial_genai_proof = {
+            "findings": [],
+            "genai_closure": [
+                {
+                    "status": "partial",
+                    "implemented_proven": ["Provider span emitted."],
+                    "tests": ["provider.success"],
+                    "evidence": [".observe/evidence/provider-success.json"],
+                }
+            ],
+        }
+
+        self.assertTrue(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                partial_genai_proof
+            )
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                partial_genai_proof,
+                blocked_verify,
+                verification_overlay=True,
+            ),
+            "Partial",
+        )
 
     def test_genai_fails_without_authoritative_instrumentation(self) -> None:
         result = self.validate_genai_with_json(write_instrumentation_json=False)

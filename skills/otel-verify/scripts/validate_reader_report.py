@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import re
@@ -29,12 +30,31 @@ EXPECTED_HEADER = (
 )
 ALLOWED_STATUSES = {"Working", "Not working", "Not proven", "Not configured"}
 PLACEHOLDERS = {"", "n/a", "none", "tested", "verified", "unknown", "-"}
+EMPTY_INVENTORY_MARKER = (
+    "No telemetry items. Selected findings are proof-first verification scope."
+)
 JSON_STATUS_LABELS = {
     "working": "Working",
     "not_working": "Not working",
     "not_proven": "Not proven",
     "not_configured": "Not configured",
     "blocked": "Not proven",
+}
+PROOF_MODES = {
+    "app_test",
+    "unit",
+    "unit+otlp",
+    "full_runtime",
+    "contract_only",
+    "static",
+    "not_run",
+}
+VISIBILITY_STATES = {
+    "explorer_visible",
+    "otlp_accepted",
+    "not_explorer_visible",
+    "not_proven",
+    "not_applicable",
 }
 
 
@@ -73,7 +93,9 @@ def split_row(line: str) -> tuple[str, ...]:
     )
 
 
-def parse_signal_table(section: str) -> list[tuple[str, ...]]:
+def parse_signal_table(
+    section: str, *, allow_empty_inventory: bool = False
+) -> list[tuple[str, ...]]:
     lines = section.splitlines()
     for index, line in enumerate(lines):
         if not line.lstrip().startswith("|"):
@@ -96,12 +118,84 @@ def parse_signal_table(section: str) -> list[tuple[str, ...]]:
                     f"per-OTel row has {len(row)} columns, expected {len(EXPECTED_HEADER)}: {row_line}"
                 )
             rows.append(row)
-        if not rows:
+        if not rows and not (
+            allow_empty_inventory
+            and re.search(
+                rf"^{re.escape(EMPTY_INVENTORY_MARKER)}$", section, re.MULTILINE
+            )
+        ):
             raise ValueError("per-OTel table has no item rows")
         return rows
     raise ValueError(
         "missing per-OTel table with header: " + " | ".join(EXPECTED_HEADER)
     )
+
+
+def parse_gap_item_ids(section: str) -> list[str]:
+    """Return exact item-ID cells from the reader-facing gap table."""
+    lines = section.splitlines()
+    for index, line in enumerate(lines):
+        if not line.lstrip().startswith("|"):
+            continue
+        header = split_row(line)
+        item_columns = [
+            column_index
+            for column_index, cell in enumerate(header)
+            if cell in {"Item", "Item ID"}
+        ]
+        if len(item_columns) != 1:
+            continue
+        separator = split_row(lines[index + 1]) if index + 1 < len(lines) else ()
+        if len(separator) != len(header) or not all(
+            re.fullmatch(r":?-+:?", cell.replace(" ", "")) for cell in separator
+        ):
+            continue
+        item_column = item_columns[0]
+        item_ids: list[str] = []
+        for row_line in lines[index + 2 :]:
+            if not row_line.lstrip().startswith("|"):
+                break
+            row = split_row(row_line)
+            if len(row) == len(header) and row[item_column]:
+                item_ids.append(normalize_item(row[item_column]))
+        return item_ids
+    return []
+
+
+def tested_projection(proof: dict) -> str:
+    proof_mode = proof.get("proof_mode")
+    if proof_mode not in PROOF_MODES:
+        raise ValueError(
+            f"{proof.get('id')}: verify proof_mode must be one of "
+            f"{sorted(PROOF_MODES)}"
+        )
+    scenarios = proof.get("scenarios", [])
+    if not isinstance(scenarios, list) or any(
+        not isinstance(value, str) or not value.strip() for value in scenarios
+    ):
+        raise ValueError(f"{proof.get('id')}: verify scenarios must be string IDs")
+    scenario_projection = ", ".join(scenarios) if scenarios else "none"
+    return f"proof_mode={proof_mode}; scenarios={scenario_projection}"
+
+
+def product_projection(proof: dict) -> str:
+    visibility = proof.get("visibility")
+    if visibility not in VISIBILITY_STATES:
+        raise ValueError(
+            f"{proof.get('id')}: verify visibility must be one of "
+            f"{sorted(VISIBILITY_STATES)}"
+        )
+    product_validation = proof.get("product_validation", [])
+    if not isinstance(product_validation, list) or any(
+        not isinstance(value, str) or not value.strip()
+        for value in product_validation
+    ):
+        raise ValueError(
+            f"{proof.get('id')}: verify product_validation must be strings"
+        )
+    values = [*product_validation]
+    values.append(f"visibility={visibility}")
+    return "; ".join(values)
 
 
 def load_expected_items(path: Path) -> set[str]:
@@ -180,9 +274,21 @@ def validate(
     if positions != sorted(positions):
         raise ValueError("required reader sections are not in the expected order")
 
+    instrumentation_data: dict | None = None
+    instrumentation_items: list[dict] = []
+    if instrumentation_json_path:
+        instrumentation_data, instrumentation_items = load_instrumentation_items(
+            instrumentation_json_path
+        )
+
     tested_start, tested_end = bounds["Tested And Working"]
     tested_section = text[tested_start:tested_end]
-    rows = parse_signal_table(tested_section)
+    rows = parse_signal_table(
+        tested_section,
+        allow_empty_inventory=(
+            instrumentation_data is not None and not instrumentation_items
+        ),
+    )
     item_ids: list[str] = []
     item_labels: set[str] = set()
     non_working: list[str] = []
@@ -235,13 +341,31 @@ def validate(
 
     gaps_start, gaps_end = bounds["Not Working Or Not Proven"]
     gaps_section = text[gaps_start:gaps_end]
-    normalized_gaps_section = normalize_item(gaps_section)
+    gap_item_ids = parse_gap_item_ids(gaps_section)
+    expected_gap_ids = [normalize_item(item) for item in non_working]
+    actual_gap_counts = Counter(gap_item_ids)
+    missing_gap_ids = sorted(
+        item for item in set(expected_gap_ids) if actual_gap_counts[item] == 0
+    )
+    duplicate_gap_ids = sorted(
+        item for item, count in actual_gap_counts.items() if count > 1
+    )
+    unexpected_gap_ids = sorted(set(gap_item_ids) - set(expected_gap_ids))
     if non_working:
-        for item in non_working:
-            if normalize_item(item) not in normalized_gaps_section:
-                errors.append(f"{item}: non-working item ID is missing from gap section")
+        for item in missing_gap_ids:
+            errors.append(f"{item}: non-working item ID is missing from gap section")
     elif not re.search(r"\bNone\b", gaps_section):
         errors.append("all rows are Working but the gap section does not say None")
+    if duplicate_gap_ids:
+        errors.append(
+            "duplicate item IDs in Not Working Or Not Proven: "
+            + ", ".join(duplicate_gap_ids)
+        )
+    if unexpected_gap_ids:
+        errors.append(
+            "unexpected item IDs in Not Working Or Not Proven: "
+            + ", ".join(unexpected_gap_ids)
+        )
 
     if expected_items_path:
         expected_items = load_expected_items(expected_items_path)
@@ -252,12 +376,7 @@ def validate(
         if unexpected:
             errors.append("unexpected OTel items: " + ", ".join(unexpected))
 
-    instrumentation_data: dict | None = None
-    instrumentation_items: list[dict] = []
     if instrumentation_json_path:
-        instrumentation_data, instrumentation_items = load_instrumentation_items(
-            instrumentation_json_path
-        )
         expected_item_ids = [item["id"].strip() for item in instrumentation_items]
         if item_ids != expected_item_ids:
             missing = [item_id for item_id in expected_item_ids if item_id not in item_ids]
@@ -318,8 +437,8 @@ def validate(
                         source.get("type", ""),
                         source.get("change", ""),
                         status,
-                        "; ".join(proof.get("observed_telemetry", [])),
-                        "; ".join(proof.get("product_validation", [])),
+                        tested_projection(proof),
+                        product_projection(proof),
                         "; ".join(proof.get("evidence", [])),
                     )
                     if tuple(map(normalize_projection_cell, row)) != tuple(

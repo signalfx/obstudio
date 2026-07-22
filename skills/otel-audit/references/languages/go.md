@@ -10,7 +10,7 @@ Load only for Go repositories. Check only dependencies that the project uses.
 | `gin-gonic/gin` | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin` | spans only |
 | `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc` | spans + metrics |
 | `database/sql` | `github.com/XSAM/otelsql` | spans only |
-| `go-redis/redis` | `github.com/redis/go-redis/extra/redisotel` | spans only |
+| `github.com/redis/go-redis/v9` | `github.com/redis/go-redis/extra/redisotel/v9` | spans + metrics |
 | `runtime` | `go.opentelemetry.io/contrib/instrumentation/runtime` | metrics only |
 | `host` | `go.opentelemetry.io/contrib/instrumentation/host` | metrics only |
 | `segmentio/kafka-go` | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | spans only |

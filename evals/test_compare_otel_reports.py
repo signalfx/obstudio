@@ -4,7 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compare_otel_reports import canonical_audit, canonical_instrument, canonical_verify, compare
+from compare_otel_reports import (
+    canonical_audit,
+    canonical_instrument,
+    canonical_verify,
+    compare,
+    split_row,
+)
 
 
 class CompareOtelReportsTest(unittest.TestCase):
@@ -12,6 +18,16 @@ class CompareOtelReportsTest(unittest.TestCase):
         path = root / name
         path.write_text(text, encoding="utf-8")
         return path
+
+    def test_only_escaped_pipes_are_safe_inside_markdown_table_code(self) -> None:
+        self.assertEqual(
+            split_row("| Command | `curl /health | jq .status` | Result |"),
+            ("Command", "curl /health", "jq .status", "Result"),
+        )
+        self.assertEqual(
+            split_row(r"| Command | `curl /health \| jq .status` | Result |"),
+            ("Command", "curl /health | jq .status", "Result"),
+        )
 
     def test_audit_ignores_prose_dates_and_evidence_but_preserves_contract_rows(self) -> None:
         template = """# Observability Report: sample

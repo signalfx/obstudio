@@ -42,17 +42,13 @@ def split_row(line: str) -> tuple[str, ...]:
     cells: list[str] = []
     current: list[str] = []
     escaped = False
-    in_code = False
     for char in text:
         if escaped:
             current.append(char)
             escaped = False
         elif char == "\\":
             escaped = True
-        elif char == "`":
-            in_code = not in_code
-            current.append(char)
-        elif char == "|" and not in_code:
+        elif char == "|":
             cells.append(normalize("".join(current)))
             current = []
         else:

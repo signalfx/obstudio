@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import re
 import subprocess
 import sys
 import tempfile
@@ -335,6 +336,69 @@ No gaps found."""
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("after Current Instrumentation", result.stderr)
 
+    def test_external_owner_mapped_genai_is_complete_without_a_gap(self) -> None:
+        empty_gaps = """## Gaps
+| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |
+|---|---|---|---|---|---|---|
+
+No gaps found.
+
+"""
+        genai = with_genai_readiness().replace(
+            "| Provider/model calls | missing |",
+            "| Provider/model calls | owner-mapped |",
+        ).replace(
+            "| App-owned: app/harness.py |",
+            "| Provider/platform-owned: billing API |",
+        ).replace("**Status:** Partial", "**Status:** Pass")
+        genai = re.sub(
+            r"(?ms)^## Gaps\n.*?(?=^## Verification Plan)",
+            empty_gaps,
+            genai,
+        )
+        genai_result = self.validate(genai)
+
+        self.assertEqual(genai_result.returncode, 0, genai_result.stderr)
+
+    def test_owner_mapped_readiness_rejects_app_owner_or_missing_incident_owner(self) -> None:
+        genai = with_genai_readiness().replace(
+            "| Provider/model calls | missing |",
+            "| Provider/model calls | owner-mapped |",
+        )
+        incident = with_incident_readiness().replace(
+            "| Queue pressure | partial |",
+            "| Queue pressure | owner-mapped |",
+        ).replace("**Status:** Partial", "**Status:** Pass")
+        incident = re.sub(
+            r"(?ms)^## Gaps\n.*?(?=^## Verification Plan)",
+            """## Gaps
+| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |
+|---|---|---|---|---|---|---|
+
+No gaps found.
+
+""",
+            incident,
+        )
+
+        genai_result = self.validate(genai)
+        incident_result = self.validate(incident)
+        generic_external_owner_result = self.validate(
+            genai.replace("| App-owned: app/harness.py |", "| external team |")
+        )
+
+        self.assertNotEqual(genai_result.returncode, 0)
+        self.assertIn("must name an exact external", genai_result.stderr)
+        self.assertNotEqual(generic_external_owner_result.returncode, 0)
+        self.assertIn(
+            "must name an exact external", generic_external_owner_result.stderr
+        )
+        self.assertNotEqual(incident_result.returncode, 0)
+        self.assertIn(
+            "partial, missing, or owner-mapped Incident Readiness area",
+            incident_result.stderr,
+        )
+
     def test_genai_yes_requires_readiness_table(self) -> None:
         report = with_genai_readiness().replace(f"\n\n{GENAI_READINESS}", "")
         result = self.validate(report)
@@ -391,7 +455,8 @@ No gaps found."""
         result = self.validate(report)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "covered Incident Readiness areas must not have prioritized gaps",
+            "covered Incident Readiness areas must not have "
+            "prioritized gaps",
             result.stderr,
         )
 

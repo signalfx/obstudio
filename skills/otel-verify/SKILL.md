@@ -619,6 +619,21 @@ prerequisite was unavailable.
 needed to substantiate the result or explain gaps.>
 ```
 
+The two proof columns are deterministic JSON projections. Render `How it was
+tested` as `proof_mode=<item_results[].proof_mode>; scenarios=<comma-separated
+item_results[].scenarios>` (use `scenarios=none` for an empty mapping). Render
+`Product result / visibility` as the semicolon-joined
+`item_results[].product_validation`, followed by
+`visibility=<item_results[].visibility>`. Do not substitute
+`observed_telemetry` for the test mode or omit the visibility enum.
+
+If the bound instrumentation inventory contains zero `telemetry_changes`
+because every selected finding is proof-first, retain the table header with no
+rows, report `Individual result: 0/0 working`, and add exactly: `No telemetry
+items. Selected findings are proof-first verification scope.` The reader
+validator accepts that zero-row representation only when the bound
+instrumentation JSON also has an empty telemetry inventory.
+
 Report requirements:
 
 - Follow `../references/report-flow-contract.md`. The first screen must let a

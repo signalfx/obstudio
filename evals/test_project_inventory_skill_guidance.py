@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -14,6 +16,45 @@ LOOPBACK_PROBE = (
     ROOT / "skills" / "references" / "scripts" / "probe_loopback_bind.py"
 )
 SKILLS = ("otel-audit", "otel-instrument", "otel-verify")
+
+
+def raw_canonical_digest(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def test_example_report_companions_are_exact_and_raw_hash_bound() -> None:
+    example_root = ROOT / "docs" / "example-reports"
+    fixture_root = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs"
+    names = (
+        "otel-audit.json",
+        "otel-selection.json",
+        "otel-instrumentation.json",
+        "otel-verify.json",
+    )
+    for name in names:
+        assert (example_root / name).read_bytes() == (fixture_root / name).read_bytes()
+
+    audit = json.loads((fixture_root / "otel-audit.json").read_bytes())
+    selection = json.loads((fixture_root / "otel-selection.json").read_bytes())
+    instrumentation = json.loads(
+        (fixture_root / "otel-instrumentation.json").read_bytes()
+    )
+    verification = json.loads((fixture_root / "otel-verify.json").read_bytes())
+
+    audit_digest = raw_canonical_digest(audit)
+    assert selection["audit_sha256"] == audit_digest
+    assert instrumentation["audit_sha256"] == audit_digest
+    assert verification["audit_sha256"] == audit_digest
+    assert instrumentation["selection_sha256"] == raw_canonical_digest(selection)
+    assert verification["instrumentation_sha256"] == raw_canonical_digest(
+        instrumentation
+    )
 
 
 def test_shared_inventory_is_routed_from_all_three_skills() -> None:
@@ -246,6 +287,51 @@ def test_java_agent_resolution_is_boundary_aware_and_proof_bounded() -> None:
         assert wrapper.is_file()
 
 
+def test_java_agent_eval_fixtures_are_byte_deterministic(tmp_path: Path) -> None:
+    builder = (
+        ROOT
+        / "evals"
+        / "java"
+        / "springboot-basic"
+        / "eval"
+        / "inputs"
+        / "build_java_agent_fixtures.py"
+    )
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+
+    for output in (first, second):
+        result = subprocess.run(
+            [sys.executable, str(builder), str(output)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    first_jars = sorted(path.relative_to(first) for path in first.glob("*.jar"))
+    second_jars = sorted(path.relative_to(second) for path in second.glob("*.jar"))
+    assert first_jars == second_jars
+    assert first_jars
+    for relative in first_jars:
+        first_bytes = (first / relative).read_bytes()
+        second_bytes = (second / relative).read_bytes()
+        assert first_bytes == second_bytes
+        assert hashlib.sha256(first_bytes).hexdigest() == hashlib.sha256(
+            second_bytes
+        ).hexdigest()
+        with zipfile.ZipFile(first / relative) as archive:
+            entries = archive.infolist()
+            assert [entry.filename for entry in entries] == [
+                "META-INF/MANIFEST.MF"
+            ]
+            entry = entries[0]
+            assert entry.date_time == (1980, 1, 1, 0, 0, 0)
+            assert entry.create_system == 3
+            assert entry.external_attr >> 16 == 0o100644
+            assert entry.compress_type == zipfile.ZIP_STORED
+
+
 def test_java_provider_and_agent_runtime_proof_use_distinct_live_forks() -> None:
     java = (
         ROOT / "skills" / "otel-instrument" / "references" / "languages" / "java.md"
@@ -430,12 +516,35 @@ def test_go_template_preserves_startup_resources_and_cleanup() -> None:
     assert "resource.WithFromEnv()" in guide
     assert "resource.WithTelemetrySDK()" in guide
     assert 'Value(attribute.Key("service.name"))' in guide
-    assert "errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))" in guide
-    assert "errors.Join(err, tp.Shutdown(ctx))" in guide
+    assert "combineErrors(tp.Shutdown(ctx), mp.Shutdown(ctx))" in guide
+    assert "combineErrors(err, tp.Shutdown(ctx))" in guide
+    assert "func combineErrors(primary, secondary error) error" in guide
+    assert 'fmt.Errorf("%w; additional error: %v", primary, secondary)' in guide
+    assert '"errors"' not in guide
+    assert "return errors.Join" not in guide
     assert 'log.Printf("telemetry disabled: %v", err)' in guide
     assert "log.Fatalf" not in guide
     assert '"go.opentelemetry.io/contrib/instrumentation/runtime"' not in guide
     assert "minimal HTTP setup intentionally" in guide
+
+
+def test_go_references_use_versioned_redisotel_traces_and_metrics() -> None:
+    audit_guide = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    instrument_guide = (
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "go.md"
+    ).read_text(encoding="utf-8")
+    for guide in (audit_guide, instrument_guide):
+        assert "`github.com/redis/go-redis/v9`" in guide
+        assert "`github.com/redis/go-redis/extra/redisotel/v9`" in guide
+        assert "spans + metrics" in guide
+        assert "github.com/redis/go-redis/extra/redisotel`" not in guide
 
 
 def test_env_example_is_only_added_for_an_authorized_env_file_surface() -> None:

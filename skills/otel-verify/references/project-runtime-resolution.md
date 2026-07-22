@@ -124,6 +124,15 @@ resolver is read-only and performs this deterministic search:
 4. targeted Maven-local and Gradle-cache coordinates for the Splunk and
    upstream OpenTelemetry Java agents.
 
+The search is bounded. If configuration discovery exceeds a file-byte,
+file-count, directory-entry, or directory-depth limit, or configured-candidate,
+project-local, or cache discovery exceeds a retained-record or visit limit, the
+resolver returns
+`status=incomplete`, `complete=false`, and no selection. Read the exact
+counts, lower-bound flags, and reasons under `bounded_discovery.omissions`.
+Do not describe that result as exhaustive, attach a candidate from its bounded
+prefix, or turn it into a user provisioning request.
+
 It revalidates every candidate as a readable JAR whose manifest
 `Premain-Class` exactly matches the recognized Splunk or upstream
 OpenTelemetry entry point and any provider-family evidence. It then records

@@ -10,11 +10,13 @@ claimed unless the caller supplies a source-derived expected version.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
 import re
 import stat
+import struct
 import sys
 import tempfile
 import zipfile
@@ -41,9 +43,19 @@ from secure_output import (
 SCHEMA_VERSION = 1
 MAX_CONFIG_FILES = 4_000
 MAX_CONFIG_BYTES = 2_000_000
+MAX_CONFIG_ENTRY_VISITS = MAX_CONFIG_FILES * 16
+MAX_CONFIG_DIRECTORY_DEPTH = 128
 MAX_CANDIDATES = 256
+MAX_CANDIDATE_VISITS = MAX_CANDIDATES * 4
 MAX_MANIFEST_BYTES = 256_000
 MAX_AGENT_BYTES = 512_000_000
+MAX_ZIP_ENTRIES = 40_000
+MAX_ZIP_CENTRAL_DIRECTORY_BYTES = 64_000_000
+ZIP_EOCD_MIN_BYTES = 22
+ZIP_MAX_COMMENT_BYTES = 65_535
+ZIP_EOCD_SIGNATURE = b"PK\x05\x06"
+ZIP_CENTRAL_HEADER_BYTES = 46
+ZIP_CENTRAL_SIGNATURE = b"PK\x01\x02"
 
 SKIP_DIRECTORIES = {
     ".git",
@@ -121,6 +133,65 @@ ENV_AGENT_PATHS = (
     "SPLUNK_OTEL_AGENT",
     "JAVAAGENT_PATH",
 )
+ZIP_CANDIDATE_ERRORS = (
+    EOFError,
+    NotImplementedError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    zipfile.BadZipFile,
+    zipfile.LargeZipFile,
+)
+
+
+@dataclass(frozen=True)
+class RootedCandidateAuthority:
+    """Identity chain binding a discovered leaf to one authenticated root."""
+
+    root: Path
+    root_identity: tuple[int, int]
+    parent_parts: tuple[str, ...]
+    parent_identities: tuple[tuple[int, int], ...]
+    leaf_name: str
+    leaf_stability: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class CandidateReference:
+    path: Path
+    source: str
+    evidence: str
+    authority: RootedCandidateAuthority | None = None
+
+    def __iter__(self):
+        # Preserve the historical three-value interface used by callers/tests.
+        yield self.path
+        yield self.source
+        yield self.evidence
+
+    def __getitem__(self, index: int):
+        return (self.path, self.source, self.evidence)[index]
+
+
+@dataclass(frozen=True)
+class CoalescedCandidate:
+    path: Path
+    source: str
+    evidence: list[str]
+    authority: RootedCandidateAuthority | None = None
+
+
+@dataclass(frozen=True)
+class AuthenticatedScanRoot:
+    path: Path
+    identity: tuple[int, int]
+    evidence: str
+
+
+@dataclass(frozen=True)
+class DirectoryCursor:
+    parts: tuple[str, ...] = ()
+    identities: tuple[tuple[int, int], ...] = ()
 
 
 def parse_manifest(payload: bytes) -> dict[str, str]:
@@ -173,8 +244,176 @@ def candidate_directory_flags() -> int:
     )
 
 
-def open_candidate_descriptor(path: Path) -> tuple[Path, int, list[tuple[Path, tuple[int, int]]]]:
+def open_rooted_directory_descriptor(
+    authority: RootedCandidateAuthority,
+) -> int:
+    """Reopen an authenticated candidate parent without following components."""
+
+    descriptor = os.open(authority.root, candidate_directory_flags())
+    try:
+        if file_identity(os.fstat(descriptor)) != authority.root_identity:
+            raise OSError("candidate discovery root changed")
+        for component, expected_identity in zip(
+            authority.parent_parts,
+            authority.parent_identities,
+            strict=True,
+        ):
+            child = os.open(
+                component,
+                candidate_directory_flags(),
+                dir_fd=descriptor,
+            )
+            os.close(descriptor)
+            descriptor = child
+            if file_identity(os.fstat(descriptor)) != expected_identity:
+                raise OSError("candidate parent changed after discovery")
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def rooted_candidate_namespace_matches(
+    authority: RootedCandidateAuthority,
+    expected_file: os.stat_result,
+) -> bool:
+    """Confirm the discovered root-to-leaf namespace still names this file."""
+
+    if descriptor_operations_supported():
+        descriptor: int | None = None
+        try:
+            descriptor = open_rooted_directory_descriptor(authority)
+            current = os.stat(
+                authority.leaf_name,
+                dir_fd=descriptor,
+                follow_symlinks=False,
+            )
+            return (
+                not path_is_link_or_reparse(current)
+                and stat.S_ISREG(current.st_mode)
+                and file_identity(current) == file_identity(expected_file)
+                and file_stability(current) == authority.leaf_stability
+            )
+        except OSError:
+            return False
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+
+    current = authority.root
+    try:
+        root_status = os.lstat(current)
+        if (
+            path_is_link_or_reparse(root_status)
+            or not stat.S_ISDIR(root_status.st_mode)
+            or file_identity(root_status) != authority.root_identity
+        ):
+            return False
+        for component, expected_identity in zip(
+            authority.parent_parts,
+            authority.parent_identities,
+            strict=True,
+        ):
+            current = current / component
+            details = os.lstat(current)
+            if (
+                path_is_link_or_reparse(details)
+                or not stat.S_ISDIR(details.st_mode)
+                or file_identity(details) != expected_identity
+            ):
+                return False
+        leaf = os.lstat(current / authority.leaf_name)
+        return (
+            not path_is_link_or_reparse(leaf)
+            and stat.S_ISREG(leaf.st_mode)
+            and file_identity(leaf) == file_identity(expected_file)
+            and file_stability(leaf) == authority.leaf_stability
+        )
+    except OSError:
+        return False
+
+
+def open_rooted_candidate_descriptor(
+    authority: RootedCandidateAuthority,
+) -> tuple[Path, int]:
+    """Open exactly the leaf authenticated during rooted discovery."""
+
+    resolved = authority.root.joinpath(
+        *authority.parent_parts,
+        authority.leaf_name,
+    )
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    if descriptor_operations_supported():
+        parent = open_rooted_directory_descriptor(authority)
+        try:
+            current = os.stat(
+                authority.leaf_name,
+                dir_fd=parent,
+                follow_symlinks=False,
+            )
+            if (
+                path_is_link_or_reparse(current)
+                or not stat.S_ISREG(current.st_mode)
+                or file_stability(current) != authority.leaf_stability
+            ):
+                raise OSError("candidate leaf changed after discovery")
+            descriptor = os.open(authority.leaf_name, flags, dir_fd=parent)
+        finally:
+            os.close(parent)
+        opened = os.fstat(descriptor)
+        if file_stability(opened) != authority.leaf_stability:
+            os.close(descriptor)
+            raise OSError("candidate leaf changed while opening")
+        return resolved, descriptor
+
+    if not rooted_candidate_namespace_matches(
+        authority,
+        _status_from_stability(authority.leaf_stability),
+    ):
+        raise OSError("candidate namespace changed after discovery")
+    before = os.lstat(resolved)
+    descriptor = os.open(resolved, flags)
+    opened = os.fstat(descriptor)
+    if (
+        file_stability(before) != authority.leaf_stability
+        or file_stability(opened) != authority.leaf_stability
+        or not rooted_candidate_namespace_matches(authority, opened)
+    ):
+        os.close(descriptor)
+        raise OSError("candidate leaf changed while opening")
+    return resolved, descriptor
+
+
+def _status_from_stability(
+    stability: tuple[int, int, int, int, int],
+) -> Any:
+    """Provide the identity fields used by the portable namespace predicate."""
+
+    class ExpectedStatus:
+        st_dev, st_ino, st_size, st_mtime_ns, st_ctime_ns = stability
+
+    return ExpectedStatus()
+
+
+def open_candidate_descriptor(
+    path: Path,
+    authority: RootedCandidateAuthority | None = None,
+) -> tuple[
+    Path,
+    int,
+    list[tuple[Path, tuple[int, int]]],
+    RootedCandidateAuthority | None,
+]:
     """Open one canonical candidate without following its final pathname."""
+
+    if authority is not None:
+        resolved, descriptor = open_rooted_candidate_descriptor(authority)
+        return resolved, descriptor, [], authority
 
     resolved = path.expanduser().resolve(strict=True)
     parent_identities: list[tuple[Path, tuple[int, int]]] = []
@@ -209,7 +448,7 @@ def open_candidate_descriptor(path: Path) -> tuple[Path, int, list[tuple[Path, t
             )
         finally:
             os.close(parent_descriptor)
-        return resolved, descriptor, parent_identities
+        return resolved, descriptor, parent_identities, None
 
     current = Path(resolved.anchor)
     for component in (None, *resolved.parent.relative_to(current).parts):
@@ -226,7 +465,7 @@ def open_candidate_descriptor(path: Path) -> tuple[Path, int, list[tuple[Path, t
     if file_identity(os.fstat(descriptor)) != file_identity(status):
         os.close(descriptor)
         raise OSError("candidate changed before it was opened")
-    return resolved, descriptor, parent_identities
+    return resolved, descriptor, parent_identities, None
 
 
 def candidate_namespace_matches(
@@ -373,10 +612,102 @@ def artifact_family(
     return premain_family, None
 
 
-def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+def validate_zip_directory_budget(snapshot: Any) -> None:
+    """Reject ZIP directories that would make stdlib metadata unbounded."""
+
+    snapshot.seek(0, os.SEEK_END)
+    archive_size = snapshot.tell()
+    tail_size = min(
+        archive_size,
+        ZIP_EOCD_MIN_BYTES + ZIP_MAX_COMMENT_BYTES,
+    )
+    snapshot.seek(archive_size - tail_size)
+    tail = snapshot.read(tail_size)
+    position = tail.rfind(ZIP_EOCD_SIGNATURE)
+    if position < 0 or position + ZIP_EOCD_MIN_BYTES > len(tail):
+        raise zipfile.BadZipFile("missing end-of-central-directory record")
+    (
+        _,
+        disk_number,
+        central_disk,
+        disk_entries,
+        total_entries,
+        central_size,
+        central_offset,
+        comment_size,
+    ) = struct.unpack_from("<4s4H2LH", tail, position)
+    if position + ZIP_EOCD_MIN_BYTES + comment_size != len(tail):
+        raise zipfile.BadZipFile("invalid end-of-central-directory length")
+    if disk_number or central_disk or disk_entries != total_entries:
+        raise zipfile.BadZipFile("multi-disk ZIP archives are not supported")
+    if (
+        total_entries == 0xFFFF
+        or central_size == 0xFFFFFFFF
+        or central_offset == 0xFFFFFFFF
+    ):
+        raise zipfile.LargeZipFile("ZIP64 Java-agent candidates are not supported")
+    if total_entries > MAX_ZIP_ENTRIES:
+        raise zipfile.LargeZipFile(
+            f"ZIP entry count {total_entries} exceeds {MAX_ZIP_ENTRIES}"
+        )
+    if central_size > MAX_ZIP_CENTRAL_DIRECTORY_BYTES:
+        raise zipfile.LargeZipFile(
+            "ZIP central directory exceeds "
+            f"{MAX_ZIP_CENTRAL_DIRECTORY_BYTES} bytes"
+        )
+    if central_offset + central_size > archive_size:
+        raise zipfile.BadZipFile("central directory escapes candidate bytes")
+    eocd_offset = archive_size - tail_size + position
+    central_start = eocd_offset - central_size
+    if central_start < central_offset:
+        raise zipfile.BadZipFile("central directory offset is inconsistent")
+
+    snapshot.seek(central_start)
+    remaining = central_size
+    actual_entries = 0
+    while remaining:
+        if remaining < ZIP_CENTRAL_HEADER_BYTES:
+            raise zipfile.BadZipFile("truncated central directory record")
+        header = snapshot.read(ZIP_CENTRAL_HEADER_BYTES)
+        if (
+            len(header) != ZIP_CENTRAL_HEADER_BYTES
+            or header[:4] != ZIP_CENTRAL_SIGNATURE
+        ):
+            raise zipfile.BadZipFile("invalid central directory record")
+        filename_size, extra_size, entry_comment_size = struct.unpack_from(
+            "<3H", header, 28
+        )
+        record_size = (
+            ZIP_CENTRAL_HEADER_BYTES
+            + filename_size
+            + extra_size
+            + entry_comment_size
+        )
+        if record_size > remaining:
+            raise zipfile.BadZipFile("central directory record escapes its budget")
+        actual_entries += 1
+        if actual_entries > MAX_ZIP_ENTRIES:
+            raise zipfile.LargeZipFile(
+                f"ZIP entry count exceeds {MAX_ZIP_ENTRIES}"
+            )
+        snapshot.seek(record_size - ZIP_CENTRAL_HEADER_BYTES, os.SEEK_CUR)
+        remaining -= record_size
+    if actual_entries != total_entries:
+        raise zipfile.BadZipFile(
+            "central directory entry count does not match end-of-directory record"
+        )
+    snapshot.seek(0)
+
+
+def validate_candidate(
+    path: Path,
+    authority: RootedCandidateAuthority | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
     descriptor: int | None = None
     try:
-        resolved, descriptor, parent_identities = open_candidate_descriptor(path)
+        resolved, descriptor, parent_identities, rooted_authority = (
+            open_candidate_descriptor(path, authority)
+        )
     except (FileNotFoundError, OSError) as error:
         return None, f"not-readable: {error}"
     try:
@@ -397,27 +728,33 @@ def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
             after = os.fstat(descriptor)
             if file_stability(before) != file_stability(after):
                 return None, "jar-changed-during-validation"
-            if not candidate_namespace_matches(
-                resolved, before, parent_identities
-            ):
+            namespace_matches = (
+                rooted_candidate_namespace_matches(rooted_authority, before)
+                if rooted_authority is not None
+                else candidate_namespace_matches(
+                    resolved, before, parent_identities
+                )
+            )
+            if not namespace_matches:
                 return None, "jar-path-changed-during-validation"
             snapshot.seek(0)
             try:
+                validate_zip_directory_budget(snapshot)
                 with zipfile.ZipFile(snapshot) as archive:
-                    manifest_names = [
-                        name
-                        for name in archive.namelist()
-                        if name.upper() == "META-INF/MANIFEST.MF"
+                    manifest_infos = [
+                        info
+                        for info in archive.infolist()
+                        if info.filename.upper() == "META-INF/MANIFEST.MF"
                     ]
-                    if len(manifest_names) != 1:
+                    if len(manifest_infos) != 1:
                         return None, "missing-or-duplicate-META-INF/MANIFEST.MF"
-                    manifest_info = archive.getinfo(manifest_names[0])
+                    manifest_info = manifest_infos[0]
                     if manifest_info.file_size > MAX_MANIFEST_BYTES:
                         return None, "manifest-too-large"
-                    manifest = parse_manifest(archive.read(manifest_names[0]))
+                    manifest = parse_manifest(archive.read(manifest_info))
             except KeyError:
                 return None, "missing-META-INF/MANIFEST.MF"
-            except (OSError, zipfile.BadZipFile) as error:
+            except ZIP_CANDIDATE_ERRORS as error:
                 return None, f"invalid-jar: {error}"
     finally:
         if descriptor is not None:
@@ -437,7 +774,12 @@ def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     version_source = "manifest" if artifact_version is not None else "filename"
     if artifact_version is None:
         artifact_version = version_from_text(resolved.name)
-    if not candidate_namespace_matches(resolved, before, parent_identities):
+    namespace_matches = (
+        rooted_candidate_namespace_matches(rooted_authority, before)
+        if rooted_authority is not None
+        else candidate_namespace_matches(resolved, before, parent_identities)
+    )
+    if not namespace_matches:
         return None, "jar-path-changed-during-validation"
     coordinate = (
         "com.splunk:splunk-otel-javaagent"
@@ -484,6 +826,237 @@ class ConfigSnapshot:
     text: str
 
 
+@dataclass
+class BoundedOmission:
+    reason: str
+    omitted_count: int
+    omitted_unit: str
+    count_is_lower_bound: bool
+    limit: int
+    limit_unit: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "reason": self.reason,
+            "omitted_count": self.omitted_count,
+            "omitted_unit": self.omitted_unit,
+            "count_is_lower_bound": self.count_is_lower_bound,
+            "limit": self.limit,
+            "limit_unit": self.limit_unit,
+        }
+
+
+def record_bounded_omission(
+    omissions: list[BoundedOmission] | None,
+    *,
+    reason: str,
+    omitted_count: int = 1,
+    omitted_unit: str,
+    count_is_lower_bound: bool,
+    limit: int,
+    limit_unit: str,
+) -> None:
+    if omissions is None or omitted_count <= 0:
+        return
+    for existing in omissions:
+        if (
+            existing.reason == reason
+            and existing.omitted_unit == omitted_unit
+            and existing.limit == limit
+            and existing.limit_unit == limit_unit
+        ):
+            existing.omitted_count += omitted_count
+            existing.count_is_lower_bound = (
+                existing.count_is_lower_bound or count_is_lower_bound
+            )
+            return
+    omissions.append(
+        BoundedOmission(
+            reason=reason,
+            omitted_count=omitted_count,
+            omitted_unit=omitted_unit,
+            count_is_lower_bound=count_is_lower_bound,
+            limit=limit,
+            limit_unit=limit_unit,
+        )
+    )
+
+
+def authenticate_scan_root(
+    root: Path,
+    source: str,
+    omissions: list[BoundedOmission] | None,
+    *,
+    allow_link_root: bool,
+) -> AuthenticatedScanRoot | None:
+    """Bind discovery to one canonical directory or make incompleteness explicit."""
+
+    raw = Path(os.path.abspath(root.expanduser()))
+    try:
+        raw_status = os.lstat(raw)
+    except FileNotFoundError:
+        return None
+    except (OSError, RuntimeError):
+        record_bounded_omission(
+            omissions,
+            reason=f"{source}_root_authentication_error",
+            omitted_unit="roots",
+            count_is_lower_bound=False,
+            limit=1,
+            limit_unit="root",
+        )
+        return None
+    if path_is_link_or_reparse(raw_status) and not allow_link_root:
+        record_bounded_omission(
+            omissions,
+            reason=f"{source}_linked_root",
+            omitted_unit="roots",
+            count_is_lower_bound=False,
+            limit=1,
+            limit_unit="root",
+        )
+        return None
+    try:
+        canonical = raw.resolve(strict=True)
+        canonical_status = os.lstat(canonical)
+        if (
+            path_is_link_or_reparse(canonical_status)
+            or not stat.S_ISDIR(canonical_status.st_mode)
+        ):
+            raise OSError("resolved discovery root is not a real directory")
+        if descriptor_operations_supported():
+            descriptor = os.open(canonical, candidate_directory_flags())
+            try:
+                opened = os.fstat(descriptor)
+                if (
+                    not stat.S_ISDIR(opened.st_mode)
+                    or file_identity(opened) != file_identity(canonical_status)
+                ):
+                    raise OSError("discovery root changed while opening")
+            finally:
+                os.close(descriptor)
+    except (OSError, RuntimeError):
+        record_bounded_omission(
+            omissions,
+            reason=f"{source}_root_authentication_error",
+            omitted_unit="roots",
+            count_is_lower_bound=False,
+            limit=1,
+            limit_unit="root",
+        )
+        return None
+    return AuthenticatedScanRoot(
+        path=canonical,
+        identity=file_identity(canonical_status),
+        evidence=str(raw),
+    )
+
+
+def portable_cursor_matches(
+    root: AuthenticatedScanRoot,
+    cursor: DirectoryCursor,
+) -> bool:
+    current = root.path
+    try:
+        details = os.lstat(current)
+        if (
+            path_is_link_or_reparse(details)
+            or not stat.S_ISDIR(details.st_mode)
+            or file_identity(details) != root.identity
+        ):
+            return False
+        for component, expected in zip(
+            cursor.parts,
+            cursor.identities,
+            strict=True,
+        ):
+            current = current / component
+            details = os.lstat(current)
+            if (
+                path_is_link_or_reparse(details)
+                or not stat.S_ISDIR(details.st_mode)
+                or file_identity(details) != expected
+            ):
+                return False
+        return True
+    except OSError:
+        return False
+
+
+def open_scan_cursor(
+    root: AuthenticatedScanRoot,
+    cursor: DirectoryCursor,
+) -> tuple[int | None, Path]:
+    path = root.path.joinpath(*cursor.parts)
+    if descriptor_operations_supported() and os.scandir in os.supports_fd:
+        descriptor = os.open(root.path, candidate_directory_flags())
+        try:
+            if file_identity(os.fstat(descriptor)) != root.identity:
+                raise OSError("discovery root changed")
+            for component, expected in zip(
+                cursor.parts,
+                cursor.identities,
+                strict=True,
+            ):
+                child = os.open(
+                    component,
+                    candidate_directory_flags(),
+                    dir_fd=descriptor,
+                )
+                os.close(descriptor)
+                descriptor = child
+                if file_identity(os.fstat(descriptor)) != expected:
+                    raise OSError("queued directory changed")
+            return descriptor, path
+        except BaseException:
+            os.close(descriptor)
+            raise
+    if not portable_cursor_matches(root, cursor):
+        raise OSError("queued directory changed")
+    return None, path
+
+
+def bounded_sorted_names(
+    target: int | Path,
+    remaining_visits: int,
+) -> list[str] | None:
+    """Return a deterministic directory inventory without retaining an overflow."""
+
+    names: list[str] = []
+    with os.scandir(target) as entries:
+        for entry in entries:
+            names.append(entry.name)
+            if len(names) > remaining_visits:
+                return None
+    return sorted(names)
+
+
+def cursor_entry_status(
+    descriptor: int | None,
+    directory: Path,
+    name: str,
+) -> os.stat_result:
+    if descriptor is not None:
+        return os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+    return os.lstat(directory / name)
+
+
+def rooted_authority(
+    root: AuthenticatedScanRoot,
+    cursor: DirectoryCursor,
+    name: str,
+    details: os.stat_result,
+) -> RootedCandidateAuthority:
+    return RootedCandidateAuthority(
+        root=root.path,
+        root_identity=root.identity,
+        parent_parts=cursor.parts,
+        parent_identities=cursor.identities,
+        leaf_name=name,
+        leaf_stability=file_stability(details),
+    )
+
+
 def read_bounded_descriptor(descriptor: int, maximum: int) -> bytes:
     chunks: list[bytes] = []
     total = 0
@@ -499,15 +1072,46 @@ def read_bounded_descriptor(descriptor: int, maximum: int) -> bytes:
     return b"".join(chunks)
 
 
+def record_config_omission(
+    omissions: list[BoundedOmission] | None,
+    reason: str,
+) -> None:
+    """Record a failed config scope whose hidden contents are not enumerable."""
+
+    record_bounded_omission(
+        omissions,
+        reason=reason,
+        omitted_unit="config scopes",
+        count_is_lower_bound=True,
+        limit=MAX_CONFIG_FILES,
+        limit_unit="config files",
+    )
+
+
+def record_config_entry_limit(
+    omissions: list[BoundedOmission] | None,
+) -> None:
+    record_bounded_omission(
+        omissions,
+        reason="config_entry_visit_limit",
+        omitted_unit="entries",
+        count_is_lower_bound=True,
+        limit=MAX_CONFIG_ENTRY_VISITS,
+        limit_unit="entries",
+    )
+
+
 def descriptor_config_snapshots(
     project: Path,
     root_descriptor: int,
     root_identity: tuple[int, int] | None,
+    bounded_omissions: list[BoundedOmission] | None = None,
 ) -> list[ConfigSnapshot]:
     """Read config bytes through one retained, no-follow directory tree."""
 
     snapshots: list[ConfigSnapshot] = []
     seen = 0
+    entry_visits = 0
     directory_flags = candidate_directory_flags()
     file_flags = (
         os.O_RDONLY
@@ -515,17 +1119,54 @@ def descriptor_config_snapshots(
         | getattr(os, "O_NOFOLLOW", 0)
         | getattr(os, "O_NONBLOCK", 0)
     )
-    descriptor = os.dup(root_descriptor)
-    if root_identity is not None and file_identity(os.fstat(descriptor)) != root_identity:
+    try:
+        descriptor = os.dup(root_descriptor)
+        root_status = os.fstat(descriptor)
+    except OSError:
+        record_config_omission(
+            bounded_omissions,
+            "config_identity_chain_error",
+        )
+        return snapshots
+    if root_identity is not None and file_identity(root_status) != root_identity:
         os.close(descriptor)
+        record_config_omission(
+            bounded_omissions,
+            "config_identity_chain_error",
+        )
         return snapshots
 
-    def visit(directory_descriptor: int, relative: Path) -> bool:
-        nonlocal seen
+    def visit(
+        directory_descriptor: int,
+        relative: Path,
+        depth: int = 0,
+    ) -> bool:
+        nonlocal seen, entry_visits
+        if depth > MAX_CONFIG_DIRECTORY_DEPTH:
+            record_bounded_omission(
+                bounded_omissions,
+                reason="config_directory_depth_limit",
+                omitted_unit="directories",
+                count_is_lower_bound=True,
+                limit=MAX_CONFIG_DIRECTORY_DEPTH,
+                limit_unit="directory levels",
+            )
+            return True
         try:
-            names = sorted(os.listdir(directory_descriptor))
+            names = bounded_sorted_names(
+                directory_descriptor,
+                MAX_CONFIG_ENTRY_VISITS - entry_visits,
+            )
         except OSError:
-            return False
+            record_config_omission(
+                bounded_omissions,
+                "config_directory_list_error",
+            )
+            return True
+        if names is None:
+            record_config_entry_limit(bounded_omissions)
+            return True
+        entry_visits += len(names)
 
         directories: list[tuple[str, os.stat_result]] = []
         files: list[tuple[str, os.stat_result]] = []
@@ -537,7 +1178,21 @@ def descriptor_config_snapshots(
                     follow_symlinks=False,
                 )
             except OSError:
-                continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_entry_stat_error",
+                )
+                return True
+            if path_is_link_or_reparse(details):
+                if name in SKIP_DIRECTORIES or (
+                    relative == Path(".observe") and name == "evidence"
+                ):
+                    continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_child_directory_error",
+                )
+                return True
             if stat.S_ISDIR(details.st_mode):
                 directories.append((name, details))
             else:
@@ -550,12 +1205,32 @@ def descriptor_config_snapshots(
                 continue
             seen += 1
             if seen > MAX_CONFIG_FILES:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="config_file_count_limit",
+                    omitted_unit="files",
+                    count_is_lower_bound=True,
+                    limit=MAX_CONFIG_FILES,
+                    limit_unit="files",
+                )
                 return True
-            if (
-                path_is_link_or_reparse(details)
-                or not stat.S_ISREG(details.st_mode)
-                or details.st_size > MAX_CONFIG_BYTES
+            if path_is_link_or_reparse(details) or not stat.S_ISREG(
+                details.st_mode
             ):
+                record_config_omission(
+                    bounded_omissions,
+                    "config_file_identity_error",
+                )
+                return True
+            if details.st_size > MAX_CONFIG_BYTES:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="config_file_size_limit",
+                    omitted_unit="files",
+                    count_is_lower_bound=False,
+                    limit=MAX_CONFIG_BYTES,
+                    limit_unit="bytes",
+                )
                 continue
             file_descriptor: int | None = None
             try:
@@ -569,27 +1244,55 @@ def descriptor_config_snapshots(
                     not stat.S_ISREG(opened.st_mode)
                     or file_identity(opened) != file_identity(details)
                 ):
-                    continue
-                payload = read_bounded_descriptor(
-                    file_descriptor,
-                    MAX_CONFIG_BYTES,
-                )
+                    record_config_omission(
+                        bounded_omissions,
+                        "config_file_identity_error",
+                    )
+                    return True
+                try:
+                    payload = read_bounded_descriptor(
+                        file_descriptor,
+                        MAX_CONFIG_BYTES,
+                    )
+                except OSError:
+                    record_config_omission(
+                        bounded_omissions,
+                        "config_file_read_error",
+                    )
+                    return True
                 after = os.fstat(file_descriptor)
                 current = os.stat(
                     name,
                     dir_fd=directory_descriptor,
                     follow_symlinks=False,
                 )
+                if len(payload) > MAX_CONFIG_BYTES:
+                    record_bounded_omission(
+                        bounded_omissions,
+                        reason="config_file_size_limit",
+                        omitted_unit="files",
+                        count_is_lower_bound=False,
+                        limit=MAX_CONFIG_BYTES,
+                        limit_unit="bytes",
+                    )
+                    continue
                 if (
-                    len(payload) > MAX_CONFIG_BYTES
-                    or file_stability(opened) != file_stability(after)
+                    file_stability(opened) != file_stability(after)
                     or path_is_link_or_reparse(current)
                     or not stat.S_ISREG(current.st_mode)
                     or file_identity(current) != file_identity(opened)
                 ):
-                    continue
+                    record_config_omission(
+                        bounded_omissions,
+                        "config_file_identity_error",
+                    )
+                    return True
             except OSError:
-                continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_file_open_error",
+                )
+                return True
             finally:
                 if file_descriptor is not None:
                     os.close(file_descriptor)
@@ -606,7 +1309,11 @@ def descriptor_config_snapshots(
             ):
                 continue
             if path_is_link_or_reparse(details):
-                continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_child_directory_error",
+                )
+                return True
             child: int | None = None
             try:
                 child = os.open(
@@ -619,19 +1326,40 @@ def descriptor_config_snapshots(
                     not stat.S_ISDIR(opened.st_mode)
                     or file_identity(opened) != file_identity(details)
                 ):
-                    continue
-                if visit(child, relative / name):
+                    record_config_omission(
+                        bounded_omissions,
+                        "config_identity_chain_error",
+                    )
+                    return True
+                if visit(child, relative / name, depth + 1):
                     return True
             except OSError:
-                continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_child_directory_error",
+                )
+                return True
             finally:
                 if child is not None:
                     os.close(child)
         return False
 
     try:
-        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
-            visit(descriptor, Path())
+        try:
+            root_status = os.fstat(descriptor)
+        except OSError:
+            record_config_omission(
+                bounded_omissions,
+                "config_identity_chain_error",
+            )
+        else:
+            if stat.S_ISDIR(root_status.st_mode):
+                visit(descriptor, Path())
+            else:
+                record_config_omission(
+                    bounded_omissions,
+                    "config_identity_chain_error",
+                )
     finally:
         os.close(descriptor)
     return snapshots
@@ -683,21 +1411,40 @@ def portable_config_snapshot(
     path: Path,
     expected: os.stat_result,
     root_identity: tuple[int, int] | None,
+    bounded_omissions: list[BoundedOmission] | None = None,
 ) -> ConfigSnapshot | None:
     try:
         parents = portable_config_chain(project, path.parent, root_identity)
-        flags = (
-            os.O_RDONLY
-            | getattr(os, "O_BINARY", 0)
-            | getattr(os, "O_NOFOLLOW", 0)
-            | getattr(os, "O_NONBLOCK", 0)
+    except OSError:
+        record_config_omission(
+            bounded_omissions,
+            "config_identity_chain_error",
         )
+        return None
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
         descriptor = os.open(path, flags)
     except OSError:
+        record_config_omission(
+            bounded_omissions,
+            "config_file_open_error",
+        )
         return None
     try:
-        opened = os.fstat(descriptor)
-        current = os.lstat(path)
+        try:
+            opened = os.fstat(descriptor)
+            current = os.lstat(path)
+        except OSError:
+            record_config_omission(
+                bounded_omissions,
+                "config_entry_stat_error",
+            )
+            return None
         if (
             not stat.S_ISREG(opened.st_mode)
             or file_identity(opened) != file_identity(expected)
@@ -705,23 +1452,58 @@ def portable_config_snapshot(
             or file_identity(current) != file_identity(opened)
             or not portable_config_chain_matches(parents)
         ):
+            record_config_omission(
+                bounded_omissions,
+                "config_file_identity_error",
+            )
             return None
-        payload = read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
-        after = os.fstat(descriptor)
-        current = os.lstat(path)
+        try:
+            payload = read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
+        except OSError:
+            record_config_omission(
+                bounded_omissions,
+                "config_file_read_error",
+            )
+            return None
+        try:
+            after = os.fstat(descriptor)
+            current = os.lstat(path)
+        except OSError:
+            record_config_omission(
+                bounded_omissions,
+                "config_entry_stat_error",
+            )
+            return None
+        if len(payload) > MAX_CONFIG_BYTES:
+            record_bounded_omission(
+                bounded_omissions,
+                reason="config_file_size_limit",
+                omitted_unit="files",
+                count_is_lower_bound=False,
+                limit=MAX_CONFIG_BYTES,
+                limit_unit="bytes",
+            )
+            return None
         if (
-            len(payload) > MAX_CONFIG_BYTES
-            or file_stability(opened) != file_stability(after)
+            file_stability(opened) != file_stability(after)
             or path_is_link_or_reparse(current)
             or file_identity(current) != file_identity(opened)
             or not portable_config_chain_matches(parents)
         ):
+            record_config_omission(
+                bounded_omissions,
+                "config_file_identity_error",
+            )
             return None
         return ConfigSnapshot(
             path=path,
             text=payload.decode("utf-8", errors="replace"),
         )
     except OSError:
+        record_config_omission(
+            bounded_omissions,
+            "config_file_read_error",
+        )
         return None
     finally:
         os.close(descriptor)
@@ -730,57 +1512,119 @@ def portable_config_snapshot(
 def portable_config_snapshots(
     project: Path,
     root_identity: tuple[int, int] | None,
+    bounded_omissions: list[BoundedOmission] | None = None,
 ) -> list[ConfigSnapshot]:
     snapshots: list[ConfigSnapshot] = []
     seen = 0
-    for directory, names, filenames in os.walk(project, followlinks=False):
-        current = Path(directory)
+    entry_visits = 0
+    pending = [(project, 0)]
+    while pending:
+        current, depth = pending.pop()
+        if depth > MAX_CONFIG_DIRECTORY_DEPTH:
+            record_bounded_omission(
+                bounded_omissions,
+                reason="config_directory_depth_limit",
+                omitted_unit="directories",
+                count_is_lower_bound=True,
+                limit=MAX_CONFIG_DIRECTORY_DEPTH,
+                limit_unit="directory levels",
+            )
+            return snapshots
         try:
             portable_config_chain(project, current, root_identity)
         except OSError:
-            names[:] = []
-            continue
+            record_config_omission(
+                bounded_omissions,
+                "config_identity_chain_error",
+            )
+            return snapshots
+        try:
+            names = bounded_sorted_names(
+                current,
+                MAX_CONFIG_ENTRY_VISITS - entry_visits,
+            )
+        except OSError:
+            record_config_omission(
+                bounded_omissions,
+                "config_walk_error",
+            )
+            return snapshots
+        if names is None:
+            record_config_entry_limit(bounded_omissions)
+            return snapshots
+        entry_visits += len(names)
+
         relative = current.relative_to(project)
-        retained: list[str] = []
-        for name in sorted(names):
+        directories: list[tuple[Path, int]] = []
+        for name in names:
             path = current / name
-            if name in SKIP_DIRECTORIES or (
-                relative == Path(".observe") and name == "evidence"
-            ):
-                continue
             try:
                 details = os.lstat(path)
             except OSError:
+                record_config_omission(
+                    bounded_omissions,
+                    "config_entry_stat_error",
+                )
+                return snapshots
+            if path_is_link_or_reparse(details):
+                if name in SKIP_DIRECTORIES or (
+                    relative == Path(".observe") and name == "evidence"
+                ):
+                    continue
+                record_config_omission(
+                    bounded_omissions,
+                    "config_child_directory_error",
+                )
+                return snapshots
+            if stat.S_ISDIR(details.st_mode):
+                if name in SKIP_DIRECTORIES or (
+                    relative == Path(".observe") and name == "evidence"
+                ):
+                    continue
+                directories.append((path, depth + 1))
                 continue
-            if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
-                continue
-            retained.append(name)
-        names[:] = retained
-        for name in sorted(filenames):
-            path = current / name
             if not is_config_file(path):
                 continue
             seen += 1
             if seen > MAX_CONFIG_FILES:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="config_file_count_limit",
+                    omitted_unit="files",
+                    count_is_lower_bound=True,
+                    limit=MAX_CONFIG_FILES,
+                    limit_unit="files",
+                )
                 return snapshots
-            try:
-                details = os.lstat(path)
-            except OSError:
-                continue
-            if (
-                path_is_link_or_reparse(details)
-                or not stat.S_ISREG(details.st_mode)
-                or details.st_size > MAX_CONFIG_BYTES
-            ):
-                continue
+            if not stat.S_ISREG(details.st_mode):
+                record_config_omission(
+                    bounded_omissions,
+                    "config_file_identity_error",
+                )
+                return snapshots
+            if details.st_size > MAX_CONFIG_BYTES:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="config_file_size_limit",
+                    omitted_unit="files",
+                    count_is_lower_bound=False,
+                    limit=MAX_CONFIG_BYTES,
+                    limit_unit="bytes",
+                )
+                return snapshots
             snapshot = portable_config_snapshot(
                 project,
                 path,
                 details,
                 root_identity,
+                bounded_omissions,
             )
-            if snapshot is not None:
-                snapshots.append(snapshot)
+            if snapshot is None:
+                return snapshots
+            snapshots.append(snapshot)
+        pending.extend(
+            sorted(directories, key=lambda item: item[0], reverse=True)
+        )
     return snapshots
 
 
@@ -789,18 +1633,24 @@ def collect_config_snapshots(
     *,
     root_descriptor: int | None = None,
     root_identity: tuple[int, int] | None = None,
+    bounded_omissions: list[BoundedOmission] | None = None,
 ) -> list[ConfigSnapshot]:
     if (
         descriptor_operations_supported()
-        and os.listdir in os.supports_fd
+        and os.scandir in os.supports_fd
         and root_descriptor is not None
     ):
         return descriptor_config_snapshots(
             project,
             root_descriptor,
             root_identity,
+            bounded_omissions,
         )
-    return portable_config_snapshots(project, root_identity)
+    return portable_config_snapshots(
+        project,
+        root_identity,
+        bounded_omissions,
+    )
 
 
 def expand_path(raw: str, bases: Iterable[Path]) -> list[Path]:
@@ -828,20 +1678,56 @@ def source_kind_for_config(path: Path, project: Path) -> str:
 def configured_candidates(
     project: Path,
     config_snapshots: list[ConfigSnapshot],
-) -> list[tuple[Path, str, str]]:
-    candidates: list[tuple[Path, str, str]] = []
+    bounded_omissions: list[BoundedOmission] | None = None,
+) -> list[CandidateReference]:
+    candidates: list[CandidateReference] = []
+    seen: set[tuple[str, str]] = set()
+    visits = 0
+
+    def retain(path: Path, source: str, evidence: str) -> bool:
+        nonlocal visits
+        visits += 1
+        if visits > MAX_CANDIDATE_VISITS:
+            record_bounded_omission(
+                bounded_omissions,
+                reason="configured_candidate_visit_limit",
+                omitted_unit="candidate visits",
+                count_is_lower_bound=True,
+                limit=MAX_CANDIDATE_VISITS,
+                limit_unit="candidate visits",
+            )
+            return False
+        key = (str(path.expanduser().absolute()), source)
+        if key in seen:
+            return True
+        if len(candidates) >= MAX_CANDIDATES:
+            record_bounded_omission(
+                bounded_omissions,
+                reason="configured_candidate_limit",
+                omitted_unit="candidates",
+                count_is_lower_bound=True,
+                limit=MAX_CANDIDATES,
+                limit_unit="candidates",
+            )
+            return False
+        seen.add(key)
+        candidates.append(CandidateReference(path, source, evidence))
+        return True
+
     for variable in ENV_AGENT_PATHS:
         value = os.environ.get(variable)
         if not value:
             continue
         for path in expand_path(value, (project,)):
-            candidates.append((path, "environment", variable))
+            if not retain(path, "environment", variable):
+                return candidates
     for variable in ENV_AGENT_OPTIONS:
         value = os.environ.get(variable, "")
         for match in AGENT_PATH_PATTERN.finditer(value):
             raw = next(group for group in match.groups() if group is not None)
             for path in expand_path(raw, (project,)):
-                candidates.append((path, "environment", variable))
+                if not retain(path, "environment", variable):
+                    return candidates
 
     for snapshot in config_snapshots:
         config_path = snapshot.path
@@ -852,7 +1738,8 @@ def configured_candidates(
             line = text.count("\n", 0, match.start()) + 1
             evidence = f"{config_path.relative_to(project)}:{line}"
             for path in expand_path(raw, (config_path.parent, project)):
-                candidates.append((path, source_kind, evidence))
+                if not retain(path, source_kind, evidence):
+                    return candidates
     return candidates
 
 
@@ -908,36 +1795,294 @@ def unique_paths(paths: Iterable[Path]) -> list[Path]:
 
 
 def cache_candidates(
-    roots: Iterable[Path], patterns: Iterable[str], source: str
-) -> list[tuple[Path, str, str]]:
-    result: list[tuple[Path, str, str]] = []
+    roots: Iterable[Path],
+    patterns: Iterable[str],
+    source: str,
+    bounded_omissions: list[BoundedOmission] | None = None,
+) -> list[CandidateReference]:
+    result: list[CandidateReference] = []
+    seen: set[str] = set()
+    visits = 0
     for root in roots:
-        for pattern in patterns:
-            try:
-                for path in sorted(root.glob(pattern)):
-                    result.append((path, source, str(root)))
-                    if len(result) >= MAX_CANDIDATES:
-                        return result
-            except OSError:
+        authenticated = authenticate_scan_root(
+            root,
+            source,
+            bounded_omissions,
+            allow_link_root=True,
+        )
+        if authenticated is None:
+            continue
+        for pattern in sorted(patterns):
+            parts = Path(pattern).parts
+            if not parts or "**" in parts:
                 continue
-    return result
+            pending: list[tuple[DirectoryCursor, int]] = [
+                (DirectoryCursor(), 0)
+            ]
+            while pending:
+                cursor, index = pending.pop()
+                segment = parts[index]
+                descriptor: int | None = None
+                try:
+                    descriptor, directory = open_scan_cursor(
+                        authenticated,
+                        cursor,
+                    )
+                    names = bounded_sorted_names(
+                        descriptor if descriptor is not None else directory,
+                        MAX_CANDIDATE_VISITS - visits,
+                    )
+                except OSError:
+                    record_bounded_omission(
+                        bounded_omissions,
+                        reason=f"{source}_traversal_error",
+                        omitted_unit="directories",
+                        count_is_lower_bound=True,
+                        limit=MAX_CANDIDATE_VISITS,
+                        limit_unit="entries",
+                    )
+                    return sorted(result, key=lambda item: str(item.path))
+                finally:
+                    if descriptor is not None:
+                        os.close(descriptor)
+                if names is None:
+                    record_bounded_omission(
+                        bounded_omissions,
+                        reason=f"{source}_entry_visit_limit",
+                        omitted_unit="entries",
+                        count_is_lower_bound=True,
+                        limit=MAX_CANDIDATE_VISITS,
+                        limit_unit="entries",
+                    )
+                    return sorted(result, key=lambda item: str(item.path))
+
+                descriptor = None
+                local_children: list[tuple[DirectoryCursor, int]] = []
+                local_candidates: list[CandidateReference] = []
+                try:
+                    descriptor, directory = open_scan_cursor(
+                        authenticated,
+                        cursor,
+                    )
+                    for name in names:
+                        visits += 1
+                        if (
+                            name.startswith(".")
+                            and not segment.startswith(".")
+                        ) or not fnmatch.fnmatchcase(name, segment):
+                            continue
+                        details = cursor_entry_status(
+                            descriptor,
+                            directory,
+                            name,
+                        )
+                        if path_is_link_or_reparse(details):
+                            raise OSError(
+                                "linked cache entry prevents authenticated traversal"
+                            )
+                        path = Path(authenticated.evidence).joinpath(
+                            *cursor.parts,
+                            name,
+                        )
+                        if index + 1 < len(parts):
+                            if stat.S_ISDIR(details.st_mode):
+                                local_children.append(
+                                    (
+                                        DirectoryCursor(
+                                            cursor.parts + (name,),
+                                            cursor.identities
+                                            + (file_identity(details),),
+                                        ),
+                                        index + 1,
+                                    )
+                                )
+                            continue
+                        if not stat.S_ISREG(details.st_mode):
+                            continue
+                        key = str(path)
+                        if key in seen:
+                            continue
+                        if len(result) + len(local_candidates) >= MAX_CANDIDATES:
+                            record_bounded_omission(
+                                bounded_omissions,
+                                reason=f"{source}_candidate_limit",
+                                omitted_unit="candidates",
+                                count_is_lower_bound=True,
+                                limit=MAX_CANDIDATES,
+                                limit_unit="candidates",
+                            )
+                            return sorted(result + local_candidates, key=lambda item: str(item.path))
+                        seen.add(key)
+                        local_candidates.append(
+                            CandidateReference(
+                                path=path,
+                                source=source,
+                                evidence=authenticated.evidence,
+                                authority=rooted_authority(
+                                    authenticated,
+                                    cursor,
+                                    name,
+                                    details,
+                                ),
+                            )
+                        )
+                    if descriptor is None and not portable_cursor_matches(
+                        authenticated,
+                        cursor,
+                    ):
+                        raise OSError("queued directory changed during scan")
+                except OSError:
+                    record_bounded_omission(
+                        bounded_omissions,
+                        reason=f"{source}_traversal_error",
+                        omitted_unit="directories",
+                        count_is_lower_bound=True,
+                        limit=MAX_CANDIDATE_VISITS,
+                        limit_unit="entries",
+                    )
+                    return sorted(result, key=lambda item: str(item.path))
+                finally:
+                    if descriptor is not None:
+                        os.close(descriptor)
+                result.extend(local_candidates)
+                pending.extend(
+                    sorted(
+                        local_children,
+                        key=lambda item: item[0].parts,
+                        reverse=True,
+                    )
+                )
+    return sorted(result, key=lambda item: str(item[0]))
 
 
-def project_local_candidates(project: Path) -> list[tuple[Path, str, str]]:
-    result: list[tuple[Path, str, str]] = []
+def project_local_candidates(
+    project: Path,
+    bounded_omissions: list[BoundedOmission] | None = None,
+) -> list[CandidateReference]:
+    result: list[CandidateReference] = []
+    seen: set[str] = set()
+    visits = 0
     roots = [project / name for name in ("lib", "libs", "tools", ".observe/cache")]
     for root in roots:
-        if not root.is_dir():
+        authenticated = authenticate_scan_root(
+            root,
+            "project_local",
+            bounded_omissions,
+            allow_link_root=False,
+        )
+        if authenticated is None:
             continue
-        for pattern in ("*javaagent*.jar", "**/*javaagent*.jar"):
+        pending = [DirectoryCursor()]
+        evidence = str(root.relative_to(project))
+        while pending:
+            cursor = pending.pop()
+            descriptor: int | None = None
             try:
-                for path in sorted(root.glob(pattern)):
-                    result.append((path, "project_local", str(root.relative_to(project))))
-                    if len(result) >= MAX_CANDIDATES:
-                        return result
+                descriptor, directory = open_scan_cursor(authenticated, cursor)
+                names = bounded_sorted_names(
+                    descriptor if descriptor is not None else directory,
+                    MAX_CANDIDATE_VISITS - visits,
+                )
             except OSError:
-                continue
-    return result
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="project_local_traversal_error",
+                    omitted_unit="directories",
+                    count_is_lower_bound=True,
+                    limit=MAX_CANDIDATE_VISITS,
+                    limit_unit="entries",
+                )
+                return sorted(result, key=lambda item: str(item.path))
+            finally:
+                if descriptor is not None:
+                    os.close(descriptor)
+            if names is None:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="project_local_entry_visit_limit",
+                    omitted_unit="entries",
+                    count_is_lower_bound=True,
+                    limit=MAX_CANDIDATE_VISITS,
+                    limit_unit="entries",
+                )
+                return sorted(result, key=lambda item: str(item.path))
+
+            descriptor = None
+            local_children: list[DirectoryCursor] = []
+            local_candidates: list[CandidateReference] = []
+            try:
+                descriptor, directory = open_scan_cursor(authenticated, cursor)
+                for name in names:
+                    visits += 1
+                    details = cursor_entry_status(descriptor, directory, name)
+                    if path_is_link_or_reparse(details):
+                        raise OSError(
+                            "linked project-local entry prevents authenticated traversal"
+                        )
+                    path = root.joinpath(*cursor.parts, name)
+                    if stat.S_ISDIR(details.st_mode):
+                        local_children.append(
+                            DirectoryCursor(
+                                cursor.parts + (name,),
+                                cursor.identities + (file_identity(details),),
+                            )
+                        )
+                        continue
+                    lowered = name.lower()
+                    if (
+                        not stat.S_ISREG(details.st_mode)
+                        or "javaagent" not in lowered
+                        or not lowered.endswith(".jar")
+                    ):
+                        continue
+                    key = str(path)
+                    if key in seen:
+                        continue
+                    if len(result) + len(local_candidates) >= MAX_CANDIDATES:
+                        record_bounded_omission(
+                            bounded_omissions,
+                            reason="project_local_candidate_limit",
+                            omitted_unit="candidates",
+                            count_is_lower_bound=True,
+                            limit=MAX_CANDIDATES,
+                            limit_unit="candidates",
+                        )
+                        return sorted(result + local_candidates, key=lambda item: str(item.path))
+                    seen.add(key)
+                    local_candidates.append(
+                        CandidateReference(
+                            path=path,
+                            source="project_local",
+                            evidence=evidence,
+                            authority=rooted_authority(
+                                authenticated,
+                                cursor,
+                                name,
+                                details,
+                            ),
+                        )
+                    )
+                if descriptor is None and not portable_cursor_matches(
+                    authenticated,
+                    cursor,
+                ):
+                    raise OSError("queued directory changed during scan")
+            except OSError:
+                record_bounded_omission(
+                    bounded_omissions,
+                    reason="project_local_traversal_error",
+                    omitted_unit="directories",
+                    count_is_lower_bound=True,
+                    limit=MAX_CANDIDATE_VISITS,
+                    limit_unit="entries",
+                )
+                return sorted(result, key=lambda item: str(item.path))
+            finally:
+                if descriptor is not None:
+                    os.close(descriptor)
+            result.extend(local_candidates)
+            pending.extend(sorted(local_children, key=lambda item: item.parts, reverse=True))
+    return sorted(result, key=lambda item: str(item.path))
 
 
 SOURCE_RANK = {
@@ -949,6 +2094,47 @@ SOURCE_RANK = {
     "maven_cache": 2,
     "gradle_cache": 2,
 }
+
+
+def coalesce_candidates(
+    candidates: Iterable[CandidateReference],
+) -> list[CoalescedCandidate]:
+    result: list[CoalescedCandidate] = []
+    index_by_path: dict[str, int] = {}
+    for candidate in candidates:
+        path = candidate.path
+        source = candidate.source
+        evidence = candidate.evidence
+        key = str(path.expanduser().absolute())
+        index = index_by_path.get(key)
+        if index is None:
+            index_by_path[key] = len(result)
+            result.append(
+                CoalescedCandidate(
+                    path,
+                    source,
+                    [evidence],
+                    candidate.authority,
+                )
+            )
+            continue
+        existing = result[index]
+        existing_path = existing.path
+        existing_source = existing.source
+        existing_evidence = list(existing.evidence)
+        existing_authority = existing.authority
+        if evidence not in existing_evidence:
+            existing_evidence.append(evidence)
+        if SOURCE_RANK.get(source, 0) > SOURCE_RANK.get(existing_source, 0):
+            existing_source = source
+            existing_authority = candidate.authority
+        result[index] = CoalescedCandidate(
+            existing_path,
+            existing_source,
+            existing_evidence,
+            existing_authority,
+        )
+    return result
 
 
 def select_candidate(
@@ -1012,14 +2198,14 @@ def repository_family_hints(
 
 def expected_contract(
     args: argparse.Namespace,
-    raw_candidates: list[tuple[Path, str, str]],
+    raw_candidates: list[CandidateReference],
     project: Path,
     config_snapshots: list[ConfigSnapshot],
 ) -> dict[str, Any]:
     config_candidates = [
-        (path, source, evidence)
-        for path, source, evidence in raw_candidates
-        if source in {"environment", "project_config"}
+        (candidate.path, candidate.source, candidate.evidence)
+        for candidate in raw_candidates
+        if candidate.source in {"environment", "project_config"}
     ]
     family_hints = sorted(
         {
@@ -1085,18 +2271,30 @@ def expected_contract(
 def resolve(args: argparse.Namespace) -> dict[str, Any]:
     project_boundary = authenticate_directory(args.project)
     project = project_boundary.path
+    bounded_omissions: list[BoundedOmission] = []
     config_snapshots = collect_config_snapshots(
         project,
         root_descriptor=project_boundary.descriptor,
         root_identity=project_boundary.identity,
+        bounded_omissions=bounded_omissions,
     )
-    raw_candidates: list[tuple[Path, str, str]] = []
+    raw_candidates: list[CandidateReference] = []
     raw_candidates.extend(
-        (Path(value), "explicit", f"--candidate={value}")
+        CandidateReference(
+            Path(value),
+            "explicit",
+            f"--candidate={value}",
+        )
         for value in args.candidate
     )
-    raw_candidates.extend(configured_candidates(project, config_snapshots))
-    raw_candidates.extend(project_local_candidates(project))
+    raw_candidates.extend(
+        configured_candidates(
+            project,
+            config_snapshots,
+            bounded_omissions,
+        )
+    )
+    raw_candidates.extend(project_local_candidates(project, bounded_omissions))
 
     maven = maven_roots(args.maven_repo)
     raw_candidates.extend(
@@ -1107,6 +2305,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
                 "io/opentelemetry/javaagent/opentelemetry-javaagent/*/opentelemetry-javaagent-*.jar",
             ),
             "maven_cache",
+            bounded_omissions,
         )
     )
     gradle = gradle_roots(args.gradle_cache)
@@ -1118,8 +2317,20 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
                 "io.opentelemetry.javaagent/opentelemetry-javaagent/*/*/opentelemetry-javaagent-*.jar",
             ),
             "gradle_cache",
+            bounded_omissions,
         )
     )
+    candidate_inputs = coalesce_candidates(raw_candidates)
+    if len(candidate_inputs) > MAX_CANDIDATES:
+        record_bounded_omission(
+            bounded_omissions,
+            reason="candidate_validation_limit",
+            omitted_count=len(candidate_inputs) - MAX_CANDIDATES,
+            omitted_unit="candidates",
+            count_is_lower_bound=False,
+            limit=MAX_CANDIDATES,
+            limit_unit="candidates",
+        )
     expected = expected_contract(
         args,
         raw_candidates,
@@ -1129,14 +2340,21 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
 
     valid_by_path: dict[str, dict[str, Any]] = {}
     rejected: list[dict[str, str]] = []
-    for path, source, evidence in raw_candidates[:MAX_CANDIDATES]:
-        candidate, reason = validate_candidate(path)
+    candidates_to_validate = candidate_inputs[:MAX_CANDIDATES]
+    for candidate_input in candidates_to_validate:
+        path = candidate_input.path
+        source = candidate_input.source
+        evidence = candidate_input.evidence
+        candidate, reason = validate_candidate(
+            path,
+            candidate_input.authority,
+        )
         if candidate is None:
             rejected.append(
                 {
                     "path": str(path.expanduser()),
                     "source": source,
-                    "source_evidence": evidence,
+                    "source_evidence": "; ".join(evidence),
                     "reason": reason or "invalid",
                 }
             )
@@ -1144,7 +2362,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         candidate.update(
             {
                 "source": source,
-                "source_evidence": [evidence],
+                "source_evidence": evidence,
             }
         )
         existing = valid_by_path.get(candidate["path"])
@@ -1152,18 +2370,30 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             valid_by_path[candidate["path"]] = candidate
             continue
         existing["source_evidence"] = sorted(
-            set(existing["source_evidence"] + [evidence])
+            set(existing["source_evidence"] + evidence)
         )
         if SOURCE_RANK.get(source, 0) > SOURCE_RANK.get(existing["source"], 0):
             existing["source"] = source
 
     valid = sorted(valid_by_path.values(), key=lambda item: item["path"])
+    bounded_omission_rows = [
+        omission.as_dict()
+        for omission in sorted(
+            bounded_omissions,
+            key=lambda item: (
+                item.reason,
+                item.limit_unit,
+                item.limit,
+            ),
+        )
+    ]
+    discovery_complete = not bounded_omission_rows
     result: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "kind": "java-agent-resolution",
         "project": str(project),
-        "status": "unresolved",
-        "complete": True,
+        "status": "unresolved" if discovery_complete else "incomplete",
+        "complete": discovery_complete,
         "candidate_only": True,
         "proof_boundary": (
             "Local artifact validation is not Java-agent execution or deployed "
@@ -1185,11 +2415,18 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
                 "runtime artifact."
             ),
         },
+        "bounded_discovery": {
+            "complete": discovery_complete,
+            "omissions": bounded_omission_rows,
+        },
         "searched": {
             "explicit_candidates": len(args.candidate),
             "maven_roots": [str(path) for path in maven],
             "gradle_roots": [str(path) for path in gradle],
+            "config_files_read": len(config_snapshots),
             "raw_candidates": len(raw_candidates),
+            "unique_candidates": len(candidate_inputs),
+            "candidates_validated": len(candidates_to_validate),
             "valid_candidates": len(valid),
         },
         "rejected": rejected,
@@ -1197,8 +2434,13 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             "No valid Java agent was found after deterministic local resolution; "
             "record the exact missing coordinate or source-configured artifact before "
             "requesting external input."
+            if discovery_complete
+            else "Java-agent resolution is incomplete because bounded discovery "
+            "omitted eligible configuration or candidates; no agent was selected."
         ),
     }
+    if not discovery_complete:
+        return result
     if expected["unresolved_conflicts"]:
         result["status"] = "ambiguous"
         result["message"] = (

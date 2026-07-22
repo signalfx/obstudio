@@ -90,6 +90,7 @@
       "area": "HTTP request telemetry",
       "gap": "The chi router has no OpenTelemetry server instrumentation.",
       "impact": "Operators cannot attribute latency or errors to stable route patterns.",
+      "product_outcome": "Splunk APM route-level latency and errors",
       "required_fix": "Add one OpenTelemetry SDK lifecycle and one route-aware otelhttp server wrapper.",
       "instrument_mode": "default",
       "verification_scenarios": [
@@ -117,7 +118,9 @@
       ],
       "follow_up_actions": [
         "Verify the route span in the local runtime and APM trace view."
-      ]
+      ],
+      "resolution": null,
+      "resolved_commit": null
     },
     {
       "id": "OTEL-002",
@@ -130,6 +133,7 @@
       "area": "Task creation KPI",
       "gap": "Successful task creation is not counted as a business event.",
       "impact": "Product activity cannot be charted independently of HTTP throughput.",
+      "product_outcome": "Splunk dashboard business KPI",
       "required_fix": "Add a task.created counter after a task is persisted.",
       "instrument_mode": "fix all",
       "verification_scenarios": [
@@ -155,7 +159,9 @@
       ],
       "follow_up_actions": [
         "Create a KPI chart only if the product owner approves this finding."
-      ]
+      ],
+      "resolution": null,
+      "resolved_commit": null
     },
     {
       "id": "OTEL-003",
@@ -202,6 +208,8 @@
       "follow_up_actions": [
         "Record the chosen signal owner before selecting the compatible instrumentation branch."
       ],
+      "resolution": null,
+      "resolved_commit": null,
       "decision_owner": "task service telemetry owner",
       "decision_question": "Which app-owned OTel signal should represent task creation: task.created or task.create?",
       "decision_options": [
@@ -256,7 +264,9 @@
       ],
       "follow_up_actions": [
         "Inspect the task.create trace waterfall only when the trace-span option is selected."
-      ]
+      ],
+      "resolution": null,
+      "resolved_commit": null
     }
   ],
   "verification": {
@@ -308,6 +318,7 @@
   },
   "anti_patterns": [],
   "recommendation": [
-    "Run $otel-instrument --ids OTEL-001; leave OTEL-002 unselected."
-  ]
+    "Save the reviewed selection as .observe/otel-selection.json, then run $otel-instrument; leave OTEL-002 unselected."
+  ],
+  "scan_blockers": []
 }
