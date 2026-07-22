@@ -4,7 +4,8 @@ description: >-
   Run deterministic verification for existing OpenTelemetry instrumentation and
   produce a report. Use when the user types $otel-verify, asks to verify OTel
   instrumentation, prove spans/metrics/logs are emitted, run observability
-  tests, validate .observe/otel.md, check GenAI trace correctness, prove all
+  tests, validate .observe/otel-audit.json or .observe/otel.md, consume approved
+  finding IDs from --ids or .observe/otel-selection.json, check GenAI trace correctness, prove all
   modified/declared spans, metrics, and logs, derive per-code-path coverage
   from an audit report, produce an instrumentation verification report, or emit
   local explorer-visible OTLP contract telemetry without starting the full app.
@@ -17,41 +18,81 @@ description: >-
 Run deterministic checks that prove existing OpenTelemetry instrumentation
 works. Prefer app-code execution with fake inputs, optionally export the same
 scenarios to a local OTLP collector or Obstudio, then write
-`.observe/otel-verify.md`.
+`.observe/otel-verify.md` and, for a canonical audit flow,
+`.observe/otel-verify.json`.
 
-Before writing `.observe/otel-verify.md`, read
+Before writing verification artifacts, read
 `../references/report-flow-contract.md` and follow the Verification Report
 Contract plus Reader-First Report Order.
 
 ## Contract
 
-- Default output: `.observe/otel-verify.md`
-- Default source of truth: `.observe/otel.md` for baseline audit and
-  `Verification Plan`, plus `.observe/otel-instrumentation.md` for
-  `Signals Changed`, validation gates, and verification handoff/results.
+- Default outputs: `.observe/otel-verify.md` and, when canonical audit approval
+  exists, `.observe/otel-verify.json`, plus a refreshed
+  `.observe/otel-instrumentation.html` concise selected-finding proof view.
+- Default source of truth: `.observe/otel-audit.json` plus the bound
+  `.observe/otel-selection.json`, and `.observe/otel-instrumentation.json` when
+  present. Markdown reports are reader projections and legacy fallbacks only.
 - Default mode: read-only for application code
 - Do not add instrumentation. Use `$otel-instrument` for instrumentation
   changes.
+- Determine invocation ownership before running checks. A standalone
+  `$otel-verify` request writes the verification artifacts and returns a
+  reader-facing result. When an active `$otel-instrument` workflow invokes
+  verification, `$otel-verify` remains read-only but returns control to that
+  workflow after writing the artifacts; it does not turn a repairable failure
+  into a terminal user handoff. In that child mode, do not enter the optional
+  permanent-test-authoring or dependency-edit paths; return the required test
+  or dependency repair to the parent instrumentation workflow.
+- Record that ownership in canonical JSON: standalone runs use
+  `meta.workflow_mode: standalone` and `meta.lifecycle: final`; child runs use
+  `meta.workflow_mode: instrumentation_child`. A failed child result is
+  `meta.lifecycle: intermediate`, never `final`. A post-repair child overlay is
+  `final` only after no executed finding, scenario, or item is `not_working`.
+- Bind canonical verification to the exact normalized instrumentation overlay
+  with `instrumentation_sha256`. Recompute it after every instrumentation
+  repair; matching audit and item IDs alone are not freshness proof. Before
+  computing it, require instrumentation's `selection_sha256` to match the exact
+  normalized selection. The instrumentation digest then transitively binds
+  verification to `decision_answers` and all executable selection state.
+- Derive the report title service identity from an existing effective
+  `service.name` when proven. Otherwise use the final segment of the owning
+  module/package identifier or the service directory basename. For a Go
+  semantic-import suffix such as `/v2`, strip that suffix and use the preceding
+  module segment; never put a full module path such as
+  `example.com/org/service` in the title.
+- In every Markdown table cell, escape a literal vertical bar as `\|`,
+  including bars inside inline-code commands and regexes. Backticks do not make
+  raw `|` safe inside a Markdown table.
+- After writing the report, always run
+  `python3 -I "<directory-containing-loaded-SKILL.md>/scripts/validate_reader_report.py"
+  "<service-root>/.observe/otel-verify.md"`. In canonical mode add
+  `--instrumentation-json <service-root>/.observe/otel-instrumentation.json`
+  and `--verify-json <service-root>/.observe/otel-verify.json` so item identity,
+  status, observed proof, product result, and evidence are projected from the
+  authoritative overlays.
+  Use `--expected-items-file` only for the legacy no-JSON fallback. Repair every
+  structural, row-coverage, status, count, or gap-mirroring error and rerun until
+  it passes. Do not finalize an unvalidated report.
 - Build inventories before running checks:
   - `Signal Inventory`: every declared span, metric, log/event, and
     runtime/exporter signal in scope
   - `Added Telemetry Inventory`: every added or modified trace/span/event,
     metric, log/event, and runtime/exporter signal from
-    `.observe/otel-instrumentation.md`, with source/call site and
-    user/application path
+    `.observe/otel-instrumentation.json`, or the Markdown legacy fallback, with
+    stable item ID, source/call site, product view/action, and user/application
+    path
   - `Acceptance Scenario Inventory`: every audit-derived user/API/runtime path with
     distinct telemetry shape
 - Run a project-runtime build/import viability gate before telemetry harnesses.
   A changed instrumented module that does not compile, typecheck, or import
   cannot have its telemetry verified.
-- Default signal coverage target: every span, metric, and log signal declared
-  in the audit or instrumentation report, especially `Signals Changed`,
-  `Current Instrumentation`, `GenAI Readiness`, changed instrumentation source
-  files, and user-provided scope.
-- Default path coverage target: every signal-affecting path declared or implied
-  by the audit: workflow success/failure, HTTP/API route, streaming, stream
-  failure, tool/MCP call, retrieval/memory, redaction, startup, shutdown,
-  background job, or dependency/runtime initialization.
+- For a canonical flow, the signal and path coverage target is exactly the
+  approved findings, their expected telemetry, and their referenced scenarios,
+  plus instrumentation changes mapped to those IDs. Do not let unselected audit
+  findings make the result partial. On the legacy fallback, cover every signal
+  and signal-affecting path declared in the Markdown audit or instrumentation
+  report.
 - Do not treat one representative trace as full verification unless the
   inventories contain only that trace's signals and paths.
 - Verification must be app-code-first. Generated SDK spans, metrics, and logs
@@ -61,12 +102,16 @@ Contract plus Reader-First Report Order.
   - What telemetry or runtime behavior was added or modified?
   - Was each change tested, and did application code execute?
   - Is each change working?
-  - What direct proof supports that conclusion?
   - If anything is not working or not proven, why and what is needed next?
+  - What direct proof supports the current conclusion?
 - Answer those questions per individual added or modified OTel item in one
   authoritative table. Use one row per exact route/server span, custom span
   call site, metric, log pipeline/category, and runtime/exporter behavior.
   Do not make the reader correlate separate change and test inventories.
+- In canonical mode, the stable instrumentation telemetry item IDs are the
+  expected inventory. Write exactly one verification `item_results` row for
+  each ID in instrumentation order and carry that ID into the reader table.
+  Never let a separately authored expected-items file omit a canonical item.
 - Keep the full signal, path, runtime, and build inventories as working
   verification data. Publish only the detail needed to support the result,
   reproduce a failure, or identify an uncovered path. Do not force the reader
@@ -88,7 +133,7 @@ Contract plus Reader-First Report Order.
   tests.
 - When the user explicitly asks to add, repair, persist, or write tests, enter
   test-authoring mode and read `references/app-code-test-authoring.md`.
-- When `.observe/otel.md` exists, read
+- When `.observe/otel-audit.json` or legacy `.observe/otel.md` exists, read
   `references/path-scenario-coverage.md` before designing harnesses or writing
   the report.
 - Read `../references/full-runtime-acceptance.md` when any claim depends on
@@ -98,23 +143,73 @@ Contract plus Reader-First Report Order.
 - Read `references/explorer-witness.md` before claiming local explorer
   visibility.
 
+Resolve every reference and script path from the directory containing the
+loaded `otel-verify/SKILL.md`. Here, `../references/<file>` means the shared
+sibling under the parent skills directory, while `references/<file>` and
+`scripts/<file>` are local to `otel-verify`. Never probe the service root or
+repository root for these paths.
+
 ## Workflow
 
 ### 1. Discover The Verification Inputs
 
 Inspect the repo before running anything:
 
-- Read `.observe/otel.md` if it exists.
-- Read `.observe/otel-instrumentation.md` if it exists.
-- When present, seed runtime candidates from `.observe/otel.md`
-  `## Verification Plan / Test Environments` and scenarios from
-  `## Verification Plan / Acceptance Scenarios`, resolving every scenario's
-  environment IDs before execution. Then seed changed-signal scenarios and
-  prior implementation checks from
-  `.observe/otel-instrumentation.md` `## Signals Changed` and
-  `## Verification Handoff / Results`. Reconcile these rows with current source
-  and config; do not blindly trust a stale command, deleted runtime, or renamed
-  module.
+#### Canonical Scope Gate
+
+When `.observe/otel-audit.json` exists, verification scope must come from the
+same explicit approval used for instrumentation. Read and follow
+`./references/json-approval-handoff.md` before choosing commands. Validate the
+audit, selection, and instrumentation handoff, including the instrumentation
+overlay's exact `selection_sha256`; then verify exactly the approved findings
+and referenced scenarios. Never infer an all-findings scope.
+
+If a canonical instrumentation Markdown report exists without its JSON
+handoff, do not infer selected finding IDs from prose. Treat it as legacy
+context, clearly mark the missing machine handoff, and verify only the
+audit-selected scope that can be reconciled to source. When no canonical audit
+exists, retain the existing legacy Markdown and direct-user-scope workflow; do
+not fabricate audit IDs or flow JSON.
+
+- Use the initial bounded file list as a size gate. When the service has at
+  most 25 non-ignored files, exactly one dependency manifest, and no nested
+  service root, take the direct small-repo path: inspect that file list, the
+  manifest, entrypoint, and cited source directly, and do not run the inventory
+  helper. For larger, multi-module, nested, or unclear repositories, run
+  `python3 -I "<directory-containing-loaded-SKILL.md>/scripts/inspect_otel_project.py"
+  "<service-root>" --output
+  "<service-root>/.observe/tmp/otel-project-inventory.json"` before broad
+  manual searches. Resolve the command
+  directly from the directory containing the loaded `otel-verify/SKILL.md`;
+  do not probe a repository-root `references/` directory. On the inventory
+  path, run one successful invocation; retry only to correct an invocation or runtime failure.
+  Use its deterministic JSON to seed manifests/languages,
+  entrypoint and route candidates, configured runtime candidates, startup/test
+  surfaces, and categorized OTel source/config hits. Treat these as candidates,
+  not proof of target-process reachability, runtime availability, application
+  execution, or telemetry emission. Inspect `complete`, `warnings`, `skipped`,
+  and `section_counts`, then read only needed JSON sections instead of dumping
+  the full file. For a section whose truncation is zero in a `complete: true`
+  inventory, do not repeat the same repository-wide `find` or broad `rg`; use
+  focused source proof. Do not follow complete file/OTel sections with recursive
+  `find`, `rg --files`, or a repository-wide OTel-pattern `rg`. The helper
+  creates the output parent; do not pre-create it. Search manually for
+  incomplete, skipped, unsupported, or truncated surfaces. If Python or the
+  shared helper is unavailable, perform the discovery manually and record the
+  exact failure. Record which discovery path was selected.
+
+- Read canonical `.observe/otel-audit.json`, `.observe/otel-selection.json`, and
+  `.observe/otel-instrumentation.json` first. Read their Markdown projections
+  only for reader detail or when canonical JSON is absent.
+- In the canonical flow, seed runtime candidates and scenarios from the
+  approved findings' `verification_scenarios`, resolving every environment ID
+  before execution. Seed changed-signal scenarios and prior checks from the
+  matching instrumentation JSON finding rows. Reconcile all rows with current
+  source and config; do not blindly trust a stale command, deleted runtime, or
+  renamed module.
+- On the legacy fallback only, seed runtime candidates and acceptance scenarios
+  from `.observe/otel.md`, then seed changed-signal scenarios and prior checks
+  from `.observe/otel-instrumentation.md`.
 - Identify the top-level service/runtime surface under test.
 - Inspect source files referenced by the audit and changed instrumentation
   files from git diff when applicable.
@@ -223,6 +318,13 @@ Rules:
   matching tests, use the framework's no-match guard only for the reactor
   mechanics, then verify that the target test report exists and ran the
   expected tests.
+- Put required auto-instrumentation artifacts in the runtime candidate
+  inventory. For a Java-agent scenario, use
+  `scripts/resolve_java_agent.py` as required by the project-runtime reference;
+  do not turn one missing host/container path into a blocker. When it resolves,
+  bind its absolute path/version/hash/identity, run its exact generated
+  `pre_attach_recheck_argv` immediately before JVM startup, and use only the
+  fresh recheck's `javaagent_argv`. Keep production parity separate.
 - If restore/import is blocked by private registry credentials, network
   policy, missing toolchain, or platform mismatch, mark affected rows
   `Blocked` with the exact prerequisite. Do not call them `Source only`.
@@ -271,15 +373,21 @@ Rules:
   `instrumentation-introduced` unless evidence proves otherwise. Classify
   missing configured runtimes, declared dependencies, private registries, or
   credentials as `environment`. Use `pre-existing` or `unknown` only with
-  concrete evidence.
+  concrete evidence. When Git or a saved pre-instrumentation snapshot exists,
+  compare the failing path with that baseline before assigning ownership; an
+  unchanged selected OTel wiring defect is `pre-existing`, not
+  `instrumentation-introduced`.
 - Verification remains read-only for application code. For an
-  instrumentation-introduced failure, mark affected signal/path rows
-  `Blocked`, set the overall result to `Fail`, name `$otel-instrument` as the
-  repair path, and do not attempt expensive runtime/OTLP harnesses that depend
-  on the broken module.
+  instrumentation-introduced failure, mark the affected finding and telemetry
+  items `not_working`, set the overall result to `Fail`, and return the exact
+  repair to `$otel-instrument`. Scenarios that could not execute because the
+  module failed its viability gate may remain `Blocked`; they do not turn the
+  application failure into an environmental blocker. Do not attempt expensive
+  runtime/OTLP harnesses that depend on the broken module.
 - An unavailable prerequisite produces `Blocked` rows and an overall `Partial`
   when meaningful proof passed. Use an overall `Blocked` result when no
-  meaningful proof can run. Use `Fail` only when a scenario ran and its
+  meaningful proof can run. Use `Fail` when project-configured source viability
+  fails because of instrumentation changes, or when a scenario ran and its
   expected telemetry was absent or invalid.
 - Continue with unaffected modules and scenarios when their runtime surface is
   independent.
@@ -298,12 +406,22 @@ a synthetic-root or direct call-site harness exists. Use the audit's
 `Proof Level` and local-safe fixture column to start the actual process and
 exercise the complete runtime-required route/scenario matrix. If no safe local
 profile exists, document the exact missing prerequisite and keep those rows
-`Partial`, `Blocked`, or `Not proven`.
+`Partial`, `Blocked`, or `Not proven`. Before authoring a receiver or temporary
+harness that needs a local listener, run the shared contract's one-shot
+`scripts/probe_loopback_bind.py` preflight. A blocked result is concrete proof
+to stop listener-dependent attempts; an available result is only permission to
+continue with the real gate.
 
 Use the same selected project runtime for temporary harnesses that you used for
 compile/import checks. Do not compile a harness with a global classpath,
 interpreter, package manager, or SDK when the project has a configured wrapper
 or toolchain.
+
+For Java, never combine a test-owned `SdkTracerProvider`/`OpenTelemetrySdk`
+with the Java agent in one test JVM. Use a no-agent unit-test fork for provider
+assertions and a separate agent E2E fork for automatic/runtime behavior. Pass
+actual `OTEL_*` environment variables to any app-owned metric reporter that
+reads `System.getenv`; `-Dotel.*` agent properties do not configure that code.
 
 Coverage rules:
 
@@ -328,6 +446,11 @@ Coverage rules:
   agent, preload, middleware, or startup bootstrap. A synthetic owning root or
   direct handler call cannot prove automatic server span count, kind, route
   name, automatic metric emission, or duplicate suppression.
+- Here, the actual agent is the validated artifact attached to the real
+  verification process; the exact deployed-production version need not be
+  known to run the check. Once attachment succeeds, remove superseded
+  agent-unavailable blockers and provisioning language from `remaining` and
+  `next_steps`. A later app startup/assertion failure is not an agent blocker.
 - If the audit names multiple telemetry-distinct outcomes for one workflow,
   such as success, failure, interrupt, empty, unavailable, retry, fallback, or
   timeout, treat each as a separate path scenario unless source inspection
@@ -360,118 +483,99 @@ undriven error/timeout/stream/shutdown path, no log exporter, collector eviction
 source-only definition, missing metric datapoint, missing span attributes or
 parentage, or missing log severity/body/correlation/redaction.
 
+For every scenario with `status: blocked`, record two reader-facing canonical
+fields: `blocking_reason` and `unobserved_outcome`. `blocking_reason` states the
+exact prerequisite failure in past or present tense and must be backed by the
+scenario's command/evidence; do not write an imperative such as “provide” or
+“run.” `unobserved_outcome` states the exact runtime, OTLP-delivery, or product
+behavior that the blocked scenario would have proved. Omit both fields for
+non-blocked scenarios. Keep remediation, when one exists, in finding
+`remaining` or run-level `next_steps`; never use it as the blocker explanation.
+
 ### 6. Prefer Unit+OTLP Contract Harnesses
 
 When Obstudio, a local collector, or an explicit OTLP endpoint is available,
-try to upgrade deterministic unit/integration proof to `Verified: unit+OTLP`
-for every language and framework.
+read and follow `references/explorer-witness.md` before configuring the
+contract harness or claiming `Verified: unit+OTLP`, explorer visibility,
+resource preservation, or validation success. Use the same focused app-code
+scenario for deterministic assertions and OTLP export. If assertions pass but
+export or explorer evidence is unavailable, use `Verified: unit`.
 
-Follow `references/explorer-witness.md`: keep the source alive through exact
-queries, save sanitized query responses before shutdown, and report live
-visibility separately from post-exit persistence. Expected local eviction is
-not an instrumentation failure.
+For local Obstudio, hold the exact emitting process or test JVM alive through
+the query and evidence save. Do not wait for Maven, Gradle, Surefire, or a test
+worker to exit and then infer non-emission from an empty query; source-PID
+eviction makes that a missing live witness.
 
-- Configure real SDK tracer, meter, and logger providers before importing app
-  modules that cache OTel globals.
-- Export from the same focused fake-input scenario that performs assertions.
-- Prefer one trace per path scenario. Use stable attributes such as
-  `verification.scenario`, `verification.path`,
-  `verification.audit_source`, and `verification.coverage_kind`.
-- Use local/test-only endpoints such as HTTP `127.0.0.1:4318` or gRPC
-  `127.0.0.1:4317`. Never export verification telemetry to production.
-- Verify the effective endpoint, protocol, and path separately for traces,
-  metrics, and logs. If one signal fails, test the configured exporter against
-  the matching receiver: gRPC commonly uses `4317`; HTTP/protobuf commonly
-  uses `4318/v1/<signal>`. Do not treat successful traces as evidence that the
-  metrics exporter is valid.
-- Assert effective resource attributes from collector data, including
-  `service.name`, environment, and version. Source-level merge logic alone does
-  not prove operator-provided values survive provider construction.
-- For HTTP auto-instrumentation, assert the exact emitted request-duration
-  metric and route dimensions. If stable semantic conventions were requested,
-  require `http.server.request.duration`; an alternate metric in source or a unit
-  fake does not satisfy that runtime row.
-- Keep an Obstudio contract process alive until trace, metric, and log queries
-  complete; some local explorers evict telemetry for short-lived sources.
-- Mark `Verified: unit+OTLP` only when assertions and collector/Obstudio
-  evidence both pass. If assertions pass but export is unavailable, use
-  `Verified: unit`.
-
-Run Obstudio validation when the user requests it, but classify each finding
-before using it as an application result:
-
-- `actionable`: emitted telemetry violates the selected convention or expected
-  contract; repair or report it.
-- `registry mismatch`: the validator's core Weaver registry marks GenAI/MCP
-  fields as moved to a dedicated registry, rejects application-owned custom
-  metrics/attributes, or rejects framework-owned attributes such as
-  `asgi.event.type`. Record this separately and do not call the application
-  failed solely from the raw red/violation count.
-- `library-owned compatibility`: official auto-instrumentation emits a shape
-  the validator interprets differently, such as omitting `server.port` for a
-  default HTTPS port. Record the package/version and affected signal; do not
-  rewrite unrelated app telemetry merely to silence the finding.
-- `stale`: telemetry arrived during validation because a periodic exporter was
-  still running. Save the run id and evidence snapshot; freshness churn is not
-  signal failure.
-
-Report the raw validator summary, the classification, and the count of
-actionable application findings. Never hide findings, and never equate a large
-unclassified advisory count with verification status.
-
-Emit a nested temporary harness when topology is necessary and the real path
+Emit a nested harness when topology is necessary and the real path
 cannot run. Topology is necessary when the audit or user scope includes
 workflow/agent/tool/retrieval/memory traces, GenAI flow graph, LangGraph,
 Temporal, queues/jobs, async handoff, MCP tool execution, streaming lifecycle,
 parent/child shape, duplicate-span prevention, or an explorer DAG.
-
-Nested topology harness rules:
-
-- Derive expected edges from the inventories, for example
-  `workflow -> agent -> llm.call`, `agent -> tool`, `tool -> mcp`, or
-  `stream -> send_failed event`.
-- Prefer real instrumented call sites. If imports are blocked, use a generated
-  temporary SDK contract with the same nesting and label it
-  `generated temporary nested SDK contract`.
-- Keep child spans active inside the parent span context. Do not create all
-  spans as siblings under a synthetic root unless topology is out of scope.
-- For async or queue boundaries, use parent/child when context propagates
-  synchronously or span links when the architecture expects links.
-- Assert topology after export by querying parent span ids, links, span depth,
-  or Obstudio flow nodes/edges when available.
+When this condition applies, read and follow the nested-topology rules in
+`references/path-scenario-coverage.md`. Prefer real instrumented call sites;
+label any unavoidable SDK-only fallback as contract-only rather than app-code
+proof.
 
 ### 7. Author App-Code Tests When Requested
 
 Enter this mode only when the user explicitly asks to add, repair, persist, or
-write unit/integration tests. Follow
-`references/app-code-test-authoring.md`.
+write unit/integration tests. Before editing tests, read and follow
+`references/app-code-test-authoring.md` for repository-native placement,
+provider initialization order, app-code execution, telemetry assertions, and
+report mapping. If the required dependency or fixture seam is unavailable,
+report that exact prerequisite instead of weakening the proof.
 
-Rules:
+### 8. Produce Verification Artifacts
 
-- Use the repo's existing test framework, fixtures, naming, and fake patterns.
-- Add focused tests near the instrumented code's existing test area.
-- Install OTel test providers before importing modules that cache tracers,
-  meters, or loggers.
-- Execute the real app function, route handler, middleware, workflow method,
-  adapter, startup hook, job, or service runner with fake dependencies.
-- Assert span names, parentage, required attributes, status/events, metric
-  datapoints, log records, correlation, and redaction.
-- Run the focused tests and include their paths and results in
-  `.observe/otel-verify.md`.
-- If dependency or fixture support is missing, report the smallest required
-  seam instead of faking away the behavior in a misleading test.
+For a canonical audit flow, write `.observe/otel-verify.json` first, using the
+exact schema, ID coverage, scenario coverage, and status rules in
+`./references/json-approval-handoff.md`.
 
-### 8. Produce `.observe/otel-verify.md`
+Derive `item_results` directly from the stable instrumentation
+`telemetry_changes[].id` inventory and preserve instrumentation order. Record
+proof mode and visibility for both scenarios and items. `Working` requires the
+mapped scenario IDs, direct evidence, observed telemetry, product validation,
+an executed proof mode, and a known visibility state. Unit proof can be working
+while explicitly not explorer-visible; an explorer-visible claim requires
+saved Observer/query evidence.
 
-Create or update this reader-first report shape:
+When one unit, application, or runtime check directly and successfully observes
+a telemetry change, mark that item `working`. Do not leave the item
+`not_proven` merely because additional routes or lifecycle scenarios were not
+exercised. Scenario and finding coverage remain independent: an item can be
+working inside a `not_proven` finding. Source/config presence, a contract-only
+check, or an unbounded/ambiguous absence does not satisfy this rule. The evidence
+must name or assert the exact telemetry item and call site. Aggregate receiver
+counts, a differently named signal, or a shared helper that never invokes the
+item are context only; keep that item `not_proven` and describe it as the exact
+item not directly observed, never as `Observed` or as needing “stronger proof.”
+
+Record that judgment in the required `item_results[].direct_assertion_passed`
+boolean before computing scenario or finding rollups. Set it `true` only for a
+passed assertion against the exact item or call site, and then set item
+`status: working`. Bind every authored attribute and value to that same typed
+signal assertion, and reject contradictory or zero/no-data observations. Set
+it `false` for contextual, aggregate, ambiguous,
+not-run, or failed evidence. For a removed telemetry item, an expected-absence
+assertion is a passed direct assertion only when a bounded executed capture
+shows the removed signal is absent and the intended replacement owner is
+present. A working removed item must also record `removal_proof` with the exact
+removed signal name, a distinct same-type replacement signal/owner, and true
+`absence_assertion_passed` and `replacement_assertion_passed` booleans. The
+canonical validator rejects a `not_proven` item with
+`direct_assertion_passed: true` and a `working` item with it set to `false`.
+
+Also create or update `.observe/otel-verify.md` with this reader-first report
+shape:
 
 ```markdown
 # OTel Verification Report: <service>
 
 **Result:** Pass | Fail | Partial | Blocked | Not run
 **Bottom line:** <one plain-language sentence saying what works and what does not>
-**Source audit:** `.observe/otel.md` or `not found`
-**Source instrumentation:** `.observe/otel-instrumentation.md` or `not found`
+**Source audit:** `.observe/otel-audit.json` | `.observe/otel.md` legacy | not found
+**Approved selection:** `.observe/otel-selection.json` | direct legacy scope
+**Source instrumentation:** `.observe/otel-instrumentation.json` | `.observe/otel-instrumentation.md` legacy | not found
 
 ## What Changed
 
@@ -485,8 +589,8 @@ Create or update this reader-first report shape:
 Read this table left to right as: what was added, whether it works, how it was
 tested, and the proof.
 
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
 
 ## Not Working Or Not Proven
 
@@ -520,8 +624,36 @@ Report requirements:
 - Follow `../references/report-flow-contract.md`. The first screen must let a
   reader answer what changed, whether it was tested, whether it works, what
   proves it, and why anything remains unproven.
+- Use the stable service identity rule from the top-level contract for the
+  title. Escape every literal `|` inside table-cell evidence or command text as
+  `\|` before running the reader-report validator.
 - Keep `Bottom line` to one sentence. Do not use coverage counts alone as the
   bottom line.
+- Preserve evidence provenance without turning it into a second reader-facing
+  proof ladder. A scenario that ran with `app_test`, `unit`, `static`, or
+  `contract_only` retains that exact `proof_mode`; never collapse it into
+  `proof_mode: not_run`. Keep its positive `observed_telemetry`. The
+  instrumentation HTML shows its human audit `trigger` under neutral **Coverage
+  details** and marks each directly observed telemetry item **Proven**. It does
+  not call a `not_proven` scenario passed merely because it contains useful
+  executed evidence; render that trigger under **Focused evidence obtained**
+  while keeping the scenario explicitly incomplete. It does not render
+  “stronger proof required” or a per-finding checklist. State local
+  delivery and target-product check scope once in the report-level status; do
+  not repeat it per finding or add generic “Target product: Not checked” or
+  “Executed checks: No executed check failed” lines. Use “Verification
+  incomplete” on an incomplete finding and reserve “no observed failures” for
+  the report-level heading. Its body
+  starts with one concise verification status and then the selected-finding
+  cards; do not add aggregate statistic cards, code-to-telemetry mapping
+  ledgers, closure ledgers, scenario-proof tables, or item-proof tables there.
+  Per-finding ratios, exact counts, commands, scenario IDs, and raw evidence
+  remain in `.observe/otel-verify.json` and `.observe/otel-verify.md`.
+  A blocked finding renders **Runtime verification unavailable** before
+  **Coverage details**, with the exact `blocking_reason`, mapped working item
+  evidence under **Already proven**, and the exact `unobserved_outcome` under
+  **Still unobserved**. Do not render only a generic blocked count or raw
+  trigger list.
 - In `What Changed`, group related signals by behavior or component instead of
   listing every span in prose.
 - In `Tested And Working`, include every individual item from the reconciled
@@ -531,23 +663,50 @@ Report requirements:
   the call site in `OTel item` and give each call site its own row.
 - Put `Individual result: <working>/<total> working` immediately above the
   table, followed by counts by signal type. Derive the counts from the table.
+- Use the stable canonical telemetry item ID in `Item ID`. Its order must match
+  `.observe/otel-instrumentation.json`; use `OTel item` for the readable signal
+  and call-site label.
 - Use only `Working`, `Not working`, `Not proven`, or `Not configured` in the
   `Working status` column. `Working` requires direct test or runtime evidence.
 - State exactly how each item was tested: application test, actual full
   runtime, temporary app-code harness, OTLP query, or static configuration
   validation. Do not write only `tested`, `verified`, or a suite name.
+- In `Product result / visibility`, name the monitoring/product outcome and the
+  explicit visibility state. Distinguish unit-only `not_explorer_visible`,
+  local `otlp_accepted`, and saved-query `explorer_visible` evidence. Include
+  the chart/dashboard or detector follow-up for a metric and the
+  filter/slice/group-by follow-up for a newly added attribute or dimension.
+- Reconcile that visibility with the instrumentation item's `product_view`.
+  Never claim `otlp_accepted` or `explorer_visible` when it says no OTLP
+  pipeline or export path exists. “No application-owned exporter was added” is
+  compatible only when durable evidence proves an agent- or platform-owned
+  path.
 - Put a direct file path, report, assertion, or saved collector response in
   every `Evidence` cell. Source code presence alone is not evidence that an
   OTel item works.
 - Repeat non-working, unproven, and unconfigured rows under
   `Not Working Or Not Proven` with the reason and next action. Write `None`
   there only when every per-OTel row is `Working`.
+- For a `not_working` finding, write `remaining` as a repair-only list of the
+  concrete in-scope application code/config changes `$otel-instrument` must
+  make. Do not append “rerun verification,” scenario execution, proof capture,
+  or product inspection as another repair action. Put the observed failure in
+  failed scenario `observed_telemetry`; keep the affected confirmation scope in
+  the scenario mappings and exact IDs/counts in `Technical Details`. In
+  reader-facing text, state that `$otel-verify` never repairs application code:
+  after `$otel-instrument` applies the change, its workflow invokes verification
+  automatically only to confirm whether the repair worked. Do not tell the
+  user to execute each scenario manually.
 - In `Proof`, explain the strength of evidence in plain language. Distinguish
   application tests, temporary app-code harnesses, OTLP collector acceptance,
   and source/config checks. Never present source presence as runtime proof.
 - Put commands, runtime selection, trace IDs, full path matrices, signal
   inventories, and topology diagnostics under `Technical Details`. Omit
   diagnostic tables that merely repeat evidence already shown above.
+- Never expose raw trace IDs or span IDs in generated human-facing HTML,
+  including narrative `observed_telemetry`. Say **the generated trace** and
+  name the relevant span or signal; retain exact identifiers in canonical
+  `trace_ids`, durable evidence, and Markdown `Technical Details` only.
 - Use exact signal names and source/test paths.
 - Do not claim a signal is verified unless command output, test assertion, or
   collector/Obstudio evidence proves it.
@@ -578,18 +737,26 @@ Report requirements:
   The report's `What Changed`, `Tested And Working`, and
   `Not Working Or Not Proven` sections are the reader-facing projection of
   those inventories.
-- Before finishing, write the exact `OTel item` labels from the reconciled
-  Added Telemetry Inventory to `.observe/tmp/otel-verify-expected-items.txt`,
-  one label per line, then run the bundled validator:
+- Before finishing in canonical mode, run the bundled validator against the
+  instrumentation JSON so report coverage cannot be reduced by a hand-authored
+  inventory:
 
 ```bash
-python3 <otel-verify-skill-dir>/scripts/validate_reader_report.py \
+python3 -I <otel-verify-skill-dir>/scripts/validate_reader_report.py \
   .observe/otel-verify.md \
-  --expected-items-file .observe/tmp/otel-verify-expected-items.txt
+  --instrumentation-json .observe/otel-instrumentation.json \
+  --verify-json .observe/otel-verify.json
 ```
+
+  Only on the legacy no-JSON fallback, write exact `OTel item` labels to
+  `.observe/tmp/otel-verify-expected-items.txt` and use
+  `--expected-items-file`.
 
   Treat a validator failure as an incomplete report. Fix missing, grouped,
   duplicate, vague, or unsupported rows before returning the result.
+- For a canonical flow, follow `Validate And Render` in
+  `./references/json-approval-handoff.md` after both verification artifacts
+  pass their own report checks. Repair every flow error before finalizing.
 - Include summary counts, for example:
 
 ```markdown
@@ -603,7 +770,11 @@ logs/events. If OTLP logs were requested but no log exporter or bridge exists,
 mark them `Not configured` and state the implementation required. Do not use
 `Not proven` for an absent implementation.
 
-### 9. Final Response
+### 9. Standalone Final Response
+
+Use this section only when `$otel-verify` is the user-invoked workflow. When an
+active `$otel-instrument` workflow invoked verification, skip this terminal
+response and return the repair packet defined below to the parent workflow.
 
 Mirror the reader-first report in the command response. Use these exact headings
 in this exact order; do not replace them with generic headings such as
@@ -612,6 +783,9 @@ in this exact order; do not replace them with generic headings such as
 ```markdown
 **Result:** Pass | Fail | Partial | Blocked | Not run
 **Report:** [otel-verify.md](<absolute path>)
+**Machine report:** [otel-verify.json](<absolute path>) when canonical
+**Instrumentation report:** [otel-instrumentation.html](<absolute path>) when canonical
+**Audit report:** [otel.html](<absolute path>) when canonical
 
 ## What Changed
 
@@ -621,8 +795,8 @@ in this exact order; do not replace them with generic headings such as
 
 **Individual result:** <working>/<total> working: <counts by signal type>.
 
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
 <one row for every individual added or modified OTel item; do not group or omit
 rows merely to shorten the response>
 
@@ -642,9 +816,33 @@ or is partial; the `Working status` column makes mixed results explicit.
 Always include `Not Working Or Not Proven`; write `None` only when every
 in-scope inventory row is proven.
 
-Name `$otel-instrument` as the repair path for instrumentation-introduced
-source failures; do not imply that rerunning verification will repair
-application code.
+Name `$otel-instrument` as the repair path for instrumentation-owned source or
+configuration failures; do not imply that rerunning verification will repair
+application code. Instrumentation-owned includes a regression introduced by
+the current instrumentation diff, missing wiring required by that change, and
+a pre-existing OTel defect inside selected scope that prevents the selected
+telemetry from working. It excludes unrelated business logic and external or
+unselected dependencies.
+
+When this verification was invoked by an active `$otel-instrument` workflow,
+write `meta.workflow_mode: instrumentation_child` and return a repair packet to
+that workflow using the existing canonical fields:
+failed finding/item/scenario IDs, direct evidence, and repair-only `remaining`
+actions. Set `meta.lifecycle: intermediate` for this failed artifact. Do not
+emit the terminal reader-facing handoff yet and do not ask the user to start
+`$otel-instrument` again. The parent instrumentation workflow
+classifies ownership, applies every safe in-scope repair, and invokes the
+affected checks again after updating the instrumentation overlay; the next
+verification must carry its new `instrumentation_sha256`. The parent's shared
+`instrumentation-final-gate` rejects this intermediate artifact as a final
+handoff. For a standalone verification request, name
+`$otel-instrument` once as the next workflow and explain that verification is
+read-only. For `Fail`, keep top-level `next_steps` to the repair that must
+happen now; the automatic verification recheck is workflow behavior, not a
+second user action.
+
+For a canonical flow, state the audit ID and approved finding IDs, and confirm
+that unselected findings were excluded from this verification result.
 
 For demo-oriented runs, include:
 

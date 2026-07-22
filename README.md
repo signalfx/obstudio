@@ -150,8 +150,21 @@ $splunk-sync
 Use `$otel-audit` to understand what is missing before editing. Use
 `$otel-instrument` when you are ready to add SDK setup, auto-instrumentation,
 and targeted custom signals. It runs the `$otel-verify` workflow by default
-after its implementation gate. Run `$otel-verify` directly to recheck existing
-instrumentation and produce `.observe/otel-verify.md`; see
+after its implementation gate. The audit writes canonical
+`.observe/otel-audit.json` plus a self-contained `.observe/otel.html`; review
+and select findings in the HTML, press **Save selection**, and place the
+downloaded file at `.observe/otel-selection.json`. You can alternatively invoke
+`$otel-instrument --ids OTEL-001,OTEL-004` directly; the skill writes the same
+validated selection handoff before editing. Instrumentation writes a separate
+`.observe/otel-instrumentation.html` that maps selected gaps to code changes,
+exact telemetry, product impact, proof, and next actions; it does not turn the
+audit HTML into a change log. The bundled renderer uses only the Python standard
+library, and both HTML reports have no Bun, Node, YAML parser, package, font, or
+network dependency. Run `$otel-verify` directly to recheck existing
+instrumentation and refresh proof in the instrumentation HTML. In a canonical
+audit/selection flow it produces
+`.observe/otel-verify.json` plus the compatibility `.observe/otel-verify.md`;
+legacy no-audit runs retain the Markdown report only. See
 [OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
 Use `$splunk-configure` after auditing to generate Splunk Observability Cloud
 detector Terraform — it reads the audit report, classifies metrics, and outputs
@@ -222,7 +235,7 @@ obstudio/
 | `make test` | Run Go tests |
 | `make test-client` | Run React client tests |
 | `make test-extension` | Run extension tests |
-| `make test-all` | Run Go, client, and extension tests |
+| `make test-all` | Run Go, client, extension, and skill-script tests |
 | `make fmt` | Format Go source |
 | `make vet` | Vet Go source |
 | `make tidy` | Tidy Go modules |

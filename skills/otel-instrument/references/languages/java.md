@@ -72,6 +72,19 @@ Record the trace source of truth in the preflight summary:
   by the app, framework, or external bootstrap module. If one is required, add it
   to an OTel/Telemetry module and mention in the final response why it was
   needed.
+- Keep provider-owning unit tests and Java-agent runtime tests in separate JVM
+  forks. Run a unit test that constructs `SdkTracerProvider`, installs an
+  `OpenTelemetrySdk`, or replaces the test global without `-javaagent`; remove
+  inherited agent options such as `JAVA_TOOL_OPTIONS` from that fork. Run
+  agent-only HTTP/topology/export assertions in a separate agent E2E fork that
+  does not install or reset a test provider. Never mix a test provider with the
+  agent-owned global in one Surefire, Failsafe, or Gradle test JVM.
+- Resolve configuration ownership per signal. Java agent system properties
+  such as `-Dotel.exporter.otlp.endpoint=...` configure the agent SDK; they do
+  not necessarily configure an application-owned metric reporter/exporter.
+  When app source reads `System.getenv("OTEL_...")`, pass actual `OTEL_*`
+  environment variables into the relevant test/runtime fork and prove the fork
+  inherited them.
 
 ---
 
