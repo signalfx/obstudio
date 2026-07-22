@@ -4520,6 +4520,33 @@ def finding_verification_heading(proof: dict[str, Any]) -> str:
     }.get(proof["status"], "Verification status")
 
 
+def named_scenario_summary(
+    scenarios: list[dict[str, Any]],
+    audit_scenarios: dict[str, dict[str, Any]],
+    remainder_noun: str,
+) -> str:
+    """Return concise human trigger text without inferring its grammar."""
+
+    labels = list(
+        dict.fromkeys(
+            scenario_reader_label(scenario, audit_scenarios)
+            for scenario in scenarios
+        )
+    )
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]}; {labels[1]}"
+    if len(labels) == 3:
+        return f"{labels[0]}; {labels[1]}; {labels[2]}"
+    additional = len(labels) - 3
+    suffix = "" if additional == 1 else "s"
+    return (
+        f"{labels[0]}; {labels[1]}; {labels[2]}; and {additional} other "
+        f"{remainder_noun}{suffix}"
+    )
+
+
 def finding_verification_summary(
     proof: dict[str, Any],
     audit_scenarios: dict[str, dict[str, Any]],
@@ -4548,19 +4575,15 @@ def finding_verification_summary(
             and scenario["proof_mode"] != "full_runtime"
         ]
         if runtime_routes:
-            route_verb = (
-                "was" if len(runtime_routes) == 1 and len(routes) == 1 else "were"
+            summary = named_scenario_summary(
+                runtime_routes, audit_scenarios, "route check"
             )
-            sentences.append(
-                f'{len(runtime_routes)} of {len(routes)} route '
-                f'{"check" if len(routes) == 1 else "checks"} {route_verb} confirmed '
-                "in a running service."
-            )
+            sentences.append(f"Confirmed in a running service: {summary}.")
         if focused_routes:
-            sentences.append(
-                f'{len(focused_routes)} additional route check'
-                f'{"s" if len(focused_routes) != 1 else ""} passed focused verification.'
+            summary = named_scenario_summary(
+                focused_routes, audit_scenarios, "route check"
             )
+            sentences.append(f"Passed focused verification: {summary}.")
     focused_working = [
         scenario
         for scenario in other
@@ -4576,15 +4599,15 @@ def finding_verification_summary(
         and scenario["proof_mode"] == "full_runtime"
     ]
     if runtime_working:
-        sentences.append(
-            f'{len(runtime_working)} additional lifecycle or topology check'
-            f'{"s" if len(runtime_working) != 1 else ""} passed in the running service.'
+        summary = named_scenario_summary(
+            runtime_working, audit_scenarios, "lifecycle or topology check"
         )
+        sentences.append(f"Confirmed in the running service: {summary}.")
     if focused_working:
-        sentences.append(
-            f'{len(focused_working)} lifecycle or topology check'
-            f'{"s" if len(focused_working) != 1 else ""} passed focused verification.'
+        summary = named_scenario_summary(
+            focused_working, audit_scenarios, "lifecycle or topology check"
         )
+        sentences.append(f"Passed focused verification: {summary}.")
     incomplete_observed = [
         scenario
         for scenario in scenarios
@@ -4592,11 +4615,10 @@ def finding_verification_summary(
         and scenario_has_positive_observation(scenario)
     ]
     if incomplete_observed:
-        count = len(incomplete_observed)
-        sentences.append(
-            f'{count} check{"s" if count != 1 else ""} produced focused evidence '
-            f'but remain{"s" if count == 1 else ""} incomplete.'
+        summary = named_scenario_summary(
+            incomplete_observed, audit_scenarios, "check"
         )
+        sentences.append(f"Focused evidence is incomplete for: {summary}.")
     not_exercised = [
         scenario
         for scenario in scenarios
@@ -4614,24 +4636,25 @@ def finding_verification_summary(
         scenario for scenario in scenarios if scenario["status"] == "not_configured"
     ]
     if not_exercised:
-        sentences.append(
-            f'{len(not_exercised)} check{"s were" if len(not_exercised) != 1 else " was"} '
-            "not exercised."
+        summary = named_scenario_summary(
+            not_exercised, audit_scenarios, "check"
         )
+        sentences.append(f"Not exercised: {summary}.")
     if unresolved:
-        sentences.append(
-            f'{len(unresolved)} executed check{"s have" if len(unresolved) != 1 else " has"} '
-            "unresolved evidence."
+        summary = named_scenario_summary(
+            unresolved, audit_scenarios, "check"
         )
+        sentences.append(f"Executed evidence is unresolved for: {summary}.")
     if not_configured:
-        sentences.append(
-            f'{len(not_configured)} check{"s are" if len(not_configured) != 1 else " is"} '
-            "not configured."
+        summary = named_scenario_summary(
+            not_configured, audit_scenarios, "check"
         )
+        sentences.append(f"Not configured: {summary}.")
     if failed:
-        sentences.append(
-            f'{len(failed)} executed check{"s failed" if len(failed) != 1 else " failed"}.'
+        summary = named_scenario_summary(
+            failed, audit_scenarios, "check"
         )
+        sentences.append(f"Verification failed for: {summary}.")
     return " ".join(sentences)
 
 

@@ -451,6 +451,11 @@ class ObserveReportTest(unittest.TestCase):
             instrumentation_html,
         )
         self.assertIn("1 of 1 telemetry change is proven", instrumentation_html)
+        self.assertIn(
+            "Confirmed in a running service: GET /health.",
+            instrumentation_html,
+        )
+        self.assertNotIn("1 of 1 route check", instrumentation_html)
         self.assertNotIn("Removed span: HttpRequest", instrumentation_html)
         self.assertIn("were outside this instrumentation run", instrumentation_html)
         self.assertNotIn("were not implemented in this run", instrumentation_html)
@@ -4660,6 +4665,9 @@ class ObserveReportTest(unittest.TestCase):
             self.assertIn("Selected issues and changes", html)
             self.assertIn("Each checkout request has one route-named trace", html)
             self.assertIn("Verification complete", html)
+            self.assertIn(
+                "Confirmed in a running service: GET /checkout.", html
+            )
             self.assertIn("Confirmed in a running service", html)
             self.assertIn("Telemetry change</th><th>What was observed</th><th>Status", html)
             self.assertIn(
@@ -4882,10 +4890,16 @@ class ObserveReportTest(unittest.TestCase):
         self.assertIn("GET /checkout", selected)
         self.assertIn("Force a checkout failure", selected)
         self.assertIn("Focused evidence obtained", selected)
-        self.assertIn("1 check produced focused evidence but remains incomplete.", selected)
+        self.assertIn(
+            "Focused evidence is incomplete for: Force a checkout failure.",
+            selected,
+        )
         self.assertNotIn("Passed focused checks", selected)
         self.assertIn("Not exercised", selected)
         self.assertIn("Cancel checkout before completion", selected)
+        self.assertIn(
+            "Not exercised: Cancel checkout before completion.", selected
+        )
         self.assertIn("Coverage details", selected)
         self.assertIn("Modified span: GET /checkout", selected)
         self.assertIn("GET /checkout SERVER span", selected)
@@ -4900,6 +4914,60 @@ class ObserveReportTest(unittest.TestCase):
         self.assertNotIn("mapped scenarios meet required proof", selected)
         self.assertNotIn("scenarios were exercised", selected)
         self.assertNotRegex(selected, r"\b\d+/\d+\b")
+
+    def test_verification_summary_does_not_infer_compound_trigger_grammar(self) -> None:
+        scenario = {
+            "id": "http.entities-and-relations",
+            "status": "not_proven",
+            "proof_mode": "not_run",
+            "visibility": "not_proven",
+            "evidence": [],
+            "observed_telemetry": [],
+            "product_validation": [],
+        }
+
+        summary = MODULE.finding_verification_summary(
+            {"scenarios": [scenario]},
+            {
+                scenario["id"]: {
+                    "trigger": "GET /entities and GET /relations",
+                }
+            },
+        )
+
+        self.assertEqual(
+            summary,
+            "Not exercised: GET /entities and GET /relations.",
+        )
+
+    def test_verification_summary_separates_compound_trigger_labels(self) -> None:
+        scenarios = [
+            {
+                "id": scenario_id,
+                "status": "not_proven",
+                "proof_mode": "not_run",
+                "visibility": "not_proven",
+                "evidence": [],
+                "observed_telemetry": [],
+                "product_validation": [],
+            }
+            for scenario_id in ("http.entities-and-relations", "http.health")
+        ]
+
+        summary = MODULE.finding_verification_summary(
+            {"scenarios": scenarios},
+            {
+                "http.entities-and-relations": {
+                    "trigger": "GET /entities and GET /relations",
+                },
+                "http.health": {"trigger": "GET /health"},
+            },
+        )
+
+        self.assertEqual(
+            summary,
+            "Not exercised: GET /entities and GET /relations; GET /health.",
+        )
 
     def test_not_proven_item_does_not_upgrade_indirect_evidence(self) -> None:
         implementation = {
