@@ -88,13 +88,28 @@ AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
     r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
     r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
     r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
-    r"npm(?:\s+run)?\s+test)\b",
+    r"(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+test|"
+    r"(?:gradle|gradlew|mvn|mvnw)\b[^\r\n;|]*\b(?:test|check|verify)|"
+    r"dotnet\s+test|bundle\s+exec\s+(?:rspec|rake\s+test)|"
+    r"(?:composer\s+(?:exec\s+)?)?(?:vendor/bin/)?phpunit)\b",
     re.IGNORECASE,
 )
 AFFIRMATIVE_EXECUTED_PROOF = re.compile(
     r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
     r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
-    r"go\s+test|pytest|cargo\s+test|npm(?:\s+run)?\s+test)\b",
+    r"go\s+test|pytest|cargo\s+test|(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+test|"
+    r"(?:gradle|gradlew|mvn|mvnw)\b[^\r\n;|]*\b(?:test|check|verify)|"
+    r"dotnet\s+test|bundle\s+exec\s+(?:rspec|rake\s+test)|"
+    r"(?:composer\s+(?:exec\s+)?)?(?:vendor/bin/)?phpunit)\b",
+    re.IGNORECASE,
+)
+NON_EXECUTING_TEST_PROOF = re.compile(
+    r"(?:\b(?:gradle|gradlew)\b[^\r\n;|]*"
+    r"(?:--dry-run|(?<!\S)-m(?=\s|$)|"
+    r"(?:--exclude-task|-x)(?:=|\s+)(?:test|check|verify)\b)|"
+    r"\b(?:mvn|mvnw)\b[^\r\n;|]*"
+    r"-D(?:skipTests|maven\.test\.skip)"
+    r"(?:=(?:true|1|yes))?(?=\s|$))",
     re.IGNORECASE,
 )
 POSITIVE_PROOF_EVIDENCE = re.compile(
@@ -158,6 +173,7 @@ def has_meaningful_instrumentation_proof(instrumentation_json: dict) -> bool:
             and all(
                 isinstance(item, str)
                 and bool(item.strip())
+                and not NON_EXECUTING_TEST_PROOF.search(item)
                 and not NEGATIVE_OR_UNCERTAIN_PROOF.search(
                     re.sub(r"[._/-]+", " ", item)
                 )
