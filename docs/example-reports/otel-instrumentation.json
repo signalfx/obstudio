@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "kind": "otel-instrumentation",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:bd62d2d6b4658b64b2639fe92422326944d4f6bd9f9dce569e0d38a749290e54",
+  "selection_sha256": "sha256:1d02d4617237f12ef486ce00d96cc4cbffb1bfff572f65335ce89e59d0f24341",
+  "meta": {
+    "service_name": "go-chi-basic",
+    "date": "2026-07-21",
+    "result": "Pass"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "working",
+      "changes": [
+        "Removed the manual HttpRequest span owner and installed one route-aware GET /health server span owner."
+      ],
+      "telemetry_changes": [
+        {
+          "id": "OTEL-001.manual-http-span",
+          "change_kind": "removed",
+          "change": "Removed the overlapping manual HttpRequest span owner.",
+          "type": "span",
+          "name": "HttpRequest",
+          "source": "main.go:28",
+          "added_attributes": [],
+          "product_view": "One canonical GET /health server span in the trace waterfall",
+          "follow_up_actions": [
+            "Inspect the generated trace for the canonical route span."
+          ],
+          "verification_scenarios": [
+            "http.health.success"
+          ]
+        },
+        {
+          "id": "OTEL-001.http-health-span",
+          "change_kind": "added",
+          "change": "Added the canonical route-aware GET /health server span.",
+          "type": "span",
+          "name": "GET /health",
+          "source": "main.go:28",
+          "added_attributes": [
+            "http.route=/health"
+          ],
+          "product_view": "Splunk APM route-level latency and errors",
+          "follow_up_actions": [
+            "Filter the trace waterfall by http.route."
+          ],
+          "verification_scenarios": [
+            "http.health.success"
+          ]
+        }
+      ],
+      "tests": [
+        "go test ./..."
+      ],
+      "evidence": [
+        "eval/inputs/canonical-verify-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Validate the bound removal and replacement proof packet."
+      ],
+      "resolved_commit": "fixture"
+    }
+  ],
+  "next_steps": []
+}
