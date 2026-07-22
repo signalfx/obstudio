@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import sys
 import tempfile
@@ -1003,6 +1004,508 @@ class ValidateConfigureOutputTest(unittest.TestCase):
             result = MODULE.validate(args)
 
         self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_accepts_audit_only_source_metric_and_rejects_partial_downstream(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            root = args.terraform_dir.parent
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            args.allow_source_only_metric = [METRIC]
+
+            missing_source = MODULE.validate(args)
+
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            result = MODULE.validate(args)
+
+            (root / "otel-selection.json").write_text("{}", encoding="utf-8")
+            partial_downstream = MODULE.validate(args)
+
+        self.assertEqual(missing_source["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "is absent from audit current_instrumentation.metrics" in error
+                for error in missing_source["errors"]
+            ),
+            missing_source["errors"],
+        )
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(partial_downstream["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow is incomplete" in error
+                for error in partial_downstream["errors"]
+            ),
+            partial_downstream["errors"],
+        )
+
+    def test_rejects_occupied_invalid_canonical_artifact_entries(self) -> None:
+        artifact_files = {
+            "audit": "otel-audit.json",
+            "selection": "otel-selection.json",
+            "instrumentation": "otel-instrumentation.json",
+            "verification": "otel-verify.json",
+        }
+        invalid_kinds = ["broken symlink", "symlink", "directory"]
+        if hasattr(os, "mkfifo"):
+            invalid_kinds.append("FIFO")
+
+        for artifact, filename in artifact_files.items():
+            for invalid_kind in invalid_kinds:
+                with self.subTest(artifact=artifact, invalid_kind=invalid_kind):
+                    with tempfile.TemporaryDirectory() as directory:
+                        args = write_validation_fixture(Path(directory))
+                        write_canonical_configure_flow(args)
+                        add_current_metric_to_canonical_flow(args, METRIC)
+                        root = args.terraform_dir.parent
+                        original_payload = (root / filename).read_bytes()
+                        for downstream in (
+                            "otel-selection.json",
+                            "otel-instrumentation.json",
+                            "otel-verify.json",
+                        ):
+                            (root / downstream).unlink()
+                        if artifact == "audit":
+                            (root / "otel-audit.json").unlink()
+                        invalid_path = root / filename
+                        if invalid_kind == "broken symlink":
+                            invalid_path.symlink_to(root / "missing.json")
+                        elif invalid_kind == "symlink":
+                            target = root / f"{filename}.target"
+                            target.write_bytes(original_payload)
+                            invalid_path.symlink_to(target)
+                        elif invalid_kind == "directory":
+                            invalid_path.mkdir()
+                        else:
+                            os.mkfifo(invalid_path)
+                        args.allow_source_only_metric = [METRIC]
+
+                        result = MODULE.validate(args)
+
+                    self.assertEqual(result["result"], "FAIL", result["errors"])
+                    self.assertTrue(
+                        any(
+                            f"canonical {artifact} artifact" in error
+                            for error in result["errors"]
+                        ),
+                        result["errors"],
+                    )
+
+    def test_rejects_unreadable_canonical_artifact_before_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
+            root = args.terraform_dir.parent
+            for downstream in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / downstream).unlink()
+            unreadable = root / "otel-selection.json"
+            unreadable.write_text("{}", encoding="utf-8")
+            args.allow_source_only_metric = [METRIC]
+            real_open = os.open
+
+            def deny_selected(path: object, flags: int, *values: object, **kwargs: object) -> int:
+                if Path(path) == unreadable:
+                    raise PermissionError("permission denied by test")
+                return real_open(path, flags, *values, **kwargs)
+
+            with mock.patch.object(MODULE.os, "open", side_effect=deny_selected):
+                result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "cannot capture canonical selection artifact" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO creation is unavailable")
+    def test_rejects_swap_to_fifo_during_canonical_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            real_open = os.open
+            swapped = False
+
+            def swap_before_open(
+                path: object, flags: int, *values: object, **kwargs: object
+            ) -> int:
+                nonlocal swapped
+                if Path(path) == target and not swapped:
+                    target.unlink()
+                    os.mkfifo(target)
+                    swapped = True
+                return real_open(path, flags, *values, **kwargs)
+
+            with mock.patch.object(
+                MODULE.os,
+                "open",
+                side_effect=swap_before_open,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical selection artifact changed to a non-regular entry"
+                in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_regular_replacement_during_canonical_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            original_payload = target.read_bytes()
+            real_open = os.open
+            real_read = os.read
+            target_descriptor: int | None = None
+            swapped = False
+
+            def remember_target(
+                path: object, flags: int, *values: object, **kwargs: object
+            ) -> int:
+                nonlocal target_descriptor
+                descriptor = real_open(path, flags, *values, **kwargs)
+                if Path(path) == target:
+                    target_descriptor = descriptor
+                return descriptor
+
+            def replace_after_read(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                payload = real_read(descriptor, size)
+                if descriptor == target_descriptor and payload and not swapped:
+                    target.unlink()
+                    target.write_bytes(original_payload)
+                    swapped = True
+                return payload
+
+            with mock.patch.object(
+                MODULE.os,
+                "open",
+                side_effect=remember_target,
+            ), mock.patch.object(
+                MODULE.os,
+                "read",
+                side_effect=replace_after_read,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical selection artifact changed during capture" in error
+                or "canonical selection artifact namespace changed during capture"
+                in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_oversized_canonical_artifact_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "otel-selection.json"
+            path.write_bytes(b"x" * 33)
+            errors: list[str] = []
+            with mock.patch.object(MODULE, "MAX_CANONICAL_ARTIFACT_BYTES", 32):
+                snapshots = MODULE.capture_canonical_artifacts(
+                    {"selection": path},
+                    errors,
+                )
+
+        self.assertEqual(snapshots, {})
+        self.assertTrue(
+            any("32-byte capture limit" in error for error in errors),
+            errors,
+        )
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO creation is unavailable")
+    def test_uses_snapshots_after_canonical_path_swaps_to_fifo(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            write_dashboard_fixture(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            original_capture = MODULE.capture_canonical_artifacts
+            swapped = False
+
+            def capture_then_swap(
+                paths: dict[str, Path], errors: list[str]
+            ) -> dict[str, bytes]:
+                nonlocal swapped
+                snapshots = original_capture(paths, errors)
+                target.unlink()
+                os.mkfifo(target)
+                swapped = True
+                return snapshots
+
+            with mock.patch.object(
+                MODULE,
+                "capture_canonical_artifacts",
+                side_effect=capture_then_swap,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_uses_snapshots_after_canonical_path_regular_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            write_dashboard_fixture(args)
+            target = args.terraform_dir.parent / "otel-audit.json"
+            original_capture = MODULE.capture_canonical_artifacts
+            replaced = False
+
+            def capture_then_replace(
+                paths: dict[str, Path], errors: list[str]
+            ) -> dict[str, bytes]:
+                nonlocal replaced
+                snapshots = original_capture(paths, errors)
+                target.unlink()
+                target.write_text("{}", encoding="utf-8")
+                replaced = True
+                return snapshots
+
+            with mock.patch.object(
+                MODULE,
+                "capture_canonical_artifacts",
+                side_effect=capture_then_replace,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(replaced)
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_rejects_malformed_audit_only_source_metric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            root = args.terraform_dir.parent
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit["schema_version"] = 999
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            args.allow_source_only_metric = [METRIC]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical audit validation failed" in error
+                and "audit schema_version" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_missing_optional_audit_metric_inventory_fails_cleanly(self) -> None:
+        for omitted in ("current_instrumentation", "metrics"):
+            with self.subTest(omitted=omitted), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                write_canonical_configure_flow(args)
+                root = args.terraform_dir.parent
+                for name in (
+                    "otel-selection.json",
+                    "otel-instrumentation.json",
+                    "otel-verify.json",
+                ):
+                    (root / name).unlink()
+                audit_path = root / "otel-audit.json"
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                if omitted == "current_instrumentation":
+                    audit.pop("current_instrumentation")
+                else:
+                    audit["current_instrumentation"].pop("metrics")
+                audit_path.write_text(json.dumps(audit), encoding="utf-8")
+                args.allow_source_only_metric = [METRIC]
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL", result["errors"])
+            self.assertIn(
+                "source-only provenance: metric "
+                f"{METRIC!r} is absent from audit current_instrumentation.metrics",
+                result["errors"],
+            )
+
+    def test_audit_only_source_metrics_use_the_validated_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
+            audit_path = args.terraform_dir.parent / "otel-audit.json"
+            replacement = json.loads(audit_path.read_text(encoding="utf-8"))
+            replacement["current_instrumentation"]["metrics"][0]["name"] = (
+                "replacement.metric"
+            )
+            original_validator = MODULE.run_checked_validator
+
+            def validate_then_replace(
+                command: list[str], label: str, errors: list[str]
+            ) -> bool:
+                validated = original_validator(command, label, errors)
+                audit_path.write_text(json.dumps(replacement), encoding="utf-8")
+                return validated
+
+            errors: list[str] = []
+            with mock.patch.object(
+                MODULE,
+                "run_checked_validator",
+                side_effect=validate_then_replace,
+            ):
+                metrics = MODULE.canonical_source_metrics(
+                    args.terraform_dir,
+                    args,
+                    errors,
+                )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(metrics, {METRIC})
+
+    def test_dashboard_delegate_accepts_audit_only_source_metric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            source_id = f"SOURCE-METRIC.{METRIC}"
+            for path in (
+                args.terraform_dir / "dashboards.tf",
+                root / "dashboards.preview.json",
+                root / "dashboards.md",
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        "OTEL-001.http-duration", source_id
+                    ),
+                    encoding="utf-8",
+                )
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            (args.terraform_dir / "detectors.tf").write_text(
+                '''provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+''',
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_dashboard_only_source_item_rejects_malformed_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit["schema_version"] = 999
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            source_id = f"SOURCE-METRIC.{METRIC}"
+            for path in (
+                args.terraform_dir / "dashboards.tf",
+                root / "dashboards.preview.json",
+                root / "dashboards.md",
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        "OTEL-001.http-duration", source_id
+                    ),
+                    encoding="utf-8",
+                )
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            (args.terraform_dir / "detectors.tf").write_text(
+                '''provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+''',
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical audit validation failed" in error
+                and "audit schema_version" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
 
     def test_rejects_dashboard_terraform_without_report_and_preview(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

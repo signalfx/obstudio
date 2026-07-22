@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -68,6 +70,7 @@ CONFIGURE_VERIFY_HEADINGS = (
     "Validation Notes",
     "Next Steps",
 )
+MAX_CANONICAL_ARTIFACT_BYTES = 64 * 1024 * 1024
 FORBIDDEN_PROGRAM_PATTERNS = {
     "raw prompt/content": re.compile(r"\b(raw[._ -]?(?:prompt|content|completion)|prompt[._ -]?text)\b", re.I),
     "request identity": re.compile(r"\b(?:request|session|user|tenant|org|trace)[._-]?(?:id|identifier)\b", re.I),
@@ -1153,6 +1156,127 @@ def canonical_flow_paths(
     }
 
 
+def artifact_stability(status: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ctime_ns,
+    )
+
+
+def capture_canonical_artifacts(
+    paths: dict[str, Path], errors: list[str]
+) -> dict[str, bytes]:
+    """Capture immutable canonical bytes without following links or blocking."""
+
+    snapshots: dict[str, bytes] = {}
+    for name, path in paths.items():
+        try:
+            namespace_status = os.lstat(path)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            errors.append(
+                f"cannot inspect canonical {name} artifact {path}: {error}"
+            )
+            continue
+
+        if stat.S_ISLNK(namespace_status.st_mode):
+            errors.append(
+                f"canonical {name} artifact must not be a symlink: {path}"
+            )
+            continue
+        if not stat.S_ISREG(namespace_status.st_mode):
+            errors.append(
+                f"canonical {name} artifact must be a readable regular file: {path}"
+            )
+            continue
+
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                errors.append(
+                    "canonical "
+                    f"{name} artifact changed to a non-regular entry: {path}"
+                )
+                continue
+            if artifact_stability(before) != artifact_stability(namespace_status):
+                errors.append(
+                    f"canonical {name} artifact changed before capture: {path}"
+                )
+                continue
+            if before.st_size > MAX_CANONICAL_ARTIFACT_BYTES:
+                errors.append(
+                    f"canonical {name} artifact exceeds the "
+                    f"{MAX_CANONICAL_ARTIFACT_BYTES}-byte capture limit: {path}"
+                )
+                continue
+            payload = bytearray()
+            oversized = False
+            while chunk := os.read(
+                descriptor,
+                min(
+                    1024 * 1024,
+                    MAX_CANONICAL_ARTIFACT_BYTES - len(payload) + 1,
+                ),
+            ):
+                payload.extend(chunk)
+                if len(payload) > MAX_CANONICAL_ARTIFACT_BYTES:
+                    errors.append(
+                        f"canonical {name} artifact exceeds the "
+                        f"{MAX_CANONICAL_ARTIFACT_BYTES}-byte capture limit: {path}"
+                    )
+                    oversized = True
+                    break
+            if oversized:
+                continue
+            after = os.fstat(descriptor)
+            if artifact_stability(after) != artifact_stability(before):
+                errors.append(
+                    f"canonical {name} artifact changed during capture: {path}"
+                )
+                continue
+            try:
+                current = os.lstat(path)
+            except OSError as error:
+                errors.append(
+                    f"canonical {name} artifact namespace changed during capture "
+                    f"{path}: {error}"
+                )
+                continue
+            if (
+                stat.S_ISLNK(current.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or artifact_stability(current) != artifact_stability(before)
+            ):
+                errors.append(
+                    f"canonical {name} artifact namespace changed during capture: "
+                    f"{path}"
+                )
+                continue
+            snapshots[name] = bytes(payload)
+        except OSError as error:
+            errors.append(
+                f"cannot capture canonical {name} artifact {path}: {error}"
+            )
+            continue
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+    return snapshots
+
+
 def run_checked_validator(
     command: list[str], label: str, errors: list[str]
 ) -> bool:
@@ -1174,6 +1298,7 @@ def canonical_working_metrics(
     verify_report: Path,
     args: argparse.Namespace,
     errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
 ) -> set[str] | None:
     """Return JSON-authoritative metrics, or None for a true legacy flow."""
 
@@ -1188,7 +1313,12 @@ def canonical_working_metrics(
             "dashboard_verification",
         )
     )
-    present = {name for name, path in paths.items() if path.is_file()}
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return set()
+    present = set(canonical_snapshots)
     if "audit" not in present:
         if explicit_paths or present:
             errors.append(
@@ -1198,7 +1328,25 @@ def canonical_working_metrics(
             return set()
         return None
 
-    missing = [name for name, path in paths.items() if not path.is_file()]
+    downstream_explicit = any(
+        getattr(args, name, None) is not None
+        for name in (
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+            "dashboard_verification",
+        )
+    )
+    downstream_present = bool(
+        present.intersection({"selection", "instrumentation", "verification"})
+    )
+    if not downstream_explicit and not downstream_present:
+        # A canonical audit can independently authorize an exact, explicitly
+        # accepted source metric. Once any downstream overlay exists, require
+        # the complete bound selection -> instrumentation -> verify chain.
+        return set()
+
+    missing = [name for name in paths if name not in canonical_snapshots]
     if missing:
         errors.append(
             "canonical verification flow is incomplete; missing "
@@ -1224,7 +1372,6 @@ def canonical_working_metrics(
             return set()
 
     try:
-        snapshots = {name: path.read_bytes() for name, path in paths.items()}
         reader_snapshot = verify_report.read_bytes()
     except OSError as error:
         errors.append(f"cannot capture canonical verification flow: {error}")
@@ -1233,10 +1380,10 @@ def canonical_working_metrics(
     with tempfile.TemporaryDirectory(prefix="configure-flow-") as directory:
         snapshot_root = Path(directory)
         snapshot_paths = {
-            name: snapshot_root / f"{name}.json" for name in snapshots
+            name: snapshot_root / f"{name}.json" for name in canonical_snapshots
         }
         reader_path = snapshot_root / "otel-verification.md"
-        for name, value in snapshots.items():
+        for name, value in canonical_snapshots.items():
             snapshot_paths[name].write_bytes(value)
         reader_path.write_bytes(reader_snapshot)
 
@@ -1273,8 +1420,8 @@ def canonical_working_metrics(
             return set()
 
     try:
-        instrumentation = json.loads(snapshots["instrumentation"])
-        verification = json.loads(snapshots["verification"])
+        instrumentation = json.loads(canonical_snapshots["instrumentation"])
+        verification = json.loads(canonical_snapshots["verification"])
     except json.JSONDecodeError as error:
         errors.append(f"cannot read validated canonical verification flow: {error}")
         return set()
@@ -1303,12 +1450,61 @@ def canonical_working_metrics(
     return metrics
 
 
+def canonical_source_metrics(
+    terraform_dir: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
+) -> set[str] | None:
+    """Return exact metric names from one validated canonical-audit snapshot."""
+
+    paths = canonical_flow_paths(terraform_dir, args)
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return set()
+    if "audit" not in canonical_snapshots:
+        return None
+    shared_validator = (
+        Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    )
+    if not shared_validator.is_file():
+        errors.append(f"missing canonical audit validator: {shared_validator}")
+        return set()
+    snapshot = canonical_snapshots["audit"]
+    with tempfile.TemporaryDirectory(prefix="configure-audit-") as directory:
+        snapshot_path = Path(directory) / "otel-audit.json"
+        snapshot_path.write_bytes(snapshot)
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(shared_validator),
+                "validate",
+                str(snapshot_path),
+            ],
+            "canonical audit validation",
+            errors,
+        ):
+            return set()
+    # Extract from the exact bytes accepted by the canonical validator, not
+    # from the caller-controlled path after validation.
+    canonical_audit = json.loads(snapshot)
+    current = canonical_audit.get("current_instrumentation", {})
+    metrics = current.get("metrics", [])
+    return {
+        row["name"]
+        for row in metrics
+    }
+
+
 def run_dashboard_validator(
     terraform_dir: Path,
     dashboards_report: Path,
     dashboard_preview: Path,
     args: argparse.Namespace,
     errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
 ) -> dict[str, object]:
     module = load_dashboard_validator(errors)
     if module is None:
@@ -1316,7 +1512,12 @@ def run_dashboard_validator(
 
     tfvars = getattr(args, "dashboard_tfvars", None)
     paths = canonical_flow_paths(terraform_dir, args)
-    canonical_mode = any(path.is_file() for path in paths.values()) or any(
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return {}
+    canonical_mode = bool(canonical_snapshots) or any(
         getattr(args, name, None) is not None
         for name in (
             "audit_json",
@@ -1326,23 +1527,47 @@ def run_dashboard_validator(
             "dashboard_verification",
         )
     )
-    verification = paths["verification"] if canonical_mode else None
-    result = module.validate(
-        argparse.Namespace(
-            terraform=terraform_dir / "dashboards.tf",
-            preview=dashboard_preview,
-            report=dashboards_report,
-            variables=terraform_dir / "variables.tf",
-            tfvars=tfvars,
-            verification=verification,
-            legacy_verification=(None if canonical_mode else args.verify_report),
-            audit=paths["audit"] if canonical_mode else None,
-            selection=paths["selection"] if canonical_mode else None,
-            instrumentation=paths["instrumentation"] if canonical_mode else None,
-            allow_source_only_item=getattr(args, "allow_source_only_item", []),
-            allow_inherited_partial=True,
-        )
+    verification_explicit = any(
+        getattr(args, name, None) is not None
+        for name in ("verification_json", "dashboard_verification")
     )
+    explicit = {
+        "audit": getattr(args, "audit_json", None) is not None,
+        "selection": getattr(args, "selection_json", None) is not None,
+        "instrumentation": getattr(args, "instrumentation_json", None) is not None,
+        "verification": verification_explicit,
+    }
+    with tempfile.TemporaryDirectory(prefix="configure-dashboard-flow-") as directory:
+        snapshot_root = Path(directory)
+        snapshot_paths = {
+            name: snapshot_root / f"{name}.json" for name in paths
+        }
+        for name, payload in canonical_snapshots.items():
+            snapshot_paths[name].write_bytes(payload)
+        delegated_paths = {
+            name: (
+                snapshot_paths[name]
+                if name in canonical_snapshots or explicit[name]
+                else None
+            )
+            for name in paths
+        }
+        result = module.validate(
+            argparse.Namespace(
+                terraform=terraform_dir / "dashboards.tf",
+                preview=dashboard_preview,
+                report=dashboards_report,
+                variables=terraform_dir / "variables.tf",
+                tfvars=tfvars,
+                verification=delegated_paths["verification"],
+                legacy_verification=(None if canonical_mode else args.verify_report),
+                audit=delegated_paths["audit"],
+                selection=delegated_paths["selection"],
+                instrumentation=delegated_paths["instrumentation"],
+                allow_source_only_item=getattr(args, "allow_source_only_item", []),
+                allow_inherited_partial=True,
+            )
+        )
     for error in result.get("errors", []):
         errors.append(f"dashboard validator: {error}")
     return result
@@ -1377,9 +1602,26 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if errors:
         return {"result": "FAIL", "errors": errors}
     try:
-        canonical_flow_paths(terraform_dir, args)
+        canonical_paths = canonical_flow_paths(terraform_dir, args)
     except ValueError as error:
         return {"result": "FAIL", "errors": [str(error)]}
+    canonical_snapshots = capture_canonical_artifacts(canonical_paths, errors)
+    if errors:
+        return {"result": "FAIL", "errors": errors}
+    requested_source_metrics = set(args.allow_source_only_metric)
+    requested_source_items = set(
+        getattr(args, "allow_source_only_item", [])
+    )
+    canonical_source_metric_names: set[str] | None = None
+    if requested_source_metrics or requested_source_items:
+        canonical_source_metric_names = canonical_source_metrics(
+            terraform_dir,
+            args,
+            errors,
+            canonical_snapshots,
+        )
+        if errors:
+            return {"result": "FAIL", "errors": errors}
 
     detectors_text = required["detectors.tf"].read_text(encoding="utf-8")
     variables_text = required["variables.tf"].read_text(encoding="utf-8")
@@ -1433,6 +1675,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             dashboard_preview,
             args,
             errors,
+            canonical_snapshots,
         )
         dashboard_chart_count = int(dashboard_result.get("chart_count", 0))
         preview_chart_count = int(dashboard_result.get("preview_chart_count", 0))
@@ -1459,10 +1702,21 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         args.verify_report,
         args,
         errors,
+        canonical_snapshots,
     )
     if verified is None:
         verified = working_metrics(args.verify_report, errors)
-    allowed = verified | set(args.allow_source_only_metric)
+    source_only = requested_source_metrics
+    if source_only:
+        if canonical_source_metric_names is not None:
+            for metric in sorted(source_only - canonical_source_metric_names):
+                errors.append(
+                    "source-only provenance: metric "
+                    f"{metric!r} is absent from audit "
+                    "current_instrumentation.metrics"
+                )
+            source_only.intersection_update(canonical_source_metric_names)
+    allowed = verified | source_only
     detector_metrics: list[str] = []
     detector_signatures: list[tuple[str, str | None, str]] = []
 

@@ -887,11 +887,20 @@ unproven. The standalone dashboard validator still rejects an all-checks-pass
 `Partial` because there is no parent result to inherit.
 
 The validator's `--verify-report` argument consumes the generated readable
-compatibility report. When `.observe/otel-audit.json` exists, the validator also
-loads the sibling selection, instrumentation, and verification JSON, validates
-the complete bound flow, and requires the Markdown to be its exact per-item
-projection. Classification authority comes only from that validated JSON chain;
-never use Markdown to override or supplement it. Markdown-only authorization is
+compatibility report. When any downstream selection, instrumentation, or
+verification overlay exists beside `.observe/otel-audit.json`, the validator
+loads all three overlays, validates the complete bound flow, and requires the
+Markdown to be its exact per-item projection. A canonical audit with no
+downstream overlays may authorize only an exact metric named in
+`current_instrumentation.metrics` and explicitly passed with
+`--allow-source-only-metric`; the presence of any partial downstream overlay
+fails closed. Symlinks, directories, FIFOs, other non-regular entries,
+and unreadable canonical artifacts are invalid rather than absent. The
+validator captures each canonical artifact once through a nonblocking regular
+file descriptor, rejects changes during capture, and caps each snapshot at 64
+MiB. It validates that immutable audit snapshot before authorizing any
+source-only metric. Never use Markdown to override or
+supplement canonical JSON. Markdown-only authorization is
 reserved for a legacy run with no canonical JSON artifacts.
 
 For every metric the user explicitly accepted as source-only, append
