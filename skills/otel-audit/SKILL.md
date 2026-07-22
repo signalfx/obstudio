@@ -959,7 +959,7 @@ Keep these essential input semantics in the canonical JSON:
   every finding area must appear in at least one marker. Repeat an area only
   when the same finding explicitly spans multiple components; do not create a
   duplicate finding for the repeated association.
-- Every telemetry-scoped partial or missing
+- Every telemetry-scoped partial, missing, or owner-mapped
   `current_instrumentation.incident_readiness` row must have an unresolved
   (`proposed`, `approved`, or `in_progress`) finding with an identical `area`
   and mapped verification scenarios. A `covered` row conflicts only with an
