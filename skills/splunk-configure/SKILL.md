@@ -195,6 +195,12 @@ Markdown instrumentation and verification companions:
    A metric is proof-ready only when its exact metric row is `Working`, emitted
    datapoints are proven with the expected unit/dimensions, and source evidence
    exists, unless the user explicitly accepts source-only detector generation.
+   The legacy report must also have exactly one overall `Result` and the full
+   item-proof columns: stable item ID, exact metric and type, executed direct
+   `proof_mode` with scenario IDs, product result plus explicit visibility, and
+   positive durable evidence. A three-column `Working` assertion, source line,
+   `not_run`, `scenarios=none`, or `visibility=not_proven` is not verification
+   proof; skip it or use an explicitly recorded source-only acceptance.
    Do not infer proof from an aggregate coverage count or from a similarly
    named metric.
 
@@ -860,6 +866,12 @@ python3 <splunk-dashboard-skill-dir>/scripts/validate_dashboard_output.py \
   --report .observe/dashboards.md \
   --verification .observe/otel-verify.json
 ```
+
+The delegated call must forward any explicit `--audit-json`,
+`--selection-json`, `--instrumentation-json`, and `--verification-json` paths.
+In a true legacy run it forwards the required `--verify-report` as explicit
+legacy Markdown proof. It must never discover or read `terraform.tfvars`
+implicitly; pass a reviewed non-secret file only with `--dashboard-tfvars`.
 
 For an explicitly accepted source-only chart, use
 `SOURCE-METRIC.<exact-metric-name>` and append that same value as

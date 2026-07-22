@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,52 @@ TELEMETRY_ITEM_ID = re.compile(
     r"^(?:OTEL-\d{3}|SOURCE-METRIC)\.[A-Za-z0-9][A-Za-z0-9._/-]*$"
 )
 REPORT_RESULT = re.compile(r"^\*\*Result:\*\*\s*(Pass|Partial|Blocked)\s*$", re.I | re.M)
+LEGACY_VERIFY_RESULT = re.compile(
+    r"^\*\*Result:\*\*\s*(Pass|Partial|Fail|Blocked|Not run)\s*$",
+    re.I | re.M,
+)
+LEGACY_VERIFY_HEADERS = (
+    "Item ID",
+    "OTel item",
+    "Type",
+    "Added or modified",
+    "Working status",
+    "How it was tested",
+    "Product result / visibility",
+    "Evidence",
+)
+LEGACY_WORKING_STATUSES = {
+    "working",
+    "not working",
+    "not proven",
+    "not configured",
+}
+LEGACY_TEST_PROJECTION = re.compile(
+    r"^proof_mode=(app_test|unit|unit\+otlp|full_runtime|contract_only|static|not_run); "
+    r"scenarios=(.+)$"
+)
+LEGACY_SCENARIO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+LEGACY_VISIBILITY_PROJECTION = re.compile(
+    r"(?:^|;\s*)visibility=(explorer_visible|otlp_accepted|"
+    r"not_explorer_visible|not_proven|not_applicable)\s*$"
+)
+LEGACY_DURABLE_EVIDENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])|"
+    r"\b(?:saved\s+(?:collector\s+)?(?:capture|response)|"
+    r"assertion\s+(?:output|report)|test\s+report)\b",
+    re.I,
+)
+LEGACY_DURABLE_ARTIFACT_REFERENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
+    re.I,
+)
+NON_PROOF_LEGACY_ARTIFACT_LABEL = re.compile(
+    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
+    r"pending|skipped|unknown)\b",
+    re.I,
+)
 VALIDATION_ROWS = (
     "Verified metric item mapping",
     "Terraform ↔ preview parity",
@@ -83,6 +130,12 @@ VERIFY_FINDING_STATUSES = {
     "deferred",
 }
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+# Every released Observer binary targets amd64 or arm64, and SpecLayout uses Go
+# int fields. Keep generated HCL and preview coordinates inside that shared
+# signed 64-bit representation so Python's arbitrary-precision integers cannot
+# validate a sidecar that encoding/json will reject in the Observer.
+OBSERVER_INT_MIN = -(1 << 63)
+OBSERVER_INT_MAX = (1 << 63) - 1
 NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE = re.compile(
     r"\b(?:could\s+not|did\s+not|never|unable|unavailable|"
     r"(?:couldn|didn|wasn|weren|isn|aren|hasn|haven|hadn)['’]t|"
@@ -153,6 +206,12 @@ class DashboardPlacement:
     layout: tuple[int, int, int, int]
     dashboard: str
     group: str
+
+
+@dataclass(frozen=True)
+class DashboardTopology:
+    groups: tuple[str, ...]
+    dashboards: tuple[tuple[str, str], ...]
 
 
 def matching_brace(source: str, opening: int) -> int:
@@ -390,6 +449,12 @@ def validate_layout(
     errors: list[str],
 ) -> None:
     column, row, width, height = layout
+    for name, value in zip(("column", "row", "width", "height"), layout):
+        if value < OBSERVER_INT_MIN or value > OBSERVER_INT_MAX:
+            errors.append(
+                f"{context} chart {label!r}: {name} must fit the signed 64-bit "
+                "Observer int range"
+            )
     if column < 0 or column > 11:
         errors.append(f"{context} chart {label!r}: column must be between 0 and 11")
     if row < 0:
@@ -406,12 +471,12 @@ def overlaps(left: tuple[int, int, int, int], right: tuple[int, int, int, int]) 
     return lc < rc + rw and rc < lc + lw and lr < rr + rh and rr < lr + lh
 
 
-def parse_placements(
+def parse_placement_model(
     source: str,
     charts: dict[str, Chart],
     variables: dict[str, object],
     errors: list[str],
-) -> dict[str, DashboardPlacement]:
+) -> tuple[dict[str, DashboardPlacement], DashboardTopology]:
     dashboard_groups: dict[str, str] = {}
     for resource_groups, group_body in resource_blocks(source, DASHBOARD_GROUP_RESOURCE):
         group_id = resource_groups[0]
@@ -432,6 +497,7 @@ def parse_placements(
         errors.append("Terraform: no signalfx_dashboard_group resource found")
 
     placements: dict[str, DashboardPlacement] = {}
+    dashboards: list[tuple[str, str]] = []
     for resource_groups, dashboard_body in resource_blocks(source, DASHBOARD_RESOURCE):
         dashboard_id = resource_groups[0]
         dashboard_name = hcl_string(dashboard_body, "name")
@@ -461,6 +527,7 @@ def parse_placements(
                 errors.append(
                     f"Terraform dashboard {dashboard_id!r}: references unknown dashboard group {group_id!r}"
                 )
+        dashboards.append((group_name, dashboard_name))
         in_dashboard: list[tuple[str, tuple[int, int, int, int]]] = []
         for chart_match in re.finditer(r"^\s*chart\s*\{", dashboard_body, re.M):
             opening = dashboard_body.find("{", chart_match.start(), chart_match.end())
@@ -503,7 +570,21 @@ def parse_placements(
             in_dashboard.append((label, layout))
     for label in sorted(set(charts) - set(placements)):
         errors.append(f"Terraform chart {label!r}: not placed in a dashboard")
-    return placements
+    return placements, DashboardTopology(
+        groups=tuple(dashboard_groups.values()),
+        dashboards=tuple(dashboards),
+    )
+
+
+def parse_placements(
+    source: str,
+    charts: dict[str, Chart],
+    variables: dict[str, object],
+    errors: list[str],
+) -> dict[str, DashboardPlacement]:
+    """Compatibility wrapper for callers that only need chart placements."""
+
+    return parse_placement_model(source, charts, variables, errors)[0]
 
 
 def required_string(row: dict[str, Any], key: str, context: str, errors: list[str]) -> str:
@@ -514,29 +595,38 @@ def required_string(row: dict[str, Any], key: str, context: str, errors: list[st
     return value.strip()
 
 
-def parse_preview(path: Path, errors: list[str]) -> dict[str, PreviewChart]:
+def parse_preview_model(
+    path: Path, errors: list[str]
+) -> tuple[dict[str, PreviewChart], DashboardTopology]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         errors.append(f"preview: invalid JSON: {error.msg}")
-        return {}
-    if not isinstance(data, dict) or data.get("schemaVersion") != 1:
+        return {}, DashboardTopology((), ())
+    if (
+        not isinstance(data, dict)
+        or type(data.get("schemaVersion")) is not int
+        or data.get("schemaVersion") != 1
+    ):
         errors.append("preview: schemaVersion must equal 1")
-        return {}
+        return {}, DashboardTopology((), ())
     groups = data.get("groups")
     if not isinstance(groups, list) or not groups:
         errors.append("preview: groups must be a non-empty array")
-        return {}
+        return {}, DashboardTopology((), ())
     charts: dict[str, PreviewChart] = {}
+    group_names: list[str] = []
+    dashboard_names: list[tuple[str, str]] = []
     for group_index, group in enumerate(groups):
         if not isinstance(group, dict):
             errors.append(f"preview groups[{group_index}]: must be an object")
             continue
         group_context = f"preview groups[{group_index}]"
         group_name = required_string(group, "name", group_context, errors)
+        group_names.append(group_name)
         dashboards = group.get("dashboards")
-        if not isinstance(dashboards, list) or not dashboards:
-            errors.append(f"{group_context}: dashboards must be a non-empty array")
+        if not isinstance(dashboards, list):
+            errors.append(f"{group_context}: dashboards must be an array")
             continue
         for dashboard_index, dashboard in enumerate(dashboards):
             context = f"preview groups[{group_index}].dashboards[{dashboard_index}]"
@@ -544,9 +634,10 @@ def parse_preview(path: Path, errors: list[str]) -> dict[str, PreviewChart]:
                 errors.append(f"{context}: must be an object")
                 continue
             dashboard_name = required_string(dashboard, "name", context, errors)
+            dashboard_names.append((group_name, dashboard_name))
             rows = dashboard.get("charts")
-            if not isinstance(rows, list) or not rows:
-                errors.append(f"{context}: charts must be a non-empty array")
+            if not isinstance(rows, list):
+                errors.append(f"{context}: charts must be an array")
                 continue
             in_dashboard: list[tuple[str, tuple[int, int, int, int]]] = []
             for chart_index, row in enumerate(rows):
@@ -589,7 +680,7 @@ def parse_preview(path: Path, errors: list[str]) -> dict[str, PreviewChart]:
                         errors.append(f"{chart_context}: missing service.name or sf_service filter")
                 layout_row = row.get("layout")
                 if not isinstance(layout_row, dict) or any(
-                    not isinstance(layout_row.get(name), int)
+                    type(layout_row.get(name)) is not int
                     for name in ("column", "row", "width", "height")
                 ):
                     errors.append(f"{chart_context}: layout must contain integer column, row, width, and height")
@@ -618,7 +709,16 @@ def parse_preview(path: Path, errors: list[str]) -> dict[str, PreviewChart]:
                     dashboard_name,
                     group_name,
                 )
-    return charts
+    return charts, DashboardTopology(
+        groups=tuple(group_names),
+        dashboards=tuple(dashboard_names),
+    )
+
+
+def parse_preview(path: Path, errors: list[str]) -> dict[str, PreviewChart]:
+    """Compatibility wrapper for callers that only need preview charts."""
+
+    return parse_preview_model(path, errors)[0]
 
 
 def working_items(path: Path, errors: list[str]) -> dict[str, dict[str, Any]]:
@@ -628,6 +728,130 @@ def working_items(path: Path, errors: list[str]) -> dict[str, dict[str, Any]]:
         errors.append(f"verification: invalid JSON: {error.msg}")
         return {}
     return working_items_data(data, errors)
+
+
+def legacy_working_metrics(path: Path, errors: list[str]) -> set[str]:
+    """Read directly proven Working metrics from a strict legacy reader report."""
+
+    if not path.is_file():
+        errors.append(f"legacy verification: missing Markdown report: {path}")
+        return set()
+    source = path.read_text(encoding="utf-8")
+    results = LEGACY_VERIFY_RESULT.findall(source)
+    if len(results) != 1:
+        errors.append(
+            "legacy verification: expected exactly one Result status, found "
+            f"{len(results)}"
+        )
+        return set()
+    report_result = results[0].lower()
+    section = markdown_section(source, "Tested And Working")
+    if section is None:
+        errors.append("legacy verification: missing ## Tested And Working")
+        return set()
+    rows = exact_markdown_table(section, LEGACY_VERIFY_HEADERS, errors)
+    if rows is None:
+        errors.append(
+            "legacy verification: ## Tested And Working must contain the full "
+            "Item ID / OTel item / Type / Added or modified / Working status / "
+            "How it was tested / Product result / visibility / Evidence contract"
+        )
+        return set()
+    if not rows:
+        errors.append("legacy verification: Tested And Working has no item rows")
+        return set()
+
+    metrics: set[str] = set()
+    statuses: list[str] = []
+    for index, row in enumerate(rows):
+        context = f"legacy verification row {index + 1}"
+        status = " ".join(row.get("Working status", "").lower().split())
+        statuses.append(status)
+        if status not in LEGACY_WORKING_STATUSES:
+            errors.append(f"{context}: unsupported Working status {status!r}")
+            continue
+        if status != "working":
+            continue
+        row_errors = len(errors)
+        if row.get("Type", "").strip().lower() != "metric":
+            errors.append(f"{context}: Working dashboard proof must have Type metric")
+        metric = row.get("OTel item", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", metric):
+            errors.append(f"{context}: OTel item must be one exact metric name")
+        item_id = row.get("Item ID", "").strip()
+        if not TELEMETRY_ITEM_ID.fullmatch(item_id):
+            errors.append(f"{context}: Item ID must be a stable telemetry item ID")
+        elif item_id != f"SOURCE-METRIC.{metric}":
+            errors.append(
+                f"{context}: Item ID must equal "
+                f"'SOURCE-METRIC.{metric}' for the exact OTel item"
+            )
+        if not row.get("Added or modified", "").strip():
+            errors.append(f"{context}: Added or modified must describe the item")
+
+        tested = row.get("How it was tested", "").strip()
+        tested_match = LEGACY_TEST_PROJECTION.fullmatch(tested)
+        if tested_match is None:
+            errors.append(
+                f"{context}: How it was tested must be the exact proof_mode/scenarios projection"
+            )
+        else:
+            proof_mode, scenario_text = tested_match.groups()
+            scenarios = [value.strip() for value in scenario_text.split(",")]
+            if proof_mode not in ITEM_DIRECT_PROOF_MODES:
+                errors.append(f"{context}: Working metric needs an executed proof mode")
+            if (
+                not scenarios
+                or scenarios == ["none"]
+                or any(not LEGACY_SCENARIO_ID.fullmatch(value) for value in scenarios)
+            ):
+                errors.append(f"{context}: Working metric needs exact executed scenario IDs")
+
+        product = row.get("Product result / visibility", "").strip()
+        visibility_match = LEGACY_VISIBILITY_PROJECTION.search(product)
+        if visibility_match is None:
+            errors.append(f"{context}: product result must end with an explicit visibility state")
+        else:
+            product_result = product[: visibility_match.start()].strip(" ;")
+            if not product_result:
+                errors.append(f"{context}: product result must name the observed outcome")
+            if visibility_match.group(1) == "not_proven":
+                errors.append(f"{context}: Working metric cannot have visibility=not_proven")
+
+        evidence = row.get("Evidence", "").strip()
+        artifact_refs = list(LEGACY_DURABLE_ARTIFACT_REFERENCE.finditer(evidence))
+        non_proof_artifact = any(
+            NON_PROOF_LEGACY_ARTIFACT_LABEL.search(
+                re.sub(r"[._/\\-]+", " ", match.group(0))
+            )
+            for match in artifact_refs
+        )
+        outcome_prose = LEGACY_DURABLE_ARTIFACT_REFERENCE.sub(" ", evidence)
+        if (
+            not evidence
+            or non_proof_artifact
+            or NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE.search(outcome_prose)
+            or not LEGACY_DURABLE_EVIDENCE.search(evidence)
+        ):
+            errors.append(
+                f"{context}: Working metric needs positive durable evidence, not source-only prose"
+            )
+        if len(errors) == row_errors:
+            if metric in metrics:
+                errors.append(f"{context}: duplicate Working metric {metric!r}")
+            else:
+                metrics.add(metric)
+
+    if report_result in {"blocked", "not run"} and metrics:
+        errors.append(
+            f"legacy verification: Result {results[0]} cannot contain directly proven Working metrics"
+        )
+        metrics.clear()
+    if report_result == "pass" and any(status != "working" for status in statuses):
+        errors.append(
+            "legacy verification: Result Pass requires every telemetry item row to be Working"
+        )
+    return metrics
 
 
 def working_items_data(
@@ -788,6 +1012,7 @@ def validate_item_provenance(
     allowed_source_only: set[str],
     errors: list[str],
     prevalidated_working: dict[str, dict[str, Any]] | None = None,
+    legacy_working: set[str] | None = None,
 ) -> int:
     for item_id in sorted(allowed_source_only):
         if not SOURCE_METRIC_ID.fullmatch(item_id):
@@ -795,33 +1020,51 @@ def validate_item_provenance(
                 f"source-only item {item_id!r}: must be SOURCE-METRIC.<exact-metric-name>"
             )
     working: dict[str, dict[str, Any]] = {}
+    legacy_working = legacy_working or set()
+    legacy_item_ids = {
+        f"SOURCE-METRIC.{metric}" for metric in legacy_working
+    }
     if verification_path is not None and verification_path.is_file():
         working = (
             prevalidated_working
             if prevalidated_working is not None
             else working_items(verification_path, errors)
         )
-    elif not allowed_source_only:
+    elif not allowed_source_only and not legacy_working:
         errors.append(
-            "verification: canonical otel-verify.json is required unless every chart item is explicitly allowed with --allow-source-only-item"
+            "verification: canonical otel-verify.json or explicit legacy Markdown "
+            "Working metric proof is required unless every chart item is explicitly "
+            "allowed with --allow-source-only-item"
         )
     chart_items = {chart.telemetry_item_id for chart in preview.values() if chart.telemetry_item_id}
     for chart in preview.values():
         if not SOURCE_METRIC_ID.fullmatch(chart.telemetry_item_id):
             continue
         metrics = DATA_METRIC.findall(chart.program_text or "")
+        if chart.telemetry_item_id in legacy_item_ids:
+            if metrics and (
+                len(metrics) != 1
+                or chart.telemetry_item_id != f"SOURCE-METRIC.{metrics[0]}"
+            ):
+                errors.append(
+                    f"provenance: legacy-proven chart {chart.label!r} must use "
+                    "SOURCE-METRIC.<exact data() metric>"
+                )
+            continue
         expected = f"SOURCE-METRIC.{metrics[0]}" if len(metrics) == 1 else ""
         if chart.telemetry_item_id != expected:
             errors.append(
                 f"provenance: source-only chart {chart.label!r} must use "
                 "SOURCE-METRIC.<exact data() metric>"
             )
-    unknown = sorted(chart_items - set(working) - allowed_source_only)
+    unknown = sorted(
+        chart_items - set(working) - legacy_item_ids - allowed_source_only
+    )
     for item_id in unknown:
         errors.append(f"provenance: chart item {item_id!r} is not a Working verification item")
     for chart in preview.values():
         item = working.get(chart.telemetry_item_id)
-        if item is None or chart.program_text is None:
+        if item is None:
             continue
         source_item = instrumentation_items.get(chart.telemetry_item_id)
         if source_item is None:
@@ -835,6 +1078,8 @@ def validate_item_provenance(
                 f"provenance: chart {chart.label!r} item {chart.telemetry_item_id!r} "
                 f"has instrumentation type {source_item.get('type')!r}, expected 'metric'"
             )
+        if chart.program_text is None:
+            continue
         observed = " ".join(item.get("observed_telemetry", []))
         for metric in DATA_METRIC.findall(chart.program_text):
             if source_item.get("name") != metric:
@@ -851,7 +1096,7 @@ def validate_item_provenance(
     unused_exceptions = sorted(allowed_source_only - chart_items)
     for item_id in unused_exceptions:
         errors.append(f"provenance: source-only exception {item_id!r} is not used by a chart")
-    return len(working)
+    return len(working) + len(legacy_working)
 
 
 def exact_metric_observed(metric: str, observed: str) -> bool:
@@ -895,6 +1140,11 @@ def validate_bound_verification_flow(
     require_canonical: bool,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     if verification_path is None or not verification_path.is_file():
+        if require_canonical:
+            errors.append(
+                "verification flow: canonical otel-verify.json is required when "
+                "canonical JSON input exists or a chart uses OTEL item provenance"
+            )
         return {}, {}
     paths: dict[str, Path | None] = {}
     for name, filename in (
@@ -981,7 +1231,29 @@ def validate_bound_verification_flow(
 
 
 def markdown_cells(line: str) -> list[str]:
-    return [cell.strip().strip("`*") for cell in line.strip().strip("|").split("|")]
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|") and not text.endswith(r"\|"):
+        text = text[:-1]
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in text:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "|":
+            cells.append("".join(current).strip().strip("`*"))
+            current = []
+        else:
+            current.append(char)
+    if escaped:
+        current.append("\\")
+    cells.append("".join(current).strip().strip("`*"))
+    return cells
 
 
 def markdown_section(source: str, heading: str) -> str | None:
@@ -1008,6 +1280,55 @@ def markdown_table(section: str, required_headers: tuple[str, ...]) -> list[dict
                 rows.append(dict(zip(header, cells)))
             return rows
     return None
+
+
+def exact_markdown_table(
+    section: str,
+    expected_header: tuple[str, ...],
+    errors: list[str],
+) -> list[dict[str, str]] | None:
+    """Parse one contiguous table with an exact, unambiguous header."""
+
+    lines = section.splitlines()
+    table_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if line.lstrip().startswith("|")
+        and (index == 0 or not lines[index - 1].lstrip().startswith("|"))
+    ]
+    if (
+        len(table_indexes) != 1
+        or tuple(markdown_cells(lines[table_indexes[0]])) != expected_header
+    ):
+        errors.append(
+            "legacy verification: expected exactly one table with the exact "
+            "item-proof header in the documented order"
+        )
+        return None
+    index = table_indexes[0]
+    if index + 1 >= len(lines):
+        errors.append("legacy verification: item-proof table is missing its separator")
+        return None
+    separator = markdown_cells(lines[index + 1])
+    if len(separator) != len(expected_header) or not all(
+        re.fullmatch(r":?-{3,}:?", cell) for cell in separator
+    ):
+        errors.append("legacy verification: item-proof table has an invalid separator")
+        return None
+
+    rows: list[dict[str, str]] = []
+    for candidate in lines[index + 2 :]:
+        if not candidate.lstrip().startswith("|"):
+            break
+        cells = markdown_cells(candidate)
+        if len(cells) != len(expected_header):
+            errors.append(
+                "legacy verification: item-proof row column count does not match "
+                "the exact header"
+            )
+            return None
+        rows.append(dict(zip(expected_header, cells)))
+    return rows
 
 
 def normalized_result(value: str) -> str:
@@ -1160,9 +1481,27 @@ def validate_report(
 def compare_artifacts(
     terraform: dict[str, Chart],
     placements: dict[str, DashboardPlacement],
+    terraform_topology: DashboardTopology,
     preview: dict[str, PreviewChart],
+    preview_topology: DashboardTopology,
     errors: list[str],
 ) -> None:
+    for label, left, right in (
+        ("dashboard group", terraform_topology.groups, preview_topology.groups),
+        ("dashboard", terraform_topology.dashboards, preview_topology.dashboards),
+    ):
+        left_counts = Counter(left)
+        right_counts = Counter(right)
+        for value, count in (left_counts - right_counts).items():
+            errors.append(
+                f"parity: Terraform {label} {value!r} is missing from preview "
+                f"({count} unmatched)"
+            )
+        for value, count in (right_counts - left_counts).items():
+            errors.append(
+                f"parity: preview {label} {value!r} has no Terraform resource "
+                f"({count} unmatched)"
+            )
     terraform_labels = set(terraform)
     preview_labels = set(preview)
     for label in sorted(terraform_labels - preview_labels):
@@ -1214,15 +1553,48 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     variables = variable_values(variables_path, tfvars_path)
     source = terraform_path.read_text(encoding="utf-8")
     terraform = parse_charts(source, variables, errors)
-    placements = parse_placements(source, terraform, variables, errors)
-    preview = parse_preview(preview_path, errors)
-    compare_artifacts(terraform, placements, preview, errors)
+    placements, terraform_topology = parse_placement_model(
+        source, terraform, variables, errors
+    )
+    preview, preview_topology = parse_preview_model(preview_path, errors)
+    compare_artifacts(
+        terraform,
+        placements,
+        terraform_topology,
+        preview,
+        preview_topology,
+        errors,
+    )
     verification_path: Path | None = getattr(args, "verification", None)
     if verification_path is None:
         candidate = preview_path.parent / "otel-verify.json"
         verification_path = candidate if candidate.is_file() else None
+    canonical_candidates = []
+    canonical_explicit = False
+    for name, filename in (
+        ("audit", "otel-audit.json"),
+        ("selection", "otel-selection.json"),
+        ("instrumentation", "otel-instrumentation.json"),
+    ):
+        explicit = getattr(args, name, None)
+        canonical_explicit = canonical_explicit or explicit is not None
+        canonical_candidates.append(explicit or preview_path.parent / filename)
+    canonical_explicit = canonical_explicit or getattr(args, "verification", None) is not None
+    canonical_mode = canonical_explicit or verification_path is not None or any(
+        path.is_file() for path in canonical_candidates
+    )
+    legacy_verification: Path | None = getattr(args, "legacy_verification", None)
+    legacy_metrics: set[str] = set()
+    if legacy_verification is not None:
+        if canonical_mode:
+            errors.append(
+                "verification: legacy Markdown must not supplement or replace a "
+                "canonical JSON flow"
+            )
+        else:
+            legacy_metrics = legacy_working_metrics(legacy_verification, errors)
     source_only_items = set(getattr(args, "allow_source_only_item", []))
-    require_canonical = any(
+    require_canonical = canonical_mode or any(
         chart.telemetry_item_id
         and not SOURCE_METRIC_ID.fullmatch(chart.telemetry_item_id)
         for chart in preview.values()
@@ -1241,6 +1613,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         source_only_items,
         errors,
         prevalidated_working,
+        legacy_metrics,
     )
     reported_status = validate_report(
         report_path.read_text(encoding="utf-8"),
@@ -1268,6 +1641,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--variables", type=Path)
     parser.add_argument("--tfvars", type=Path)
     parser.add_argument("--verification", type=Path)
+    parser.add_argument(
+        "--legacy-verification",
+        type=Path,
+        help="explicit legacy otel-verify.md; valid only when no canonical JSON artifact exists",
+    )
     parser.add_argument("--audit", type=Path)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--instrumentation", type=Path)

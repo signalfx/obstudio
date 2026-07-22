@@ -353,6 +353,380 @@ class ValidateDashboardOutputTest(unittest.TestCase):
         self.assertEqual(result["working_verification_item_count"], 2)
         self.assertEqual(result["reported_status"], "Partial")
 
+    def test_rejects_boolean_schema_version_and_layout_integer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            data = json.loads(args.preview.read_text(encoding="utf-8"))
+            data["schemaVersion"] = True
+            args.preview.write_text(json.dumps(data), encoding="utf-8")
+            result = MODULE.validate(args)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn("preview: schemaVersion must equal 1", result["errors"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            args.terraform.write_text(
+                args.terraform.read_text(encoding="utf-8").replace(
+                    "chart_id = signalfx_time_chart.p99_latency.id\n    column = 0\n    row = 0",
+                    "chart_id = signalfx_time_chart.p99_latency.id\n    column = 0\n    row = 1",
+                ),
+                encoding="utf-8",
+            )
+            data = json.loads(args.preview.read_text(encoding="utf-8"))
+            data["groups"][0]["dashboards"][0]["charts"][0]["layout"]["row"] = True
+            args.preview.write_text(json.dumps(data), encoding="utf-8")
+            args.report.write_text(
+                args.report.read_text(encoding="utf-8").replace(
+                    "time_series | 0,0,6,3 |", "time_series | 0,1,6,3 |"
+                ),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("layout must contain integer" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_layout_outside_observer_signed_int_range_despite_parity(self) -> None:
+        for row in (1 << 63, -(1 << 63) - 1):
+            with self.subTest(row=row), tempfile.TemporaryDirectory() as directory:
+                args = write_fixture(Path(directory))
+                args.terraform.write_text(
+                    args.terraform.read_text(encoding="utf-8").replace(
+                        "chart_id = signalfx_time_chart.p99_latency.id\n    column = 0\n    row = 0",
+                        "chart_id = signalfx_time_chart.p99_latency.id\n"
+                        f"    column = 0\n    row = {row}",
+                    ),
+                    encoding="utf-8",
+                )
+                data = json.loads(args.preview.read_text(encoding="utf-8"))
+                data["groups"][0]["dashboards"][0]["charts"][0]["layout"][
+                    "row"
+                ] = row
+                args.preview.write_text(json.dumps(data), encoding="utf-8")
+                args.report.write_text(
+                    args.report.read_text(encoding="utf-8").replace(
+                        "time_series | 0,0,6,3 |",
+                        f"time_series | 0,{row},6,3 |",
+                    ),
+                    encoding="utf-8",
+                )
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertTrue(
+                any(
+                    "row must fit the signed 64-bit Observer int range" in error
+                    for error in result["errors"]
+                ),
+                result["errors"],
+            )
+
+    def test_observer_int_range_applies_to_every_layout_coordinate(self) -> None:
+        for index, name in enumerate(("column", "row", "width", "height")):
+            with self.subTest(name=name):
+                layout = [0, 0, 1, 1]
+                layout[index] = 1 << 63
+                errors: list[str] = []
+
+                MODULE.validate_layout(
+                    "chart", tuple(layout), "preview dashboard 'service'", errors
+                )
+
+                self.assertTrue(
+                    any(
+                        f"{name} must fit the signed 64-bit Observer int range"
+                        in error
+                        for error in errors
+                    ),
+                    errors,
+                )
+
+    def test_topology_parity_includes_unused_groups_and_empty_dashboards(self) -> None:
+        extra_hcl = '''
+resource "signalfx_dashboard_group" "empty_group" {
+  name = "checkout Empty Group"
+}
+
+resource "signalfx_dashboard" "empty_dashboard" {
+  name            = "checkout Empty Dashboard"
+  dashboard_group = signalfx_dashboard_group.empty_group.id
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            args.terraform.write_text(
+                args.terraform.read_text(encoding="utf-8") + extra_hcl,
+                encoding="utf-8",
+            )
+            data = json.loads(args.preview.read_text(encoding="utf-8"))
+            data["groups"].append(
+                {
+                    "name": "checkout Empty Group",
+                    "dashboards": [
+                        {"name": "checkout Empty Dashboard", "charts": []}
+                    ],
+                }
+            )
+            args.preview.write_text(json.dumps(data), encoding="utf-8")
+            accepted = MODULE.validate(args)
+            self.assertEqual(accepted["result"], "PASS", accepted["errors"])
+
+            data["groups"][1]["dashboards"] = []
+            args.preview.write_text(json.dumps(data), encoding="utf-8")
+            missing_dashboard = MODULE.validate(args)
+        self.assertEqual(missing_dashboard["result"], "FAIL")
+        self.assertTrue(
+            any("Terraform dashboard" in error and "missing from preview" in error for error in missing_dashboard["errors"]),
+            missing_dashboard["errors"],
+        )
+
+    def test_accepts_explicit_legacy_working_metric_without_source_only_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            for name in (
+                "otel-audit.json",
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (args.preview.parent / name).unlink()
+            replacements = {
+                "OTEL-001.http-duration": "SOURCE-METRIC.http.server.request.duration",
+                "OTEL-002.http-errors": "SOURCE-METRIC.http.server.errors.total",
+            }
+            for path in (args.terraform, args.preview, args.report):
+                text = path.read_text(encoding="utf-8")
+                for old, new in replacements.items():
+                    text = text.replace(old, new)
+                path.write_text(text, encoding="utf-8")
+            legacy = args.preview.parent / "legacy-otel-verify.md"
+            legacy.write_text(
+                """# OTel Verification Report: checkout
+
+**Result:** Pass
+
+## Tested And Working
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| SOURCE-METRIC.http.server.request.duration | `http.server.request.duration` | Metric | Existing route duration metric | Working | proof_mode=full_runtime; scenarios=http.success | Route latency data accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json |
+| SOURCE-METRIC.http.server.errors.total | `http.server.errors.total` | Metric | Existing route error metric | Working | proof_mode=unit+otlp; scenarios=http.failure | Route error data accepted; visibility=otlp_accepted | .observe/evidence/http-errors.json |
+""",
+                encoding="utf-8",
+            )
+            args.verification = None
+            args.legacy_verification = legacy
+            args.allow_source_only_item = []
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["working_verification_item_count"], 2)
+
+    def test_rejects_bare_legacy_working_labels_as_metric_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            for name in (
+                "otel-audit.json",
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (args.preview.parent / name).unlink()
+            for path in (args.terraform, args.preview, args.report):
+                path.write_text(
+                    path.read_text(encoding="utf-8")
+                    .replace(
+                        "OTEL-001.http-duration",
+                        "SOURCE-METRIC.http.server.request.duration",
+                    )
+                    .replace(
+                        "OTEL-002.http-errors",
+                        "SOURCE-METRIC.http.server.errors.total",
+                    ),
+                    encoding="utf-8",
+                )
+            legacy = args.preview.parent / "legacy-otel-verify.md"
+            legacy.write_text(
+                """# OTel Verification Report: checkout
+
+**Result:** Pass
+
+## Tested And Working
+| OTel item | Type | Working status |
+|---|---|---|
+| `http.server.request.duration` | Metric | Working |
+| `http.server.errors.total` | Metric | Working |
+""",
+                encoding="utf-8",
+            )
+            args.verification = None
+            args.legacy_verification = legacy
+            args.allow_source_only_item = []
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("must contain the full" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_legacy_working_metric_requires_direct_durable_proof(self) -> None:
+        template = """# OTel Verification Report: checkout
+
+**Result:** {result}
+
+## Tested And Working
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| SOURCE-METRIC.http.server.request.duration | http.server.request.duration | Metric | Existing route metric | Working | {tested} | {product} | {evidence} |
+"""
+        cases = {
+            "not-run proof": {
+                "result": "Pass",
+                "tested": "proof_mode=not_run; scenarios=none",
+                "product": "Route latency; visibility=not_proven",
+                "evidence": "main.go:12",
+                "expected": "executed proof mode",
+            },
+            "source-only evidence": {
+                "result": "Pass",
+                "tested": "proof_mode=full_runtime; scenarios=http.success",
+                "product": "Route latency; visibility=otlp_accepted",
+                "evidence": "main.go:12",
+                "expected": "positive durable evidence",
+            },
+            "unproven artifact label": {
+                "result": "Pass",
+                "tested": "proof_mode=full_runtime; scenarios=http.success",
+                "product": "Route latency; visibility=otlp_accepted",
+                "evidence": ".observe/evidence/not-proven.log",
+                "expected": "positive durable evidence",
+            },
+            "missing product outcome": {
+                "result": "Pass",
+                "tested": "proof_mode=full_runtime; scenarios=http.success",
+                "product": "visibility=otlp_accepted",
+                "evidence": ".observe/evidence/http-duration.json",
+                "expected": "must name the observed outcome",
+            },
+            "blocked overall result": {
+                "result": "Blocked",
+                "tested": "proof_mode=full_runtime; scenarios=http.success",
+                "product": "Route latency; visibility=otlp_accepted",
+                "evidence": ".observe/evidence/http-duration.json",
+                "expected": "cannot contain directly proven Working metrics",
+            },
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "otel-verify.md"
+                path.write_text(template.format(**case), encoding="utf-8")
+                errors: list[str] = []
+
+                metrics = MODULE.legacy_working_metrics(path, errors)
+
+                self.assertEqual(metrics, set())
+                self.assertTrue(
+                    any(case["expected"] in error for error in errors), errors
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "otel-verify.md"
+            path.write_text(
+                template.format(
+                    result="Pass",
+                    tested="proof_mode=full_runtime; scenarios=http.failure",
+                    product="Failure-path telemetry accepted; visibility=otlp_accepted",
+                    evidence=".observe/evidence/http-failure.json",
+                ),
+                encoding="utf-8",
+            )
+            errors = []
+
+            metrics = MODULE.legacy_working_metrics(path, errors)
+
+            self.assertEqual(metrics, {"http.server.request.duration"}, errors)
+            self.assertEqual(errors, [])
+
+    def test_legacy_working_metric_requires_item_id_for_exact_metric(self) -> None:
+        template = """# OTel Verification Report: checkout
+
+**Result:** Pass
+
+## Tested And Working
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| {item_id} | http.server.request.duration | Metric | Existing route metric | Working | proof_mode=full_runtime; scenarios=http.success | Route latency accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json |
+"""
+        for item_id in (
+            "SOURCE-METRIC.http.server.errors.total",
+            "OTEL-001.http-duration",
+        ):
+            with self.subTest(item_id=item_id), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "otel-verify.md"
+                path.write_text(template.format(item_id=item_id), encoding="utf-8")
+                errors: list[str] = []
+
+                metrics = MODULE.legacy_working_metrics(path, errors)
+
+                self.assertEqual(metrics, set())
+                self.assertTrue(
+                    any(
+                        "Item ID must equal "
+                        "'SOURCE-METRIC.http.server.request.duration'" in error
+                        for error in errors
+                    ),
+                    errors,
+                )
+
+    def test_legacy_proof_rejects_duplicate_last_wins_status_header(self) -> None:
+        report = """# OTel Verification Report: checkout
+
+**Result:** Pass
+
+## Tested And Working
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence | Working status |
+|---|---|---|---|---|---|---|---|---|
+| SOURCE-METRIC.http.server.request.duration | http.server.request.duration | Metric | Existing route metric | Not working | proof_mode=full_runtime; scenarios=http.success | Route latency accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json | Working |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "otel-verify.md"
+            path.write_text(report, encoding="utf-8")
+            errors: list[str] = []
+
+            metrics = MODULE.legacy_working_metrics(path, errors)
+
+        self.assertEqual(metrics, set())
+        self.assertTrue(
+            any("exact item-proof header" in error for error in errors), errors
+        )
+
+    def test_canonical_audit_never_falls_back_to_legacy_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            args.verification.unlink()
+            legacy = args.preview.parent / "legacy-otel-verify.md"
+            legacy.write_text(
+                """## Tested And Working
+| OTel item | Type | Working status |
+|---|---|---|
+| `http.server.request.duration` | Metric | Working |
+""",
+                encoding="utf-8",
+            )
+            args.verification = None
+            args.legacy_verification = legacy
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("legacy Markdown must not supplement" in error for error in result["errors"]),
+            result["errors"],
+        )
+
     def test_rejects_non_bijective_or_mismatched_chart_contracts(self) -> None:
         mutations = {
             "one-to-one": lambda charts: charts.pop(),
@@ -720,6 +1094,49 @@ class ValidateDashboardOutputTest(unittest.TestCase):
             }
             items["OTEL-001.http-duration"] = {
                 **items["OTEL-001.http-duration"],
+                "type": "span",
+            }
+            MODULE.validate_item_provenance(
+                preview, args.verification, items, set(), errors
+            )
+
+        self.assertTrue(
+            any("instrumentation type 'span', expected 'metric'" in error for error in errors),
+            errors,
+        )
+
+    def test_text_chart_still_requires_bound_metric_item(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            errors: list[str] = []
+            parsed = MODULE.parse_preview(args.preview, errors)
+            chart = parsed["p99_latency"]
+            preview = {
+                "p99_latency": MODULE.PreviewChart(
+                    chart.label,
+                    chart.title,
+                    "text",
+                    None,
+                    "Bound metric explanation",
+                    chart.telemetry_item_id,
+                    chart.product_action,
+                    chart.layout,
+                    chart.dashboard,
+                    chart.group,
+                )
+            }
+            instrumentation = json.loads(
+                (args.preview.parent / "otel-instrumentation.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            items = {
+                item["id"]: item
+                for finding in instrumentation["findings"]
+                for item in finding["telemetry_changes"]
+            }
+            items[chart.telemetry_item_id] = {
+                **items[chart.telemetry_item_id],
                 "type": "span",
             }
             MODULE.validate_item_provenance(

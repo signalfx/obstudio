@@ -29,7 +29,6 @@ DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]\s*(?=,|\))")
 AGG_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
-BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
 REPORT_STATUS = re.compile(r"^\*\*Result:\*\*\s*(Pass|Partial|Fail|Blocked)\s*$", re.I | re.M)
 TABLE_SEPARATOR = re.compile(r"^:?-{3,}:?$")
@@ -141,36 +140,38 @@ def has_substantive_content(section: str) -> bool:
     return any(line not in harmless for line in content)
 
 
-def working_metrics(report: Path) -> set[str]:
-    if not report.exists():
+def load_dashboard_validator(errors: list[str]):
+    """Load the shared dashboard/provenance validator used by both workflows."""
+
+    script = (
+        Path(__file__).parents[2]
+        / "splunk-dashboard"
+        / "scripts"
+        / "validate_dashboard_output.py"
+    )
+    if not script.is_file():
+        errors.append(f"missing shared dashboard validator: {script}")
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "splunk_dashboard_output_validator", script
+    )
+    if spec is None or spec.loader is None:
+        errors.append(f"could not load shared dashboard validator: {script}")
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def working_metrics(report: Path, errors: list[str] | None = None) -> set[str]:
+    """Return only metrics satisfying the strict legacy verification contract."""
+
+    validation_errors = errors if errors is not None else []
+    module = load_dashboard_validator(validation_errors)
+    if module is None:
         return set()
-    lines = report.read_text(encoding="utf-8").splitlines()
-    in_section = False
-    header: list[str] | None = None
-    metrics: set[str] = set()
-    for line in lines:
-        if line.startswith("## "):
-            in_section = line.strip() == "## Tested And Working"
-            header = None
-            continue
-        if not in_section or not line.lstrip().startswith("|"):
-            continue
-        cells = markdown_cells(line)
-        if header is None and "OTel item" in cells and "Working status" in cells:
-            header = cells
-            continue
-        if header is None or set(cells) <= {"---", "--"} or len(cells) != len(header):
-            continue
-        # Column counts are checked above; avoid Python 3.10-only zip(strict=...).
-        row = dict(zip(header, cells))
-        if row.get("Working status") != "Working" or not re.match(
-            r"^metric\b", row.get("Type", ""), re.I
-        ):
-            continue
-        item = row["OTel item"]
-        tokens = BACKTICK.findall(item)
-        metrics.add(tokens[0] if tokens else item.strip())
-    return metrics
+    return module.legacy_working_metrics(report, validation_errors)
 
 
 def matching_brace(text: str, opening: int) -> int:
@@ -1269,26 +1270,28 @@ def run_dashboard_validator(
     args: argparse.Namespace,
     errors: list[str],
 ) -> dict[str, object]:
-    script = Path(__file__).parents[2] / "splunk-dashboard" / "scripts" / "validate_dashboard_output.py"
-    if not script.is_file():
-        errors.append(f"missing shared dashboard validator: {script}")
+    module = load_dashboard_validator(errors)
+    if module is None:
         return {}
-    spec = importlib.util.spec_from_file_location("splunk_dashboard_output_validator", script)
-    if spec is None or spec.loader is None:
-        errors.append(f"could not load shared dashboard validator: {script}")
-        return {}
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
 
-    verification = getattr(args, "dashboard_verification", None)
+    verification = getattr(args, "dashboard_verification", None) or getattr(
+        args, "verification_json", None
+    )
     if verification is None:
         candidate = terraform_dir.parent / "otel-verify.json"
         verification = candidate if candidate.is_file() else None
     tfvars = getattr(args, "dashboard_tfvars", None)
-    if tfvars is None:
-        candidate = terraform_dir / "terraform.tfvars"
-        tfvars = candidate if candidate.is_file() else None
+    paths = canonical_flow_paths(terraform_dir, args)
+    canonical_mode = any(path.is_file() for path in paths.values()) or any(
+        getattr(args, name, None) is not None
+        for name in (
+            "audit_json",
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+            "dashboard_verification",
+        )
+    )
     result = module.validate(
         argparse.Namespace(
             terraform=terraform_dir / "dashboards.tf",
@@ -1297,6 +1300,10 @@ def run_dashboard_validator(
             variables=terraform_dir / "variables.tf",
             tfvars=tfvars,
             verification=verification,
+            legacy_verification=(None if canonical_mode else args.verify_report),
+            audit=getattr(args, "audit_json", None),
+            selection=getattr(args, "selection_json", None),
+            instrumentation=getattr(args, "instrumentation_json", None),
             allow_source_only_item=getattr(args, "allow_source_only_item", []),
             allow_inherited_partial=True,
         )
@@ -1415,7 +1422,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors,
     )
     if verified is None:
-        verified = working_metrics(args.verify_report)
+        verified = working_metrics(args.verify_report, errors)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
     detector_signatures: list[tuple[str, str | None, str]] = []
