@@ -6,15 +6,18 @@ import os
 import shutil
 import stat
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Protocol
 
 from .ab import side_prompt
 from .backends import (
     AgentBackend,
     AnchoredDirectory,
+    BACKEND_SCRATCH_DIRECTORY,
     CodexBackend,
     anchored_namespace_matches,
     atomic_text_write,
@@ -23,6 +26,7 @@ from .backends import (
     ensure_anchored_directory,
     open_anchored_directory,
     path_is_link_or_reparse,
+    regular_file_stability,
 )
 from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
 from .eval_contracts import (
@@ -54,6 +58,22 @@ ARTIFACT_IGNORED_NAMES = {
     "target",
 }
 ARTIFACT_IGNORED_SUFFIXES = (".pyc",)
+EXECUTION_QUARANTINE_ROOT_ENV = "CODEX_EVAL_QUARANTINE_ROOT"
+EXECUTION_QUARANTINE_DIRECTORY_PREFIX = "codex-eval-quarantine-v1" + (
+    f"-{os.geteuid()}" if hasattr(os, "geteuid") else ""
+) + "-"
+EXECUTION_QUARANTINE_MAX_WORKSPACES = 1024
+EXECUTION_QUARANTINE_SLOT_PREFIX = "workspace-"
+EXECUTION_QUARANTINE_SLOT_WIDTH = 6
+EXECUTION_WORKSPACE_DIRECTORY = "execution"
+_DEFAULT_EXECUTION_QUARANTINE_LOCK = threading.Lock()
+_DEFAULT_EXECUTION_QUARANTINE_ROOT: Path | None = None
+
+
+class DigestWriter(Protocol):
+    """Minimal interface shared by the hashlib digest implementations."""
+
+    def update(self, value: bytes, /) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -64,11 +84,36 @@ class WorkspaceInputSnapshot:
     fixture_tree_sha256: str
     skill_path: str
     skill_tree_sha256: str
+    staged_skill_path: str | None
     shared_references_path: str
     shared_references_tree_sha256: str | None
     definition_path: str | None
     definition_exists: bool
     definition_sha256: str | None
+
+
+@dataclass(frozen=True)
+class SourceTreeEntry:
+    """One immutable directory or regular-file entry captured from a source."""
+
+    relative: Path
+    mode: int
+    content: bytes | None
+
+
+@dataclass(frozen=True)
+class SourceTreeSnapshot:
+    """Exact source bytes used for both provenance and workspace materialization."""
+
+    source: Path
+    entries: tuple[SourceTreeEntry, ...]
+    tree_sha256: str
+
+    def file_bytes(self, relative: Path) -> bytes | None:
+        for entry in self.entries:
+            if entry.relative == relative and entry.content is not None:
+                return entry.content
+        return None
 
 
 def new_run_id() -> str:
@@ -78,6 +123,229 @@ def new_run_id() -> str:
 def new_run_root(repo_root: Path, skill: str, run_id: str | None = None) -> Path:
     run_id = run_id or new_run_id()
     return repo_root / ".workspace" / "codex-evals" / skill / run_id
+
+
+def allocate_execution_workspace() -> tuple[Path, AnchoredDirectory]:
+    """Atomically reserve one retained execution workspace.
+
+    The harness never deliberately releases a normally retained reservation.
+    The fixed namespace limits cooperative allocator use, but it is not a
+    same-UID security or resource boundary: evaluated code can move a
+    top-level reservation and make that name reusable. Callers must place the
+    quarantine on an isolated, quota-limited disposable filesystem when
+    evaluated code is untrusted.
+    """
+
+    quarantine_anchor = open_execution_quarantine()
+    try:
+        validate_execution_quarantine(quarantine_anchor)
+        for index in range(EXECUTION_QUARANTINE_MAX_WORKSPACES):
+            slot_name = (
+                f"{EXECUTION_QUARANTINE_SLOT_PREFIX}"
+                f"{index:0{EXECUTION_QUARANTINE_SLOT_WIDTH}d}"
+            )
+            try:
+                create_anchored_child_directory(
+                    quarantine_anchor, slot_name, mode=0o700
+                )
+            except FileExistsError:
+                continue
+
+            # The harness never deliberately releases this reservation on a
+            # later failure. Never delete through this pathname: evaluated
+            # code may retain a concurrent renamer and substitute a victim.
+            if not anchored_namespace_matches(quarantine_anchor):
+                raise ValueError(
+                    "eval execution quarantine changed during allocation"
+                )
+            slot_path = quarantine_anchor.path / slot_name
+            slot_anchor = open_anchored_directory(
+                slot_path, quarantine_anchor.path
+            )
+            try:
+                if (
+                    slot_anchor.boundary_identity
+                    != quarantine_anchor.parent_identity
+                ):
+                    raise ValueError(
+                        "eval execution quarantine was replaced during allocation"
+                    )
+                validate_private_directory(
+                    slot_anchor, f"eval execution reservation {slot_name}"
+                )
+                create_anchored_child_directory(
+                    slot_anchor, EXECUTION_WORKSPACE_DIRECTORY, mode=0o700
+                )
+                if not anchored_namespace_matches(slot_anchor):
+                    raise ValueError(
+                        "eval execution reservation changed during allocation"
+                    )
+            finally:
+                close_anchored_directory(slot_anchor)
+
+            workspace_path = slot_path / EXECUTION_WORKSPACE_DIRECTORY
+            workspace_anchor = open_anchored_directory(
+                workspace_path, quarantine_anchor.path
+            )
+            if (
+                workspace_anchor.boundary_identity
+                != quarantine_anchor.parent_identity
+                or not anchored_namespace_matches(workspace_anchor)
+            ):
+                close_anchored_directory(workspace_anchor)
+                raise ValueError(
+                    "eval execution workspace was replaced during allocation"
+                )
+            return workspace_path, workspace_anchor
+
+        raise RuntimeError(
+            "eval execution quarantine retained workspace limit reached "
+            f"({EXECUTION_QUARANTINE_MAX_WORKSPACES}); refusing to start the "
+            "agent backend. Start a fresh harness invocation, or provision a "
+            "fresh quota-limited disposable filesystem via "
+            f"{EXECUTION_QUARANTINE_ROOT_ENV} only after all processes from "
+            "the previous quarantine have stopped."
+        )
+    finally:
+        close_anchored_directory(quarantine_anchor)
+
+
+def open_execution_quarantine() -> AnchoredDirectory:
+    configured = os.environ.get(EXECUTION_QUARANTINE_ROOT_ENV)
+    if configured:
+        quarantine_root = Path(configured)
+        if not quarantine_root.is_absolute():
+            raise ValueError(
+                f"{EXECUTION_QUARANTINE_ROOT_ENV} must be an absolute path"
+            )
+        try:
+            return open_anchored_directory(quarantine_root, quarantine_root)
+        except FileNotFoundError as error:
+            raise ValueError(
+                f"{EXECUTION_QUARANTINE_ROOT_ENV} must name a pre-provisioned "
+                "private directory"
+            ) from error
+
+    quarantine_root = default_execution_quarantine_root()
+    return open_anchored_directory(quarantine_root, quarantine_root)
+
+
+def default_execution_quarantine_root() -> Path:
+    """Return this process's retained private default quarantine.
+
+    A random process-local root prevents normal prior invocations from
+    consuming the current invocation's fixed reservation namespace. It is
+    intentionally never pathname-deleted; the operating-system temporary
+    directory lifecycle owns eventual cleanup.
+    """
+
+    global _DEFAULT_EXECUTION_QUARANTINE_ROOT
+    with _DEFAULT_EXECUTION_QUARANTINE_LOCK:
+        if _DEFAULT_EXECUTION_QUARANTINE_ROOT is None:
+            temporary_root = Path(os.path.abspath(tempfile.gettempdir()))
+            temporary_anchor = open_anchored_directory(
+                temporary_root, temporary_root
+            )
+            try:
+                quarantine_root = Path(
+                    tempfile.mkdtemp(
+                        prefix=EXECUTION_QUARANTINE_DIRECTORY_PREFIX,
+                        dir=temporary_root,
+                    )
+                )
+                if not anchored_namespace_matches(temporary_anchor):
+                    raise ValueError(
+                        "operating-system temporary directory changed during "
+                        "quarantine setup"
+                    )
+                quarantine_anchor = open_anchored_directory(
+                    quarantine_root, temporary_root
+                )
+                try:
+                    if (
+                        quarantine_anchor.boundary_identity
+                        != temporary_anchor.parent_identity
+                    ):
+                        raise ValueError(
+                            "operating-system temporary directory was replaced "
+                            "during quarantine setup"
+                        )
+                    validate_private_directory(
+                        quarantine_anchor, "eval execution quarantine"
+                    )
+                finally:
+                    close_anchored_directory(quarantine_anchor)
+            finally:
+                close_anchored_directory(temporary_anchor)
+            _DEFAULT_EXECUTION_QUARANTINE_ROOT = quarantine_root
+        return _DEFAULT_EXECUTION_QUARANTINE_ROOT
+
+
+def validate_execution_quarantine(anchor: AnchoredDirectory) -> None:
+    validate_private_directory(anchor, "eval execution quarantine")
+    expected_names = {
+        (
+            f"{EXECUTION_QUARANTINE_SLOT_PREFIX}"
+            f"{index:0{EXECUTION_QUARANTINE_SLOT_WIDTH}d}"
+        )
+        for index in range(EXECUTION_QUARANTINE_MAX_WORKSPACES)
+    }
+    names = (
+        os.listdir(anchor.descriptor)
+        if anchor.descriptor is not None
+        else os.listdir(anchor.path)
+    )
+    unexpected = sorted(set(names) - expected_names)
+    if unexpected:
+        raise ValueError(
+            "eval execution quarantine contains unexpected entries; "
+            f"refusing allocation: {', '.join(unexpected)}"
+        )
+    for name in names:
+        details = (
+            os.stat(name, dir_fd=anchor.descriptor, follow_symlinks=False)
+            if anchor.descriptor is not None
+            else os.lstat(anchor.path / name)
+        )
+        if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+            raise ValueError(
+                "eval execution quarantine reservation must be a real "
+                f"directory: {name}"
+            )
+        validate_private_directory_status(
+            details, f"eval execution reservation {name}"
+        )
+    if not anchored_namespace_matches(anchor):
+        raise ValueError("eval execution quarantine changed during validation")
+
+
+def validate_private_directory(anchor: AnchoredDirectory, label: str) -> None:
+    details = (
+        os.fstat(anchor.descriptor)
+        if anchor.descriptor is not None
+        else os.lstat(anchor.path)
+    )
+    validate_private_directory_status(details, label)
+    if not anchored_namespace_matches(anchor):
+        raise ValueError(f"{label} changed during validation")
+
+
+def validate_private_directory_status(details: os.stat_result, label: str) -> None:
+    if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+        raise ValueError(f"{label} must be a real directory")
+    if hasattr(os, "geteuid") and details.st_uid != os.geteuid():
+        raise ValueError(f"{label} must be owned by the current user")
+    if os.name == "posix" and stat.S_IMODE(details.st_mode) != 0o700:
+        raise ValueError(f"{label} must have mode 0700")
+
+
+def create_anchored_child_directory(
+    parent: AnchoredDirectory, name: str, *, mode: int
+) -> None:
+    if parent.descriptor is None:
+        (parent.path / name).mkdir(mode=mode)
+    else:
+        os.mkdir(name, mode=mode, dir_fd=parent.descriptor)
 
 
 def run_case(
@@ -103,12 +371,14 @@ def run_case(
         backend = CodexBackend()
     run_root_identity = ensure_real_directory(run_root, repo_root, create=True)
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
-    exec_case_root = Path(tempfile.mkdtemp(prefix=f"codex-eval-{case.skill}-{case.language}-{case.service}-{case.prompt_id}-"))
-    exec_case_root_identity = directory_identity(exec_case_root)
+    exec_case_root, exec_case_anchor = allocate_execution_workspace()
+    exec_case_root_identity = exec_case_anchor.parent_identity
     try:
         with_skill = None
         baseline = None
         if "with_skill" in sides:
+            if not anchored_namespace_matches(exec_case_anchor):
+                raise ValueError("eval execution root was replaced between sides")
             with_skill = run_side(
                 repo_root=repo_root,
                 case=case,
@@ -129,8 +399,11 @@ def run_case(
                 run_configuration=run_configuration,
                 run_root=run_root,
                 run_root_identity=run_root_identity,
+                exec_root_identity=exec_case_root_identity,
             )
         if "baseline" in sides:
+            if not anchored_namespace_matches(exec_case_anchor):
+                raise ValueError("eval execution root was replaced between sides")
             baseline = run_side(
                 repo_root=repo_root,
                 case=case,
@@ -151,6 +424,7 @@ def run_case(
                 run_configuration=run_configuration,
                 run_root=run_root,
                 run_root_identity=run_root_identity,
+                exec_root_identity=exec_case_root_identity,
             )
         return CaseResult(
             id=case.id,
@@ -163,11 +437,14 @@ def run_case(
             baseline=baseline,
         )
     finally:
+        close_anchored_directory(exec_case_anchor)
         # Code evaluated in this directory is untrusted and can retain a
         # concurrent renamer. There is no portable conditional-rmdir syscall,
         # so deleting by pathname here could delete a replacement victim.
-        # The OS temporary-directory lifecycle owns eventual cleanup.
-        del exec_case_root_identity
+        # The harness intentionally does not release the reservation. Treat
+        # this as cooperative bookkeeping only: same-UID code can move the
+        # top-level slot. Reclaim the isolated quarantine externally after
+        # every descendant process has stopped.
 
 
 def run_side(
@@ -191,6 +468,7 @@ def run_side(
     run_configuration: dict[str, object] | None,
     run_root: Path,
     run_root_identity: tuple[int, int],
+    exec_root_identity: tuple[int, int],
 ) -> SideResult:
     require_directory_identity(run_root, run_root_identity, "eval run root")
     artifact_parent_anchor = open_anchored_directory(
@@ -206,7 +484,6 @@ def run_side(
             raise ValueError(
                 f"artifact directory already exists; refusing to replace it: {artifact_dir}"
             )
-        exec_root_identity = directory_identity(exec_dir.parent)
         input_snapshot = prepare_side_workspace(
             repo_root,
             case,
@@ -590,19 +867,9 @@ def read_regular_from_directory(
 
 
 def parse_trace_snapshot(backend: AgentBackend, value: bytes):
-    descriptor, name = tempfile.mkstemp(prefix="codex-eval-trace-", suffix=".jsonl")
-    path = Path(name)
-    try:
-        offset = 0
-        while offset < len(value):
-            offset += os.write(descriptor, value[offset:])
-        os.close(descriptor)
-        descriptor = -1
-        return backend.parse_trace(path)
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        path.unlink(missing_ok=True)
+    """Parse already-authenticated trace bytes without an exposed temp path."""
+
+    return backend.parse_trace_bytes(value)
 
 
 def copy_regular_file_fd(
@@ -654,7 +921,9 @@ def copy_artifact_tree_fd(
         | getattr(os, "O_NOFOLLOW", 0)
     )
     for name in names:
-        if name in ignored or (root and name == "summary.json"):
+        if name in ignored or (
+            root and name in {BACKEND_SCRATCH_DIRECTORY, "summary.json"}
+        ):
             continue
         details = os.stat(name, dir_fd=source_descriptor, follow_symlinks=False)
         if stat.S_ISLNK(details.st_mode):
@@ -705,7 +974,9 @@ def copy_artifact_tree_portable(
     names = sorted(entry.name for entry in os.scandir(source))
     ignored = artifact_ignore("", names)
     for name in names:
-        if name in ignored or (root and name == "summary.json"):
+        if name in ignored or (
+            root and name in {BACKEND_SCRATCH_DIRECTORY, "summary.json"}
+        ):
             continue
         source_path = source / name
         destination_path = destination / name
@@ -986,6 +1257,11 @@ def build_run_provenance(
         "skill": {
             "path": skill_path,
             "tree_sha256": skill_tree_digest,
+            "staged_path": (
+                input_snapshot.staged_skill_path
+                if input_snapshot is not None
+                else None
+            ),
         },
         "shared_references": {
             "path": shared_references_path,
@@ -1080,69 +1356,57 @@ def prepare_side_workspace(
             raise ValueError("eval execution root was replaced during setup")
     finally:
         close_anchored_directory(parent_anchor)
-    # Copy source inputs before hashing them. The temporary fixture snapshot
-    # closes the copy->hash race: both the service workspace and its recorded
-    # provenance are derived from the same retained bytes, even if the source
-    # fixture changes concurrently.
-    with tempfile.TemporaryDirectory(
-        prefix=f".{side_dir.name}-fixture-snapshot-", dir=side_dir.parent
-    ) as snapshot_parent:
-        fixture_snapshot = Path(snapshot_parent) / "fixture"
-        snapshot_source_tree(case.fixture_dir, fixture_snapshot)
-        definition = snapshot_definition_provenance(
-            case,
-            fixture_snapshot,
-        )
-        require_collected_definition(case, definition)
-        fixture_tree_digest = tree_sha256(fixture_snapshot)
-        shutil.copytree(
-            fixture_snapshot,
-            side_dir / "service",
-            ignore=workspace_ignore(fixture_snapshot),
-        )
-        copy_eval_inputs(fixture_snapshot, side_dir / "service")
+    # Capture immutable source bytes in memory. This keeps the eval definition
+    # private, derives the service and provenance from the same bytes, and
+    # avoids a TemporaryDirectory cleanup that a retained agent descendant
+    # could redirect to a replacement victim.
+    fixture_snapshot = capture_source_tree(case.fixture_dir)
+    definition = snapshot_definition_provenance(case, fixture_snapshot)
+    require_collected_definition(case, definition)
+    fixture_tree_digest = fixture_snapshot.tree_sha256
+    materialize_fixture_workspace(fixture_snapshot, side_dir / "service")
 
     target = skill_dir or repo_root / "skills" / case.skill
-    if not (target / "SKILL.md").is_file():
+    skill_source_snapshot = capture_source_tree(target)
+    if skill_source_snapshot.file_bytes(Path("SKILL.md")) is None:
         raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
     references = repo_root / "skills" / "references"
+    references_snapshot = (
+        capture_source_tree(references) if references.is_dir() else None
+    )
 
+    staged_skill_path: str | None = None
     if side == "with_skill":
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
         skill_snapshot = skills_dir / target.name
-        snapshot_source_tree(target, skill_snapshot)
-        skill_tree_digest = tree_sha256(skill_snapshot)
+        materialize_source_tree(skill_source_snapshot, skill_snapshot)
+        skill_tree_digest = skill_source_snapshot.tree_sha256
+        staged_skill_path = str(
+            Path(os.path.abspath(skill_snapshot / "SKILL.md"))
+        )
 
         shared_references_tree_digest: str | None = None
-        if references.is_dir():
-            references_snapshot = skills_dir / "references"
-            snapshot_source_tree(references, references_snapshot)
-            shared_references_tree_digest = tree_sha256(references_snapshot)
+        if references_snapshot is not None:
+            staged_references = skills_dir / "references"
+            materialize_source_tree(references_snapshot, staged_references)
+            shared_references_tree_digest = references_snapshot.tree_sha256
     else:
-        # Baseline sides do not expose a skill, but still bind the compared
-        # skill/reference identity. Use short-lived copies so those hashes are
-        # captured from stable bytes rather than mutable source paths.
-        with tempfile.TemporaryDirectory(
-            prefix=f".{side_dir.name}-skill-snapshot-", dir=side_dir.parent
-        ) as snapshot_parent:
-            snapshot_root = Path(snapshot_parent)
-            skill_snapshot = snapshot_root / target.name
-            snapshot_source_tree(target, skill_snapshot)
-            skill_tree_digest = tree_sha256(skill_snapshot)
-            shared_references_tree_digest = None
-            if references.is_dir():
-                references_snapshot = snapshot_root / "references"
-                snapshot_source_tree(references, references_snapshot)
-                shared_references_tree_digest = tree_sha256(
-                    references_snapshot
-                )
+        # Baseline sides bind the exact compared bytes without materializing
+        # those instructions anywhere the baseline agent can discover.
+        skill_tree_digest = skill_source_snapshot.tree_sha256
+        shared_references_tree_digest = (
+            None
+            if references_snapshot is None
+            else references_snapshot.tree_sha256
+        )
 
     return WorkspaceInputSnapshot(
         fixture_path=str(Path(os.path.abspath(case.fixture_dir))),
         fixture_tree_sha256=fixture_tree_digest,
         skill_path=str(Path(os.path.abspath(target))),
         skill_tree_sha256=skill_tree_digest,
+        staged_skill_path=staged_skill_path,
         shared_references_path=str(Path(os.path.abspath(references))),
         shared_references_tree_sha256=shared_references_tree_digest,
         definition_path=definition["path"],
@@ -1153,7 +1417,7 @@ def prepare_side_workspace(
 
 def snapshot_definition_provenance(
     case: EvalCase,
-    fixture_snapshot: Path,
+    fixture_snapshot: SourceTreeSnapshot,
 ) -> dict[str, object]:
     """Hash the definition bytes from the same fixture snapshot used by a side."""
 
@@ -1167,8 +1431,8 @@ def snapshot_definition_provenance(
         relative = definition_path.relative_to(fixture_path)
     except ValueError:
         return file_provenance(definition_path)
-    snapshot_path = fixture_snapshot / relative
-    if snapshot_path.is_symlink() or not snapshot_path.is_file():
+    definition_bytes = fixture_snapshot.file_bytes(relative)
+    if definition_bytes is None:
         return {
             "path": str(definition_path.resolve()),
             "exists": False,
@@ -1177,43 +1441,368 @@ def snapshot_definition_provenance(
     return {
         "path": str(definition_path.resolve()),
         "exists": True,
-        "sha256": hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
+        "sha256": hashlib.sha256(definition_bytes).hexdigest(),
     }
 
 
 def snapshot_source_tree(source: Path, destination: Path) -> None:
-    """Copy a provenance source tree without following any symlink."""
+    """Copy one immutable in-memory source capture to a new directory."""
+
+    materialize_source_tree(capture_source_tree(source), destination)
+
+
+def capture_source_tree(source: Path) -> SourceTreeSnapshot:
+    """Capture one no-link source tree without a cleanup-sensitive temp path."""
 
     source = Path(os.path.abspath(source))
-    destination = Path(os.path.abspath(destination))
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f"snapshot source must be a real directory: {source}")
-    if destination.exists() or destination.is_symlink():
-        raise ValueError(f"snapshot destination already exists: {destination}")
-    destination.mkdir(mode=0o755)
+    entries: list[SourceTreeEntry] = []
+    digest = hashlib.sha256()
     if not descriptor_operations_supported():
         source_identity = directory_identity(source)
-        destination_identity = directory_identity(destination)
-        copy_snapshot_tree_portable(source, destination)
+        capture_source_tree_portable(
+            source,
+            Path(),
+            entries,
+            digest,
+        )
         require_directory_identity(
             source, source_identity, "snapshot source directory"
         )
-        require_directory_identity(
-            destination, destination_identity, "snapshot destination directory"
+    else:
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
         )
-        return
+        source_descriptor = os.open(source, directory_flags)
+        source_identity = descriptor_identity(source_descriptor)
+        try:
+            capture_source_tree_fd(
+                source_descriptor,
+                Path(),
+                entries,
+                digest,
+            )
+        finally:
+            os.close(source_descriptor)
+        require_directory_identity(
+            source, source_identity, "snapshot source directory"
+        )
+    return SourceTreeSnapshot(
+        source=source,
+        entries=tuple(entries),
+        tree_sha256=digest.hexdigest(),
+    )
+
+
+def captured_tree_digest_entry(
+    digest: DigestWriter,
+    relative: Path,
+    kind: bytes,
+    content: bytes | None = None,
+) -> None:
+    digest.update(relative.as_posix().encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(kind)
+    digest.update(b"\0")
+    if content is not None:
+        digest.update(content)
+    digest.update(b"\0")
+
+
+def capture_source_tree_fd(
+    source_descriptor: int,
+    prefix: Path,
+    entries: list[SourceTreeEntry],
+    digest: DigestWriter,
+) -> None:
+    """Capture stable bytes recursively through retained directory fds."""
+
+    names = sorted(os.listdir(source_descriptor))
+    statuses = {
+        name: os.stat(name, dir_fd=source_descriptor, follow_symlinks=False)
+        for name in names
+    }
+    for name, details in statuses.items():
+        if path_is_link_or_reparse(details):
+            raise ValueError(
+                f"provenance source tree must not contain links: {prefix / name}"
+            )
+        if not stat.S_ISDIR(details.st_mode) and not stat.S_ISREG(details.st_mode):
+            raise ValueError(
+                f"unsupported provenance source tree entry: {prefix / name}"
+            )
+
+    retained_directories: list[tuple[str, os.stat_result]] = []
+    for name, details in statuses.items():
+        if not stat.S_ISDIR(details.st_mode) or name in HASH_IGNORED_NAMES:
+            continue
+        relative = prefix / name
+        entries.append(
+            SourceTreeEntry(relative, details.st_mode & 0o777, None)
+        )
+        captured_tree_digest_entry(digest, relative, b"dir")
+        retained_directories.append((name, details))
+
+    for name, details in statuses.items():
+        if not stat.S_ISREG(details.st_mode) or name.endswith(
+            HASH_IGNORED_SUFFIXES
+        ):
+            continue
+        relative = prefix / name
+        content = read_stable_source_file_fd(
+            source_descriptor,
+            name,
+            details,
+            relative,
+        )
+        entries.append(
+            SourceTreeEntry(relative, details.st_mode & 0o777, content)
+        )
+        captured_tree_digest_entry(digest, relative, b"file", content)
+
     directory_flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
-    source_descriptor = os.open(source, directory_flags)
-    destination_descriptor = os.open(destination, directory_flags)
+    for name, before in retained_directories:
+        child = os.open(name, directory_flags, dir_fd=source_descriptor)
+        try:
+            opened = os.fstat(child)
+            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                raise ValueError(f"snapshot source changed before read: {prefix / name}")
+            capture_source_tree_fd(child, prefix / name, entries, digest)
+            after = os.stat(
+                name,
+                dir_fd=source_descriptor,
+                follow_symlinks=False,
+            )
+            if (
+                path_is_link_or_reparse(after)
+                or not stat.S_ISDIR(after.st_mode)
+                or (after.st_dev, after.st_ino)
+                != (opened.st_dev, opened.st_ino)
+            ):
+                raise ValueError(
+                    f"snapshot source changed during read: {prefix / name}"
+                )
+        finally:
+            os.close(child)
+    if sorted(os.listdir(source_descriptor)) != names:
+        raise ValueError(f"snapshot source directory changed during read: {prefix}")
+
+
+def read_stable_source_file_fd(
+    source_descriptor: int,
+    name: str,
+    before: os.stat_result,
+    relative: Path,
+) -> bytes:
+    descriptor = os.open(
+        name,
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0),
+        dir_fd=source_descriptor,
+    )
     try:
-        copy_snapshot_tree_fd(source_descriptor, destination_descriptor)
+        opened = os.fstat(descriptor)
+        if (
+            path_is_link_or_reparse(opened)
+            or not stat.S_ISREG(opened.st_mode)
+            or regular_file_stability(opened) != regular_file_stability(before)
+        ):
+            raise ValueError(f"snapshot source changed before read: {relative}")
+        chunks: list[bytes] = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        current = os.stat(
+            name,
+            dir_fd=source_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            regular_file_stability(opened) != regular_file_stability(after)
+            or path_is_link_or_reparse(current)
+            or not stat.S_ISREG(current.st_mode)
+            or regular_file_stability(current) != regular_file_stability(after)
+        ):
+            raise ValueError(f"snapshot source changed during read: {relative}")
+        return b"".join(chunks)
     finally:
-        os.close(source_descriptor)
-        os.close(destination_descriptor)
+        os.close(descriptor)
+
+
+def capture_source_tree_portable(
+    source: Path,
+    prefix: Path,
+    entries: list[SourceTreeEntry],
+    digest: DigestWriter,
+) -> None:
+    """Best available stable source capture without directory-relative APIs."""
+
+    source_identity = directory_identity(source)
+    names = sorted(entry.name for entry in os.scandir(source))
+    statuses = {name: os.lstat(source / name) for name in names}
+    for name, details in statuses.items():
+        if path_is_link_or_reparse(details):
+            raise ValueError(
+                f"provenance source tree must not contain links: {source / name}"
+            )
+        if not stat.S_ISDIR(details.st_mode) and not stat.S_ISREG(details.st_mode):
+            raise ValueError(
+                f"unsupported provenance source tree entry: {source / name}"
+            )
+
+    for name, details in statuses.items():
+        if not stat.S_ISDIR(details.st_mode) or name in HASH_IGNORED_NAMES:
+            continue
+        relative = prefix / name
+        entries.append(
+            SourceTreeEntry(relative, details.st_mode & 0o777, None)
+        )
+        captured_tree_digest_entry(digest, relative, b"dir")
+
+    for name, details in statuses.items():
+        if not stat.S_ISREG(details.st_mode) or name.endswith(
+            HASH_IGNORED_SUFFIXES
+        ):
+            continue
+        relative = prefix / name
+        content = read_stable_source_file_portable(
+            source / name,
+            details,
+            relative,
+        )
+        entries.append(
+            SourceTreeEntry(relative, details.st_mode & 0o777, content)
+        )
+        captured_tree_digest_entry(digest, relative, b"file", content)
+
+    for name, details in statuses.items():
+        if not stat.S_ISDIR(details.st_mode) or name in HASH_IGNORED_NAMES:
+            continue
+        capture_source_tree_portable(
+            source / name,
+            prefix / name,
+            entries,
+            digest,
+        )
+    if sorted(entry.name for entry in os.scandir(source)) != names:
+        raise ValueError(f"snapshot source directory changed during read: {source}")
+    require_directory_identity(source, source_identity, "snapshot source directory")
+
+
+def read_stable_source_file_portable(
+    path: Path,
+    before: os.stat_result,
+    relative: Path,
+) -> bytes:
+    descriptor = os.open(
+        path,
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0),
+    )
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            path_is_link_or_reparse(opened)
+            or not stat.S_ISREG(opened.st_mode)
+            or regular_file_stability(opened) != regular_file_stability(before)
+        ):
+            raise ValueError(f"snapshot source changed before read: {relative}")
+        chunks: list[bytes] = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            regular_file_stability(opened) != regular_file_stability(after)
+            or path_is_link_or_reparse(current)
+            or not stat.S_ISREG(current.st_mode)
+            or regular_file_stability(current) != regular_file_stability(after)
+        ):
+            raise ValueError(f"snapshot source changed during read: {relative}")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def materialize_source_tree(
+    snapshot: SourceTreeSnapshot,
+    destination: Path,
+    *,
+    entries: tuple[SourceTreeEntry, ...] | None = None,
+) -> None:
+    """Materialize captured regular bytes without later pathname cleanup."""
+
+    destination = Path(os.path.abspath(destination))
+    if os.path.lexists(destination):
+        raise ValueError(f"snapshot destination already exists: {destination}")
+    destination.mkdir(mode=0o755)
+    selected = snapshot.entries if entries is None else entries
+    for entry in sorted(
+        (entry for entry in selected if entry.content is None),
+        key=lambda item: (len(item.relative.parts), item.relative.as_posix()),
+    ):
+        (destination / entry.relative).mkdir(
+            mode=entry.mode,
+            parents=True,
+            exist_ok=True,
+        )
+    for entry in sorted(
+        (entry for entry in selected if entry.content is not None),
+        key=lambda item: item.relative.as_posix(),
+    ):
+        target = destination / entry.relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(
+            target,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_NOFOLLOW", 0),
+            entry.mode,
+        )
+        try:
+            content = entry.content or b""
+            offset = 0
+            while offset < len(content):
+                offset += os.write(descriptor, content[offset:])
+        finally:
+            os.close(descriptor)
+
+
+def materialize_fixture_workspace(
+    snapshot: SourceTreeSnapshot,
+    destination: Path,
+) -> None:
+    """Expose only service files and explicit eval inputs to the agent."""
+
+    selected = tuple(
+        entry
+        for entry in snapshot.entries
+        if fixture_entry_is_visible(entry.relative)
+        or entry.relative.parts[:2] == ("eval", "inputs")
+    )
+    materialize_source_tree(snapshot, destination, entries=selected)
+
+
+def fixture_entry_is_visible(relative: Path) -> bool:
+    if not relative.parts or relative.parts[0] == "eval":
+        return False
+    return not any(
+        part in WORKSPACE_IGNORED_NAMES
+        or part.endswith(WORKSPACE_IGNORED_SUFFIXES)
+        or part.endswith("_eval.json")
+        for part in relative.parts
+    )
 
 
 def copy_snapshot_tree_fd(

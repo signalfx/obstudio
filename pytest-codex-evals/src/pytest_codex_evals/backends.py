@@ -14,6 +14,9 @@ from typing import Any, Protocol
 from .trace import TraceSummary, parse_trace
 
 
+BACKEND_SCRATCH_DIRECTORY = ".codex-eval-scratch"
+
+
 @dataclass
 class AgentResult:
     returncode: int
@@ -48,6 +51,8 @@ class AgentBackend(Protocol):
     ) -> AgentResult: ...
 
     def parse_trace(self, trace_path: Path) -> TraceSummary: ...
+
+    def parse_trace_bytes(self, value: bytes) -> TraceSummary: ...
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +466,6 @@ def atomic_text_write(
         return
     temporary_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
     descriptor: int | None = None
-    replaced = False
     try:
         descriptor = os.open(
             temporary_name,
@@ -485,22 +489,18 @@ def atomic_text_write(
             src_dir_fd=anchor.descriptor,
             dst_dir_fd=anchor.descriptor,
         )
-        replaced = True
         os.fsync(anchor.descriptor)
         if not anchored_namespace_matches(anchor):
-            os.unlink(path.name, dir_fd=anchor.descriptor)
-            replaced = False
             raise ValueError(
                 f"output directory namespace changed during write: {path.parent}"
             )
     finally:
         if descriptor is not None:
             os.close(descriptor)
-        if not replaced:
-            try:
-                os.unlink(temporary_name, dir_fd=anchor.descriptor)
-            except FileNotFoundError:
-                pass
+        # Code running in the destination can retain a concurrent renamer.
+        # No portable conditional-unlink syscall can safely remove either
+        # exposed name after failure; leave it quarantined in the containing
+        # tree rather than risk deleting a replacement.
         os.close(anchor.descriptor)
 
 
@@ -670,7 +670,7 @@ class AnchoredTemporaryOutput:
     path: Path
     name: str
     anchor: AnchoredDirectory
-    identity: tuple[int, int]
+    released: bool = field(default=False, init=False, repr=False)
 
 
 def create_anchored_temporary_output(
@@ -716,7 +716,6 @@ def create_anchored_temporary_output(
             path=parent / name,
             name=name,
             anchor=anchor,
-            identity=(status.st_dev, status.st_ino),
         )
     except BaseException:
         close_anchored_directory(anchor)
@@ -727,34 +726,38 @@ def create_anchored_temporary_output(
 
 
 def cleanup_anchored_temporary_output(output: AnchoredTemporaryOutput) -> None:
-    """Remove only the exact temporary file through its retained parent."""
+    """Release retained handles without deleting an attacker-controlled path."""
 
-    try:
-        descriptor = output.anchor.descriptor
-        if descriptor is None:
-            # Pathname cleanup cannot be made race-free on the portable
-            # fallback. Leave the untrusted temporary output in place.
-            return
-        try:
-            status = os.stat(
-                output.name,
-                dir_fd=descriptor,
-                follow_symlinks=False,
-            )
-        except OSError:
-            return
-        if (
-            path_is_link_or_reparse(status)
-            or not stat.S_ISREG(status.st_mode)
-            or (status.st_dev, status.st_ino) != output.identity
-        ):
-            return
-        try:
-            os.unlink(output.name, dir_fd=descriptor)
-        except OSError:
-            pass
-    finally:
-        close_anchored_directory(output.anchor)
+    if output.released:
+        return
+    output.released = True
+    # Executed code can retain a concurrent renamer. There is no portable
+    # conditional-unlink syscall, so even stat-then-unlink could delete a
+    # replacement victim. The raw file remains quarantined in the
+    # capture-excluded case tree; this function does not promise reclamation.
+    close_anchored_directory(output.anchor)
+
+
+def create_backend_temporary_output(
+    exec_dir: Path,
+    label: str,
+    *,
+    expected_exec_dir_identity: tuple[int, int],
+) -> tuple[AnchoredTemporaryOutput, Path, tuple[int, int]]:
+    """Create raw backend output beneath a capture-excluded scratch boundary."""
+
+    scratch = exec_dir / BACKEND_SCRATCH_DIRECTORY
+    scratch_identity = ensure_anchored_directory(
+        scratch,
+        boundary=exec_dir,
+        expected_boundary_identity=expected_exec_dir_identity,
+    )
+    output = create_anchored_temporary_output(
+        scratch,
+        label,
+        expected_parent_identity=scratch_identity,
+    )
+    return output, scratch, scratch_identity
 
 
 def read_regular_text(
@@ -837,10 +840,12 @@ class CodexBackend:
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
-        raw_final = create_anchored_temporary_output(
-            exec_dir,
-            ".codex-final-",
-            expected_parent_identity=exec_dir_identity,
+        raw_final, raw_boundary, raw_boundary_identity = (
+            create_backend_temporary_output(
+                exec_dir,
+                ".codex-final-",
+                expected_exec_dir_identity=exec_dir_identity,
+            )
         )
 
         cmd = [
@@ -869,8 +874,8 @@ class CodexBackend:
             )
             final_value = read_regular_text(
                 raw_final.path,
-                boundary=exec_dir,
-                expected_boundary_identity=exec_dir_identity,
+                boundary=raw_boundary,
+                expected_boundary_identity=raw_boundary_identity,
             )
             atomic_text_write(
                 final_path,
@@ -899,10 +904,12 @@ class CodexBackend:
     ) -> AgentResult:
         exec_dir_identity = path_directory_identity(exec_dir)
         output_path = exec_dir / "rubric_grade.json"
-        raw_output = create_anchored_temporary_output(
-            exec_dir,
-            ".codex-rubric-",
-            expected_parent_identity=exec_dir_identity,
+        raw_output, raw_boundary, raw_boundary_identity = (
+            create_backend_temporary_output(
+                exec_dir,
+                ".codex-rubric-",
+                expected_exec_dir_identity=exec_dir_identity,
+            )
         )
         trace_path = exec_dir / "rubric_trace.jsonl"
         stderr_path = exec_dir / "rubric_stderr.txt"
@@ -940,8 +947,8 @@ class CodexBackend:
             )
             output = read_regular_text(
                 raw_output.path,
-                boundary=exec_dir,
-                expected_boundary_identity=exec_dir_identity,
+                boundary=raw_boundary,
+                expected_boundary_identity=raw_boundary_identity,
             )
             if completed.returncode != 0 and not output.strip():
                 output = rubric_failure_payload(
@@ -965,6 +972,9 @@ class CodexBackend:
 
     def parse_trace(self, trace_path: Path) -> TraceSummary:
         return parse_trace(trace_path)
+
+    def parse_trace_bytes(self, value: bytes) -> TraceSummary:
+        return _parse_jsonl_trace_bytes(value)
 
 
 # ---------------------------------------------------------------------------
@@ -993,10 +1003,12 @@ class CursorBackend:
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
-        raw_final = create_anchored_temporary_output(
-            exec_dir,
-            ".cursor-final-",
-            expected_parent_identity=exec_dir_identity,
+        raw_final, raw_boundary, raw_boundary_identity = (
+            create_backend_temporary_output(
+                exec_dir,
+                ".cursor-final-",
+                expected_exec_dir_identity=exec_dir_identity,
+            )
         )
 
         cmd = [
@@ -1026,8 +1038,8 @@ class CursorBackend:
                 final_path,
                 read_regular_text(
                     raw_final.path,
-                    boundary=exec_dir,
-                    expected_boundary_identity=exec_dir_identity,
+                    boundary=raw_boundary,
+                    expected_boundary_identity=raw_boundary_identity,
                 ),
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
@@ -1053,10 +1065,12 @@ class CursorBackend:
     ) -> AgentResult:
         exec_dir_identity = path_directory_identity(exec_dir)
         output_path = exec_dir / "rubric_grade.json"
-        raw_output = create_anchored_temporary_output(
-            exec_dir,
-            ".cursor-rubric-",
-            expected_parent_identity=exec_dir_identity,
+        raw_output, raw_boundary, raw_boundary_identity = (
+            create_backend_temporary_output(
+                exec_dir,
+                ".cursor-rubric-",
+                expected_exec_dir_identity=exec_dir_identity,
+            )
         )
         trace_path = exec_dir / "rubric_trace.jsonl"
         stderr_path = exec_dir / "rubric_stderr.txt"
@@ -1093,8 +1107,8 @@ class CursorBackend:
             )
             output = read_regular_text(
                 raw_output.path,
-                boundary=exec_dir,
-                expected_boundary_identity=exec_dir_identity,
+                boundary=raw_boundary,
+                expected_boundary_identity=raw_boundary_identity,
             )
             if completed.returncode != 0 and not output.strip():
                 output = rubric_failure_payload(
@@ -1118,6 +1132,9 @@ class CursorBackend:
 
     def parse_trace(self, trace_path: Path) -> TraceSummary:
         return parse_trace(trace_path)
+
+    def parse_trace_bytes(self, value: bytes) -> TraceSummary:
+        return _parse_jsonl_trace_bytes(value)
 
 
 # ---------------------------------------------------------------------------
@@ -1256,6 +1273,9 @@ class ClaudeBackend:
     def parse_trace(self, trace_path: Path) -> TraceSummary:
         return _parse_claude_trace(trace_path)
 
+    def parse_trace_bytes(self, value: bytes) -> TraceSummary:
+        return _parse_claude_trace_bytes(value)
+
 
 def _claude_subprocess_env(exec_dir: Path) -> dict[str, str]:
     env = os.environ.copy()
@@ -1301,9 +1321,16 @@ def _extract_claude_final_message(
 
 def _parse_claude_trace(trace_path: Path) -> TraceSummary:
     """Parse Claude Code JSON output into TraceSummary (best-effort)."""
+
+    return _parse_claude_trace_bytes(trace_path.read_bytes())
+
+
+def _parse_claude_trace_bytes(value: bytes) -> TraceSummary:
+    """Parse captured Claude Code JSON bytes without a temporary pathname."""
+
     from .trace import CommandEvent, TraceSummary, TraceUsage
 
-    raw = trace_path.read_text(encoding="utf-8", errors="replace")
+    raw = value.decode("utf-8", errors="replace")
     try:
         data = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
@@ -1338,6 +1365,21 @@ def _parse_claude_trace(trace_path: Path) -> TraceSummary:
     summary.commands = commands
     summary.usage = usage
     return summary
+
+
+def _parse_jsonl_trace_bytes(value: bytes) -> TraceSummary:
+    """Parse captured Codex/Cursor JSONL bytes without exposing a temp file."""
+
+    raw = value.decode("utf-8", errors="replace")
+    events: list[dict[str, Any]] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        event = json.loads(line)
+        if not isinstance(event, dict):
+            raise ValueError("trace JSONL entries must be objects")
+        events.append(event)
+    return TraceSummary(events, raw)
 
 
 # ---------------------------------------------------------------------------

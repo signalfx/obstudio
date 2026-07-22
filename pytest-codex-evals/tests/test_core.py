@@ -5,8 +5,11 @@ import json
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
@@ -27,11 +30,13 @@ from pytest_codex_evals.definitions import (
 from pytest_codex_evals.graders.rubric import rubric_prompt
 from pytest_codex_evals.backends import (
     AgentResult,
+    BACKEND_SCRATCH_DIRECTORY,
     _codex_subprocess_env,
     _merge_stream_observations,
     atomic_text_write,
     cleanup_anchored_temporary_output,
     create_anchored_temporary_output,
+    create_backend_temporary_output,
     descriptor_operations_supported,
     ensure_anchored_directory,
     path_directory_identity,
@@ -62,8 +67,21 @@ from pytest_codex_evals.report import (
     write_report_outputs,
     write_session_results,
 )
-from pytest_codex_evals.runner import prepare_side_workspace, run_case, tree_sha256
-from pytest_codex_evals.trace import parse_trace
+from pytest_codex_evals.runner import (
+    parse_trace_snapshot,
+    prepare_side_workspace,
+    run_case,
+    tree_sha256,
+)
+from pytest_codex_evals.trace import TraceSummary, parse_trace
+
+
+@pytest.fixture(autouse=True)
+def isolated_execution_quarantine(tmp_path: Path, monkeypatch) -> Path:
+    quarantine = tmp_path / "execution-quarantine"
+    quarantine.mkdir(mode=0o700)
+    monkeypatch.setenv("CODEX_EVAL_QUARANTINE_ROOT", str(quarantine))
+    return quarantine
 
 
 def test_side_prompt_generates_loaded_and_not_loaded_variants():
@@ -71,6 +89,27 @@ def test_side_prompt_generates_loaded_and_not_loaded_variants():
 
     assert side_prompt(case, "with_skill") == "Use the $sample-skill skill. Scan the service."
     assert side_prompt(case, "baseline") == "Scan the service."
+
+
+def test_trace_snapshot_parses_authenticated_bytes_without_a_temp_path(
+    monkeypatch,
+):
+    def fail_temp_path(*_args, **_kwargs):
+        raise AssertionError("trace parsing must not create a temp pathname")
+
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.setattr(runner_module.tempfile, "mkstemp", fail_temp_path)
+    trace = (
+        json.dumps(
+            {"type": "turn.completed", "usage": {"total_tokens": 7}}
+        )
+        + "\n"
+    ).encode("utf-8")
+
+    summary = parse_trace_snapshot(RecordingBackend(), trace)
+
+    assert summary.usage.total_tokens == 7
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -1340,7 +1379,42 @@ def test_atomic_writer_refuses_parent_namespace_swap(tmp_path: Path):
 
     assert sentinel.read_text(encoding="utf-8") == "keep\n"
     assert not (outside / "nested/result.json").exists()
-    assert not (stolen / "nested/result.json").exists()
+    assert (stolen / "nested/result.json").read_text(encoding="utf-8") == (
+        "forged\n"
+    )
+
+
+def test_atomic_writer_does_not_unlink_replaced_leaf_after_failed_check(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    real_namespace_check = backends_module.anchored_namespace_matches
+    replaced = False
+
+    def replace_before_failed_check(anchor):
+        nonlocal replaced
+        if not replaced and target.exists():
+            target.unlink()
+            target.write_text("replacement\n", encoding="utf-8")
+            replaced = True
+            return False
+        return real_namespace_check(anchor)
+
+    with patch(
+        "pytest_codex_evals.backends.anchored_namespace_matches",
+        replace_before_failed_check,
+    ):
+        with _pytest.raises(ValueError, match="namespace changed"):
+            atomic_text_write(target, "generated\n", boundary=boundary)
+
+    assert replaced
+    assert target.read_text(encoding="utf-8") == "replacement\n"
 
 
 def test_anchored_reader_rejects_parent_namespace_swap_during_read(
@@ -1389,7 +1463,7 @@ def test_anchored_reader_rejects_parent_namespace_swap_during_read(
     assert (boundary / target.name).read_text(encoding="utf-8") == "attacker\n"
 
 
-def test_temporary_output_cleanup_uses_retained_parent_after_namespace_swap(
+def test_temporary_output_cleanup_touches_neither_namespace_after_parent_swap(
     tmp_path: Path,
 ):
     import pytest as _pytest
@@ -1413,7 +1487,7 @@ def test_temporary_output_cleanup_uses_retained_parent_after_namespace_swap(
     cleanup_anchored_temporary_output(output)
 
     assert decoy.read_text(encoding="utf-8") == "keep\n"
-    assert not (stolen / output.name).exists()
+    assert (stolen / output.name).read_text(encoding="utf-8") == "generated\n"
 
 
 def test_temporary_output_cleanup_preserves_replaced_leaf(tmp_path: Path):
@@ -1434,6 +1508,46 @@ def test_temporary_output_cleanup_preserves_replaced_leaf(tmp_path: Path):
     cleanup_anchored_temporary_output(output)
 
     assert output.path.read_text(encoding="utf-8") == "replacement\n"
+
+
+def test_temporary_output_cleanup_is_idempotent_and_leaves_exposed_leaf(
+    tmp_path: Path,
+):
+    exec_dir = tmp_path / "exec"
+    exec_dir.mkdir()
+    output = create_anchored_temporary_output(
+        exec_dir,
+        ".agent-final-",
+        expected_parent_identity=path_directory_identity(exec_dir),
+    )
+    output.path.write_text("generated\n", encoding="utf-8")
+
+    cleanup_anchored_temporary_output(output)
+    cleanup_anchored_temporary_output(output)
+
+    assert output.path.read_text(encoding="utf-8") == "generated\n"
+
+
+def test_backend_temporary_output_uses_capture_excluded_scratch(tmp_path: Path):
+    exec_dir = tmp_path / "exec"
+    exec_dir.mkdir()
+
+    output, boundary, boundary_identity = create_backend_temporary_output(
+        exec_dir,
+        ".agent-final-",
+        expected_exec_dir_identity=path_directory_identity(exec_dir),
+    )
+    output.path.write_text("generated\n", encoding="utf-8")
+
+    assert boundary == exec_dir / BACKEND_SCRATCH_DIRECTORY
+    assert output.path.parent == boundary
+    assert read_regular_text(
+        output.path,
+        boundary=boundary,
+        expected_boundary_identity=boundary_identity,
+    ) == "generated\n"
+
+    cleanup_anchored_temporary_output(output)
 
 
 def test_anchored_reader_rejects_same_inode_mutation_during_read(tmp_path: Path):
@@ -2214,7 +2328,12 @@ def case_result(with_skill: SideResult | None, baseline: SideResult | None) -> C
 
 
 def test_backend_registry_creates_backends():
-    from pytest_codex_evals.backends import create_backend, CodexBackend, CursorBackend, ClaudeBackend
+    from pytest_codex_evals.backends import (
+        ClaudeBackend,
+        CodexBackend,
+        CursorBackend,
+        create_backend,
+    )
 
     codex = create_backend("codex")
     assert isinstance(codex, CodexBackend)
@@ -2233,6 +2352,28 @@ def test_backend_registry_creates_backends():
     import pytest as _pytest
     with _pytest.raises(ValueError, match="unknown agent backend"):
         create_backend("unsupported")
+
+
+def test_builtin_backends_parse_captured_trace_bytes_without_paths():
+    from pytest_codex_evals.backends import (
+        ClaudeBackend,
+        CodexBackend,
+        CursorBackend,
+    )
+
+    jsonl = (
+        json.dumps(
+            {"type": "turn.completed", "usage": {"total_tokens": 11}}
+        )
+        + "\n"
+    ).encode("utf-8")
+    for backend in (CodexBackend(), CursorBackend()):
+        assert backend.parse_trace_bytes(jsonl).usage.total_tokens == 11
+
+    claude = json.dumps(
+        {"type": "result", "usage": {"input_tokens": 3, "output_tokens": 5}}
+    ).encode("utf-8")
+    assert ClaudeBackend().parse_trace_bytes(claude).usage.total_tokens == 8
 
 
 def test_runtime_expectations_generic_endpoints():
@@ -2265,6 +2406,11 @@ def test_runtime_expectations_generic_endpoints():
 def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     fixture_dir = tmp_path / "fixture"
     fixture_dir.mkdir()
+    nested_scratch = fixture_dir / "config" / BACKEND_SCRATCH_DIRECTORY
+    nested_scratch.mkdir(parents=True)
+    (nested_scratch / "schema.json").write_text(
+        '{"source": "fixture"}\n', encoding="utf-8"
+    )
     definition_path = fixture_dir / "eval/qual/sample.json"
     definition_path.parent.mkdir(parents=True)
     definition_path.write_text(
@@ -2335,11 +2481,172 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     assert len(provenance["run_configuration"]["sha256"]) == 64
     assert len(provenance["fixture"]["tree_sha256"]) == 64
     assert len(provenance["skill"]["tree_sha256"]) == 64
+    assert provenance["skill"]["staged_path"].endswith(
+        "/.agents/skills/sample-skill/SKILL.md"
+    )
     assert not (
         provenance_path.parent / "service/target/generated-output.bin"
     ).exists()
     assert not (provenance_path.parent / ".uv-cache").exists()
     assert not (provenance_path.parent / ".pip-cache").exists()
+    assert not (provenance_path.parent / BACKEND_SCRATCH_DIRECTORY).exists()
+    assert (
+        provenance_path.parent
+        / "service"
+        / "config"
+        / BACKEND_SCRATCH_DIRECTORY
+        / "schema.json"
+    ).read_text(encoding="utf-8") == '{"source": "fixture"}\n'
+
+
+def test_execution_quarantine_allocates_distinct_slots_atomically(
+    isolated_execution_quarantine: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.setattr(
+        runner_module, "EXECUTION_QUARANTINE_MAX_WORKSPACES", 2
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        allocations = list(
+            executor.map(
+                lambda _: runner_module.allocate_execution_workspace(), range(2)
+            )
+        )
+    try:
+        paths = {path for path, _anchor in allocations}
+        assert paths == {
+            isolated_execution_quarantine
+            / "workspace-000000"
+            / "execution",
+            isolated_execution_quarantine
+            / "workspace-000001"
+            / "execution",
+        }
+        for path in paths:
+            assert path.is_dir()
+    finally:
+        for _path, anchor in allocations:
+            runner_module.close_anchored_directory(anchor)
+
+    with pytest.raises(RuntimeError, match="retained workspace limit reached"):
+        runner_module.allocate_execution_workspace()
+
+
+def test_execution_quarantine_creates_private_default_root(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.delenv("CODEX_EVAL_QUARANTINE_ROOT")
+    monkeypatch.setattr(
+        runner_module.tempfile, "gettempdir", lambda: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        runner_module, "_DEFAULT_EXECUTION_QUARANTINE_ROOT", None
+    )
+
+    workspace, anchor = runner_module.allocate_execution_workspace()
+    runner_module.close_anchored_directory(anchor)
+
+    quarantine = workspace.parents[1]
+    assert quarantine.parent == tmp_path
+    assert quarantine.name.startswith(
+        runner_module.EXECUTION_QUARANTINE_DIRECTORY_PREFIX
+    )
+    assert workspace == quarantine / "workspace-000000" / "execution"
+    assert quarantine.stat().st_mode & 0o777 == 0o700
+
+
+def test_default_quarantine_capacity_is_scoped_to_one_process_invocation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.delenv("CODEX_EVAL_QUARANTINE_ROOT")
+    monkeypatch.setattr(
+        runner_module.tempfile, "gettempdir", lambda: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        runner_module, "EXECUTION_QUARANTINE_MAX_WORKSPACES", 1
+    )
+    monkeypatch.setattr(
+        runner_module, "_DEFAULT_EXECUTION_QUARANTINE_ROOT", None
+    )
+
+    first_workspace, first_anchor = runner_module.allocate_execution_workspace()
+    runner_module.close_anchored_directory(first_anchor)
+    with pytest.raises(RuntimeError, match="retained workspace limit reached"):
+        runner_module.allocate_execution_workspace()
+
+    # A fresh harness process starts with no module-local root. Simulate that
+    # process boundary without removing the retained first root.
+    monkeypatch.setattr(
+        runner_module, "_DEFAULT_EXECUTION_QUARANTINE_ROOT", None
+    )
+    second_workspace, second_anchor = runner_module.allocate_execution_workspace()
+    runner_module.close_anchored_directory(second_anchor)
+
+    assert first_workspace.parents[1] != second_workspace.parents[1]
+    assert first_workspace.name == second_workspace.name == "execution"
+    assert first_workspace.parent.name == second_workspace.parent.name == (
+        "workspace-000000"
+    )
+    assert first_workspace.parents[1].is_dir()
+    assert second_workspace.parents[1].is_dir()
+
+
+def test_execution_quarantine_rejects_unexpected_entries_before_allocation(
+    isolated_execution_quarantine: Path,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    (isolated_execution_quarantine / "renamed-workspace").mkdir(mode=0o700)
+
+    with pytest.raises(ValueError, match="contains unexpected entries"):
+        runner_module.allocate_execution_workspace()
+
+    assert not (
+        isolated_execution_quarantine / "workspace-000000"
+    ).exists()
+
+
+def test_run_case_refuses_full_quarantine_before_backend(
+    tmp_path: Path,
+    isolated_execution_quarantine: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.setattr(
+        runner_module, "EXECUTION_QUARANTINE_MAX_WORKSPACES", 1
+    )
+    (isolated_execution_quarantine / "workspace-000000").mkdir(mode=0o700)
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    backend = RecordingBackend()
+
+    with pytest.raises(RuntimeError, match="refusing to start the agent backend"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.agent_timeouts == []
 
 
 def test_run_case_uses_portable_filesystem_fallback_when_dir_fd_is_unavailable(
@@ -2359,6 +2666,11 @@ def test_run_case_uses_portable_filesystem_fallback_when_dir_fd_is_unavailable(
     fixture_dir = tmp_path / "fixture"
     fixture_dir.mkdir()
     (fixture_dir / "README.md").write_text("fixture\n", encoding="utf-8")
+    nested_scratch = fixture_dir / "config" / BACKEND_SCRATCH_DIRECTORY
+    nested_scratch.mkdir(parents=True)
+    (nested_scratch / "schema.json").write_text(
+        '{"source": "fixture"}\n', encoding="utf-8"
+    )
     skill_dir = tmp_path / "skills/sample-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
@@ -2381,6 +2693,13 @@ def test_run_case_uses_portable_filesystem_fallback_when_dir_fd_is_unavailable(
     assert (artifact / "last_message.md").read_text(encoding="utf-8") == "done"
     assert (artifact / ".codex-eval-provenance.json").is_file()
     assert not (artifact / "service/target").exists()
+    assert (
+        artifact
+        / "service"
+        / "config"
+        / BACKEND_SCRATCH_DIRECTORY
+        / "schema.json"
+    ).read_text(encoding="utf-8") == '{"source": "fixture"}\n'
 
 
 def test_harness_owned_outputs_replace_agent_planted_symlinks(tmp_path: Path):
@@ -2443,7 +2762,10 @@ def test_run_case_rejects_backend_execution_directory_swap(tmp_path: Path):
         )
 
 
-def test_run_case_cleanup_does_not_delete_replacement_victim(tmp_path: Path):
+def test_run_case_cleanup_does_not_delete_replacement_victim(
+    tmp_path: Path,
+    isolated_execution_quarantine: Path,
+):
     import pytest as _pytest
 
     fixture_dir = tmp_path / "fixture"
@@ -2468,9 +2790,68 @@ def test_run_case_cleanup_does_not_delete_replacement_victim(tmp_path: Path):
     assert (backend.replaced_root / "sentinel.txt").read_text(encoding="utf-8") == (
         "keep\n"
     )
+    # Moving the nested execution root does not free its retained reservation.
+    assert (
+        isolated_execution_quarantine / "workspace-000000"
+    ).is_dir()
     shutil.rmtree(backend.replaced_root)
     assert backend.stolen_root is not None
     shutil.rmtree(backend.stolen_root)
+
+
+def test_run_case_rejects_execution_root_swap_between_sides(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import pytest as _pytest
+    from pytest_codex_evals import runner as runner_module
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    real_run_side = runner_module.run_side
+    swapped_root: Path | None = None
+    stolen_root: Path | None = None
+
+    def run_side_then_swap(**kwargs):
+        nonlocal swapped_root, stolen_root
+        result = real_run_side(**kwargs)
+        if kwargs["side"] == "with_skill":
+            swapped_root = kwargs["exec_dir"].parent
+            stolen_root = tmp_path / "stolen-case-root"
+            swapped_root.rename(stolen_root)
+            swapped_root.mkdir()
+            (swapped_root / "sentinel.txt").write_text(
+                "keep\n", encoding="utf-8"
+            )
+        return result
+
+    monkeypatch.setattr(runner_module, "run_side", run_side_then_swap)
+
+    with _pytest.raises(
+        ValueError, match="execution root was replaced between sides"
+    ):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill", "baseline"),
+            backend=RecordingBackend(),
+        )
+
+    assert swapped_root is not None
+    assert (swapped_root / "sentinel.txt").read_text(encoding="utf-8") == (
+        "keep\n"
+    )
+    assert stolen_root is not None
+    shutil.rmtree(swapped_root)
+    shutil.rmtree(stolen_root)
 
 
 def test_run_case_does_not_delete_artifact_directory_planted_by_agent(
@@ -2681,7 +3062,20 @@ def test_run_case_never_copies_through_swapped_artifact_parent(
     assert (stolen / "with_skill/trace.jsonl").is_file()
 
 
-def test_prepare_side_workspace_copies_only_explicit_eval_inputs(tmp_path: Path):
+def test_prepare_side_workspace_copies_only_explicit_eval_inputs(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import runner as runner_module
+
+    def fail_cleanup_sensitive_snapshot(*_args, **_kwargs):
+        raise AssertionError("workspace preparation must not use TemporaryDirectory")
+
+    monkeypatch.setattr(
+        runner_module.tempfile,
+        "TemporaryDirectory",
+        fail_cleanup_sensitive_snapshot,
+    )
     fixture_dir = tmp_path / "fixture"
     (fixture_dir / "eval/inputs").mkdir(parents=True)
     (fixture_dir / "eval/qual").mkdir(parents=True)
@@ -2704,7 +3098,9 @@ def test_prepare_side_workspace_copies_only_explicit_eval_inputs(tmp_path: Path)
     case = sanity_case(fixture_dir=fixture_dir)
     side_dir = tmp_path / "run"
 
-    prepare_side_workspace(tmp_path, case, "with_skill", side_dir, skill_dir)
+    snapshot = prepare_side_workspace(
+        tmp_path, case, "with_skill", side_dir, skill_dir
+    )
 
     service = side_dir / "service"
     assert (service / "main.go").is_file()
@@ -2713,6 +3109,16 @@ def test_prepare_side_workspace_copies_only_explicit_eval_inputs(tmp_path: Path)
     assert (service / "internal/eval/runtime.go").is_file()
     assert not (service / "target").exists()
     assert not (service / ".observe").exists()
+    assert snapshot.staged_skill_path == str(
+        side_dir / ".agents/skills/sample-skill/SKILL.md"
+    )
+
+    baseline_dir = tmp_path / "baseline"
+    baseline_snapshot = prepare_side_workspace(
+        tmp_path, case, "baseline", baseline_dir, skill_dir
+    )
+    assert baseline_snapshot.staged_skill_path is None
+    assert not (baseline_dir / ".agents").exists()
 
 
 def test_prepare_side_workspace_rejects_symlinked_eval_input(tmp_path: Path):
@@ -2794,36 +3200,25 @@ def test_run_case_seals_snapshot_bytes_when_sources_change_between_copy_and_hash
         "skill": tree_sha256(skill_dir),
         "references": tree_sha256(references_dir),
     }
-    original_tree_sha256 = runner_module.tree_sha256
+    original_capture_source_tree = runner_module.capture_source_tree
     mutated: set[str] = set()
 
-    def mutate_source_before_snapshot_hash(path: Path) -> str:
+    def capture_then_mutate_source(path: Path):
         path = Path(path)
-        if (
-            path.name == "fixture"
-            and "fixture-snapshot" in path.parent.name
-            and "fixture" not in mutated
-        ):
+        snapshot = original_capture_source_tree(path)
+        if path == fixture_dir and "fixture" not in mutated:
             fixture_file.write_text("fixture-new\n", encoding="utf-8")
             mutated.add("fixture")
-        elif (
-            path.name == "sample-skill"
-            and ".agents" in path.parts
-            and "skill" not in mutated
-        ):
+        elif path == skill_dir and "skill" not in mutated:
             skill_file.write_text("skill-new\n", encoding="utf-8")
             mutated.add("skill")
-        elif (
-            path.name == "references"
-            and ".agents" in path.parts
-            and "references" not in mutated
-        ):
+        elif path == references_dir and "references" not in mutated:
             reference_file.write_text("reference-new\n", encoding="utf-8")
             mutated.add("references")
-        return original_tree_sha256(path)
+        return snapshot
 
     monkeypatch.setattr(
-        runner_module, "tree_sha256", mutate_source_before_snapshot_hash
+        runner_module, "capture_source_tree", capture_then_mutate_source
     )
     backend = SnapshotObservingBackend()
     run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
@@ -3126,6 +3521,11 @@ class RecordingBackend:
 
     def run_agent(self, *, prompt: str, exec_dir: Path, model: str | None = None, timeout: int = 1200) -> AgentResult:
         self.agent_timeouts.append(timeout)
+        scratch = exec_dir / BACKEND_SCRATCH_DIRECTORY
+        scratch.mkdir(exist_ok=True)
+        (scratch / ".codex-final-random.tmp").write_text(
+            "raw\n", encoding="utf-8"
+        )
         for cache_name in (".uv-cache", ".pip-cache"):
             cache_file = exec_dir / cache_name / "archive.bin"
             cache_file.parent.mkdir(parents=True)
@@ -3170,6 +3570,11 @@ class RecordingBackend:
 
     def parse_trace(self, trace_path: Path):
         return parse_trace(trace_path)
+
+    def parse_trace_bytes(self, value: bytes):
+        raw = value.decode("utf-8", errors="replace")
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        return TraceSummary(events, raw)
 
 
 class SymlinkPlantingBackend(RecordingBackend):

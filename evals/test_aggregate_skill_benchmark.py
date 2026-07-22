@@ -17,6 +17,7 @@ from aggregate_skill_benchmark import (
     gap_closure_validator_command,
     main,
     reader_validator_command,
+    traced_skill_evidence,
     tree_sha256,
 )
 from pytest_codex_evals.report import write_capture_manifest
@@ -280,7 +281,10 @@ raise SystemExit(0)
             "item": {
                 "id": "item_skill",
                 "type": "command_execution",
-                "command": f"/bin/zsh -lc \"sed -n '1,999p' {skill_path / 'SKILL.md'}\"",
+                "command": (
+                    "/bin/zsh -lc \"sed -n '1,999p' "
+                    f"{root / 'execution' / side / '.agents/skills' / skill_name / 'SKILL.md'}\""
+                ),
                 "aggregated_output": (skill_path / "SKILL.md").read_text(
                     encoding="utf-8"
                 ),
@@ -379,6 +383,14 @@ raise SystemExit(0)
                     "skill": {
                         "path": str(skill_path),
                         "tree_sha256": tree_sha256(skill_path),
+                        "staged_path": str(
+                            root
+                            / "execution"
+                            / side
+                            / ".agents/skills"
+                            / skill_name
+                            / "SKILL.md"
+                        ),
                     },
                     "shared_references": {
                         "path": str(repo / "skills/references"),
@@ -631,7 +643,7 @@ raise SystemExit(0)
         after = result["skills"][0]["performance"]["agent_duration_seconds"]["after"]
         self.assertEqual(after["median"], 5.0)
 
-    def test_equivalent_skill_content_at_a_different_path_is_accepted(self) -> None:
+    def test_harness_staged_skill_content_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = self.make_repo(root)
@@ -648,7 +660,10 @@ raise SystemExit(0)
                 )
 
             expected = repo / "skills/otel-audit/SKILL.md"
-            equivalent = root / "preserved-skill/otel-audit/SKILL.md"
+            equivalent = (
+                root
+                / "execution/after/.agents/skills/otel-audit/SKILL.md"
+            )
             equivalent.parent.mkdir(parents=True)
             equivalent.write_bytes(expected.read_bytes())
             trace = next((root / "after/audit/run1").rglob("with_skill/trace.jsonl"))
@@ -662,6 +677,58 @@ raise SystemExit(0)
             result = build_benchmark(root, repo, ["audit"], 1)
 
         self.assertTrue(result["complete"])
+
+    def test_fixture_local_agents_copy_cannot_prove_skill_load(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            for side in ("before", "after"):
+                self.write_run(
+                    root,
+                    side=side,
+                    skill="audit",
+                    run=1,
+                    duration=10,
+                    commands=10,
+                    tokens=100,
+                    report=AUDIT_REPORT.format(route="/tasks"),
+                )
+
+            false_stage = (
+                root
+                / "execution/after/service/.agents/skills/otel-audit/SKILL.md"
+            )
+            trace = next((root / "after/audit/run1").rglob("with_skill/trace.jsonl"))
+            event = json.loads(trace.read_text(encoding="utf-8"))
+            event["item"]["command"] = f"sed -n '1,999p' {false_stage}"
+            trace.write_text(json.dumps(event) + "\n", encoding="utf-8")
+            self.reseal(root, "after", "audit")
+
+            result = build_benchmark(root, repo, ["audit"], 1)
+
+        self.assertFalse(result["complete"])
+        run = result["skills"][0]["sides"]["after"]["runs"][0]
+        self.assertTrue(
+            any("skill load mismatch" in error for error in run["errors"])
+        )
+        self.assertTrue(
+            any(str(false_stage) in error for error in run["errors"])
+        )
+
+    def test_arbitrary_equivalent_skill_copy_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "skills/sample/SKILL.md"
+            equivalent = root / "preserved-skill/sample/SKILL.md"
+            expected.parent.mkdir(parents=True)
+            equivalent.parent.mkdir(parents=True)
+            expected.write_text("one\ntwo\n", encoding="utf-8")
+            equivalent.write_bytes(expected.read_bytes())
+            evidence = {equivalent: [equivalent.read_text(encoding="utf-8")]}
+
+            self.assertFalse(
+                benchmark_module.skill_read_proven(expected, evidence)
+            )
 
     def test_message_and_reference_read_do_not_prove_the_skill_was_loaded(
         self,
@@ -705,6 +772,12 @@ raise SystemExit(0)
             provenance_data["skill"] = {
                 "path": str(unique_skill),
                 "tree_sha256": tree_sha256(unique_skill),
+                "staged_path": str(
+                    root
+                    / "execution/after/.agents/skills"
+                    / unique_name
+                    / "SKILL.md"
+                ),
             }
             provenance_data["shared_references"]["tree_sha256"] = tree_sha256(
                 repo / "skills/references"
@@ -764,6 +837,521 @@ raise SystemExit(0)
             "a reference read or agent message cannot prove",
             run["errors"][0],
         )
+
+    def test_quoted_read_command_text_does_not_prove_skill_load(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+        trace = {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": f"printf 'cat {expected}'",
+                "aggregated_output": f"cat {expected}",
+                "exit_code": 0,
+            },
+        }
+
+        self.assertEqual(
+            traced_skill_evidence(
+                (json.dumps(trace) + "\n").encode("utf-8"),
+                "trace.jsonl",
+            ),
+            {},
+        )
+
+    def test_unexecuted_or_outputless_read_does_not_prove_skill_load(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / "SKILL.md"
+            skill.write_text("---\nname: sample\n---\n# Sample\n", encoding="utf-8")
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"true || cat {skill}",
+                        "aggregated_output": skill.read_text(encoding="utf-8"),
+                        "exit_code": 0,
+                    },
+                },
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '999999p' {skill}",
+                        "aggregated_output": "",
+                        "exit_code": 0,
+                    },
+                },
+            ]
+
+            evidence = traced_skill_evidence(
+                "".join(json.dumps(event) + "\n" for event in events).encode(
+                    "utf-8"
+                ),
+                "trace.jsonl",
+            )
+            outputs = [value for values in evidence.values() for value in values]
+            self.assertFalse(benchmark_module.output_covers_skill(skill, outputs))
+
+    def test_chunked_skill_output_proves_complete_read(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / "SKILL.md"
+            skill.write_text("one\ntwo\nthree\nfour\n", encoding="utf-8")
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '3,4p' {skill}",
+                        "aggregated_output": "three\nfour\n",
+                        "exit_code": 0,
+                    },
+                },
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '1,2p' {skill}",
+                        "aggregated_output": "one\ntwo\n",
+                        "exit_code": 0,
+                    },
+                },
+            ]
+
+            evidence = traced_skill_evidence(
+                "".join(json.dumps(event) + "\n" for event in events).encode(
+                    "utf-8"
+                ),
+                "trace.jsonl",
+            )
+            outputs = [value for values in evidence.values() for value in values]
+            self.assertTrue(benchmark_module.output_covers_skill(skill, outputs))
+
+    def test_shell_wrapper_options_find_only_the_command_payload(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(
+                f"bash --rcfile 'cat {expected}' -lc true"
+            ),
+            [],
+        )
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(
+                f"bash --norc -lc 'cat {expected}'"
+            ),
+            [Path(expected)],
+        )
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(
+                f"sh -c -- 'cat {expected}'"
+            ),
+            [Path(expected)],
+        )
+
+    def test_multiline_command_is_not_skill_read_evidence(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(
+                f"cat /dev/null\nprintf '{expected}'"
+            ),
+            [],
+        )
+
+    def test_local_reader_lookalike_is_not_skill_read_evidence(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(f"./cat {expected}"),
+            [],
+        )
+
+    def test_redirect_target_is_not_skill_read_evidence(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+
+        self.assertEqual(
+            benchmark_module.traced_skill_paths(
+                f"cat unrelated-copy.txt < {expected}"
+            ),
+            [],
+        )
+
+    def test_unrelated_reader_output_cannot_prove_skill_load(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "SKILL.md"
+            copy = root / "copy.txt"
+            content = "one\ntwo\nthree\nfour\n"
+            skill.write_text(content, encoding="utf-8")
+            copy.write_text(content, encoding="utf-8")
+            trace = {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": f"head -n 0 {skill} && cat {copy}",
+                    "aggregated_output": content,
+                    "exit_code": 0,
+                },
+            }
+
+            self.assertEqual(
+                traced_skill_evidence(
+                    (json.dumps(trace) + "\n").encode("utf-8"),
+                    "trace.jsonl",
+                ),
+                {},
+            )
+
+    def test_unrelated_pipeline_reader_cannot_prove_skill_load(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "SKILL.md"
+            copy = root / "copy.txt"
+            content = "one\ntwo\nthree\nfour\n"
+            skill.write_text(content, encoding="utf-8")
+            copy.write_text(content, encoding="utf-8")
+            trace = {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": f"head -n 0 {skill} | cat {copy}",
+                    "aggregated_output": content,
+                    "exit_code": 0,
+                },
+            }
+
+            self.assertEqual(
+                traced_skill_evidence(
+                    (json.dumps(trace) + "\n").encode("utf-8"),
+                    "trace.jsonl",
+                ),
+                {},
+            )
+
+    def test_stdin_only_pipeline_filters_preserve_skill_read_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / "SKILL.md"
+            content = "one\ntwo\nthree\nfour\n"
+            skill.write_text(content, encoding="utf-8")
+            trace = {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "command": (
+                        f"cat {skill} | sed -n '1,4p' | head -n 4 "
+                        "| tail -n +1 | cat"
+                    ),
+                    "aggregated_output": content,
+                    "exit_code": 0,
+                },
+            }
+
+            evidence = traced_skill_evidence(
+                (json.dumps(trace) + "\n").encode("utf-8"),
+                "trace.jsonl",
+            )
+
+            self.assertTrue(benchmark_module.skill_read_proven(skill, evidence))
+
+    def test_minimal_stdin_pipeline_forms_are_recognized(self) -> None:
+        expected = Path("/workspace/skills/otel-audit/SKILL.md")
+        commands = (
+            f"cat {expected} | sed -n '1,240p'",
+            f"cat {expected} | cat",
+            f"cat {expected} | cat -",
+            f"cat {expected} | head",
+            f"cat {expected} | head -n 240",
+            f"cat {expected} | head -n 240 -",
+            f"cat {expected} | tail",
+            f"cat {expected} | tail -n +1",
+            f"cat {expected} | tail -n +1 -",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    benchmark_module.traced_skill_paths(command),
+                    [expected],
+                )
+
+    def test_non_posix_skill_trace_platform_fails_with_clear_diagnostic(
+        self,
+    ) -> None:
+        self.assertIsNone(benchmark_module.skill_trace_platform_error("posix"))
+        self.assertEqual(
+            benchmark_module.skill_trace_platform_error("nt"),
+            "unsupported skill-load trace platform: before/after aggregation "
+            "requires POSIX execution and POSIX aggregation",
+        )
+
+    def test_downstream_pipeline_filters_reject_unrelated_file_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "SKILL.md"
+            unrelated = root / "unrelated.txt"
+            sed_program = root / "filter.sed"
+            content = "one\ntwo\nthree\nfour\n"
+            skill.write_text(content, encoding="utf-8")
+            unrelated.write_text(content, encoding="utf-8")
+            sed_program.write_text("1,4p\n", encoding="utf-8")
+
+            commands = (
+                f"cat {skill} | cat {unrelated}",
+                f"cat {skill} | head -n 4 {unrelated}",
+                f"cat {skill} | tail -n +1 {unrelated}",
+                f"cat {skill} | sed -n '1,4p' {unrelated}",
+                f"cat {skill} | cat < {unrelated}",
+                f"cat {skill} | sed -n -f {sed_program}",
+            )
+            for command in commands:
+                with self.subTest(command=command):
+                    trace = {
+                        "type": "item.completed",
+                        "item": {
+                            "type": "command_execution",
+                            "command": command,
+                            "aggregated_output": content,
+                            "exit_code": 0,
+                        },
+                    }
+
+                    self.assertEqual(
+                        traced_skill_evidence(
+                            (json.dumps(trace) + "\n").encode("utf-8"),
+                            "trace.jsonl",
+                        ),
+                        {},
+                    )
+
+    def test_pipeline_filters_reject_options_redirections_and_control_chains(
+        self,
+    ) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+        commands = (
+            f"cat {expected} | cat -n",
+            f"cat {expected} | head -c 240",
+            f"cat {expected} | head --lines=240",
+            f"cat {expected} | head -n +240",
+            f"cat {expected} | tail -c 240",
+            f"cat {expected} | tail -n -1",
+            f"cat {expected} | sed -e '1,240p'",
+            f"cat {expected} | sed --quiet '1,240p'",
+            f"cat {expected} | sed -n -f filter.sed",
+            f"cat {expected} | sed -i -n '1,240p'",
+            f"cat {expected} | sed -ni '1,240p'",
+            f"cat {expected} | sed -n '1r unrelated.txt'",
+            f"cat {expected} | sed -n '1,240p' unrelated.txt",
+            f"cat {expected} | cat < unrelated.txt",
+            f"cat {expected} | cat > output.txt",
+            f"cat {expected} | cat 2> errors.txt",
+            f"cat {expected} | sed -n '1,240p' && cat unrelated.txt",
+            f"cat {expected} | sed -n '1,240p' || cat unrelated.txt",
+            f"cat {expected} | sed -n '1,240p'; cat unrelated.txt",
+            f"cat {expected} | sed -n '1,240p' & cat unrelated.txt",
+            f"cat {expected} || sed -n '1,240p'",
+            f"cat {expected} | | sed -n '1,240p'",
+            f"cat {expected} | sed -n '1,240p' |",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    benchmark_module.traced_skill_paths(command),
+                    [],
+                )
+
+    def test_source_reader_rejects_unknown_or_mutating_options(self) -> None:
+        expected = "/workspace/skills/otel-audit/SKILL.md"
+        commands = (
+            f"cat --number {expected}",
+            f"head --lines=240 {expected}",
+            f"tail -c 240 {expected}",
+            f"sed -e '1,240p' {expected}",
+            f"sed -f filter.sed {expected}",
+            f"sed -i -n '1,240p' {expected}",
+            f"sed -ni '1,240p' {expected}",
+        )
+
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    benchmark_module.traced_skill_paths(command),
+                    [],
+                )
+
+    def test_outputs_from_different_skill_paths_are_not_pooled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "expected" / "SKILL.md"
+            first = root / "first" / "SKILL.md"
+            second = root / "second" / "SKILL.md"
+            for path, content in (
+                (expected, "one\ntwo\nthree\nfour\n"),
+                (first, "one\nthree\n"),
+                (second, "two\nfour\n"),
+            ):
+                path.parent.mkdir()
+                path.write_text(content, encoding="utf-8")
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"cat {path}",
+                        "aggregated_output": path.read_text(encoding="utf-8"),
+                        "exit_code": 0,
+                    },
+                }
+                for path in (first, second)
+            ]
+            evidence = traced_skill_evidence(
+                "".join(json.dumps(event) + "\n" for event in events).encode(
+                    "utf-8"
+                ),
+                "trace.jsonl",
+            )
+
+            self.assertTrue(evidence)
+            self.assertFalse(
+                benchmark_module.skill_read_proven(
+                    expected,
+                    evidence,
+                    staged_path=str(first),
+                )
+            )
+
+    def test_outputs_from_different_staged_skill_paths_are_not_pooled(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "skills/sample/SKILL.md"
+            first = root / "run1/.agents/skills/sample/SKILL.md"
+            second = root / "run2/.agents/skills/sample/SKILL.md"
+            expected.parent.mkdir(parents=True)
+            first.parent.mkdir(parents=True)
+            second.parent.mkdir(parents=True)
+            expected.write_text("one\ntwo\nthree\nfour\n", encoding="utf-8")
+            first.write_text("one\ntwo\n", encoding="utf-8")
+            second.write_text("three\nfour\n", encoding="utf-8")
+            evidence = {
+                first: [first.read_text(encoding="utf-8")],
+                second: [second.read_text(encoding="utf-8")],
+            }
+
+            self.assertFalse(
+                benchmark_module.skill_read_proven(expected, evidence)
+            )
+
+    def test_staged_skill_proof_uses_captured_output_not_live_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "skills/sample/SKILL.md"
+            staged = root / "run/.agents/skills/sample/SKILL.md"
+            expected.parent.mkdir(parents=True)
+            staged.parent.mkdir(parents=True)
+            content = "one\ntwo\nthree\nfour\n"
+            expected.write_text(content, encoding="utf-8")
+            staged.write_text(content, encoding="utf-8")
+            evidence = {staged: [content]}
+
+            staged.write_text("changed after execution\n", encoding="utf-8")
+            self.assertTrue(
+                benchmark_module.skill_read_proven(
+                    expected,
+                    evidence,
+                    expected_bytes=content.encode("utf-8"),
+                    staged_path=str(staged),
+                )
+            )
+            staged.unlink()
+            self.assertTrue(
+                benchmark_module.skill_read_proven(
+                    expected,
+                    evidence,
+                    expected_bytes=content.encode("utf-8"),
+                    staged_path=str(staged),
+                )
+            )
+
+    def test_reordered_stale_skill_chunks_do_not_prove_load(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "expected" / "SKILL.md"
+            stale = root / "stale" / "SKILL.md"
+            expected.parent.mkdir()
+            stale.parent.mkdir()
+            expected.write_text("alpha\nbeta\ngamma\n", encoding="utf-8")
+            stale.write_text("gamma\nbeta\nalpha\n", encoding="utf-8")
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '{line_number}p' {stale}",
+                        "aggregated_output": output,
+                        "exit_code": 0,
+                    },
+                }
+                for line_number, output in (
+                    (1, "gamma\n"),
+                    (2, "beta\n"),
+                    (3, "alpha\n"),
+                )
+            ]
+            evidence = traced_skill_evidence(
+                "".join(json.dumps(event) + "\n" for event in events).encode(
+                    "utf-8"
+                ),
+                "trace.jsonl",
+            )
+
+            self.assertNotEqual(
+                benchmark_module.file_hash(expected),
+                benchmark_module.file_hash(stale),
+            )
+            self.assertFalse(
+                benchmark_module.skill_read_proven(expected, evidence)
+            )
+
+    def test_equivalent_skill_paths_pool_chunked_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "skills" / "sample" / "SKILL.md"
+            expected.parent.mkdir(parents=True)
+            expected.write_text("one\ntwo\nthree\nfour\n", encoding="utf-8")
+            equivalent = expected.parent / ".." / "sample" / "SKILL.md"
+            events = [
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '1,2p' {expected}",
+                        "aggregated_output": "one\ntwo\n",
+                        "exit_code": 0,
+                    },
+                },
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "command_execution",
+                        "command": f"sed -n '3,4p' {equivalent}",
+                        "aggregated_output": "three\nfour\n",
+                        "exit_code": 0,
+                    },
+                },
+            ]
+            evidence = traced_skill_evidence(
+                "".join(json.dumps(event) + "\n" for event in events).encode(
+                    "utf-8"
+                ),
+                "trace.jsonl",
+            )
+
+            self.assertEqual(len(evidence), 2)
+            self.assertTrue(
+                benchmark_module.skill_read_proven(expected, evidence)
+            )
 
     def test_stale_skill_read_marks_run_incomplete_even_if_discovery_mentions_expected_path(
         self,
@@ -1081,6 +1669,72 @@ raise SystemExit(0)
                 )
             )
 
+    def test_one_skill_snapshot_blocks_restore_between_load_and_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            for side in ("before", "after"):
+                self.write_run(
+                    root,
+                    side=side,
+                    skill="audit",
+                    run=1,
+                    duration=10,
+                    commands=10,
+                    tokens=100,
+                    report=AUDIT_REPORT.format(route="/tasks"),
+                )
+
+            skill_file = repo / "skills/otel-audit/SKILL.md"
+            original_bytes = skill_file.read_bytes()
+            replacement = b"---\nname: otel-audit\n---\n# replacement\n"
+            skill_file.write_bytes(replacement)
+            replacement_digest = tree_sha256(skill_file.parent)
+            provenance_path = root / (
+                "after/audit/run1/cases/go/sample/benchmark/with_skill/"
+                ".codex-eval-provenance.json"
+            )
+            provenance = json.loads(
+                provenance_path.read_text(encoding="utf-8")
+            )
+            provenance["skill"]["tree_sha256"] = replacement_digest
+            provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+            skill_file.write_bytes(original_bytes)
+            self.reseal(root, "after", "audit")
+
+            original_snapshot = benchmark_module.read_skill_tree_snapshot
+            snapshot_count = 0
+
+            def snapshot_then_switch(path: Path):
+                nonlocal snapshot_count
+                snapshot_count += 1
+                snapshot = original_snapshot(path)
+                if snapshot_count == 2:
+                    skill_file.write_bytes(replacement)
+                return snapshot
+
+            try:
+                with patch.object(
+                    benchmark_module,
+                    "read_skill_tree_snapshot",
+                    side_effect=snapshot_then_switch,
+                ):
+                    result = build_benchmark(root, repo, ["audit"], 1)
+            finally:
+                skill_file.write_bytes(original_bytes)
+
+        self.assertEqual(snapshot_count, 2)
+        self.assertFalse(result["complete"])
+        run = result["skills"][0]["sides"]["after"]["runs"][0]
+        self.assertTrue(
+            any(
+                "skill.tree_sha256 does not match" in error
+                for error in run["errors"]
+            )
+        )
+
     def test_definition_snapshot_rejects_hybrid_contract_and_digest(
         self,
     ) -> None:
@@ -1346,11 +2000,20 @@ raise SystemExit(0)
             provenance["skill"] = {
                 "path": str(alternate),
                 "tree_sha256": tree_sha256(alternate),
+                "staged_path": str(
+                    root
+                    / "execution/after/.agents/skills"
+                    / alternate.name
+                    / "SKILL.md"
+                ),
             }
             provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
             trace_path = run_dir / "cases/go/sample/benchmark/with_skill/trace.jsonl"
             trace = json.loads(trace_path.read_text(encoding="utf-8"))
             trace["item"]["command"] = f"sed -n '1,999p' {alternate / 'SKILL.md'}"
+            trace["item"]["aggregated_output"] = (
+                alternate / "SKILL.md"
+            ).read_text(encoding="utf-8")
             trace_path.write_text(json.dumps(trace) + "\n", encoding="utf-8")
             self.reseal(root, "after", "audit", 2)
 
@@ -1601,6 +2264,197 @@ raise SystemExit(0)
             self.assertEqual(
                 (destination / "nested/artifact.bin").read_bytes(),
                 b"authenticated",
+            )
+
+    def test_authenticated_snapshot_workspaces_are_retained_not_unlinked(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            for side in ("before", "after"):
+                self.write_run(
+                    root,
+                    side=side,
+                    skill="audit",
+                    run=1,
+                    duration=10,
+                    commands=10,
+                    tokens=100,
+                    report=AUDIT_REPORT.format(route="/tasks"),
+                )
+            retained_root = root / "retained"
+            retained_root.mkdir()
+            original_mkdtemp = tempfile.mkdtemp
+            retained: list[Path] = []
+
+            def allocate_retained(*, prefix: str):
+                allocated = Path(
+                    original_mkdtemp(prefix=prefix, dir=retained_root)
+                )
+                retained.append(allocated)
+                return str(allocated)
+
+            with patch.object(
+                benchmark_module.tempfile,
+                "mkdtemp",
+                side_effect=allocate_retained,
+            ), patch.object(
+                benchmark_module.tempfile,
+                "TemporaryDirectory",
+                side_effect=AssertionError("recursive cleanup is unsafe"),
+            ), patch.object(
+                benchmark_module.Path,
+                "unlink",
+                side_effect=AssertionError("pathname unlink is unsafe"),
+            ):
+                result = build_benchmark(root, repo, ["audit"], 1)
+
+            self.assertTrue(result["complete"])
+            self.assertGreaterEqual(len(retained), 4)
+            self.assertTrue(all(path.is_dir() for path in retained))
+            self.assertTrue(
+                any(
+                    path.name.startswith("otel-benchmark-capture-")
+                    for path in retained
+                )
+            )
+            self.assertTrue(
+                any(
+                    path.name.startswith("otel-benchmark-render-")
+                    for path in retained
+                )
+            )
+
+    def test_load_run_rejects_retained_root_swap_during_canonicalization(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            self.write_run(
+                root,
+                side="after",
+                skill="audit",
+                run=1,
+                duration=10,
+                commands=10,
+                tokens=100,
+                report=AUDIT_REPORT.format(route="/tasks"),
+            )
+            retained_root = root / "retained"
+            retained_root.mkdir()
+            original_mkdtemp = tempfile.mkdtemp
+            swapped = False
+
+            def allocate_retained(*, prefix: str):
+                return original_mkdtemp(prefix=prefix, dir=retained_root)
+
+            def swap_before_projection(path: Path) -> dict[str, object]:
+                nonlocal swapped
+                workspace = next(
+                    parent
+                    for parent in path.parents
+                    if parent.parent == retained_root
+                )
+                relative = path.relative_to(workspace)
+                stolen = workspace.with_name(f"{workspace.name}-stolen")
+                workspace.rename(stolen)
+                workspace.mkdir(mode=0o700)
+                forged = workspace / relative
+                forged.parent.mkdir(parents=True)
+                forged.write_text(
+                    AUDIT_REPORT.format(route="/forged"), encoding="utf-8"
+                )
+                swapped = True
+                return {"kind": "audit", "routes": [{"Path": "/forged"}]}
+
+            with patch.object(
+                benchmark_module.tempfile,
+                "mkdtemp",
+                side_effect=allocate_retained,
+            ), patch.dict(
+                benchmark_module.CANONICALIZERS,
+                {"audit": swap_before_projection},
+            ):
+                artifact = benchmark_module.load_run(
+                    root,
+                    repo,
+                    "after",
+                    "audit",
+                    "run1",
+                )
+
+            self.assertTrue(swapped)
+            self.assertTrue(
+                any(
+                    "retained workspace namespace changed after report "
+                    "canonicalization" in error
+                    for error in artifact.errors()
+                ),
+                artifact.errors(),
+            )
+            self.assertIsNone(artifact.projection)
+
+    def test_canonical_html_rejects_generated_root_swap(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            observe = root / "service/.observe"
+            observe.mkdir(parents=True)
+            (observe / "otel-audit.json").write_text("{}\n", encoding="utf-8")
+            html = observe / "otel.html"
+            html.write_text(CANONICAL_HTML, encoding="utf-8")
+            retained_root = root / "retained"
+            retained_root.mkdir()
+            original_mkdtemp = tempfile.mkdtemp
+            swapped = False
+
+            def allocate_retained(*, prefix: str):
+                return original_mkdtemp(prefix=prefix, dir=retained_root)
+
+            def render_then_swap(command, **_kwargs):
+                nonlocal swapped
+                output = Path(command[command.index("-o") + 1])
+                output.write_text(CANONICAL_HTML, encoding="utf-8")
+                workspace = output.parent
+                stolen = workspace.with_name(f"{workspace.name}-stolen")
+                workspace.rename(stolen)
+                workspace.mkdir(mode=0o700)
+                (workspace / output.name).write_text(
+                    CANONICAL_HTML, encoding="utf-8"
+                )
+                swapped = True
+                return benchmark_module.subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout="",
+                    stderr="",
+                )
+
+            with patch.object(
+                benchmark_module.tempfile,
+                "mkdtemp",
+                side_effect=allocate_retained,
+            ), patch.object(
+                benchmark_module.subprocess,
+                "run",
+                side_effect=render_then_swap,
+            ):
+                result = benchmark_module.canonical_html_result(
+                    repo,
+                    observe,
+                    "audit",
+                    html,
+                )
+
+            self.assertTrue(swapped)
+            self.assertEqual(result["status"], "error")
+            self.assertIn(
+                "retained workspace namespace changed after audit_canonical_html",
+                result["reason"],
             )
 
     def test_aggregate_output_creation_refuses_ancestor_namespace_swap(

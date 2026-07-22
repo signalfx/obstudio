@@ -6,16 +6,22 @@ The benchmark runner stores one copied pytest-codex-evals run under
 and report artifacts, reruns the applicable report validators, and compares
 both the stable Markdown reader projections produced by
 ``compare_otel_reports.py`` and the bound canonical JSON report flows.
+
+Skill-load authentication intentionally accepts only bounded POSIX shell read
+forms. Live model execution and aggregation therefore require POSIX; unsupported
+platforms fail closed instead of treating command text as proof.
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import itertools
 import json
 import os
 import re
+import shlex
 import stat
 import statistics
 import subprocess
@@ -37,6 +43,7 @@ if str(PYTEST_EVALS_SOURCE) not in sys.path:
 
 from compare_otel_reports import CANONICALIZERS
 from pytest_codex_evals.backends import (
+    AnchoredDirectory,
     anchored_namespace_matches,
     atomic_text_write,
     close_anchored_directory,
@@ -44,6 +51,7 @@ from pytest_codex_evals.backends import (
     open_anchored_directory,
     path_directory_identity,
     path_is_link_or_reparse,
+    read_anchored_regular_bytes,
 )
 from pytest_codex_evals.eval_contracts import (
     case_contract_sha256,
@@ -94,12 +102,21 @@ CAPTURE_MANIFEST_FILE = ".codex-eval-capture.json"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 HASH_IGNORED_NAMES = {".observe", ".venv", "__pycache__", "target"}
 HASH_IGNORED_SUFFIXES = (".db", ".pyc")
-SKILL_PATH_PATTERN = re.compile(
-    r"(?P<path>(?:/|~/?|\.\.?/)[^\s\"'`;&|()<>]+/SKILL\.md)"
-)
-SKILL_READ_PATTERN = re.compile(
-    r"(?:^|[\s\"'])(?:(?:/usr)?/bin/)?(?:cat|sed|head|tail|awk|perl|python\d*(?:\.\d+)?)\b"
-)
+SKILL_READ_COMMANDS = {"cat", "head", "sed", "tail"}
+SHELL_COMMANDS = {"bash", "dash", "sh", "zsh"}
+TRUSTED_COMMAND_DIRECTORIES = {Path("/bin"), Path("/usr/bin")}
+
+
+def skill_trace_platform_error(platform_name: str | None = None) -> str | None:
+    """Return a deterministic diagnostic for unsupported trace platforms."""
+
+    platform_name = os.name if platform_name is None else platform_name
+    if platform_name == "posix":
+        return None
+    return (
+        "unsupported skill-load trace platform: before/after aggregation "
+        "requires POSIX execution and POSIX aggregation"
+    )
 
 
 @dataclass
@@ -134,6 +151,16 @@ class FileDigestSnapshot:
 
     exists: bool
     sha256: str | None
+
+
+@dataclass(frozen=True)
+class SkillTreeSnapshot:
+    """Canonical skill bytes and tree identity captured in one traversal."""
+
+    root: Path
+    skill_path: Path
+    skill_bytes: bytes
+    tree_sha256: str
 
 
 def round_number(value: float) -> float:
@@ -528,13 +555,19 @@ def file_hash(path: Path) -> str | None:
         return None
 
 
-def tree_sha256(root: Path) -> str:
-    """Hash a source tree with the same rules as the eval runner."""
+def read_tree_snapshot(
+    root: Path,
+    *,
+    capture: Path | None = None,
+) -> tuple[str, bytes | None]:
+    """Hash one tree and optionally retain one file's exact hashed bytes."""
 
     if root.is_symlink():
         raise ValueError(f"provenance source tree must not be a symlink: {root}")
     if not root.is_dir():
         raise FileNotFoundError(root)
+    capture_relative = None if capture is None else capture.relative_to(root)
+    captured: bytes | None = None
     digest = hashlib.sha256()
     for directory, dirnames, filenames in os.walk(root, followlinks=False):
         parent = Path(directory)
@@ -566,9 +599,34 @@ def tree_sha256(root: Path) -> str:
                     f"provenance source tree must not contain symlinks: {candidate}"
                 )
             digest.update(b"file\0")
-            digest.update(candidate.read_bytes())
+            value = candidate.read_bytes()
+            digest.update(value)
+            if capture_relative is not None and relative == capture_relative:
+                captured = value
             digest.update(b"\0")
-    return digest.hexdigest()
+    return digest.hexdigest(), captured
+
+
+def tree_sha256(root: Path) -> str:
+    """Hash a source tree with the same rules as the eval runner."""
+
+    digest, _ = read_tree_snapshot(root)
+    return digest
+
+
+def read_skill_tree_snapshot(path: Path) -> SkillTreeSnapshot:
+    """Capture canonical SKILL.md bytes and their tree digest together."""
+
+    root = path.parent
+    digest, skill_bytes = read_tree_snapshot(root, capture=path)
+    if skill_bytes is None:
+        raise FileNotFoundError(path)
+    return SkillTreeSnapshot(
+        root=Path(os.path.abspath(root)),
+        skill_path=Path(os.path.abspath(path)),
+        skill_bytes=skill_bytes,
+        tree_sha256=digest,
+    )
 
 
 def expected_result(validation: dict[str, Any], skill: str) -> dict[str, Any]:
@@ -667,8 +725,9 @@ def authenticated_tree_record(
     errors: list[str],
     *,
     optional: bool = False,
+    snapshot: SkillTreeSnapshot | None = None,
 ) -> dict[str, object]:
-    """Bind a manifest tree digest to its declared source and current bytes."""
+    """Bind a manifest tree digest to its declared source byte snapshot."""
 
     if not isinstance(record, dict):
         errors.append(f"evaluator provenance {name} must be an object")
@@ -696,7 +755,16 @@ def authenticated_tree_record(
         )
 
     computed_digest: str | None = None
-    if expected_resolved.is_dir():
+    if snapshot is not None:
+        snapshot_matches = snapshot.root == Path(os.path.abspath(expected_path))
+        if not snapshot_matches:
+            errors.append(
+                f"evaluator provenance {name} snapshot path mismatch: expected "
+                f"{expected_resolved}, got {snapshot.root}"
+            )
+        else:
+            computed_digest = snapshot.tree_sha256
+    elif expected_resolved.is_dir():
         try:
             computed_digest = tree_sha256(expected_resolved)
         except (OSError, ValueError) as error:
@@ -738,6 +806,40 @@ def authenticated_tree_record(
             and recorded_digest == computed_digest
         ),
     }
+
+
+def authenticated_staged_skill_path(
+    record: object,
+    expected_skill: Path,
+    errors: list[str],
+) -> str | None:
+    """Validate the harness-owned staged path without touching it live."""
+
+    value = record.get("staged_path") if isinstance(record, dict) else None
+    if not isinstance(value, str) or not value.strip():
+        errors.append("evaluator provenance skill.staged_path is missing")
+        return None
+    candidate = Path(value)
+    normalized = lexical_path(candidate)
+    if not candidate.is_absolute() or normalized != value:
+        errors.append(
+            "evaluator provenance skill.staged_path must be a normalized "
+            "absolute path"
+        )
+        return None
+    expected_suffix = (
+        ".agents",
+        "skills",
+        expected_skill.parent.name,
+        "SKILL.md",
+    )
+    if tuple(candidate.parts[-4:]) != expected_suffix:
+        errors.append(
+            "evaluator provenance skill.staged_path does not identify the "
+            "declared staged skill"
+        )
+        return None
+    return normalized
 
 
 def authenticated_file_record(
@@ -903,6 +1005,8 @@ def load_run_provenance(
     repo_root: Path,
     skill: str,
     captured_files: dict[str, bytes],
+    *,
+    skill_snapshot: SkillTreeSnapshot | None = None,
 ) -> tuple[dict[str, object], str, list[str]]:
     errors: list[str] = []
     result = expected_result(validation, skill)
@@ -1063,6 +1167,20 @@ def load_run_provenance(
         declared_skill_path or source_base / ".missing-skill",
         source_base,
         errors,
+        snapshot=skill_snapshot,
+    )
+    staged_skill_path = authenticated_staged_skill_path(
+        manifest.get("skill") if isinstance(manifest, dict) else None,
+        (
+            declared_skill_path / "SKILL.md"
+            if declared_skill_path is not None
+            else source_base / ".missing-skill/SKILL.md"
+        ),
+        errors,
+    )
+    skill_record["staged_path"] = staged_skill_path
+    skill_record["staged_path_verified"] = bool(
+        skill_record.get("verified") is True and staged_skill_path is not None
     )
     shared_references_record = authenticated_tree_record(
         "shared_references",
@@ -1174,8 +1292,204 @@ def load_run_provenance(
     return provenance, task, errors
 
 
-def traced_skill_evidence(trace_bytes: bytes, trace_label: str) -> list[Path]:
-    skill_reads: list[Path] = []
+def shell_tokens(command: str) -> list[str]:
+    lexer = shlex.shlex(
+        command,
+        posix=True,
+        punctuation_chars=";&|<>",
+    )
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return list(lexer)
+
+
+def trusted_command_name(token: str, allowed: set[str]) -> str | None:
+    """Recognize an ordinary PATH command or a standard absolute binary."""
+
+    candidate = Path(token)
+    name = candidate.name
+    if name not in allowed:
+        return None
+    if "/" not in token:
+        return name
+    if candidate.parent in TRUSTED_COMMAND_DIRECTORIES:
+        return name
+    return None
+
+
+def reader_uses_only_stdin(reader: str, arguments: list[str]) -> bool:
+    """Recognize a small, auditable set of stdin-only reader filters."""
+
+    if arguments and arguments[-1] == "-":
+        arguments = arguments[:-1]
+    if reader == "cat":
+        return not arguments
+    if reader in {"head", "tail"}:
+        count_pattern = r"\d+" if reader == "head" else r"\+?\d+"
+        return not arguments or (
+            len(arguments) == 2
+            and arguments[0] == "-n"
+            and re.fullmatch(count_pattern, arguments[1]) is not None
+        )
+    if reader == "sed":
+        return (
+            len(arguments) == 2
+            and arguments[0] == "-n"
+            and re.fullmatch(r"[1-9]\d*(?:,[1-9]\d*)?p", arguments[1])
+            is not None
+        )
+    return False
+
+
+def skill_reader_path(reader: str, arguments: list[str]) -> Path | None:
+    """Recognize one direct reader with exactly one SKILL.md input."""
+
+    if not arguments or Path(arguments[-1]).name != "SKILL.md":
+        return None
+    path = arguments[-1]
+    options = arguments[:-1]
+    if reader == "cat" and not options:
+        return skill_file(path)
+    if reader in {"head", "tail"} and (
+        not options
+        or (
+            len(options) == 2
+            and options[0] == "-n"
+            and re.fullmatch(
+                r"\d+" if reader == "head" else r"\+?\d+",
+                options[1],
+            )
+            is not None
+        )
+    ):
+        return skill_file(path)
+    if reader == "sed" and (
+        len(options) == 2
+        and options[0] == "-n"
+        and re.fullmatch(r"[1-9]\d*(?:,[1-9]\d*)?p", options[1])
+        is not None
+    ):
+        return skill_file(path)
+    return None
+
+
+def shell_payload(tokens: list[str]) -> str | None:
+    """Return the command string from a minimal supported shell wrapper."""
+
+    shell = trusted_command_name(tokens[0], SHELL_COMMANDS)
+    if shell is None:
+        return None
+    arguments = tokens[1:]
+    if shell == "bash" and arguments[:1] == ["--norc"]:
+        arguments = arguments[1:]
+    if not arguments or arguments[0] not in {"-c", "-lc"}:
+        return None
+    arguments = arguments[1:]
+    if arguments[:1] == ["--"]:
+        arguments = arguments[1:]
+    return arguments[0] if len(arguments) == 1 else None
+
+
+def shell_operator(token: str) -> bool:
+    return bool(token) and not set(token).difference(";&|<>")
+
+
+def traced_skill_paths(command: str) -> list[Path]:
+    """Return SKILL.md operands from structurally recognized read commands."""
+
+    if "\n" in command:
+        return []
+    try:
+        tokens = shell_tokens(command)
+    except ValueError:
+        return []
+    if not tokens:
+        return []
+
+    if trusted_command_name(tokens[0], SHELL_COMMANDS) is not None:
+        payload = shell_payload(tokens)
+        return traced_skill_paths(payload) if payload is not None else []
+
+    operators = [token for token in tokens if shell_operator(token)]
+    if any(operator != "|" for operator in operators):
+        return []
+
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token == "|":
+            segments.append([])
+        else:
+            segments[-1].append(token)
+    if any(not segment for segment in segments):
+        return []
+
+    source_reader = trusted_command_name(segments[0][0], SKILL_READ_COMMANDS)
+    if source_reader is None:
+        return []
+    source = skill_reader_path(source_reader, segments[0][1:])
+    if source is None:
+        return []
+
+    for segment in segments[1:]:
+        reader = trusted_command_name(segment[0], SKILL_READ_COMMANDS)
+        if reader is None or not reader_uses_only_stdin(reader, segment[1:]):
+            return []
+    return [source]
+
+
+def output_covers_skill(
+    expected: Path | bytes,
+    outputs: list[str],
+) -> bool:
+    try:
+        value = expected.read_bytes() if isinstance(expected, Path) else expected
+        expected_lines = value.decode("utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return False
+    if not expected_lines:
+        return False
+    covered: set[int] = set()
+    for output in outputs:
+        matcher = difflib.SequenceMatcher(
+            None,
+            expected_lines,
+            output.splitlines(),
+            autojunk=False,
+        )
+        for block in matcher.get_matching_blocks():
+            covered.update(range(block.a, block.a + block.size))
+    return len(covered) == len(expected_lines)
+
+
+def skill_read_proven(
+    expected: Path,
+    reads_by_path: dict[Path, list[str]],
+    *,
+    expected_bytes: bytes | None = None,
+    staged_path: str | None = None,
+) -> bool:
+    """Require one declared or harness-staged path to expose the full skill."""
+
+    expected_lexical = lexical_path(expected)
+    expected_value: Path | bytes = (
+        expected if expected_bytes is None else expected_bytes
+    )
+    matching_outputs: dict[str, list[str]] = {}
+    for candidate, outputs in reads_by_path.items():
+        candidate_lexical = lexical_path(candidate)
+        if candidate_lexical in {expected_lexical, staged_path}:
+            matching_outputs.setdefault(candidate_lexical, []).extend(outputs)
+    return any(
+        output_covers_skill(expected_value, outputs)
+        for outputs in matching_outputs.values()
+    )
+
+
+def traced_skill_evidence(
+    trace_bytes: bytes,
+    trace_label: str,
+) -> dict[Path, list[str]]:
+    reads_by_path: dict[Path, list[str]] = {}
     for line_number, line in enumerate(
         trace_bytes.decode("utf-8").splitlines(), 1
     ):
@@ -1194,33 +1508,24 @@ def traced_skill_evidence(trace_bytes: bytes, trace_label: str) -> list[Path]:
             continue
         if item.get("exit_code") != 0 or not isinstance(item.get("command"), str):
             continue
-        command = str(item["command"])
-        for segment in re.split(r"\s*(?:&&|\|\||;|\n)\s*", command):
-            if not SKILL_READ_PATTERN.search(segment):
-                continue
-            skill_reads.extend(
-                skill_file(match.group("path"))
-                for match in SKILL_PATH_PATTERN.finditer(segment)
-            )
-    return skill_reads
+        output = item.get("aggregated_output")
+        if not isinstance(output, str):
+            continue
+        for path in dict.fromkeys(traced_skill_paths(str(item["command"]))):
+            reads_by_path.setdefault(path, []).append(output)
+    return reads_by_path
 
 
 def validate_skill_load(
     run_dir: Path,
     summary_path: Path,
-    skill: str,
+    expected: Path,
+    skill_snapshot: SkillTreeSnapshot,
+    staged_path: str | None,
     captured_files: dict[str, bytes],
 ) -> list[str]:
-    validation_path, errors = find_validation(run_dir, captured_files)
-    if validation_path is None:
-        return errors
-    if error := captured_file_error(
-        validation_path,
-        run_dir,
-        captured_files,
-        "validation result",
-    ):
-        return [*errors, error]
+    if platform_error := skill_trace_platform_error():
+        return [platform_error]
     trace_path, trace_errors = find_trace(
         run_dir, summary_path, captured_files
     )
@@ -1234,9 +1539,6 @@ def validate_skill_load(
     ):
         return [*trace_errors, error]
     try:
-        declared_name, expected = expected_skill(
-            captured_json(validation_path, run_dir, captured_files), skill
-        )
         skill_reads = traced_skill_evidence(
             captured_bytes(trace_path, run_dir, captured_files), str(trace_path)
         )
@@ -1244,25 +1546,24 @@ def validate_skill_load(
         return [f"failed to verify loaded skill: {error}"]
 
     expected_lexical = lexical_path(expected)
-    if any(lexical_path(candidate) == expected_lexical for candidate in skill_reads):
+    if skill_read_proven(
+        expected,
+        skill_reads,
+        expected_bytes=skill_snapshot.skill_bytes,
+        staged_path=staged_path,
+    ):
         return []
 
-    expected_hash = file_hash(expected)
-    if expected_hash is not None:
-        for candidate in skill_reads:
-            if file_hash(candidate) == expected_hash:
-                return []
-
+    expected_hash = hashlib.sha256(skill_snapshot.skill_bytes).hexdigest()
     if skill_reads:
         loaded = ", ".join(
             sorted({lexical_path(candidate) for candidate in skill_reads})
         )
     else:
         loaded = "no successful SKILL.md content reads"
-    hash_note = "unavailable" if expected_hash is None else expected_hash
     return [
         "skill load mismatch: validation expected "
-        f"{expected_lexical} (sha256={hash_note}), but trace loaded {loaded}; "
+        f"{expected_lexical} (sha256={expected_hash}), but trace loaded {loaded}; "
         "a reference read or agent message cannot prove that the governing "
         "SKILL.md was loaded"
     ]
@@ -1273,6 +1574,7 @@ def validator_result(
     command: list[str] | None,
     *,
     reason: str | None = None,
+    workspaces: tuple["RetainedWorkspace", ...] = (),
 ) -> dict[str, object]:
     if command is None:
         return {
@@ -1281,6 +1583,8 @@ def validator_result(
             "reason": reason or "validator does not apply",
         }
     try:
+        for workspace in workspaces:
+            workspace.require_current(f"before {name}")
         completed = subprocess.run(
             command,
             check=False,
@@ -1288,7 +1592,9 @@ def validator_result(
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+        for workspace in workspaces:
+            workspace.require_current(f"after {name}")
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         return {
             "name": name,
             "status": "error",
@@ -1359,6 +1665,129 @@ def missing_validator(name: str, reason: str) -> dict[str, object]:
     return {"name": name, "status": "missing", "reason": reason}
 
 
+@dataclass
+class RetainedWorkspace:
+    """Private retained tree whose original root stays descriptor-anchored."""
+
+    path: Path
+    anchor: AnchoredDirectory
+
+    @property
+    def identity(self) -> tuple[int, int]:
+        return self.anchor.parent_identity
+
+    def require_current(self, operation: str) -> None:
+        if not anchored_namespace_matches(self.anchor):
+            raise ValueError(
+                f"retained workspace namespace changed {operation}: {self.path}"
+            )
+
+    def read_bytes(self, path: Path, operation: str) -> bytes:
+        absolute = Path(os.path.abspath(path))
+        try:
+            absolute.relative_to(self.path)
+        except ValueError as error:
+            raise ValueError(
+                f"retained workspace read escapes root: {absolute}"
+            ) from error
+        self.require_current(f"before {operation}")
+        value = read_anchored_regular_bytes(
+            absolute,
+            boundary=self.path,
+            expected_boundary_identity=self.identity,
+        )
+        self.require_current(f"after {operation}")
+        return value
+
+    def verify_files(
+        self,
+        expected: dict[str, bytes],
+        operation: str,
+    ) -> None:
+        """Verify every authenticated file and reject added regular files."""
+
+        self.require_current(f"before {operation}")
+        actual_paths: set[str] = set()
+        for directory, dirnames, filenames in os.walk(
+            self.path, followlinks=False
+        ):
+            parent = Path(directory)
+            retained: list[str] = []
+            for name in sorted(dirnames):
+                candidate = parent / name
+                details = os.lstat(candidate)
+                if path_is_link_or_reparse(details) or not stat.S_ISDIR(
+                    details.st_mode
+                ):
+                    raise ValueError(
+                        f"retained workspace contains an unsafe directory: {candidate}"
+                    )
+                retained.append(name)
+            dirnames[:] = retained
+            for name in sorted(filenames):
+                candidate = parent / name
+                details = os.lstat(candidate)
+                if path_is_link_or_reparse(details) or not stat.S_ISREG(
+                    details.st_mode
+                ):
+                    raise ValueError(
+                        f"retained workspace contains an unsafe file: {candidate}"
+                    )
+                actual_paths.add(candidate.relative_to(self.path).as_posix())
+        if actual_paths != set(expected):
+            added = sorted(actual_paths - set(expected))
+            missing = sorted(set(expected) - actual_paths)
+            raise ValueError(
+                f"retained workspace file set changed {operation}; "
+                f"added={added}, missing={missing}"
+            )
+        for relative, value in expected.items():
+            current = self.read_bytes(
+                self.path / relative,
+                f"{operation} read {relative}",
+            )
+            if current != value:
+                raise ValueError(
+                    f"retained workspace file changed {operation}: {relative}"
+                )
+        self.require_current(f"after {operation}")
+
+    def close(self) -> None:
+        close_anchored_directory(self.anchor)
+
+
+def retained_workspace(prefix: str) -> RetainedWorkspace:
+    """Create and retain an authenticated private workspace root."""
+
+    workspace = Path(tempfile.mkdtemp(prefix=prefix))
+    details = workspace.lstat()
+    if (
+        not stat.S_ISDIR(details.st_mode)
+        or stat.S_IMODE(details.st_mode) != 0o700
+    ):
+        raise ValueError(
+            f"retained workspace is not a private directory: {workspace}"
+        )
+    if hasattr(os, "getuid") and details.st_uid != os.getuid():
+        raise ValueError(
+            "retained workspace is not owned by the current user: "
+            f"{workspace}"
+        )
+    anchor = open_anchored_directory(workspace, workspace.parent)
+    if anchor.parent_identity != (details.st_dev, details.st_ino):
+        close_anchored_directory(anchor)
+        raise ValueError(
+            f"retained workspace changed while it was opened: {workspace}"
+        )
+    retained = RetainedWorkspace(workspace, anchor)
+    try:
+        retained.require_current("during creation")
+    except BaseException:
+        retained.close()
+        raise
+    return retained
+
+
 def task_requires(task: str, filename: str) -> bool:
     return filename in task
 
@@ -1406,6 +1835,7 @@ def canonical_html_result(
     observe_dir: Path,
     skill: str,
     html_path: Path,
+    source_workspace: RetainedWorkspace | None = None,
 ) -> dict[str, object]:
     name = f"{skill}_canonical_html"
     if not html_path.is_file():
@@ -1418,13 +1848,10 @@ def canonical_html_result(
     if not audit.is_file():
         return missing_validator(name, f"canonical audit JSON is missing: {audit}")
 
-    temporary: Path | None = None
+    generated_workspace: RetainedWorkspace | None = None
     try:
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix=".benchmark-render-", suffix=".html", dir=observe_dir
-        )
-        os.close(descriptor)
-        temporary = Path(temporary_name)
+        generated_workspace = retained_workspace("otel-benchmark-render-")
+        temporary = generated_workspace.path / "rendered.html"
         if skill == "audit":
             command = [
                 sys.executable,
@@ -1463,24 +1890,46 @@ def canonical_html_result(
             ]
             if verify.is_file():
                 command.extend(["--verify-json", str(verify)])
-        result = validator_result(name, command)
+        monitored = (
+            (generated_workspace,)
+            if source_workspace is None
+            else (source_workspace, generated_workspace)
+        )
+        result = validator_result(name, command, workspaces=monitored)
         if result["status"] != "passed":
             return result
-        if temporary.read_bytes() != html_path.read_bytes():
+        rendered = generated_workspace.read_bytes(
+            temporary, "while reading the fresh canonical HTML"
+        )
+        preserved = (
+            source_workspace.read_bytes(
+                html_path, "while reading the preserved canonical HTML"
+            )
+            if source_workspace is not None
+            else regular_file_bytes(html_path)
+        )
+        if rendered != preserved:
             result["status"] = "failed"
             result["reason"] = (
                 "checked-in HTML differs from a fresh canonical render of the "
                 "preserved JSON flow"
             )
         return result
-    except OSError as error:
+    except (OSError, ValueError) as error:
         return {"name": name, "status": "error", "reason": str(error)}
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        if generated_workspace is not None:
+            generated_workspace.close()
 
 
-def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, object]]:
+def validate_run(
+    repo_root: Path,
+    artifact: RunArtifact,
+    workspace: RetainedWorkspace | None = None,
+) -> list[dict[str, object]]:
+    monitored = () if workspace is None else (workspace,)
+    if workspace is not None:
+        workspace.require_current("before run validation")
     if artifact.report_path is None or not artifact.report_path.is_file():
         return [
             {
@@ -1514,6 +1963,7 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
                     str(repo_root / "skills/otel-audit/scripts/validate_audit_report.py"),
                     str(artifact.report_path),
                 ],
+                workspaces=monitored,
             )
         )
     elif artifact.skill == "verify":
@@ -1521,6 +1971,7 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
             validator_result(
                 "verify_reader_report",
                 reader_validator_command(repo_root, artifact.report_path),
+                workspaces=monitored,
             )
         )
 
@@ -1537,7 +1988,11 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
             )
         else:
             results.append(
-                validator_result(f"{artifact.skill}_canonical_json", flow_command)
+                validator_result(
+                    f"{artifact.skill}_canonical_json",
+                    flow_command,
+                    workspaces=monitored,
+                )
             )
 
     canonical_html = observe_dir / CANONICAL_HTML_REPORTS[artifact.skill]
@@ -1546,7 +2001,11 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
     ):
         results.append(
             canonical_html_result(
-                repo_root, observe_dir, artifact.skill, canonical_html
+                repo_root,
+                observe_dir,
+                artifact.skill,
+                canonical_html,
+                workspace,
             )
         )
 
@@ -1561,6 +2020,7 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
                 gap_closure_validator_command(
                     repo_root, observe_dir, artifact.report_path
                 ),
+                workspaces=monitored,
             )
         )
     else:
@@ -1578,6 +2038,7 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
             validator_result(
                 "nested_verify_reader_report",
                 reader_validator_command(repo_root, nested_verify),
+                workspaces=monitored,
             )
         )
     else:
@@ -1596,11 +2057,21 @@ def validate_run(repo_root: Path, artifact: RunArtifact) -> list[dict[str, objec
 
 
 def materialize_capture_snapshot(
-    destination: Path, captured_files: dict[str, bytes]
+    destination: Path,
+    captured_files: dict[str, bytes],
+    *,
+    expected_destination_identity: tuple[int, int] | None = None,
 ) -> None:
     """Create a process-owned tree from the exact authenticated capture bytes."""
 
     destination_identity = path_directory_identity(destination)
+    if (
+        expected_destination_identity is not None
+        and destination_identity != expected_destination_identity
+    ):
+        raise ValueError(
+            "capture snapshot root changed before materialization"
+        )
     for relative, value in sorted(captured_files.items()):
         target = destination / relative
         normalized = captured_relative_path(target, destination)
@@ -1612,8 +2083,6 @@ def materialize_capture_snapshot(
             create=True,
         )
         descriptor: int | None = None
-        created = False
-        completed = False
         try:
             if anchor.boundary_identity != destination_identity:
                 raise ValueError(
@@ -1649,7 +2118,6 @@ def materialize_capture_snapshot(
                     0o600,
                     dir_fd=anchor.descriptor,
                 )
-            created = True
             offset = 0
             while offset < len(value):
                 offset += os.write(descriptor, value[offset:])
@@ -1657,24 +2125,14 @@ def materialize_capture_snapshot(
             os.close(descriptor)
             descriptor = None
             if not anchored_namespace_matches(anchor):
-                if anchor.descriptor is not None:
-                    os.unlink(target.name, dir_fd=anchor.descriptor)
-                created = False
                 raise ValueError(
                     "capture snapshot namespace changed during write"
                 )
-            completed = True
         finally:
             if descriptor is not None:
                 os.close(descriptor)
-            if created and (
-                not completed or not anchored_namespace_matches(anchor)
-            ):
-                if anchor.descriptor is not None:
-                    try:
-                        os.unlink(target.name, dir_fd=anchor.descriptor)
-                    except FileNotFoundError:
-                        pass
+            # Snapshot consumers may retain a concurrent renamer. Do not
+            # pathname-delete an exposed entry after a failed identity check.
             close_anchored_directory(anchor)
 
 
@@ -1726,9 +2184,6 @@ def load_run(
         artifact.errors().append(f"failed to read summary: {error}")
         return artifact
 
-    artifact.errors().extend(
-        validate_skill_load(run_dir, summary_path, skill, captured_files)
-    )
     validation_path, validation_errors = find_validation(
         run_dir, captured_files
     )
@@ -1747,6 +2202,22 @@ def load_run(
             validation = captured_json(
                 validation_path, run_dir, captured_files
             )
+            result = expected_result(validation, skill)
+            declared_skill = resolve_recorded_path(
+                result.get("skill_path"),
+                repo_root,
+                boundary=repo_root,
+            )
+            if declared_skill is None:
+                raise ValueError(
+                    "validation skill_path is outside the benchmark repository"
+                )
+            expected = (
+                declared_skill
+                if declared_skill.name == "SKILL.md"
+                else declared_skill / "SKILL.md"
+            )
+            skill_snapshot = read_skill_tree_snapshot(expected)
             provenance, task, provenance_errors = load_run_provenance(
                 run_dir,
                 summary_path,
@@ -1755,10 +2226,29 @@ def load_run(
                 repo_root,
                 skill,
                 captured_files,
+                skill_snapshot=skill_snapshot,
             )
             artifact.provenance = provenance
             artifact.task = task
             artifact.errors().extend(provenance_errors)
+            skill_record = provenance.get("skill")
+            staged_path = (
+                skill_record.get("staged_path")
+                if isinstance(skill_record, dict)
+                and skill_record.get("staged_path_verified") is True
+                and isinstance(skill_record.get("staged_path"), str)
+                else None
+            )
+            artifact.errors().extend(
+                validate_skill_load(
+                    run_dir,
+                    summary_path,
+                    expected,
+                    skill_snapshot,
+                    staged_path,
+                    captured_files,
+                )
+            )
         except (OSError, ValueError, json.JSONDecodeError) as error:
             artifact.errors().append(f"failed to verify run provenance: {error}")
 
@@ -1830,28 +2320,60 @@ def load_run(
         artifact.canonical_json_projection = canonical_json_projection
         artifact.canonical_json_facts = flatten_facts(canonical_json_projection)
 
-    with tempfile.TemporaryDirectory(prefix="otel-benchmark-capture-") as temporary:
-        snapshot_root = Path(temporary)
+    snapshot_workspace = retained_workspace("otel-benchmark-capture-")
+    snapshot_root = snapshot_workspace.path
+    try:
+        materialize_capture_snapshot(
+            snapshot_root,
+            captured_files,
+            expected_destination_identity=snapshot_workspace.identity,
+        )
+        snapshot_workspace.verify_files(
+            captured_files, "after authenticated materialization"
+        )
+        report_relative = captured_relative_path(
+            artifact.report_path, run_dir
+        )
+        if report_relative is None:
+            raise ValueError("primary report escapes run root")
+        snapshot_report = snapshot_root / report_relative
+        expected_report = captured_files.get(report_relative)
+        if expected_report is None:
+            raise ValueError("primary report is absent from authenticated capture")
+        if snapshot_workspace.read_bytes(
+            snapshot_report, "before report canonicalization"
+        ) != expected_report:
+            raise ValueError(
+                "primary report differs from authenticated capture before canonicalization"
+            )
+        projection = CANONICALIZERS[skill](snapshot_report)
+        snapshot_workspace.require_current("after report canonicalization")
+        if snapshot_workspace.read_bytes(
+            snapshot_report, "after report canonicalization"
+        ) != expected_report:
+            raise ValueError(
+                "primary report differs from authenticated capture after canonicalization"
+            )
+        artifact.projection = projection
+        artifact.facts = flatten_facts(projection)
+        original_report_path = artifact.report_path
+        artifact.report_path = snapshot_report
         try:
-            materialize_capture_snapshot(snapshot_root, captured_files)
-            report_relative = captured_relative_path(
-                artifact.report_path, run_dir
+            validators = validate_run(
+                repo_root, artifact, snapshot_workspace
             )
-            if report_relative is None:
-                raise ValueError("primary report escapes run root")
-            snapshot_report = snapshot_root / report_relative
-            artifact.projection = CANONICALIZERS[skill](snapshot_report)
-            artifact.facts = flatten_facts(artifact.projection)
-            original_report_path = artifact.report_path
-            artifact.report_path = snapshot_report
-            try:
-                artifact.validators = validate_run(repo_root, artifact)
-            finally:
-                artifact.report_path = original_report_path
-        except (OSError, ValueError, KeyError) as error:
-            artifact.errors().append(
-                f"failed to consume authenticated report snapshot: {error}"
-            )
+        finally:
+            artifact.report_path = original_report_path
+        snapshot_workspace.verify_files(
+            captured_files, "after report validation"
+        )
+        artifact.validators = validators
+    except (OSError, ValueError, KeyError) as error:
+        artifact.errors().append(
+            f"failed to consume authenticated report snapshot: {error}"
+        )
+    finally:
+        snapshot_workspace.close()
     return artifact
 
 
