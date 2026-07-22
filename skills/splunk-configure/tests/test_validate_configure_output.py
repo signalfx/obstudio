@@ -691,6 +691,64 @@ class ValidateConfigureOutputTest(unittest.TestCase):
                 result["errors"],
             )
 
+    def test_authenticated_plan_claims_must_all_come_from_evidence(self) -> None:
+        evidence_values = (
+            "N/A",
+            (
+                "N/A; Authenticated terraform plan and SignalFlow compile "
+                "accepted all 1 generated detector."
+            ),
+            "Authenticated terraform plan evidence saved.",
+            "SignalFlow compile accepted all 1 generated detector.",
+            "Authenticated terraform plan and SignalFlow compile succeeded.",
+            (
+                "Unauthenticated terraform plan and SignalFlow compile accepted "
+                "all 1 generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not all generated detectors."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not all 1 generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not-every generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile not-run "
+                "for all 1 generated detector."
+            ),
+        )
+        valid_row = (
+            "| Authenticated detector SignalFlow compile | Pass | Authenticated "
+            "`terraform plan -refresh=false -input=false` accepted all generated "
+            "detectors through `/v2/detector/validate`. |"
+        )
+        for evidence in evidence_values:
+            with self.subTest(evidence=evidence), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                report = args.configure_verify_report.read_text(encoding="utf-8")
+                misleading_row = (
+                    "| Authenticated terraform plan / SignalFlow compile for all 1 "
+                    f"generated detector | Pass | {evidence} |"
+                )
+                args.configure_verify_report.write_text(
+                    report.replace(valid_row, misleading_row), encoding="utf-8"
+                )
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertIn(
+                "configure verification report: Result Pass requires a successful "
+                "authenticated terraform plan / SignalFlow compile row covering every "
+                "generated detector",
+                result["errors"],
+            )
+
     def test_accepts_dashboard_proof_with_publish_not_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))

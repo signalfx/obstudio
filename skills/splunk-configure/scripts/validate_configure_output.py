@@ -47,6 +47,19 @@ NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE = re.compile(
     r"no\s+(?:evidence|result|output|plan|compile|validation))\b",
     re.I,
 )
+PLAN_PLACEHOLDER_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9])(?:n/a|not\s+applicable|todo)(?![A-Za-z0-9])",
+    re.I,
+)
+NEGATED_AUTHENTICATION = re.compile(
+    r"\b(?:unauthenticated|not[-\s]+authenticated)\b",
+    re.I,
+)
+NEGATED_DETECTOR_COVERAGE = re.compile(
+    r"\bnot[-\s]+(?:all|every)(?:\s+(?:one\s+of|of))?(?:\s+the)?"
+    r"(?:\s+\d+)?\s+(?:generated\s+)?detectors?\b",
+    re.I,
+)
 CONFIGURE_VERIFY_HEADINGS = (
     "Executive Summary",
     "What Was Added",
@@ -1083,17 +1096,30 @@ def has_authenticated_detector_plan(rows: list[dict[str, str]], detector_count: 
     for row in rows:
         if row_result(row) not in SUCCESS_RESULTS:
             continue
-        joined = " ".join(row.values())
-        normalized = normalize_markdown(joined)
-        proves_plan = "authenticated" in normalized and "terraform plan" in normalized
+        evidence = row_evidence(row)
+        normalized = normalize_markdown(evidence).replace(
+            "not-run", "not run"
+        ).rstrip(".!:")
+        if (
+            normalized in {"", "-", "n/a", "none", "not applicable", "todo"}
+            or PLAN_PLACEHOLDER_TOKEN.search(normalized)
+        ):
+            continue
+        proves_plan = bool(
+            re.search(r"\bauthenticated\b", normalized)
+            and "terraform plan" in normalized
+        )
         proves_compile = "signalflow" in normalized or "/v2/detector/validate" in normalized
-        proves_full_set = bool(count_pattern.search(joined) or all_pattern.search(joined))
+        proves_full_set = bool(
+            count_pattern.search(normalized) or all_pattern.search(normalized)
+        )
         if (
             proves_plan
             and proves_compile
             and proves_full_set
-            and row_evidence(row)
-            and not NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE.search(joined)
+            and not NEGATED_AUTHENTICATION.search(normalized)
+            and not NEGATED_DETECTOR_COVERAGE.search(normalized)
+            and not NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE.search(normalized)
         ):
             return True
     return False
