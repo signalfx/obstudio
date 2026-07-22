@@ -891,11 +891,12 @@ After auto-instrumentation is wired up, prompt the user:
 Then wait for the user's answer.
 
 Skip this prompt when the user already asked for incident-readiness or GenAI/LLM
-workflow instrumentation, a specific custom signal, when an Audit-Driven
-Readiness path applies, or when a validated canonical selection already defines
-the scope. In those cases, the direct request or bound selection is the scope
-authority; implement only the safe scoped signals and clearly list any unpatched
-prerequisites.
+workflow instrumentation or a specific custom signal on the legacy
+no-canonical-audit path, when an Audit-Driven Readiness path applies, or when a
+validated canonical selection already defines the scope. A direct request is
+scope authority only on the legacy no-canonical-audit path; a canonical audit
+requires its validated bound selection. Implement only the safe scoped signals
+and clearly list any unpatched prerequisites.
 
 - **If no**: proceed to the project-runtime validation gate (Step 5).
 - **If yes**: for each candidate point below, first check whether it occurs
