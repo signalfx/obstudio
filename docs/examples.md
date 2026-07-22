@@ -1,11 +1,16 @@
 # Example Prompts
 
+Interactive, self-contained output examples are available in
+[example-reports](example-reports/README.md): an audit report with scope
+selection and an instrumentation report with finding-level changes and proof.
+
 ## Audit -- Gap Analysis
 
 | Use Case | Prompt | Skill |
 |----------|--------|-------|
 | Identify observability gaps without making code changes | `$otel-audit` this service and show me the gaps | `$otel-audit` |
 | Assess a legacy service before planning instrumentation work | Run `$otel-audit` on this service -- I need a gap report before the sprint planning | `$otel-audit` |
+| Review and select gaps in the human report | Run `$otel-audit`, then open `.observe/otel.html` so I can select findings and save `.observe/otel-selection.json` | `$otel-audit` |
 
 ## Verify -- Prove Existing Instrumentation
 
@@ -73,6 +78,8 @@
 | Use Case | Prompt | Skill |
 |----------|--------|-------|
 | Add OpenTelemetry to an uninstrumented service | Instrument the service with OpenTelemetry | `$otel-instrument` |
+| Implement only selected audit findings | `$otel-instrument --ids OTEL-001,OTEL-004` and leave every unselected finding unchanged | `$otel-instrument` |
+| Review exactly what changed and what is proven | Run `$otel-instrument` for my selected IDs, then open `.observe/otel-instrumentation.html` | `$otel-instrument` |
 | Trace a known bottleneck function with a custom span | Add a custom span around `syncInventory` -- it's a bottleneck with no visibility | `$otel-instrument` |
 | Trace an outbound API call and measure its latency | The checkout flow calls a fraud-detection API -- add outbound HTTP spans and a `fraud.check.duration` histogram | `$otel-instrument` |
 | Track business events with counters and structured logs | Add a counter for order cancellations by reason and a log event with full cancellation context | `$otel-instrument` |

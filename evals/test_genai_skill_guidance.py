@@ -6,6 +6,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 GENAI_REF = SKILLS_DIR / "references" / "genai-readiness.md"
+AUDIT_GENAI_REF = SKILLS_DIR / "otel-audit" / "references" / "genai-audit.md"
+INSTRUMENT_GENAI_REF = (
+    SKILLS_DIR / "otel-instrument" / "references" / "genai-instrumentation.md"
+)
 REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
 OTEL_VERIFY = SKILLS_DIR / "otel-verify" / "SKILL.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
@@ -20,7 +24,31 @@ SPLUNK_DETECTOR_PUBLISH_REFS = SKILLS_DIR / "splunk-detector-publish" / "referen
 
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    text = path.read_text()
+    if path == SKILLS_DIR / "otel-audit" / "SKILL.md":
+        text += "\n" + AUDIT_GENAI_REF.read_text()
+    if path == SKILLS_DIR / "otel-instrument" / "SKILL.md":
+        text += "\n" + INSTRUMENT_GENAI_REF.read_text()
+    return text
+
+
+def test_audit_genai_progressive_disclosure_route_resolves():
+    skill = (SKILLS_DIR / "otel-audit" / "SKILL.md").read_text()
+    relative = "references/genai-audit.md"
+    assert relative in skill
+    assert (SKILLS_DIR / "otel-audit" / relative).resolve() == AUDIT_GENAI_REF.resolve()
+    assert "Do not load the audit-specific reference for non-GenAI services" in skill
+
+
+def test_instrument_genai_progressive_disclosure_route_resolves():
+    skill_path = SKILLS_DIR / "otel-instrument" / "SKILL.md"
+    skill = skill_path.read_text()
+    relative = "references/genai-instrumentation.md"
+    assert relative in skill
+    assert (skill_path.parent / relative).resolve() == INSTRUMENT_GENAI_REF.resolve()
+    assert "Do not load the instrument-specific GenAI reference for non-GenAI services" in skill
+    assert "### GenAI Span Ownership And Context" not in skill
+    assert "### GenAI Span Ownership And Context" in INSTRUMENT_GENAI_REF.read_text()
 
 
 def test_genai_reference_covers_otel_semconv_signals():
@@ -802,56 +830,52 @@ def test_instrument_requires_mcp_safe_dimensions_send_failure_and_tests():
     assert not missing
 
 
-def test_audit_places_genai_readiness_before_gaps_when_owned():
-    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
-    assert "## Current Instrumentation" in report_template
-    assert "## GenAI Readiness" in report_template
-    assert "## Gaps" in report_template
-    current_index = report_template.index("## Current Instrumentation")
-    genai_index = report_template.index("## GenAI Readiness")
-    gaps_index = report_template.index("## Gaps")
-    assert current_index < genai_index < gaps_index
+def test_audit_json_drives_conditional_genai_rendering():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    required_terms = [
+        '"genai_ownership_detected": false',
+        '"current_instrumentation": {',
+        '"genai_readiness": []',
+        "`meta.genai_ownership_detected` is the explicit ownership switch",
+        "Populate `genai_readiness` only when it is true",
+        "Human HTML and Markdown must visibly render authored GenAI readiness",
+        "`render-markdown` command owns the complete `.observe/otel.md` compatibility schema",
+    ]
+    assert not [term for term in required_terms if term not in audit]
 
 
-def test_audit_requires_reader_first_current_state_baseline():
+def test_audit_json_and_renderer_own_reader_first_compatibility():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     audit_normalized = " ".join(audit.split())
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
-
-    evidence_index = report_template.index("## Audit Evidence")
-    current_index = report_template.index("## Current Instrumentation")
-    gaps_index = report_template.index("## Gaps")
-    verification_index = report_template.index("## Verification Plan")
-    assert evidence_index < current_index < gaps_index < verification_index
-
     required_terms = [
-        "**GenAI ownership detected:** Yes | No",
-        "| GenAI ownership |",
-        "Always emit `**GenAI ownership detected:** Yes` or `No`",
-        "Use only the top-level sections shown in the report template",
-        "validator rejects additional top-level sections",
-        "python3 scripts/validate_audit_report.py .observe/otel.md",
+        "Use this shape for `.observe/otel-audit.json`",
+        '"evidence": [',
+        '"current_instrumentation": {',
+        '"findings": [',
+        '"verification": {',
+        "`render-markdown` command owns the complete `.observe/otel.md` compatibility schema",
+        "`render-markdown` and `../references/report-flow-contract.md` determine all compatibility layout",
+        'python3 "<directory-containing-loaded-SKILL.md>/scripts/validate_audit_report.py"',
     ]
     missing = [term for term in required_terms if term not in audit_normalized]
     assert not missing
+    assert "````markdown" not in audit
+    assert "--normalized-out" not in audit
+    assert "otel-audit.normalized.json" not in audit
 
 
 def test_audit_read_only_scope_still_writes_the_report_artifact():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    normalized = " ".join(audit.split())
     required_terms = [
         "Read-only for application code",
-        "writes `.observe/otel.md`",
         "does not modify service code",
-        "Write the report to `.observe/otel.md`",
+        ".observe/otel-audit.json",
+        ".observe/otel.html",
+        "render-markdown",
+        "Do not hand-author or independently update `.observe/otel.md`",
     ]
-    missing = [term for term in required_terms if term not in audit]
+    missing = [term for term in required_terms if term not in normalized]
     assert not missing
 
 
@@ -873,7 +897,7 @@ def test_instrument_requires_signals_changed_and_gap_closure():
         "## Audit Gap Closure",
         "## GenAI Readiness Closure",
         "`Signals Changed` is the implementation-change inventory",
-        "| Signal type | Added | Modified | Removed | Evidence | Verification status |",
+        "| Signal type | Added | Modified | Removed | Product result / next product action | Evidence | Verification status |",
         "Do not claim a removal unless the previous report or git diff proves",
         "Use one row per prioritized audit gap",
         "Derive the report-level `**Result:**` from both closure tables",
@@ -888,9 +912,10 @@ def test_instrument_requires_route_aware_http_proof_and_source_owned_closure():
         _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
     )
     required_terms = [
-        "route-aware server spans are required",
-        "low-cardinality route pattern",
-        "do not emit duplicate server spans",
+        "low-cardinality route pattern in `http.route`",
+        "It does **not** rename the span",
+        "prove one server span per request",
+        "do not add a second span-producing server middleware",
         "When no source audit exists, do not create `## GenAI Readiness Closure`",
         "do not create a `GenAI Readiness Closure` table without source-audit rows",
     ]

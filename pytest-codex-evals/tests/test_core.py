@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
@@ -21,7 +24,13 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
-from pytest_codex_evals.backends import AgentResult, _codex_subprocess_env, run_streamed_command
+from pytest_codex_evals.backends import (
+    AgentResult,
+    _codex_subprocess_env,
+    atomic_text_write,
+    ensure_anchored_directory,
+    run_streamed_command,
+)
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
     grade_runtime,
@@ -32,11 +41,15 @@ from pytest_codex_evals.graders.runtime import (
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
 from pytest_codex_evals.report import (
+    build_validation_benchmark,
     normalize_rubric_score,
+    report_metadata,
     render_reports_for_run_root,
+    write_capture_manifest,
+    write_report_outputs,
     write_session_results,
 )
-from pytest_codex_evals.runner import run_case
+from pytest_codex_evals.runner import prepare_side_workspace, run_case, tree_sha256
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -98,6 +111,35 @@ def test_command_runner_records_output_without_terminal_echo(tmp_path: Path, cap
     assert stderr_path.read_text(encoding="utf-8") == "error line\n"
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_command_runner_replaces_preexisting_output_symlinks(tmp_path: Path):
+    outside_trace = tmp_path / "outside-trace.txt"
+    outside_stderr = tmp_path / "outside-stderr.txt"
+    outside_trace.write_text("sentinel trace\n", encoding="utf-8")
+    outside_stderr.write_text("sentinel stderr\n", encoding="utf-8")
+    trace_path = tmp_path / "trace.jsonl"
+    stderr_path = tmp_path / "stderr.txt"
+    trace_path.symlink_to(outside_trace)
+    stderr_path.symlink_to(outside_stderr)
+
+    run_streamed_command(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print('trace'); print('error', file=sys.stderr)",
+        ],
+        stdout_path=trace_path,
+        stderr_path=stderr_path,
+        timeout=10,
+    )
+
+    assert outside_trace.read_text(encoding="utf-8") == "sentinel trace\n"
+    assert outside_stderr.read_text(encoding="utf-8") == "sentinel stderr\n"
+    assert not trace_path.is_symlink()
+    assert not stderr_path.is_symlink()
+    assert trace_path.read_text(encoding="utf-8") == "trace\n"
+    assert stderr_path.read_text(encoding="utf-8") == "error\n"
 
 
 def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
@@ -385,10 +427,26 @@ def test_session_result_writer_writes_raw_json_without_markdown(tmp_path: Path):
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
 
 
-def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
-    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
-    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=False, evidence="missing output")])
-    result = case_result(side_result("with_skill", grade), None)
+def test_session_writer_replaces_precreated_result_symlinks(tmp_path: Path):
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    result_dir = run_root / "results/sample/service/sample-skill"
+    runs_dir = run_root / "runs"
+    result_dir.mkdir(parents=True)
+    runs_dir.mkdir()
+    targets = [
+        result_dir / "eval.json",
+        result_dir / "with_skill.json",
+        result_dir / "with_baseline.json",
+        runs_dir / "sanity-with_skill.json",
+        run_root / "run.json",
+    ]
+    outside = tmp_path / "outside-result.json"
+    outside.write_text('{"sentinel":true}\n', encoding="utf-8")
+    for target in targets:
+        target.symlink_to(outside)
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
 
     write_session_results(
         [
@@ -403,8 +461,228 @@ def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
                     "eval_kind": "sanity",
                     "run_id": "run",
                     "skill": "sample-skill",
-                    "agent_model": "gpt-test",
                 },
+                "results": [case_result(side_result("with_skill", grade), None)],
+            }
+        ]
+    )
+
+    assert outside.read_text(encoding="utf-8") == '{"sentinel":true}\n'
+    assert all(target.is_file() and not target.is_symlink() for target in targets)
+
+
+def test_session_writer_rejects_symlinked_raw_result_directory(tmp_path: Path):
+    import pytest as _pytest
+
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    run_root.mkdir(parents=True)
+    outside = tmp_path / "outside-runs"
+    outside.mkdir()
+    sentinel = outside / "sentinel.json"
+    sentinel.write_text('{"safe":true}\n', encoding="utf-8")
+    (run_root / "runs").symlink_to(outside, target_is_directory=True)
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
+
+    with _pytest.raises(ValueError, match="must not be a symlink"):
+        write_session_results(
+            [
+                {
+                    "mode": "with_skill",
+                    "eval_kind": "sanity",
+                    "repo_root": tmp_path,
+                    "run_root": run_root,
+                    "skill": "sample-skill",
+                    "metadata": {},
+                    "results": [
+                        case_result(side_result("with_skill", grade), None)
+                    ],
+                }
+            ]
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == '{"safe":true}\n'
+
+
+def test_worker_result_writer_replaces_precreated_symlink(tmp_path: Path):
+    from pytest_codex_evals.plugin import RUN_ID_ATTR, write_worker_results
+
+    config = SimpleNamespace(workerinput={"workerid": "gw0"})
+    setattr(config, RUN_ID_ATTR, "run")
+    root = tmp_path / ".workspace/codex-evals/_worker-results/run"
+    root.mkdir(parents=True)
+    target = root / "gw0-0-sample-skill-sanity-with_skill.json"
+    outside = tmp_path / "outside-worker.json"
+    outside.write_text('{"sentinel":true}\n', encoding="utf-8")
+    target.symlink_to(outside)
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
+    run = {
+        "mode": "with_skill",
+        "eval_kind": "sanity",
+        "repo_root": tmp_path,
+        "run_root": tmp_path / ".workspace/codex-evals/sample-skill/run",
+        "skill": "sample-skill",
+        "metadata": {},
+        "results": [case_result(side_result("with_skill", grade), None)],
+    }
+
+    write_worker_results(config, {("key",): run})
+
+    assert outside.read_text(encoding="utf-8") == '{"sentinel":true}\n'
+    assert target.is_file()
+    assert not target.is_symlink()
+
+
+def test_worker_result_writer_rejects_symlinked_result_directory(tmp_path: Path):
+    import pytest as _pytest
+    from pytest_codex_evals.plugin import RUN_ID_ATTR, write_worker_results
+
+    config = SimpleNamespace(workerinput={"workerid": "gw0"})
+    setattr(config, RUN_ID_ATTR, "run")
+    worker_parent = tmp_path / ".workspace/codex-evals/_worker-results"
+    worker_parent.mkdir(parents=True)
+    outside = tmp_path / "outside-worker"
+    outside.mkdir()
+    sentinel = outside / "sentinel.json"
+    sentinel.write_text('{"safe":true}\n', encoding="utf-8")
+    (worker_parent / "run").symlink_to(outside, target_is_directory=True)
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
+    run = {
+        "mode": "with_skill",
+        "eval_kind": "sanity",
+        "repo_root": tmp_path,
+        "run_root": tmp_path / ".workspace/codex-evals/sample-skill/run",
+        "skill": "sample-skill",
+        "metadata": {},
+        "results": [case_result(side_result("with_skill", grade), None)],
+    }
+
+    with _pytest.raises(ValueError, match="must not be a symlink"):
+        write_worker_results(config, {("key",): run})
+
+    assert sentinel.read_text(encoding="utf-8") == '{"safe":true}\n'
+
+
+def test_worker_result_collector_rejects_outside_run_root(tmp_path: Path):
+    import pytest as _pytest
+    from pytest_codex_evals.plugin import (
+        RUN_ID_ATTR,
+        collect_worker_results,
+    )
+
+    (tmp_path / "skills").mkdir()
+    config = SimpleNamespace(rootpath=tmp_path)
+    setattr(config, RUN_ID_ATTR, "run")
+    worker_root = tmp_path / ".workspace/codex-evals/_worker-results/run"
+    worker_root.mkdir(parents=True)
+    outside = tmp_path / "outside-run"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    result = case_result(
+        side_result(
+            "with_skill",
+            GradeResult(
+                checks=[
+                    GradeCheckResult(
+                        id="check", description="check", passed=True
+                    )
+                ]
+            ),
+        ),
+        None,
+    )
+    payload = {
+        "mode": "with_skill",
+        "eval_kind": "sanity",
+        "repo_root": str(tmp_path),
+        "run_root": str(outside),
+        "skill": "sample-skill",
+        "metadata": {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "skill": "sample-skill",
+            "run_id": "run",
+        },
+        "results": [result.model_dump(mode="json")],
+    }
+    (worker_root / "gw0.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+    with _pytest.raises(ValueError, match="run_root does not match"):
+        collect_worker_results(config)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+
+
+def test_duplicate_validation_results_cannot_report_full(tmp_path: Path):
+    definition = write_scope_definition(tmp_path, "sanity")
+    fixture = definition.parents[2]
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    result = ValidationResult(
+        id="sample/service/sample-skill/direct",
+        base_id="sample/service/sample-skill",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        definition_path=str(definition),
+        fixture_dir=str(fixture),
+        skill_path=str(skill),
+        eval_kind="sanity",
+    )
+
+    benchmark = build_validation_benchmark(
+        tmp_path,
+        "sample-skill",
+        [result, result],
+        {"mode": "validation"},
+    )
+
+    scope = benchmark["metadata"]["scope"]
+    assert scope["status"] == "stale"
+    assert "duplicate validation result: sample/service/sample-skill/direct" in scope[
+        "errors"
+    ]
+    assert any("validation provenance" in error for error in scope["errors"])
+
+
+def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
+    definition = write_scope_definition(tmp_path, "sanity")
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=False, evidence="missing output")])
+    result = case_result(side_result("with_skill", grade), None)
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+            "agent_model": "gpt-test",
+        },
+    )
+    attach_run_provenance(run_root, result, definition, metadata)
+
+    write_session_results(
+        [
+            {
+                "mode": "with_skill",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                    "metadata": metadata,
                 "results": [result],
             }
         ]
@@ -418,6 +696,7 @@ def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
     assert (run_root / "results" / "sample" / "service" / "sample-skill" / "with_baseline.json").is_file()
     benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
     assert benchmark["kind"] == "sanity"
+    assert benchmark["metadata"]["scope"]["status"] == "full"
     assert benchmark["evals"][0]["with_baseline"] is None
     assert set(benchmark["evals"][0]["with_skill"]) >= {"checks", "tokens", "duration_seconds"}
     assert "rubric" not in benchmark["evals"][0]["with_skill"]
@@ -429,9 +708,22 @@ def test_report_renderer_writes_kind_specific_outputs(tmp_path: Path):
 
 
 def test_cli_report_renders_latest_run(tmp_path: Path):
+    definition = write_scope_definition(tmp_path, "sanity")
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
     result = case_result(side_result("with_skill", grade), None)
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+        },
+    )
+    attach_run_provenance(run_root, result, definition, metadata)
     write_session_results(
         [
             {
@@ -440,7 +732,7 @@ def test_cli_report_renders_latest_run(tmp_path: Path):
                 "repo_root": tmp_path,
                 "run_root": run_root,
                 "skill": "sample-skill",
-                "metadata": {"mode": "with_skill", "eval_kind": "sanity", "run_id": "run", "skill": "sample-skill"},
+                    "metadata": metadata,
                 "results": [result],
             }
         ]
@@ -450,6 +742,701 @@ def test_cli_report_renders_latest_run(tmp_path: Path):
 
     assert (tmp_path / "eval-reports" / "sample-skill" / "sanity" / "report.md").is_file()
     assert (tmp_path / "eval-reports" / "sample-skill" / "sanity" / "benchmark.json").is_file()
+
+
+def test_scoped_report_does_not_replace_full_latest_report(tmp_path: Path):
+    definition = write_scope_definition(
+        tmp_path, "sanity", prompts=("direct", "alternate")
+    )
+    run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
+    grade = GradeResult(
+        checks=[GradeCheckResult(id="check", description="check", passed=True)]
+    )
+    result = case_result(side_result("with_skill", grade), None)
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+        },
+    )
+    attach_run_provenance(run_root, result, definition, metadata)
+    write_session_results(
+        [
+            {
+                "mode": "with_skill",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                    "metadata": metadata,
+                "results": [result],
+            }
+        ]
+    )
+    latest = tmp_path / "eval-reports/sample-skill/sanity"
+    latest.mkdir(parents=True)
+    (latest / "report.md").write_text("full report\n", encoding="utf-8")
+    (latest / "benchmark.json").write_text(
+        '{"scope":"full"}\n', encoding="utf-8"
+    )
+
+    report_path, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    scope = benchmark["metadata"]["scope"]
+    assert scope["status"] == "scoped"
+    assert scope["selected_prompt_count"] == 1
+    assert scope["expected_prompt_count"] == 2
+    assert scope["missing_prompt_ids"] == [
+        "sample/service/sample-skill/alternate"
+    ]
+    assert (latest / "report.md").read_text(encoding="utf-8") == "full report\n"
+    assert json.loads((latest / "benchmark.json").read_text(encoding="utf-8")) == {
+        "scope": "full"
+    }
+    scoped = latest / "scoped/run"
+    assert (scoped / "report.md").read_text(encoding="utf-8") == report_path.read_text(
+        encoding="utf-8"
+    )
+    assert (scoped / "benchmark.json").is_file()
+
+
+def test_changed_definition_and_config_cannot_replace_full_latest_report(
+    tmp_path: Path,
+):
+    definition, config, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    _, initial_benchmark_path = render_reports_for_run_root(run_root, "sanity")
+    initial_benchmark = json.loads(initial_benchmark_path.read_text(encoding="utf-8"))
+    assert initial_benchmark["metadata"]["scope"]["status"] == "full"
+    latest = tmp_path / "eval-reports/sample-skill/sanity"
+    latest_report = (latest / "report.md").read_text(encoding="utf-8")
+
+    definition.write_text(
+        json.dumps(
+            {
+                "id": "sample/service/sample-skill",
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Changed task."}],
+                "checks": [
+                    {
+                        "id": "changed-check",
+                        "description": "Changed contract.",
+                        "kind": "final_contains_all",
+                        "values": ["changed"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config.write_text('[run]\nmode = "ab"\n', encoding="utf-8")
+
+    report_path, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))["metadata"][
+        "scope"
+    ]
+    assert scope["status"] == "stale"
+    assert scope["stale_prompt_ids"] == ["sample/service/sample-skill/direct"]
+    assert any("eval definition changed after capture" in error for error in scope["errors"])
+    assert any("eval config changed after capture" in error for error in scope["errors"])
+    assert (latest / "report.md").read_text(encoding="utf-8") == latest_report
+    assert (
+        latest / "scoped" / run_root.name / "report.md"
+    ).read_text(encoding="utf-8") == report_path.read_text(encoding="utf-8")
+
+
+def test_changed_skill_and_shared_contract_cannot_report_full(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    _, initial_benchmark_path = render_reports_for_run_root(run_root, "sanity")
+    assert (
+        json.loads(initial_benchmark_path.read_text(encoding="utf-8"))["metadata"]
+        ["scope"]["status"]
+        == "full"
+    )
+
+    (tmp_path / "skills/sample-skill/SKILL.md").write_text(
+        "name: sample-skill\nchanged: true\n", encoding="utf-8"
+    )
+    (tmp_path / "skills/references/contract.md").write_text(
+        "changed contract\n", encoding="utf-8"
+    )
+
+    _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))["metadata"][
+        "scope"
+    ]
+    assert scope["status"] == "stale"
+    assert any("skill tree changed after capture" in error for error in scope["errors"])
+    assert any("shared references changed after capture" in error for error in scope["errors"])
+
+
+def test_changed_harness_source_identity_cannot_report_full(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    provenance = next(run_root.rglob("with_skill/.codex-eval-provenance.json"))
+    payload = json.loads(provenance.read_text(encoding="utf-8"))
+    payload["harness"]["tree_sha256"] = "f" * 64
+    provenance.write_text(json.dumps(payload), encoding="utf-8")
+    write_capture_manifest(run_root)
+
+    _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))["metadata"][
+        "scope"
+    ]
+    assert scope["status"] == "stale"
+    assert any(
+        "eval harness or grader source changed after capture" in error
+        for error in scope["errors"]
+    )
+
+
+def test_report_rejects_stitched_skill_and_shared_reference_identities(
+    tmp_path: Path,
+):
+    definition = write_scope_definition(
+        tmp_path,
+        "sanity",
+        prompts=("direct", "alternate"),
+    )
+    fixture = definition.parents[2]
+    (fixture / "main.txt").write_text("fixture\n", encoding="utf-8")
+    canonical_skill = tmp_path / "skills/sample-skill"
+    alternate_skill = tmp_path / "skills/sample-skill-copy"
+    for skill in (canonical_skill, alternate_skill):
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    shared = tmp_path / "skills/references"
+    shared.mkdir()
+    (shared / "contract.md").write_text("contract\n", encoding="utf-8")
+    config = tmp_path / "codex-evals.toml"
+    config.write_text('[run]\nmode = "with_skill"\n', encoding="utf-8")
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+            "config_path": "codex-evals.toml",
+        },
+    )
+    direct = run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(
+            task="Run direct.",
+            definition_path=definition,
+            fixture_dir=fixture,
+        ),
+        skill_dir=canonical_skill,
+        rubric=False,
+        eval_kind="sanity",
+        sides=("with_skill",),
+        backend=RecordingBackend(),
+        config_path=config,
+        run_configuration=metadata,
+    )
+    alternate = run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(
+            id="sample/service/sample-skill/alternate",
+            prompt_id="alternate",
+            task="Run alternate.",
+            definition_path=definition,
+            fixture_dir=fixture,
+        ),
+        skill_dir=alternate_skill,
+        rubric=False,
+        eval_kind="sanity",
+        sides=("with_skill",),
+        backend=RecordingBackend(),
+        config_path=config,
+        run_configuration=metadata,
+    )
+    alternate_manifest = next(
+        (run_root / "cases/sample/service/alternate").rglob(
+            "with_skill/.codex-eval-provenance.json"
+        )
+    )
+    alternate_provenance = json.loads(
+        alternate_manifest.read_text(encoding="utf-8")
+    )
+    alternate_provenance["shared_references"]["path"] = str(
+        tmp_path / "skills/../skills/references"
+    )
+    alternate_manifest.write_text(
+        json.dumps(alternate_provenance), encoding="utf-8"
+    )
+    run = {
+        "mode": "with_skill",
+        "eval_kind": "sanity",
+        "repo_root": tmp_path,
+        "run_root": run_root,
+        "skill": "sample-skill",
+        "metadata": metadata,
+        "results": [direct, alternate],
+    }
+    write_session_results([run])
+
+    _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))["metadata"][
+        "scope"
+    ]
+    assert scope["status"] == "stale"
+    assert any("different selected skill paths" in error for error in scope["errors"])
+    assert any("different shared-reference paths" in error for error in scope["errors"])
+
+
+def test_validation_report_rejects_changed_definition_with_same_prompt_id(
+    tmp_path: Path,
+):
+    from pytest_codex_evals.plugin import validation_result
+
+    definition = write_scope_definition(tmp_path, "sanity")
+    fixture = definition.parents[2]
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    config = tmp_path / "codex-evals.toml"
+    config.write_text('[run]\nmode = "validation"\n', encoding="utf-8")
+    metadata = {"mode": "validation"}
+    result = validation_result(
+        sanity_case(
+            task="Run direct.",
+            definition_path=definition,
+            fixture_dir=fixture,
+        ),
+        tmp_path,
+        skill,
+        config_path=config,
+        run_configuration=metadata,
+    )
+    initial = build_validation_benchmark(
+        tmp_path,
+        "sample-skill",
+        [result],
+        metadata,
+    )
+    assert initial["metadata"]["scope"]["status"] == "full"
+
+    definition.write_text(
+        json.dumps(
+            {
+                "id": "sample/service/sample-skill",
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Run direct."}],
+                "checks": [{"id": "new-check", "kind": "final_contains_all"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    changed = build_validation_benchmark(
+        tmp_path,
+        "sample-skill",
+        [result],
+        metadata,
+    )
+    scope = changed["metadata"]["scope"]
+    assert scope["status"] == "stale"
+    assert any(
+        "eval definition changed after validation" in error
+        for error in scope["errors"]
+    )
+
+
+def test_forged_payload_metadata_is_quarantined_and_not_displayed(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    raw_path = run_root / "runs/sanity-with_skill.json"
+    raw = json.loads(raw_path.read_text(encoding="utf-8"))
+    raw["metadata"]["agent_model"] = "forged-model"
+    raw_path.write_text(json.dumps(raw), encoding="utf-8")
+    write_capture_manifest(run_root)
+
+    report_path, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    scope = benchmark["metadata"]["scope"]
+    assert scope["status"] == "stale"
+    assert any(
+        "payload metadata differs from captured run configuration" in error
+        for error in scope["errors"]
+    )
+    assert benchmark["metadata"]["agent_model"] == "-"
+    assert "forged-model" not in report_path.read_text(encoding="utf-8")
+
+
+def test_duplicate_result_and_run_manifest_entries_are_rejected(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    raw_path = run_root / "runs/sanity-with_skill.json"
+    raw = json.loads(raw_path.read_text(encoding="utf-8"))
+    raw["results"].append(raw["results"][0])
+    raw_path.write_text(json.dumps(raw), encoding="utf-8")
+    write_capture_manifest(run_root)
+
+    _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))["metadata"][
+        "scope"
+    ]
+    assert scope["status"] == "stale"
+    assert any("duplicate captured result" in error for error in scope["errors"])
+
+    manifest_path = run_root / "run.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["runs"].append(manifest["runs"][0])
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_capture_manifest(run_root)
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="duplicate entries"):
+        render_reports_for_run_root(run_root, "sanity")
+
+
+def test_run_manifest_traversal_is_rejected(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    manifest_path = run_root / "run.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["runs"] = ["../outside.json"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_capture_manifest(run_root)
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="escapes run root"):
+        render_reports_for_run_root(run_root, "sanity")
+
+
+def test_report_rejects_artifact_mutation_after_capture(tmp_path: Path):
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    raw_path = run_root / "runs/sanity-with_skill.json"
+    raw_path.write_text('{"forged":true}\n', encoding="utf-8")
+
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="changed after capture"):
+        render_reports_for_run_root(run_root, "sanity")
+
+
+def test_report_consumes_authenticated_bytes_after_verification(
+    tmp_path: Path,
+):
+    from unittest.mock import patch
+    from pytest_codex_evals import report as report_module
+
+    _, _, run_root, result = captured_sanity_run(tmp_path)
+    write_session_results([result])
+    raw_path = run_root / "runs/sanity-with_skill.json"
+    original_verify = report_module.verify_capture_manifest
+
+    def verify_then_mutate(root: Path):
+        authenticated = original_verify(root)
+        forged = json.loads(raw_path.read_text(encoding="utf-8"))
+        forged["results"][0]["with_skill"]["tokens"] = 999999
+        raw_path.write_text(json.dumps(forged), encoding="utf-8")
+        return authenticated
+
+    with patch.object(
+        report_module,
+        "verify_capture_manifest",
+        side_effect=verify_then_mutate,
+    ):
+        _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    assert benchmark["evals"][0]["with_skill"]["tokens"] != 999999
+
+
+def test_atomic_writer_refuses_parent_namespace_swap(tmp_path: Path):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+
+    boundary = tmp_path / "output-root"
+    parent = boundary / "nested"
+    parent.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    stolen = tmp_path / "stolen-root"
+    target = parent / "result.json"
+    real_replace = os.replace
+    swapped = False
+
+    def replace_after_swap(*args, **kwargs):
+        nonlocal swapped
+        if not swapped:
+            boundary.rename(stolen)
+            boundary.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return real_replace(*args, **kwargs)
+
+    with patch("pytest_codex_evals.backends.os.replace", replace_after_swap):
+        with _pytest.raises(ValueError, match="namespace changed"):
+            atomic_text_write(target, "forged\n", boundary=boundary)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+    assert not (outside / "nested/result.json").exists()
+    assert not (stolen / "nested/result.json").exists()
+
+
+def test_anchored_directory_creation_never_follows_swapped_parent(
+    tmp_path: Path,
+):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+
+    boundary = tmp_path / "root"
+    boundary.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    stolen = tmp_path / "stolen-root"
+    real_mkdir = os.mkdir
+    swapped = False
+
+    def mkdir_after_swap(*args, **kwargs):
+        nonlocal swapped
+        if not swapped:
+            boundary.rename(stolen)
+            boundary.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return real_mkdir(*args, **kwargs)
+
+    with patch("pytest_codex_evals.backends.os.mkdir", mkdir_after_swap):
+        with _pytest.raises(ValueError, match="namespace changed"):
+            ensure_anchored_directory(
+                boundary / "nested/leaf", boundary=boundary
+            )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+    assert not (outside / "nested").exists()
+    assert (stolen / "nested/leaf").is_dir()
+
+
+def test_anchored_directory_creation_accepts_concurrent_directory_winner(
+    tmp_path: Path,
+):
+    import os
+    from unittest.mock import patch
+
+    boundary = tmp_path / "root"
+    boundary.mkdir()
+    target = boundary / "nested/leaf"
+    real_mkdir = os.mkdir
+    simulated_race = False
+
+    def mkdir_after_concurrent_winner(*args, **kwargs):
+        nonlocal simulated_race
+        if not simulated_race:
+            simulated_race = True
+            real_mkdir(*args, **kwargs)
+            raise FileExistsError("created by another worker")
+        return real_mkdir(*args, **kwargs)
+
+    with patch(
+        "pytest_codex_evals.backends.os.mkdir",
+        mkdir_after_concurrent_winner,
+    ):
+        ensure_anchored_directory(target, boundary=boundary)
+
+    assert simulated_race
+    assert target.is_dir()
+
+
+def test_report_outputs_replace_leaf_symlinks_without_following_them(
+    tmp_path: Path,
+):
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    report_dir = run_root / "sanity"
+    report_dir.mkdir(parents=True)
+    latest_dir = tmp_path / "latest/sample-skill/sanity"
+    latest_dir.mkdir(parents=True)
+    outside_report = tmp_path / "outside-report.md"
+    outside_benchmark = tmp_path / "outside-benchmark.json"
+    outside_report.write_text("sentinel report\n", encoding="utf-8")
+    outside_benchmark.write_text('{"sentinel":true}\n', encoding="utf-8")
+    for directory in (report_dir, latest_dir):
+        (directory / "report.md").symlink_to(outside_report)
+        (directory / "benchmark.json").symlink_to(outside_benchmark)
+    benchmark = {"metadata": {"scope": {"status": "full"}}}
+
+    write_report_outputs(
+        tmp_path,
+        run_root,
+        "sample-skill",
+        "sanity",
+        benchmark,
+        "safe report\n",
+        tmp_path / "latest",
+    )
+
+    assert outside_report.read_text(encoding="utf-8") == "sentinel report\n"
+    assert outside_benchmark.read_text(encoding="utf-8") == '{"sentinel":true}\n'
+    for directory in (report_dir, latest_dir):
+        assert not (directory / "report.md").is_symlink()
+        assert not (directory / "benchmark.json").is_symlink()
+
+
+def test_report_outputs_reject_symlinked_run_and_latest_directories(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    run_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (run_root / "sanity").symlink_to(outside)
+    benchmark = {"metadata": {"scope": {"status": "full"}}}
+
+    with _pytest.raises(ValueError, match="must not be a symlink"):
+        write_report_outputs(
+            tmp_path,
+            run_root,
+            "sample-skill",
+            "sanity",
+            benchmark,
+            "report\n",
+        )
+
+    (run_root / "sanity").unlink()
+    latest_root = tmp_path / "latest"
+    latest_root.mkdir()
+    (latest_root / "sample-skill").symlink_to(outside)
+    with _pytest.raises(ValueError, match="must not be a symlink"):
+        write_report_outputs(
+            tmp_path,
+            run_root,
+            "sample-skill",
+            "sanity",
+            benchmark,
+            "report\n",
+            latest_root,
+        )
+
+
+def test_report_directory_creation_refuses_ancestor_namespace_swap(
+    tmp_path: Path,
+):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    run_root = repo_root / ".workspace/codex-evals/sample-skill/run"
+    stolen_root = tmp_path / "stolen-repo"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_mkdir = os.mkdir
+    swapped = False
+
+    def mkdir_after_swap(*args, **kwargs):
+        nonlocal swapped
+        if not swapped:
+            repo_root.rename(stolen_root)
+            repo_root.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return real_mkdir(*args, **kwargs)
+
+    benchmark = {"metadata": {"scope": {"status": "full"}}}
+    with patch(
+        "pytest_codex_evals.backends.os.mkdir",
+        side_effect=mkdir_after_swap,
+    ):
+        with _pytest.raises(ValueError, match="namespace changed"):
+            write_report_outputs(
+                repo_root,
+                run_root,
+                "sample-skill",
+                "sanity",
+                benchmark,
+                "report\n",
+            )
+
+    assert swapped
+    assert not (outside / ".workspace").exists()
+    assert not (outside / "eval-reports").exists()
+    assert not list(outside.rglob("report.md"))
+    assert not list(outside.rglob("benchmark.json"))
+
+
+def captured_sanity_run(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, dict[str, object]]:
+    definition = write_scope_definition(tmp_path, "sanity")
+    fixture = definition.parents[2]
+    (fixture / "main.txt").write_text("fixture\n", encoding="utf-8")
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    shared = tmp_path / "skills/references"
+    shared.mkdir()
+    (shared / "contract.md").write_text("contract\n", encoding="utf-8")
+    config = tmp_path / "codex-evals.toml"
+    config.write_text('[run]\nmode = "with_skill"\n', encoding="utf-8")
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+            "config_path": "codex-evals.toml",
+        },
+    )
+    case = sanity_case(
+        task="Run direct.",
+        definition_path=definition,
+        fixture_dir=fixture,
+    )
+    case_result_value = run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=case,
+        skill_dir=skill,
+        rubric=False,
+        eval_kind="sanity",
+        sides=("with_skill",),
+        backend=RecordingBackend(),
+        config_path=config,
+        run_configuration=metadata,
+    )
+    run = {
+        "mode": "with_skill",
+        "eval_kind": "sanity",
+        "repo_root": tmp_path,
+        "run_root": run_root,
+        "skill": "sample-skill",
+        "metadata": metadata,
+        "results": [case_result_value],
+    }
+    return definition, config, run_root, run
 
 
 def test_runtime_report_uses_runtime_template_only(tmp_path: Path):
@@ -491,10 +1478,15 @@ def test_rubric_report_uses_rubric_template_only(tmp_path: Path):
 
 
 def report_for_kind(tmp_path: Path, eval_kind: str) -> str:
+    write_scope_definition(tmp_path, eval_kind)
     run_root = tmp_path / ".workspace" / "codex-evals" / "sample-skill" / "run"
     sanity = GradeCheckResult(id="file", description="file", passed=True)
     runtime = GradeCheckResult(id="observer", description="observer", passed=True, category="runtime")
-    rubric_path = tmp_path / "rubric_grade.json"
+    rubric_path = (
+        run_root
+        / "cases/sample/service/direct/with_skill/rubric_grade.json"
+    )
+    rubric_path.parent.mkdir(parents=True)
     rubric_path.write_text(
         json.dumps({"overall_pass": True, "score": 4, "checks": [{"id": "quality", "pass": True, "evidence": "ok"}]}),
         encoding="utf-8",
@@ -532,6 +1524,101 @@ def report_for_kind(tmp_path: Path, eval_kind: str) -> str:
     report_path, _ = render_reports_for_run_root(run_root, eval_kind)
 
     return report_path.read_text(encoding="utf-8")
+
+
+def write_scope_definition(
+    root: Path, kind: str, *, prompts: tuple[str, ...] = ("direct",)
+) -> Path:
+    role = "qual" if kind == "rubric" else kind
+    path = root / f"evals/sample/service/eval/{role}/sample.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "id": "sample/service/sample-skill",
+                "skill": "sample-skill",
+                "prompts": [
+                    {"id": prompt, "task": f"Run {prompt}."}
+                    for prompt in prompts
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def attach_run_provenance(
+    run_root: Path,
+    result: CaseResult,
+    definition: Path,
+    metadata: dict[str, object],
+) -> None:
+    side = result.with_skill
+    assert side is not None
+    artifact_dir = (
+        run_root
+        / "cases"
+        / result.language
+        / result.service
+        / result.prompt_id
+        / "with_skill"
+    )
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = artifact_dir / "trace.jsonl"
+    final_path = artifact_dir / "last_message.md"
+    trace_path.write_text("", encoding="utf-8")
+    final_path.write_text("done\n", encoding="utf-8")
+    side.trace_path = str(trace_path)
+    side.final_message_path = str(final_path)
+    fixture = definition.parents[2]
+    skill = definition.parents[5] / "skills" / result.skill
+    skill.mkdir(parents=True, exist_ok=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    shared_references = skill.parent / "references"
+    harness_source = Path(__file__).resolve().parents[1] / "src/pytest_codex_evals"
+    manifest = {
+        "schema_version": 2,
+        "case": {
+            "id": result.id,
+            "contract_sha256": "a" * 64,
+        },
+        "definition": {
+            "path": str(definition.resolve()),
+            "exists": True,
+            "sha256": hashlib.sha256(definition.read_bytes()).hexdigest(),
+        },
+        "config": {"path": None, "exists": False, "sha256": None},
+        "run_configuration": {
+            "value": metadata,
+            "sha256": hashlib.sha256(
+                json.dumps(
+                    metadata,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+        },
+        "fixture": {
+            "path": str(fixture.resolve()),
+            "tree_sha256": tree_sha256(fixture),
+        },
+        "skill": {
+            "path": str(skill.resolve()),
+            "tree_sha256": tree_sha256(skill),
+        },
+        "shared_references": {
+            "path": str(shared_references.resolve()),
+            "tree_sha256": None,
+        },
+        "harness": {
+            "path": str(harness_source.resolve()),
+            "tree_sha256": tree_sha256(harness_source),
+        },
+    }
+    (artifact_dir / ".codex-eval-provenance.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
 
 
 def sanity_case(**overrides) -> SanityEvalCase:
@@ -657,6 +1744,21 @@ def test_runtime_expectations_generic_endpoints():
 def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     fixture_dir = tmp_path / "fixture"
     fixture_dir.mkdir()
+    definition_path = fixture_dir / "eval/qual/sample.json"
+    definition_path.parent.mkdir(parents=True)
+    definition_path.write_text(
+        json.dumps(
+            {
+                "id": "sample/service/rubric",
+                "skill": "sample-skill",
+                "prompts": [{"id": "direct", "task": "Evaluate the answer."}],
+                "rubric": ["Must pass."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "codex-evals.toml"
+    config_path.write_text('[run]\nmode = "with_skill"\n', encoding="utf-8")
     skill_dir = tmp_path / "skills" / "sample-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
@@ -668,6 +1770,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
         language="sample",
         service="service",
         task="Evaluate the answer.",
+        definition_path=definition_path,
         fixture_dir=fixture_dir,
         rubric=["Must pass."],
     )
@@ -685,10 +1788,426 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
         backend=backend,
         agent_timeout=2400,
         judge_timeout=1200,
+        config_path=config_path,
+        run_configuration={"mode": "with_skill", "eval_kind": "rubric"},
     )
 
     assert backend.agent_timeouts == [2400]
     assert backend.judge_timeouts == [1200]
+
+    provenance_path = (
+        tmp_path
+        / ".workspace/codex-evals/sample-skill/run"
+        / "cases/sample/service/direct/with_skill/.codex-eval-provenance.json"
+    )
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    assert provenance["case"]["task"] == "Evaluate the answer."
+    assert provenance["case"]["skill"] == "sample-skill"
+    assert len(provenance["case"]["task_sha256"]) == 64
+    assert len(provenance["case"]["contract_sha256"]) == 64
+    assert provenance["definition"]["sha256"] == hashlib.sha256(
+        definition_path.read_bytes()
+    ).hexdigest()
+    assert provenance["config"]["sha256"] == hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    assert len(provenance["run_configuration"]["sha256"]) == 64
+    assert len(provenance["fixture"]["tree_sha256"]) == 64
+    assert len(provenance["skill"]["tree_sha256"]) == 64
+    assert not (
+        provenance_path.parent / "service/target/generated-output.bin"
+    ).exists()
+    assert not (provenance_path.parent / ".uv-cache").exists()
+    assert not (provenance_path.parent / ".pip-cache").exists()
+
+
+def test_harness_owned_outputs_replace_agent_planted_symlinks(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    outside = {
+        name: tmp_path / f"outside-{name}.txt"
+        for name in ("grade", "provenance", "summary")
+    }
+    for path in outside.values():
+        path.write_text("sentinel\n", encoding="utf-8")
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+
+    run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(fixture_dir=fixture_dir),
+        skill_dir=skill_dir,
+        rubric=False,
+        sides=("with_skill",),
+        backend=SymlinkPlantingBackend(outside),
+    )
+
+    artifact_dir = run_root / "cases/sample/service/direct/with_skill"
+    for path in outside.values():
+        assert path.read_text(encoding="utf-8") == "sentinel\n"
+    for name in ("grade.json", ".codex-eval-provenance.json", "summary.json"):
+        path = artifact_dir / name
+        assert path.is_file()
+        assert not path.is_symlink()
+
+
+def test_run_case_rejects_backend_execution_directory_swap(tmp_path: Path):
+    import pytest as _pytest
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+
+    with _pytest.raises(ValueError, match="execution directory was replaced"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=ExecutionDirectorySwapBackend(outside),
+        )
+
+    for name in ("grade.json", ".codex-eval-provenance.json", "summary.json"):
+        assert (outside / "stolen-exec" / name).read_text(encoding="utf-8") == (
+            "sentinel\n"
+        )
+
+
+def test_run_case_cleanup_does_not_delete_replacement_victim(tmp_path: Path):
+    import pytest as _pytest
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    backend = ExecutionRootVictimSwapBackend(tmp_path / "outside")
+
+    with _pytest.raises(ValueError, match="execution directory was replaced"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.replaced_root is not None
+    assert (backend.replaced_root / "sentinel.txt").read_text(encoding="utf-8") == (
+        "keep\n"
+    )
+    shutil.rmtree(backend.replaced_root)
+    assert backend.stolen_root is not None
+    shutil.rmtree(backend.stolen_root)
+
+
+def test_run_case_does_not_delete_artifact_directory_planted_by_agent(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    artifact_dir = (
+        run_root / "cases/sample/service/direct/with_skill"
+    )
+    victim = tmp_path / "victim"
+    backend = ArtifactDirectoryPlantingBackend(victim, artifact_dir)
+
+    with _pytest.raises(ValueError, match="appeared during agent execution"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert (artifact_dir / "sentinel.txt").read_text(encoding="utf-8") == (
+        "keep\n"
+    )
+    shutil.rmtree(artifact_dir)
+
+
+def test_run_case_refuses_stale_artifact_without_deleting_it(tmp_path: Path):
+    import pytest as _pytest
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    artifact_dir = run_root / "cases/sample/service/direct/with_skill"
+    artifact_dir.mkdir(parents=True)
+    sentinel = artifact_dir / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+
+    with _pytest.raises(ValueError, match="refusing to replace"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=RecordingBackend(),
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+
+
+def test_run_case_rejects_replacement_trace_and_final_bytes(tmp_path: Path):
+    import pytest as _pytest
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    backend = OutputReadReplacementBackend(tmp_path / "outside")
+
+    with _pytest.raises(ValueError, match="replaced during agent output read"):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=sanity_case(fixture_dir=fixture_dir),
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.replacement is not None
+    assert (backend.replacement / "last_message.md").read_text(
+        encoding="utf-8"
+    ) == "FORGED\n"
+
+
+def test_run_case_copies_retained_source_not_replacement_tree(tmp_path: Path):
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import runner as runner_module
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    backend = TrackingBackend()
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    artifact_dir = run_root / "cases/sample/service/direct/with_skill"
+    original_copy = runner_module.copy_artifact_tree_fd
+    swapped = False
+    stolen = tmp_path / "stolen-exec"
+
+    def swap_then_copy(source_descriptor: int, destination_descriptor: int, **kwargs):
+        nonlocal swapped
+        if not swapped:
+            assert backend.exec_dir is not None
+            backend.exec_dir.rename(stolen)
+            backend.exec_dir.mkdir()
+            (backend.exec_dir / "trace.jsonl").write_text(
+                "FORGED\n", encoding="utf-8"
+            )
+            (backend.exec_dir / ".codex-eval-provenance.json").write_text(
+                "FORGED\n", encoding="utf-8"
+            )
+            swapped = True
+        return original_copy(
+            source_descriptor, destination_descriptor, **kwargs
+        )
+
+    with patch.object(
+        runner_module, "copy_artifact_tree_fd", side_effect=swap_then_copy
+    ):
+        with _pytest.raises(ValueError, match="replaced during capture"):
+            run_case(
+                repo_root=tmp_path,
+                run_root=run_root,
+                case=sanity_case(fixture_dir=fixture_dir),
+                skill_dir=skill_dir,
+                rubric=False,
+                sides=("with_skill",),
+                backend=backend,
+            )
+
+    assert (artifact_dir / "trace.jsonl").read_text(encoding="utf-8") != (
+        "FORGED\n"
+    )
+    assert json.loads(
+        (artifact_dir / ".codex-eval-provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )["schema_version"] == 2
+
+
+def test_run_case_never_copies_through_swapped_artifact_parent(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import runner as runner_module
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    artifact_parent = run_root / "cases/sample/service/direct"
+    outside = tmp_path / "outside-artifacts"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    stolen = tmp_path / "stolen-artifact-parent"
+    original_copy = runner_module.copy_artifact_tree_fd
+    swapped = False
+
+    def swap_then_copy(source_descriptor: int, destination_descriptor: int, **kwargs):
+        nonlocal swapped
+        if not swapped:
+            artifact_parent.rename(stolen)
+            artifact_parent.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return original_copy(
+            source_descriptor, destination_descriptor, **kwargs
+        )
+
+    with patch.object(
+        runner_module, "copy_artifact_tree_fd", side_effect=swap_then_copy
+    ):
+        with _pytest.raises(ValueError, match="artifact directory was replaced"):
+            run_case(
+                repo_root=tmp_path,
+                run_root=run_root,
+                case=sanity_case(fixture_dir=fixture_dir),
+                skill_dir=skill_dir,
+                rubric=False,
+                sides=("with_skill",),
+                backend=RecordingBackend(),
+            )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep\n"
+    assert not (outside / "with_skill").exists()
+    assert (stolen / "with_skill/trace.jsonl").is_file()
+
+
+def test_prepare_side_workspace_copies_only_explicit_eval_inputs(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    (fixture_dir / "eval/inputs").mkdir(parents=True)
+    (fixture_dir / "eval/qual").mkdir(parents=True)
+    (fixture_dir / "internal/eval").mkdir(parents=True)
+    (fixture_dir / "target/classes").mkdir(parents=True)
+    (fixture_dir / ".observe").mkdir()
+    (fixture_dir / "main.go").write_text("package main\n", encoding="utf-8")
+    (fixture_dir / "eval/inputs/otel-audit.json").write_text(
+        '{"kind":"otel-audit"}\n', encoding="utf-8"
+    )
+    (fixture_dir / "eval/qual/audit.json").write_text("{}\n", encoding="utf-8")
+    (fixture_dir / "internal/eval/runtime.go").write_text(
+        "package eval\n", encoding="utf-8"
+    )
+    (fixture_dir / "target/classes/App.class").write_bytes(b"compiled")
+    (fixture_dir / ".observe/stale.json").write_text("{}\n", encoding="utf-8")
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = sanity_case(fixture_dir=fixture_dir)
+    side_dir = tmp_path / "run"
+
+    prepare_side_workspace(tmp_path, case, "with_skill", side_dir, skill_dir)
+
+    service = side_dir / "service"
+    assert (service / "main.go").is_file()
+    assert (service / "eval/inputs/otel-audit.json").is_file()
+    assert not (service / "eval/qual").exists()
+    assert (service / "internal/eval/runtime.go").is_file()
+    assert not (service / "target").exists()
+    assert not (service / ".observe").exists()
+
+
+def test_prepare_side_workspace_rejects_symlinked_eval_input(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    (fixture_dir / "eval/inputs").mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    (fixture_dir / "eval/inputs/otel-audit.json").symlink_to(outside)
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
+    case = sanity_case(fixture_dir=fixture_dir)
+
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="must not contain symlinks"):
+        prepare_side_workspace(
+            tmp_path, case, "with_skill", tmp_path / "run", skill_dir
+        )
+
+
+def test_prepare_side_workspace_rejects_symlink_anywhere_in_fixture(
+    tmp_path: Path,
+):
+    fixture_dir = tmp_path / "fixture"
+    (fixture_dir / "config").mkdir(parents=True)
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text("first secret\n", encoding="utf-8")
+    (fixture_dir / "config/secret.txt").symlink_to(outside)
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    case = sanity_case(fixture_dir=fixture_dir)
+
+    import pytest as _pytest
+
+    with _pytest.raises(
+        ValueError, match="provenance source tree must not contain symlinks"
+    ):
+        tree_sha256(fixture_dir)
+
+    with _pytest.raises(ValueError, match="fixture must not contain symlinks"):
+        prepare_side_workspace(
+            tmp_path, case, "with_skill", tmp_path / "run", skill_dir
+        )
+
+    outside.write_text("changed secret\n", encoding="utf-8")
+    with _pytest.raises(
+        ValueError, match="provenance source tree must not contain symlinks"
+    ):
+        tree_sha256(fixture_dir)
+    with _pytest.raises(ValueError, match="fixture must not contain symlinks"):
+        prepare_side_workspace(
+            tmp_path, case, "with_skill", tmp_path / "run", skill_dir
+        )
 
 
 def write_loaded_skill(root: Path, skill: str) -> None:
@@ -712,6 +2231,13 @@ class RecordingBackend:
 
     def run_agent(self, *, prompt: str, exec_dir: Path, model: str | None = None, timeout: int = 1200) -> AgentResult:
         self.agent_timeouts.append(timeout)
+        for cache_name in (".uv-cache", ".pip-cache"):
+            cache_file = exec_dir / cache_name / "archive.bin"
+            cache_file.parent.mkdir(parents=True)
+            cache_file.write_bytes(b"cache")
+        generated = exec_dir / "service/target/generated-output.bin"
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_bytes(b"generated")
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
@@ -749,3 +2275,179 @@ class RecordingBackend:
 
     def parse_trace(self, trace_path: Path):
         return parse_trace(trace_path)
+
+
+class SymlinkPlantingBackend(RecordingBackend):
+    def __init__(self, outside: dict[str, Path]) -> None:
+        super().__init__()
+        self.outside = outside
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        result = super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+        for name, target in (
+            ("grade.json", self.outside["grade"]),
+            (".codex-eval-provenance.json", self.outside["provenance"]),
+            ("summary.json", self.outside["summary"]),
+        ):
+            (exec_dir / name).symlink_to(target)
+        return result
+
+
+class ExecutionDirectorySwapBackend(RecordingBackend):
+    def __init__(self, outside: Path) -> None:
+        super().__init__()
+        self.outside = outside
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        result = super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+        stolen = self.outside / "stolen-exec"
+        self.outside.mkdir(parents=True)
+        shutil.move(str(exec_dir), str(stolen))
+        exec_dir.symlink_to(stolen, target_is_directory=True)
+        for name in ("grade.json", ".codex-eval-provenance.json", "summary.json"):
+            (stolen / name).write_text("sentinel\n", encoding="utf-8")
+        return result
+
+
+class ExecutionRootVictimSwapBackend(RecordingBackend):
+    def __init__(self, outside: Path) -> None:
+        super().__init__()
+        self.outside = outside
+        self.replaced_root: Path | None = None
+        self.stolen_root: Path | None = None
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        result = super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+        original_root = exec_dir.parent
+        self.outside.mkdir(parents=True)
+        stolen_root = self.outside / "stolen-root"
+        original_root.rename(stolen_root)
+        victim = self.outside / "victim"
+        victim.mkdir()
+        (victim / "sentinel.txt").write_text("keep\n", encoding="utf-8")
+        victim.rename(original_root)
+        self.replaced_root = original_root
+        self.stolen_root = stolen_root
+        return result
+
+
+class ArtifactDirectoryPlantingBackend(RecordingBackend):
+    def __init__(self, victim: Path, artifact_dir: Path) -> None:
+        super().__init__()
+        self.victim = victim
+        self.artifact_dir = artifact_dir
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        result = super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+        self.victim.mkdir()
+        (self.victim / "sentinel.txt").write_text(
+            "keep\n", encoding="utf-8"
+        )
+        self.victim.rename(self.artifact_dir)
+        return result
+
+
+class OutputReadReplacementBackend(RecordingBackend):
+    def __init__(self, outside: Path) -> None:
+        super().__init__()
+        self.outside = outside
+        self.replacement: Path | None = None
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        result = super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+        self.outside.mkdir()
+        stolen = self.outside / "original"
+        exec_dir.rename(stolen)
+        exec_dir.mkdir()
+        (exec_dir / "trace.jsonl").write_text(
+            json.dumps({"type": "turn.completed", "usage": {"total_tokens": 999}})
+            + "\n",
+            encoding="utf-8",
+        )
+        (exec_dir / "last_message.md").write_text(
+            "FORGED\n", encoding="utf-8"
+        )
+        self.replacement = exec_dir
+        return result
+
+
+class TrackingBackend(RecordingBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.exec_dir: Path | None = None
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        self.exec_dir = exec_dir
+        return super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )

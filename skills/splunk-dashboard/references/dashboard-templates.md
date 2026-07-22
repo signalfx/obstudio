@@ -59,6 +59,7 @@ resource "signalfx_dashboard" "red" {
 
 ```hcl
 resource "signalfx_time_chart" "p99_latency" {
+  # telemetry-item: OTEL-001.http-duration
   name         = "P99 Latency - <metric_name>"
   plot_type    = "LineChart"   # LineChart | AreaChart | ColumnChart | Histogram
 
@@ -76,6 +77,7 @@ resource "signalfx_time_chart" "p99_latency" {
 
 ```hcl
 resource "signalfx_single_value_chart" "kpi_p99_latency" {
+  # telemetry-item: OTEL-001.http-duration
   name         = "P99 Latency"
   color_by     = "Scale"
 
@@ -105,6 +107,7 @@ EOF
 
 ```hcl
 resource "signalfx_single_value_chart" "saturation_connections" {
+  # telemetry-item: OTEL-005.db-connections
   name         = "Active Connections"
   program_text = <<-EOF
     A = data('db.pool.connections.active', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Active Connections')
@@ -123,6 +126,7 @@ resource "signalfx_single_value_chart" "saturation_connections" {
 
 ```hcl
 resource "signalfx_text_chart" "section_red" {
+  # telemetry-item: OTEL-001.http-duration
   name     = "RED Signals"
   markdown = "## RED Signals\nRate, errors, and duration for ${var.service_name}."
 }
@@ -130,6 +134,16 @@ resource "signalfx_text_chart" "section_red" {
 
 A text panel has `markdown` and no `program_text`; in the preview sidecar it maps
 to `chartType: "text"` with `programText: null` and the markdown in `text`.
+
+Every chart resource carries stable provenance as `# telemetry-item:`. Use the
+verified `OTEL-###.<item>` ID for implemented telemetry. For a pre-existing
+metric explicitly accepted without item proof, use
+`SOURCE-METRIC.<exact-metric-name>` and record the same explicit exception in
+the report and validator command; never manufacture an `OTEL-###` ID. The
+preview repeats that exact value in `telemetryItemId` and records the
+item-specific chart/dashboard follow-up in `productAction`; these fields are
+ignored by Terraform and the Observer renderer but are validated before the
+report can pass.
 
 ## Other chart types
 

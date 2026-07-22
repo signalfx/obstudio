@@ -20,11 +20,13 @@ project-configured runtime. If a default shell runtime fails but project config
 points elsewhere, record the default runtime as rejected and retry with the
 project runtime.
 
-When `.observe/otel.md` contains `Verification Plan / Test Environments`, or
-`.observe/otel-instrumentation.md` contains `Verification Handoff / Results`,
-treat their runtime rows and commands as candidates. Revalidate all candidates
-against current wrappers, toolchain files, manifests, and local availability
-before execution; a handoff can become stale.
+When canonical JSON exists, use the selected findings' referenced verification
+environments and the matching `.observe/otel-instrumentation.json` tests as
+runtime candidates. Otherwise use legacy `.observe/otel.md` Verification Plan
+test environments and `.observe/otel-instrumentation.md` verification-handoff
+results. Revalidate all candidates against current wrappers,
+toolchain files, manifests, and local availability before execution; a handoff
+can become stale.
 
 ## Discovery Order
 
@@ -45,7 +47,10 @@ Inspect these sources before choosing commands:
    local dependency caches.
 
 Prefer the first candidate that is both project-configured and locally
-available. Do not install global tools or update dependency manifests.
+available. A validated provider-compatible local artifact may be used as an
+explicit verification pin when source does not declare an exact artifact
+version, but that does not prove production-version parity. Do not install
+global tools or update dependency manifests.
 
 ## Language Rules
 
@@ -72,6 +77,73 @@ available. Do not install global tools or update dependency manifests.
 - For temporary Java harnesses, use the same JDK and project classpath. Prefer
   `test-compile` plus `dependency:build-classpath`, Gradle test runtime
   classpath tasks, or an existing test source set over ad hoc global jars.
+- Use two JVM forks when both test-owned SDK/provider assertions and real-agent
+  behavior are required. Run tests that construct `SdkTracerProvider`, install
+  `OpenTelemetrySdk`, or replace the test global without `-javaagent` and with
+  inherited agent options removed. Run automatic server-span, topology,
+  runtime-correlation, and OTLP checks in a separate agent E2E fork that does
+  not install or reset a test provider. Do not apply one Maven `argLine`,
+  `JAVA_TOOL_OPTIONS`, or Gradle test JVM configuration to both surfaces.
+- Resolve configuration ownership per exporter before starting either fork.
+  `-Dotel.*` system properties configure the Java agent SDK, but an app-owned
+  metric reporter may read `System.getenv("OTEL_...")` instead. Pass actual
+  `OTEL_*` environment variables through the shell, Surefire/Failsafe
+  `environmentVariables`, Gradle `environment`, or the repository's launcher,
+  and capture evidence that the emitting fork received the effective values.
+
+#### Java-agent artifact resolution
+
+Resolve the execution boundary before testing an agent path: host JVM, forked
+test JVM, container, Compose service, or deployed image. A missing
+container-internal path such as `/opt/opentelemetry-javaagent.jar` on the host
+is one rejected candidate, not evidence that no agent is available.
+
+When a selected scenario needs `-javaagent`, run the bundled resolver before
+reporting an artifact prerequisite:
+
+```bash
+python3 -I \
+  "<directory-containing-loaded-SKILL.md>/scripts/resolve_java_agent.py" \
+  --project "<service-root>" \
+  --output "<service-root>/.observe/tmp/java-agent-resolution.json"
+```
+
+Pass `--expected-family splunk` or `--expected-family opentelemetry` only when
+source configuration establishes that provider family. Pass
+`--expected-version <version>` only when repository/deployment evidence names
+the exact version. An unexpanded variable in a configured agent path still
+constrains provider family and version even though that path is not executable
+locally. When configured paths name conflicting families or versions, the
+resolver remains `ambiguous` until authoritative source evidence supports the
+corresponding explicit `--expected-family` or `--expected-version`. The
+resolver is read-only and performs this deterministic search:
+
+1. explicit candidates and current Java option environment;
+2. repository startup, container, CI, and prior `.observe` `-javaagent` paths;
+3. project-local agent JARs;
+4. targeted Maven-local and Gradle-cache coordinates for the Splunk and
+   upstream OpenTelemetry Java agents.
+
+It revalidates every candidate as a readable JAR whose manifest
+`Premain-Class` exactly matches the recognized Splunk or upstream
+OpenTelemetry entry point and any provider-family evidence. It then records
+the absolute path, full artifact SemVer (including prerelease and build
+identifiers), implementation version, provider family, size, and SHA-256. Use
+the absolute `selected.javaagent_argv` value; a JVM does not expand `~` inside
+a `-javaagent:` argument. Do not ask the user to provide, locate, install, or
+download an agent when `status` is `resolved`.
+
+Treat the selected path/version/hash as the verification pin. Keep
+`production_parity.status` separate: `not_proven` means the production version
+is not source-declared, not that the verification agent is unavailable. Only
+report an agent artifact as a concrete blocker after the resolver returns
+`unresolved` and all candidates relevant to the chosen execution boundary were
+rejected; name the exact missing coordinate or source-configured artifact.
+
+A later real-process command that successfully attaches the resolved agent
+supersedes earlier fixed-path absence evidence. If that process then fails an
+application startup or telemetry assertion, classify the application/runtime
+result normally; do not keep an agent-unavailable blocker or provisioning CTA.
 
 ### Node and TypeScript
 

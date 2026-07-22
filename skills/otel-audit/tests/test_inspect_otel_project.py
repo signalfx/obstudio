@@ -1,0 +1,428 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).parents[3]
+SCANNER = REPO_ROOT / "skills" / "references" / "scripts" / "inspect_otel_project.py"
+
+
+class InspectOtelProjectTest(unittest.TestCase):
+    def inspect(self, root: Path, *args: str) -> dict[str, Any]:
+        result = subprocess.run(
+            [sys.executable, str(SCANNER), str(root), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_go_fixture_finds_manifest_entrypoint_routes_runtime_and_tests(self) -> None:
+        root = REPO_ROOT / "evals" / "go" / "kvstore"
+
+        result = self.inspect(root)
+
+        self.assertEqual(result["schema_version"], 1)
+        self.assertIn(
+            {"path": "go.mod", "language": "go", "kind": "go-module"},
+            result["manifests"],
+        )
+        self.assertIn(
+            "cmd/kvstore-server/main.go",
+            {item["path"] for item in result["entrypoints"]},
+        )
+        self.assertEqual(
+            {item["route"] for item in result["routes"]},
+            {"/kv/", "/search"},
+        )
+        self.assertIn("go", {item["ecosystem"] for item in result["runtime_candidates"]})
+        self.assertIn("kvstore/http_test.go", result["tests"])
+        self.assertEqual(result["summary"]["otel_findings"], 0)
+        self.assertIn("Candidates only", result["proof_boundary"])
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(
+            result["section_counts"]["routes"],
+            {"total": 2, "returned": 2, "truncated": 0},
+        )
+
+    def test_cross_language_route_candidates_are_detected(self) -> None:
+        cases = {
+            REPO_ROOT / "evals" / "python" / "fastapi-celery": {"GET", "POST", "DELETE"},
+            REPO_ROOT / "evals" / "node" / "express-basic": {"GET", "POST"},
+        }
+        for root, expected_methods in cases.items():
+            with self.subTest(root=root):
+                result = self.inspect(root)
+                methods = {item["method"] for item in result["routes"]}
+                self.assertTrue(expected_methods.issubset(methods))
+
+    def test_common_router_receiver_names_are_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "routes.py").write_text(
+                'api.get("/api", handler)\n'
+                'engine.post("/engine", handler)\n'
+                'v1.delete("/v1/items/{id}", handler)\n',
+                encoding="utf-8",
+            )
+
+            result = self.inspect(root)
+
+        self.assertEqual(
+            {(item["method"], item["route"]) for item in result["routes"]},
+            {("GET", "/api"), ("POST", "/engine"), ("DELETE", "/v1/items/{id}")},
+        )
+
+    def test_otel_findings_are_categorized_and_excluded_directories_are_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pyproject.toml").write_text(
+                '[project]\nrequires-python = ">=3.11"\n'
+                'dependencies = ["opentelemetry-sdk"]\n',
+                encoding="utf-8",
+            )
+            (root / "app.py").write_text(
+                "from opentelemetry.sdk.trace import TracerProvider\n"
+                "from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\n"
+                "provider = TracerProvider()\n"
+                "trace.set_tracer_provider(provider)\n"
+                "with tracer.start_as_current_span('work'):\n"
+                "    pass\n"
+                "provider.force_flush()\n",
+                encoding="utf-8",
+            )
+            (root / ".env").write_text("OTEL_SERVICE_NAME=checkout\n", encoding="utf-8")
+            (root / ".env.local").write_text(
+                "OTEL_EXPORTER_OTLP_HEADERS=Authorization=secret-value\n",
+                encoding="utf-8",
+            )
+            (root / "collector.yaml").write_text(
+                "headers: secret-value\n",
+                encoding="utf-8",
+            )
+            ignored = root / ".venv"
+            ignored.mkdir()
+            (ignored / "ignored.py").write_text("LoggerProvider()\n", encoding="utf-8")
+
+            result = self.inspect(root)
+
+        findings = result["otel_findings"]
+        self.assertGreaterEqual(len(findings["dependency_or_import"]), 2)
+        self.assertEqual(findings["provider_construction"][0]["path"], "app.py")
+        self.assertEqual(findings["provider_registration"][0]["line"], 4)
+        self.assertEqual(findings["exporter"][0]["path"], "app.py")
+        self.assertEqual(findings["custom_span"][0]["line"], 5)
+        self.assertEqual(findings["runtime_configuration"][0]["path"], ".env")
+        runtime_text = {item["path"]: item["text"] for item in findings["runtime_configuration"]}
+        self.assertEqual(runtime_text[".env"], "OTEL_SERVICE_NAME=<redacted>")
+        self.assertEqual(
+            runtime_text[".env.local"],
+            "OTEL_EXPORTER_OTLP_HEADERS=<redacted>",
+        )
+        self.assertNotIn("secret-value", json.dumps(result))
+        self.assertFalse(any(item["path"].startswith(".venv/") for values in findings.values() for item in values))
+
+    def test_output_is_deterministic_and_bounded(self) -> None:
+        root = REPO_ROOT / "evals" / "go" / "chi-basic"
+        first = self.inspect(root, "--max-items", "2")
+        second = self.inspect(root, "--max-items", "2")
+
+        self.assertEqual(first, second)
+        self.assertTrue(all(len(items) <= 2 for items in first["otel_findings"].values()))
+        self.assertLessEqual(len(first["routes"]), 2)
+
+    def test_truncation_counts_preserve_total_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text(
+                "\n".join(
+                    f"provider_{index} = TracerProvider()" for index in range(5)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.inspect(root, "--max-items", "2")
+
+        self.assertEqual(result["summary"]["otel_findings_by_category"]["provider_construction"], 5)
+        self.assertEqual(len(result["otel_findings"]["provider_construction"]), 2)
+        self.assertEqual(
+            result["summary"]["otel_findings_truncated_by_category"]["provider_construction"],
+            3,
+        )
+        self.assertEqual(
+            result["otel_finding_counts"]["provider_construction"],
+            {"total": 5, "returned": 2, "truncated": 3},
+        )
+        self.assertFalse(result["complete"])
+        self.assertTrue(
+            any("otel_findings" in warning for warning in result["warnings"])
+        )
+
+    def test_non_otel_sections_report_truncation_and_incomplete_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text(
+                "\n".join(
+                    f'app.get("/route-{index}", handler)' for index in range(5)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.inspect(root, "--max-items", "2")
+
+        self.assertEqual(len(result["routes"]), 2)
+        self.assertEqual(
+            result["section_counts"]["routes"],
+            {"total": 5, "returned": 2, "truncated": 3},
+        )
+        self.assertFalse(result["complete"])
+        self.assertTrue(
+            any("routes" in warning for warning in result["warnings"])
+        )
+
+    def test_file_and_byte_limits_bound_scan_and_report_skips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.py").write_text("print('a')\n", encoding="utf-8")
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+
+            file_limited = self.inspect(root, "--max-files", "1")
+            byte_limited = self.inspect(root, "--max-total-bytes", "5")
+
+        self.assertFalse(file_limited["complete"])
+        self.assertEqual(file_limited["summary"]["text_files_scanned"], 1)
+        self.assertEqual(file_limited["skipped"]["file_limit"], 1)
+        self.assertGreaterEqual(file_limited["skipped_count"], 1)
+        self.assertFalse(byte_limited["complete"])
+        self.assertEqual(byte_limited["summary"]["text_files_scanned"], 0)
+        self.assertEqual(byte_limited["skipped"]["byte_limit"], 1)
+
+    def test_sensitive_route_text_and_package_script_definition_are_redacted(self) -> None:
+        secret = "sentinel-hard-coded-secret"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text(
+                'app.get("/health?token='
+                + secret
+                + '", headers="Authorization: '
+                + secret
+                + '")\n',
+                encoding="utf-8",
+            )
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "scripts": {
+                            "probe": f"curl -H 'Authorization: {secret}' /health"
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.inspect(root)
+
+        serialized = json.dumps(result)
+        self.assertNotIn(secret, serialized)
+        self.assertEqual(
+            result["routes"][0]["text"], "<redacted sensitive configuration>"
+        )
+        self.assertEqual(
+            result["routes"][0]["route"], "<redacted sensitive route>"
+        )
+        self.assertEqual(
+            result["project_commands"][0]["definition"],
+            "<redacted sensitive configuration>",
+        )
+
+    def test_malformed_package_json_does_not_abort_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text("{not-json", encoding="utf-8")
+            (root / "app.js").write_text('app.get("/health", handler);\n', encoding="utf-8")
+
+            result = self.inspect(root)
+
+        self.assertIn(
+            {"path": "package.json", "language": "node", "kind": "node-package"},
+            result["manifests"],
+        )
+        self.assertEqual(result["project_commands"], [])
+        self.assertEqual(result["routes"][0]["route"], "/health")
+
+    def test_excludes_eval_docs_and_lockfiles_from_otel_evidence(self) -> None:
+        root = REPO_ROOT / "evals" / "go" / "chi-partial"
+        source_lines = (root / "main.go").read_text(encoding="utf-8").splitlines()
+        provider_line = next(
+            index
+            for index, line in enumerate(source_lines, start=1)
+            if "sdktrace.NewTracerProvider(" in line
+        )
+        resource_line = next(
+            index
+            for index, line in enumerate(source_lines, start=1)
+            if "resource.New(ctx)" in line
+        )
+
+        result = self.inspect(root)
+
+        paths = {
+            item["path"]
+            for values in result["otel_findings"].values()
+            for item in values
+        }
+        self.assertFalse(any(path.startswith("eval/") for path in paths))
+        self.assertNotIn("go.sum", paths)
+        self.assertIn("main.go", paths)
+        self.assertEqual(
+            result["otel_findings"]["provider_construction"][0]["line"],
+            provider_line,
+        )
+        self.assertIn(
+            "otlptracehttp.New",
+            result["otel_findings"]["exporter"][-1]["text"],
+        )
+        self.assertEqual(
+            result["otel_findings"]["resource"][0]["line"], resource_line
+        )
+
+    def test_excludes_repository_level_evals_directory_from_otel_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "provider = TracerProvider()\n", encoding="utf-8"
+            )
+            evals = root / "evals" / "fixture"
+            evals.mkdir(parents=True)
+            (evals / "service.py").write_text(
+                "provider = MeterProvider()\n", encoding="utf-8"
+            )
+
+            result = self.inspect(root)
+
+        paths = {
+            item["path"]
+            for values in result["otel_findings"].values()
+            for item in values
+        }
+        self.assertIn("service.py", paths)
+        self.assertFalse(any(path.startswith("evals/") for path in paths))
+
+    def test_nested_module_runtime_uses_module_cwd_and_local_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            module = root / "services" / "api"
+            module.mkdir(parents=True)
+            (module / "pyproject.toml").write_text(
+                '[project]\nrequires-python = ">=3.12"\n',
+                encoding="utf-8",
+            )
+            (module / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+            (module / ".python-version").write_text("3.12\n", encoding="utf-8")
+
+            result = self.inspect(root)
+
+        self.assertEqual(
+            result["runtime_candidates"],
+            [
+                {
+                    "ecosystem": "python",
+                    "cwd": "services/api",
+                    "evidence": "services/api/pyproject.toml + services/api/uv.lock",
+                    "runner": "uv run --locked",
+                    "probe": "uv run --locked python --version",
+                }
+            ],
+        )
+        self.assertEqual(result["lockfiles"], ["services/api/uv.lock"])
+        self.assertEqual(result["version_files"], ["services/api/.python-version"])
+
+    def test_output_writes_full_inventory_and_prints_summary(self) -> None:
+        root = REPO_ROOT / "evals" / "node" / "express-basic"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "inventory.json"
+            completed = subprocess.run(
+                [sys.executable, str(SCANNER), str(root), "--output", str(output)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            summary = json.loads(completed.stdout)
+            full = json.loads(output.read_text(encoding="utf-8"))
+
+        self.assertEqual(summary["output"], str(output.resolve()))
+        self.assertEqual(summary["summary"], full["summary"])
+        self.assertEqual(summary["complete"], full["complete"])
+        self.assertEqual(summary["warnings"], full["warnings"])
+        self.assertEqual(summary["skipped_count"], full["skipped_count"])
+        self.assertIn("otel_findings", full)
+
+    def test_make_special_targets_are_not_commands(self) -> None:
+        result = self.inspect(REPO_ROOT / "evals" / "go" / "kvstore")
+        names = {item["name"] for item in result["project_commands"]}
+        self.assertNotIn(".PHONY", names)
+        self.assertIn("test", names)
+
+    def test_rejects_invalid_root_and_limit(self) -> None:
+        missing = subprocess.run(
+            [sys.executable, str(SCANNER), "/definitely/missing"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("not a directory", missing.stderr)
+
+        invalid_limit = subprocess.run(
+            [sys.executable, str(SCANNER), str(REPO_ROOT), "--max-items", "0"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid_limit.returncode, 0)
+        self.assertIn("at least 1", invalid_limit.stderr)
+
+        invalid_files = subprocess.run(
+            [
+                sys.executable,
+                str(SCANNER),
+                str(REPO_ROOT),
+                "--max-files",
+                "0",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid_files.returncode, 0)
+        self.assertIn("--max-files must be at least 1", invalid_files.stderr)
+
+        invalid_bytes = subprocess.run(
+            [
+                sys.executable,
+                str(SCANNER),
+                str(REPO_ROOT),
+                "--max-total-bytes",
+                "0",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid_bytes.returncode, 0)
+        self.assertIn("--max-total-bytes must be at least 1", invalid_bytes.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

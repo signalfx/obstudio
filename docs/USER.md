@@ -109,9 +109,9 @@ Once installed, open any project in your agent and use:
 
 | Command | What it does |
 |---------|-------------|
-| `/otel-audit` | Analyze codebase for observability gaps |
-| `/otel-instrument` | Add OpenTelemetry instrumentation |
-| `/otel-verify` | Prove existing instrumentation and write `.observe/otel-verify.md` |
+| `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
+| `/otel-instrument` | In a canonical audit/selection flow, implement selected IDs and write instrumentation JSON and HTML; a no-audit request writes the compatibility Markdown report only |
+| `/otel-verify` | In a canonical flow, write bound verification JSON and refresh instrumentation HTML; a legacy/no-audit run writes `.observe/otel-verify.md` only |
 
 Or use natural language:
 
@@ -131,6 +131,25 @@ blocks it. See the
 for how to run verification directly and read the generated report. The
 complete report schema remains in the canonical
 [report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract).
+
+When an audit and validated selection are present, the normal review loop is
+JSON-backed and HTML-first:
+
+1. Run `$otel-audit` and open `.observe/otel.html`.
+2. Filter and expand findings, press **Save selection**, then place the
+   downloaded file at `.observe/otel-selection.json`.
+3. Run `$otel-instrument`. Alternatively, invoke
+   `$otel-instrument --ids OTEL-001,OTEL-004` directly; it writes the same
+   validated selection handoff before editing.
+4. Open `.observe/otel-instrumentation.html` for the code-to-telemetry-to-product
+   change report. The audit HTML remains unchanged.
+5. Run `$otel-verify` directly when you need to refresh proof in the
+   instrumentation HTML. Instrumentation and verification JSON sidecars keep
+   that view deterministic.
+
+The Markdown reports remain available for compatibility with older tooling and
+are the only artifacts in explicit legacy/no-audit fallbacks. JSON is canonical
+only for the JSON-backed workflow.
 
 ## Running the Full Observer
 
@@ -255,9 +274,10 @@ Observability Cloud **dashboards**:
 $splunk-dashboard
 ```
 
-This reads `.observe/otel.md`, groups the service's metrics into RED-style
-panels (latency/duration, error rate, throughput, plus saturation and KPI
-single-value tiles), and writes dashboard Terraform to
+This reads canonical `.observe/otel-audit.json` when present (falling back to
+`.observe/otel.md` for older audits), groups the service's metrics into
+RED-style panels (latency/duration, error rate, throughput, plus saturation and
+KPI single-value tiles), and writes dashboard Terraform to
 `.observe/terraform/dashboards.tf` — a `signalfx_dashboard_group`, one or more
 `signalfx_dashboard`, and one `signalfx_*_chart` resource per panel placed on
 the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a

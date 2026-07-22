@@ -9,16 +9,20 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20260711T231609164685Z |
+| Run ID | 20260722T024307148606Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
+| Report scope | full |
+| Selected prompts | 31 |
+| Expected prompts | 31 |
 
 ## Eval Summary
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 6 | 0 |
+| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 8 | 0 |
+| go/chi-basic/qual/benchmark-audit | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/benchmark-audit.json | 0 | 5 | 0 |
+| go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 7 | 0 |
 | go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 5 | 0 |
 | java/kafka-batch-consumer/qual/audit | java/kafka-batch-consumer | 2 | evals/java/kafka-batch-consumer/eval/qual/audit.json | 0 | 6 | 0 |
 | java/kafka-listener-container/qual/audit | java/kafka-listener-container | 2 | evals/java/kafka-listener-container/eval/qual/audit.json | 0 | 6 | 0 |

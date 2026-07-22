@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Instrument representative owned paths in the MCP-style AI tool gateway in ./service: JSON-RPC method outcomes, session/stream lifecycle, execute_tool, and the provider call. Add safe spans/metrics, focused tests, and the separate reader-first instrumentation report. Run one focused verification pass; after a dependency or environment blocker, record the exact blocker and finish instead of repeatedly retrying setup."
+      "task": "Instrument representative owned paths in the MCP-style AI tool gateway in ./service: JSON-RPC method outcomes, session/stream lifecycle, execute_tool, and the provider call. Add safe spans/metrics, focused tests, and the separate reader-first instrumentation report. Run focused verification. Do not repeatedly retry unchanged dependency or environment setup after an evidenced blocker; instrumentation-owned failures still require repair, overlay refresh, and affected-scenario reverification before final handoff."
     }
   ],
   "judge_inputs": [

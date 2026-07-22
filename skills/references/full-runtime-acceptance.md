@@ -22,20 +22,55 @@ prove the number, kind, name, or attributes of real server spans.
 
 ## Safe Runtime Plan
 
-1. Identify the repository's actual start command and auto-instrumentation
-   bootstrap.
-2. Inventory required local dependencies and prefer existing test profiles,
+Before authoring a local receiver, temporary runtime harness, or start plan
+that requires a listener, run exactly one bounded capability probe:
+
+```bash
+python3 -I \
+  "<directory-containing-loaded-SKILL.md>/scripts/probe_loopback_bind.py"
+```
+
+Resolve the wrapper from the active `otel-instrument` or `otel-verify` skill
+directory. When the complete JSON result is `status: blocked`, preserve its
+error type, errno, and message as the concrete runtime prerequisite; do not
+author or repeatedly execute a receiver/harness that necessarily needs the
+same forbidden bind. Mark only the listener-dependent rows `Blocked` or `Not
+proven`, while retaining compile and focused-test evidence. When the result is
+`status: available`, continue with the real runtime gate: the probe is a
+prerequisite check, not startup, readiness, emission, or export proof. Do not
+run this probe when the chosen repository-native plan requires no local
+listener.
+
+Then:
+
+1. Identify the repository's actual start command, auto-instrumentation
+   bootstrap, and execution boundary: host/forked JVM, container, Compose
+   service, or deployed-image equivalent.
+2. When the boundary uses a Java agent, follow the active skill's project
+   runtime reference and run its `scripts/resolve_java_agent.py` wrapper before
+   startup. Use the resolver's absolute validated path/version/hash as the
+   verification pin. A missing path from a different boundary is a rejected
+   candidate, not a blocker. Keep an unknown deployed-production version as a
+   parity gap; do not ask the user to supply a JAR when a valid local candidate
+   resolved.
+3. Inventory required local dependencies and prefer existing test profiles,
    fake services, embedded fixtures, Testcontainers, Compose services, or
    repository-provided substitutes. Never use production credentials or data.
-3. Start the real process with the project runtime, local OTLP endpoint, short
-   export intervals, stable `service.name`, and test/local environment.
-4. Wait for an observable readiness condition. Capture startup failure output
+4. Start the real process with the project runtime, local OTLP endpoint, short
+   export intervals, stable `service.name`, and test/local environment. Resolve
+   configuration ownership per signal: agent `-Dotel.*` properties do not
+   substitute for actual `OTEL_*` environment variables read by an app-owned
+   reporter/exporter.
+5. Wait for an observable readiness condition. Capture startup failure output
    and stop if the process cannot become ready.
-5. Exercise every runtime-required scenario from the audit contract. Use a
+6. Exercise every runtime-required scenario from the audit contract. Use a
    parameterized route/request matrix when many routes share setup.
-6. Query in-memory exporters and the local collector/explorer while the process
-   is alive, following the verifier's explorer witness contract.
-7. Shut down the process and dependencies cleanly after evidence is captured.
+7. Query in-memory exporters and the local collector/explorer while the exact
+   emitting process or test fork is alive, following the verifier's explorer
+   witness contract. Save the query evidence before allowing that process to
+   exit; a parent build process remaining alive does not preserve a child
+   emitter's source.
+8. Shut down the process and dependencies cleanly after evidence is captured.
 
 If the repository has no safe local profile and creating one would change
 application behavior materially, record the exact prerequisite and mark the
@@ -68,6 +103,12 @@ trace/span correlation, redaction, resource identity, and collector visibility.
   expected signal, or an instrumentation-introduced startup failure remains.
 - `Blocked`: no meaningful runtime proof could execute because a concrete
   prerequisite was unavailable.
+
+Successful current-run agent attachment supersedes earlier path-absence
+probes. A process that attached its agent and then failed application startup
+or an assertion is `Fail`/`Not working`, not agent-blocked. Unknown production
+agent parity remains a separate limitation and does not erase proof from the
+resolved verification pin.
 
 Keep baseline compile and focused-test results separate from this gate so a
 runtime prerequisite does not erase valid app-code proof.

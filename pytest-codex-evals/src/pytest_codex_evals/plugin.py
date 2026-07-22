@@ -6,7 +6,13 @@ from typing import Any
 
 import pytest
 
-from .backends import AgentBackend, create_backend
+from .backends import (
+    AgentBackend,
+    atomic_text_write,
+    create_backend,
+    path_directory_identity,
+    read_regular_text,
+)
 from .config import CodexEvalSettings, load_settings
 from .eval_files import eval_file_layout, is_eval_file
 from .definitions import (
@@ -21,8 +27,8 @@ from .definitions import (
     SanityEvalDefinition,
     ValidationResult,
 )
-from .report import write_session_results
-from .runner import new_run_id, new_run_root, run_case
+from .report import ensure_safe_output_directory, write_session_results
+from .runner import build_run_provenance, new_run_id, new_run_root, run_case
 from .schema_resources import schema_validator
 
 
@@ -128,8 +134,12 @@ def write_worker_results(config: pytest.Config, runs: dict[tuple[str, str, str, 
         if not results:
             continue
         root = worker_results_root(run["repo_root"], config)
-        root.mkdir(parents=True, exist_ok=True)
-        path = root / f"{worker_id}-{index}-{safe_name(run['skill'])}-{run['eval_kind']}-{run['mode']}.json"
+        ensure_safe_output_directory(root, run["repo_root"])
+        root_identity = path_directory_identity(root)
+        path = root / (
+            f"{safe_name(worker_id)}-{index}-{safe_name(run['skill'])}-"
+            f"{safe_name(run['eval_kind'])}-{safe_name(run['mode'])}.json"
+        )
         payload = {
             "mode": run["mode"],
             "eval_kind": run["eval_kind"],
@@ -139,7 +149,12 @@ def write_worker_results(config: pytest.Config, runs: dict[tuple[str, str, str, 
             "metadata": run.get("metadata", {}),
             "results": [result.model_dump(mode="json") for result in results],
         }
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        atomic_text_write(
+            path,
+            json.dumps(payload, indent=2),
+            boundary=root,
+            expected_boundary_identity=root_identity,
+        )
 
 
 def collect_worker_results(config: pytest.Config) -> list[dict[str, Any]]:
@@ -150,25 +165,96 @@ def collect_worker_results(config: pytest.Config) -> list[dict[str, Any]]:
     root = worker_results_root(repo_root, config)
     if not root.is_dir():
         return []
+    ensure_safe_output_directory(root, repo_root)
 
-    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    repo_root = repo_root.resolve()
+    run_id = getattr(config, RUN_ID_ATTR)
+    grouped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    seen_results: set[tuple[tuple[str, str, str, str, str], str]] = set()
     for path in sorted(root.glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        mode = payload["mode"]
+        if path.is_symlink():
+            raise ValueError(f"worker result must not be a symlink: {path}")
+        payload = json.loads(read_regular_text(path))
+        if not isinstance(payload, dict):
+            raise ValueError(f"worker result must be an object: {path}")
+        mode = payload.get("mode")
+        skill = payload.get("skill")
         eval_kind_value = payload.get("eval_kind", "validation" if mode == "validation" else "standard")
-        key = (payload["repo_root"], payload["run_root"], payload["skill"], eval_kind_value, mode)
+        for label, value in (
+            ("mode", mode),
+            ("skill", skill),
+            ("eval kind", eval_kind_value),
+        ):
+            if (
+                not isinstance(value, str)
+                or not value
+                or safe_name(value) != value
+            ):
+                raise ValueError(f"worker result has unsafe {label}: {value!r}")
+        if mode not in {"validation", "with_skill", "with_baseline", "ab"}:
+            raise ValueError(f"worker result has unsupported mode: {mode}")
+        declared_repo = Path(str(payload.get("repo_root", ""))).resolve()
+        if declared_repo != repo_root:
+            raise ValueError(
+                f"worker result repo_root does not match controller: {declared_repo}"
+            )
+        expected_run_root = (
+            repo_root / ".workspace" / "codex-evals" / skill / run_id
+        ).resolve()
+        declared_run_root = Path(str(payload.get("run_root", ""))).resolve()
+        if declared_run_root != expected_run_root:
+            raise ValueError(
+                "worker result run_root does not match the current controller run: "
+                f"{declared_run_root}"
+            )
+        metadata = payload.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("worker result metadata must be an object")
+        expected_metadata = {
+            "mode": mode,
+            "eval_kind": eval_kind_value,
+            "skill": skill,
+            "run_id": run_id,
+        }
+        for field, expected in expected_metadata.items():
+            if metadata.get(field) != expected:
+                raise ValueError(
+                    f"worker result metadata {field} does not match payload"
+                )
+        key = (
+            str(repo_root),
+            str(expected_run_root),
+            skill,
+            eval_kind_value,
+            mode,
+        )
         if key not in grouped:
             grouped[key] = {
                 "mode": mode,
                 "eval_kind": eval_kind_value,
-                "repo_root": Path(payload["repo_root"]),
-                "run_root": Path(payload["run_root"]),
-                "skill": payload["skill"],
-                "metadata": payload.get("metadata", {}),
+                "repo_root": repo_root,
+                "run_root": expected_run_root,
+                "skill": skill,
+                "metadata": metadata,
                 "results": [],
             }
         result_model = ValidationResult if mode == "validation" else CaseResult
-        grouped[key]["results"].extend(result_model.model_validate(result) for result in payload["results"])
+        raw_results = payload.get("results")
+        if not isinstance(raw_results, list):
+            raise ValueError("worker result results must be a list")
+        for raw_result in raw_results:
+            result = result_model.model_validate(raw_result)
+            if result.skill != skill:
+                raise ValueError(
+                    f"worker result skill differs from payload: {result.id}"
+                )
+            identity = (key, result.id)
+            if identity in seen_results:
+                raise ValueError(
+                    f"duplicate worker result for {mode}: {result.id}"
+                )
+            seen_results.add(identity)
+            grouped[key]["results"].append(result)
 
     for run in grouped.values():
         run["results"].sort(key=lambda result: (result.language, result.service, result.prompt_id, result.id))
@@ -227,7 +313,15 @@ class CodexEvalItem(pytest.Item):
         validate_case(self.case, repo_root, skill_dir)
 
         validation_run = session_run(self.config, repo_root, self.case.skill, "validation", "validation")
-        validation_run["results"].append(validation_result(self.case, repo_root, skill_dir))
+        validation_run["results"].append(
+            validation_result(
+                self.case,
+                repo_root,
+                skill_dir,
+                config_path=config_path(self.config),
+                run_configuration=validation_run["metadata"],
+            )
+        )
 
         if mode == "validation":
             return
@@ -248,6 +342,8 @@ class CodexEvalItem(pytest.Item):
             backend=get_backend(self.config),
             agent_timeout=agent_timeout(self.config),
             judge_timeout=judge_timeout(self.config),
+            config_path=config_path(self.config),
+            run_configuration=run["metadata"],
         )
         run["results"].append(result)
         validate_live_result(result)
@@ -509,7 +605,14 @@ def display_path(path: Path, repo_root: Path) -> str:
         return str(path)
 
 
-def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:
+def validation_result(
+    case: EvalCase,
+    repo_root: Path,
+    skill_dir: Path | None,
+    *,
+    config_path: Path | None,
+    run_configuration: dict[str, object],
+) -> ValidationResult:
     resolved_skill_dir = skill_dir or repo_root / "skills" / case.skill
     sanity_count = len(case.checks) if isinstance(case, SanityEvalCase) else 0
     rubric_count = len(case.rubric) if isinstance(case, RubricEvalCase) else 0
@@ -528,6 +631,13 @@ def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -
         sanity_check_count=sanity_count,
         rubric_check_count=rubric_count,
         runtime_check_count=runtime_count,
+        provenance=build_run_provenance(
+            repo_root,
+            case,
+            resolved_skill_dir,
+            config_path=config_path,
+            run_configuration=run_configuration,
+        ),
     )
 
 

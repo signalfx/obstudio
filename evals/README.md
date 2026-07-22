@@ -207,6 +207,13 @@ eval-reports/<skill>/runtime/report.md
 eval-reports/<skill>/runtime/benchmark.json
 ```
 
+Those unscoped paths represent only a proven full suite. When `CASE`, `PROMPT`,
+or `EVAL_PATTERN` selects less than the current suite, or the definition set is
+stale or cannot be proven, reports retain their run-local outputs and are
+copied to
+`eval-reports/<skill>/<kind>/scoped/<run-id>/` instead. Every report records the
+scope status and selected versus expected prompt counts.
+
 Each `benchmark.json` is kind-specific. Sanity contains sanity checks only,
 rubric contains judge/rubric fields only, and runtime contains runtime check
 fields only. Baseline columns are `-` when the run mode did not execute a

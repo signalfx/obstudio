@@ -2,16 +2,35 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "validate_configure_output.py"
+SKILL = Path(__file__).parents[1] / "SKILL.md"
 SPEC = importlib.util.spec_from_file_location("validate_configure_output", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+DASHBOARD_TESTS = (
+    Path(__file__).parents[2]
+    / "splunk-dashboard"
+    / "tests"
+    / "test_validate_dashboard_output.py"
+)
+DASHBOARD_SPEC = importlib.util.spec_from_file_location(
+    "dashboard_test_helpers_for_configure", DASHBOARD_TESTS
+)
+assert DASHBOARD_SPEC and DASHBOARD_SPEC.loader
+DASHBOARD_HELPERS = importlib.util.module_from_spec(DASHBOARD_SPEC)
+sys.modules[DASHBOARD_SPEC.name] = DASHBOARD_HELPERS
+DASHBOARD_SPEC.loader.exec_module(DASHBOARD_HELPERS)
 
 METRIC = "http.server.request.duration"
 
@@ -85,13 +104,15 @@ Validation passed.
 One detector.
 
 ## Tested And Working
-Local validation.
+| Check | Result | Evidence |
+|---|---|---|
+| Authenticated detector SignalFlow compile | Pass | Authenticated `terraform plan -refresh=false -input=false` accepted all generated detectors through `/v2/detector/validate`. |
 
 ## Not Yet Proven
-Remote apply.
+None.
 
 ## Validation Notes
-Fixture evidence.
+Publishing/applying was not run because it is not required for configure verification.
 
 ## Next Steps
 Apply with credentials.
@@ -116,6 +137,234 @@ Apply with credentials.
     )
 
 
+def write_canonical_reader_report(args: argparse.Namespace) -> None:
+    root = args.terraform_dir.parent
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    proofs = {
+        item["id"]: item
+        for finding in verification["findings"]
+        for item in finding["item_results"]
+    }
+    status_labels = {
+        "working": "Working",
+        "not_working": "Not working",
+        "not_proven": "Not proven",
+        "not_configured": "Not configured",
+        "blocked": "Not proven",
+    }
+    rows = []
+    non_working = []
+    for finding in instrumentation["findings"]:
+        for source in finding["telemetry_changes"]:
+            proof = proofs[source["id"]]
+            status = status_labels[proof["status"]]
+            if status != "Working":
+                non_working.append(source["id"])
+            rows.append(
+                "| {id} | {name} | {type} | {change} | {status} | {tested} | "
+                "{product} | {evidence} |".format(
+                    id=source["id"],
+                    name=source["name"],
+                    type=source["type"],
+                    change=source["change"],
+                    status=status,
+                    tested="; ".join(proof["observed_telemetry"]),
+                    product="; ".join(proof["product_validation"]),
+                    evidence="; ".join(proof["evidence"]),
+                )
+            )
+    working = len(rows) - len(non_working)
+    gaps = "None." if not non_working else "\n".join(f"- {item}" for item in non_working)
+    args.verify_report.write_text(
+        f"""# OpenTelemetry Verification Report
+
+**Result:** {verification['meta']['result']}
+
+## What Changed
+Canonical verification results were projected for readers.
+
+## Tested And Working
+**Individual result:** {working}/{len(rows)} working: metrics {working}/{len(rows)}.
+
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+{chr(10).join(rows)}
+
+## Not Working Or Not Proven
+{gaps}
+
+## Proof
+Canonical JSON contains the bound commands and evidence.
+""",
+        encoding="utf-8",
+    )
+
+
+def write_canonical_configure_flow(args: argparse.Namespace) -> None:
+    root = args.terraform_dir.parent
+    DASHBOARD_HELPERS.write_bound_flow(root, root / "otel-verify.json")
+    write_canonical_reader_report(args)
+
+
+def add_scenario_only_metric_to_canonical_flow(
+    args: argparse.Namespace, metric: str
+) -> None:
+    root = args.terraform_dir.parent
+    report_module = DASHBOARD_HELPERS.REPORT_MODULE
+    audit = json.loads((root / "otel-audit.json").read_text(encoding="utf-8"))
+    audit["findings"][0]["expected_telemetry"].append(
+        {
+            "type": "metric",
+            "name": metric,
+            "attributes": ["service.name"],
+            "product_view": "Request size chart",
+        }
+    )
+    audit = report_module.normalize_audit_report(audit)
+    audit_digest = report_module.audit_digest(audit)
+
+    selection = json.loads(
+        (root / "otel-selection.json").read_text(encoding="utf-8")
+    )
+    selection["audit_sha256"] = audit_digest
+    selection = report_module.normalize_selection(selection, audit)
+
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    instrumentation["audit_sha256"] = audit_digest
+    instrumentation = report_module.normalize_instrumentation(
+        instrumentation, audit, selection
+    )
+
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    verification["audit_sha256"] = audit_digest
+    verification["instrumentation_sha256"] = report_module.instrumentation_digest(
+        instrumentation
+    )
+    verification["findings"][0]["scenarios"][0]["observed_telemetry"].append(
+        f"{metric} emitted with service.name=checkout"
+    )
+    verification = report_module.normalize_verify(
+        verification, audit, selection, instrumentation
+    )
+
+    (root / "otel-audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    (root / "otel-selection.json").write_text(
+        json.dumps(selection), encoding="utf-8"
+    )
+    (root / "otel-instrumentation.json").write_text(
+        json.dumps(instrumentation), encoding="utf-8"
+    )
+    (root / "otel-verify.json").write_text(
+        json.dumps(verification), encoding="utf-8"
+    )
+    write_canonical_reader_report(args)
+
+
+def write_dashboard_fixture(
+    args: argparse.Namespace,
+    *,
+    result: str = "Pass",
+    observer_result: str = "Pass",
+    live_value_result: str = "Pass",
+) -> None:
+    (args.terraform_dir / "dashboards.tf").write_text(
+        '''resource "signalfx_time_chart" "latency" {
+  # telemetry-item: OTEL-001.http-duration
+  name = "P99 Latency"
+  program_text = <<-EOF
+    data('http.server.request.duration', filter=filter('service.name', 'checkout')).percentile(pct=99).publish(label='P99 Latency')
+  EOF
+}
+
+resource "signalfx_dashboard_group" "overview" {
+  name = "Checkout Overview"
+}
+
+resource "signalfx_dashboard" "red" {
+  name            = "Checkout RED"
+  dashboard_group = signalfx_dashboard_group.overview.id
+  chart {
+    chart_id = signalfx_time_chart.latency.id
+    column   = 0
+    row      = 0
+    width    = 6
+    height   = 3
+  }
+}
+''',
+        encoding="utf-8",
+    )
+    (args.terraform_dir.parent / "dashboards.preview.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "groups": [
+                    {
+                        "name": "Checkout Overview",
+                        "dashboards": [
+                            {
+                                "name": "Checkout RED",
+                                "charts": [
+                                    {
+                                        "label": "latency",
+                                        "title": "P99 Latency",
+                                        "chartType": "time_series",
+                                        "telemetryItemId": "OTEL-001.http-duration",
+                                        "productAction": "Add the verified latency metric to the RED dashboard.",
+                                        "programText": "data('http.server.request.duration', filter=filter('service.name', 'checkout')).percentile(pct=99).publish(label='P99 Latency')",
+                                        "text": None,
+                                        "layout": {
+                                            "column": 0,
+                                            "row": 0,
+                                            "width": 6,
+                                            "height": 3,
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (args.terraform_dir.parent / "dashboards.md").write_text(
+        f"""# Dashboards Report: checkout
+
+**Result:** {result}
+**Preview:** `.observe/dashboards.preview.json`
+
+## Panels
+
+| # | Telemetry Item ID | Panel | Metric | Chart Type | Grid (col,row,w,h) | Product action / rationale |
+|---|---|---|---|---|---|---|
+| 1 | OTEL-001.http-duration | P99 Latency | http.server.request.duration | time_series | 0,0,6,3 | Add the verified latency metric to the RED dashboard. |
+
+## Preview And Validation
+
+| Check | Result | What it proves | Evidence / next step |
+|---|---|---|---|
+| Verified metric item mapping | Pass | Every chart maps to a working telemetry item | `OTEL-001.http-duration` and verification evidence |
+| Terraform ↔ preview parity | Pass | HCL and sidecar agree | `validate_dashboard_output.py` validator passed for 1 chart |
+| Observer render | {observer_result} | Observer accepted and rendered the sidecar | local Observer render witness for 1 chart |
+| Live value sanity | {live_value_result} | Query returned plausible values and dimensions | saved recent-window query evidence for `http.server.request.duration` |
+| Publish/apply | Not run | Review remains local | publish only after human approval |
+""",
+        encoding="utf-8",
+    )
+    write_canonical_configure_flow(args)
+
+
 class WorkingMetricsTest(unittest.TestCase):
     def test_reads_working_metric_on_python_39_compatible_path(self) -> None:
         report = """## Tested And Working
@@ -132,6 +381,13 @@ class WorkingMetricsTest(unittest.TestCase):
                 {"http.server.request.duration"},
             )
 
+    def test_skill_documents_structured_authenticated_plan_evidence(self) -> None:
+        text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("| Check | Result | Evidence |", text)
+        self.assertIn("| Authenticated detector SignalFlow compile | Pass |", text)
+        self.assertIn("`/v2/detector/validate`", text)
+
 
 class ValidateConfigureOutputTest(unittest.TestCase):
     def test_accepts_verified_detector_and_secure_provider_wiring(self) -> None:
@@ -142,6 +398,257 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         self.assertEqual(result["detector_count"], 1)
         self.assertEqual(result["detector_metrics"], [METRIC])
         self.assertEqual(result["reported_status"], "Pass")
+
+    def test_accepts_detector_authorized_by_bound_canonical_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["working_metric_count"], 2)
+
+    def test_rejects_markdown_metric_not_authorized_by_canonical_json(self) -> None:
+        detector_metric = "custom.unverified.metric"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory),
+                detector_metric=detector_metric,
+                verified_metric=detector_metric,
+            )
+            write_canonical_configure_flow(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {detector_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_uses_the_exact_canonical_snapshot_that_was_validated(self) -> None:
+        detector_metric = "custom.post-validation.metric"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory), detector_metric=detector_metric
+            )
+            write_canonical_configure_flow(args)
+            original_validator = MODULE.run_checked_validator
+            validator_calls = 0
+
+            def mutate_after_validation(command, label, errors):
+                nonlocal validator_calls
+                result = original_validator(command, label, errors)
+                validator_calls += 1
+                if validator_calls == 2:
+                    path = args.terraform_dir.parent / "otel-instrumentation.json"
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    payload["findings"][0]["telemetry_changes"][0]["name"] = (
+                        detector_metric
+                    )
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                return result
+
+            with mock.patch.object(
+                MODULE, "run_checked_validator", side_effect=mutate_after_validation
+            ):
+                result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {detector_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_rejects_scenario_only_metric_without_working_item_result(self) -> None:
+        scenario_only_metric = "http.server.request.size"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory), detector_metric=scenario_only_metric
+            )
+            write_canonical_configure_flow(args)
+            add_scenario_only_metric_to_canonical_flow(args, scenario_only_metric)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {scenario_only_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_rejects_markdown_that_disagrees_with_canonical_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            args.verify_report.write_text(
+                args.verify_report.read_text(encoding="utf-8").replace(
+                    METRIC, "custom.forged.metric", 1
+                ),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "verify Markdown projection validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_pass_with_substantive_not_yet_proven_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            report = args.configure_verify_report.read_text(encoding="utf-8").replace(
+                "## Not Yet Proven\nNone.",
+                "## Not Yet Proven\nRemote SignalFlow compilation was not run.",
+            )
+            args.configure_verify_report.write_text(report, encoding="utf-8")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "configure verification report: Result Pass conflicts with substantive "
+            "## Not Yet Proven content",
+            result["errors"],
+        )
+
+    def test_rejects_pass_without_authenticated_detector_compile_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            report = args.configure_verify_report.read_text(encoding="utf-8").replace(
+                "| Authenticated detector SignalFlow compile | Pass | Authenticated `terraform plan -refresh=false -input=false` accepted all generated detectors through `/v2/detector/validate`. |",
+                "| Local Terraform validation | Pass | `terraform validate -json` returned valid. |",
+            )
+            args.configure_verify_report.write_text(report, encoding="utf-8")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "configure verification report: Result Pass requires a successful authenticated "
+            "terraform plan / SignalFlow compile row covering every generated detector",
+            result["errors"],
+        )
+
+    def test_rejects_authenticated_plan_row_with_negative_or_uncertain_evidence(self) -> None:
+        contradictions = (
+            "Authenticated terraform plan failed; SignalFlow compile returned no "
+            "validation result for all 1 generated detector.",
+            "Authenticated terraform plan may have succeeded; SignalFlow validation "
+            "is pending for all 1 generated detector.",
+        )
+        for contradictory in contradictions:
+            with self.subTest(contradictory=contradictory), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                report = args.configure_verify_report.read_text(encoding="utf-8")
+                report = re.sub(
+                    r"Authenticated `terraform plan[^|]+",
+                    contradictory + " ",
+                    report,
+                )
+                args.configure_verify_report.write_text(report, encoding="utf-8")
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertIn(
+                "configure verification report: Result Pass requires a successful authenticated "
+                "terraform plan / SignalFlow compile row covering every generated detector",
+                result["errors"],
+            )
+
+    def test_accepts_dashboard_proof_with_publish_not_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["dashboard_chart_count"], 1)
+        self.assertEqual(result["preview_chart_count"], 1)
+
+    def test_accepts_inherited_partial_when_dashboard_checks_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args, result="Partial")
+            args.detectors_report.write_text(
+                args.detectors_report.read_text(encoding="utf-8").replace(
+                    "**Result:** Pass", "**Result:** Partial"
+                ),
+                encoding="utf-8",
+            )
+            args.configure_verify_report.write_text(
+                args.configure_verify_report.read_text(encoding="utf-8").replace(
+                    "**Result:** Pass", "**Result:** Partial"
+                ),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["reported_status"], "Partial")
+
+    def test_delegates_explicit_source_metric_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            source_id = "SOURCE-METRIC.http.server.request.duration"
+            dashboards_tf = args.terraform_dir / "dashboards.tf"
+            dashboards_tf.write_text(
+                dashboards_tf.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            preview = args.terraform_dir.parent / "dashboards.preview.json"
+            preview.write_text(
+                preview.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            report = args.terraform_dir.parent / "dashboards.md"
+            report.write_text(
+                report.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_rejects_dashboard_terraform_without_report_and_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            (args.terraform_dir / "dashboards.tf").write_text(
+                'resource "signalfx_time_chart" "latency" {}\n',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(error.startswith("missing dashboards report:") for error in result["errors"]),
+            result["errors"],
+        )
+        self.assertTrue(
+            any(error.startswith("missing dashboard preview:") for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_dashboard_pass_without_render_and_live_value_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args, observer_result="Not run", live_value_result="Blocked")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "dashboard validator: report: Result Pass requires Observer render and "
+            "Live value sanity to be Pass",
+            result["errors"],
+        )
 
     def test_rejects_detector_without_working_metric_evidence(self) -> None:
         detector_metric = "custom.unverified.metric"

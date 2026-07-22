@@ -12,9 +12,9 @@ matching the frameworks and clients detected in the codebase.
 
 | Dependency               | Auto-instrumentation Package                                                              | Signals         | What It Covers                                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
-| `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans, `http.server.request.duration`, `http.server.active_requests` |
+| `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans and version-dependent duration/body-size metrics                |
 | `gorilla/mux`            | `go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux`              | spans only      | Route-aware HTTP spans                                                                  |
-| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`               | spans only      | Route-aware HTTP spans                                                                  |
+| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` + `otelhttp.WithRouteTag` | spans + metrics | HTTP server spans/metrics with explicit low-cardinality chi route patterns              |
 | `gin-gonic/gin`          | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`            | spans only      | Route-aware HTTP spans                                                                  |
 | `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc`             | spans + metrics | gRPC client/server spans and metrics                                                    |
 | `database/sql`           | `github.com/XSAM/otelsql`                                                                 | spans only      | SQL query spans with `db.statement`                                                     |
@@ -34,14 +34,21 @@ instead.
 
 ## Framework Selection Guide
 
-Framework-specific middleware packages (otelchi, otelgin, otelmux) only emit
-**spans** -- they do not register HTTP server metric instruments. To get full
-request count, error status, and request-duration coverage, wrap the outermost
-handler with
-`otelhttp.NewHandler`, which emits both spans and metrics.
+Framework-specific middleware packages such as `otelgin` and `otelmux` only
+emit **spans** -- they do not register HTTP server metric instruments.
+`otelhttp.NewHandler` adds HTTP spans and metrics. Do not stack two
+span-producing server middleware layers merely to get both behaviors: that
+emits duplicate server spans.
+The exact metric names and set depend on the selected `otelhttp` version and
+`OTEL_SEMCONV_STABILITY_OPT_IN` behavior. Inspect the selected module source or
+runtime output before declaring names; never infer `http.server.active_requests`
+from the wrapper alone.
 
-**Default rule:** always use `otelhttp.NewHandler` as the outermost wrapper.
-Add framework middleware inside only when you need route-pattern span names.
+**Default rule:** use `otelhttp.NewHandler` as the sole outer server-span
+producer. Add a non-span-producing route annotator inside it when route
+patterns are needed. If you instead choose framework middleware for its span
+naming, do not also wrap it with another span-producing handler; record that
+the `otelhttp` server metrics are absent unless separately instrumented.
 
 ### chi
 
@@ -52,13 +59,24 @@ handler := otelhttp.NewHandler(r, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-If you also need chi route patterns in span names, add `otelchi` as inner
-middleware:
+There is no official OpenTelemetry Go contrib `otelchi` module. Do not probe
+for or add the nonexistent
+`go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`
+package. For route-aware chi telemetry, annotate each registered handler with
+the low-cardinality route pattern while retaining the outer `otelhttp` handler:
 
 ```go
-r.Use(otelchi.Middleware("server"))
+r.Get("/tasks/{id}", otelhttp.WithRouteTag(
+	"/tasks/{id}",
+	http.HandlerFunc(getTask),
+).ServeHTTP)
 handler := otelhttp.NewHandler(r, "server")
 ```
+
+`WithRouteTag` sets `http.route` on the current span and the `otelhttp` metric
+labeler. It does not rename the outer span. If route-pattern span names are an
+explicit requirement, rename that current span after route matching and prove
+the name in a recorder test; do not start a second server span.
 
 ### gin
 
@@ -69,12 +87,11 @@ handler := otelhttp.NewHandler(ginEngine, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-Combined with route-aware span names:
-
-```go
-ginEngine.Use(otelgin.Middleware("server"))
-handler := otelhttp.NewHandler(ginEngine, "server")
-```
+For route attributes or names plus `otelhttp` metrics, add a gin middleware
+that reads the matched full path after `Next`, updates the current outer span,
+and adds the same `http.route` value to the `otelhttp` labeler without starting
+another span. Alternatively use `otelgin.Middleware` alone for route-aware
+spans and record the missing `otelhttp` server metrics.
 
 ### gorilla/mux
 
@@ -85,12 +102,11 @@ handler := otelhttp.NewHandler(router, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-Combined with route-aware span names:
-
-```go
-router.Use(otelmux.Middleware("server"))
-handler := otelhttp.NewHandler(router, "server")
-```
+For route attributes or names plus `otelhttp` metrics, add non-span-producing
+middleware that reads `mux.CurrentRoute(r).GetPathTemplate()`, updates the
+current outer span, and adds the same `http.route` value to the `otelhttp`
+labeler. Alternatively use `otelmux.Middleware` alone for route-aware spans and
+record the missing `otelhttp` server metrics.
 
 ### Adding a new framework
 
@@ -102,8 +118,11 @@ Follow this template:
 Preferred (spans + metrics):
   handler := otelhttp.NewHandler({router}, "server")
 
-Combined with route-aware span names:
+Route-aware spans without otelhttp metrics:
   {router}.Use({framework-package}.Middleware("server"))
+
+Spans + metrics with route data:
+  add non-span-producing middleware that annotates the outer otelhttp span and labeler
   handler := otelhttp.NewHandler({router}, "server")
 ```
 
@@ -111,14 +130,134 @@ Combined with route-aware span names:
 
 ## Dependencies
 
+Read `go.mod` first. Use the cache-backed resolver only for the standard HTTP
+bootstrap: the task needs `otelhttp`, core/SDK, and trace + metric OTLP-HTTP
+exporters, and the project has no `go.opentelemetry.io` requirements or
+main-module `replace`/`exclude` directives. Run it exactly once:
+
 ```bash
-go get go.opentelemetry.io/otel \
-  go.opentelemetry.io/otel/sdk \
-  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc \
-  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc \
-  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp \
-  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
+python3 -I \
+  "<directory-containing-loaded-SKILL.md>/scripts/resolve_go_otel_versions.py" \
+  --project "<service-root>"
 ```
+
+Resolve the script from the loaded `otel-instrument` skill directory. Pass
+`--gomodcache "<path>"` only when the selected project runtime uses a specific
+cache; otherwise the helper reads `GOMODCACHE`, then `GOPATH`, then the default
+Go cache location. The helper is dependency-free and read-only: it never runs
+Go, invokes a shell, or edits `go.mod`/`go.sum`. For an already-instrumented
+project, a non-HTTP service, a different exporter family, or a custom-only edit
+that needs no dependency change, skip this fixed-bundle resolver. Preserve the
+project's existing OTel family and use its configured Go dependency workflow.
+
+There are exactly two authorized bootstrap branches.
+
+**Full-closure branch.** Run the sibling runner's `--action go-get` when all
+three resolver conditions are true:
+
+- `status` is `complete`
+- `complete` is `true`
+- `go_get.ready` is `true`
+
+Readiness means the file proxy contains non-empty `.mod`, `.info`, `.zip`, and
+`.ziphash` artifacts for the full selected dependency closure of the existing
+project plus `otelhttp`, core OTel, the SDK, and both OTLP HTTP exporters in one
+compatible release family. Every selected module must support the project's Go
+version. Metadata-only or direct-bundle-only versions are not runnable
+candidates.
+
+**Import-reachable probe branch.** When the resolver is incomplete and
+`bootstrap_probe.eligible` is `true`, run exactly once:
+
+```bash
+python3 -I \
+  "<directory-containing-loaded-SKILL.md>/scripts/run_go_otel_command.py" \
+  --project "<service-root>" --action probe-bootstrap
+```
+
+The runner stages fixed standard-HTTP imports below its owned project-local
+directory, executes one captured `go mod tidy` with the isolated file-only
+proxy, verifies the source, directives, and exact pins, removes the stage and
+read-only cache payloads without flooding output, and writes a drift-bound
+accepted-plan ledger. `status: accepted` proves only import-reachable dependency
+resolution for those fixed imports. It does not prove application compilation,
+tests, instrumentation, export, or runtime telemetry. A blocked result is
+terminal: leave dependencies unchanged and report its compact reason. Do not
+read `candidate_rejections` to choose a version, run cache archaeology, or
+substitute a manual `GOMODCACHE=... go ...` command.
+
+After either a complete full-closure plan or an accepted bootstrap probe,
+execute the exact pinned dependency edit with:
+
+```bash
+python3 -I \
+  "<directory-containing-loaded-SKILL.md>/scripts/run_go_otel_command.py" \
+  --project "<service-root>" --action go-get
+```
+
+The runner reloads the canonical sibling resolver, requires either its complete
+plan or the matching probed ledger, snapshots `go.mod`/`go.sum`, and rolls both
+back if `go get` or the post-edit invariant checks fail. On success it advances
+the ledger to `applied`, bound to the new hashes, unchanged module/go/toolchain
+directives, and exact intended OTel pins. It validates that owned paths stay
+below the project with no symlink escape, scrubs conflicting inherited Go
+environment values, and invokes Go with argv rather than a shell. Never copy
+`go_get.env` into an `env KEY=value ...` command; values such as `GOVCS=*:off`,
+empty values, and paths with spaces are intentionally handled by the runner.
+
+On this resolver-backed bootstrap branch, use the same runner for every later
+Go command in this run:
+
+```bash
+python3 -I <runner> --project "<service-root>" -- go mod tidy
+python3 -I <runner> --project "<service-root>" -- go test ./...
+python3 -I <runner> --project "<service-root>" -- go build ./...
+python3 -I <runner> --project "<service-root>" -- go list ./...
+python3 -I <runner> --project "<service-root>" -- go run <target>
+```
+
+Only `go mod tidy`, `go test`, `go build`, `go list`, and `go run` are accepted
+as explicit follow-up commands. Dependency changes and cleanup require their
+named actions, and external-tool flags such as `-exec`, `-toolexec`, and
+`-vettool` are rejected. This keeps temporary dependency and build state inside
+the two resolver-owned cache paths and prevents a second download/cache branch.
+The runner is argv-safe and cache-isolated, not a sandbox: project builds,
+tests, generators, and applications still execute trusted project code.
+
+The environment isolates `HOME`, `GOPATH`, `GOMODCACHE`, and `GOCACHE` under
+the project, uses the detected cache's download directory as a file-only
+`GOPROXY`, disables the checksum database and VCS fallback, and forbids
+automatic toolchain switching. Do not replace a pin with `@latest`, add an
+unpinned OTel module, manually copy cache artifacts, probe the home cache, or
+repeat version/cache commands when the plan is ready.
+
+Treat both resolver and probe results as dependency candidates, not application
+proof. After the edit, inspect the `go.mod`/`go.sum` diff, run the required
+runner-backed tidy/build/test commands, and prove the imports used by the
+implementation. The runner rejects directive, exact-pin, hash, or ledger drift;
+do not bypass that rejection.
+
+Defer cleanup until all source and report edits, verification decisions, final
+code review, and required runner-backed Go validation are complete. Do not run
+it merely because an initial tidy/test/build pass succeeded. If final review
+causes an edit, repeat every affected runner-backed validation. Then, as the
+final project command, run:
+`python3 -I <runner> --project "<service-root>" --action cleanup`. The runner
+removes its accepted-plan ledger, probe stage, and read-only owned caches with a
+compact result. After cleanup, do not rerun the resolver, edit the project, or
+run another Go command. Do not run `rm`, any `find` inspection/deletion,
+recursive `chmod`, or another cleanup command. Never recover with a manual
+`GOCACHE`, `GOMODCACHE`, or `go` branch. Some Go toolchains write small local
+telemetry bookkeeping below the isolated `HOME`; that state cannot reach the
+user's home directory and is not a build/module cache payload.
+
+For `incomplete` or `no-candidate`, use only an eligible runner bootstrap probe.
+If it is ineligible or blocked, do not execute `go_get`, inspect rejection rows
+to choose pins, run a version/cache lookup, or start a probe loop. An
+`existing-otel-dependencies` or unsupported main-module directive reason routes
+back to the project's selected versions and normal dependency workflow; it does
+not authorize an upgrade. Otherwise leave dependencies unchanged and report the
+exact compact blocker.
 
 ---
 
@@ -134,11 +273,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -151,13 +290,19 @@ import (
 
 func initOTel(ctx context.Context) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			attribute.String("service.name",
-				envOr("OTEL_SERVICE_NAME", "my-service")),
-		),
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
 	)
 	if err != nil {
 		return nil, err
+	}
+	if _, present := res.Set().Value(attribute.Key("service.name")); !present {
+		res, err = resource.Merge(res, resource.NewSchemaless(
+			attribute.String("service.name", "my-service"),
+		))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	traceExporter, err := otlptracehttp.New(ctx)
@@ -169,15 +314,9 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
 	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
-
 	metricExporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, tp.Shutdown(ctx))
 	}
 
 	mp := sdkmetric.NewMeterProvider(
@@ -188,26 +327,17 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		)),
 		sdkmetric.WithResource(res),
 	)
+	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-
-	if err := runtime.Start(); err != nil {
-		return nil, err
-	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	shutdown := func(ctx context.Context) error {
-		if err := tp.Shutdown(ctx); err != nil {
-			return err
-		}
-		return mp.Shutdown(ctx)
+		return errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))
 	}
 	return shutdown, nil
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 func metricExportInterval() time.Duration {
@@ -241,15 +371,28 @@ the collector before the process stops.
 ```go
 func main() {
 	ctx := context.Background()
-	shutdown, err := initOTel(ctx)
-	if err != nil {
-		log.Fatalf("failed to initialize telemetry: %v", err)
+	shutdown := func(context.Context) error { return nil }
+	if otelShutdown, err := initOTel(ctx); err != nil {
+		log.Printf("telemetry disabled: %v", err)
+	} else {
+		shutdown = otelShutdown
 	}
-	defer shutdown(ctx)
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			log.Printf("telemetry shutdown: %v", err)
+		}
+	}()
 
 	// ... start HTTP server, gRPC server, etc.
 }
 ```
+
+Preserve the application's existing startup policy. The fail-open example
+keeps a previously runnable service available when telemetry initialization
+fails. Use fail-closed telemetry startup only when repository evidence or the
+user explicitly makes telemetry readiness-critical. Add runtime/host metrics
+only when requested or audit-required; the minimal HTTP setup intentionally
+does not add `go.opentelemetry.io/contrib/instrumentation/runtime`.
 
 ### Wrapping HTTP handlers
 
@@ -265,9 +408,12 @@ handler := otelhttp.NewHandler(mux, "server",
 http.ListenAndServe(":8080", handler)
 ```
 
-For router-specific middleware (`otelmux`, `otelchi`, `otelgin`), see the
-Framework Selection Guide above. These packages emit spans only -- always
-use `otelhttp.NewHandler` as the outermost wrapper for HTTP server metrics.
+For router-specific integration, see the Framework Selection Guide above. For
+chi, `otelhttp.WithRouteTag` annotates the current span and metrics without
+renaming the span. `otelmux` and `otelgin` emit spans; do not stack either under
+another span-producing wrapper. Use a non-span-producing route annotator with
+the outer `otelhttp.NewHandler` when both one server span and HTTP server
+metrics are required.
 
 ### HTTP Client Instrumentation
 

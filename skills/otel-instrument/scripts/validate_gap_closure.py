@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -72,6 +76,32 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
+JSON_STATUS_LABELS = {
+    "working": "Working",
+    "not_working": "Not working",
+    "not_proven": "Not proven",
+    "not_configured": "Not configured",
+    "deferred": "Deferred",
+}
+GENAI_JSON_STATUS_LABELS = {
+    "working": "Working",
+    "partial": "Partial",
+    "not_working": "Not working",
+    "not_proven": "Not proven",
+    "not_configured": "Not configured",
+    "deferred": "Deferred",
+    "owner_mapped": "Owner-mapped",
+}
+GENAI_JSON_FIELDS = {
+    "surface",
+    "required_signals",
+    "owner",
+    "implemented_proven",
+    "tests",
+    "evidence",
+    "remaining_signals",
+    "status",
+}
 
 
 def fail(message: str) -> None:
@@ -101,19 +131,395 @@ def subsection(text: str, heading: str) -> str:
     return text[start : start + next_heading.start()] if next_heading else text[start:]
 
 
+def split_row(line: str) -> list[str]:
+    value = line.strip()
+    if value.startswith("|"):
+        value = value[1:]
+    if value.endswith("|") and not value.endswith(r"\|"):
+        value = value[:-1]
+    return [
+        cell.replace(r"\|", "|").strip()
+        for cell in re.split(r"(?<!\\)\|", value)
+    ]
+
+
 def table(body: str, label: str) -> tuple[list[str], list[list[str]]]:
-    lines = [line.strip() for line in body.splitlines() if line.strip().startswith("|")]
+    lines: list[str] = []
+    in_table = False
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("|"):
+            in_table = True
+            lines.append(line)
+        elif in_table:
+            break
     if len(lines) < 2:
         fail(f"{label} table is missing")
-    header = [cell.strip() for cell in lines[0].strip("|").split("|")]
-    rows = [
-        [cell.strip() for cell in line.strip("|").split("|")]
-        for line in lines[2:]
-    ]
+    header = split_row(lines[0])
+    rows = [split_row(line) for line in lines[2:]]
     return header, rows
 
 
-def validate(audit_path: Path, instrumentation_path: Path) -> None:
+def load_json(path: Path, label: str) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"invalid {label} JSON {path}: {exc}")
+    if not isinstance(value, dict):
+        fail(f"{label} JSON must be an object: {path}")
+    return value
+
+
+def canonical_digest(value: dict) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def validate_overlay_bindings(
+    audit_json: dict,
+    instrumentation_json: dict,
+    overlay_json: dict,
+    verify_overlay: bool,
+) -> None:
+    if (
+        audit_json.get("schema_version") not in {1, 2}
+        or audit_json.get("kind") != "otel-audit"
+    ):
+        fail("canonical audit JSON must use a supported schema and kind otel-audit")
+    audit_id = audit_json.get("meta", {}).get("audit_id")
+    audit_sha256 = canonical_digest(audit_json)
+    if (
+        instrumentation_json.get("schema_version") != 1
+        or instrumentation_json.get("kind") != "otel-instrumentation"
+    ):
+        fail(
+            "authoritative instrumentation JSON must have schema_version 1 "
+            "and kind otel-instrumentation"
+        )
+    if instrumentation_json.get("audit_id") != audit_id:
+        fail("instrumentation audit_id does not match canonical audit JSON")
+    if instrumentation_json.get("audit_sha256") != audit_sha256:
+        fail("instrumentation audit_sha256 does not match canonical audit JSON")
+
+    expected_kind = "otel-verify" if verify_overlay else "otel-instrumentation"
+    if overlay_json.get("schema_version") != 1 or overlay_json.get("kind") != expected_kind:
+        fail(
+            f"authoritative overlay must have schema_version 1 and kind {expected_kind}"
+        )
+    if overlay_json.get("audit_id") != audit_id:
+        fail("overlay audit_id does not match canonical audit JSON")
+    if overlay_json.get("audit_sha256") != audit_sha256:
+        fail("overlay audit_sha256 does not match canonical audit JSON")
+    if verify_overlay:
+        instrumentation_sha256 = canonical_digest(instrumentation_json)
+        if overlay_json.get("instrumentation_sha256") != instrumentation_sha256:
+            fail(
+                "verify instrumentation_sha256 does not match the authoritative "
+                "instrumentation JSON"
+            )
+
+
+def validate_bound_flow(
+    audit_json_path: Path,
+    selection_json_path: Path | None,
+    instrumentation_json_path: Path,
+    verify_json_path: Path | None,
+) -> None:
+    selection = selection_json_path or audit_json_path.parent / "otel-selection.json"
+    if not selection.is_file():
+        fail(
+            "canonical JSON projection requires --selection-json or sibling "
+            "otel-selection.json"
+        )
+    shared = (
+        Path(__file__).resolve().parents[2]
+        / "references"
+        / "scripts"
+        / "observe_report.py"
+    )
+    if not shared.is_file():
+        fail(f"shared canonical flow validator is missing: {shared}")
+    command = [
+        sys.executable,
+        str(shared),
+        "validate-flow",
+        str(audit_json_path),
+        "--selection-json",
+        str(selection),
+        "--instrumentation-json",
+        str(instrumentation_json_path),
+    ]
+    if verify_json_path is not None:
+        command.extend(["--verify-json", str(verify_json_path)])
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        fail(f"canonical audit/selection/overlay flow is invalid: {detail}")
+
+
+def json_string(value: object, path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{path} must be a non-empty string")
+    return value
+
+
+def json_string_list(value: object, path: str) -> list[str]:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item.strip() for item in value
+    ):
+        fail(f"{path} must be an array of non-empty strings")
+    return value
+
+
+def validate_genai_json_projection(
+    markdown_rows: list[list[str]],
+    audit_json: dict,
+    instrumentation_json: dict,
+) -> None:
+    audit_rows = audit_json.get("genai_readiness")
+    if not isinstance(audit_rows, list) or not audit_rows:
+        fail("canonical GenAI audit must contain non-empty genai_readiness rows")
+    canonical_rows = instrumentation_json.get("genai_closure")
+    if not isinstance(canonical_rows, list):
+        fail("authoritative instrumentation JSON must contain genai_closure rows")
+
+    audit_surfaces: list[str] = []
+    audit_required_by_surface: dict[str, str] = {}
+    audit_owner_by_surface: dict[str, str] = {}
+    for index, row in enumerate(audit_rows):
+        path = f"audit.genai_readiness[{index}]"
+        if not isinstance(row, dict):
+            fail(f"{path} must be an object")
+        surface = json_string(row.get("surface"), f"{path}.surface")
+        required = json_string(row.get("required_signals"), f"{path}.required_signals")
+        owner = json_string(row.get("owner"), f"{path}.owner")
+        if surface in audit_required_by_surface:
+            fail(f"duplicate canonical GenAI audit surface: {surface}")
+        audit_surfaces.append(surface)
+        audit_required_by_surface[surface] = required
+        audit_owner_by_surface[surface] = owner
+
+    projected_rows: list[list[str]] = []
+    canonical_surfaces: list[str] = []
+    for index, row in enumerate(canonical_rows):
+        path = f"instrumentation.genai_closure[{index}]"
+        if not isinstance(row, dict):
+            fail(f"{path} must be an object")
+        if set(row) != GENAI_JSON_FIELDS:
+            fail(
+                f"{path} fields must exactly equal {sorted(GENAI_JSON_FIELDS)}"
+            )
+        surface = json_string(row.get("surface"), f"{path}.surface")
+        required = json_string(
+            row.get("required_signals"), f"{path}.required_signals"
+        )
+        owner = json_string(row.get("owner"), f"{path}.owner")
+        implemented = json_string_list(
+            row.get("implemented_proven"), f"{path}.implemented_proven"
+        )
+        tests = json_string_list(row.get("tests"), f"{path}.tests")
+        evidence = json_string_list(row.get("evidence"), f"{path}.evidence")
+        remaining = json_string_list(
+            row.get("remaining_signals"), f"{path}.remaining_signals"
+        )
+        raw_status = row.get("status")
+        status = GENAI_JSON_STATUS_LABELS.get(raw_status)
+        if status is None:
+            fail(f"unsupported JSON GenAI closure status for {surface}: {raw_status}")
+        canonical_surfaces.append(surface)
+        if audit_required_by_surface.get(surface) != required:
+            fail(
+                "instrumentation JSON GenAI required signals disagree with the "
+                f"canonical audit for surface: {surface}"
+            )
+        if audit_owner_by_surface.get(surface) != owner:
+            fail(
+                "instrumentation JSON GenAI owner disagrees with the canonical "
+                f"audit for surface: {surface}"
+            )
+        if raw_status == "working" and (
+            not implemented or not tests or not evidence or remaining
+        ):
+            fail(
+                f"working JSON GenAI closure requires implementation, tests, evidence, "
+                f"and no remaining signals: {surface}"
+            )
+        if raw_status != "working" and not remaining:
+            fail(
+                f"non-working JSON GenAI closure must name remaining signals: {surface}"
+            )
+        projected_rows.append(
+            [
+                surface,
+                required,
+                "; ".join(implemented),
+                "; ".join(tests),
+                "; ".join(remaining) if remaining else "None",
+                status,
+            ]
+        )
+
+    if canonical_surfaces != audit_surfaces:
+        fail(
+            "instrumentation JSON genai_closure must follow canonical audit surface order: "
+            f"expected={audit_surfaces}, actual={canonical_surfaces}"
+        )
+    if markdown_rows != projected_rows:
+        fail(
+            "instrumentation Markdown GenAI closure disagrees with the current "
+            f"instrumentation JSON overlay: markdown={markdown_rows}, overlay={projected_rows}"
+        )
+
+
+def validate_json_projection(
+    closure_rows: list[list[str]],
+    genai_closure_rows: list[list[str]],
+    genai_detected: bool,
+    report_result: str,
+    audit_json_path: Path,
+    selection_json_path: Path | None,
+    instrumentation_json_path: Path | None,
+    verify_json_path: Path | None,
+) -> None:
+    if verify_json_path is None and instrumentation_json_path is None:
+        fail("a current --instrumentation-json/--verify-json overlay is required")
+    audit_json = load_json(audit_json_path, "audit")
+    authoritative_instrumentation_path = instrumentation_json_path
+    if verify_json_path is not None:
+        authoritative_instrumentation_path = (
+            verify_json_path.parent / "otel-instrumentation.json"
+        )
+        if not authoritative_instrumentation_path.is_file():
+            fail(
+                "--verify-json requires sibling otel-instrumentation.json as the "
+                "authoritative implementation overlay"
+            )
+    if (
+        authoritative_instrumentation_path is None
+        or not authoritative_instrumentation_path.is_file()
+    ):
+        fail("an authoritative instrumentation JSON overlay is required and must exist")
+    validate_bound_flow(
+        audit_json_path,
+        selection_json_path,
+        authoritative_instrumentation_path,
+        verify_json_path,
+    )
+    instrumentation_json = load_json(
+        authoritative_instrumentation_path, "instrumentation"
+    )
+    overlay_json_path = verify_json_path or instrumentation_json_path
+    assert overlay_json_path is not None
+    overlay_json = load_json(overlay_json_path, "overlay")
+    validate_overlay_bindings(
+        audit_json,
+        instrumentation_json,
+        overlay_json,
+        verify_json_path is not None,
+    )
+    overlay_result = overlay_json.get("meta", {}).get("result")
+    if report_result != overlay_result:
+        fail(
+            "instrumentation Markdown Result disagrees with the current JSON overlay: "
+            f"markdown={report_result}, overlay={overlay_result}"
+        )
+    closure_by_key = {(row[0], row[1]): row for row in closure_rows}
+    canonical_keys = [
+        (finding.get("priority"), finding.get("area"))
+        for finding in audit_json.get("findings", [])
+        if isinstance(finding, dict)
+    ]
+    markdown_keys = [(row[0], row[1]) for row in closure_rows]
+    if markdown_keys != canonical_keys:
+        fail(
+            "instrumentation Markdown closure rows must exactly follow canonical "
+            f"audit findings: markdown={markdown_keys}, audit={canonical_keys}"
+        )
+    instrumentation_by_id = {
+        row.get("id"): row
+        for row in instrumentation_json.get("findings", [])
+        if isinstance(row, dict)
+    }
+    overlay_status_by_id = {
+        row.get("id"): row.get("status")
+        for row in overlay_json.get("findings", [])
+        if isinstance(row, dict)
+    }
+    for finding in audit_json.get("findings", []):
+        if not isinstance(finding, dict):
+            fail("canonical audit findings must be objects")
+        finding_id = finding.get("id")
+        key = (finding.get("priority"), finding.get("area"))
+        row = closure_by_key.get(key)
+        if row is None:
+            continue
+        raw_status = overlay_status_by_id.get(finding_id, "deferred")
+        expected = JSON_STATUS_LABELS.get(raw_status)
+        if expected is None:
+            fail(f"unsupported JSON closure status for {finding_id}: {raw_status}")
+        if row[4] != expected:
+            fail(
+                "instrumentation Markdown closure disagrees with the current JSON "
+                f"overlay for {finding_id}: markdown={row[4]}, overlay={expected}"
+            )
+
+        implementation = instrumentation_by_id.get(finding_id)
+        if implementation is None:
+            continue
+        expected_content = [
+            "; ".join(
+                json_string_list(
+                    implementation.get("changes"),
+                    f"instrumentation.findings[{finding_id}].changes",
+                )
+            ),
+            "; ".join(
+                json_string_list(
+                    implementation.get("tests"),
+                    f"instrumentation.findings[{finding_id}].tests",
+                )
+            ),
+            "; ".join(
+                json_string_list(
+                    implementation.get("evidence"),
+                    f"instrumentation.findings[{finding_id}].evidence",
+                )
+            ),
+        ]
+        markdown_content = [row[2], row[3], row[5]]
+        if markdown_content != expected_content:
+            fail(
+                "instrumentation Markdown closure content disagrees with the "
+                f"current instrumentation JSON for {finding_id}: "
+                f"markdown={markdown_content}, overlay={expected_content}"
+            )
+
+    audit_genai_rows = audit_json.get("genai_readiness", [])
+    if not isinstance(audit_genai_rows, list):
+        fail("canonical audit genai_readiness must be an array")
+    canonical_genai_detected = bool(audit_genai_rows)
+    if canonical_genai_detected != genai_detected:
+        fail(
+            "instrumentation Markdown GenAI ownership disagrees with canonical audit JSON"
+        )
+    if not genai_detected:
+        return
+
+    validate_genai_json_projection(
+        genai_closure_rows,
+        audit_json,
+        instrumentation_json,
+    )
+
+
+def validate(
+    audit_path: Path,
+    instrumentation_path: Path,
+    audit_json_path: Path | None = None,
+    selection_json_path: Path | None = None,
+    instrumentation_json_path: Path | None = None,
+    verify_json_path: Path | None = None,
+) -> None:
     audit = audit_path.read_text(encoding="utf-8")
     instrumentation = instrumentation_path.read_text(encoding="utf-8")
 
@@ -245,6 +651,7 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
 
     genai_surface_count = 0
     genai_result_blockers = set()
+    genai_closure_rows: list[list[str]] = []
     if genai_detected:
         readiness_header, readiness_rows = table(
             section(audit, "## GenAI Readiness"), "audit GenAI Readiness"
@@ -271,7 +678,9 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
 
         closure_by_surface = {}
         for row in genai_closure_rows:
-            if len(row) != len(GENAI_CLOSURE_HEADER) or any(not cell for cell in row):
+            if len(row) != len(GENAI_CLOSURE_HEADER) or any(
+                not row[index] for index in (0, 1, 4, 5)
+            ):
                 fail(f"malformed GenAI closure row: {row}")
             surface, required, implemented, _tests, remaining, result = row
             if result not in GENAI_RESULTS:
@@ -281,9 +690,9 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
             if result == "Working":
                 if remaining != "None":
                     fail(f"Working GenAI surface must have Remaining signals None: {surface}")
-                if UNPROVEN_PROOF.search(implemented):
+                if not implemented or UNPROVEN_PROOF.search(implemented):
                     fail(f"Working GenAI surface must name implemented or proven signals: {surface}")
-                if UNPROVEN_PROOF.search(_tests):
+                if not _tests or UNPROVEN_PROOF.search(_tests):
                     fail(f"Working GenAI surface must name executed proof: {surface}")
             elif remaining == "None":
                 fail(f"non-Working GenAI surface must name remaining signals: {surface}")
@@ -318,6 +727,26 @@ def validate(audit_path: Path, instrumentation_path: Path) -> None:
             f"genai={sorted(genai_result_blockers)}"
         )
 
+    if instrumentation_json_path is not None and verify_json_path is not None:
+        fail("--instrumentation-json and --verify-json are mutually exclusive")
+    overlay_present = (
+        instrumentation_json_path is not None or verify_json_path is not None
+    )
+    audit_json_present = audit_json_path is not None
+    if audit_json_present != overlay_present:
+        fail("--audit-json and a current --instrumentation-json/--verify-json must be used together")
+    if audit_json_path is not None and overlay_present:
+        validate_json_projection(
+            closure_rows,
+            genai_closure_rows,
+            genai_detected,
+            report_result,
+            audit_json_path,
+            selection_json_path,
+            instrumentation_json_path,
+            verify_json_path,
+        )
+
     print(
         f"PASS: {instrumentation_path} closes {len(closure_rows)}/"
         f"{len(gap_rows)} prioritized audit rows and {genai_surface_count} "
@@ -329,8 +758,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("audit", type=Path)
     parser.add_argument("instrumentation", type=Path)
+    parser.add_argument("--audit-json", type=Path)
+    parser.add_argument("--selection-json", type=Path)
+    overlay = parser.add_mutually_exclusive_group()
+    overlay.add_argument("--instrumentation-json", type=Path)
+    overlay.add_argument("--verify-json", type=Path)
     args = parser.parse_args()
-    validate(args.audit, args.instrumentation)
+    validate(
+        args.audit,
+        args.instrumentation,
+        args.audit_json,
+        args.selection_json,
+        args.instrumentation_json,
+        args.verify_json,
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2 @@
+The bounded fixture capture contains one GET /health SERVER span with
+http.route=/health and no manual HttpRequest span.

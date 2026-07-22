@@ -1,8 +1,8 @@
 # Acceptance Scenario Coverage
 
-Use this reference whenever `.observe/otel.md` exists or the verification scope
-includes workflows, routes, jobs, startup, streaming, tools, retrieval,
-redaction, or error paths.
+Use this reference whenever `.observe/otel-audit.json` or legacy
+`.observe/otel.md` exists, or the verification scope includes workflows,
+routes, jobs, startup, streaming, tools, retrieval, redaction, or error paths.
 
 ## Goal
 
@@ -19,7 +19,14 @@ scenario-specific execution and evidence.
 
 ## Derive Acceptance Scenarios From The Audit
 
-Read `.observe/otel.md` and extract scenarios from these places when present:
+For a canonical flow, read `.observe/otel-audit.json`, the bound
+`.observe/otel-selection.json`, and `.observe/otel-instrumentation.json`.
+Extract only the approved findings' referenced scenarios and environments, and
+preserve their stable IDs. Do not derive verification obligations from
+unselected findings.
+
+On the legacy fallback, read `.observe/otel.md`. Extract scenarios from these
+places when present:
 
 - `Verification Plan / Test Environments`: resolve each reusable runtime,
   fixture, and prerequisite profile by its stable environment ID.
@@ -134,6 +141,30 @@ Use stable ids such as:
 - A source-only code read can document expected telemetry, but it does not prove
   the code works. Leave `App code proof` empty or `source only` and keep the
   status below fully verified.
+
+## Nested Topology Harnesses
+
+Use a nested temporary harness only when topology is in scope and the real path
+cannot run. Topology is necessary for workflow/agent/tool/retrieval/memory
+traces, GenAI flow graphs, LangGraph, Temporal, queues/jobs, async handoff, MCP
+tool execution, streaming lifecycle, parent/child shape, duplicate-span
+prevention, or an explorer DAG.
+
+- Derive expected edges from the inventories, for example
+  `workflow -> agent -> llm.call`, `agent -> tool`, `tool -> mcp`, or
+  `stream -> send_failed event`.
+- Prefer real instrumented call sites. If imports are blocked, use a generated
+  temporary SDK contract with the same nesting and label it
+  `generated temporary nested SDK contract`.
+- Keep child spans active inside the parent span context. Do not create all
+  spans as siblings under a synthetic root unless topology is out of scope.
+- For async or queue boundaries, use parent/child when context propagates
+  synchronously and span links when the architecture expects links.
+- Assert topology after export by querying parent span ids, links, span depth,
+  or Obstudio flow nodes/edges when available.
+
+Generated SDK topology is contract-only evidence. It does not prove the
+application executed the corresponding path.
 
 ## Report Requirements
 

@@ -45,7 +45,7 @@ ACCEPTANCE_SCENARIO_HEADER = [
     "Environment",
 ]
 PRIORITIES = {"required", "recommended", "deferred"}
-INSTRUMENT_MODES = {"default", "fix all", "manual decision"}
+INSTRUMENT_MODES = {"default", "fix all", "manual decision", "external follow-up"}
 PROOF_LEVELS = {"focused call-site", "full runtime", "either"}
 GENAI_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 INCIDENT_READINESS_HEADER = [
@@ -70,6 +70,7 @@ REQUIRED_TOP_LEVEL_HEADINGS = [
 ]
 ALLOWED_TOP_LEVEL_HEADINGS = set(REQUIRED_TOP_LEVEL_HEADINGS) | {
     "## Routes",
+    "## Scan Blockers",
     "## GenAI Readiness",
 }
 
@@ -101,15 +102,30 @@ def subsection(text: str, heading: str) -> str:
     return text[start : start + next_heading.start()] if next_heading else text[start:]
 
 
+def split_row(line: str) -> list[str]:
+    value = line.strip()
+    if value.startswith("|"):
+        value = value[1:]
+    if value.endswith("|") and not value.endswith(r"\|"):
+        value = value[:-1]
+    return [
+        cell.replace(r"\|", "|").strip()
+        for cell in re.split(r"(?<!\\)\|", value)
+    ]
+
+
 def table(body: str, label: str) -> tuple[list[str], list[list[str]]]:
-    lines = [line.strip() for line in body.splitlines() if line.strip().startswith("|")]
+    lines = []
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("|"):
+            lines.append(line)
+        elif lines and line:
+            break
     if len(lines) < 2:
         fail(f"{label} table is missing")
-    header = [cell.strip() for cell in lines[0].strip("|").split("|")]
-    rows = [
-        [cell.strip() for cell in line.strip("|").split("|")]
-        for line in lines[2:]
-    ]
+    header = split_row(lines[0])
+    rows = [split_row(line) for line in lines[2:]]
     return header, rows
 
 
@@ -174,8 +190,14 @@ def validate(path: Path) -> None:
                 "and before Gaps"
             )
 
-    if not re.search(r"^\*\*Status:\*\* (Pass|Partial|Blocked)$", text, re.MULTILINE):
+    status_match = re.search(
+        r"^\*\*Status:\*\* (Pass|Partial|Blocked)$", text, re.MULTILINE
+    )
+    if not status_match:
         fail("Status must be Pass, Partial, or Blocked")
+    status = status_match.group(1)
+    if status == "Blocked" and "Scan blocked:" not in section(text, "## Executive Summary"):
+        fail("Status Blocked requires structured scan-blocker details in Executive Summary")
     evidence_header, evidence_rows = table(section(text, "## Audit Evidence"), "Audit Evidence")
     if evidence_header != EVIDENCE_HEADER:
         fail(f"Audit Evidence header must be {EVIDENCE_HEADER}")
@@ -196,6 +218,7 @@ def validate(path: Path) -> None:
     if not ownership_row[2]:
         fail("GenAI ownership evidence must cite source paths or scan evidence")
 
+    readiness_rows: list[list[str]] = []
     if genai_detected:
         readiness_header, readiness_rows = table(
             section(text, "## GenAI Readiness"), "GenAI Readiness"
@@ -220,6 +243,33 @@ def validate(path: Path) -> None:
         fail(f"Gaps header must be {GAP_HEADER}")
     if not gap_rows and "No gaps found." not in gap_body:
         fail("an empty Gaps table must be followed by 'No gaps found.'")
+    if gap_rows and "No gaps found." in gap_body:
+        fail("a non-empty Gaps table must not say 'No gaps found.'")
+    if status == "Pass" and gap_rows:
+        fail("Status Pass requires zero source-visible gaps")
+    if status == "Partial" and not gap_rows:
+        fail("Status Partial requires at least one source-visible gap")
+
+    gap_areas = {row[1] for row in gap_rows if len(row) == len(GAP_HEADER)}
+    incomplete_genai_surfaces = {
+        row[0] for row in readiness_rows if row[1] in {"partial", "missing"}
+    }
+    unmapped_genai_surfaces = sorted(incomplete_genai_surfaces - gap_areas)
+    if unmapped_genai_surfaces:
+        fail(
+            "partial or missing GenAI readiness surfaces require identical "
+            f"prioritized Gaps Area values: {unmapped_genai_surfaces}"
+        )
+    covered_genai_with_gaps = sorted(
+        {row[0] for row in readiness_rows if row[1] == "covered"} & gap_areas
+    )
+    if covered_genai_with_gaps:
+        fail(
+            "covered GenAI readiness surfaces must not have prioritized gaps: "
+            f"{covered_genai_with_gaps}"
+        )
+    if status == "Pass" and any(row[1] != "covered" for row in readiness_rows):
+        fail("Status Pass requires every GenAI readiness surface to be covered")
 
     areas = set()
     gap_rows_by_area: dict[str, list[list[str]]] = {}
@@ -238,6 +288,7 @@ def validate(path: Path) -> None:
         ):
             ownership_terms = (
                 "app-owned",
+                "service-owned",
                 "framework-owned",
                 "bridge-owned",
                 "agent-owned",
@@ -284,6 +335,14 @@ def validate(path: Path) -> None:
                     "partial or missing Incident Readiness area has no identical "
                     f"prioritized Gaps Area: {row[0]}"
                 )
+        covered_incident_with_gaps = sorted(
+            {row[0] for row in incident_rows if row[1] == "covered"} & areas
+        )
+        if covered_incident_with_gaps:
+            fail(
+                "covered Incident Readiness areas must not have prioritized gaps: "
+                f"{covered_incident_with_gaps}"
+            )
 
     flow = section(text, "## Signal Flow")
     if "### Component Flow Map" not in flow:

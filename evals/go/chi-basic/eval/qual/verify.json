@@ -1,0 +1,22 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "canonical-proof-packet",
+      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical proof rather than changing application code. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, and report the exact validated result."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe/otel-audit.json, otel-selection.json, otel-instrumentation.json, otel-verify.json, and otel-verify.md.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Runs the canonical bound-flow validator and preserves exact audit_sha256 and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
+    "Keeps the verify aggregate result Pass only because the selected finding, mapped scenario, and both telemetry item results are working with direct proof.",
+    "Preserves structured removal_proof for HttpRequest with both absence_assertion_passed and replacement_assertion_passed true and the distinct GET /health replacement signal.",
+    "Requires direct item-local proof for GET /health with http.route and does not let the HttpRequest absence assertion prove the replacement item by itself.",
+    "Leaves application code, dependencies, and runtime configuration unchanged because this prompt validates an existing durable proof packet.",
+    "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers."
+  ]
+}

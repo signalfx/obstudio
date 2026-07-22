@@ -135,3 +135,4 @@ class ValidationResult(BaseModel):
     sanity_check_count: int = 0
     rubric_check_count: int = 0
     runtime_check_count: int = 0
+    provenance: dict[str, object] = Field(default_factory=dict)
