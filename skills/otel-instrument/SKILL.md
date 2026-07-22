@@ -424,6 +424,26 @@ the exact item or call site, otherwise `false`. For a removed item, require a
 bounded capture proving both absence of the removed signal and presence of its
 intended replacement owner before setting it `true`.
 
+After child verification, derive the instrumentation report's top-level result
+from both authorities: verification finding/scenario/item state and the
+instrumentation-owned `genai_closure`. A passing verification overlay does not
+erase a partial or failed GenAI closure. `not_working` in either authority is
+`Fail`. A verification blocker is `Blocked` only when no instrumentation or
+GenAI proof succeeded; when any implementation-owned proof exists, the
+aggregate is `Partial`. Otherwise unresolved proof or GenAI signals are
+`Partial`, and `Pass` requires verified findings plus only `working`,
+`deferred`, or `owner_mapped` GenAI closure rows.
+Use that aggregate result on the first screen of the HTML report, and show one
+concise GenAI closure table with every surface, current status, ready signals,
+remaining signals, and owner. Do not hide unresolved GenAI scope behind a
+passing finding-verification result.
+Count implementation-owned proof only from a `working` finding with executed,
+non-negative tests and durable evidence, or a `working`/`partial` GenAI row
+with nonempty implemented/proven signals plus executed tests and durable
+evidence. Source references, `not run`, blocked-test prose, owner mappings, and
+the mere presence of a `tests` or `evidence` list do not turn a fully blocked
+verification run into `Partial`.
+
 On each selected-finding card, render one plain status such as **Verification
 incomplete**, followed by a three-column **Telemetry
 change / What was observed / Status** table. State local delivery and Splunk
@@ -628,7 +648,7 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 
 #### Implementation Rules
 
-- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `go-redis/redisotel`, `XSAM/otelsql`).
+- Use only official OpenTelemetry packages (`go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib`, `@opentelemetry/*`, `opentelemetry-*`). Do not use community or third-party OTel wrappers. The only exceptions are library-maintained integrations where no official package exists (e.g. `github.com/redis/go-redis/extra/redisotel/v9`, `XSAM/otelsql`).
 - Do not initialize the SDK more than once per process.
 - Find any existing OTel setup before adding new code. Extend it. Treat lazy
   provider helpers and providers initialized on first instrument creation as

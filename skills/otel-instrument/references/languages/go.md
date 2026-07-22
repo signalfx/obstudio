@@ -18,7 +18,7 @@ matching the frameworks and clients detected in the codebase.
 | `gin-gonic/gin`          | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`            | spans only      | Route-aware HTTP spans                                                                  |
 | `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc`             | spans + metrics | gRPC client/server spans and metrics                                                    |
 | `database/sql`           | `github.com/XSAM/otelsql`                                                                 | spans only      | SQL query spans with `db.statement`                                                     |
-| `go-redis/redis`         | `github.com/redis/go-redis/extra/redisotel`                                               | spans only      | Redis command spans                                                                     |
+| `github.com/redis/go-redis/v9` | `github.com/redis/go-redis/extra/redisotel/v9`                                    | spans + metrics | Redis command spans and client metrics                                                  |
 | `runtime`                | `go.opentelemetry.io/contrib/instrumentation/runtime`                                     | metrics only    | Goroutine count, memory, GC metrics                                                     |
 | `host`                   | `go.opentelemetry.io/contrib/instrumentation/host`                                        | metrics only    | CPU, memory, network host metrics                                                       |
 | `segmentio/kafka-go`     | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | spans only      | Kafka producer/consumer spans                                                           |
@@ -265,6 +265,9 @@ exact compact blocker.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
 Call it early in `main()`.
+Honor the project's `go` directive when choosing standard-library APIs. This
+template deliberately avoids `errors.Join` so it remains usable before Go 1.20;
+do not replace the compatibility helper unless the project directive permits it.
 
 **File**: `otel.go`
 
@@ -273,7 +276,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -316,7 +319,7 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 	)
 	metricExporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {
-		return nil, errors.Join(err, tp.Shutdown(ctx))
+		return nil, combineErrors(err, tp.Shutdown(ctx))
 	}
 
 	mp := sdkmetric.NewMeterProvider(
@@ -335,9 +338,21 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 	))
 
 	shutdown := func(ctx context.Context) error {
-		return errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))
+		return combineErrors(tp.Shutdown(ctx), mp.Shutdown(ctx))
 	}
 	return shutdown, nil
+}
+
+// combineErrors preserves the primary error and the secondary cleanup failure
+// without requiring errors.Join, which was added in Go 1.20.
+func combineErrors(primary, secondary error) error {
+	if primary == nil {
+		return secondary
+	}
+	if secondary == nil {
+		return primary
+	}
+	return fmt.Errorf("%w; additional error: %v", primary, secondary)
 }
 
 func metricExportInterval() time.Duration {

@@ -76,6 +76,45 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
+NEGATIVE_OR_UNCERTAIN_PROOF = re.compile(
+    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
+    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
+    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
+    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
+    r"\btests?\s+(?:are\s+)?blocked\b)",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
+    r"npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_EXECUTED_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"go\s+test|pytest|cargo\s+test|npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+POSITIVE_PROOF_EVIDENCE = re.compile(
+    r"(?:^|/)\.observe/evidence/|"
+    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
+    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
+    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
+    r"exported|recorded|assertion)\b",
+    re.IGNORECASE,
+)
+DURABLE_ARTIFACT_REFERENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
+    re.IGNORECASE,
+)
+NON_PROOF_ARTIFACT_LABEL = re.compile(
+    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
+    r"pending|skipped|unknown)\b",
+    re.IGNORECASE,
+)
 JSON_STATUS_LABELS = {
     "working": "Working",
     "not_working": "Not working",
@@ -102,10 +141,115 @@ GENAI_JSON_FIELDS = {
     "remaining_signals",
     "status",
 }
+GENAI_COMPLETE_STATUSES = {"working", "deferred", "owner_mapped"}
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
+
+
+def has_meaningful_instrumentation_proof(instrumentation_json: dict) -> bool:
+    """Return whether implementation-owned scope records any completed proof."""
+
+    def affirmative_entries(value: object, pattern: re.Pattern[str]) -> bool:
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(
+                isinstance(item, str)
+                and bool(item.strip())
+                and not NEGATIVE_OR_UNCERTAIN_PROOF.search(
+                    re.sub(r"[._/-]+", " ", item)
+                )
+                and pattern.search(re.sub(r"[._/-]+", " ", item))
+                for item in value
+            )
+        )
+
+    def positive_evidence(value: object) -> bool:
+        def positive_item(item: object) -> bool:
+            if not isinstance(item, str) or not item.strip():
+                return False
+            artifact_refs = list(DURABLE_ARTIFACT_REFERENCE.finditer(item))
+            if any(
+                NON_PROOF_ARTIFACT_LABEL.search(
+                    re.sub(r"[._/\\-]+", " ", match.group(0))
+                )
+                for match in artifact_refs
+            ):
+                return False
+            outcome_prose = DURABLE_ARTIFACT_REFERENCE.sub(" ", item)
+            return bool(
+                not NEGATIVE_OR_UNCERTAIN_PROOF.search(
+                    re.sub(r"[._/\\-]+", " ", outcome_prose)
+                )
+                and POSITIVE_PROOF_EVIDENCE.search(item)
+            )
+
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(positive_item(item) for item in value)
+        )
+
+    for finding in instrumentation_json.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        if (
+            finding.get("status") == "working"
+            and affirmative_entries(
+                finding.get("tests"), AFFIRMATIVE_EXECUTED_PROOF
+            )
+            and positive_evidence(finding.get("evidence"))
+        ):
+            return True
+
+    for row in instrumentation_json.get("genai_closure", []):
+        if not isinstance(row, dict):
+            continue
+        if (
+            row.get("status") in {"working", "partial"}
+            and affirmative_entries(
+                row.get("implemented_proven"), AFFIRMATIVE_IMPLEMENTATION_PROOF
+            )
+            and affirmative_entries(row.get("tests"), AFFIRMATIVE_EXECUTED_PROOF)
+            and positive_evidence(row.get("evidence"))
+        ):
+            return True
+    return False
+
+
+def expected_report_result(
+    instrumentation_json: dict,
+    overlay_json: dict,
+    *,
+    verification_overlay: bool,
+) -> str:
+    """Aggregate finding verification with implementation-owned GenAI closure."""
+    if not verification_overlay:
+        return str(instrumentation_json.get("meta", {}).get("result"))
+
+    verification_result = overlay_json.get("meta", {}).get("result")
+    if verification_result not in {"Pass", "Partial", "Fail", "Blocked", "Not run"}:
+        fail(f"unsupported verification result: {verification_result}")
+    genai_statuses = [
+        row.get("status")
+        for row in instrumentation_json.get("genai_closure", [])
+        if isinstance(row, dict)
+    ]
+    if verification_result == "Fail" or "not_working" in genai_statuses:
+        return "Fail"
+    if verification_result == "Blocked":
+        return (
+            "Partial"
+            if has_meaningful_instrumentation_proof(instrumentation_json)
+            else "Blocked"
+        )
+    if verification_result in {"Partial", "Not run"}:
+        return "Partial"
+    if all(status in GENAI_COMPLETE_STATUSES for status in genai_statuses):
+        return "Pass"
+    return "Partial"
 
 
 def heading_match(text: str, heading: str) -> re.Match[str]:
@@ -436,11 +580,16 @@ def validate_json_projection(
         overlay_json,
         verify_json_path is not None,
     )
-    overlay_result = overlay_json.get("meta", {}).get("result")
-    if report_result != overlay_result:
+    expected_result = expected_report_result(
+        instrumentation_json,
+        overlay_json,
+        verification_overlay=verify_json_path is not None,
+    )
+    if report_result != expected_result:
         fail(
-            "instrumentation Markdown Result disagrees with the current JSON overlay: "
-            f"markdown={report_result}, overlay={overlay_result}"
+            "instrumentation Markdown Result disagrees with the aggregate current "
+            "state from finding verification and instrumentation GenAI closure: "
+            f"markdown={report_result}, expected={expected_result}"
         )
     closure_by_key = {(row[0], row[1]): row for row in closure_rows}
     canonical_keys = [
