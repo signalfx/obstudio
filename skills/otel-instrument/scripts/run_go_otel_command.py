@@ -22,8 +22,8 @@ RUNNER = Path(__file__).resolve()
 RESOLVER = RUNNER.with_name("resolve_go_otel_versions.py")
 ALLOWED_GO_SUBCOMMANDS = {"build", "list", "run", "test"}
 BOOTSTRAP_FOLLOWUP_SUBCOMMANDS = {"build", "list", "run", "test"}
-FORBIDDEN_EXTERNAL_TOOL_FLAGS = {"-exec", "-toolexec", "-vettool"}
-FORBIDDEN_BOOTSTRAP_FLAGS = {"-mod", "-modfile", "-overlay"}
+FORBIDDEN_EXTERNAL_TOOL_FLAGS = {"exec", "toolexec", "vettool"}
+FORBIDDEN_BOOTSTRAP_FLAGS = {"mod", "modfile", "overlay"}
 LEDGER_SCHEMA_VERSION = 1
 LEDGER_KIND = "go-otel-bootstrap-accepted-plan"
 OWNED_DIRECTORY = Path(".observe") / "tmp" / "go-otel-resolver"
@@ -87,14 +87,18 @@ class CommandError(ValueError):
     pass
 
 
+def status_is_link_or_reparse(status: os.stat_result) -> bool:
+    reparse_mask = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = getattr(status, "st_file_attributes", 0)
+    return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
+
+
 def path_is_link_or_reparse(path: Path) -> bool:
     try:
         status = os.lstat(path)
     except OSError:
         return False
-    reparse_mask = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
-    attributes = getattr(status, "st_file_attributes", 0)
-    return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
+    return status_is_link_or_reparse(status)
 
 
 def _detect_descriptor_cleanup_support() -> bool:
@@ -111,8 +115,26 @@ def _detect_descriptor_cleanup_support() -> bool:
 _DESCRIPTOR_CLEANUP_SUPPORTED = _detect_descriptor_cleanup_support()
 
 
+def _detect_descriptor_publication_support() -> bool:
+    required_dir_fd = {os.open, os.rename, os.stat, os.unlink}
+    return (
+        os.name == "posix"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and required_dir_fd.issubset(os.supports_dir_fd)
+        and os.stat in os.supports_follow_symlinks
+    )
+
+
+_DESCRIPTOR_PUBLICATION_SUPPORTED = _detect_descriptor_publication_support()
+
+
 def descriptor_cleanup_supported() -> bool:
     return _DESCRIPTOR_CLEANUP_SUPPORTED
+
+
+def descriptor_publication_supported() -> bool:
+    return _DESCRIPTOR_PUBLICATION_SUPPORTED
 
 
 def descriptor_mode_supported() -> bool:
@@ -408,7 +430,7 @@ def select_argv(
     forbidden = [
         item
         for item in command[2:]
-        if item.split("=", 1)[0] in FORBIDDEN_EXTERNAL_TOOL_FLAGS
+        if go_flag_name(item) in FORBIDDEN_EXTERNAL_TOOL_FLAGS
     ]
     if forbidden:
         raise CommandError(
@@ -416,6 +438,17 @@ def select_argv(
             + ", ".join(forbidden)
         )
     return command[1], command
+
+
+def go_flag_name(argument: str) -> str | None:
+    """Normalize the one- and two-dash spellings accepted by Go's flag parser."""
+
+    token = argument.split("=", 1)[0]
+    if token.startswith("--"):
+        return token[2:]
+    if token.startswith("-"):
+        return token[1:]
+    return None
 
 
 def command_environment(plan_env: dict[str, str]) -> dict[str, str]:
@@ -493,32 +526,166 @@ def snapshot_project(project: Path) -> dict[str, tuple[bool, bytes, int | None]]
     return snapshot
 
 
-def atomic_write(path: Path, payload: bytes, mode: int = 0o600) -> None:
+def file_identity(status: os.stat_result) -> tuple[int, int]:
+    return status.st_dev, status.st_ino
+
+
+def require_regular_target_descriptor(parent: int, name: str) -> None:
+    try:
+        status = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if status_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+        raise CommandError(
+            f"atomic-write target must be a regular file, not a link: {name}"
+        )
+
+
+def require_regular_target_portable(path: Path) -> None:
+    if not os.path.lexists(path):
+        return
+    status = os.lstat(path)
+    if status_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+        raise CommandError(
+            f"atomic-write target must be a regular file, not a link: {path}"
+        )
+
+
+def write_all(descriptor: int, payload: bytes) -> None:
+    offset = 0
+    while offset < len(payload):
+        written = os.write(descriptor, payload[offset:])
+        if written <= 0:
+            raise OSError("atomic write made no progress")
+        offset += written
+
+
+def atomic_write_descriptor(path: Path, payload: bytes, mode: int) -> None:
+    parent = os.open(
+        path.parent,
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    temporary_name = f".{path.name}.{os.getpid()}.tmp"
+    descriptor: int | None = None
+    temporary_identity: tuple[int, int] | None = None
+    published = False
+    try:
+        require_regular_target_descriptor(parent, path.name)
+        try:
+            descriptor = os.open(
+                temporary_name,
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0),
+                mode,
+                dir_fd=parent,
+            )
+        except FileExistsError:
+            raise CommandError(
+                f"temporary path already exists: {path.parent / temporary_name}"
+            ) from None
+        if descriptor_mode_supported():
+            os.fchmod(descriptor, mode)
+        write_all(descriptor, payload)
+        os.fsync(descriptor)
+        temporary_identity = file_identity(os.fstat(descriptor))
+        named_status = os.stat(
+            temporary_name, dir_fd=parent, follow_symlinks=False
+        )
+        if (
+            status_is_link_or_reparse(named_status)
+            or not stat.S_ISREG(named_status.st_mode)
+            or file_identity(named_status) != temporary_identity
+        ):
+            raise CommandError("temporary file identity changed before publication")
+        require_regular_target_descriptor(parent, path.name)
+        os.rename(
+            temporary_name,
+            path.name,
+            src_dir_fd=parent,
+            dst_dir_fd=parent,
+        )
+        published = True
+        published_status = os.stat(
+            path.name, dir_fd=parent, follow_symlinks=False
+        )
+        if (
+            status_is_link_or_reparse(published_status)
+            or not stat.S_ISREG(published_status.st_mode)
+            or file_identity(published_status) != temporary_identity
+        ):
+            raise CommandError("published file identity changed during publication")
+        os.fsync(parent)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if not published and temporary_identity is not None:
+            try:
+                current = os.stat(
+                    temporary_name, dir_fd=parent, follow_symlinks=False
+                )
+            except FileNotFoundError:
+                pass
+            else:
+                if file_identity(current) == temporary_identity:
+                    os.unlink(temporary_name, dir_fd=parent)
+        os.close(parent)
+
+
+def atomic_write_portable(path: Path, payload: bytes, mode: int) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    if temporary.exists() or temporary.is_symlink():
+    if os.path.lexists(temporary):
         raise CommandError(f"temporary path already exists: {temporary}")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     descriptor: int | None = None
+    temporary_identity: tuple[int, int] | None = None
+    published = False
     try:
         descriptor = os.open(temporary, flags, mode)
         if descriptor_mode_supported():
             os.fchmod(descriptor, mode)
-        with os.fdopen(descriptor, "wb") as stream:
-            descriptor = None
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
+        write_all(descriptor, payload)
+        os.fsync(descriptor)
+        temporary_identity = file_identity(os.fstat(descriptor))
+        named_status = os.lstat(temporary)
+        if (
+            status_is_link_or_reparse(named_status)
+            or not stat.S_ISREG(named_status.st_mode)
+            or file_identity(named_status) != temporary_identity
+        ):
+            raise CommandError("temporary file identity changed before publication")
+        require_regular_target_portable(path)
         os.replace(temporary, path)
-    except BaseException:
+        published = True
+        published_status = os.lstat(path)
+        if (
+            status_is_link_or_reparse(published_status)
+            or not stat.S_ISREG(published_status.st_mode)
+            or file_identity(published_status) != temporary_identity
+        ):
+            raise CommandError("published file identity changed during publication")
+    finally:
         if descriptor is not None:
             os.close(descriptor)
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
-        raise
+        if not published and temporary_identity is not None:
+            try:
+                current = os.lstat(temporary)
+            except FileNotFoundError:
+                pass
+            else:
+                if file_identity(current) == temporary_identity:
+                    temporary.unlink()
+
+
+def atomic_write(path: Path, payload: bytes, mode: int = 0o600) -> None:
+    if descriptor_publication_supported():
+        atomic_write_descriptor(path, payload, mode)
+    else:
+        atomic_write_portable(path, payload, mode)
 
 
 def restore_project(
@@ -1190,7 +1357,7 @@ def run_ledger_followup(
     forbidden = [
         item
         for item in argv[2:]
-        if item.split("=", 1)[0] in FORBIDDEN_BOOTSTRAP_FLAGS
+        if go_flag_name(item) in FORBIDDEN_BOOTSTRAP_FLAGS
     ]
     if forbidden:
         raise CommandError(
@@ -1209,6 +1376,9 @@ def run_ledger_followup(
     ledger = plan["ledger"]
     if not isinstance(ledger, dict):
         raise CommandError("accepted-plan ledger is invalid")
+    if action == "mod" and return_code != 0:
+        restore_project(project, snapshot)
+        return return_code
     if action == "mod" and return_code == 0:
         try:
             updated = verify_post_edit(project, resolver, ledger)

@@ -26,6 +26,7 @@ MAX_CANDIDATE_REJECTIONS = 32
 MAX_CLOSURE_MODULES = 256
 MAX_CLOSURE_STEPS = 1024
 MAX_REQUIREMENTS_PER_GO_MOD = 512
+MAX_CACHE_DIRECTORY_ENTRIES = 4_096
 PROXY_ARTIFACT_SUFFIXES = ("mod", "info", "zip", "ziphash")
 
 OTELHTTP_MODULE = (
@@ -381,29 +382,65 @@ def proxy_artifacts(
     return artifacts, missing
 
 
+def bounded_cache_entries(
+    directory: Path, max_entries: int
+) -> tuple[list[Path], bool]:
+    """Return sorted entries only when the whole directory fits the bound."""
+
+    if max_entries < 1:
+        raise ValueError("max_entries must be at least 1")
+    entries: list[Path] = []
+    with os.scandir(directory) as iterator:
+        for entry in iterator:
+            if len(entries) >= max_entries:
+                return [], True
+            entries.append(directory / entry.name)
+    return sorted(entries, key=lambda path: path.name), False
+
+
 def discover_otelhttp_sources(
-    cache: Path, warnings: Warnings
-) -> tuple[dict[str, list[tuple[Path, str]]], bool]:
+    cache: Path,
+    warnings: Warnings,
+    max_entries: int | None = None,
+) -> tuple[dict[str, list[tuple[Path, str]]], bool, int, int]:
     sources: dict[str, list[tuple[Path, str]]] = {}
     scan_failed = False
+    directories_truncated = 0
+    entries_omitted_at_least = 0
+    entry_limit = (
+        MAX_CACHE_DIRECTORY_ENTRIES if max_entries is None else max_entries
+    )
 
     parts = OTELHTTP_MODULE.split("/")
     extracted_parent = cache.joinpath(*parts[:-1])
     extracted_prefix = f"{parts[-1]}@"
     if extracted_parent.is_dir():
         try:
-            entries = sorted(extracted_parent.iterdir(), key=lambda path: path.name)
+            entries, truncated = bounded_cache_entries(
+                extracted_parent, entry_limit
+            )
         except OSError as error:
             warnings.add(f"could not scan cached otelhttp modules: {error}")
             scan_failed = True
         else:
-            for entry in entries:
-                if not entry.name.startswith(extracted_prefix):
-                    continue
-                version = entry.name[len(extracted_prefix) :]
-                go_mod = entry / "go.mod"
-                if go_mod.is_file():
-                    sources.setdefault(version, []).append((go_mod, "extracted"))
+            if truncated:
+                warnings.add(
+                    "cached otelhttp module directory exceeded the "
+                    f"{entry_limit}-entry scan limit"
+                )
+                scan_failed = True
+                directories_truncated += 1
+                entries_omitted_at_least += 1
+            else:
+                for entry in entries:
+                    if not entry.name.startswith(extracted_prefix):
+                        continue
+                    version = entry.name[len(extracted_prefix) :]
+                    go_mod = entry / "go.mod"
+                    if go_mod.is_file():
+                        sources.setdefault(version, []).append(
+                            (go_mod, "extracted")
+                        )
 
     download_dir = (
         cache
@@ -414,20 +451,36 @@ def discover_otelhttp_sources(
     )
     if download_dir.is_dir():
         try:
-            entries = sorted(download_dir.iterdir(), key=lambda path: path.name)
+            entries, truncated = bounded_cache_entries(
+                download_dir, entry_limit
+            )
         except OSError as error:
             warnings.add(f"could not scan downloaded otelhttp metadata: {error}")
             scan_failed = True
         else:
-            for entry in entries:
-                if not entry.name.endswith(".mod") or not entry.is_file():
-                    continue
-                version = entry.name[: -len(".mod")]
-                existing = sources.setdefault(version, [])
-                if not any(source == "download" for _, source in existing):
-                    existing.append((entry, "download"))
+            if truncated:
+                warnings.add(
+                    "downloaded otelhttp metadata directory exceeded the "
+                    f"{entry_limit}-entry scan limit"
+                )
+                scan_failed = True
+                directories_truncated += 1
+                entries_omitted_at_least += 1
+            else:
+                for entry in entries:
+                    if not entry.name.endswith(".mod") or not entry.is_file():
+                        continue
+                    version = entry.name[: -len(".mod")]
+                    existing = sources.setdefault(version, [])
+                    if not any(source == "download" for _, source in existing):
+                        existing.append((entry, "download"))
 
-    return sources, scan_failed
+    return (
+        sources,
+        scan_failed,
+        directories_truncated,
+        entries_omitted_at_least,
+    )
 
 
 def default_gomodcache(explicit: Path | None) -> tuple[Path, str]:
@@ -477,6 +530,9 @@ def base_result(project: Path, go_mod: Path, cache: Path, source: str) -> dict[s
             "source": source,
         },
         "scan": {
+            "cache_entry_limit": MAX_CACHE_DIRECTORY_ENTRIES,
+            "cache_directories_truncated": 0,
+            "cache_entries_omitted_at_least": 0,
             "otelhttp_versions_seen": 0,
             "usable_versions": 0,
             "compatible_versions": 0,
@@ -863,8 +919,21 @@ def resolve(project_arg: Path, gomodcache_arg: Path | None) -> dict[str, Any]:
         warnings.add(f"Go module cache is not a directory: {cache}")
         return finish(result, warnings)
 
-    sources, scan_failed = discover_otelhttp_sources(cache, warnings)
+    (
+        sources,
+        scan_failed,
+        directories_truncated,
+        entries_omitted_at_least,
+    ) = discover_otelhttp_sources(cache, warnings)
+    result["scan"]["cache_directories_truncated"] = directories_truncated
+    result["scan"]["cache_entries_omitted_at_least"] = (
+        entries_omitted_at_least
+    )
     result["scan"]["otelhttp_versions_seen"] = len(sources)
+    if scan_failed:
+        result["status"] = "incomplete"
+        result["reasons"] = ["otelhttp-cache-scan-failed"]
+        return finish(result, warnings)
 
     compatible: list[dict[str, Any]] = []
     for version, version_sources in sources.items():
