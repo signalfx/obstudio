@@ -77,7 +77,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 ### Local
 
 ```sh
-make test-all            # Go + observer client + extension integration tests
+make test-all            # Go + observer client + extension + skill-script tests
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests
 ```

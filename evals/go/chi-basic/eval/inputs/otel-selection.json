@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "kind": "otel-selection",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:bd62d2d6b4658b64b2639fe92422326944d4f6bd9f9dce569e0d38a749290e54",
+  "requested_ids": [
+    "OTEL-001"
+  ],
+  "approved_ids": [
+    "OTEL-001"
+  ],
+  "approved_by": null,
+  "approved_at": null
+}

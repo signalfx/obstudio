@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "kind": "otel-verify",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:bd62d2d6b4658b64b2639fe92422326944d4f6bd9f9dce569e0d38a749290e54",
+  "instrumentation_sha256": "sha256:5d9feeba7486970a1c9eda8becad43a28cc75cb54f998ad064848fbe1547f93b",
+  "meta": {
+    "service_name": "go-chi-basic",
+    "date": "2026-07-21",
+    "result": "Pass",
+    "workflow_mode": "standalone",
+    "lifecycle": "final"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "working",
+      "scenarios": [
+        {
+          "id": "http.health.success",
+          "status": "working",
+          "commands": [
+            "validate bounded fixture capture"
+          ],
+          "evidence": [
+            "eval/inputs/canonical-verify-evidence.txt"
+          ],
+          "observed_telemetry": [
+        "The generated trace contains GET /health with http.route=/health and contains no HttpRequest span."
+          ],
+          "trace_ids": [],
+          "product_validation": [
+            "The local OTLP fixture capture contains the generated trace."
+          ],
+          "proof_mode": "full_runtime",
+          "visibility": "otlp_accepted"
+        }
+      ],
+      "item_results": [
+        {
+          "id": "OTEL-001.manual-http-span",
+          "status": "working",
+          "direct_assertion_passed": true,
+          "scenarios": [
+            "http.health.success"
+          ],
+          "proof_mode": "full_runtime",
+          "visibility": "otlp_accepted",
+          "evidence": [
+            "eval/inputs/canonical-verify-evidence.txt"
+          ],
+          "observed_telemetry": [
+        "The generated trace contains no HttpRequest span and contains one GET /health span with http.route=/health."
+          ],
+          "product_validation": [
+            "The local OTLP fixture capture contains the generated trace."
+          ],
+          "removal_proof": {
+            "removed_signal": "HttpRequest",
+            "replacement_signal": "GET /health",
+            "absence_assertion_passed": true,
+            "replacement_assertion_passed": true
+          }
+        },
+        {
+          "id": "OTEL-001.http-health-span",
+          "status": "working",
+          "direct_assertion_passed": true,
+          "scenarios": [
+            "http.health.success"
+          ],
+          "proof_mode": "full_runtime",
+          "visibility": "otlp_accepted",
+          "evidence": [
+            "eval/inputs/canonical-verify-evidence.txt"
+          ],
+          "observed_telemetry": [
+            "The generated trace contains GET /health with http.route=/health."
+          ],
+          "product_validation": [
+            "The local OTLP fixture capture contains the generated trace."
+          ]
+        }
+      ],
+      "remaining": []
+    }
+  ],
+  "next_steps": []
+}

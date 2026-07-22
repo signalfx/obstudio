@@ -44,7 +44,9 @@ The `eval/<kind>/` layout lets jobs select a global-style path pattern such as
 
 If a case needs local source files or other fixtures, place them in the case
 directory above `eval/`. If it does not, the case directory can contain only the
-`eval/` folder.
+`eval/` folder. Fixture, skill, and shared-reference source trees must not
+contain symlinks; provenance hashing rejects them before the fixture is copied
+so executed bytes cannot come from outside the authenticated tree.
 
 Minimal shape:
 
@@ -249,8 +251,12 @@ uv run codex-eval-harness report --repo-root . --skill <skill-id> --kind sanity
 ```
 
 The report step writes `<kind>/report.md` and `<kind>/benchmark.json` in the
-timestamped run directory and copies the latest summary to
-`eval-reports/<skill>/<kind>/`.
+timestamped run directory. It compares the run's prompt IDs with the current
+complete eval definitions for that skill and kind. Only a full-suite report
+replaces `eval-reports/<skill>/<kind>/report.md` and `benchmark.json`; filtered,
+stale, or otherwise unprovable scopes are preserved under
+`eval-reports/<skill>/<kind>/scoped/<run-id>/`. Scope status and selected versus
+expected prompt counts are included in both report formats.
 
 Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
 check fields, rubric reports contain only rubric judge fields, and runtime

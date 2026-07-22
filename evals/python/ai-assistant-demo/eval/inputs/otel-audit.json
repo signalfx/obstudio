@@ -1,0 +1,173 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-ai-assistant-genai-fixture",
+    "service_name": "python-ai-assistant-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "fastapi",
+    "date": "2026-07-21",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "The app-owned assistant lifecycle has no OpenTelemetry GenAI spans or bounded token, tool, and stream telemetry."
+  ],
+  "flow": "audit -> select -> instrument -> verify",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "FastAPI service without OpenTelemetry dependencies",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "App-owned assistant, provider, tool, and streaming lifecycle",
+      "source": "app.py:58"
+    },
+    {
+      "check": "Route source",
+      "finding": "Chat, stream, feedback, and health routes",
+      "source": "app.py:126"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Python 3.11 FastAPI application",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:58-187"
+    }
+  ],
+  "routes": [
+    {"method": "GET", "path": "/health"},
+    {"method": "POST", "path": "/v1/chat"},
+    {"method": "POST", "path": "/v1/chat/stream"},
+    {"method": "GET", "path": "/v1/streams"},
+    {"method": "POST", "path": "/v1/feedback"},
+    {"method": "POST", "path": "/v1/feedback/export"}
+  ],
+  "signal_flow": {
+    "component_flow_map": "Assistant lifecycle\nFastAPI routes [SOURCE-COVERED] -> build_turn [GAP: Assistant GenAI lifecycle] -> run_tool and call_provider [SOURCE-COVERED]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Assistant GenAI lifecycle",
+      "status": "missing",
+      "evidence": "app.py:58-187",
+      "required_signals": "gen_ai.client.operation span with gen_ai.operation.name, gen_ai.provider.name, and gen_ai.request.model; execute_tool span with gen_ai.tool.name; gen_ai.client.token.usage metric with gen_ai.token.type; assistant.stream.active metric",
+      "owner": "App-owned: app.py:58-187",
+      "acceptance_criteria": "A bounded chat run emits gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics without prompt, completion, session, or tool-argument dimensions.",
+      "impact": "Operators cannot localize model, tool, token-pressure, or streaming failures in the assistant lifecycle."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Emit the app-owned GenAI lifecycle",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "otel_concerns": [
+        "signal-emission",
+        "semantic-attributes",
+        "cardinality-safety"
+      ],
+      "status": "proposed",
+      "area": "Assistant GenAI lifecycle",
+      "gap": "The app-owned assistant, provider, tool, token, and streaming lifecycle emits no OpenTelemetry GenAI telemetry.",
+      "impact": "Model and tool failures, token pressure, and stream concurrency cannot be localized from telemetry.",
+      "product_outcome": "The trace waterfall and metric explorer show one bounded app-owned assistant lifecycle.",
+      "required_fix": "Add one reusable OpenTelemetry setup path and emit bounded app-owned GenAI spans and metrics for the assistant lifecycle.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "genai.turn.lifecycle"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:58-187"
+      ],
+      "acceptance_criteria": [
+        "A bounded chat run emits gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics."
+      ],
+      "constraints": [
+        "Do not record raw prompts, completions, session IDs, user values, request IDs, or tool arguments as metric dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "gen_ai.client.operation",
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model"
+          ],
+          "product_view": "App-owned model-call trace waterfall"
+        },
+        {
+          "type": "span",
+          "name": "execute_tool",
+          "attributes": [
+            "gen_ai.tool.name"
+          ],
+          "product_view": "Bounded tool-call trace waterfall"
+        },
+        {
+          "type": "metric",
+          "name": "gen_ai.client.token.usage",
+          "attributes": [
+            "gen_ai.token.type"
+          ],
+          "product_view": "Token usage chart and detector"
+        },
+        {
+          "type": "metric",
+          "name": "assistant.stream.active",
+          "attributes": [],
+          "product_view": "Active stream chart and detector"
+        }
+      ],
+      "follow_up_actions": [
+        "Inspect the app-owned GenAI trace waterfall and chart the bounded token and active-stream metrics."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "python.local",
+        "surface": "python-ai-assistant-demo service",
+        "config_evidence": "pyproject.toml",
+        "runner": "python -m pytest",
+        "scope": "service",
+        "prerequisites": "installed project dependencies"
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "genai.turn.lifecycle",
+        "trigger": "POST /v1/chat with bounded input and one bounded tool name",
+        "entrypoint": "app.py:93",
+        "expected_signals": "gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "The generated telemetry contains the exact bounded GenAI signal names and required semantic attributes without raw content or identifier dimensions.",
+        "environments": [
+          "python.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Select OTEL-001 and run $otel-instrument, then verify the bounded GenAI lifecycle."
+  ]
+}

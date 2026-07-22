@@ -23,9 +23,11 @@ observer/internal/web/static/assets/
 observer/client/public/assets/
 
 # Eval fixture apps -- track baselines, ignore generated artifacts
+.observe/
 evals/**/.observe/
 evals/**/.venv/
 evals/**/__pycache__/
+evals/**/target/
 evals/**/uv.lock
 !evals/uv.lock
 evals/**/*.db

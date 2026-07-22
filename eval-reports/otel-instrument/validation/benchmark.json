@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260711T231609164685Z",
-    "repo_root": "/Users/btiwana/code/signalfx/obstudio",
+    "run_id": "20260722T043951304464Z",
+    "repo_root": ".",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -16,16 +16,83 @@
     "judge_timeout": "900",
     "rubric_enabled": false,
     "runtime_enabled": false,
-    "workers": "1"
+    "workers": "1",
+    "scope": {
+      "status": "full",
+      "selected_prompt_count": 39,
+      "expected_prompt_count": 39,
+      "selected_prompt_ids": [
+        "go/chi-basic/qual/benchmark-instrument/benchmark",
+        "go/chi-basic/qual/instrument/decision-gated",
+        "go/chi-basic/qual/instrument/direct",
+        "go/chi-basic/qual/instrument/runtime-preserving",
+        "go/chi-basic/runtime/instrument/runtime-preserving",
+        "go/chi-partial/qual/instrument/direct",
+        "go/chi-partial/qual/instrument/runtime-preserving",
+        "go/chi-partial/runtime/instrument/runtime-preserving",
+        "go/kvstore/qual/incident-readiness/mttd",
+        "go/kvstore/qual/instrument/direct",
+        "go/kvstore/qual/instrument/runtime-preserving",
+        "go/kvstore/runtime/instrument/runtime-preserving",
+        "java/kafka-batch-consumer/qual/instrument/direct",
+        "java/kafka-batch-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-listener-container/qual/instrument/direct",
+        "java/kafka-listener-container/qual/instrument/runtime-preserving",
+        "java/kafka-producer-consumer/qual/instrument/direct",
+        "java/kafka-producer-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-streams/qual/incident-readiness/mttd",
+        "java/kafka-streams/qual/instrument/direct",
+        "java/kafka-streams/qual/instrument/runtime-preserving",
+        "java/springboot-basic/qual/instrument/direct",
+        "java/springboot-basic/qual/instrument/runtime-preserving",
+        "node/express-basic/qual/instrument/direct",
+        "node/express-basic/qual/instrument/runtime-preserving",
+        "node/express-basic/runtime/instrument/runtime-preserving",
+        "python/ai-assistant-demo/qual/instrument/direct",
+        "python/assistant-v3-framework-bridge-demo/qual/instrument/framework-bridge",
+        "python/checkout-red-demo/qual/instrument/direct",
+        "python/fastapi-celery/qual/incident-readiness/mttd",
+        "python/fastapi-celery/qual/instrument/direct",
+        "python/fastapi-celery/qual/instrument/runtime-preserving",
+        "python/fastapi-celery/runtime/instrument/runtime-preserving",
+        "python/flask-basic/qual/instrument/direct",
+        "python/flask-basic/qual/instrument/runtime-preserving",
+        "python/flask-basic/runtime/instrument/runtime-preserving",
+        "python/mcp-ai-tool-demo/qual/instrument/direct",
+        "sanity/skill-smoke/sanity/instrument/direct",
+        "sanity/skill-smoke/sanity/instrument/runtime-preserving"
+      ],
+      "missing_prompt_ids": [],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
   },
   "evals": [
+    {
+      "id": "go/chi-basic/qual/benchmark-instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "benchmark"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/benchmark-instrument.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
     {
       "id": "go/chi-basic/qual/instrument",
       "case": "go/chi-basic",
       "language": "go",
       "service": "chi-basic",
-      "prompt_count": 2,
+      "prompt_count": 3,
       "prompts": [
+        "decision-gated",
         "direct",
         "runtime-preserving"
       ],
@@ -33,7 +100,7 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 8,
       "runtime_check_count": 0
     },
     {
@@ -281,7 +348,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 7,
+      "rubric_check_count": 8,
       "runtime_check_count": 0
     },
     {
@@ -433,11 +500,11 @@
     }
   ],
   "summary": {
-    "eval_count": 25,
-    "case_count": 37,
-    "prompt_count": 37,
+    "eval_count": 26,
+    "case_count": 39,
+    "prompt_count": 39,
     "sanity_check_count": 0,
-    "rubric_check_count": 164,
+    "rubric_check_count": 183,
     "runtime_check_count": 6
   }
 }

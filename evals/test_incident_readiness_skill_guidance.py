@@ -6,6 +6,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 INCIDENT_REF = SKILLS_DIR / "references" / "incident-readiness.md"
+REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
+AUDIT_SKILL = SKILLS_DIR / "otel-audit" / "SKILL.md"
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
 
@@ -98,12 +100,81 @@ def test_python_auto_instrumentation_example_uses_current_environment_attribute(
 
 
 def test_audit_and_instrument_load_incident_reference():
-    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    audit = _read(AUDIT_SKILL)
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     for text in (audit, instrument):
         assert "../references/incident-readiness.md" in text
         assert "incident-readiness" in text
         assert "faster incident detection" in text
+
+
+def test_audit_excludes_general_operational_hygiene_from_otel_findings():
+    audit = _squash(_read(AUDIT_SKILL))
+    incident = _squash(_read(INCIDENT_REF))
+    report_flow = _squash(_read(REPORT_FLOW))
+
+    required_audit_terms = [
+        "OTel finding boundary",
+        "If no OTel-specific closure remains, omit the finding",
+        "must not become OTel findings merely because telemetry could observe them",
+        "Do not relabel those outputs as `configuration` expected telemetry",
+        "Omit unrelated contract, documentation, link, policy, security, or product debt from every audit section",
+        "Do not promote service code, configuration, contract, documentation, policy, or general test work into its own OTel finding",
+        "A `configuration` item may describe only OTel SDK",
+        "Every `configuration` item must include `configuration_scope`",
+        "`otel-sdk`, `otel-resource`, `otel-exporter`, `otel-sampling`, `otel-propagation`, `otel-instrumentation`, or `otel-collector`",
+        "Configuration is insufficient by itself",
+        "Contract lint, link validation, behavior-only tests, and policy approval without telemetry proof are not audit verification scenarios",
+        "must have an unresolved (`proposed`, `approved`, or `in_progress`) finding with an identical `area`",
+        "Validate incident `area` and `required_signals`, plus GenAI `surface`, `required_signals`, and `acceptance_criteria`, as OTel closure fields",
+    ]
+    assert not [term for term in required_audit_terms if term not in audit]
+
+    required_incident_terms = [
+        "telemetry-readiness reference, not a general production-readiness audit",
+        "leaves no OTel closure, omit the surface",
+        "A general policy may constrain or explain telemetry, but it cannot block or become an OTel finding",
+        "omit the candidate until the remaining choice is telemetry-specific",
+        "Omit unrelated contract, documentation, link, policy, security, or product debt from all audit sections",
+        "do not make an OTel finding responsible for choosing or enforcing product semantics",
+    ]
+    assert not [term for term in required_incident_terms if term not in incident]
+
+    required_flow_terms = [
+        "An OTel finding ID is not a general operational task container",
+        "If no independently useful OTel closure remains, omit the finding",
+        "neither mode makes a general operational task an OTel finding",
+        "Omit unrelated non-telemetry debt from summary, top-level evidence, readiness, anti-patterns, recommendations, findings, and scenarios",
+        "Apply instrument modes only after the OTel finding boundary",
+        "Omit non-telemetry service code, configuration, contract, documentation, policy, or general test work instead of splitting it into another finding",
+        "`done`, `rejected`, and `deferred` findings do not satisfy a partial/missing row",
+        "Render authored Incident and GenAI telemetry-readiness tables as visible panels",
+    ]
+    assert not [term for term in required_flow_terms if term not in report_flow]
+
+
+def test_audit_schema_v2_non_executable_findings_are_only_prerequisites():
+    audit = _squash(_read(AUDIT_SKILL))
+    report_flow = _squash(_read(REPORT_FLOW))
+
+    for text in (audit, report_flow):
+        for term in (
+            "Dependency direction is executable finding -> prerequisite",
+            "transitively required by at least one executable finding",
+            "orphan non-executable findings",
+        ):
+            assert term in text
+
+    assert (
+        "In schema v2, every `manual decision` and `external follow-up` must be "
+        "in the transitive dependency closure of at least one `default`/`fix all` finding"
+        in audit
+    )
+    assert (
+        "Keep a schema-v2 `manual decision` or `external follow-up` only when it is "
+        "transitively required by at least one executable finding"
+        in report_flow
+    )
 
 
 def test_instrument_allows_recommended_semconv_readiness_signals():
@@ -186,12 +257,11 @@ def test_instrument_converts_incident_readiness_audit_to_patchable_work():
     text = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     required_terms = [
         "Audit-Driven Incident Readiness",
-        "partial or missing readiness row",
-        "matching prioritized `## Gaps` row",
-        "every safe app-owned incident gap",
-        "`required` / `default`",
-        "`recommended` / `fix all`",
-        "Do not choose one representative gap",
+        "partial or missing `current_instrumentation.incident_readiness` rows",
+        "selected finding with the same `area`",
+        "resolve every safe app-owned incident gap",
+        "to exact IDs and create the selection before editing",
+        "Do not choose one representative gap unless the user explicitly narrows scope",
         "add or prove the applicable surfaces",
         "no placeholder instrument",
         "MTTD-improving",
@@ -204,10 +274,12 @@ def test_instrument_requires_gap_closure_matrix_for_incident_readiness():
     text = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     required_terms = [
         "Audit-Driven Gap Closure",
-        "prioritized `## Gaps` table as the implementation queue",
+        "validated dependency-closed selected finding set as the implementation queue",
+        "exactly the selected IDs plus executable dependencies added by `select`",
         "one row per prioritized audit gap",
         "Working / Not working / Not proven / Not configured / Deferred",
-        "all untouched rows",
+        "unselected rows `Deferred`",
+        "machine JSON contains selected rows only",
         "manual decision",
         "owner-map the exact prerequisite",
         "required signals",
@@ -281,9 +353,8 @@ def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
         "Skip this prompt",
         "incident-readiness or GenAI/LLM",
         "Audit-Driven Readiness path",
-        "implement the safe",
-        "scoped",
-        "signals",
+        "validated canonical selection already defines the scope",
+        "implement only the safe scoped signals",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
@@ -323,15 +394,17 @@ def test_splunk_configure_consumes_current_main_gaps_section():
 
 
 def test_audit_maps_incident_readiness_to_current_gap_contract():
-    audit = _squash(_read(SKILLS_DIR / "otel-audit" / "SKILL.md"))
-    report_contract = _squash(_read(SKILLS_DIR / "references" / "report-flow-contract.md"))
+    audit = _squash(_read(AUDIT_SKILL))
+    report_contract = _squash(_read(REPORT_FLOW))
     required_terms = [
+        "OTel finding boundary",
         "### Incident Readiness",
+        "Record only telemetry-scoped readiness surfaces",
         "single prioritized `## Gaps` table",
         "`Area` is the stable human-readable gap identity",
         "`Required fix` names every required signal",
         "mapped acceptance scenarios",
-        "Split a gap when required signals have different owners",
+        "Split a telemetry gap when required signals have different owners",
         "Do not mark a partial surface covered",
     ]
     missing = [term for term in required_terms if term not in audit]
@@ -339,10 +412,14 @@ def test_audit_maps_incident_readiness_to_current_gap_contract():
     assert "## Gap Ledger" not in audit
     required_contract_terms = [
         "one `### Incident Readiness` subsection",
-        "Every `partial` or `missing` row",
+        "Every telemetry-scoped `partial` or `missing` row",
         "`Area` cell is identical",
+        "Do not add a readiness row solely for API behavior",
         "not a second top-level gap ledger",
-        "reconcile those rows through the matching prioritized gaps",
+        "canonical `current_instrumentation.incident_readiness` is non-empty",
+        "reconcile those rows through the matching findings",
+        "Only in legacy fallback mode, read `### Incident Readiness`",
+        "reconcile it through the prioritized gaps",
     ]
     assert not [term for term in required_contract_terms if term not in report_contract]
 
@@ -351,11 +428,13 @@ def test_instrument_reconciles_current_audit_gap_contract():
     instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
     required_terms = [
         "Audit-Driven Gap Closure",
-        "prioritized `## Gaps` table as the implementation queue",
+        "validated dependency-closed selected finding set as the implementation queue",
+        "exactly the selected IDs plus executable dependencies added by `select`",
         "Build an internal closure matrix before editing",
-        "area -> priority -> required fix -> instrument mode -> planned action",
+        "finding ID -> area -> priority -> required fix -> instrument mode -> planned action",
         "one row per prioritized audit gap",
         "exact audit `Area` value",
+        "unselected rows `Deferred`",
         "Not working",
         "Not proven",
         "Not configured",
@@ -544,19 +623,23 @@ def test_dashboard_group_template_includes_provider_required_description():
     assert 'description = "Service health dashboards for ${var.service_name}"' in dashboard_shape
 
 
-def test_audit_keeps_current_main_report_contract():
+def test_audit_keeps_current_canonical_report_contract():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    current_report_terms = [
-        "## Signal Flow",
-        "### Component Flow Map",
-        "## Audit Evidence",
-        "## Current Instrumentation",
-        "| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |",
-        "### Test Environments",
-        "### Acceptance Scenarios",
+    canonical_terms = [
+        '"signal_flow": {',
+        '"component_flow_map":',
+        '"evidence": [',
+        '"current_instrumentation": {',
+        '"findings": [',
+        '"verification": {',
+        '"environments": [',
+        '"scenarios": [',
+        "`render-markdown` command owns the complete `.observe/otel.md`",
+        "`render-markdown` and `../references/report-flow-contract.md` determine all",
     ]
-    assert not [term for term in current_report_terms if term not in audit]
-    assert "| Priority | Area | Gap | User Impact | Fix | Instrument Mode |" not in audit
+    assert not [term for term in canonical_terms if term not in audit]
+    assert "# Observability Report: {service-name}" not in audit
+    assert "````markdown" not in audit
 
 
 def test_incident_readiness_guidance_stays_generic_and_non_genai():

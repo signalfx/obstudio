@@ -12,6 +12,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  skills:
+    name: Skill scripts – unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Run skill and eval-harness tests
+        run: |
+          make test-skills
+          make test-eval-harness
+          make test-pytest-plugin
+
   observer:
     name: Observer – vet, build & test
     runs-on: ubuntu-latest
