@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="otel-audit-sha256" content="sha256:bd62d2d6b4658b64b2639fe92422326944d4f6bd9f9dce569e0d38a749290e54">
-<meta name="otel-instrumentation-sha256" content="sha256:3d4afbc54f8f81af54e78fe8ea6e9af095d00fac3a267b25d9dd9c0183b67d65">
-<meta name="otel-verify-instrumentation-sha256" content="sha256:3d4afbc54f8f81af54e78fe8ea6e9af095d00fac3a267b25d9dd9c0183b67d65">
+<meta name="otel-selection-sha256" content="sha256:1d02d4617237f12ef486ce00d96cc4cbffb1bfff572f65335ce89e59d0f24341">
+<meta name="otel-instrumentation-sha256" content="sha256:5d9feeba7486970a1c9eda8becad43a28cc75cb54f998ad064848fbe1547f93b">
+<meta name="otel-verify-instrumentation-sha256" content="sha256:5d9feeba7486970a1c9eda8becad43a28cc75cb54f998ad064848fbe1547f93b">
 <title>OTel Instrumentation - go-chi-basic</title>
 <style>
 :root { --bg:#f5f7fa; --surface:#fff; --ink:#17202a; --muted:#5f6b7a; --line:#dbe2ea; --accent:#1f5eff; --ok:#16794c; --critical:#b42318; }
@@ -113,7 +114,7 @@ p { margin:0 0 12px; }
     <p class="review-note">Each issue shows what changed, how observability improves, telemetry-item proof, scenario coverage, and any remaining uncertainty.</p>
     <ol class="selected-issues"><li><article class="selected-issue" id="selected-OTEL-001"><div class="selected-issue-header"><div><span class="selection-reason">You selected</span><h3>HTTP requests lack route-aware telemetry</h3><p class="muted"><code>OTEL-001</code> · HTTP request telemetry · required</p></div><span class="issue-status-group"><span class="issue-status">Implementation: change recorded</span><span class="issue-status">Proof: verified</span></span></div><p><strong>Selected issue:</strong> The chi router has no OpenTelemetry server instrumentation.</p><div class="selected-issue-grid"><section><h4>What changed / was corrected</h4><ul><li>Removed the manual HttpRequest span owner and installed one route-aware GET /health server span owner.</li></ul></section><section><h4>How it improves observability</h4><p>Splunk APM route-level latency and errors</p></section></div><p class="issue-proof"><strong>Telemetry changes:</strong> 2 spans · <strong>Verification:</strong> verified</p><section class="finding-proof"><h4>Verification complete</h4><p class="proof-summary">1 of 1 route check was confirmed in a running service.</p><div class="telemetry-proof-table"><table><caption class="sr-only">Proof status for telemetry changes</caption><thead><tr><th>Telemetry change</th><th>What was observed</th><th>Status</th></tr></thead><tbody><tr><th scope="row">Removed span: HttpRequest</th><td>The generated trace contains no HttpRequest span and contains one GET /health span with http.route=/health.</td><td><strong class="proof-status proof-status-working">Proven</strong></td></tr><tr><th scope="row">Added span: GET /health</th><td>The generated trace contains GET /health with http.route=/health.</td><td><strong class="proof-status proof-status-working">Proven</strong></td></tr></tbody></table></div><details class="coverage-details"><summary>Coverage details</summary><div class="coverage-detail-body"><div class="proof-group proof-runtime"><strong>Confirmed in a running service</strong><ul><li>GET /health</li></ul></div></div></details></section></article></li></ol>
   </section>
-  <section class="panel"><h2>Outside selected scope</h2><p>3 audit findings were not implemented in this run. Review them in <a href="otel.html">the audit and scope report</a>.</p></section>
+  <section class="panel"><h2>Outside selected scope</h2><p>3 audit findings were outside this instrumentation run. Review them in <a href="otel.html">the audit and scope report</a>.</p></section>
 </main>
 </body>
 </html>

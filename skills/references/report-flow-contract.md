@@ -24,6 +24,14 @@ Apply these precedence and identity rules throughout the chain:
   Each overlay must match the canonical audit's `meta.audit_id` through
   `audit_id` and the validator-computed SHA-256 digest of the canonical field
   representation through `audit_sha256`.
+- `.observe/otel-instrumentation.json` must also match the validator-computed
+  digest of the exact normalized selection through `selection_sha256`. That
+  digest includes `requested_ids`, dependency-closed `approved_ids`, stable
+  `decision_answers`, and approval metadata. Changing an answer invalidates
+  older instrumentation even when the executable finding IDs do not change.
+  Verification remains transitively bound to that exact selection because its
+  `instrumentation_sha256` covers the complete normalized instrumentation
+  overlay, including `selection_sha256`.
 - `.observe/otel.html` is the self-contained human review and plan-building surface.
   It renders the canonical audit and exports the selection overlay; it is not a
   second source of truth. It must not render instrumentation or verification
@@ -63,7 +71,7 @@ Each document has one job. Do not mix these responsibilities.
 | `.observe/otel.html` | `$otel-audit` renderer + human reviewer | Interactive review of the canonical audit and selection export | Independent audit state or hidden selection state |
 | `.observe/otel-instrumentation.html` | `$otel-instrument` renderer, refreshed by `$otel-verify` | Concise verification status followed by every selected finding's change, observability impact, item proof, and coverage | Aggregate technical ledgers, audit selection controls, unbound overlays, or an independently rewritten baseline |
 | `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers` plus requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
-| `.observe/otel-instrumentation.json` | `$otel-instrument` | Authoritative implementation result for every dependency-closed selected finding ID (`approved_ids`) | Unselected findings or a rewritten audit baseline |
+| `.observe/otel-instrumentation.json` | `$otel-instrument` | Authoritative implementation result for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized selection by `selection_sha256` | Unselected findings, stale decision answers, or a rewritten audit baseline |
 | `.observe/otel-verify.json` | `$otel-verify` | Authoritative scenario proof for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized instrumentation overlay by `instrumentation_sha256` | Unselected findings, stale/unbound instrumentation proof, or unsupported `working` claims |
 | `.observe/otel.md` | `$otel-audit` | Generated readable compatibility view of the canonical audit | State that differs from `.observe/otel-audit.json` |
 | `.observe/otel-instrumentation.md` | `$otel-instrument` | Generated readable compatibility view of the instrumentation overlay | State that differs from `.observe/otel-instrumentation.json` |
@@ -646,7 +654,10 @@ attribute, or configuration scope, and two or three explicit selectable
 `decision_options`. Each option carries a unique stable `id`, a concise
 `label`, a concrete `outcome`, and an `unlocks` list of executable findings
 that depend on the manual finding. An empty `unlocks` list records an answer
-that intentionally produces no instrumentation work. Canonical external-follow-up findings must
+that intentionally produces no instrumentation work. Because the options are
+mutually exclusive, their executable `unlocks` sets must be pairwise disjoint;
+one executable finding cannot safely represent two different answers.
+Canonical external-follow-up findings must
 carry a known `external_owner` plus an exact `external_requirement` naming an
 actual expected OTel signal, attribute, pipeline configuration scope, or
 telemetry proof that owner must supply. Placeholder owners are invalid. The
@@ -665,7 +676,8 @@ Instrumentation is a goal workflow, not just a code edit:
 3. Implement the dependency-closed selected scope.
 4. Run project-runtime compile/import and focused tests.
 5. Write and validate `.observe/otel-instrumentation.json`, with one row per
-   dependency-closed selected finding in canonical audit order, then generate
+   dependency-closed selected finding in canonical audit order and
+   `selection_sha256` for the exact normalized selection, then generate
    `.observe/otel-instrumentation.md` as its readable compatibility view and
    `.observe/otel-instrumentation.html` as the human change and impact view.
 6. Invoke or apply the `$otel-verify` workflow unless the user explicitly opts
@@ -834,9 +846,12 @@ Verification reads the canonical audit and authoritative overlays:
 - Generated readable output: `.observe/otel-verify.md`
 
 Validate `audit_id` and `audit_sha256` before using either input overlay, then
-bind verification to the exact normalized instrumentation overlay with
-`instrumentation_sha256`. A matching item inventory is not enough: any material
-instrumentation change invalidates older proof. Write
+require instrumentation's `selection_sha256` to match the exact normalized
+selection and bind verification to the exact normalized instrumentation overlay
+with `instrumentation_sha256`. Because that instrumentation digest includes
+`selection_sha256`, verification is transitively bound to reviewer intent. A
+matching executable or item inventory is not enough: a changed decision answer
+or any material instrumentation change invalidates older proof. Write
 one verification finding for every dependency-closed selected ID (`approved_ids`) in canonical audit order. A
 finding may be `working` only when its scenarios cover the audit's required
 scenario IDs and carry direct evidence. If the canonical audit is absent, use
@@ -895,9 +910,12 @@ evidence, observed telemetry, product validation, and the required
 `direct_assertion_passed` boolean. `Working` requires all of those fields and
 `direct_assertion_passed: true`; every other item status requires it to be
 `false`. Its `observed_telemetry` must put the exact item name and every required
-attribute in one affirmative observation clause using direct language such as
+attribute (including an authored `key=value`) on the same typed signal in one
+affirmative observation clause using direct language such as
 observed, emitted, recorded, exported, received, accepted, or captured.
-Expected, should/may, unconfirmed, or cross-clause token mentions are not proof.
+Expected, should/may, unconfirmed, zero/no-data results, contradictory
+observations, attributes attached to another same-kind signal, or cross-clause
+token mentions are not proof.
 Keep unit-only proof explicitly `not_explorer_visible`; use
 `explorer_visible` only with saved Observer/query evidence. This item inventory,
 not a hand-authored expected-items file, determines whether every code-to-
@@ -905,7 +923,8 @@ telemetry change was verified.
 
 For a working `change_kind: removed` item, also require structured
 `removal_proof`: `removed_signal` exactly equals the instrumentation item name,
-`replacement_signal` names a distinct intended owner, and both
+`replacement_signal` names a distinct intended owner of the same signal type,
+and both
 `absence_assertion_passed` and `replacement_assertion_passed` are true. This is
 in addition to durable evidence and reader prose; a generic success sentence
 cannot stand in for the two bounded assertions.

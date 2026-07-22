@@ -43,10 +43,13 @@ func copyDir(src, dst string) error {
 			return err
 		}
 
-		// Skip evals directories — they are dev-only test fixtures
-		// and should not be embedded in the release binary.
-		if d.IsDir() && d.Name() == "evals" {
+		// Skip development-only fixtures, tests, and interpreter caches. Runtime
+		// skill instructions, references, scripts, and assets are copied below.
+		if d.IsDir() && (d.Name() == "evals" || d.Name() == "tests" || d.Name() == "__pycache__") {
 			return fs.SkipDir
+		}
+		if !d.IsDir() && filepath.Ext(d.Name()) == ".pyc" {
+			return nil
 		}
 
 		rel, err := filepath.Rel(src, path)

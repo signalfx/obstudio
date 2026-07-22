@@ -14,11 +14,28 @@ import hashlib
 import json
 import os
 import re
+import stat
 import sys
+import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 from xml.etree import ElementTree
+
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from secure_output import (
+    SecureOutputError,
+    authenticate_directory,
+    descriptor_operations_supported,
+    path_is_link_or_reparse,
+    require_same_directory,
+    write_text,
+)
 
 
 SCHEMA_VERSION = 1
@@ -26,6 +43,7 @@ MAX_CONFIG_FILES = 4_000
 MAX_CONFIG_BYTES = 2_000_000
 MAX_CANDIDATES = 256
 MAX_MANIFEST_BYTES = 256_000
+MAX_AGENT_BYTES = 512_000_000
 
 SKIP_DIRECTORIES = {
     ".git",
@@ -133,12 +151,109 @@ def manifest_value(attributes: dict[str, str], name: str) -> str:
     )
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def file_identity(status: os.stat_result) -> tuple[int, int]:
+    return status.st_dev, status.st_ino
+
+
+def file_stability(status: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ctime_ns,
+    )
+
+
+def candidate_directory_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+
+
+def open_candidate_descriptor(path: Path) -> tuple[Path, int, list[tuple[Path, tuple[int, int]]]]:
+    """Open one canonical candidate without following its final pathname."""
+
+    resolved = path.expanduser().resolve(strict=True)
+    parent_identities: list[tuple[Path, tuple[int, int]]] = []
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    if descriptor_operations_supported():
+        anchor = Path(resolved.anchor)
+        parent_descriptor = os.open(anchor, candidate_directory_flags())
+        try:
+            current = anchor
+            parent_identities.append(
+                (current, file_identity(os.fstat(parent_descriptor)))
+            )
+            for component in resolved.parent.relative_to(anchor).parts:
+                child = os.open(
+                    component,
+                    candidate_directory_flags(),
+                    dir_fd=parent_descriptor,
+                )
+                os.close(parent_descriptor)
+                parent_descriptor = child
+                current = current / component
+                parent_identities.append(
+                    (current, file_identity(os.fstat(parent_descriptor)))
+                )
+            descriptor = os.open(
+                resolved.name, file_flags, dir_fd=parent_descriptor
+            )
+        finally:
+            os.close(parent_descriptor)
+        return resolved, descriptor, parent_identities
+
+    current = Path(resolved.anchor)
+    for component in (None, *resolved.parent.relative_to(current).parts):
+        if component is not None:
+            current = current / component
+        status = os.lstat(current)
+        if path_is_link_or_reparse(status) or not stat.S_ISDIR(status.st_mode):
+            raise OSError(f"candidate parent is a link or reparse point: {current}")
+        parent_identities.append((current, file_identity(status)))
+    status = os.lstat(resolved)
+    if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+        raise OSError("candidate is not a real regular file")
+    descriptor = os.open(resolved, file_flags)
+    if file_identity(os.fstat(descriptor)) != file_identity(status):
+        os.close(descriptor)
+        raise OSError("candidate changed before it was opened")
+    return resolved, descriptor, parent_identities
+
+
+def candidate_namespace_matches(
+    path: Path,
+    expected_file: os.stat_result,
+    parents: list[tuple[Path, tuple[int, int]]],
+) -> bool:
+    for parent, identity in parents:
+        try:
+            status = os.lstat(parent)
+        except OSError:
+            return False
+        if (
+            path_is_link_or_reparse(status)
+            or not stat.S_ISDIR(status.st_mode)
+            or file_identity(status) != identity
+        ):
+            return False
+    try:
+        current = os.lstat(path)
+    except OSError:
+        return False
+    return (
+        not path_is_link_or_reparse(current)
+        and stat.S_ISREG(current.st_mode)
+        and file_identity(current) == file_identity(expected_file)
+    )
 
 
 def parse_semver(
@@ -167,6 +282,13 @@ def parse_semver(
         prerelease,
         build,
     )
+
+
+def parse_sha256(value: str) -> str:
+    normalized = value.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+        raise argparse.ArgumentTypeError("expected SHA-256 must be 64 hexadecimal characters")
+    return normalized
 
 
 def version_from_text(value: str) -> str | None:
@@ -252,30 +374,54 @@ def artifact_family(
 
 
 def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    descriptor: int | None = None
     try:
-        resolved = path.expanduser().resolve(strict=True)
+        resolved, descriptor, parent_identities = open_candidate_descriptor(path)
     except (FileNotFoundError, OSError) as error:
         return None, f"not-readable: {error}"
-    if not resolved.is_file():
-        return None, "not-a-regular-file"
-    before = resolved.stat()
     try:
-        with zipfile.ZipFile(resolved) as archive:
-            manifest_names = [
-                name
-                for name in archive.namelist()
-                if name.upper() == "META-INF/MANIFEST.MF"
-            ]
-            if len(manifest_names) != 1:
-                return None, "missing-or-duplicate-META-INF/MANIFEST.MF"
-            manifest_info = archive.getinfo(manifest_names[0])
-            if manifest_info.file_size > MAX_MANIFEST_BYTES:
-                return None, "manifest-too-large"
-            manifest = parse_manifest(archive.read(manifest_names[0]))
-    except KeyError:
-        return None, "missing-META-INF/MANIFEST.MF"
-    except (OSError, zipfile.BadZipFile) as error:
-        return None, f"invalid-jar: {error}"
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            return None, "not-a-regular-file"
+        if before.st_size > MAX_AGENT_BYTES:
+            return None, "agent-jar-too-large"
+        digest = hashlib.sha256()
+        with tempfile.TemporaryFile() as snapshot:
+            total = 0
+            while chunk := os.read(descriptor, 1024 * 1024):
+                total += len(chunk)
+                if total > MAX_AGENT_BYTES:
+                    return None, "agent-jar-too-large"
+                digest.update(chunk)
+                snapshot.write(chunk)
+            after = os.fstat(descriptor)
+            if file_stability(before) != file_stability(after):
+                return None, "jar-changed-during-validation"
+            if not candidate_namespace_matches(
+                resolved, before, parent_identities
+            ):
+                return None, "jar-path-changed-during-validation"
+            snapshot.seek(0)
+            try:
+                with zipfile.ZipFile(snapshot) as archive:
+                    manifest_names = [
+                        name
+                        for name in archive.namelist()
+                        if name.upper() == "META-INF/MANIFEST.MF"
+                    ]
+                    if len(manifest_names) != 1:
+                        return None, "missing-or-duplicate-META-INF/MANIFEST.MF"
+                    manifest_info = archive.getinfo(manifest_names[0])
+                    if manifest_info.file_size > MAX_MANIFEST_BYTES:
+                        return None, "manifest-too-large"
+                    manifest = parse_manifest(archive.read(manifest_names[0]))
+            except KeyError:
+                return None, "missing-META-INF/MANIFEST.MF"
+            except (OSError, zipfile.BadZipFile) as error:
+                return None, f"invalid-jar: {error}"
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
     premain_class = manifest_value(manifest, "Premain-Class").strip()
     if not premain_class:
         return None, "missing-Premain-Class"
@@ -291,10 +437,8 @@ def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     version_source = "manifest" if artifact_version is not None else "filename"
     if artifact_version is None:
         artifact_version = version_from_text(resolved.name)
-    digest = sha256_file(resolved)
-    after = resolved.stat()
-    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-        return None, "jar-changed-during-validation"
+    if not candidate_namespace_matches(resolved, before, parent_identities):
+        return None, "jar-path-changed-during-validation"
     coordinate = (
         "com.splunk:splunk-otel-javaagent"
         if family == "splunk"
@@ -304,8 +448,12 @@ def validate_candidate(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         {
             "path": str(resolved),
             "coordinate": coordinate,
-            "sha256": digest,
-            "size_bytes": after.st_size,
+            "sha256": digest.hexdigest(),
+            "size_bytes": before.st_size,
+            "artifact_identity": {
+                "device": before.st_dev,
+                "inode": before.st_ino,
+            },
             "premain_class": premain_class,
             "implementation_vendor": manifest_value(
                 manifest, "Implementation-Vendor"
@@ -330,28 +478,329 @@ def is_config_file(path: Path) -> bool:
     )
 
 
-def iter_config_files(project: Path) -> Iterable[Path]:
-    seen = 0
-    for directory, names, filenames in os.walk(project):
-        relative = Path(directory).relative_to(project)
-        names[:] = sorted(
-            name
-            for name in names
-            if name not in SKIP_DIRECTORIES
-            and not (relative == Path(".observe") and name == "evidence")
+@dataclass(frozen=True)
+class ConfigSnapshot:
+    path: Path
+    text: str
+
+
+def read_bounded_descriptor(descriptor: int, maximum: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while total <= maximum:
+        chunk = os.read(
+            descriptor,
+            min(1024 * 1024, maximum + 1 - total),
         )
-        for filename in sorted(filenames):
-            path = Path(directory) / filename
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
+def descriptor_config_snapshots(
+    project: Path,
+    root_descriptor: int,
+    root_identity: tuple[int, int] | None,
+) -> list[ConfigSnapshot]:
+    """Read config bytes through one retained, no-follow directory tree."""
+
+    snapshots: list[ConfigSnapshot] = []
+    seen = 0
+    directory_flags = candidate_directory_flags()
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.dup(root_descriptor)
+    if root_identity is not None and file_identity(os.fstat(descriptor)) != root_identity:
+        os.close(descriptor)
+        return snapshots
+
+    def visit(directory_descriptor: int, relative: Path) -> bool:
+        nonlocal seen
+        try:
+            names = sorted(os.listdir(directory_descriptor))
+        except OSError:
+            return False
+
+        directories: list[tuple[str, os.stat_result]] = []
+        files: list[tuple[str, os.stat_result]] = []
+        for name in names:
+            try:
+                details = os.stat(
+                    name,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError:
+                continue
+            if stat.S_ISDIR(details.st_mode):
+                directories.append((name, details))
+            else:
+                files.append((name, details))
+
+        for name, details in files:
+            relative_path = relative / name
+            path = project / relative_path
             if not is_config_file(path):
                 continue
             seen += 1
             if seen > MAX_CONFIG_FILES:
-                return
+                return True
+            if (
+                path_is_link_or_reparse(details)
+                or not stat.S_ISREG(details.st_mode)
+                or details.st_size > MAX_CONFIG_BYTES
+            ):
+                continue
+            file_descriptor: int | None = None
             try:
-                if path.stat().st_size <= MAX_CONFIG_BYTES:
-                    yield path
+                file_descriptor = os.open(
+                    name,
+                    file_flags,
+                    dir_fd=directory_descriptor,
+                )
+                opened = os.fstat(file_descriptor)
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or file_identity(opened) != file_identity(details)
+                ):
+                    continue
+                payload = read_bounded_descriptor(
+                    file_descriptor,
+                    MAX_CONFIG_BYTES,
+                )
+                after = os.fstat(file_descriptor)
+                current = os.stat(
+                    name,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+                if (
+                    len(payload) > MAX_CONFIG_BYTES
+                    or file_stability(opened) != file_stability(after)
+                    or path_is_link_or_reparse(current)
+                    or not stat.S_ISREG(current.st_mode)
+                    or file_identity(current) != file_identity(opened)
+                ):
+                    continue
             except OSError:
                 continue
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
+            snapshots.append(
+                ConfigSnapshot(
+                    path=path,
+                    text=payload.decode("utf-8", errors="replace"),
+                )
+            )
+
+        for name, details in directories:
+            if name in SKIP_DIRECTORIES or (
+                relative == Path(".observe") and name == "evidence"
+            ):
+                continue
+            if path_is_link_or_reparse(details):
+                continue
+            child: int | None = None
+            try:
+                child = os.open(
+                    name,
+                    directory_flags,
+                    dir_fd=directory_descriptor,
+                )
+                opened = os.fstat(child)
+                if (
+                    not stat.S_ISDIR(opened.st_mode)
+                    or file_identity(opened) != file_identity(details)
+                ):
+                    continue
+                if visit(child, relative / name):
+                    return True
+            except OSError:
+                continue
+            finally:
+                if child is not None:
+                    os.close(child)
+        return False
+
+    try:
+        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            visit(descriptor, Path())
+    finally:
+        os.close(descriptor)
+    return snapshots
+
+
+def portable_config_chain(
+    project: Path,
+    parent: Path,
+    root_identity: tuple[int, int] | None,
+) -> list[tuple[Path, tuple[int, int]]]:
+    try:
+        relative = parent.relative_to(project)
+    except ValueError as error:
+        raise OSError(f"config path escapes project root: {parent}") from error
+    identities: list[tuple[Path, tuple[int, int]]] = []
+    current = project
+    for component in (None, *relative.parts):
+        if component is not None:
+            current = current / component
+        details = os.lstat(current)
+        if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+            raise OSError(f"config parent is a link or reparse point: {current}")
+        identity = file_identity(details)
+        if not identities and root_identity is not None and identity != root_identity:
+            raise OSError("project root changed during config discovery")
+        identities.append((current, identity))
+    return identities
+
+
+def portable_config_chain_matches(
+    identities: list[tuple[Path, tuple[int, int]]],
+) -> bool:
+    for path, expected in identities:
+        try:
+            details = os.lstat(path)
+        except OSError:
+            return False
+        if (
+            path_is_link_or_reparse(details)
+            or not stat.S_ISDIR(details.st_mode)
+            or file_identity(details) != expected
+        ):
+            return False
+    return True
+
+
+def portable_config_snapshot(
+    project: Path,
+    path: Path,
+    expected: os.stat_result,
+    root_identity: tuple[int, int] | None,
+) -> ConfigSnapshot | None:
+    try:
+        parents = portable_config_chain(project, path.parent, root_identity)
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or file_identity(opened) != file_identity(expected)
+            or path_is_link_or_reparse(current)
+            or file_identity(current) != file_identity(opened)
+            or not portable_config_chain_matches(parents)
+        ):
+            return None
+        payload = read_bounded_descriptor(descriptor, MAX_CONFIG_BYTES)
+        after = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            len(payload) > MAX_CONFIG_BYTES
+            or file_stability(opened) != file_stability(after)
+            or path_is_link_or_reparse(current)
+            or file_identity(current) != file_identity(opened)
+            or not portable_config_chain_matches(parents)
+        ):
+            return None
+        return ConfigSnapshot(
+            path=path,
+            text=payload.decode("utf-8", errors="replace"),
+        )
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+
+
+def portable_config_snapshots(
+    project: Path,
+    root_identity: tuple[int, int] | None,
+) -> list[ConfigSnapshot]:
+    snapshots: list[ConfigSnapshot] = []
+    seen = 0
+    for directory, names, filenames in os.walk(project, followlinks=False):
+        current = Path(directory)
+        try:
+            portable_config_chain(project, current, root_identity)
+        except OSError:
+            names[:] = []
+            continue
+        relative = current.relative_to(project)
+        retained: list[str] = []
+        for name in sorted(names):
+            path = current / name
+            if name in SKIP_DIRECTORIES or (
+                relative == Path(".observe") and name == "evidence"
+            ):
+                continue
+            try:
+                details = os.lstat(path)
+            except OSError:
+                continue
+            if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+                continue
+            retained.append(name)
+        names[:] = retained
+        for name in sorted(filenames):
+            path = current / name
+            if not is_config_file(path):
+                continue
+            seen += 1
+            if seen > MAX_CONFIG_FILES:
+                return snapshots
+            try:
+                details = os.lstat(path)
+            except OSError:
+                continue
+            if (
+                path_is_link_or_reparse(details)
+                or not stat.S_ISREG(details.st_mode)
+                or details.st_size > MAX_CONFIG_BYTES
+            ):
+                continue
+            snapshot = portable_config_snapshot(
+                project,
+                path,
+                details,
+                root_identity,
+            )
+            if snapshot is not None:
+                snapshots.append(snapshot)
+    return snapshots
+
+
+def collect_config_snapshots(
+    project: Path,
+    *,
+    root_descriptor: int | None = None,
+    root_identity: tuple[int, int] | None = None,
+) -> list[ConfigSnapshot]:
+    if (
+        descriptor_operations_supported()
+        and os.listdir in os.supports_fd
+        and root_descriptor is not None
+    ):
+        return descriptor_config_snapshots(
+            project,
+            root_descriptor,
+            root_identity,
+        )
+    return portable_config_snapshots(project, root_identity)
 
 
 def expand_path(raw: str, bases: Iterable[Path]) -> list[Path]:
@@ -376,7 +825,10 @@ def source_kind_for_config(path: Path, project: Path) -> str:
     return "project_config"
 
 
-def configured_candidates(project: Path) -> list[tuple[Path, str, str]]:
+def configured_candidates(
+    project: Path,
+    config_snapshots: list[ConfigSnapshot],
+) -> list[tuple[Path, str, str]]:
     candidates: list[tuple[Path, str, str]] = []
     for variable in ENV_AGENT_PATHS:
         value = os.environ.get(variable)
@@ -391,11 +843,9 @@ def configured_candidates(project: Path) -> list[tuple[Path, str, str]]:
             for path in expand_path(raw, (project,)):
                 candidates.append((path, "environment", variable))
 
-    for config_path in iter_config_files(project):
-        try:
-            text = config_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
+    for snapshot in config_snapshots:
+        config_path = snapshot.path
+        text = snapshot.text
         source_kind = source_kind_for_config(config_path, project)
         for match in AGENT_PATH_PATTERN.finditer(text):
             raw = next(group for group in match.groups() if group is not None)
@@ -531,7 +981,10 @@ def family_from_path(path: Path) -> str | None:
     return None
 
 
-def repository_family_hints(project: Path) -> tuple[list[str], list[str]]:
+def repository_family_hints(
+    project: Path,
+    config_snapshots: list[ConfigSnapshot],
+) -> tuple[list[str], list[str]]:
     families: set[str] = set()
     evidence: set[str] = set()
     splunk_markers = (
@@ -544,11 +997,9 @@ def repository_family_hints(project: Path) -> tuple[list[str], list[str]]:
         "io.opentelemetry.javaagent:opentelemetry-javaagent",
         "io/opentelemetry/javaagent/opentelemetry-javaagent",
     )
-    for config_path in iter_config_files(project):
-        try:
-            text = config_path.read_text(encoding="utf-8", errors="replace").lower()
-        except OSError:
-            continue
+    for snapshot in config_snapshots:
+        config_path = snapshot.path
+        text = snapshot.text.lower()
         relative = str(config_path.relative_to(project))
         if any(marker in text for marker in splunk_markers):
             families.add("splunk")
@@ -563,6 +1014,7 @@ def expected_contract(
     args: argparse.Namespace,
     raw_candidates: list[tuple[Path, str, str]],
     project: Path,
+    config_snapshots: list[ConfigSnapshot],
 ) -> dict[str, Any]:
     config_candidates = [
         (path, source, evidence)
@@ -576,7 +1028,10 @@ def expected_contract(
             if (family := family_from_path(path)) is not None
         }
     )
-    repository_families, repository_evidence = repository_family_hints(project)
+    repository_families, repository_evidence = repository_family_hints(
+        project,
+        config_snapshots,
+    )
     family_hints = sorted(set(family_hints + repository_families))
     version_hints = sorted(
         {
@@ -605,6 +1060,8 @@ def expected_contract(
         else None
     )
     source = "cli" if family or version else "none"
+    if args.expected_sha256 is not None:
+        source = "cli"
     if family is None and len(family_hints) == 1:
         family = family_hints[0]
         source = "repository_config"
@@ -614,6 +1071,7 @@ def expected_contract(
     return {
         "family": family,
         "version": version,
+        "sha256": args.expected_sha256,
         "source": source,
         "evidence": sorted(
             {evidence for _, _, evidence in config_candidates}
@@ -625,13 +1083,19 @@ def expected_contract(
 
 
 def resolve(args: argparse.Namespace) -> dict[str, Any]:
-    project = args.project.expanduser().resolve()
+    project_boundary = authenticate_directory(args.project)
+    project = project_boundary.path
+    config_snapshots = collect_config_snapshots(
+        project,
+        root_descriptor=project_boundary.descriptor,
+        root_identity=project_boundary.identity,
+    )
     raw_candidates: list[tuple[Path, str, str]] = []
     raw_candidates.extend(
         (Path(value), "explicit", f"--candidate={value}")
         for value in args.candidate
     )
-    raw_candidates.extend(configured_candidates(project))
+    raw_candidates.extend(configured_candidates(project, config_snapshots))
     raw_candidates.extend(project_local_candidates(project))
 
     maven = maven_roots(args.maven_repo)
@@ -656,7 +1120,12 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             "gradle_cache",
         )
     )
-    expected = expected_contract(args, raw_candidates, project)
+    expected = expected_contract(
+        args,
+        raw_candidates,
+        project,
+        config_snapshots,
+    )
 
     valid_by_path: dict[str, dict[str, Any]] = {}
     rejected: list[dict[str, str]] = []
@@ -706,6 +1175,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             "local_candidate_validated": False,
             "verification_execution": "not_run",
             "repository_configuration_match": "none",
+            "verification_pin_match": "none",
             "production_parity": "not_proven",
         },
         "production_parity": {
@@ -774,6 +1244,22 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         if exact_version_candidates:
             eligible = exact_version_candidates
 
+    expected_sha256 = expected["sha256"]
+    if expected_sha256 is not None:
+        exact_digest_candidates = [
+            candidate
+            for candidate in eligible
+            if candidate["sha256"] == expected_sha256
+        ]
+        if not exact_digest_candidates:
+            result["message"] = (
+                "No validated Java agent matches the required SHA-256 verification pin; "
+                "the candidate changed or the wrong artifact was selected."
+            )
+            result["claims"]["verification_pin_match"] = "mismatch"
+            return result
+        eligible = exact_digest_candidates
+
     selected = select_candidate(eligible, expected_version)
     same_pin = [
         candidate
@@ -805,9 +1291,36 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
     else:
         selection_reason = "cache_only_fallback"
     selected["selection_reason"] = selection_reason
+    recheck_argv = [
+        sys.executable,
+        "-I",
+        str(Path(__file__).resolve()),
+        "--project",
+        str(project),
+        "--candidate",
+        selected["path"],
+        "--expected-family",
+        selected["family"],
+        "--expected-sha256",
+        selected["sha256"],
+    ]
+    if selected.get("artifact_version") is not None:
+        recheck_argv.extend(
+            ["--expected-version", selected["artifact_version"]]
+        )
+    selected["verification_pin"] = {
+        "path": selected["path"],
+        "sha256": selected["sha256"],
+        "size_bytes": selected["size_bytes"],
+        "artifact_identity": selected["artifact_identity"],
+    }
+    selected["pre_attach_recheck_argv"] = recheck_argv
     result["status"] = "resolved"
     result["selected"] = selected
     result["claims"]["local_candidate_validated"] = True
+    result["claims"]["verification_pin_match"] = (
+        "exact" if expected_sha256 is not None else "recorded"
+    )
     if expected_version is not None:
         result["claims"]["repository_configuration_match"] = (
             "exact" if exact_expected_version else "mismatch"
@@ -843,22 +1356,40 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--expected-version")
+    parser.add_argument(
+        "--expected-sha256",
+        type=parse_sha256,
+        help=(
+            "Required verification-pin digest. Re-run with the selected path and "
+            "digest immediately before attaching the Java agent."
+        ),
+    )
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    if not args.project.expanduser().is_dir():
-        print(f"Project directory does not exist: {args.project}", file=sys.stderr)
+    try:
+        project = authenticate_directory(args.project)
+    except SecureOutputError as error:
+        print(f"Project directory is not safe: {error}", file=sys.stderr)
         return 2
+    args.project = project.path
     payload = json.dumps(resolve(args), indent=2, sort_keys=True) + "\n"
+    try:
+        require_same_directory(project)
+    except SecureOutputError as error:
+        print(f"Project directory changed during resolution: {error}", file=sys.stderr)
+        return 2
     if args.output is None:
         sys.stdout.write(payload)
     else:
-        output = args.output.expanduser()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(payload, encoding="utf-8")
+        try:
+            output = write_text(project, args.output, payload)
+        except SecureOutputError as error:
+            print(f"Refusing unsafe Java-agent output: {error}", file=sys.stderr)
+            return 2
         print(output)
     return 0
 

@@ -48,6 +48,10 @@ bound selection whose `approved_ids` is nonempty. A valid answer-only handoff
 may persist `decision_answers` with no executable IDs; it authorizes no code or
 configuration edits. Implement exactly the dependency-closed selected IDs
 (stored in `approved_ids` for schema compatibility).
+Bind `.observe/otel-instrumentation.json` to the entire normalized selection
+with `selection_sha256`, not only to its audit and executable IDs. This digest
+includes `decision_answers`; changing an answer invalidates older
+instrumentation even when `approved_ids` is unchanged.
 
 When no canonical audit exists, a direct, concrete user request is the authorized
 scope and the legacy no-audit workflow remains available. Do not fabricate
@@ -465,6 +469,8 @@ it a stable item ID and record the concrete code/config change, exact source or
 call site, added/modified/removed signal, newly added attributes/dimensions,
 product view, audit scenarios, and item-specific follow-up actions. Do not rely
 on the finding-level free-text `changes` list for coverage. Every new custom
+attribute must preserve the audit promise exactly: key-only stays key-only and
+an authored `key=value` keeps that exact bounded value. Every new custom
 metric must name the chart/dashboard or detector action to take after proof;
 every added low-cardinality attribute or dimension must name the product
 filter, slice, group-by, or breakdown it enables. Never auto-publish a chart or
@@ -1024,7 +1030,9 @@ update the instrumentation overlay's exact change/source/test/evidence rows,
 rerun compile and focused tests, invoke the affected verification scenarios,
 then replace the current verification overlay. The verifier must bind
 `instrumentation_sha256` to that updated normalized instrumentation overlay;
-never reuse proof from an earlier overlay that happens to have the same item IDs.
+that digest transitively includes the exact selection through
+`selection_sha256`. Never reuse proof from an earlier overlay that happens to
+have the same finding or item IDs.
 
 Before finalizing, reconcile delivery wording across the overlays. A telemetry
 item whose `product_view` denies any OTLP pipeline or export path cannot be

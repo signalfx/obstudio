@@ -8,9 +8,11 @@ import hashlib
 import importlib.util
 import json
 import os
+import secrets
 import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -27,6 +29,7 @@ LEDGER_KIND = "go-otel-bootstrap-accepted-plan"
 OWNED_DIRECTORY = Path(".observe") / "tmp" / "go-otel-resolver"
 STAGE_DIRECTORY = "bootstrap-stage"
 LEDGER_NAME = "accepted-plan.json"
+RETIRED_DIRECTORY_PREFIX = f".{OWNED_DIRECTORY.name}.retired."
 MAX_PROJECT_FILE_BYTES = 8_000_000
 MAX_BLOCKER_DETAIL = 240
 PROBE_PROOF_BOUNDARY = (
@@ -84,6 +87,38 @@ class CommandError(ValueError):
     pass
 
 
+def path_is_link_or_reparse(path: Path) -> bool:
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    reparse_mask = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = getattr(status, "st_file_attributes", 0)
+    return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
+
+
+def _detect_descriptor_cleanup_support() -> bool:
+    required_dir_fd = {os.open, os.mkdir, os.rename, os.stat}
+    return (
+        os.name == "posix"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and required_dir_fd.issubset(os.supports_dir_fd)
+        and os.stat in os.supports_follow_symlinks
+    )
+
+
+_DESCRIPTOR_CLEANUP_SUPPORTED = _detect_descriptor_cleanup_support()
+
+
+def descriptor_cleanup_supported() -> bool:
+    return _DESCRIPTOR_CLEANUP_SUPPORTED
+
+
+def descriptor_mode_supported() -> bool:
+    return hasattr(os, "fchmod")
+
+
 def load_resolver() -> ModuleType:
     if RESOLVER.is_symlink():
         raise CommandError(f"resolver must be a trusted regular sibling: {RESOLVER}")
@@ -117,8 +152,10 @@ def ensure_no_symlink_components(project: Path, target: Path, label: str) -> Non
     current = project
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
-            raise CommandError(f"{label} contains symlink component: {current}")
+        if path_is_link_or_reparse(current):
+            raise CommandError(
+                f"{label} contains symlink component or reparse point: {current}"
+            )
 
 
 def validate_project(result: dict[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
@@ -212,6 +249,30 @@ def cleanup_contract(
         "owned": list(owned),
         "allowed": list(allowed),
     }
+
+
+def isolate_runtime_paths(
+    plan: dict[str, object], runtime_root: Path
+) -> dict[str, object]:
+    """Move executable Go state out of the repository for this invocation."""
+
+    environment = dict(require_dict(plan.get("env"), "runtime env"))
+    environment.update(
+        {
+            "GOCACHE": str(runtime_root / "gocache"),
+            "GOMODCACHE": str(runtime_root / "gomodcache"),
+            "GOPATH": str(runtime_root / "gopath"),
+            "HOME": str(runtime_root / "home"),
+        }
+    )
+    isolated = {**plan, "env": environment, "runtime_root": runtime_root}
+    if "owned" in isolated:
+        isolated["owned"] = [environment["GOCACHE"], environment["GOMODCACHE"]]
+        isolated["allowed"] = [
+            str(Path(environment["GOCACHE"]) / "README"),
+            str(Path(environment["GOCACHE"]) / "trim.txt"),
+        ]
+    return isolated
 
 
 def validate_resolved_plan(
@@ -442,7 +503,8 @@ def atomic_write(path: Path, payload: bytes, mode: int = 0o600) -> None:
     descriptor: int | None = None
     try:
         descriptor = os.open(temporary, flags, mode)
-        os.fchmod(descriptor, mode)
+        if descriptor_mode_supported():
+            os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "wb") as stream:
             descriptor = None
             stream.write(payload)
@@ -652,11 +714,20 @@ def terminal_blocker(reason: str, **details: object) -> None:
     print(json.dumps(payload, separators=(",", ":"), sort_keys=True), file=sys.stderr)
 
 
-def remove_owned_tree(project: Path) -> tuple[int, list[str]]:
+def remove_bookkeeping(project: Path) -> tuple[int, list[str]]:
+    """Deactivate the exact accepted-plan ledger by tombstoning its directory.
+
+    Executable caches and probe staging live in a fresh external temporary
+    directory. Repository contents are deliberately never traversed here:
+    unexpected entries block cleanup and remain untouched. The accepted-plan
+    directory is moved intact into a fresh quarantine directory, so even an
+    exact-ledger substitution between validation and rename is never unlinked.
+    """
+
+    if not descriptor_cleanup_supported():
+        return remove_bookkeeping_portable(project)
+
     root = project / OWNED_DIRECTORY
-    ensure_no_symlink_components(project, root, "runner-owned directory")
-    if not root.exists():
-        return 0, []
     errors: list[str] = []
     error_count = 0
 
@@ -666,75 +737,241 @@ def remove_owned_tree(project: Path) -> tuple[int, list[str]]:
         if len(errors) < 3:
             errors.append(f"{path.name}:{error.strerror or error}")
 
-    try:
-        root.chmod(root.stat().st_mode | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-    except OSError as error:
-        record(root, error)
-    def walk_error(error: OSError) -> None:
-        record(Path(error.filename) if error.filename else root, error)
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
 
-    for current_text, directories, files in os.walk(
-        root, topdown=True, followlinks=False, onerror=walk_error
-    ):
-        current = Path(current_text)
-        for name in list(directories):
-            path = current / name
-            try:
-                if path.is_symlink():
-                    path.unlink()
-                    directories.remove(name)
-                else:
-                    path.chmod(
-                        path.stat().st_mode
-                        | stat.S_IRUSR
-                        | stat.S_IWUSR
-                        | stat.S_IXUSR
-                    )
-            except OSError as error:
-                record(path, error)
-        for name in files:
-            path = current / name
-            try:
-                if not path.is_symlink():
-                    path.chmod(path.stat().st_mode | stat.S_IWUSR)
-                path.unlink()
-            except OSError as error:
-                record(path, error)
-    for current_text, directories, _ in os.walk(
-        root, topdown=False, followlinks=False, onerror=walk_error
-    ):
-        current = Path(current_text)
-        for name in directories:
-            path = current / name
-            if path.is_symlink():
-                continue
-            try:
-                path.rmdir()
-            except OSError as error:
-                record(path, error)
+    descriptor: int | None = None
+    parent_descriptor: int | None = None
+    root_descriptor: int | None = None
+    quarantine_descriptor: int | None = None
+    ancestor_identities: list[tuple[str | None, tuple[int, int]]] = []
+
+    def identity(open_descriptor: int) -> tuple[int, int]:
+        status = os.fstat(open_descriptor)
+        return status.st_dev, status.st_ino
+
+    def canonical_ancestors_match() -> bool:
+        if not ancestor_identities:
+            return False
+        reopened: int | None = None
+        try:
+            reopened = os.open(project, flags)
+            if identity(reopened) != ancestor_identities[0][1]:
+                return False
+            for component, expected in ancestor_identities[1:]:
+                if component is None:
+                    return False
+                next_descriptor = os.open(component, flags, dir_fd=reopened)
+                os.close(reopened)
+                reopened = next_descriptor
+                if identity(reopened) != expected:
+                    return False
+            return True
+        except OSError:
+            return False
+        finally:
+            if reopened is not None:
+                os.close(reopened)
+
     try:
-        root.rmdir()
-    except OSError as error:
-        record(root, error)
+        descriptor = os.open(project, flags)
+        ancestor_identities.append((None, identity(descriptor)))
+        current_path = project
+        for index, component in enumerate(OWNED_DIRECTORY.parts):
+            child_path = current_path / component
+            try:
+                child_descriptor = os.open(component, flags, dir_fd=descriptor)
+            except FileNotFoundError:
+                return 0, []
+            except OSError as error:
+                record(child_path, error)
+                return error_count, errors
+            if index == len(OWNED_DIRECTORY.parts) - 1:
+                parent_descriptor = descriptor
+                descriptor = None
+                root_descriptor = child_descriptor
+                break
+            ancestor_identities.append((component, identity(child_descriptor)))
+            os.close(descriptor)
+            descriptor = child_descriptor
+            current_path = child_path
+
+        if parent_descriptor is None or root_descriptor is None:
+            return 0, []
+        root_status = os.fstat(root_descriptor)
+        root_identity = (root_status.st_dev, root_status.st_ino)
+        root_name = OWNED_DIRECTORY.name
+        try:
+            names = os.listdir(root_descriptor)
+        except OSError as error:
+            record(root, error)
+            return error_count, errors
+        unexpected = sorted(name for name in names if name != LEDGER_NAME)
+        if unexpected:
+            error_count += 1
+            errors.append(
+                f"{root.name}:unexpected entries block non-recursive cleanup: "
+                + ", ".join(unexpected[:3])
+            )
+            return error_count, errors
+        if LEDGER_NAME in names:
+            try:
+                ledger_status = os.stat(
+                    LEDGER_NAME,
+                    dir_fd=root_descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError as error:
+                record(root / LEDGER_NAME, error)
+                return error_count, errors
+            if not stat.S_ISREG(ledger_status.st_mode):
+                error_count += 1
+                errors.append(
+                    f"{LEDGER_NAME}:accepted-plan ledger is not a regular file"
+                )
+                return error_count, errors
+        quarantine_name = f"{RETIRED_DIRECTORY_PREFIX}{secrets.token_hex(12)}"
+        try:
+            os.mkdir(quarantine_name, mode=0o700, dir_fd=parent_descriptor)
+            quarantine_descriptor = os.open(
+                quarantine_name, flags, dir_fd=parent_descriptor
+            )
+            os.rename(
+                root_name,
+                "retired",
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=quarantine_descriptor,
+            )
+        except OSError as error:
+            record(root, error)
+            return error_count, errors
+        try:
+            retired = os.stat(
+                "retired",
+                dir_fd=quarantine_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError as error:
+            record(root, error)
+            return error_count, errors
+        if not stat.S_ISDIR(retired.st_mode) or (
+            retired.st_dev,
+            retired.st_ino,
+        ) != root_identity:
+            error_count += 1
+            errors.append(f"{root.name}:directory namespace changed during cleanup")
+        if not canonical_ancestors_match():
+            error_count += 1
+            if len(errors) < 3:
+                errors.append(
+                    f"{root.name}:canonical ancestor namespace changed during cleanup"
+                )
+    finally:
+        if quarantine_descriptor is not None:
+            os.close(quarantine_descriptor)
+        if root_descriptor is not None:
+            os.close(root_descriptor)
+        if parent_descriptor is not None:
+            os.close(parent_descriptor)
+        if descriptor is not None:
+            os.close(descriptor)
     return error_count, errors
+
+
+def portable_directory_identity(path: Path) -> tuple[int, int]:
+    status = os.lstat(path)
+    if path_is_link_or_reparse(path) or not stat.S_ISDIR(status.st_mode):
+        raise OSError(f"expected a real directory: {path}")
+    return status.st_dev, status.st_ino
+
+
+def remove_bookkeeping_portable(project: Path) -> tuple[int, list[str]]:
+    """Tombstone exact bookkeeping without Unix directory descriptors.
+
+    Identity and reparse checks fail closed around the atomic directory move.
+    Windows cannot eliminate the narrow path check/use window without native
+    directory handles, but the helper never recursively deletes repository
+    content or follows a caller-controlled reparse point.
+    """
+
+    root = project / OWNED_DIRECTORY
+    parent = root.parent
+    try:
+        ensure_no_symlink_components(project, root, "accepted-plan directory")
+        if not os.path.lexists(root):
+            return 0, []
+        project_identity = portable_directory_identity(project)
+        parent_identity = portable_directory_identity(parent)
+        root_identity = portable_directory_identity(root)
+        names = sorted(entry.name for entry in os.scandir(root))
+        unexpected = [name for name in names if name != LEDGER_NAME]
+        if unexpected:
+            return 1, [
+                f"{root.name}:unexpected entries block non-recursive cleanup: "
+                + ", ".join(unexpected[:3])
+            ]
+        if LEDGER_NAME in names:
+            ledger = root / LEDGER_NAME
+            ledger_status = os.lstat(ledger)
+            if path_is_link_or_reparse(ledger) or not stat.S_ISREG(
+                ledger_status.st_mode
+            ):
+                return 1, [
+                    f"{LEDGER_NAME}:accepted-plan ledger is not a regular file"
+                ]
+        quarantine = parent / (
+            f"{RETIRED_DIRECTORY_PREFIX}{secrets.token_hex(12)}"
+        )
+        quarantine.mkdir(mode=0o700)
+        quarantine_identity = portable_directory_identity(quarantine)
+        if (
+            portable_directory_identity(project) != project_identity
+            or portable_directory_identity(parent) != parent_identity
+            or portable_directory_identity(root) != root_identity
+        ):
+            return 1, [f"{root.name}:directory namespace changed during cleanup"]
+        retired = quarantine / "retired"
+        os.replace(root, retired)
+        if (
+            portable_directory_identity(project) != project_identity
+            or portable_directory_identity(parent) != parent_identity
+            or portable_directory_identity(quarantine) != quarantine_identity
+            or portable_directory_identity(retired) != root_identity
+        ):
+            return 1, [f"{root.name}:directory namespace changed during cleanup"]
+        return 0, []
+    except OSError as error:
+        return 1, [f"{root.name}:{error.strerror or error}"]
+
+
+def retired_bookkeeping_exists(project: Path) -> bool:
+    """Recognize an intentional prior tombstone without traversing it."""
+
+    parent = project / OWNED_DIRECTORY.parent
+    ensure_no_symlink_components(project, parent, "retired bookkeeping parent")
+    if not parent.is_dir():
+        return False
+    return any(
+        path.name.startswith(RETIRED_DIRECTORY_PREFIX)
+        and not path_is_link_or_reparse(path)
+        and path.is_dir()
+        for path in parent.iterdir()
+    )
 
 
 def stage_probe(plan: dict[str, object], resolver: ModuleType) -> int:
     project = plan["project"]
     if not isinstance(project, Path):
         raise CommandError("bootstrap project is invalid")
-    root = project / OWNED_DIRECTORY
-    stage = root / STAGE_DIRECTORY
-    ensure_no_symlink_components(project, root, "runner-owned directory")
-    cleanup_count, cleanup_errors = remove_owned_tree(project)
-    if cleanup_count:
-        terminal_blocker(
-            "owned-cleanup-failed", count=cleanup_count, errors=cleanup_errors
-        )
-        return 3
+    runtime_root = plan.get("runtime_root")
+    if not isinstance(runtime_root, Path):
+        raise CommandError("bootstrap runtime root is invalid")
+    stage = runtime_root / STAGE_DIRECTORY
     try:
-        stage.mkdir(parents=True, exist_ok=False)
-        ensure_no_symlink_components(project, stage, "bootstrap stage")
+        stage.mkdir(exist_ok=False)
         modules = plan["modules"]
         if not isinstance(modules, list):
             raise CommandError("bootstrap modules are invalid")
@@ -775,13 +1012,11 @@ def stage_probe(plan: dict[str, object], resolver: ModuleType) -> int:
             capture_output=True,
         )
     except (CommandError, OSError) as error:
-        cleanup_count, cleanup_errors = remove_owned_tree(project)
         terminal_blocker(
             "probe-stage-or-tidy-unavailable",
             detail=str(error)[:MAX_BLOCKER_DETAIL],
-            cleanup_errors=cleanup_count,
         )
-        return 126 if not cleanup_errors else 3
+        return 126
     post_tidy_error: CommandError | None = None
     if completed.returncode == 0:
         try:
@@ -799,12 +1034,6 @@ def stage_probe(plan: dict[str, object], resolver: ModuleType) -> int:
                 raise CommandError("staged exact intended OTel pins changed")
         except CommandError as error:
             post_tidy_error = error
-    cleanup_count, cleanup_errors = remove_owned_tree(project)
-    if cleanup_count:
-        terminal_blocker(
-            "owned-cleanup-failed", count=cleanup_count, errors=cleanup_errors
-        )
-        return 3
     if completed.returncode != 0:
         terminal_blocker(
             "go-mod-tidy-failed",
@@ -822,11 +1051,9 @@ def stage_probe(plan: dict[str, object], resolver: ModuleType) -> int:
         ledger = create_ledger(plan, resolver, "probed")
         write_ledger(project, ledger)
     except (CommandError, OSError) as error:
-        cleanup_count, _ = remove_owned_tree(project)
         terminal_blocker(
             "accepted-plan-ledger-write-failed",
             detail=str(error)[:MAX_BLOCKER_DETAIL],
-            cleanup_errors=cleanup_count,
         )
         return 3
     print(
@@ -848,11 +1075,14 @@ def stage_probe(plan: dict[str, object], resolver: ModuleType) -> int:
 
 
 def verify_cleanup(plan: dict[str, object]) -> list[str]:
+    runtime_root = plan.get("runtime_root")
+    if not isinstance(runtime_root, Path):
+        raise CommandError("cleanup runtime root is invalid")
     allowed = {Path(path) for path in plan["allowed"]}
     unexpected: list[str] = []
     for cache_text in plan["owned"]:
         cache = Path(cache_text)
-        ensure_no_symlink_components(plan["project"], cache, "owned cache")
+        ensure_no_symlink_components(runtime_root, cache, "owned runtime cache")
         if not cache.exists():
             continue
         allowed_directories = {
@@ -1003,17 +1233,16 @@ def run_ledger_followup(
     return return_code
 
 
-def main() -> int:
-    args = parse_args()
+def run(args: argparse.Namespace, runtime_root: Path) -> int:
     try:
         resolver = load_resolver()
         resolved = resolver.resolve(args.project, args.gomodcache)
         project, cache, _ = validate_project(resolved)
-        accepted_plan = ledger_path(project)
+        bookkeeping_root = project / OWNED_DIRECTORY
         if args.action == "cleanup" and (
-            accepted_plan.exists() or accepted_plan.is_symlink()
+            bookkeeping_root.exists() or bookkeeping_root.is_symlink()
         ):
-            count, errors = remove_owned_tree(project)
+            count, errors = remove_bookkeeping(project)
             if count:
                 print(
                     json.dumps(
@@ -1037,9 +1266,19 @@ def main() -> int:
                 )
             )
             return 0
+        if args.action == "cleanup" and retired_bookkeeping_exists(project):
+            print(
+                json.dumps(
+                    {"action": "cleanup", "status": "complete"},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            return 0
         ledger = read_ledger(project)
         if args.action == "probe-bootstrap":
             plan = validate_bootstrap_plan(resolved, resolver)
+            plan = isolate_runtime_paths(plan, runtime_root)
             return stage_probe(plan, resolver)
 
         if ledger is not None:
@@ -1069,6 +1308,7 @@ def main() -> int:
                         "the exact pinned dependency edit is already applied"
                     )
             action, argv = select_argv(args, plan)
+            plan = isolate_runtime_paths(plan, runtime_root)
             if action == "go-get":
                 return run_ledger_go_get(argv, plan, resolver)
             return run_ledger_followup(action, argv, plan, resolver)
@@ -1084,11 +1324,13 @@ def main() -> int:
             )
             write_ledger(project, ledger)
             plan = {**plan, "ledger": ledger}
+            plan = isolate_runtime_paths(plan, runtime_root)
             return run_ledger_go_get(argv, plan, resolver)
         if action != "cleanup":
             raise CommandError(
                 "run the exact pinned go-get before follow-up commands"
             )
+        plan = isolate_runtime_paths(plan, runtime_root)
     except (CommandError, OSError) as error:
         if args.action == "probe-bootstrap":
             terminal_blocker(
@@ -1112,6 +1354,14 @@ def main() -> int:
             )
             return 3
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    with tempfile.TemporaryDirectory(
+        prefix="obstudio-go-otel-", ignore_cleanup_errors=True
+    ) as runtime_text:
+        return run(args, Path(runtime_text))
 
 
 if __name__ == "__main__":

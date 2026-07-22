@@ -102,8 +102,11 @@ Look for `.observe/otel-audit.json` in the repository root.
 - If it exists, validate and use it as the audit authority. Load
   `.observe/otel-selection.json`, `.observe/otel-instrumentation.json`, and
   `.observe/otel-verify.json` when present. Require every overlay's `audit_id`
-  and `audit_sha256` to match the canonical audit. A stale or invalid JSON
-  artifact is an error; do not fall back to Markdown or fill JSON gaps from it.
+  and `audit_sha256` to match the canonical audit, instrumentation's
+  `selection_sha256` to match the exact normalized selection, and verification's
+  `instrumentation_sha256` to match the exact normalized instrumentation. A
+  stale or invalid JSON artifact is an error; do not fall back to Markdown or
+  fill JSON gaps from it.
 - Only when `.observe/otel-audit.json` is absent, fall back to the legacy
   `.observe/otel.md`, `.observe/otel-instrumentation.md`, and
   `.observe/otel-verify.md` chain. Do not mix legacy Markdown with JSON overlays.

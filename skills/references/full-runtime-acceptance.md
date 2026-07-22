@@ -48,11 +48,13 @@ Then:
    service, or deployed-image equivalent.
 2. When the boundary uses a Java agent, follow the active skill's project
    runtime reference and run its `scripts/resolve_java_agent.py` wrapper before
-   startup. Use the resolver's absolute validated path/version/hash as the
-   verification pin. A missing path from a different boundary is a rejected
-   candidate, not a blocker. Keep an unknown deployed-production version as a
-   parity gap; do not ask the user to supply a JAR when a valid local candidate
-   resolved.
+   startup. Bind the resolver's absolute validated path/version/hash/identity as
+   the verification pin, execute its exact `pre_attach_recheck_argv` immediately
+   before JVM startup, and attach only the `javaagent_argv` returned by that
+   successful exact-pin recheck. A missing path from a different boundary is a
+   rejected candidate, not a blocker. Keep an unknown deployed-production
+   version as a parity gap; do not ask the user to supply a JAR when a valid
+   local candidate resolved.
 3. Inventory required local dependencies and prefer existing test profiles,
    fake services, embedded fixtures, Testcontainers, Compose services, or
    repository-provided substitutes. Never use production credentials or data.

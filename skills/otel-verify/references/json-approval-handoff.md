@@ -38,6 +38,9 @@ finding IDs. It binds verification to the approved instrumentation scope.
    instrumentation JSON is absent, but do not write `.observe/otel-verify.json`
    or claim a complete canonical flow. Route the user to `$otel-instrument` for
    the bound machine handoff.
+   The instrumentation overlay's `selection_sha256` must match the exact
+   normalized selection. A changed `decision_answers` entry is stale even when
+   `approved_ids` is unchanged.
 4. Verify exactly the approved findings in audit order, their expected
    telemetry, and referenced scenarios. Unselected findings are outside this
    result and must not make it partial.
@@ -101,7 +104,9 @@ Copy `audit_id` and `audit_sha256` from the selection. Compute
 `instrumentation_sha256` from the exact normalized instrumentation overlay used
 to derive expected items and proof. Any material instrumentation change,
 including change text, source, tests, or evidence, invalidates prior
-verification even when item IDs are unchanged.
+verification even when item IDs are unchanged. The instrumentation digest also
+contains `selection_sha256`, so verification is transitively bound to the exact
+normalized selection without a redundant second selection hash.
 
 Use `meta.workflow_mode: standalone` for a user-invoked verification and
 `instrumentation_child` when an active `$otel-instrument` workflow invoked it.
@@ -196,14 +201,15 @@ of the assertion cannot collapse into a generic evidence sentence:
 ```json
 "removal_proof": {
   "removed_signal": "HttpRequest",
-  "replacement_signal": "GET /health SERVER span",
+  "replacement_signal": "GET /health",
   "absence_assertion_passed": true,
   "replacement_assertion_passed": true
 }
 ```
 
 `removed_signal` must exactly match the instrumentation item's `name`;
-`replacement_signal` must name a distinct intended owner. Keep the saved
+`replacement_signal` must name a distinct intended owner of the removed item's
+signal type; its proof must use that type explicitly. Keep the saved
 capture in `evidence` and the reader-friendly observation in
 `observed_telemetry`.
 

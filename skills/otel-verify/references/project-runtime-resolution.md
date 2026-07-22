@@ -128,12 +128,18 @@ It revalidates every candidate as a readable JAR whose manifest
 `Premain-Class` exactly matches the recognized Splunk or upstream
 OpenTelemetry entry point and any provider-family evidence. It then records
 the absolute path, full artifact SemVer (including prerelease and build
-identifiers), implementation version, provider family, size, and SHA-256. Use
-the absolute `selected.javaagent_argv` value; a JVM does not expand `~` inside
-a `-javaagent:` argument. Do not ask the user to provide, locate, install, or
-download an agent when `status` is `resolved`.
+identifiers), implementation version, provider family, size, file identity,
+and SHA-256. Immediately before starting the JVM, execute the exact
+`selected.pre_attach_recheck_argv` array without a shell. Continue only when it
+returns `status=resolved`, `claims.verification_pin_match=exact`, and the same
+`selected.verification_pin`; then use the `selected.javaagent_argv` returned by
+that fresh recheck. A JVM does not expand `~` inside a `-javaagent:` argument.
+Do not ask the user to provide, locate, install, or download an agent when
+`status` is `resolved`.
 
-Treat the selected path/version/hash as the verification pin. Keep
+Treat the selected path/version/hash/identity as the verification pin, but do
+not attach a path from an earlier resolver result without the generated
+pre-attach digest recheck. Keep
 `production_parity.status` separate: `not_proven` means the production version
 is not source-declared, not that the verification agent is unavailable. Only
 report an agent artifact as a concrete blocker after the resolver returns

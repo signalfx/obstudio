@@ -69,6 +69,7 @@ class ValidateReaderReportTest(unittest.TestCase):
                         {
                             "schema_version": 1,
                             "kind": "otel-instrumentation",
+                            "selection_sha256": "sha256:" + "b" * 64,
                             "findings": [
                                 {
                                     "id": "OTEL-001",
@@ -149,6 +150,7 @@ class ValidateReaderReportTest(unittest.TestCase):
                 "kind": "otel-instrumentation",
                 "audit_id": "audit-1",
                 "audit_sha256": "sha256:" + "a" * 64,
+                "selection_sha256": "sha256:" + "b" * 64,
                 "findings": [
                     {
                         "id": "OTEL-001",
@@ -224,6 +226,17 @@ class ValidateReaderReportTest(unittest.TestCase):
             stale = subprocess.run(command, check=False, capture_output=True, text=True)
             self.assertNotEqual(stale.returncode, 0)
             self.assertIn("reader row disagrees", stale.stderr)
+
+            report_path.write_text(REPORT, encoding="utf-8")
+            instrumentation.pop("selection_sha256")
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            unbound = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(unbound.returncode, 0)
+            self.assertIn("selection_sha256 must be a canonical", unbound.stderr)
 
 
 if __name__ == "__main__":

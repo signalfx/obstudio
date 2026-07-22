@@ -12,8 +12,24 @@ import argparse
 import json
 import os
 import re
+import stat
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+from secure_output import (
+    SecureOutputError,
+    authenticate_directory,
+    descriptor_operations_supported,
+    path_is_link_or_reparse,
+    require_same_directory,
+    write_text,
+)
 
 
 SCHEMA_VERSION = 1
@@ -344,6 +360,300 @@ def relative_label(root: Path, path: Path) -> str:
 
 
 def collect_scan_input(
+    root: Path,
+    *,
+    max_files: int,
+    max_total_bytes: int,
+    root_descriptor: int | None = None,
+) -> ScanInput:
+    if descriptor_operations_supported() and os.listdir in os.supports_fd:
+        return collect_scan_input_descriptor(
+            root,
+            max_files=max_files,
+            max_total_bytes=max_total_bytes,
+            root_descriptor=root_descriptor,
+        )
+    return collect_scan_input_portable(
+        root,
+        max_files=max_files,
+        max_total_bytes=max_total_bytes,
+    )
+
+
+def descriptor_identity(status: os.stat_result) -> tuple[int, int]:
+    return status.st_dev, status.st_ino
+
+
+def read_descriptor_payload(descriptor: int, maximum: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while total <= maximum:
+        chunk = os.read(descriptor, min(1024 * 1024, maximum + 1 - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
+
+
+def collect_scan_input_descriptor(
+    root: Path,
+    *,
+    max_files: int,
+    max_total_bytes: int,
+    root_descriptor: int | None,
+) -> ScanInput:
+    """Scan through retained directory descriptors without following links."""
+
+    scan = ScanInput()
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = (
+        os.dup(root_descriptor)
+        if root_descriptor is not None
+        else os.open(root, directory_flags)
+    )
+
+    def visit(directory_descriptor: int, relative: Path) -> bool:
+        try:
+            names = sorted(os.listdir(directory_descriptor))
+        except OSError as error:
+            scan.skipped["walk_errors"] += 1
+            scan.warn(
+                f"directory walk failed at {relative.as_posix() or '.'}: {error}"
+            )
+            return False
+
+        directories: list[tuple[str, os.stat_result]] = []
+        files: list[tuple[str, os.stat_result]] = []
+        for name in names:
+            try:
+                details = os.stat(
+                    name,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError as error:
+                scan.skipped["stat_errors"] += 1
+                scan.warn(
+                    f"could not stat {(relative / name).as_posix()}: {error}"
+                )
+                continue
+            if stat.S_ISDIR(details.st_mode):
+                directories.append((name, details))
+            else:
+                files.append((name, details))
+
+        for name, details in files:
+            relative_path = relative / name
+            path = root / relative_path
+            if not is_supported_text(path):
+                continue
+            if path_is_link_or_reparse(details):
+                scan.skipped["symlink_files"] += 1
+                scan.warn(f"skipped symlink file: {relative_path.as_posix()}")
+                continue
+            if len(scan.files) >= max_files:
+                scan.skipped["file_limit"] += 1
+                scan.warn(
+                    f"stopped after {max_files} text files; additional files were not scanned"
+                )
+                return True
+            if not stat.S_ISREG(details.st_mode):
+                scan.skipped["read_errors"] += 1
+                scan.warn(
+                    f"skipped non-regular file: {relative_path.as_posix()}"
+                )
+                continue
+            if details.st_size > MAX_FILE_BYTES:
+                scan.skipped["oversized_files"] += 1
+                scan.warn(
+                    f"skipped oversized file {relative_path.as_posix()} "
+                    f"({details.st_size} bytes; limit {MAX_FILE_BYTES})"
+                )
+                continue
+            if scan.bytes_scanned + details.st_size > max_total_bytes:
+                scan.skipped["byte_limit"] += 1
+                scan.warn(
+                    f"stopped before {relative_path.as_posix()} because the "
+                    f"{max_total_bytes}-byte scan limit was reached"
+                )
+                return True
+
+            file_descriptor: int | None = None
+            try:
+                file_descriptor = os.open(
+                    name, file_flags, dir_fd=directory_descriptor
+                )
+                opened = os.fstat(file_descriptor)
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or descriptor_identity(opened) != descriptor_identity(details)
+                ):
+                    raise OSError("file entry changed before it was opened")
+                remaining = min(
+                    MAX_FILE_BYTES,
+                    max_total_bytes - scan.bytes_scanned,
+                )
+                payload = read_descriptor_payload(file_descriptor, remaining)
+                if len(payload) > MAX_FILE_BYTES:
+                    scan.skipped["oversized_files"] += 1
+                    scan.warn(
+                        f"skipped oversized file {relative_path.as_posix()} "
+                        f"(grew beyond limit {MAX_FILE_BYTES})"
+                    )
+                    continue
+                if scan.bytes_scanned + len(payload) > max_total_bytes:
+                    scan.skipped["byte_limit"] += 1
+                    scan.warn(
+                        f"stopped before {relative_path.as_posix()} because the "
+                        f"{max_total_bytes}-byte scan limit was reached"
+                    )
+                    return True
+            except OSError as error:
+                scan.skipped["read_errors"] += 1
+                scan.warn(
+                    f"could not read {relative_path.as_posix()}: {error}"
+                )
+                continue
+            finally:
+                if file_descriptor is not None:
+                    os.close(file_descriptor)
+            scan.files.append(path)
+            scan.lines[path] = tuple(
+                payload.decode("utf-8", errors="replace").splitlines()
+            )
+            scan.bytes_scanned += len(payload)
+
+        for name, details in directories:
+            path = root / relative / name
+            label = (relative / name).as_posix()
+            if name in SKIP_DIRS:
+                scan.skipped["configured_directories"] += 1
+                continue
+            if path_is_link_or_reparse(details):
+                scan.skipped["symlink_directories"] += 1
+                scan.warn(f"skipped symlink directory: {label}")
+                continue
+            child: int | None = None
+            try:
+                child = os.open(name, directory_flags, dir_fd=directory_descriptor)
+                opened = os.fstat(child)
+                if (
+                    not stat.S_ISDIR(opened.st_mode)
+                    or descriptor_identity(opened) != descriptor_identity(details)
+                ):
+                    raise OSError("directory entry changed before it was opened")
+                if visit(child, relative / name):
+                    return True
+            except OSError as error:
+                scan.skipped["walk_errors"] += 1
+                scan.warn(f"directory changed or became unsafe: {label}: {error}")
+            finally:
+                if child is not None:
+                    os.close(child)
+        return False
+
+    try:
+        root_status = os.fstat(descriptor)
+        if not stat.S_ISDIR(root_status.st_mode):
+            raise SecureOutputError(f"project root is not a directory: {root}")
+        visit(descriptor, Path())
+    finally:
+        os.close(descriptor)
+    return scan
+
+
+def portable_directory_chain(
+    root: Path, parent: Path
+) -> list[tuple[Path, tuple[int, int]]]:
+    try:
+        relative = parent.relative_to(root)
+    except ValueError as error:
+        raise OSError(f"scan path escapes project root: {parent}") from error
+    result: list[tuple[Path, tuple[int, int]]] = []
+    current = root
+    for component in (None, *relative.parts):
+        if component is not None:
+            current = current / component
+        details = os.lstat(current)
+        if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+            raise OSError(f"directory component is a link or reparse point: {current}")
+        result.append((current, descriptor_identity(details)))
+    return result
+
+
+def portable_chain_matches(
+    identities: list[tuple[Path, tuple[int, int]]]
+) -> bool:
+    for path, expected in identities:
+        try:
+            details = os.lstat(path)
+        except OSError:
+            return False
+        if (
+            path_is_link_or_reparse(details)
+            or not stat.S_ISDIR(details.st_mode)
+            or descriptor_identity(details) != expected
+        ):
+            return False
+    return True
+
+
+def portable_read_payload(
+    root: Path,
+    path: Path,
+    expected: os.stat_result,
+    maximum: int,
+) -> bytes:
+    """Best-effort no-follow read for platforms without dir_fd support.
+
+    Reparse and identity checks fail closed around the read. Python cannot
+    eliminate the narrow path check/use window on Windows, but mismatched
+    bytes are never retained after a detected namespace change.
+    """
+
+    identities = portable_directory_chain(root, path.parent)
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+        current = os.lstat(path)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or path_is_link_or_reparse(current)
+            or descriptor_identity(opened) != descriptor_identity(expected)
+            or descriptor_identity(current) != descriptor_identity(opened)
+            or not portable_chain_matches(identities)
+        ):
+            raise OSError("file or parent namespace changed before portable read")
+        payload = read_descriptor_payload(descriptor, maximum)
+        current = os.lstat(path)
+        if (
+            path_is_link_or_reparse(current)
+            or descriptor_identity(current) != descriptor_identity(opened)
+            or not portable_chain_matches(identities)
+        ):
+            raise OSError("file or parent namespace changed during portable read")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def collect_scan_input_portable(
     root: Path, *, max_files: int, max_total_bytes: int
 ) -> ScanInput:
     scan = ScanInput()
@@ -353,7 +663,9 @@ def collect_scan_input(
         scan.warn(f"directory walk failed: {error}")
 
     stop = False
-    for current, dirnames, filenames in os.walk(root, onerror=walk_error):
+    for current, dirnames, filenames in os.walk(
+        root, onerror=walk_error, followlinks=False
+    ):
         current_path = Path(current)
         retained_dirs = []
         for name in sorted(dirnames):
@@ -361,9 +673,23 @@ def collect_scan_input(
             if name in SKIP_DIRS:
                 scan.skipped["configured_directories"] += 1
                 continue
-            if path.is_symlink():
+            try:
+                details = os.lstat(path)
+            except OSError as error:
+                scan.skipped["stat_errors"] += 1
+                scan.warn(
+                    f"could not stat {relative_label(root, path)}: {error}"
+                )
+                continue
+            if path_is_link_or_reparse(details):
                 scan.skipped["symlink_directories"] += 1
                 scan.warn(f"skipped symlink directory: {relative_label(root, path)}")
+                continue
+            if not stat.S_ISDIR(details.st_mode):
+                scan.skipped["walk_errors"] += 1
+                scan.warn(
+                    f"skipped non-directory entry: {relative_label(root, path)}"
+                )
                 continue
             retained_dirs.append(name)
         dirnames[:] = retained_dirs
@@ -372,7 +698,15 @@ def collect_scan_input(
             path = current_path / name
             if not is_supported_text(path):
                 continue
-            if path.is_symlink():
+            try:
+                details = os.lstat(path)
+            except OSError as error:
+                scan.skipped["stat_errors"] += 1
+                scan.warn(
+                    f"could not stat {relative_label(root, path)}: {error}"
+                )
+                continue
+            if path_is_link_or_reparse(details):
                 scan.skipped["symlink_files"] += 1
                 scan.warn(f"skipped symlink file: {relative_label(root, path)}")
                 continue
@@ -383,14 +717,13 @@ def collect_scan_input(
                 )
                 stop = True
                 break
-            try:
-                size = path.stat().st_size
-            except OSError as error:
-                scan.skipped["stat_errors"] += 1
+            if not stat.S_ISREG(details.st_mode):
+                scan.skipped["read_errors"] += 1
                 scan.warn(
-                    f"could not stat {relative_label(root, path)}: {error}"
+                    f"skipped non-regular file: {relative_label(root, path)}"
                 )
                 continue
+            size = details.st_size
             if size > MAX_FILE_BYTES:
                 scan.skipped["oversized_files"] += 1
                 scan.warn(
@@ -407,8 +740,11 @@ def collect_scan_input(
                 stop = True
                 break
             try:
-                lines = tuple(
-                    path.read_text(encoding="utf-8", errors="replace").splitlines()
+                payload = portable_read_payload(
+                    root,
+                    path,
+                    details,
+                    min(MAX_FILE_BYTES, max_total_bytes - scan.bytes_scanned),
                 )
             except OSError as error:
                 scan.skipped["read_errors"] += 1
@@ -416,9 +752,25 @@ def collect_scan_input(
                     f"could not read {relative_label(root, path)}: {error}"
                 )
                 continue
+            if len(payload) > MAX_FILE_BYTES:
+                scan.skipped["oversized_files"] += 1
+                scan.warn(
+                    f"skipped oversized file {relative_label(root, path)} "
+                    f"(grew beyond limit {MAX_FILE_BYTES})"
+                )
+                continue
+            if scan.bytes_scanned + len(payload) > max_total_bytes:
+                scan.skipped["byte_limit"] += 1
+                scan.warn(
+                    f"stopped before {relative_label(root, path)} because the "
+                    f"{max_total_bytes}-byte scan limit was reached"
+                )
+                stop = True
+                break
+            lines = tuple(payload.decode("utf-8", errors="replace").splitlines())
             scan.files.append(path)
             scan.lines[path] = lines
-            scan.bytes_scanned += size
+            scan.bytes_scanned += len(payload)
         if stop:
             break
 
@@ -429,7 +781,7 @@ def file_role(root: Path, path: Path) -> str:
     relative = path.relative_to(root)
     lowered_parts = {part.lower() for part in relative.parts}
     name = path.name.lower()
-    if lowered_parts & {"eval", "evals"}:
+    if relative.parts and relative.parts[0].lower() in {"eval", "evals"}:
         return "eval"
     if path.name in LOCKFILE_NAMES:
         return "lockfile"
@@ -816,11 +1168,13 @@ def inspect(
     *,
     max_files: int = DEFAULT_MAX_FILES,
     max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES,
+    root_descriptor: int | None = None,
 ) -> dict[str, object]:
     scan = collect_scan_input(
         root,
         max_files=max_files,
         max_total_bytes=max_total_bytes,
+        root_descriptor=root_descriptor,
     )
     files = scan.files
     lines_by_path = scan.lines
@@ -987,9 +1341,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    root = args.root.resolve()
-    if not root.is_dir():
-        raise SystemExit(f"project root is not a directory: {root}")
+    try:
+        project = authenticate_directory(args.root)
+    except SecureOutputError as error:
+        raise SystemExit(f"project root is not a safe directory: {error}") from None
+    root = project.path
     if args.max_items < 1:
         raise SystemExit("--max-items must be at least 1")
     if args.max_files < 1:
@@ -1001,11 +1357,21 @@ def main() -> int:
         args.max_items,
         max_files=args.max_files,
         max_total_bytes=args.max_total_bytes,
+        root_descriptor=project.descriptor,
     )
+    try:
+        require_same_directory(project)
+    except SecureOutputError as error:
+        raise SystemExit(f"project root changed during inventory: {error}") from None
     if args.output:
-        output = args.output.resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        try:
+            output = write_text(
+                project,
+                args.output,
+                json.dumps(result, indent=2, sort_keys=True) + "\n",
+            )
+        except SecureOutputError as error:
+            raise SystemExit(f"refusing unsafe inventory output: {error}") from None
         print(
             json.dumps(
                 {

@@ -13,6 +13,7 @@ from aggregate_skill_benchmark import (
     build_benchmark,
     canonical_equality_satisfied,
     compare_provenance,
+    definition_case_contract,
     gap_closure_validator_command,
     main,
     reader_validator_command,
@@ -269,6 +270,7 @@ raise SystemExit(0)
                 {
                     "skill": skill_name,
                     "prompts": [{"id": "benchmark", "task": task}],
+                    "rubric": ["The generated report is correct."],
                 }
             ),
             encoding="utf-8",
@@ -326,13 +328,12 @@ raise SystemExit(0)
             encoding="utf-8",
         )
         task_hash = hashlib.sha256(task.encode("utf-8")).hexdigest()
-        contract_hash = hashlib.sha256(
-            json.dumps(
-                {"task": task, "definition": str(definition)},
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        _, contract_hash, contract_errors = definition_case_contract(
+            definition,
+            "benchmark",
+        )
+        self.assertEqual(contract_errors, [])
+        self.assertIsNotNone(contract_hash)
         run_configuration_hash = hashlib.sha256(
             json.dumps(
                 run_configuration,
@@ -1011,6 +1012,154 @@ raise SystemExit(0)
         self.assertTrue(result["complete"])
         self.assertTrue(result["validators_ok"])
 
+    def test_changed_rubric_with_same_task_rejects_replayed_case_contract(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            for side in ("before", "after"):
+                self.write_run(
+                    root,
+                    side=side,
+                    skill="audit",
+                    run=1,
+                    duration=10,
+                    commands=10,
+                    tokens=100,
+                    report=AUDIT_REPORT.format(route="/tasks"),
+                )
+
+            definition = (
+                repo
+                / "evals/go/sample/eval/qual/benchmark-audit.json"
+            )
+            current = json.loads(definition.read_text(encoding="utf-8"))
+            original_task = current["prompts"][0]["task"]
+            current["rubric"] = ["A newly required semantic contract."]
+            definition.write_text(json.dumps(current), encoding="utf-8")
+            definition_hash = hashlib.sha256(
+                definition.read_bytes()
+            ).hexdigest()
+            fixture_hash = tree_sha256(definition.parents[2])
+
+            for side in ("before", "after"):
+                provenance_path = next(
+                    (root / side / "audit/run1").rglob(
+                        "with_skill/.codex-eval-provenance.json"
+                    )
+                )
+                provenance = json.loads(
+                    provenance_path.read_text(encoding="utf-8")
+                )
+                self.assertEqual(provenance["case"]["task"], original_task)
+                provenance["definition"]["sha256"] = definition_hash
+                provenance["fixture"]["tree_sha256"] = fixture_hash
+                provenance_path.write_text(
+                    json.dumps(provenance),
+                    encoding="utf-8",
+                )
+                self.reseal(root, side, "audit")
+
+            result = build_benchmark(root, repo, ["audit"], 1)
+
+        self.assertFalse(result["complete"])
+        for side in ("before", "after"):
+            run = result["skills"][0]["sides"][side]["runs"][0]
+            self.assertTrue(
+                any(
+                    "case.contract_sha256 differs from the current eval definition"
+                    in error
+                    for error in run["errors"]
+                )
+            )
+
+    def test_definition_snapshot_rejects_hybrid_contract_and_digest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            for side in ("before", "after"):
+                self.write_run(
+                    root,
+                    side=side,
+                    skill="audit",
+                    run=1,
+                    duration=10,
+                    commands=10,
+                    tokens=100,
+                    report=AUDIT_REPORT.format(route="/tasks"),
+                )
+
+            definition = (
+                repo
+                / "evals/go/sample/eval/qual/benchmark-audit.json"
+            )
+            original_bytes = definition.read_bytes()
+            changed = json.loads(original_bytes)
+            changed["rubric"] = ["A contract from different definition bytes."]
+            changed_bytes = json.dumps(changed).encode("utf-8")
+            definition.write_bytes(changed_bytes)
+            changed_definition_hash = hashlib.sha256(
+                changed_bytes
+            ).hexdigest()
+            changed_fixture_hash = tree_sha256(definition.parents[2])
+
+            for side in ("before", "after"):
+                provenance_path = next(
+                    (root / side / "audit/run1").rglob(
+                        "with_skill/.codex-eval-provenance.json"
+                    )
+                )
+                provenance = json.loads(
+                    provenance_path.read_text(encoding="utf-8")
+                )
+                provenance["definition"]["sha256"] = (
+                    changed_definition_hash
+                )
+                provenance["fixture"]["tree_sha256"] = (
+                    changed_fixture_hash
+                )
+                provenance_path.write_text(
+                    json.dumps(provenance),
+                    encoding="utf-8",
+                )
+                self.reseal(root, side, "audit")
+
+            original_snapshot_reader = (
+                benchmark_module.read_file_digest_snapshot
+            )
+            snapshot_reads = 0
+
+            def read_original_then_swap(path: Path):
+                nonlocal snapshot_reads
+                if path.resolve() != definition.resolve():
+                    return original_snapshot_reader(path)
+                snapshot_reads += 1
+                definition.write_bytes(original_bytes)
+                captured = original_snapshot_reader(path)
+                definition.write_bytes(changed_bytes)
+                return captured
+
+            with patch.object(
+                benchmark_module,
+                "read_file_digest_snapshot",
+                side_effect=read_original_then_swap,
+            ):
+                result = build_benchmark(root, repo, ["audit"], 1)
+
+        self.assertEqual(snapshot_reads, 2)
+        self.assertFalse(result["complete"])
+        for side in ("before", "after"):
+            run = result["skills"][0]["sides"][side]["runs"][0]
+            self.assertTrue(
+                any(
+                    "definition.sha256 does not match" in error
+                    for error in run["errors"]
+                )
+            )
+
     def test_changed_harness_source_invalidates_captured_runs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1427,6 +1576,25 @@ raise SystemExit(0)
             self.assertTrue(swapped)
             self.assertFalse((outside / "nested").exists())
             self.assertFalse((outside / "nested/artifact.bin").exists())
+
+    def test_capture_snapshot_has_portable_no_dir_fd_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "snapshot"
+            destination.mkdir()
+
+            with patch(
+                "pytest_codex_evals.backends.descriptor_operations_supported",
+                return_value=False,
+            ):
+                benchmark_module.materialize_capture_snapshot(
+                    destination,
+                    {"nested/artifact.bin": b"authenticated"},
+                )
+
+            self.assertEqual(
+                (destination / "nested/artifact.bin").read_bytes(),
+                b"authenticated",
+            )
 
     def test_aggregate_output_creation_refuses_ancestor_namespace_swap(
         self,

@@ -47,6 +47,9 @@ Before any application-code, dependency, runtime-config, or test edit:
    stop. A handoff with an authored answer whose option unlocks no work may
    validly have empty executable ID lists. Repair invalid state through the
    planning flow; never bypass the validator.
+   Instrumentation must later copy the validator-computed digest of this exact
+   normalized selection into `selection_sha256`. Do not hash a hand-authored or
+   partially normalized object.
 5. Use only the scoped executable findings, dependencies, and referenced
    verification scenarios. `manual decision` and `external follow-up` findings
    cannot appear in either selection ID list. `decision_answers` is separate
@@ -80,6 +83,7 @@ Write `.observe/otel-instrumentation.json` with this shape:
   "kind": "otel-instrumentation",
   "audit_id": "audit-id-from-selection",
   "audit_sha256": "audit-sha256-from-selection",
+  "selection_sha256": "sha256-of-exact-normalized-selection",
   "meta": {
     "service_name": "example-service",
     "date": "2026-07-17",
@@ -98,7 +102,7 @@ Write `.observe/otel-instrumentation.json` with this shape:
           "type": "span",
           "name": "GET /health",
           "source": "main.go:42",
-          "added_attributes": ["http.route"],
+          "added_attributes": ["http.route=/health"],
           "product_view": "Trace waterfall shows route latency and errors.",
           "follow_up_actions": ["Filter the trace waterfall by http.route after verification."],
           "verification_scenarios": ["http.health.success"]
@@ -114,7 +118,11 @@ Write `.observe/otel-instrumentation.json` with this shape:
 }
 ```
 
-Copy `audit_id` and `audit_sha256` from the selection. Use only `Pass`,
+Copy `audit_id` and `audit_sha256` from the selection. Compute
+`selection_sha256` from the exact normalized selection returned by the shared
+validator, including `requested_ids`, dependency-closed `approved_ids`,
+`decision_answers`, and approval metadata. A changed answer invalidates older
+instrumentation even when the executable IDs remain unchanged. Use only `Pass`,
 `Partial`, `Fail`, `Blocked`, or `Not run` for `meta.result`; `working`,
 `not_working`, `not_proven`, `not_configured`, or `deferred` for finding status;
 and `span`, `metric`, `log`, `resource`, or `configuration` for telemetry type.
@@ -130,7 +138,9 @@ example `OTEL-001.http-server-span`. Use `added`, `modified`, or `removed` for
 source/call site; list only newly added attributes or dimensions; and map the
 item to the audit scenarios that prove it. Every item requires at least one
 product follow-up. For a metric, name the chart/dashboard or detector action it
-enables. When `added_attributes` is nonempty, name the filter, slice, group-by,
+enables. Preserve each audit-authored attribute exactly: a key-only promise
+stays key-only, while `key=value` keeps that exact bounded value. When
+`added_attributes` is nonempty, name the filter, slice, group-by,
 or breakdown it enables. These item IDs are the deterministic inventory that
 verification must cover exactly; a free-text `changes` list is not a substitute.
 Never use filler such as "Added/modified `<name>` for the selected bounded
@@ -255,7 +265,8 @@ python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" rende
 After `$otel-verify` writes `.observe/otel-verify.json`, rerun validation and
 `render-instrumentation-html` with `--verify-json .observe/otel-verify.json`.
 The verify overlay must carry `instrumentation_sha256` for the exact normalized
-instrumentation overlay plus `meta.workflow_mode: instrumentation_child`.
+instrumentation overlay, which includes the bound `selection_sha256`, plus
+`meta.workflow_mode: instrumentation_child`.
 Repair every binding, digest, ID order, status, or evidence error before finalizing.
 When executed verification reports `not_working`, do not treat successful JSON
 validation or HTML rendering as completion. Apply the pre-finalization repair

@@ -62,6 +62,8 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
 
     handoff_normalized = " ".join(_read(INSTRUMENT_HANDOFF).lower().split())
     assert "selection gate" in handoff_normalized
+    assert "selection_sha256" in handoff_normalized
+    assert "changed answer invalidates older instrumentation" in handoff_normalized
     assert "cannot appear in either selection id list" in handoff_normalized
     assert "unresolved dependency" in handoff_normalized
 
@@ -87,6 +89,7 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
             "`unlocks`",
         ):
             assert term in text
+        assert "pairwise disjoint" in text
 
     for text in (flow, instrument, handoff):
         for term in (

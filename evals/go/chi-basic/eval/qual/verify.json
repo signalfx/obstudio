@@ -12,7 +12,7 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Runs the canonical bound-flow validator and preserves exact audit_sha256 and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
+    "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
     "Keeps the verify aggregate result Pass only because the selected finding, mapped scenario, and both telemetry item results are working with direct proof.",
     "Preserves structured removal_proof for HttpRequest with both absence_assertion_passed and replacement_assertion_passed true and the distinct GET /health replacement signal.",
     "Requires direct item-local proof for GET /health with http.route and does not let the HttpRequest absence assertion prove the replacement item by itself.",

@@ -330,6 +330,8 @@ unchecked; do not manufacture an approve/decline decision around it. A genuine
 telemetry-specific choices remain after the source scan. Record those choices
 as explicit selectable `decision_options`, each with a stable `id`, concise
 `label`, concrete `outcome`, and the executable finding IDs it `unlocks`.
+Because the choices are mutually exclusive, their `unlocks` sets must be
+pairwise disjoint; one executable finding cannot encode two different answers.
 
 After applying the OTel boundary, validate finding relevance from the
 dependency graph. Dependency direction is executable finding -> prerequisite.
@@ -758,8 +760,9 @@ JSON requirements:
   `decision_options`. Each option has a stable `id`, concise `label`, concrete
   `outcome`, and an `unlocks` list containing only executable finding IDs that
   depend on the manual finding. Option IDs are unique within the decision, and
-  an option may use an empty `unlocks` list when that answer intentionally
-  produces no instrumentation work. Every `external follow-up` must
+  option unlock sets are pairwise disjoint. An option may use an empty
+  `unlocks` list when that answer intentionally produces no instrumentation
+  work. Every `external follow-up` must
   include a known non-placeholder `external_owner` and an exact
   `external_requirement` naming an actual expected OTel signal, attribute,
   configuration scope, or telemetry proof that owner must supply. The exact

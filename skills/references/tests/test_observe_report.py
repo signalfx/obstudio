@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -267,12 +268,29 @@ def make_external_follow_up(finding: dict[str, object]) -> None:
     finding.pop("decision_question", None)
 
 
-def sample_instrumentation(report: dict[str, object], digest: str) -> dict[str, object]:
+def sample_instrumentation(
+    report: dict[str, object],
+    digest: str,
+    selection: dict[str, object] | None = None,
+) -> dict[str, object]:
+    if selection is None:
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
     return {
         "schema_version": 1,
         "kind": "otel-instrumentation",
         "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
         "audit_sha256": digest,
+        "selection_sha256": MODULE.selection_digest(selection),
         "meta": {"service_name": "checkout", "date": "2026-07-17", "result": "Partial"},
         "findings": [
             {
@@ -352,6 +370,181 @@ def sample_verify(
 
 
 class ObserveReportTest(unittest.TestCase):
+    def test_example_report_companions_are_canonical_and_bound(self) -> None:
+        example_root = Path(__file__).parents[3] / "docs" / "example-reports"
+        audit_raw = json.loads((example_root / "otel-audit.json").read_text())
+        selection_raw = json.loads(
+            (example_root / "otel-selection.json").read_text()
+        )
+        instrumentation_raw = json.loads(
+            (example_root / "otel-instrumentation.json").read_text()
+        )
+        verify_raw = json.loads((example_root / "otel-verify.json").read_text())
+
+        report = MODULE.normalize_audit_report(audit_raw)
+        self.assertEqual(audit_raw, report)
+        selection = MODULE.normalize_selection(selection_raw, report)
+        instrumentation = MODULE.normalize_instrumentation(
+            instrumentation_raw, report, selection
+        )
+        verify = MODULE.normalize_verify(
+            verify_raw, report, selection, instrumentation
+        )
+
+        self.assertEqual(selection_raw, selection)
+        self.assertEqual(instrumentation_raw, instrumentation)
+        self.assertEqual(verify_raw, verify)
+        self.assertEqual(selection["audit_sha256"], MODULE.audit_digest(report))
+        self.assertEqual(
+            instrumentation["selection_sha256"],
+            MODULE.selection_digest(selection),
+        )
+        self.assertEqual(
+            verify["instrumentation_sha256"],
+            MODULE.instrumentation_digest(instrumentation),
+        )
+        instrumentation_html = (
+            example_root / "otel-instrumentation.html"
+        ).read_text()
+        self.assertIn(
+            f'<meta name="otel-selection-sha256" content="{MODULE.selection_digest(selection)}">',
+            instrumentation_html,
+        )
+        self.assertIn("were outside this instrumentation run", instrumentation_html)
+        self.assertNotIn("were not implemented in this run", instrumentation_html)
+
+    def test_report_writes_reject_symlinked_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "repository"
+            repository.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            victim = outside / "otel.html"
+            victim.write_text("must survive\n", encoding="utf-8")
+            (repository / ".observe").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaises(OSError):
+                MODULE.write_text(repository / ".observe" / "otel.html", "forged\n")
+
+            self.assertEqual(victim.read_text(encoding="utf-8"), "must survive\n")
+
+    def test_report_writes_reject_symlinked_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / ".observe" / "otel-audit.json"
+            output.parent.mkdir()
+            victim = root / "victim.json"
+            victim.write_text("must survive\n", encoding="utf-8")
+            output.symlink_to(victim)
+
+            with self.assertRaises(MODULE.ReportError):
+                MODULE.write_json(output, {"forged": True})
+
+            self.assertEqual(victim.read_text(encoding="utf-8"), "must survive\n")
+
+    def test_portable_report_writer_creates_and_replaces_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = (
+                Path(directory).resolve()
+                / "repository"
+                / ".observe"
+                / "otel.html"
+            )
+            with mock.patch.object(
+                MODULE, "descriptor_atomic_writes_supported", return_value=False
+            ):
+                MODULE.write_text(output, "first\n")
+                MODULE.write_text(output, "second\n")
+
+            self.assertEqual(output.read_text(encoding="utf-8"), "second\n")
+
+    def test_portable_report_writer_rejects_symlink_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            outside = root / "outside"
+            outside.mkdir()
+            victim = outside / "otel.html"
+            victim.write_text("must survive\n", encoding="utf-8")
+            repository = root / "repository"
+            repository.mkdir()
+            (repository / ".observe").symlink_to(outside, target_is_directory=True)
+            with mock.patch.object(
+                MODULE, "descriptor_atomic_writes_supported", return_value=False
+            ):
+                with self.assertRaises(MODULE.ReportError):
+                    MODULE.write_text(
+                        repository / ".observe" / "otel.html", "forged\n"
+                    )
+            self.assertEqual(victim.read_text(encoding="utf-8"), "must survive\n")
+
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            linked_output = real_parent / "otel.json"
+            linked_output.symlink_to(victim)
+            with mock.patch.object(
+                MODULE, "descriptor_atomic_writes_supported", return_value=False
+            ):
+                with self.assertRaises(MODULE.ReportError):
+                    MODULE.write_json(linked_output, {"forged": True})
+            self.assertEqual(victim.read_text(encoding="utf-8"), "must survive\n")
+
+    def test_portable_report_writer_detects_parent_swap_after_replace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            parent = root / "repository" / ".observe"
+            parent.mkdir(parents=True)
+            output = parent / "otel.html"
+            moved = parent.with_name("moved-observe")
+            real_replace = MODULE.os.replace
+
+            def replace_then_swap(source: Path, target: Path) -> None:
+                real_replace(source, target)
+                parent.rename(moved)
+                parent.mkdir()
+
+            with mock.patch.object(
+                MODULE, "descriptor_atomic_writes_supported", return_value=False
+            ), mock.patch.object(MODULE.os, "replace", replace_then_swap):
+                with self.assertRaisesRegex(
+                    MODULE.ReportError, "lacks descriptor-relative"
+                ):
+                    MODULE.write_text(output, "generated\n")
+
+            self.assertFalse(output.exists())
+            self.assertEqual(
+                (moved / output.name).read_text(encoding="utf-8"),
+                "generated\n",
+            )
+
+    def test_windows_reparse_attribute_is_rejected(self) -> None:
+        status = type(
+            "ReparseStatus",
+            (),
+            {
+                "st_mode": MODULE.stat.S_IFDIR,
+                "st_file_attributes": getattr(
+                    MODULE.stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400
+                ),
+            },
+        )()
+        self.assertTrue(MODULE.path_is_link_or_reparse(status))
+
+    def test_descriptor_writer_requires_complete_platform_capabilities(self) -> None:
+        if MODULE.os.name != "posix":
+            self.assertFalse(MODULE.descriptor_atomic_writes_supported())
+            return
+        without_rename = set(MODULE.os.supports_dir_fd) - {MODULE.os.rename}
+        with mock.patch.object(MODULE.os, "supports_dir_fd", without_rename):
+            self.assertFalse(MODULE.descriptor_atomic_writes_supported())
+        without_nofollow_stat = set(MODULE.os.supports_follow_symlinks) - {
+            MODULE.os.stat
+        }
+        with mock.patch.object(
+            MODULE.os, "supports_follow_symlinks", without_nofollow_stat
+        ):
+            self.assertFalse(MODULE.descriptor_atomic_writes_supported())
+
     def test_exact_telemetry_reference_rejects_identifier_prefix_collisions(self) -> None:
         item = {
             "name": "http.server.request.duration",
@@ -410,6 +603,134 @@ class ObserveReportTest(unittest.TestCase):
                 "The receiver observed http.server.request.duration with "
                 "http.route=/checkout.",
                 item,
+            )
+        )
+
+    def test_exact_telemetry_reference_requires_signal_kind_and_authored_values(
+        self,
+    ) -> None:
+        item = {
+            "type": "metric",
+            "name": "task.created",
+            "attributes": ["http.route=/health"],
+        }
+        self.assertFalse(
+            MODULE.exact_telemetry_item_is_referenced(
+                "The generated trace contained span task.created with "
+                "http.route=/health.",
+                item,
+            )
+        )
+        self.assertFalse(
+            MODULE.exact_telemetry_item_is_referenced(
+                "The receiver observed metric task.created with "
+                "http.route=/wrong.",
+                item,
+            )
+        )
+        self.assertTrue(
+            MODULE.exact_telemetry_item_is_referenced(
+                "The receiver observed metric task.created with "
+                "http.route=/health.",
+                item,
+            )
+        )
+        for observation in (
+            "Metric task.created was emitted, and metric other.signal had "
+            "http.route=/health.",
+            "Metric task.created with http.route=/health was emitted. No metric "
+            "task.created with http.route=/health was emitted.",
+            "No data points were recorded for metric task.created with "
+            "http.route=/health.",
+            "The receiver recorded zero metric task.created with "
+            "http.route=/health.",
+            "Metric task.created with http.route=/health was emitted. It was "
+            "actually a span.",
+        ):
+            with self.subTest(observation=observation):
+                self.assertFalse(
+                    MODULE.exact_telemetry_item_is_referenced(observation, item)
+                )
+
+    def test_exact_telemetry_reference_does_not_combine_contrasting_assertions(
+        self,
+    ) -> None:
+        metric = {
+            "type": "metric",
+            "name": "task.created",
+            "attributes": ["http.route=/health"],
+        }
+        rejected = (
+            "Only a span task.created with http.route=/health, not a metric "
+            "task.created with http.route=/health, was emitted.",
+            "A span task.created with http.route=/health was emitted, whereas a "
+            "metric task.created with http.route=/health was absent.",
+            "A span task.created with http.route=/health was emitted, but a metric "
+            "task.created with http.route=/health was not emitted.",
+            "A span task.created with http.route=/health, rather than a metric "
+            "task.created with http.route=/health, was emitted.",
+            "The metric receiver observed a span task.created with "
+            "http.route=/health.",
+            "A span task.created with http.route=/health was emitted and the "
+            "metric exporter accepted another signal.",
+        )
+        for observation in rejected:
+            with self.subTest(observation=observation):
+                self.assertFalse(
+                    MODULE.exact_telemetry_item_is_referenced(observation, metric)
+                )
+
+        self.assertTrue(
+            MODULE.exact_telemetry_item_is_referenced(
+                "A metric task.created with http.route=/health was emitted, but a "
+                "span task.created with http.route=/health was not emitted.",
+                metric,
+            )
+        )
+
+        span = {**metric, "type": "span"}
+        self.assertFalse(
+            MODULE.exact_telemetry_item_is_referenced(
+                "Metric task.created with http.route=/health was absent; span "
+                "task.created with http.route=/health was emitted.",
+                span,
+                reference_outcome="negative",
+            )
+        )
+        self.assertTrue(
+            MODULE.exact_telemetry_item_is_referenced(
+                "Span task.created with http.route=/health was absent; metric "
+                "task.created with http.route=/health was emitted.",
+                span,
+                reference_outcome="negative",
+            )
+        )
+
+    def test_signal_kind_must_be_separate_from_name_and_embedded_kind_words(self) -> None:
+        embedded_kind = {
+            "type": "metric",
+            "name": "application.log.count",
+            "attributes": [],
+        }
+        self.assertFalse(
+            MODULE.exact_telemetry_item_is_referenced(
+                "application.log.count was emitted.", embedded_kind
+            )
+        )
+        self.assertTrue(
+            MODULE.exact_telemetry_item_is_referenced(
+                "Metric application.log.count was emitted.", embedded_kind
+            )
+        )
+
+        metric_word_in_name = {
+            "type": "metric",
+            "name": "custom.metric",
+            "attributes": [],
+        }
+        self.assertFalse(
+            MODULE.exact_telemetry_item_is_referenced(
+                "custom.metric was emitted.", metric_word_in_name
             )
         )
 
@@ -473,7 +794,7 @@ class ObserveReportTest(unittest.TestCase):
             },
             report,
         )
-        instrumentation_data = sample_instrumentation(report, digest)
+        instrumentation_data = sample_instrumentation(report, digest, selection)
         instrumentation_data["findings"][0]["evidence"] = [  # type: ignore[index]
             "/private/tmp/runtime-result.json"
         ]
@@ -758,12 +1079,12 @@ class ObserveReportTest(unittest.TestCase):
         )
         finding = verify["findings"][0]  # type: ignore[index]
         finding["scenarios"][0]["observed_telemetry"] = [
-            "The focused check observed GET /checkout with http.route."
+            "The focused check observed span GET /checkout with http.route."
         ]
         finding["item_results"][0]["status"] = "working"
         finding["item_results"][0]["direct_assertion_passed"] = True
         finding["item_results"][0]["observed_telemetry"] = [
-            "The focused check observed GET /checkout with http.route."
+            "The focused check observed span GET /checkout with http.route."
         ]
 
         normalized = MODULE.normalize_verify(
@@ -834,6 +1155,54 @@ class ObserveReportTest(unittest.TestCase):
             MODULE.ReportError, "direct_assertion_passed must be true exactly"
         ):
             MODULE.normalize_verify(verify, report, selection, instrumentation)
+
+    def test_working_item_rejects_unbound_zero_and_contradictory_observations(
+        self,
+    ) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        instrumentation = MODULE.normalize_instrumentation(
+            sample_instrumentation(report, digest), report, selection
+        )
+        observations = (
+            "Span GET /checkout was emitted, and span payment.authorize had http.route.",
+            "Span GET /checkout with http.route was emitted. No span GET /checkout "
+            "with http.route was emitted.",
+            "No data points were recorded for span GET /checkout with http.route.",
+        )
+        for observation in observations:
+            with self.subTest(observation=observation):
+                verify = sample_verify(
+                    report, digest, MODULE.instrumentation_digest(instrumentation)
+                )
+                item = verify["findings"][0]["item_results"][0]  # type: ignore[index]
+                item.update(
+                    {
+                        "status": "working",
+                        "direct_assertion_passed": True,
+                        "proof_mode": "full_runtime",
+                        "visibility": "otlp_accepted",
+                        "observed_telemetry": [observation],
+                        "product_validation": ["The local receiver check ran."],
+                    }
+                )
+                with self.assertRaisesRegex(
+                    MODULE.ReportError, "positive proof semantics"
+                ):
+                    MODULE.normalize_verify(
+                        verify, report, selection, instrumentation
+                    )
 
     def test_item_proof_must_use_its_instrumentation_scenario_mapping(self) -> None:
         data = sample_report()
@@ -923,7 +1292,7 @@ class ObserveReportTest(unittest.TestCase):
 
         item["removal_proof"] = {
             "removed_signal": "HttpRequest",
-            "replacement_signal": "GET /checkout SERVER span",
+            "replacement_signal": "GET /checkout",
             "absence_assertion_passed": True,
             "replacement_assertion_passed": False,
         }
@@ -939,6 +1308,59 @@ class ObserveReportTest(unittest.TestCase):
                 "replacement_assertion_passed"
             ]
         )
+
+        wrong_kind = copy.deepcopy(verify)
+        wrong_kind_item = wrong_kind["findings"][0]["item_results"][0]  # type: ignore[index]
+        wrong_kind_item["observed_telemetry"] = [
+            "Span HttpRequest was absent. Metric GET /checkout was emitted."
+        ]
+        with self.assertRaisesRegex(MODULE.ReportError, "replacement proof"):
+            MODULE.normalize_verify(
+                wrong_kind, report, selection, instrumentation
+            )
+
+        instrumentation_with_attribute_data = copy.deepcopy(instrumentation_data)
+        instrumentation_with_attribute_data["findings"][0]["telemetry_changes"][0][  # type: ignore[index]
+            "added_attributes"
+        ] = ["http.route"]
+        instrumentation_with_attribute_data["findings"][0]["telemetry_changes"][0][  # type: ignore[index]
+            "follow_up_actions"
+        ] = ["Filter canonical route traces by http.route."]
+        instrumentation_with_attribute = MODULE.normalize_instrumentation(
+            instrumentation_with_attribute_data, report, selection
+        )
+        attribute_only = sample_verify(
+            report,
+            digest,
+            MODULE.instrumentation_digest(instrumentation_with_attribute),
+        )
+        attribute_only_item = attribute_only["findings"][0]["item_results"][0]  # type: ignore[index]
+        attribute_only_item.update(
+            {
+                "status": "working",
+                "direct_assertion_passed": True,
+                "proof_mode": "full_runtime",
+                "visibility": "otlp_accepted",
+                "observed_telemetry": [
+                    "Span HttpRequest was emitted without http.route. Span GET "
+                    "/checkout was emitted."
+                ],
+                "product_validation": ["The local receiver captured telemetry."],
+                "removal_proof": {
+                    "removed_signal": "HttpRequest",
+                    "replacement_signal": "GET /checkout",
+                    "absence_assertion_passed": True,
+                    "replacement_assertion_passed": True,
+                },
+            }
+        )
+        with self.assertRaisesRegex(MODULE.ReportError, "negative proof semantics"):
+            MODULE.normalize_verify(
+                attribute_only,
+                report,
+                selection,
+                instrumentation_with_attribute,
+            )
 
         contradictory = copy.deepcopy(verify)
         contradictory_item = contradictory["findings"][0]["item_results"][0]  # type: ignore[index]
@@ -1059,7 +1481,7 @@ class ObserveReportTest(unittest.TestCase):
                 "status": "working",
                 "direct_assertion_passed": True,
                 "observed_telemetry": [
-                    "The focused check observed GET /checkout with http.route."
+                    "The focused check observed span GET /checkout with http.route."
                 ],
             }
         )
@@ -2879,6 +3301,59 @@ class ObserveReportTest(unittest.TestCase):
         ):
             MODULE.dependency_closure(blocked, ["OTEL-002"])
 
+    def test_terminal_executable_prerequisites_have_identical_python_and_html_semantics(
+        self,
+    ) -> None:
+        done_data = sample_report()
+        done_data["findings"][0]["status"] = "done"  # type: ignore[index]
+        done = MODULE.normalize_audit_report(done_data)
+        digest = MODULE.audit_digest(done)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": done["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-002"],
+                "approved_ids": ["OTEL-002"],
+            },
+            done,
+        )
+        self.assertEqual(MODULE.dependency_closure(done, ["OTEL-002"]), ["OTEL-002"])
+        self.assertEqual(selection["approved_ids"], ["OTEL-002"])
+
+        html = MODULE.render_html(done, selection)
+        self.assertIn(
+            'dependency.status === "done"',
+            html,
+        )
+        self.assertIn(
+            '["rejected", "deferred"].includes(dependency.status)',
+            html,
+        )
+        self.assertIn(
+            'finding.status === "done") return;',
+            html,
+        )
+
+        for status in ("rejected", "deferred"):
+            with self.subTest(status=status):
+                blocked_data = sample_report()
+                blocked_data["findings"][0]["status"] = status  # type: ignore[index]
+                blocked = MODULE.normalize_audit_report(blocked_data)
+                self.assertEqual(
+                    MODULE.finding_selection_eligibility(blocked, "OTEL-002"),
+                    {
+                        "selectable": False,
+                        "blockers": ["OTEL-001"],
+                        "reason": "Blocked by OTEL-001",
+                    },
+                )
+                with self.assertRaisesRegex(
+                    MODULE.ReportError, "Blocked by OTEL-001"
+                ):
+                    MODULE.dependency_closure(blocked, ["OTEL-002"])
+
     def test_selection_v2_answer_unlocks_only_its_direct_executable_branch(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         answers = [
@@ -2942,6 +3417,27 @@ class ObserveReportTest(unittest.TestCase):
         ):
             MODULE.dependency_closure(report, ["OTEL-001"], answers)
 
+    def test_selection_closure_includes_prerequisites_behind_answered_decision(self) -> None:
+        report = MODULE.normalize_audit_report(sample_decision_branch_report())
+        prerequisite = copy.deepcopy(report["findings"][1])
+        prerequisite.update({"id": "OTEL-004", "dependencies": []})
+        report["findings"].insert(0, prerequisite)
+        report["findings"][1]["dependencies"] = ["OTEL-004"]
+        answers = [
+            {"finding_id": "OTEL-001", "option_id": "application-owned"}
+        ]
+
+        self.assertEqual(
+            MODULE.dependency_closure(report, ["OTEL-002"], answers),
+            ["OTEL-004", "OTEL-002"],
+        )
+
+        html = MODULE.render_html(report, MODULE.empty_selection(report))
+        self.assertIn(
+            'if (!selectable && finding.instrument_mode !== "manual decision") return;',
+            html,
+        )
+
     def test_decision_options_validate_cardinality_ids_and_direct_unlocks(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         self.assertEqual(
@@ -2974,6 +3470,14 @@ class ObserveReportTest(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ReportError, "unlock every direct executable dependent"):
             MODULE.normalize_audit_report(incomplete)
 
+        overlapping = sample_decision_branch_report()
+        overlapping["findings"][0]["decision_options"][1]["unlocks"] = [  # type: ignore[index]
+            "OTEL-002",
+            "OTEL-003",
+        ]
+        with self.assertRaisesRegex(MODULE.ReportError, "pairwise disjoint"):
+            MODULE.normalize_audit_report(overlapping)
+
     def test_selection_v2_persists_answer_without_authorizing_code(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         selection = MODULE.normalize_selection(
@@ -2997,6 +3501,72 @@ class ObserveReportTest(unittest.TestCase):
             selection["decision_answers"],
             [{"finding_id": "OTEL-001", "option_id": "application-owned"}],
         )
+
+    def test_instrumentation_is_bound_to_exact_decision_answer_when_scope_is_unchanged(
+        self,
+    ) -> None:
+        report = MODULE.normalize_audit_report(sample_decision_branch_report())
+        digest = MODULE.audit_digest(report)
+
+        def answer_selection(option_id: str) -> dict[str, object]:
+            return MODULE.normalize_selection(
+                {
+                    "schema_version": 2,
+                    "kind": "otel-selection",
+                    "audit_id": report["meta"]["audit_id"],
+                    "audit_sha256": digest,
+                    "requested_ids": [],
+                    "approved_ids": [],
+                    "decision_answers": [
+                        {"finding_id": "OTEL-001", "option_id": option_id}
+                    ],
+                },
+                report,
+            )
+
+        application_owned = answer_selection("application-owned")
+        runtime_owned = answer_selection("runtime-owned")
+        self.assertEqual(application_owned["approved_ids"], runtime_owned["approved_ids"])
+        self.assertNotEqual(
+            MODULE.selection_digest(application_owned),
+            MODULE.selection_digest(runtime_owned),
+        )
+
+        raw_instrumentation = {
+            "schema_version": 1,
+            "kind": "otel-instrumentation",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": digest,
+            "selection_sha256": MODULE.selection_digest(application_owned),
+            "meta": {
+                "service_name": "checkout",
+                "date": "2026-07-21",
+                "result": "Partial",
+            },
+            "findings": [],
+            "next_steps": ["Select the executable branch after recording the answer."],
+        }
+        normalized = MODULE.normalize_instrumentation(
+            raw_instrumentation, report, application_owned
+        )
+        self.assertEqual(
+            normalized["selection_sha256"],
+            MODULE.selection_digest(application_owned),
+        )
+
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "selection_sha256 does not match selection"
+        ):
+            MODULE.normalize_instrumentation(
+                raw_instrumentation, report, runtime_owned
+            )
+
+        unbound = copy.deepcopy(raw_instrumentation)
+        unbound.pop("selection_sha256")
+        with self.assertRaisesRegex(
+            MODULE.ReportError, "selection_sha256 is required"
+        ):
+            MODULE.normalize_instrumentation(unbound, report, application_owned)
 
     def test_cli_select_can_persist_an_answer_only_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -3227,6 +3797,38 @@ class ObserveReportTest(unittest.TestCase):
 
         with self.assertRaisesRegex(MODULE.ReportError, "exact expected telemetry item"):
             MODULE.normalize_instrumentation(instrumentation, report, selection)
+
+        instrumentation = sample_instrumentation(report, digest)
+        item = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
+        item["added_attributes"] = ["http.route=/admin"]
+        with self.assertRaisesRegex(MODULE.ReportError, "attributes not promised"):
+            MODULE.normalize_instrumentation(instrumentation, report, selection)
+
+        report["findings"][0]["expected_telemetry"][0]["attributes"] = [  # type: ignore[index]
+            "http.route=/checkout"
+        ]
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        instrumentation = sample_instrumentation(report, digest)
+        item = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
+        item["added_attributes"] = ["http.route=/checkout"]
+        normalized = MODULE.normalize_instrumentation(
+            instrumentation, report, selection
+        )
+        self.assertEqual(
+            normalized["findings"][0]["telemetry_changes"][0]["added_attributes"],
+            ["http.route=/checkout"],
+        )
 
     def test_verify_closure_must_account_for_expected_attributes(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -3529,6 +4131,9 @@ class ObserveReportTest(unittest.TestCase):
                 "kind": "otel-instrumentation",
                 "audit_id": report["meta"]["audit_id"],
                 "audit_sha256": digest,
+                "selection_sha256": MODULE.selection_digest(
+                    MODULE.normalize_selection(selection, report)
+                ),
                 "meta": {"service_name": "checkout", "date": "2026-07-17", "result": "Pass"},
                 "findings": [
                     {
@@ -3573,7 +4178,7 @@ class ObserveReportTest(unittest.TestCase):
                                 "commands": ["curl localhost:8080/checkout"],
                                 "evidence": ["one server span observed"],
                                 "observed_telemetry": [
-                                    "GET /checkout emitted with http.route=/checkout"
+                                    "Span GET /checkout emitted with http.route=/checkout"
                                 ],
                                 "trace_ids": ["0123456789abcdef0123456789abcdef"],
                                 "product_validation": ["Visible in ObStudio trace waterfall"],
@@ -3792,7 +4397,7 @@ class ObserveReportTest(unittest.TestCase):
             },
             report,
         )
-        instrumentation_data = sample_instrumentation(report, digest)
+        instrumentation_data = sample_instrumentation(report, digest, selection)
         instrumentation_data["findings"].append(  # type: ignore[index]
             {
                 "id": "OTEL-002",
@@ -4495,6 +5100,7 @@ class ObserveReportTest(unittest.TestCase):
                 "kind": "otel-instrumentation",
                 "audit_id": report["meta"]["audit_id"],
                 "audit_sha256": MODULE.audit_digest(report),
+                "selection_sha256": MODULE.selection_digest(selection),
                 "meta": {"service_name": "checkout", "date": "2026-07-17", "result": "Partial"},
                 "findings": [
                     {

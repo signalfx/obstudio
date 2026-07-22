@@ -1,16 +1,31 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).parents[3]
 SCANNER = REPO_ROOT / "skills" / "references" / "scripts" / "inspect_otel_project.py"
+
+
+def load_scanner_module():
+    spec = importlib.util.spec_from_file_location("inspect_otel_project_tested", SCANNER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+SCANNER_MODULE = load_scanner_module()
 
 
 class InspectOtelProjectTest(unittest.TestCase):
@@ -138,6 +153,103 @@ class InspectOtelProjectTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertTrue(all(len(items) <= 2 for items in first["otel_findings"].values()))
         self.assertLessEqual(len(first["routes"]), 2)
+
+    def test_stat_then_symlink_swap_cannot_escape_project_read(self) -> None:
+        if not SCANNER_MODULE.descriptor_operations_supported():
+            self.skipTest("requires descriptor-relative no-follow operations")
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "project"
+            root.mkdir()
+            source = root / "app.py"
+            source.write_text("print('safe')\n", encoding="utf-8")
+            outside = base / "outside.py"
+            secret = "EXTERNAL_PRIVATE_VALUE_314159"
+            outside.write_text(secret + "\n", encoding="utf-8")
+            moved = root / "app.original.py"
+            real_open = os.open
+            swapped = False
+
+            def swap_before_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal swapped
+                if path == "app.py" and dir_fd is not None and not swapped:
+                    source.rename(moved)
+                    source.symlink_to(outside)
+                    swapped = True
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            with (
+                mock.patch.object(
+                    SCANNER_MODULE,
+                    "descriptor_operations_supported",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    SCANNER_MODULE.os, "open", side_effect=swap_before_open
+                ),
+            ):
+                result = SCANNER_MODULE.collect_scan_input(
+                    root, max_files=10, max_total_bytes=10_000
+                )
+
+            self.assertTrue(swapped)
+            self.assertNotIn(
+                secret,
+                "\n".join(
+                    line for lines in result.lines.values() for line in lines
+                ),
+            )
+            self.assertEqual(result.skipped["read_errors"], 1)
+
+    def test_directory_component_swap_cannot_escape_project_read(self) -> None:
+        if not SCANNER_MODULE.descriptor_operations_supported():
+            self.skipTest("requires descriptor-relative no-follow operations")
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "project"
+            nested = root / "nested"
+            nested.mkdir(parents=True)
+            (nested / "safe.py").write_text("print('safe')\n", encoding="utf-8")
+            outside = base / "outside"
+            outside.mkdir()
+            secret = "EXTERNAL_DIRECTORY_VALUE_271828"
+            (outside / "outside.py").write_text(secret + "\n", encoding="utf-8")
+            moved = root / "nested-original"
+            real_open = os.open
+            swapped = False
+
+            def swap_directory_before_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal swapped
+                if path == "nested" and dir_fd is not None and not swapped:
+                    nested.rename(moved)
+                    nested.symlink_to(outside, target_is_directory=True)
+                    swapped = True
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            with (
+                mock.patch.object(
+                    SCANNER_MODULE,
+                    "descriptor_operations_supported",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    SCANNER_MODULE.os,
+                    "open",
+                    side_effect=swap_directory_before_open,
+                ),
+            ):
+                result = SCANNER_MODULE.collect_scan_input(
+                    root, max_files=10, max_total_bytes=10_000
+                )
+
+            self.assertTrue(swapped)
+            self.assertNotIn(
+                secret,
+                "\n".join(
+                    line for lines in result.lines.values() for line in lines
+                ),
+            )
+            self.assertGreaterEqual(result.skipped["walk_errors"], 1)
 
     def test_truncation_counts_preserve_total_findings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -318,6 +430,30 @@ class InspectOtelProjectTest(unittest.TestCase):
         self.assertIn("service.py", paths)
         self.assertFalse(any(path.startswith("evals/") for path in paths))
 
+    def test_nested_eval_package_is_source_but_top_level_eval_is_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "src" / "eval"
+            source.mkdir(parents=True)
+            (source / "runtime.py").write_text(
+                "provider = TracerProvider()\n", encoding="utf-8"
+            )
+            fixture = root / "eval" / "runtime"
+            fixture.mkdir(parents=True)
+            (fixture / "fixture.py").write_text(
+                "provider = MeterProvider()\n", encoding="utf-8"
+            )
+
+            result = self.inspect(root)
+
+        paths = {
+            item["path"]
+            for values in result["otel_findings"].values()
+            for item in values
+        }
+        self.assertIn("src/eval/runtime.py", paths)
+        self.assertFalse(any(path.startswith("eval/") for path in paths))
+
     def test_nested_module_runtime_uses_module_cwd_and_local_lockfile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -350,7 +486,7 @@ class InspectOtelProjectTest(unittest.TestCase):
     def test_output_writes_full_inventory_and_prints_summary(self) -> None:
         root = REPO_ROOT / "evals" / "node" / "express-basic"
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "inventory.json"
+            output = Path(directory).resolve() / "inventory.json"
             completed = subprocess.run(
                 [sys.executable, str(SCANNER), str(root), "--output", str(output)],
                 check=False,
@@ -367,6 +503,103 @@ class InspectOtelProjectTest(unittest.TestCase):
         self.assertEqual(summary["warnings"], full["warnings"])
         self.assertEqual(summary["skipped_count"], full["skipped_count"])
         self.assertIn("otel_findings", full)
+
+    def test_relative_output_is_project_anchored_and_replaces_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            root = base / "project"
+            root.mkdir()
+            (root / "service.py").write_text(
+                "provider = TracerProvider()\n", encoding="utf-8"
+            )
+            output = root / ".observe" / "inventory.json"
+            output.parent.mkdir()
+            output.write_text("old\n", encoding="utf-8")
+            unrelated_cwd = base / "cwd"
+            unrelated_cwd.mkdir()
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCANNER),
+                    str(root),
+                    "--output",
+                    ".observe/inventory.json",
+                ],
+                cwd=unrelated_cwd,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            summary = json.loads(completed.stdout)
+            self.assertEqual(summary["output"], str(output))
+            self.assertEqual(json.loads(output.read_text())["root"], ".")
+            self.assertFalse((unrelated_cwd / ".observe").exists())
+
+    def test_relative_output_rejects_project_local_symlink_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            root = base / "project"
+            root.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            (root / ".observe").symlink_to(outside, target_is_directory=True)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCANNER),
+                    str(root),
+                    "--output",
+                    ".observe/inventory.json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("symlink", completed.stderr.lower())
+            self.assertFalse((outside / "inventory.json").exists())
+
+    def test_output_rejects_symlink_target_and_project_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            root = base / "project"
+            root.mkdir()
+            outside = base / "outside.json"
+            outside.write_text("must survive\n", encoding="utf-8")
+            target = root / "inventory.json"
+            target.symlink_to(outside)
+
+            target_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCANNER),
+                    str(root),
+                    "--output",
+                    "inventory.json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            project_link = base / "project-link"
+            project_link.symlink_to(root, target_is_directory=True)
+            project_result = subprocess.run(
+                [sys.executable, str(SCANNER), str(project_link)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(target_result.returncode, 0)
+            self.assertIn("symlink", target_result.stderr.lower())
+            self.assertEqual(outside.read_text(encoding="utf-8"), "must survive\n")
+            self.assertNotEqual(project_result.returncode, 0)
+            self.assertIn("symlink", project_result.stderr.lower())
 
     def test_make_special_targets_are_not_commands(self) -> None:
         result = self.inspect(REPO_ROOT / "evals" / "go" / "kvstore")

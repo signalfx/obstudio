@@ -238,6 +238,7 @@ def add_scenario_only_metric_to_canonical_flow(
         (root / "otel-instrumentation.json").read_text(encoding="utf-8")
     )
     instrumentation["audit_sha256"] = audit_digest
+    instrumentation["selection_sha256"] = report_module.selection_digest(selection)
     instrumentation = report_module.normalize_instrumentation(
         instrumentation, audit, selection
     )
@@ -250,7 +251,7 @@ def add_scenario_only_metric_to_canonical_flow(
         instrumentation
     )
     verification["findings"][0]["scenarios"][0]["observed_telemetry"].append(
-        f"{metric} emitted with service.name=checkout"
+        f"Metric {metric} emitted with service.name=checkout"
     )
     verification = report_module.normalize_verify(
         verification, audit, selection, instrumentation
@@ -407,6 +408,53 @@ class ValidateConfigureOutputTest(unittest.TestCase):
 
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(result["working_metric_count"], 2)
+
+    def test_rejects_instrumentation_bound_to_a_stale_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            path = args.terraform_dir.parent / "otel-instrumentation.json"
+            instrumentation = json.loads(path.read_text(encoding="utf-8"))
+            instrumentation["selection_sha256"] = "sha256:" + "f" * 64
+            path.write_text(json.dumps(instrumentation), encoding="utf-8")
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_metric_authorized_only_by_same_named_span_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            verify_path = args.terraform_dir.parent / "otel-verify.json"
+            verification = json.loads(verify_path.read_text(encoding="utf-8"))
+            wrong_kind = (
+                "The generated trace captured span "
+                "http.server.request.duration with service.name=checkout."
+            )
+            finding = verification["findings"][0]
+            finding["scenarios"][0]["observed_telemetry"] = [wrong_kind]
+            finding["item_results"][0]["observed_telemetry"] = [wrong_kind]
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            write_canonical_reader_report(args)
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
 
     def test_rejects_markdown_metric_not_authorized_by_canonical_json(self) -> None:
         detector_metric = "custom.unverified.metric"

@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
 RUNNER = Path(__file__).parents[1] / "scripts" / "run_go_otel_command.py"
+SPEC = importlib.util.spec_from_file_location("run_go_otel_command", RUNNER)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
 OTELHTTP = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 COMPANIONS = (
     "go.opentelemetry.io/otel",
@@ -522,6 +528,211 @@ class RunGoOtelCommandTest(unittest.TestCase):
         self.assertIn("symlink component", completed.stderr)
         self.assertFalse(log.exists())
 
+    def test_atomic_write_works_without_unix_fchmod(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "result.json"
+            with mock.patch.object(
+                MODULE, "descriptor_mode_supported", return_value=False
+            ), mock.patch.object(
+                MODULE.os,
+                "fchmod",
+                side_effect=AssertionError("Unix fchmod must not be called"),
+                create=True,
+            ):
+                MODULE.atomic_write(target, b'{"ok":true}\n')
+
+            self.assertEqual(target.read_bytes(), b'{"ok":true}\n')
+
+    def test_bookkeeping_cleanup_has_portable_no_dir_fd_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, _ = self.make_fixture(root)
+            owned = project / MODULE.OWNED_DIRECTORY
+            owned.mkdir(parents=True)
+            (owned / MODULE.LEDGER_NAME).write_text(
+                "portable\n", encoding="utf-8"
+            )
+
+            with mock.patch.object(
+                MODULE, "descriptor_cleanup_supported", return_value=False
+            ):
+                count, errors = MODULE.remove_bookkeeping(project)
+
+            tombstones = list(
+                owned.parent.glob(f"{MODULE.RETIRED_DIRECTORY_PREFIX}*")
+            )
+            self.assertEqual((count, errors), (0, []))
+            self.assertFalse(owned.exists())
+            self.assertEqual(len(tombstones), 1)
+            self.assertEqual(
+                (tombstones[0] / "retired" / MODULE.LEDGER_NAME).read_text(
+                    encoding="utf-8"
+                ),
+                "portable\n",
+            )
+
+    def test_bookkeeping_cleanup_never_recurses_after_nested_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, _ = self.make_fixture(root)
+            owned = project / MODULE.OWNED_DIRECTORY
+            owned.mkdir(parents=True)
+            (owned / MODULE.LEDGER_NAME).write_text("{}\n", encoding="utf-8")
+            nested = owned / "gomodcache" / "nested"
+            nested.mkdir(parents=True)
+            owned_payload = nested / "cache.a"
+            owned_payload.write_text("owned\n", encoding="utf-8")
+            moved = nested.with_name("renamed-nested")
+            real_listdir = os.listdir
+            swapped = False
+
+            def swap_before_listing(descriptor: int) -> list[str]:
+                nonlocal swapped
+                names = real_listdir(descriptor)
+                if not swapped:
+                    nested.rename(moved)
+                    nested.mkdir()
+                    (nested / "externally-injected").write_text(
+                        "safe\n", encoding="utf-8"
+                    )
+                    swapped = True
+                return names
+
+            with mock.patch.object(MODULE.os, "listdir", swap_before_listing):
+                count, errors = MODULE.remove_bookkeeping(project)
+
+            self.assertGreater(count, 0)
+            self.assertTrue(any("non-recursive cleanup" in error for error in errors))
+            self.assertEqual(
+                (nested / "externally-injected").read_text(encoding="utf-8"),
+                "safe\n",
+            )
+            self.assertEqual(
+                (moved / owned_payload.name).read_text(encoding="utf-8"),
+                "owned\n",
+            )
+
+    def test_bookkeeping_cleanup_tombstones_exact_ledger_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, _ = self.make_fixture(root)
+            owned = project / MODULE.OWNED_DIRECTORY
+            owned.mkdir(parents=True)
+            ledger = owned / MODULE.LEDGER_NAME
+            ledger.write_text("original\n", encoding="utf-8")
+            original_root = owned.with_name("original-owned-tree")
+            real_rename = os.rename
+            swapped = False
+
+            def substitute_then_rename(
+                source: str,
+                target: str,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+            ) -> None:
+                nonlocal swapped
+                if source == MODULE.OWNED_DIRECTORY.name and target == "retired":
+                    real_rename(owned, original_root)
+                    owned.mkdir()
+                    (owned / MODULE.LEDGER_NAME).write_text(
+                        "externally injected\n", encoding="utf-8"
+                    )
+                    swapped = True
+                real_rename(
+                    source,
+                    target,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                )
+
+            with mock.patch.object(MODULE.os, "rename", substitute_then_rename):
+                count, errors = MODULE.remove_bookkeeping(project)
+
+            quarantine_root = project / ".observe" / "tmp"
+            quarantines = list(
+                quarantine_root.glob(".go-otel-resolver.retired.*")
+            )
+            self.assertTrue(swapped)
+            self.assertGreater(count, 0)
+            self.assertTrue(any("namespace changed" in error for error in errors))
+            self.assertEqual(
+                (original_root / MODULE.LEDGER_NAME).read_text(encoding="utf-8"),
+                "original\n",
+            )
+            self.assertEqual(len(quarantines), 1)
+            self.assertEqual(
+                (
+                    quarantines[0] / "retired" / MODULE.LEDGER_NAME
+                ).read_text(encoding="utf-8"),
+                "externally injected\n",
+            )
+
+    def test_bookkeeping_cleanup_fails_closed_on_ancestor_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, _ = self.make_fixture(root)
+            owned = project / MODULE.OWNED_DIRECTORY
+            owned.mkdir(parents=True)
+            (owned / MODULE.LEDGER_NAME).write_text(
+                "original\n", encoding="utf-8"
+            )
+            observe = project / ".observe"
+            moved_observe = project / ".observe-original"
+            real_rename = os.rename
+            swapped = False
+
+            def swap_ancestor_then_rename(
+                source: str,
+                target: str,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+            ) -> None:
+                nonlocal swapped
+                if source == MODULE.OWNED_DIRECTORY.name and target == "retired":
+                    real_rename(observe, moved_observe)
+                    replacement = project / MODULE.OWNED_DIRECTORY
+                    replacement.mkdir(parents=True)
+                    (replacement / MODULE.LEDGER_NAME).write_text(
+                        "replacement\n", encoding="utf-8"
+                    )
+                    swapped = True
+                real_rename(
+                    source,
+                    target,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                )
+
+            with mock.patch.object(
+                MODULE.os, "rename", swap_ancestor_then_rename
+            ):
+                count, errors = MODULE.remove_bookkeeping(project)
+
+            replacement_ledger = project / MODULE.OWNED_DIRECTORY / MODULE.LEDGER_NAME
+            quarantines = list(
+                (moved_observe / "tmp").glob(
+                    f"{MODULE.RETIRED_DIRECTORY_PREFIX}*"
+                )
+            )
+            self.assertTrue(swapped)
+            self.assertGreater(count, 0)
+            self.assertTrue(
+                any("canonical ancestor namespace changed" in error for error in errors)
+            )
+            self.assertEqual(
+                replacement_ledger.read_text(encoding="utf-8"),
+                "replacement\n",
+            )
+            self.assertEqual(len(quarantines), 1)
+            self.assertEqual(
+                (
+                    quarantines[0] / "retired" / MODULE.LEDGER_NAME
+                ).read_text(encoding="utf-8"),
+                "original\n",
+            )
+
     def test_symlink_launcher_cannot_replace_trusted_sibling_resolver(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -660,6 +871,7 @@ class RunGoOtelCommandTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(invocation["argv"], ["mod", "tidy"])
         self.assertTrue(invocation["cwd"].endswith("bootstrap-stage"))
+        self.assertFalse(Path(invocation["cwd"]).is_relative_to(project))
         self.assertEqual(invocation["env"]["GOTOOLCHAIN"], "local")
         self.assertEqual(invocation["env"]["GOVCS"], "*:off")
         self.assertEqual(invocation["env"]["GOSUMDB"], "off")
@@ -1010,7 +1222,7 @@ class RunGoOtelCommandTest(unittest.TestCase):
         self.assertIn("file proxy overlaps", completed.stderr)
         self.assertEqual(source_survived, "must survive")
 
-    def test_bootstrap_cleanup_removes_read_only_owned_tree_compactly(self) -> None:
+    def test_cleanup_blocks_on_unexpected_read_only_repository_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             project, cache, _ = self.make_bootstrap_fixture(root)
@@ -1033,11 +1245,46 @@ class RunGoOtelCommandTest(unittest.TestCase):
                 "cleanup",
             )
             owned_exists = owned.exists()
+            payload_survived = payload.read_text(encoding="utf-8")
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(len(completed.stdout.splitlines()), 1)
-        self.assertEqual(json.loads(completed.stdout)["status"], "complete")
-        self.assertFalse(owned_exists)
+        self.assertEqual(completed.returncode, 3)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("non-recursive cleanup", completed.stderr)
+        self.assertTrue(owned_exists)
+        self.assertEqual(payload_survived, "cache")
+
+    def test_bookkeeping_cleanup_is_idempotent_and_retains_one_tombstone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, cache, _ = self.make_bootstrap_fixture(root)
+            fake_bin = self.make_fake_go(root)
+            probe = self.probe(project, cache, fake_bin, root / "probe.json")
+
+            first = self.run_command(
+                project,
+                cache,
+                fake_bin,
+                root / "first-cleanup.json",
+                "--action",
+                "cleanup",
+            )
+            second = self.run_command(
+                project,
+                cache,
+                fake_bin,
+                root / "second-cleanup.json",
+                "--action",
+                "cleanup",
+            )
+            parent = project / ".observe" / "tmp"
+            tombstones = list(parent.glob(f"{MODULE.RETIRED_DIRECTORY_PREFIX}*"))
+
+        self.assertEqual(probe.returncode, 0, probe.stderr)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(json.loads(first.stdout)["status"], "complete")
+        self.assertEqual(json.loads(second.stdout)["status"], "complete")
+        self.assertEqual(len(tombstones), 1)
 
     def test_cleanup_accepts_only_allowlisted_bookkeeping(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

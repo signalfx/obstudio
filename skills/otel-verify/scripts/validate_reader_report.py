@@ -122,6 +122,14 @@ def load_instrumentation_items(path: Path) -> tuple[dict, list[dict]]:
         raise ValueError(
             "instrumentation JSON must have schema_version 1 and kind otel-instrumentation"
         )
+    selection_sha256 = data.get("selection_sha256")
+    if not isinstance(selection_sha256, str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", selection_sha256
+    ):
+        raise ValueError(
+            "instrumentation selection_sha256 must be a canonical "
+            "sha256:<64 lowercase hex> digest"
+        )
     items: list[dict] = []
     for finding in data.get("findings", []):
         if not isinstance(finding, dict):

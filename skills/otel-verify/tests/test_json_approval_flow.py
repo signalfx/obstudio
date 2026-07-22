@@ -44,6 +44,8 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         normalized = " ".join(text.split())
         self.assertIn('"kind": "otel-verify"', text)
         self.assertIn('"audit_sha256": "audit-sha256-from-selection"', text)
+        self.assertIn("selection_sha256", text)
+        self.assertIn("transitively bound to the exact normalized selection", normalized)
         self.assertIn("Findings must exactly equal approved IDs in audit order", normalized)
         self.assertIn("one scenario object for every scenario referenced", normalized)
         for value in (

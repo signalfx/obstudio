@@ -244,6 +244,13 @@ function selectionBlockersFor(findingId) {
       visiting.delete(dependencyId);
       return;
     }
+    if (["default", "fix all"].includes(dependency.instrument_mode) && dependency.status === "done") {
+      return;
+    }
+    if (["default", "fix all"].includes(dependency.instrument_mode) && ["rejected", "deferred"].includes(dependency.status)) {
+      blocked.add(dependencyId);
+      return;
+    }
     if (!["default", "fix all"].includes(dependency.instrument_mode)) {
       blocked.add(dependencyId);
       return;
@@ -598,11 +605,15 @@ function syncDependencyClosure() {
   const closed = new Set();
   const visiting = new Set();
   function include(id) {
-    if (!isSelectable(id) || closed.has(id) || visiting.has(id)) return;
+    const finding = byId.get(id);
+    if (!finding || closed.has(id) || visiting.has(id)) return;
+    if (["default", "fix all"].includes(finding.instrument_mode) && finding.status === "done") return;
+    const selectable = isSelectable(id);
+    if (!selectable && finding.instrument_mode !== "manual decision") return;
     visiting.add(id);
-    for (const dependency of byId.get(id)?.dependencies || []) include(dependency);
+    for (const dependency of finding.dependencies || []) include(dependency);
     visiting.delete(id);
-    closed.add(id);
+    if (selectable) closed.add(id);
   }
   for (const finding of REPORT.findings) {
     if (requested.has(finding.id) && isSelectable(finding.id)) include(finding.id);

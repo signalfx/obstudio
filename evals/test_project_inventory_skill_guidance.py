@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
 SCANNER = ROOT / "skills" / "references" / "scripts" / "inspect_otel_project.py"
+SECURE_OUTPUT = ROOT / "skills" / "references" / "scripts" / "secure_output.py"
 LOOPBACK_PROBE = (
     ROOT / "skills" / "references" / "scripts" / "probe_loopback_bind.py"
 )
@@ -373,9 +374,11 @@ def test_failed_verification_routes_to_owned_repair_and_automatic_recheck() -> N
         in normalized_instrument_handoff
     )
     assert "instrumentation_sha256" in normalized_instrument
+    assert "selection_sha256" in normalized_instrument
     assert "instrumentation-final-gate" in normalized_instrument
     assert "meta.lifecycle: intermediate" in normalized_verify
     assert "instrumentation_sha256" in normalized_verify_handoff
+    assert "selection_sha256" in normalized_verify_handoff
     assert (
         "For a child invocation from an active instrumentation workflow"
         in normalized_verify_handoff
@@ -452,6 +455,7 @@ def test_wrappers_run_from_bundle_with_spaces_and_unrelated_cwd(
     shared_dir = bundle / "references" / "scripts"
     shared_dir.mkdir(parents=True)
     shutil.copy2(SCANNER, shared_dir / SCANNER.name)
+    shutil.copy2(SECURE_OUTPUT, shared_dir / SECURE_OUTPUT.name)
 
     service = tmp_path / "service with spaces"
     shutil.copytree(ROOT / "evals" / "go" / "chi-basic", service)

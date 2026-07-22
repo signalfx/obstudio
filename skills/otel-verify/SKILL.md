@@ -51,7 +51,10 @@ Contract plus Reader-First Report Order.
   `final` only after no executed finding, scenario, or item is `not_working`.
 - Bind canonical verification to the exact normalized instrumentation overlay
   with `instrumentation_sha256`. Recompute it after every instrumentation
-  repair; matching audit and item IDs alone are not freshness proof.
+  repair; matching audit and item IDs alone are not freshness proof. Before
+  computing it, require instrumentation's `selection_sha256` to match the exact
+  normalized selection. The instrumentation digest then transitively binds
+  verification to `decision_answers` and all executable selection state.
 - Derive the report title service identity from an existing effective
   `service.name` when proven. Otherwise use the final segment of the owning
   module/package identifier or the service directory basename. For a Go
@@ -157,8 +160,9 @@ Inspect the repo before running anything:
 When `.observe/otel-audit.json` exists, verification scope must come from the
 same explicit approval used for instrumentation. Read and follow
 `./references/json-approval-handoff.md` before choosing commands. Validate the
-audit, selection, and instrumentation handoff; then verify exactly the approved
-findings and referenced scenarios. Never infer an all-findings scope.
+audit, selection, and instrumentation handoff, including the instrumentation
+overlay's exact `selection_sha256`; then verify exactly the approved findings
+and referenced scenarios. Never infer an all-findings scope.
 
 If a canonical instrumentation Markdown report exists without its JSON
 handoff, do not infer selected finding IDs from prose. Treat it as legacy
@@ -318,7 +322,9 @@ Rules:
   inventory. For a Java-agent scenario, use
   `scripts/resolve_java_agent.py` as required by the project-runtime reference;
   do not turn one missing host/container path into a blocker. When it resolves,
-  use its absolute path/version/hash and keep production parity separate.
+  bind its absolute path/version/hash/identity, run its exact generated
+  `pre_attach_recheck_argv` immediately before JVM startup, and use only the
+  fresh recheck's `javaagent_argv`. Keep production parity separate.
 - If restore/import is blocked by private registry credentials, network
   policy, missing toolchain, or platform mismatch, mark affected rows
   `Blocked` with the exact prerequisite. Do not call them `Source only`.
@@ -547,12 +553,14 @@ item not directly observed, never as `Observed` or as needing “stronger proof.
 Record that judgment in the required `item_results[].direct_assertion_passed`
 boolean before computing scenario or finding rollups. Set it `true` only for a
 passed assertion against the exact item or call site, and then set item
-`status: working`. Set it `false` for contextual, aggregate, ambiguous,
+`status: working`. Bind every authored attribute and value to that same typed
+signal assertion, and reject contradictory or zero/no-data observations. Set
+it `false` for contextual, aggregate, ambiguous,
 not-run, or failed evidence. For a removed telemetry item, an expected-absence
 assertion is a passed direct assertion only when a bounded executed capture
 shows the removed signal is absent and the intended replacement owner is
 present. A working removed item must also record `removal_proof` with the exact
-removed signal name, a distinct replacement signal/owner, and true
+removed signal name, a distinct same-type replacement signal/owner, and true
 `absence_assertion_passed` and `replacement_assertion_passed` booleans. The
 canonical validator rejects a `not_proven` item with
 `direct_assertion_passed: true` and a `working` item with it set to `false`.

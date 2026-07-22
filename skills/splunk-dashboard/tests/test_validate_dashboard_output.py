@@ -100,6 +100,7 @@ def write_bound_flow(root: Path, verification: Path) -> None:
             "kind": "otel-instrumentation",
             "audit_id": audit["meta"]["audit_id"],
             "audit_sha256": audit_sha256,
+            "selection_sha256": REPORT_MODULE.selection_digest(selection),
             "meta": {
                 "service_name": "checkout",
                 "date": "2026-07-17",
@@ -124,7 +125,7 @@ def write_bound_flow(root: Path, verification: Path) -> None:
                         "commands": ["go test ./..."],
                         "evidence": [".observe/evidence/dashboard-runtime.json"],
                         "observed_telemetry": [
-                            f"{name} emitted with service.name=checkout"
+                            f"Metric {name} emitted with service.name=checkout"
                         ],
                         "trace_ids": [],
                         "product_validation": [product_view],
@@ -142,7 +143,7 @@ def write_bound_flow(root: Path, verification: Path) -> None:
                         "visibility": "explorer_visible",
                         "evidence": [".observe/evidence/dashboard-runtime.json"],
                         "observed_telemetry": [
-                            f"{name} emitted with service.name=checkout"
+                            f"Metric {name} emitted with service.name=checkout"
                         ],
                         "product_validation": [product_view],
                     }
@@ -469,6 +470,26 @@ class ValidateDashboardOutputTest(unittest.TestCase):
         self.assertTrue(
             any(
                 "canonical audit/selection/instrumentation binding validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_instrumentation_bound_to_a_stale_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            path = args.preview.parent / "otel-instrumentation.json"
+            instrumentation = json.loads(path.read_text(encoding="utf-8"))
+            instrumentation["selection_sha256"] = "sha256:" + "f" * 64
+            path.write_text(json.dumps(instrumentation), encoding="utf-8")
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical audit/selection/instrumentation binding validation failed"
+                in error
                 for error in result["errors"]
             ),
             result["errors"],

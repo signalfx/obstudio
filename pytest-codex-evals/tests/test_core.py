@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,6 +28,7 @@ from pytest_codex_evals.graders.rubric import rubric_prompt
 from pytest_codex_evals.backends import (
     AgentResult,
     _codex_subprocess_env,
+    _merge_stream_observations,
     atomic_text_write,
     ensure_anchored_directory,
     run_streamed_command,
@@ -40,6 +42,12 @@ from pytest_codex_evals.graders.runtime import (
 )
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
+from pytest_codex_evals.eval_contracts import (
+    case_contract_sha256,
+    case_from_definition,
+    case_task_sha256,
+    load_eval_definition,
+)
 from pytest_codex_evals.report import (
     build_validation_benchmark,
     normalize_rubric_score,
@@ -111,6 +119,47 @@ def test_command_runner_records_output_without_terminal_echo(tmp_path: Path, cap
     assert stderr_path.read_text(encoding="utf-8") == "error line\n"
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_command_runner_persists_partial_output_before_timeout(
+    tmp_path: Path, capfd
+):
+    import pytest as _pytest
+
+    trace_path = tmp_path / "trace.jsonl"
+    stderr_path = tmp_path / "stderr.txt"
+
+    with _pytest.raises(subprocess.TimeoutExpired):
+        run_streamed_command(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys, time; "
+                    "print('partial stdout', flush=True); "
+                    "print('partial stderr', file=sys.stderr, flush=True); "
+                    "time.sleep(30)"
+                ),
+            ],
+            stdout_path=trace_path,
+            stderr_path=stderr_path,
+            timeout=1,
+        )
+
+    captured = capfd.readouterr()
+    assert trace_path.read_text(encoding="utf-8") == "partial stdout\n"
+    assert stderr_path.read_text(encoding="utf-8") == "partial stderr\n"
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_timeout_stream_merge_decodes_and_deduplicates_observations():
+    assert _merge_stream_observations(
+        b"partial stdout\n",
+        "partial stdout\ncomplete stdout\n",
+        b"partial stdout\ncomplete stdout\n",
+        encoding="utf-8",
+    ) == "partial stdout\ncomplete stdout\n"
 
 
 def test_command_runner_replaces_preexisting_output_symlinks(tmp_path: Path):
@@ -852,6 +901,89 @@ def test_changed_definition_and_config_cannot_replace_full_latest_report(
     ).read_text(encoding="utf-8") == report_path.read_text(encoding="utf-8")
 
 
+def test_report_rejects_replayed_case_contract_with_current_input_hashes(
+    tmp_path: Path,
+):
+    definition = write_scope_definition(tmp_path, "sanity")
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    result = case_result(
+        side_result(
+            "with_skill",
+            GradeResult(
+                checks=[
+                    GradeCheckResult(
+                        id="check",
+                        description="check",
+                        passed=True,
+                    )
+                ]
+            ),
+        ),
+        None,
+    )
+    metadata = report_metadata(
+        "sample-skill",
+        "with_skill",
+        run_root,
+        {
+            "mode": "with_skill",
+            "eval_kind": "sanity",
+            "run_id": "run",
+            "skill": "sample-skill",
+        },
+    )
+    attach_run_provenance(run_root, result, definition, metadata)
+
+    changed_definition = json.loads(definition.read_text(encoding="utf-8"))
+    changed_definition["prompts"][0]["task"] = "Run changed contract."
+    definition.write_text(
+        json.dumps(changed_definition),
+        encoding="utf-8",
+    )
+    provenance_path = next(
+        run_root.rglob("with_skill/.codex-eval-provenance.json")
+    )
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["definition"]["sha256"] = hashlib.sha256(
+        definition.read_bytes()
+    ).hexdigest()
+    provenance["fixture"]["tree_sha256"] = tree_sha256(
+        definition.parents[2]
+    )
+    provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+
+    write_session_results(
+        [
+            {
+                "mode": "with_skill",
+                "eval_kind": "sanity",
+                "repo_root": tmp_path,
+                "run_root": run_root,
+                "skill": "sample-skill",
+                "metadata": metadata,
+                "results": [result],
+            }
+        ]
+    )
+    _, benchmark_path = render_reports_for_run_root(run_root, "sanity")
+
+    scope = json.loads(benchmark_path.read_text(encoding="utf-8"))[
+        "metadata"
+    ]["scope"]
+    assert scope["status"] == "stale"
+    assert scope["stale_prompt_ids"] == [
+        "sample/service/sample-skill/direct"
+    ]
+    assert any(
+        "task differs from the current eval definition" in error
+        for error in scope["errors"]
+    )
+    assert any(
+        "case contract differs from the current eval definition" in error
+        for error in scope["errors"]
+    )
+
+
 def test_changed_skill_and_shared_contract_cannot_report_full(tmp_path: Path):
     _, _, run_root, result = captured_sanity_run(tmp_path)
     write_session_results([result])
@@ -1040,7 +1172,14 @@ def test_validation_report_rejects_changed_definition_with_same_prompt_id(
                 "id": "sample/service/sample-skill",
                 "skill": "sample-skill",
                 "prompts": [{"id": "direct", "task": "Run direct."}],
-                "checks": [{"id": "new-check", "kind": "final_contains_all"}],
+                "checks": [
+                    {
+                        "id": "new-check",
+                        "description": "Changed contract.",
+                        "kind": "final_contains_all",
+                        "values": ["changed"],
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -1299,6 +1438,48 @@ def test_report_outputs_replace_leaf_symlinks_without_following_them(
         assert not (directory / "benchmark.json").is_symlink()
 
 
+def test_latest_report_outputs_redact_machine_specific_repo_root(
+    tmp_path: Path,
+):
+    repo_root = tmp_path / "private-machine" / "obstudio"
+    run_root = repo_root / ".workspace/codex-evals/sample-skill/run"
+    run_root.mkdir(parents=True)
+    benchmark = {
+        "metadata": {
+            "repo_root": str(repo_root),
+            "scope": {"status": "full"},
+        },
+        "evidence_path": str(repo_root / "evals/sample/case.json"),
+    }
+    report = (
+        f"Repository: {repo_root}\n"
+        f"Evidence: {repo_root / 'evals/sample/case.json'}\n"
+    )
+
+    report_path, benchmark_path = write_report_outputs(
+        repo_root,
+        run_root,
+        "sample-skill",
+        "sanity",
+        benchmark,
+        report,
+    )
+
+    latest = repo_root / "eval-reports/sample-skill/sanity"
+    published_benchmark = json.loads(
+        (latest / "benchmark.json").read_text(encoding="utf-8")
+    )
+    published_report = (latest / "report.md").read_text(encoding="utf-8")
+    self_path = str(repo_root)
+    assert self_path in benchmark_path.read_text(encoding="utf-8")
+    assert self_path in report_path.read_text(encoding="utf-8")
+    assert self_path not in json.dumps(published_benchmark)
+    assert self_path not in published_report
+    assert published_benchmark["metadata"]["repo_root"] == "."
+    assert published_benchmark["evidence_path"] == "evals/sample/case.json"
+    assert "Evidence: evals/sample/case.json" in published_report
+
+
 def test_report_outputs_reject_symlinked_run_and_latest_directories(
     tmp_path: Path,
 ):
@@ -1532,17 +1713,22 @@ def write_scope_definition(
     role = "qual" if kind == "rubric" else kind
     path = root / f"evals/sample/service/eval/{role}/sample.json"
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "id": "sample/service/sample-skill",
+        "skill": "sample-skill",
+        "prompts": [
+            {"id": prompt, "task": f"Run {prompt}."}
+            for prompt in prompts
+        ],
+    }
+    if kind == "rubric":
+        payload["rubric"] = ["The response is correct."]
+    elif kind == "runtime":
+        payload["checks"] = [
+            runtime_check().model_dump(mode="json", exclude_none=True)
+        ]
     path.write_text(
-        json.dumps(
-            {
-                "id": "sample/service/sample-skill",
-                "skill": "sample-skill",
-                "prompts": [
-                    {"id": prompt, "task": f"Run {prompt}."}
-                    for prompt in prompts
-                ],
-            }
-        ),
+        json.dumps(payload),
         encoding="utf-8",
     )
     return path
@@ -1577,11 +1763,24 @@ def attach_run_provenance(
     (skill / "SKILL.md").write_text("name: sample-skill\n", encoding="utf-8")
     shared_references = skill.parent / "references"
     harness_source = Path(__file__).resolve().parents[1] / "src/pytest_codex_evals"
+    current_definition = load_eval_definition(definition)
+    prompt = next(
+        prompt
+        for prompt in current_definition.prompts
+        if prompt.id == result.prompt_id
+    )
+    current_case = case_from_definition(
+        current_definition,
+        prompt,
+        definition,
+    )
     manifest = {
         "schema_version": 2,
         "case": {
             "id": result.id,
-            "contract_sha256": "a" * 64,
+            "task": current_case.task,
+            "task_sha256": case_task_sha256(current_case),
+            "contract_sha256": case_contract_sha256(current_case),
         },
         "definition": {
             "path": str(definition.resolve()),
@@ -1819,6 +2018,47 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     ).exists()
     assert not (provenance_path.parent / ".uv-cache").exists()
     assert not (provenance_path.parent / ".pip-cache").exists()
+
+
+def test_run_case_uses_portable_filesystem_fallback_when_dir_fd_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from pytest_codex_evals import backends as backends_module
+    from pytest_codex_evals import runner as runner_module
+
+    monkeypatch.setattr(
+        backends_module, "descriptor_operations_supported", lambda: False
+    )
+    monkeypatch.setattr(
+        runner_module, "descriptor_operations_supported", lambda: False
+    )
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    (fixture_dir / "README.md").write_text("fixture\n", encoding="utf-8")
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n", encoding="utf-8"
+    )
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/portable"
+
+    result = run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(fixture_dir=fixture_dir),
+        skill_dir=skill_dir,
+        rubric=False,
+        sides=("with_skill",),
+        backend=RecordingBackend(),
+    )
+
+    assert result.with_skill is not None
+    artifact = run_root / "cases/sample/service/direct/with_skill"
+    assert (artifact / "last_message.md").read_text(encoding="utf-8") == "done"
+    assert (artifact / ".codex-eval-provenance.json").is_file()
+    assert not (artifact / "service/target").exists()
 
 
 def test_harness_owned_outputs_replace_agent_planted_symlinks(tmp_path: Path):
@@ -2210,6 +2450,339 @@ def test_prepare_side_workspace_rejects_symlink_anywhere_in_fixture(
         )
 
 
+def test_run_case_seals_snapshot_bytes_when_sources_change_between_copy_and_hash(
+    tmp_path: Path, monkeypatch
+):
+    from pytest_codex_evals import runner as runner_module
+
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    fixture_file = fixture_dir / "main.txt"
+    fixture_file.write_text("fixture-old\n", encoding="utf-8")
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("skill-old\n", encoding="utf-8")
+    references_dir = tmp_path / "skills/references"
+    references_dir.mkdir()
+    reference_file = references_dir / "contract.md"
+    reference_file.write_text("reference-old\n", encoding="utf-8")
+    expected_hashes = {
+        "fixture": tree_sha256(fixture_dir),
+        "skill": tree_sha256(skill_dir),
+        "references": tree_sha256(references_dir),
+    }
+    original_tree_sha256 = runner_module.tree_sha256
+    mutated: set[str] = set()
+
+    def mutate_source_before_snapshot_hash(path: Path) -> str:
+        path = Path(path)
+        if (
+            path.name == "fixture"
+            and "fixture-snapshot" in path.parent.name
+            and "fixture" not in mutated
+        ):
+            fixture_file.write_text("fixture-new\n", encoding="utf-8")
+            mutated.add("fixture")
+        elif (
+            path.name == "sample-skill"
+            and ".agents" in path.parts
+            and "skill" not in mutated
+        ):
+            skill_file.write_text("skill-new\n", encoding="utf-8")
+            mutated.add("skill")
+        elif (
+            path.name == "references"
+            and ".agents" in path.parts
+            and "references" not in mutated
+        ):
+            reference_file.write_text("reference-new\n", encoding="utf-8")
+            mutated.add("references")
+        return original_tree_sha256(path)
+
+    monkeypatch.setattr(
+        runner_module, "tree_sha256", mutate_source_before_snapshot_hash
+    )
+    backend = SnapshotObservingBackend()
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+
+    run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(fixture_dir=fixture_dir),
+        skill_dir=skill_dir,
+        rubric=False,
+        sides=("with_skill",),
+        backend=backend,
+    )
+
+    assert mutated == {"fixture", "skill", "references"}
+    assert backend.observed == {
+        "fixture": "fixture-old\n",
+        "skill": "skill-old\n",
+        "references": "reference-old\n",
+    }
+    provenance = json.loads(
+        (
+            run_root
+            / "cases/sample/service/direct/with_skill/.codex-eval-provenance.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert provenance["fixture"]["tree_sha256"] == expected_hashes["fixture"]
+    assert provenance["skill"]["tree_sha256"] == expected_hashes["skill"]
+    assert (
+        provenance["shared_references"]["tree_sha256"]
+        == expected_hashes["references"]
+    )
+
+
+def test_run_case_reads_snapshots_when_sources_change_after_hash_before_agent(
+    tmp_path: Path,
+):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    fixture_file = fixture_dir / "main.txt"
+    fixture_file.write_text("fixture-old\n", encoding="utf-8")
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("skill-old\n", encoding="utf-8")
+    references_dir = tmp_path / "skills/references"
+    references_dir.mkdir()
+    reference_file = references_dir / "contract.md"
+    reference_file.write_text("reference-old\n", encoding="utf-8")
+    expected_hashes = {
+        "fixture": tree_sha256(fixture_dir),
+        "skill": tree_sha256(skill_dir),
+        "references": tree_sha256(references_dir),
+    }
+
+    def mutate_sources() -> None:
+        fixture_file.write_text("fixture-new\n", encoding="utf-8")
+        skill_file.write_text("skill-new\n", encoding="utf-8")
+        reference_file.write_text("reference-new\n", encoding="utf-8")
+
+    backend = SnapshotObservingBackend(mutate_sources)
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    run_case(
+        repo_root=tmp_path,
+        run_root=run_root,
+        case=sanity_case(fixture_dir=fixture_dir),
+        skill_dir=skill_dir,
+        rubric=False,
+        sides=("with_skill",),
+        backend=backend,
+    )
+
+    assert backend.observed == {
+        "fixture": "fixture-old\n",
+        "skill": "skill-old\n",
+        "references": "reference-old\n",
+    }
+    provenance = json.loads(
+        (
+            run_root
+            / "cases/sample/service/direct/with_skill/.codex-eval-provenance.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert provenance["fixture"]["tree_sha256"] == expected_hashes["fixture"]
+    assert provenance["skill"]["tree_sha256"] == expected_hashes["skill"]
+    assert (
+        provenance["shared_references"]["tree_sha256"]
+        == expected_hashes["references"]
+    )
+
+
+def test_run_case_rejects_definition_changed_after_case_collection(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    definition_path = write_scope_definition(tmp_path, "sanity")
+    definition = load_eval_definition(definition_path)
+    case = case_from_definition(
+        definition,
+        definition.prompts[0],
+        definition_path,
+    )
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n",
+        encoding="utf-8",
+    )
+    changed = json.loads(definition_path.read_text(encoding="utf-8"))
+    changed["prompts"][0]["task"] = "Run changed contract."
+    definition_path.write_text(json.dumps(changed), encoding="utf-8")
+    backend = RecordingBackend()
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+
+    with _pytest.raises(
+        ValueError,
+        match="eval definition changed after case collection",
+    ):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=case,
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.agent_timeouts == []
+    assert not run_root.exists()
+
+
+def test_run_case_rejects_task_changed_after_case_collection(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    definition_path = write_scope_definition(tmp_path, "sanity")
+    definition = load_eval_definition(definition_path)
+    case = case_from_definition(
+        definition,
+        definition.prompts[0],
+        definition_path,
+    )
+    case.task = "Run a task that is not in the collected definition."
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n",
+        encoding="utf-8",
+    )
+    backend = RecordingBackend()
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+
+    with _pytest.raises(
+        ValueError,
+        match="eval case contract changed after collection",
+    ):
+        run_case(
+            repo_root=tmp_path,
+            run_root=run_root,
+            case=case,
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert backend.agent_timeouts == []
+    assert not run_root.exists()
+
+
+def test_run_case_rejects_nested_contract_changed_after_collection(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n",
+        encoding="utf-8",
+    )
+
+    for kind in ("rubric", "runtime"):
+        definition_path = write_scope_definition(tmp_path, kind)
+        definition = load_eval_definition(definition_path)
+        case = case_from_definition(
+            definition,
+            definition.prompts[0],
+            definition_path,
+        )
+        if isinstance(case, RubricEvalCase):
+            case.rubric.append("A requirement added after collection.")
+        elif isinstance(case, RuntimeEvalCase):
+            case.checks[0].expect.service_port += 1
+        else:  # pragma: no cover - guarded by the test inputs
+            raise AssertionError(f"unexpected case type: {type(case).__name__}")
+        backend = RecordingBackend()
+        run_root = (
+            tmp_path / f".workspace/codex-evals/sample-skill/{kind}-run"
+        )
+
+        with _pytest.raises(
+            ValueError,
+            match="eval case contract changed after collection",
+        ):
+            run_case(
+                repo_root=tmp_path,
+                run_root=run_root,
+                case=case,
+                skill_dir=skill_dir,
+                rubric=False,
+                sides=("with_skill",),
+                backend=backend,
+            )
+
+        assert backend.agent_timeouts == []
+        assert not run_root.exists()
+
+
+def test_run_case_rechecks_definition_in_fixture_snapshot_before_agent(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import pytest as _pytest
+    from pytest_codex_evals import runner as runner_module
+
+    definition_path = write_scope_definition(tmp_path, "sanity")
+    definition = load_eval_definition(definition_path)
+    case = case_from_definition(
+        definition,
+        definition.prompts[0],
+        definition_path,
+    )
+    skill_dir = tmp_path / "skills/sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "name: sample-skill\n",
+        encoding="utf-8",
+    )
+    backend = RecordingBackend()
+    original_prepare = runner_module.prepare_side_workspace
+    mutated = False
+
+    def mutate_definition_then_prepare(*args, **kwargs):
+        nonlocal mutated
+        if not mutated:
+            changed = json.loads(
+                definition_path.read_text(encoding="utf-8")
+            )
+            changed["prompts"][0]["task"] = "Run changed contract."
+            definition_path.write_text(json.dumps(changed), encoding="utf-8")
+            mutated = True
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(
+        runner_module,
+        "prepare_side_workspace",
+        mutate_definition_then_prepare,
+    )
+
+    with _pytest.raises(
+        ValueError,
+        match="eval definition changed after case collection",
+    ):
+        run_case(
+            repo_root=tmp_path,
+            run_root=tmp_path / ".workspace/codex-evals/sample-skill/run",
+            case=case,
+            skill_dir=skill_dir,
+            rubric=False,
+            sides=("with_skill",),
+            backend=backend,
+        )
+
+    assert mutated
+    assert backend.agent_timeouts == []
+
+
 def write_loaded_skill(root: Path, skill: str) -> None:
     skill_dir = root / ".agents" / "skills" / skill
     skill_dir.mkdir(parents=True)
@@ -2445,6 +3018,45 @@ class TrackingBackend(RecordingBackend):
         timeout: int = 1200,
     ) -> AgentResult:
         self.exec_dir = exec_dir
+        return super().run_agent(
+            prompt=prompt,
+            exec_dir=exec_dir,
+            model=model,
+            timeout=timeout,
+        )
+
+
+class SnapshotObservingBackend(RecordingBackend):
+    def __init__(self, mutate_sources=None) -> None:
+        super().__init__()
+        self.mutate_sources = mutate_sources
+        self.observed: dict[str, str] = {}
+
+    def run_agent(
+        self,
+        *,
+        prompt: str,
+        exec_dir: Path,
+        model: str | None = None,
+        timeout: int = 1200,
+    ) -> AgentResult:
+        if self.mutate_sources is not None:
+            self.mutate_sources()
+        skill_snapshot = exec_dir / ".agents/skills/sample-skill"
+        references_snapshot = exec_dir / ".agents/skills/references"
+        assert not skill_snapshot.is_symlink()
+        assert not references_snapshot.is_symlink()
+        self.observed = {
+            "fixture": (exec_dir / "service/main.txt").read_text(
+                encoding="utf-8"
+            ),
+            "skill": (skill_snapshot / "SKILL.md").read_text(
+                encoding="utf-8"
+            ),
+            "references": (references_snapshot / "contract.md").read_text(
+                encoding="utf-8"
+            ),
+        }
         return super().run_agent(
             prompt=prompt,
             exec_dir=exec_dir,

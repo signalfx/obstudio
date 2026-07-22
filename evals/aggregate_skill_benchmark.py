@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, TypeGuard
 
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
+
 PYTEST_EVALS_SOURCE = (
     Path(__file__).resolve().parents[1]
     / "pytest-codex-evals"
@@ -37,9 +39,16 @@ from compare_otel_reports import CANONICALIZERS
 from pytest_codex_evals.backends import (
     anchored_namespace_matches,
     atomic_text_write,
+    close_anchored_directory,
     ensure_anchored_directory,
     open_anchored_directory,
     path_directory_identity,
+    path_is_link_or_reparse,
+)
+from pytest_codex_evals.eval_contracts import (
+    case_contract_sha256,
+    case_from_definition,
+    load_eval_definition,
 )
 
 
@@ -123,6 +132,14 @@ class RunArtifact:
 
     def validator_results(self) -> list[dict[str, object]]:
         return self.validators if self.validators is not None else []
+
+
+@dataclass(frozen=True)
+class FileDigestSnapshot:
+    """Content identity captured by one authenticated file read."""
+
+    exists: bool
+    sha256: str | None
 
 
 def round_number(value: float) -> float:
@@ -737,8 +754,9 @@ def authenticated_file_record(
     errors: list[str],
     *,
     optional: bool = False,
+    snapshot: FileDigestSnapshot | None = None,
 ) -> dict[str, object]:
-    """Authenticate a run-time file digest against its declared current path."""
+    """Authenticate a file digest against one captured source snapshot."""
 
     if not isinstance(record, dict):
         errors.append(f"evaluator provenance {name} must be an object")
@@ -770,10 +788,16 @@ def authenticated_file_record(
         errors.append(f"evaluator provenance {name} source must not be a symlink")
         path_matches = False
 
-    current_exists = bool(
-        expected_resolved is not None and expected_resolved.is_file()
-    )
-    computed_digest = file_hash(expected_resolved) if current_exists else None
+    if snapshot is None:
+        current_exists = bool(
+            expected_resolved is not None and expected_resolved.is_file()
+        )
+        computed_digest = (
+            file_hash(expected_resolved) if current_exists else None
+        )
+    else:
+        current_exists = snapshot.exists
+        computed_digest = snapshot.sha256
     digest_is_valid = (
         recorded_digest is None
         if not current_exists
@@ -837,33 +861,44 @@ def authenticated_run_configuration(
     }
 
 
-def definition_task(
+def definition_case_contract(
     definition_path: Path,
     prompt_id: str,
-) -> tuple[str, list[str]]:
+    *,
+    definition_bytes: bytes | None = None,
+) -> tuple[str, str | None, list[str]]:
     errors: list[str] = []
     try:
-        definition = load_json(definition_path)
-    except (OSError, ValueError, json.JSONDecodeError) as error:
-        return "", [f"failed to read eval definition: {error}"]
-    prompts = definition.get("prompts")
-    if not isinstance(prompts, list):
-        return "", [f"eval definition prompts must be a list: {definition_path}"]
+        definition = load_eval_definition(
+            definition_path,
+            definition_bytes=definition_bytes,
+        )
+    except (OSError, ValueError, TypeError, JsonSchemaValidationError) as error:
+        return "", None, [f"failed to read eval definition: {error}"]
     matches = [
         prompt
-        for prompt in prompts
-        if isinstance(prompt, dict) and prompt.get("id") == prompt_id
+        for prompt in definition.prompts
+        if prompt.id == prompt_id
     ]
     if len(matches) != 1:
         errors.append(
             f"expected one prompt {prompt_id!r} in {definition_path}, found {len(matches)}"
         )
-        return "", errors
-    task = matches[0].get("task")
-    if not isinstance(task, str) or not task.strip():
-        errors.append(f"prompt {prompt_id!r} has no task in {definition_path}")
-        return "", errors
-    return task, errors
+        return "", None, errors
+    case = case_from_definition(definition, matches[0], definition_path)
+    return case.task, case_contract_sha256(case), errors
+
+
+def read_file_digest_snapshot(
+    path: Path,
+) -> tuple[bytes, FileDigestSnapshot]:
+    """Read one file once and retain the digest of those exact bytes."""
+
+    value = path.read_bytes()
+    return value, FileDigestSnapshot(
+        exists=True,
+        sha256=hashlib.sha256(value).hexdigest(),
+    )
 
 
 def load_run_provenance(
@@ -920,11 +955,28 @@ def load_run_provenance(
         errors.append(run_manifest_error)
 
     current_task = ""
+    current_case_contract_sha256: str | None = None
+    definition_snapshot = FileDigestSnapshot(exists=False, sha256=None)
     if definition_path is None:
         errors.append("validation result has no definition_path")
     else:
-        current_task, definition_errors = definition_task(definition_path, prompt_id)
-        errors.extend(definition_errors)
+        try:
+            definition_bytes, definition_snapshot = (
+                read_file_digest_snapshot(definition_path)
+            )
+        except OSError as error:
+            errors.append(f"failed to read eval definition: {error}")
+        else:
+            (
+                current_task,
+                current_case_contract_sha256,
+                definition_errors,
+            ) = definition_case_contract(
+                definition_path,
+                prompt_id,
+                definition_bytes=definition_bytes,
+            )
+            errors.extend(definition_errors)
     if fixture_path is None or not fixture_path.is_dir():
         errors.append(f"validation fixture_dir is unavailable: {fixture_path}")
     if declared_skill_path is None or not declared_skill_path.is_dir():
@@ -949,7 +1001,7 @@ def load_run_provenance(
     case = manifest.get("case") if isinstance(manifest, dict) else None
     task = ""
     task_sha256: object = None
-    case_contract_sha256: object = None
+    recorded_case_contract_sha256: object = None
     if not isinstance(case, dict):
         errors.append("evaluator provenance case must be an object")
     else:
@@ -966,7 +1018,7 @@ def load_run_provenance(
                 )
         recorded_task = case.get("task")
         recorded_task_hash = case.get("task_sha256")
-        case_contract_sha256 = case.get("contract_sha256")
+        recorded_case_contract_sha256 = case.get("contract_sha256")
         if not isinstance(recorded_task, str) or not recorded_task.strip():
             errors.append("evaluator provenance case.task is missing")
         else:
@@ -982,10 +1034,18 @@ def load_run_provenance(
             errors.append("evaluator provenance task_sha256 is invalid")
         else:
             task_sha256 = recorded_task_hash
-        if not isinstance(case_contract_sha256, str) or not SHA256_PATTERN.fullmatch(
-            case_contract_sha256
+        if not isinstance(
+            recorded_case_contract_sha256,
+            str,
+        ) or not SHA256_PATTERN.fullmatch(
+            recorded_case_contract_sha256
         ):
             errors.append("evaluator provenance case.contract_sha256 is invalid")
+        elif recorded_case_contract_sha256 != current_case_contract_sha256:
+            errors.append(
+                "evaluator provenance case.contract_sha256 differs from "
+                "the current eval definition"
+            )
 
     definition_record = authenticated_file_record(
         "definition",
@@ -993,6 +1053,7 @@ def load_run_provenance(
         definition_path,
         source_base,
         errors,
+        snapshot=definition_snapshot,
     )
 
     fixture_record = authenticated_tree_record(
@@ -1114,7 +1175,7 @@ def load_run_provenance(
             summary_path.with_name("trace.jsonl"), run_dir, captured_files
         ),
         "task_sha256": task_sha256,
-        "case_contract_sha256": case_contract_sha256,
+        "case_contract_sha256": recorded_case_contract_sha256,
     }
     return provenance, task, errors
 
@@ -1611,15 +1672,32 @@ def materialize_capture_snapshot(
                 raise ValueError(
                     "capture snapshot namespace changed during creation"
                 )
-            descriptor = os.open(
-                target.name,
-                os.O_WRONLY
-                | os.O_CREAT
-                | os.O_EXCL
-                | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-                dir_fd=anchor.descriptor,
-            )
+            if anchor.descriptor is None:
+                if os.path.lexists(target):
+                    status = os.lstat(target)
+                    if path_is_link_or_reparse(status):
+                        raise ValueError(
+                            f"capture snapshot target is a link: {target}"
+                        )
+                    raise FileExistsError(target)
+                descriptor = os.open(
+                    target,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_BINARY", 0),
+                    0o600,
+                )
+            else:
+                descriptor = os.open(
+                    target.name,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=anchor.descriptor,
+                )
             created = True
             offset = 0
             while offset < len(value):
@@ -1628,7 +1706,8 @@ def materialize_capture_snapshot(
             os.close(descriptor)
             descriptor = None
             if not anchored_namespace_matches(anchor):
-                os.unlink(target.name, dir_fd=anchor.descriptor)
+                if anchor.descriptor is not None:
+                    os.unlink(target.name, dir_fd=anchor.descriptor)
                 created = False
                 raise ValueError(
                     "capture snapshot namespace changed during write"
@@ -1640,11 +1719,12 @@ def materialize_capture_snapshot(
             if created and (
                 not completed or not anchored_namespace_matches(anchor)
             ):
-                try:
-                    os.unlink(target.name, dir_fd=anchor.descriptor)
-                except FileNotFoundError:
-                    pass
-            os.close(anchor.descriptor)
+                if anchor.descriptor is not None:
+                    try:
+                        os.unlink(target.name, dir_fd=anchor.descriptor)
+                    except FileNotFoundError:
+                        pass
+            close_anchored_directory(anchor)
 
 
 def load_run(

@@ -25,6 +25,7 @@ class BaseEvalDefinition(BaseModel):
     prompts: list[PromptVariant]
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+    definition_sha256: str | None = None
 
     @property
     def kind(self) -> EvalRole:
@@ -51,6 +52,8 @@ class BaseEvalCase(BaseModel):
     task: str
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+    definition_sha256: str | None = None
+    collected_contract_sha256: str | None = None
 
     @property
     def kind(self) -> EvalRole:

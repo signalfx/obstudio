@@ -18,18 +18,18 @@ from .eval_files import eval_file_layout, is_eval_file
 from .definitions import (
     CaseResult,
     EvalCase,
-    PromptVariant,
+    EvalDefinition,
     RubricEvalCase,
-    RubricEvalDefinition,
     RuntimeEvalCase,
-    RuntimeEvalDefinition,
     SanityEvalCase,
-    SanityEvalDefinition,
     ValidationResult,
+)
+from .eval_contracts import (
+    case_from_definition,
+    load_eval_definition,
 )
 from .report import ensure_safe_output_directory, write_session_results
 from .runner import build_run_provenance, new_run_id, new_run_root, run_case
-from .schema_resources import schema_validator
 
 
 RUNS_ATTR = "_codex_eval_runs"
@@ -352,92 +352,12 @@ class CodexEvalItem(pytest.Item):
         return self.path, 0, self.name
 
 
-def load_eval_definition(path: Path) -> EvalDefinition:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    data = with_path_defaults(path, data)
-    role = eval_role(path)
-    schema_validator(schema_name_for_role(role)).validate(data)
-    definition = definition_model_for_role(role).model_validate(data)
-    definition.definition_path = path
-    definition.fixture_dir = eval_fixture_dir(path)
-    return definition
-
-
-def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path: Path) -> EvalCase:
-    common = {
-        "id": f"{definition.id}/{prompt.id}",
-        "base_id": definition.id,
-        "prompt_id": prompt.id,
-        "skill": definition.skill,
-        "language": definition.language,
-        "service": definition.service,
-        "task": prompt.task,
-        "definition_path": path,
-        "fixture_dir": eval_fixture_dir(path),
-    }
-    if isinstance(definition, SanityEvalDefinition):
-        return SanityEvalCase(**common, checks=definition.checks)
-    if isinstance(definition, RubricEvalDefinition):
-        return RubricEvalCase(**common, rubric=definition.rubric, judge_prompt=definition.judge_prompt, judge_inputs=definition.judge_inputs)
-    if isinstance(definition, RuntimeEvalDefinition):
-        return RuntimeEvalCase(**common, checks=definition.checks)
-    raise TypeError(f"unsupported eval definition: {type(definition).__name__}")
-
-
-def with_path_defaults(path: Path, data: dict[str, Any]) -> dict[str, Any]:
-    layout = eval_file_layout(path)
-    if layout is None:
-        return dict(data)
-    normalized = dict(data)
-    normalized.setdefault("language", layout.language)
-    normalized.setdefault("service", layout.service)
-    normalized.setdefault("id", layout.default_id)
-    return normalized
-
-
-def eval_fixture_dir(path: Path) -> Path:
-    layout = eval_file_layout(path)
-    if layout is None:
-        return path.parent
-    return layout.fixture_dir
-
-
 def definition_matches_eval_kind(definition: EvalDefinition, kind: str, path: Path) -> bool:
     layout = eval_file_layout(path)
     role = layout.role if layout else definition.kind
     if kind in {"validation", "standard"}:
         return True
     return role == kind
-
-
-EvalDefinition = SanityEvalDefinition | RubricEvalDefinition | RuntimeEvalDefinition
-
-
-def eval_role(path: Path) -> str:
-    layout = eval_file_layout(path)
-    if layout is None or layout.role is None:
-        raise pytest.UsageError(f"eval files must live under eval/sanity, eval/qual, or eval/runtime: {path}")
-    return layout.role
-
-
-def schema_name_for_role(role: str) -> str:
-    if role == "sanity":
-        return "sanity.schema.json"
-    if role == "rubric":
-        return "rubric.schema.json"
-    if role == "runtime":
-        return "runtime.schema.json"
-    raise pytest.UsageError(f"unknown eval role: {role}")
-
-
-def definition_model_for_role(role: str):
-    if role == "sanity":
-        return SanityEvalDefinition
-    if role == "rubric":
-        return RubricEvalDefinition
-    if role == "runtime":
-        return RuntimeEvalDefinition
-    raise pytest.UsageError(f"unknown eval role: {role}")
 
 
 def infer_repo_root(start: Path) -> Path:

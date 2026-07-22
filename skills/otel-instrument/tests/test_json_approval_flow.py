@@ -45,13 +45,17 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn('"kind": "otel-instrumentation"', text)
         self.assertIn('"audit_sha256": "audit-sha256-from-selection"', text)
         self.assertIn(
+            '"selection_sha256": "sha256-of-exact-normalized-selection"', text
+        )
+        self.assertIn("A changed answer invalidates older instrumentation", normalized)
+        self.assertIn(
             "Findings must exactly equal the dependency-closed selected IDs (`approved_ids`) in audit order",
             normalized,
         )
         for value in (
             '"id": "OTEL-001.http-server-span"',
             '"change_kind": "added"',
-            '"added_attributes": ["http.route"]',
+            '"added_attributes": ["http.route=/health"]',
             '"verification_scenarios": ["http.health.success"]',
             "chart/dashboard or detector",
             "filter, slice, group-by",

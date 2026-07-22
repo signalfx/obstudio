@@ -217,6 +217,7 @@ class ValidateGapClosureTest(unittest.TestCase):
         *,
         overlay_audit_sha256: str | None = None,
         audit_schema_version: int = 2,
+        stale_selection_approved_by: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -248,7 +249,7 @@ class ValidateGapClosureTest(unittest.TestCase):
                         "status": "working",
                         "evidence": [".observe/evidence/runtime.json"],
                         "observed_telemetry": [
-                            "GET /checkout emitted with http.route=/checkout"
+                            "Span GET /checkout emitted with http.route=/checkout"
                         ],
                         "product_validation": [
                             "The local receiver accepted the generated trace."
@@ -263,7 +264,7 @@ class ValidateGapClosureTest(unittest.TestCase):
                         "direct_assertion_passed": True,
                         "evidence": [".observe/evidence/runtime.json"],
                         "observed_telemetry": [
-                            "GET /checkout emitted with http.route=/checkout"
+                            "Span GET /checkout emitted with http.route=/checkout"
                         ],
                         "product_validation": [
                             "The local receiver accepted the generated trace."
@@ -275,6 +276,8 @@ class ValidateGapClosureTest(unittest.TestCase):
             verify_json = REPORT_MODULE.normalize_verify(
                 verify_json, audit_json, selection_json, instrumentation_json
             )
+            if stale_selection_approved_by is not None:
+                selection_json["approved_by"] = stale_selection_approved_by
             if overlay_audit_sha256 is not None:
                 verify_json["audit_sha256"] = overlay_audit_sha256
             audit_json_path.write_text(json.dumps(audit_json), encoding="utf-8")
@@ -438,6 +441,16 @@ class ValidateGapClosureTest(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("audit_sha256 does not match", result.stderr)
+
+    def test_json_overlay_rejects_stale_exact_selection_binding(self) -> None:
+        result = self.validate_with_json(
+            INSTRUMENT_NO_GENAI,
+            overlay_status="working",
+            overlay_result="Pass",
+            stale_selection_approved_by="different-reviewer",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("selection_sha256 does not match selection", result.stderr)
 
     def test_json_projection_accepts_bound_schema_v1_audit(self) -> None:
         result = self.validate_with_json(

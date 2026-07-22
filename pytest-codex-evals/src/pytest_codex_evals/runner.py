@@ -7,6 +7,7 @@ import shutil
 import stat
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,10 +18,18 @@ from .backends import (
     CodexBackend,
     anchored_namespace_matches,
     atomic_text_write,
+    close_anchored_directory,
+    descriptor_operations_supported,
     ensure_anchored_directory,
     open_anchored_directory,
+    path_is_link_or_reparse,
 )
 from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
+from .eval_contracts import (
+    canonical_sha256,
+    case_contract_sha256,
+    case_task_sha256,
+)
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
 
@@ -45,6 +54,21 @@ ARTIFACT_IGNORED_NAMES = {
     "target",
 }
 ARTIFACT_IGNORED_SUFFIXES = (".pyc",)
+
+
+@dataclass(frozen=True)
+class WorkspaceInputSnapshot:
+    """Hashes of the immutable input copies prepared for one eval side."""
+
+    fixture_path: str
+    fixture_tree_sha256: str
+    skill_path: str
+    skill_tree_sha256: str
+    shared_references_path: str
+    shared_references_tree_sha256: str | None
+    definition_path: str | None
+    definition_exists: bool
+    definition_sha256: str | None
 
 
 def new_run_id() -> str:
@@ -74,6 +98,7 @@ def run_case(
     config_path: Path | None = None,
     run_configuration: dict[str, object] | None = None,
 ) -> CaseResult:
+    require_collected_definition(case)
     if backend is None:
         backend = CodexBackend()
     run_root_identity = ensure_real_directory(run_root, repo_root, create=True)
@@ -172,19 +197,17 @@ def run_side(
         artifact_dir.parent, run_root, create=True
     )
     if artifact_parent_anchor.boundary_identity != run_root_identity:
-        os.close(artifact_parent_anchor.descriptor)
+        close_anchored_directory(artifact_parent_anchor)
         raise ValueError("eval run root was replaced before artifact setup")
     try:
         if not anchored_namespace_matches(artifact_parent_anchor):
             raise ValueError("eval artifact parent was replaced during setup")
-        if directory_entry_exists(
-            artifact_parent_anchor.descriptor, artifact_dir.name
-        ):
+        if directory_entry_exists(artifact_parent_anchor, artifact_dir.name):
             raise ValueError(
                 f"artifact directory already exists; refusing to replace it: {artifact_dir}"
             )
         exec_root_identity = directory_identity(exec_dir.parent)
-        prepare_side_workspace(
+        input_snapshot = prepare_side_workspace(
             repo_root,
             case,
             side,
@@ -194,7 +217,7 @@ def run_side(
         )
         exec_anchor = open_anchored_directory(exec_dir, exec_dir.parent)
         if exec_anchor.boundary_identity != exec_root_identity:
-            os.close(exec_anchor.descriptor)
+            close_anchored_directory(exec_anchor)
             raise ValueError("eval execution root was replaced before agent launch")
         try:
             return _run_side_anchored(
@@ -215,15 +238,16 @@ def run_side(
                 judge_timeout=judge_timeout,
                 config_path=config_path,
                 run_configuration=run_configuration,
+                input_snapshot=input_snapshot,
                 run_root=run_root,
                 run_root_identity=run_root_identity,
                 exec_anchor=exec_anchor,
                 artifact_parent_anchor=artifact_parent_anchor,
             )
         finally:
-            os.close(exec_anchor.descriptor)
+            close_anchored_directory(exec_anchor)
     finally:
-        os.close(artifact_parent_anchor.descriptor)
+        close_anchored_directory(artifact_parent_anchor)
 
 
 def _run_side_anchored(
@@ -245,6 +269,7 @@ def _run_side_anchored(
     judge_timeout: int,
     config_path: Path | None,
     run_configuration: dict[str, object] | None,
+    input_snapshot: WorkspaceInputSnapshot,
     run_root: Path,
     run_root_identity: tuple[int, int],
     exec_anchor: AnchoredDirectory,
@@ -257,6 +282,7 @@ def _run_side_anchored(
         skill_dir,
         config_path=config_path,
         run_configuration=run_configuration,
+        input_snapshot=input_snapshot,
     )
     exec_dir_identity = exec_anchor.parent_identity
 
@@ -273,12 +299,8 @@ def _run_side_anchored(
     final_relative = relative_artifact_path(
         agent_result.final_message_path, exec_dir
     )
-    trace_bytes = read_regular_from_directory(
-        exec_anchor.descriptor, trace_relative
-    )
-    final_bytes = read_regular_from_directory(
-        exec_anchor.descriptor, final_relative
-    )
+    trace_bytes = read_regular_from_directory(exec_anchor, trace_relative)
+    final_bytes = read_regular_from_directory(exec_anchor, final_relative)
     if not anchored_namespace_matches(exec_anchor):
         raise ValueError("eval execution directory was replaced during agent output read")
     trace = parse_trace_snapshot(backend, trace_bytes)
@@ -324,12 +346,10 @@ def _run_side_anchored(
         finally:
             rubric_duration_seconds = time.monotonic() - rubric_start
             rubric_trace_relative = Path("rubric_trace.jsonl")
-            if directory_entry_exists(
-                exec_anchor.descriptor, rubric_trace_relative.name
-            ):
+            if directory_entry_exists(exec_anchor, rubric_trace_relative.name):
                 try:
                     rubric_trace_bytes = read_regular_from_directory(
-                        exec_anchor.descriptor, rubric_trace_relative
+                        exec_anchor, rubric_trace_relative
                     )
                     rubric_tokens = parse_trace_snapshot(
                         backend, rubric_trace_bytes
@@ -343,7 +363,7 @@ def _run_side_anchored(
         if harness_artifact is None:
             continue
         relative = relative_artifact_path(harness_artifact, exec_dir)
-        read_regular_from_directory(exec_anchor.descriptor, relative)
+        read_regular_from_directory(exec_anchor, relative)
 
     # Write this after the agent completes so the preserved manifest is owned by
     # the harness, not by code running inside the evaluation workspace.
@@ -361,56 +381,28 @@ def _run_side_anchored(
         raise ValueError("eval execution directory was replaced before capture")
     if not anchored_namespace_matches(artifact_parent_anchor):
         raise ValueError("eval artifact parent was replaced before capture")
-    if directory_entry_exists(
-        artifact_parent_anchor.descriptor, artifact_dir.name
-    ):
+    if directory_entry_exists(artifact_parent_anchor, artifact_dir.name):
         raise ValueError(
             f"artifact directory appeared during agent execution: {artifact_dir}"
         )
-    os.mkdir(
-        artifact_dir.name,
-        mode=0o755,
-        dir_fd=artifact_parent_anchor.descriptor,
+    artifact_anchor = create_child_directory_anchor(
+        artifact_parent_anchor, artifact_dir.name
     )
-    directory_flags = (
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-    )
-    artifact_descriptor = os.open(
-        artifact_dir.name,
-        directory_flags,
-        dir_fd=artifact_parent_anchor.descriptor,
-    )
-    artifact_dir_identity = descriptor_identity(artifact_descriptor)
-    artifact_anchor = AnchoredDirectory(
-        descriptor=artifact_descriptor,
-        boundary=artifact_parent_anchor.boundary,
-        relative_parts=(
-            *artifact_parent_anchor.relative_parts,
-            artifact_dir.name,
-        ),
-        boundary_identity=artifact_parent_anchor.boundary_identity,
-        parent_identity=artifact_dir_identity,
-    )
+    artifact_dir_identity = artifact_anchor.parent_identity
     try:
-        copy_artifact_tree_fd(exec_anchor.descriptor, artifact_descriptor)
+        copy_artifact_tree(exec_anchor, artifact_anchor)
         if not anchored_namespace_matches(exec_anchor):
             raise ValueError("eval execution directory was replaced during capture")
         if not anchored_namespace_matches(artifact_anchor):
             raise ValueError("eval artifact directory was replaced during capture")
-        if read_regular_from_directory(
-            artifact_descriptor, trace_relative
-        ) != trace_bytes:
+        if read_regular_from_directory(artifact_anchor, trace_relative) != trace_bytes:
             raise ValueError("captured trace differs from the authenticated agent output")
-        if read_regular_from_directory(
-            artifact_descriptor, final_relative
-        ) != final_bytes:
+        if read_regular_from_directory(artifact_anchor, final_relative) != final_bytes:
             raise ValueError(
                 "captured final message differs from the authenticated agent output"
             )
         if read_regular_from_directory(
-            artifact_descriptor, Path(PROVENANCE_FILE)
+            artifact_anchor, Path(PROVENANCE_FILE)
         ) != provenance_bytes:
             raise ValueError("captured provenance differs from harness-owned bytes")
 
@@ -450,7 +442,7 @@ def _run_side_anchored(
             raise ValueError("eval artifact directory was replaced after summary write")
         return result
     finally:
-        os.close(artifact_descriptor)
+        close_anchored_directory(artifact_anchor)
 
 
 def ensure_real_directory(
@@ -474,12 +466,15 @@ def ensure_real_directory(
             raise ValueError(f"directory namespace changed while opening: {path}")
         return anchor.parent_identity
     finally:
-        os.close(anchor.descriptor)
+        close_anchored_directory(anchor)
 
 
-def directory_entry_exists(descriptor: int, name: str) -> bool:
+def directory_entry_exists(anchor: AnchoredDirectory, name: str) -> bool:
     try:
-        os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if anchor.descriptor is not None:
+            os.stat(name, dir_fd=anchor.descriptor, follow_symlinks=False)
+        else:
+            os.lstat(anchor.path / name)
     except FileNotFoundError:
         return False
     return True
@@ -490,6 +485,34 @@ def descriptor_identity(descriptor: int) -> tuple[int, int]:
     if not stat.S_ISDIR(details.st_mode):
         raise ValueError("expected an open directory descriptor")
     return details.st_dev, details.st_ino
+
+
+def create_child_directory_anchor(
+    parent: AnchoredDirectory, name: str
+) -> AnchoredDirectory:
+    if parent.descriptor is None:
+        child = parent.path / name
+        child.mkdir(mode=0o755)
+        anchor = open_anchored_directory(child, parent.boundary)
+        if anchor.boundary_identity != parent.boundary_identity:
+            close_anchored_directory(anchor)
+            raise ValueError("directory boundary changed while creating child")
+        return anchor
+    os.mkdir(name, mode=0o755, dir_fd=parent.descriptor)
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(name, directory_flags, dir_fd=parent.descriptor)
+    return AnchoredDirectory(
+        descriptor=descriptor,
+        boundary=parent.boundary,
+        relative_parts=(*parent.relative_parts, name),
+        boundary_identity=parent.boundary_identity,
+        parent_identity=descriptor_identity(descriptor),
+        path=parent.path / name,
+    )
 
 
 def relative_artifact_path(path: Path, boundary: Path) -> Path:
@@ -505,8 +528,36 @@ def relative_artifact_path(path: Path, boundary: Path) -> Path:
     return relative
 
 
-def read_regular_from_directory(descriptor: int, relative: Path) -> bytes:
-    current = os.dup(descriptor)
+def read_regular_from_directory(
+    anchor: AnchoredDirectory, relative: Path
+) -> bytes:
+    if anchor.descriptor is None:
+        candidate = anchor.path / relative
+        current = anchor.path
+        for component in relative.parts[:-1]:
+            current = current / component
+            details = os.lstat(current)
+            if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+                raise ValueError(f"artifact path must contain real directories: {relative}")
+        details = os.lstat(candidate)
+        if path_is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
+            raise ValueError(f"artifact must be a regular file: {relative}")
+        file_descriptor = os.open(
+            candidate, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        )
+        try:
+            if not stat.S_ISREG(os.fstat(file_descriptor).st_mode):
+                raise ValueError(f"artifact must be a regular file: {relative}")
+            chunks: list[bytes] = []
+            while chunk := os.read(file_descriptor, 1024 * 1024):
+                chunks.append(chunk)
+        finally:
+            os.close(file_descriptor)
+        if not anchored_namespace_matches(anchor):
+            raise ValueError("artifact directory changed during portable read")
+        return b"".join(chunks)
+
+    current = os.dup(anchor.descriptor)
     try:
         directory_flags = (
             os.O_RDONLY
@@ -633,9 +684,82 @@ def copy_artifact_tree_fd(
         raise ValueError(f"unsupported artifact tree entry: {name}")
 
 
+def copy_artifact_tree(
+    source: AnchoredDirectory,
+    destination: AnchoredDirectory,
+) -> None:
+    if source.descriptor is not None and destination.descriptor is not None:
+        copy_artifact_tree_fd(source.descriptor, destination.descriptor)
+        return
+    if source.descriptor is not None or destination.descriptor is not None:
+        raise ValueError("artifact copy capabilities changed during execution")
+    copy_artifact_tree_portable(source.path, destination.path)
+
+
+def copy_artifact_tree_portable(
+    source: Path,
+    destination: Path,
+    *,
+    root: bool = True,
+) -> None:
+    names = sorted(entry.name for entry in os.scandir(source))
+    ignored = artifact_ignore("", names)
+    for name in names:
+        if name in ignored or (root and name == "summary.json"):
+            continue
+        source_path = source / name
+        destination_path = destination / name
+        details = os.lstat(source_path)
+        if path_is_link_or_reparse(details):
+            raise ValueError(f"artifact tree must not contain links: {source_path}")
+        if stat.S_ISDIR(details.st_mode):
+            destination_path.mkdir(mode=details.st_mode & 0o777)
+            copy_artifact_tree_portable(
+                source_path, destination_path, root=False
+            )
+            continue
+        if stat.S_ISREG(details.st_mode):
+            copy_regular_file_portable(
+                source_path, destination_path, details.st_mode
+            )
+            continue
+        raise ValueError(f"unsupported artifact tree entry: {source_path}")
+
+
+def copy_regular_file_portable(
+    source: Path,
+    destination: Path,
+    mode: int,
+) -> None:
+    source_descriptor = os.open(
+        source, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    )
+    destination_descriptor: int | None = None
+    try:
+        if not stat.S_ISREG(os.fstat(source_descriptor).st_mode):
+            raise ValueError(f"source must be a regular file: {source}")
+        destination_descriptor = os.open(
+            destination,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_BINARY", 0),
+            mode & 0o777,
+        )
+        while chunk := os.read(source_descriptor, 1024 * 1024):
+            offset = 0
+            while offset < len(chunk):
+                offset += os.write(destination_descriptor, chunk[offset:])
+        os.fsync(destination_descriptor)
+    finally:
+        os.close(source_descriptor)
+        if destination_descriptor is not None:
+            os.close(destination_descriptor)
+
+
 def directory_identity(path: Path) -> tuple[int, int]:
     details = path.stat(follow_symlinks=False)
-    if not stat.S_ISDIR(details.st_mode) or path.is_symlink():
+    if path_is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
         raise ValueError(f"expected a real directory: {path}")
     return details.st_dev, details.st_ino
 
@@ -782,19 +906,60 @@ def build_run_provenance(
     *,
     config_path: Path | None = None,
     run_configuration: dict[str, object] | None = None,
+    input_snapshot: WorkspaceInputSnapshot | None = None,
 ) -> dict[str, object]:
     if case.fixture_dir is None:
         raise ValueError(f"case {case.id} has no fixture_dir")
-    validate_fixture_tree(case.fixture_dir)
     selected_skill = skill_dir or repo_root / "skills" / case.skill
     shared_references = repo_root / "skills" / "references"
+    if input_snapshot is None:
+        validate_fixture_tree(case.fixture_dir)
     harness_source = Path(__file__).resolve().parent
-    task_sha256 = hashlib.sha256(case.task.encode("utf-8")).hexdigest()
-    case_contract = case.model_dump(
-        mode="json",
-        exclude={"definition_path", "fixture_dir"},
-    )
     normalized_run_configuration = dict(run_configuration or {})
+    fixture_tree_digest = (
+        input_snapshot.fixture_tree_sha256
+        if input_snapshot is not None
+        else tree_sha256(case.fixture_dir)
+    )
+    skill_tree_digest = (
+        input_snapshot.skill_tree_sha256
+        if input_snapshot is not None
+        else tree_sha256(selected_skill)
+    )
+    shared_references_tree_digest = (
+        input_snapshot.shared_references_tree_sha256
+        if input_snapshot is not None
+        else (
+            tree_sha256(shared_references)
+            if shared_references.is_dir()
+            else None
+        )
+    )
+    fixture_path = (
+        input_snapshot.fixture_path
+        if input_snapshot is not None
+        else str(case.fixture_dir.resolve())
+    )
+    skill_path = (
+        input_snapshot.skill_path
+        if input_snapshot is not None
+        else str(selected_skill.resolve())
+    )
+    shared_references_path = (
+        input_snapshot.shared_references_path
+        if input_snapshot is not None
+        else str(shared_references.resolve())
+    )
+    definition = (
+        {
+            "path": input_snapshot.definition_path,
+            "exists": input_snapshot.definition_exists,
+            "sha256": input_snapshot.definition_sha256,
+        }
+        if input_snapshot is not None
+        else file_provenance(case.definition_path)
+    )
+    require_collected_definition(case, definition)
     return {
         "schema_version": 2,
         "case": {
@@ -805,46 +970,32 @@ def build_run_provenance(
             "language": case.language,
             "service": case.service,
             "task": case.task,
-            "task_sha256": task_sha256,
-            "contract_sha256": canonical_sha256(case_contract),
+            "task_sha256": case_task_sha256(case),
+            "contract_sha256": case_contract_sha256(case),
         },
-        "definition": file_provenance(case.definition_path),
+        "definition": definition,
         "config": file_provenance(config_path),
         "run_configuration": {
             "value": normalized_run_configuration,
             "sha256": canonical_sha256(normalized_run_configuration),
         },
         "fixture": {
-            "path": str(case.fixture_dir.resolve()),
-            "tree_sha256": tree_sha256(case.fixture_dir),
+            "path": fixture_path,
+            "tree_sha256": fixture_tree_digest,
         },
         "skill": {
-            "path": str(selected_skill.resolve()),
-            "tree_sha256": tree_sha256(selected_skill),
+            "path": skill_path,
+            "tree_sha256": skill_tree_digest,
         },
         "shared_references": {
-            "path": str(shared_references.resolve()),
-            "tree_sha256": (
-                tree_sha256(shared_references)
-                if shared_references.is_dir()
-                else None
-            ),
+            "path": shared_references_path,
+            "tree_sha256": shared_references_tree_digest,
         },
         "harness": {
             "path": str(harness_source),
             "tree_sha256": tree_sha256(harness_source),
         },
     }
-
-
-def canonical_sha256(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def file_provenance(path: Path | None) -> dict[str, object]:
@@ -864,6 +1015,36 @@ def file_provenance(path: Path | None) -> dict[str, object]:
     }
 
 
+def require_collected_definition(
+    case: EvalCase,
+    provenance: dict[str, object] | None = None,
+) -> None:
+    """Fail before execution when a collected case no longer matches its file."""
+
+    if case.definition_sha256 is None:
+        return
+    if case.definition_path is None:
+        raise ValueError(
+            f"{case.id}: collected eval case has no definition path"
+        )
+    if case.collected_contract_sha256 is None:
+        raise ValueError(
+            f"{case.id}: collected eval case has no contract hash"
+        )
+    if case_contract_sha256(case) != case.collected_contract_sha256:
+        raise ValueError(
+            f"{case.id}: eval case contract changed after collection"
+        )
+    current = provenance or file_provenance(case.definition_path)
+    if (
+        not current.get("exists")
+        or current.get("sha256") != case.definition_sha256
+    ):
+        raise ValueError(
+            f"{case.id}: eval definition changed after case collection"
+        )
+
+
 def prepare_side_workspace(
     repo_root: Path,
     case: EvalCase,
@@ -872,7 +1053,7 @@ def prepare_side_workspace(
     skill_dir: Path | None = None,
     *,
     exec_root_identity: tuple[int, int] | None = None,
-) -> None:
+) -> WorkspaceInputSnapshot:
     if case.fixture_dir is None:
         raise ValueError(f"case {case.id} has no fixture_dir")
     validate_fixture_tree(case.fixture_dir)
@@ -883,36 +1064,233 @@ def prepare_side_workspace(
     try:
         if parent_anchor.boundary_identity != expected_root_identity:
             raise ValueError("eval execution root was replaced during setup")
-        if directory_entry_exists(parent_anchor.descriptor, side_dir.name):
+        if directory_entry_exists(parent_anchor, side_dir.name):
             raise ValueError(
                 f"eval execution directory already exists: {side_dir}"
             )
-        os.mkdir(side_dir.name, mode=0o755, dir_fd=parent_anchor.descriptor)
+        if parent_anchor.descriptor is None:
+            (parent_anchor.path / side_dir.name).mkdir(mode=0o755)
+        else:
+            os.mkdir(
+                side_dir.name,
+                mode=0o755,
+                dir_fd=parent_anchor.descriptor,
+            )
         if not anchored_namespace_matches(parent_anchor):
             raise ValueError("eval execution root was replaced during setup")
     finally:
-        os.close(parent_anchor.descriptor)
-    shutil.copytree(
-        case.fixture_dir,
-        side_dir / "service",
-        ignore=workspace_ignore(case.fixture_dir),
-    )
-    copy_eval_inputs(case.fixture_dir, side_dir / "service")
+        close_anchored_directory(parent_anchor)
+    # Copy source inputs before hashing them. The temporary fixture snapshot
+    # closes the copy->hash race: both the service workspace and its recorded
+    # provenance are derived from the same retained bytes, even if the source
+    # fixture changes concurrently.
+    with tempfile.TemporaryDirectory(
+        prefix=f".{side_dir.name}-fixture-snapshot-", dir=side_dir.parent
+    ) as snapshot_parent:
+        fixture_snapshot = Path(snapshot_parent) / "fixture"
+        snapshot_source_tree(case.fixture_dir, fixture_snapshot)
+        definition = snapshot_definition_provenance(
+            case,
+            fixture_snapshot,
+        )
+        require_collected_definition(case, definition)
+        fixture_tree_digest = tree_sha256(fixture_snapshot)
+        shutil.copytree(
+            fixture_snapshot,
+            side_dir / "service",
+            ignore=workspace_ignore(fixture_snapshot),
+        )
+        copy_eval_inputs(fixture_snapshot, side_dir / "service")
+
+    target = skill_dir or repo_root / "skills" / case.skill
+    if not (target / "SKILL.md").is_file():
+        raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
+    references = repo_root / "skills" / "references"
+
     if side == "with_skill":
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
-        target = skill_dir or repo_root / "skills" / case.skill
-        if not (target / "SKILL.md").exists():
-            raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
-        create_skill_link(target, skills_dir / target.name)
+        skill_snapshot = skills_dir / target.name
+        snapshot_source_tree(target, skill_snapshot)
+        skill_tree_digest = tree_sha256(skill_snapshot)
 
-        references = repo_root / "skills" / "references"
-        if references.exists():
-            create_skill_link(references, skills_dir / "references")
+        shared_references_tree_digest: str | None = None
+        if references.is_dir():
+            references_snapshot = skills_dir / "references"
+            snapshot_source_tree(references, references_snapshot)
+            shared_references_tree_digest = tree_sha256(references_snapshot)
+    else:
+        # Baseline sides do not expose a skill, but still bind the compared
+        # skill/reference identity. Use short-lived copies so those hashes are
+        # captured from stable bytes rather than mutable source paths.
+        with tempfile.TemporaryDirectory(
+            prefix=f".{side_dir.name}-skill-snapshot-", dir=side_dir.parent
+        ) as snapshot_parent:
+            snapshot_root = Path(snapshot_parent)
+            skill_snapshot = snapshot_root / target.name
+            snapshot_source_tree(target, skill_snapshot)
+            skill_tree_digest = tree_sha256(skill_snapshot)
+            shared_references_tree_digest = None
+            if references.is_dir():
+                references_snapshot = snapshot_root / "references"
+                snapshot_source_tree(references, references_snapshot)
+                shared_references_tree_digest = tree_sha256(
+                    references_snapshot
+                )
+
+    return WorkspaceInputSnapshot(
+        fixture_path=str(Path(os.path.abspath(case.fixture_dir))),
+        fixture_tree_sha256=fixture_tree_digest,
+        skill_path=str(Path(os.path.abspath(target))),
+        skill_tree_sha256=skill_tree_digest,
+        shared_references_path=str(Path(os.path.abspath(references))),
+        shared_references_tree_sha256=shared_references_tree_digest,
+        definition_path=definition["path"],
+        definition_exists=bool(definition["exists"]),
+        definition_sha256=definition["sha256"],
+    )
 
 
-def create_skill_link(target: Path, link: Path) -> None:
+def snapshot_definition_provenance(
+    case: EvalCase,
+    fixture_snapshot: Path,
+) -> dict[str, object]:
+    """Hash the definition bytes from the same fixture snapshot used by a side."""
+
+    if case.definition_path is None:
+        return {"path": None, "exists": False, "sha256": None}
+    if case.fixture_dir is None:
+        raise ValueError(f"case {case.id} has no fixture_dir")
+    definition_path = Path(os.path.abspath(case.definition_path))
+    fixture_path = Path(os.path.abspath(case.fixture_dir))
     try:
-        os.symlink(target, link, target_is_directory=True)
-    except OSError:
-        shutil.copytree(target, link)
+        relative = definition_path.relative_to(fixture_path)
+    except ValueError:
+        return file_provenance(definition_path)
+    snapshot_path = fixture_snapshot / relative
+    if snapshot_path.is_symlink() or not snapshot_path.is_file():
+        return {
+            "path": str(definition_path.resolve()),
+            "exists": False,
+            "sha256": None,
+        }
+    return {
+        "path": str(definition_path.resolve()),
+        "exists": True,
+        "sha256": hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
+    }
+
+
+def snapshot_source_tree(source: Path, destination: Path) -> None:
+    """Copy a provenance source tree without following any symlink."""
+
+    source = Path(os.path.abspath(source))
+    destination = Path(os.path.abspath(destination))
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError(f"snapshot source must be a real directory: {source}")
+    if destination.exists() or destination.is_symlink():
+        raise ValueError(f"snapshot destination already exists: {destination}")
+    destination.mkdir(mode=0o755)
+    if not descriptor_operations_supported():
+        source_identity = directory_identity(source)
+        destination_identity = directory_identity(destination)
+        copy_snapshot_tree_portable(source, destination)
+        require_directory_identity(
+            source, source_identity, "snapshot source directory"
+        )
+        require_directory_identity(
+            destination, destination_identity, "snapshot destination directory"
+        )
+        return
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    source_descriptor = os.open(source, directory_flags)
+    destination_descriptor = os.open(destination, directory_flags)
+    try:
+        copy_snapshot_tree_fd(source_descriptor, destination_descriptor)
+    finally:
+        os.close(source_descriptor)
+        os.close(destination_descriptor)
+
+
+def copy_snapshot_tree_fd(
+    source_descriptor: int,
+    destination_descriptor: int,
+) -> None:
+    """Recursively snapshot regular files through retained directory fds."""
+
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    for name in sorted(os.listdir(source_descriptor)):
+        details = os.stat(name, dir_fd=source_descriptor, follow_symlinks=False)
+        if stat.S_ISLNK(details.st_mode):
+            raise ValueError(
+                f"provenance source tree must not contain symlinks: {name}"
+            )
+        if stat.S_ISDIR(details.st_mode):
+            if name in HASH_IGNORED_NAMES:
+                continue
+            os.mkdir(
+                name,
+                mode=details.st_mode & 0o777,
+                dir_fd=destination_descriptor,
+            )
+            source_child = os.open(
+                name, directory_flags, dir_fd=source_descriptor
+            )
+            destination_child = os.open(
+                name, directory_flags, dir_fd=destination_descriptor
+            )
+            try:
+                copy_snapshot_tree_fd(source_child, destination_child)
+            finally:
+                os.close(source_child)
+                os.close(destination_child)
+            continue
+        if stat.S_ISREG(details.st_mode):
+            if name.endswith(HASH_IGNORED_SUFFIXES):
+                continue
+            copy_regular_file_fd(
+                source_descriptor,
+                destination_descriptor,
+                name,
+                details.st_mode,
+            )
+            continue
+        raise ValueError(f"unsupported provenance source tree entry: {name}")
+
+
+def copy_snapshot_tree_portable(source: Path, destination: Path) -> None:
+    """Best available no-link snapshot without directory-relative APIs."""
+
+    for entry in sorted(os.scandir(source), key=lambda item: item.name):
+        name = entry.name
+        source_path = source / name
+        destination_path = destination / name
+        details = os.lstat(source_path)
+        if path_is_link_or_reparse(details):
+            raise ValueError(
+                f"provenance source tree must not contain links: {source_path}"
+            )
+        if stat.S_ISDIR(details.st_mode):
+            if name in HASH_IGNORED_NAMES:
+                continue
+            destination_path.mkdir(mode=details.st_mode & 0o777)
+            copy_snapshot_tree_portable(source_path, destination_path)
+            continue
+        if stat.S_ISREG(details.st_mode):
+            if name.endswith(HASH_IGNORED_SUFFIXES):
+                continue
+            copy_regular_file_portable(
+                source_path, destination_path, details.st_mode
+            )
+            continue
+        raise ValueError(
+            f"unsupported provenance source tree entry: {source_path}"
+        )

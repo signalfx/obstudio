@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,9 +10,13 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 RESOLVER = Path(__file__).parents[1] / "scripts" / "resolve_java_agent.py"
+SHARED_RESOLVER = (
+    Path(__file__).parents[2] / "references" / "scripts" / "resolve_java_agent.py"
+)
 UPSTREAM_PREMAIN = "io.opentelemetry.javaagent.OpenTelemetryAgent"
 SPLUNK_PREMAIN = "com.splunk.opentelemetry.javaagent.SplunkAgent"
 
@@ -32,6 +37,20 @@ def write_agent(
     payload = "\r\n".join(lines) + "\r\n\r\n"
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("META-INF/MANIFEST.MF", payload)
+
+
+def load_shared_resolver():
+    spec = importlib.util.spec_from_file_location(
+        "resolve_java_agent_tested", SHARED_RESOLVER
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+RESOLVER_MODULE = load_shared_resolver()
 
 
 class ResolveJavaAgentTest(unittest.TestCase):
@@ -109,9 +128,188 @@ class ResolveJavaAgentTest(unittest.TestCase):
                 selected["javaagent_argv"], [f"-javaagent:{newer.resolve()}"]
             )
             self.assertEqual(
+                selected["verification_pin"]["sha256"], selected["sha256"]
+            )
+            self.assertEqual(
+                selected["verification_pin"]["artifact_identity"],
+                selected["artifact_identity"],
+            )
+            self.assertIn("--expected-sha256", selected["pre_attach_recheck_argv"])
+            self.assertEqual(
                 result["production_parity"]["status"], "not_proven"
             )
             self.assertIn("no user-supplied agent is required", result["message"])
+
+    def test_equal_size_equal_mtime_path_swap_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate = root / "opentelemetry-javaagent-1.2.3.jar"
+            replacement = root / "replacement.jar"
+            write_agent(candidate, version="1.2.3")
+            write_agent(
+                replacement,
+                version="1.2.3",
+                premain="x" * len(UPSTREAM_PREMAIN),
+            )
+            before = candidate.stat()
+            self.assertEqual(candidate.stat().st_size, replacement.stat().st_size)
+            os.utime(
+                replacement,
+                ns=(before.st_atime_ns, before.st_mtime_ns),
+            )
+            saved = root / "validated-original.jar"
+            original_match = RESOLVER_MODULE.candidate_namespace_matches
+            swapped = False
+
+            def swap_then_match(path, expected_file, parents):
+                nonlocal swapped
+                if not swapped:
+                    candidate.rename(saved)
+                    replacement.replace(candidate)
+                    os.utime(
+                        candidate,
+                        ns=(before.st_atime_ns, before.st_mtime_ns),
+                    )
+                    swapped = True
+                return original_match(path, expected_file, parents)
+
+            with mock.patch.object(
+                RESOLVER_MODULE,
+                "candidate_namespace_matches",
+                side_effect=swap_then_match,
+            ):
+                selected, error = RESOLVER_MODULE.validate_candidate(candidate)
+
+            self.assertTrue(swapped)
+            self.assertIsNone(selected)
+            self.assertEqual(error, "jar-path-changed-during-validation")
+
+    def test_generated_pre_attach_recheck_rejects_changed_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            repository = root / "m2"
+            candidate = (
+                repository
+                / "io/opentelemetry/javaagent/opentelemetry-javaagent/1.2.3"
+                / "opentelemetry-javaagent-1.2.3.jar"
+            )
+            write_agent(candidate, version="1.2.3")
+            first = self.run_resolver(project, maven_repo=repository)
+            recheck = first["selected"]["pre_attach_recheck_argv"]
+
+            with zipfile.ZipFile(candidate, "a") as archive:
+                archive.writestr("changed-marker", "different bytes")
+            completed = subprocess.run(
+                recheck,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            second = json.loads(completed.stdout)
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(second["status"], "unresolved")
+            self.assertEqual(
+                second["claims"]["verification_pin_match"], "mismatch"
+            )
+
+    def test_symlinked_dockerfile_cannot_disclose_outside_agent_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            private_path = "/PRIVATE_HOST_VALUE_8472.jar"
+            outside = root / "outside-Dockerfile"
+            outside.write_text(
+                f'ENV JAVA_TOOL_OPTIONS="-javaagent:{private_path}"\n',
+                encoding="utf-8",
+            )
+            (project / "Dockerfile").symlink_to(outside)
+
+            result = self.run_resolver(
+                project,
+                maven_repo=root / "missing-m2",
+                unset_env=tuple(
+                    RESOLVER_MODULE.ENV_AGENT_PATHS
+                    + RESOLVER_MODULE.ENV_AGENT_OPTIONS
+                ),
+            )
+
+            serialized = json.dumps(result)
+            self.assertNotIn(private_path, serialized)
+            self.assertNotIn("Dockerfile", result["expected"]["evidence"])
+
+    def test_equal_size_equal_mtime_config_swap_is_not_retained(self) -> None:
+        if not RESOLVER_MODULE.descriptor_operations_supported():
+            self.skipTest("requires descriptor-relative no-follow operations")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            config = project / "Dockerfile"
+            private_path = "/PRIVATE_HOST_RACE_VALUE_9265.jar"
+            private_text = (
+                f'ENV JAVA_TOOL_OPTIONS="-javaagent:{private_path}"\n'
+            )
+            safe_text = "#" * (len(private_text) - 1) + "\n"
+            config.write_text(safe_text, encoding="utf-8")
+            replacement = root / "replacement-Dockerfile"
+            replacement.write_text(private_text, encoding="utf-8")
+            before = config.stat()
+            os.utime(
+                replacement,
+                ns=(before.st_atime_ns, before.st_mtime_ns),
+            )
+            self.assertEqual(config.stat().st_size, replacement.stat().st_size)
+            self.assertEqual(
+                config.stat().st_mtime_ns,
+                replacement.stat().st_mtime_ns,
+            )
+            saved = project / "original-Dockerfile"
+            real_open = os.open
+            swapped = False
+
+            def swap_before_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal swapped
+                if path == "Dockerfile" and dir_fd is not None and not swapped:
+                    config.rename(saved)
+                    replacement.replace(config)
+                    os.utime(
+                        config,
+                        ns=(before.st_atime_ns, before.st_mtime_ns),
+                    )
+                    swapped = True
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            boundary = RESOLVER_MODULE.authenticate_directory(project)
+            try:
+                with (
+                    mock.patch.object(
+                        RESOLVER_MODULE,
+                        "descriptor_operations_supported",
+                        return_value=True,
+                    ),
+                    mock.patch.object(
+                        RESOLVER_MODULE.os,
+                        "open",
+                        side_effect=swap_before_open,
+                    ),
+                ):
+                    snapshots = RESOLVER_MODULE.collect_config_snapshots(
+                        boundary.path,
+                        root_descriptor=boundary.descriptor,
+                        root_identity=boundary.identity,
+                    )
+            finally:
+                boundary.close()
+
+            self.assertTrue(swapped)
+            self.assertNotIn(
+                private_path,
+                "\n".join(snapshot.text for snapshot in snapshots),
+            )
 
     def test_project_configured_candidate_wins_and_can_match_declared_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -500,6 +698,118 @@ class ResolveJavaAgentTest(unittest.TestCase):
             self.assertEqual(resolved["status"], "resolved")
             self.assertEqual(resolved["selected"]["artifact_version"], "2.3.0")
             self.assertEqual(resolved["expected"]["unresolved_conflicts"], [])
+
+    def test_relative_output_is_project_anchored_and_replaces_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            project = base / "project"
+            project.mkdir()
+            repository = base / "m2"
+            output = project / ".observe" / "java-agent-resolution.json"
+            output.parent.mkdir()
+            output.write_text("old\n", encoding="utf-8")
+            unrelated_cwd = base / "cwd"
+            unrelated_cwd.mkdir()
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(RESOLVER),
+                    "--project",
+                    str(project),
+                    "--maven-repo",
+                    str(repository),
+                    "--gradle-cache",
+                    str(base / "missing-gradle"),
+                    "--output",
+                    ".observe/java-agent-resolution.json",
+                ],
+                cwd=unrelated_cwd,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.stdout.strip(), str(output))
+            self.assertEqual(json.loads(output.read_text())["project"], str(project))
+            self.assertFalse((unrelated_cwd / ".observe").exists())
+
+    def test_relative_output_rejects_project_local_symlink_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            project = base / "project"
+            project.mkdir()
+            outside = base / "outside"
+            outside.mkdir()
+            (project / ".observe").symlink_to(outside, target_is_directory=True)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(RESOLVER),
+                    "--project",
+                    str(project),
+                    "--maven-repo",
+                    str(base / "m2"),
+                    "--gradle-cache",
+                    str(base / "gradle"),
+                    "--output",
+                    ".observe/java-agent-resolution.json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("symlink", completed.stderr.lower())
+            self.assertFalse((outside / "java-agent-resolution.json").exists())
+
+    def test_output_rejects_symlink_target_and_project_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            project = base / "project"
+            project.mkdir()
+            outside = base / "outside.json"
+            outside.write_text("must survive\n", encoding="utf-8")
+            target = project / "java-agent-resolution.json"
+            target.symlink_to(outside)
+            common = [
+                sys.executable,
+                str(RESOLVER),
+                "--maven-repo",
+                str(base / "m2"),
+                "--gradle-cache",
+                str(base / "gradle"),
+            ]
+
+            target_result = subprocess.run(
+                [
+                    *common,
+                    "--project",
+                    str(project),
+                    "--output",
+                    "java-agent-resolution.json",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            project_link = base / "project-link"
+            project_link.symlink_to(project, target_is_directory=True)
+            project_result = subprocess.run(
+                [*common, "--project", str(project_link)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(target_result.returncode, 2)
+            self.assertIn("symlink", target_result.stderr.lower())
+            self.assertEqual(outside.read_text(encoding="utf-8"), "must survive\n")
+            self.assertEqual(project_result.returncode, 2)
+            self.assertIn("symlink", project_result.stderr.lower())
 
 
 if __name__ == "__main__":

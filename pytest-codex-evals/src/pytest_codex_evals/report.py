@@ -7,12 +7,29 @@ import stat
 from pathlib import Path
 from typing import Any
 
-from .definitions import CaseResult, GradeCheckResult, SideResult, ValidationResult
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
+from pydantic import ValidationError as PydanticValidationError
+
+from .definitions import (
+    CaseResult,
+    GradeCheckResult,
+    RubricEvalCase,
+    RuntimeEvalCase,
+    SanityEvalCase,
+    SideResult,
+    ValidationResult,
+)
 from .backends import (
     atomic_text_write,
     ensure_anchored_directory,
     path_directory_identity,
     read_regular_text,
+)
+from .eval_contracts import (
+    case_contract_sha256,
+    case_from_definition,
+    case_task_sha256,
+    load_eval_definition,
 )
 from .eval_files import eval_file_layout, iter_eval_files
 from .reports import ReportTemplate, template_for_kind
@@ -617,47 +634,53 @@ def expected_prompt_contracts(
             continue
         try:
             definition_bytes = path.read_bytes()
-            definition = json.loads(definition_bytes)
-        except (OSError, json.JSONDecodeError) as error:
+            definition = load_eval_definition(
+                path,
+                definition_bytes=definition_bytes,
+            )
+        except (
+            OSError,
+            json.JSONDecodeError,
+            JsonSchemaValidationError,
+            PydanticValidationError,
+            TypeError,
+            ValueError,
+        ) as error:
             errors.append(f"failed to inspect {path}: {error}")
             continue
-        if not isinstance(definition, dict) or definition.get("skill") != skill:
+        if definition.skill != skill:
             continue
-        base_id = definition.get("id") or layout.default_id
-        prompts = definition.get("prompts")
-        if not isinstance(base_id, str) or not isinstance(prompts, list):
-            errors.append(f"invalid eval scope definition: {path}")
-            continue
-        for prompt in prompts:
-            prompt_id = prompt.get("id") if isinstance(prompt, dict) else None
-            if not isinstance(prompt_id, str) or not prompt_id:
-                errors.append(f"invalid eval scope prompt in {path}")
-                continue
-            full_id = f"{base_id}/{prompt_id}"
+        for prompt in definition.prompts:
+            case = case_from_definition(definition, prompt, path)
+            full_id = case.id
             if full_id in expected:
                 errors.append(f"duplicate eval scope prompt {full_id}: {path}")
                 continue
             expected[full_id] = {
                 "path": str(path.resolve()),
                 "sha256": hashlib.sha256(definition_bytes).hexdigest(),
-                "fixture_path": str(layout.fixture_dir.resolve()),
-                "base_id": base_id,
-                "language": layout.language,
-                "service": layout.service,
-                "eval_kind": layout.role,
+                "fixture_path": str(
+                    (definition.fixture_dir or layout.fixture_dir).resolve()
+                ),
+                "base_id": case.base_id,
+                "language": case.language,
+                "service": case.service,
+                "eval_kind": case.kind,
+                "task_sha256": case_task_sha256(case),
+                "contract_sha256": case_contract_sha256(case),
                 "sanity_check_count": (
-                    len(definition.get("checks", []))
-                    if layout.role == "sanity"
+                    len(case.checks)
+                    if isinstance(case, SanityEvalCase)
                     else 0
                 ),
                 "rubric_check_count": (
-                    len(definition.get("rubric", []))
-                    if layout.role == "rubric"
+                    len(case.rubric)
+                    if isinstance(case, RubricEvalCase)
                     else 0
                 ),
                 "runtime_check_count": (
-                    len(definition.get("checks", []))
-                    if layout.role == "runtime"
+                    len(case.checks)
+                    if isinstance(case, RuntimeEvalCase)
                     else 0
                 ),
             }
@@ -949,8 +972,16 @@ def verify_run_contract_manifest(
     case = manifest.get("case")
     if not isinstance(case, dict) or case.get("id") != result.id:
         errors.append(f"{prefix} case id does not match the captured result")
-    elif not valid_sha256(case.get("contract_sha256")):
-        errors.append(f"{prefix} case contract hash is invalid")
+    else:
+        if case.get("task_sha256") != current_definition["task_sha256"]:
+            errors.append(f"{prefix} task differs from the current eval definition")
+        if (
+            case.get("contract_sha256")
+            != current_definition["contract_sha256"]
+        ):
+            errors.append(
+                f"{prefix} case contract differs from the current eval definition"
+            )
 
     definition = manifest.get("definition")
     if not authenticated_file_matches(
@@ -1032,8 +1063,16 @@ def verify_validation_provenance(
     case = manifest.get("case")
     if not isinstance(case, dict) or case.get("id") != result.id:
         errors.append(f"{prefix} case id does not match")
-    elif not valid_sha256(case.get("contract_sha256")):
-        errors.append(f"{prefix} case contract hash is invalid")
+    else:
+        if case.get("task_sha256") != current_definition["task_sha256"]:
+            errors.append(f"{prefix} task differs from the current eval definition")
+        if (
+            case.get("contract_sha256")
+            != current_definition["contract_sha256"]
+        ):
+            errors.append(
+                f"{prefix} case contract differs from the current eval definition"
+            )
     if not authenticated_file_matches(
         manifest.get("definition"),
         Path(current_definition["path"]),
@@ -1336,19 +1375,49 @@ def write_report_outputs(
         validate_output_component(run_root.name, "run id")
         latest_dir = latest_dir / "scoped" / run_root.name
     ensure_safe_output_directory(latest_dir, latest_root)
+    published_benchmark = sanitize_published_value(benchmark, repo_root)
+    published_report = sanitize_published_text(report, repo_root)
     atomic_text_write(
         latest_dir / "report.md",
-        report,
+        published_report,
         boundary=latest_root,
         expected_boundary_identity=latest_root_identity,
     )
     atomic_text_write(
         latest_dir / "benchmark.json",
-        json.dumps(benchmark, indent=2),
+        json.dumps(published_benchmark, indent=2),
         boundary=latest_root,
         expected_boundary_identity=latest_root_identity,
     )
     return report_path, benchmark_path
+
+
+def sanitize_published_text(value: str, repo_root: Path) -> str:
+    """Remove machine-specific repository prefixes from latest reports."""
+
+    roots = sorted(
+        {str(repo_root.absolute()), str(repo_root.resolve())},
+        key=len,
+        reverse=True,
+    )
+    result = value
+    for root in roots:
+        result = result.replace(root + os.sep, "")
+        result = result.replace(root, ".")
+    return result
+
+
+def sanitize_published_value(value: Any, repo_root: Path) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: sanitize_published_value(item, repo_root)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_published_value(item, repo_root) for item in value]
+    if isinstance(value, str):
+        return sanitize_published_text(value, repo_root)
+    return value
 
 
 def validate_output_component(value: str, label: str) -> None:

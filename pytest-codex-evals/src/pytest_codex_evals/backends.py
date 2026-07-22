@@ -99,31 +99,102 @@ def run_streamed_command(
     stderr_thread.start()
     try:
         returncode = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as error:
         process.kill()
         process.wait()
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
+        communicated_stdout: str | bytes | None = None
+        communicated_stderr: str | bytes | None = None
+        if not stdout_thread.is_alive() and not stderr_thread.is_alive():
+            communicated_stdout, communicated_stderr = process.communicate()
+        stdout = _merge_stream_observations(
+            error.stdout,
+            "".join(stdout_chunks),
+            communicated_stdout,
+            encoding=getattr(process.stdout, "encoding", None),
+        )
+        stderr = _merge_stream_observations(
+            error.stderr,
+            "".join(stderr_chunks),
+            communicated_stderr,
+            encoding=getattr(process.stderr, "encoding", None),
+        )
+        _write_streamed_artifacts(
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            stdout=stdout,
+            stderr=stderr,
+            output_boundary_identity=output_boundary_identity,
+        )
         raise
     stdout_thread.join()
     stderr_thread.join()
+    stdout = "".join(stdout_chunks)
+    stderr = "".join(stderr_chunks)
+    _write_streamed_artifacts(
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+        stdout=stdout,
+        stderr=stderr,
+        output_boundary_identity=output_boundary_identity,
+    )
+    return StreamedCommandResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def _write_streamed_artifacts(
+    *,
+    stdout_path: Path,
+    stderr_path: Path,
+    stdout: str,
+    stderr: str,
+    output_boundary_identity: tuple[int, int],
+) -> None:
     atomic_text_write(
         stdout_path,
-        "".join(stdout_chunks),
+        stdout,
         boundary=stdout_path.parent,
         expected_boundary_identity=output_boundary_identity,
     )
     atomic_text_write(
         stderr_path,
-        "".join(stderr_chunks),
+        stderr,
         boundary=stderr_path.parent,
         expected_boundary_identity=output_boundary_identity,
     )
-    return StreamedCommandResult(
-        returncode=returncode,
-        stdout="".join(stdout_chunks),
-        stderr="".join(stderr_chunks),
-    )
+
+
+def _merge_stream_observations(
+    *values: str | bytes | None,
+    encoding: str | None,
+) -> str:
+    merged = ""
+    for value in values:
+        fragment = _stream_text(value, encoding=encoding)
+        if not fragment:
+            continue
+        if fragment.startswith(merged):
+            merged = fragment
+            continue
+        if merged.startswith(fragment) or fragment in merged:
+            continue
+        overlap = min(len(merged), len(fragment))
+        while overlap and merged[-overlap:] != fragment[:overlap]:
+            overlap -= 1
+        merged += fragment[overlap:]
+    return merged
+
+
+def _stream_text(value: str | bytes | None, *, encoding: str | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(encoding or "utf-8", errors="replace")
+    return value
 
 
 def _pump_stream(pipe: Any, chunks: list[str]) -> None:
@@ -135,11 +206,77 @@ def _pump_stream(pipe: Any, chunks: list[str]) -> None:
 
 @dataclass(frozen=True)
 class AnchoredDirectory:
-    descriptor: int
+    descriptor: int | None
     boundary: Path
     relative_parts: tuple[str, ...]
     boundary_identity: tuple[int, int]
     parent_identity: tuple[int, int]
+    path: Path
+
+
+def path_is_link_or_reparse(status: os.stat_result) -> bool:
+    reparse_mask = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = getattr(status, "st_file_attributes", 0)
+    return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
+
+
+def _detect_descriptor_operations() -> bool:
+    required_dir_fd = {os.open, os.mkdir, os.stat, os.rename, os.unlink}
+    return (
+        os.name == "posix"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and required_dir_fd.issubset(os.supports_dir_fd)
+        and os.stat in os.supports_follow_symlinks
+    )
+
+
+_DESCRIPTOR_OPERATIONS_SUPPORTED = _detect_descriptor_operations()
+
+
+def descriptor_operations_supported() -> bool:
+    return _DESCRIPTOR_OPERATIONS_SUPPORTED
+
+
+def close_anchored_directory(anchor: AnchoredDirectory) -> None:
+    if anchor.descriptor is not None:
+        os.close(anchor.descriptor)
+
+
+def _portable_directory_identity(path: Path) -> tuple[int, int]:
+    status = os.lstat(path)
+    if path_is_link_or_reparse(status) or not stat.S_ISDIR(status.st_mode):
+        raise ValueError(f"expected a real directory: {path}")
+    return status.st_dev, status.st_ino
+
+
+def _portable_chain(
+    parent: Path,
+    boundary: Path,
+    *,
+    create: bool,
+) -> tuple[tuple[str, ...], tuple[int, int], tuple[int, int]]:
+    try:
+        relative = parent.relative_to(boundary)
+    except ValueError as error:
+        raise ValueError(
+            f"output parent {parent} is outside anchored boundary {boundary}"
+        ) from error
+    boundary_identity = _portable_directory_identity(boundary)
+    current = boundary
+    for component in relative.parts:
+        if _portable_directory_identity(boundary) != boundary_identity:
+            raise ValueError(f"directory boundary changed during setup: {boundary}")
+        current = current / component
+        if not os.path.lexists(current):
+            if not create:
+                raise FileNotFoundError(current)
+            try:
+                current.mkdir()
+            except FileExistsError:
+                pass
+        _portable_directory_identity(current)
+    return relative.parts, boundary_identity, _portable_directory_identity(parent)
 
 
 def directory_identity(descriptor: int) -> tuple[int, int]:
@@ -161,6 +298,18 @@ def open_anchored_directory(
         raise ValueError(
             f"output parent {parent} is outside anchored boundary {boundary}"
         ) from error
+    if not descriptor_operations_supported():
+        relative_parts, boundary_identity, parent_identity = _portable_chain(
+            parent, boundary, create=create
+        )
+        return AnchoredDirectory(
+            descriptor=None,
+            boundary=boundary,
+            relative_parts=relative_parts,
+            boundary_identity=boundary_identity,
+            parent_identity=parent_identity,
+            path=parent,
+        )
     flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
@@ -191,6 +340,7 @@ def open_anchored_directory(
             relative_parts=relative.parts,
             boundary_identity=boundary_identity,
             parent_identity=directory_identity(descriptor),
+            path=parent,
         )
     except BaseException:
         os.close(descriptor)
@@ -220,16 +370,19 @@ def ensure_anchored_directory(
             )
         return anchor.parent_identity
     finally:
-        os.close(anchor.descriptor)
+        close_anchored_directory(anchor)
 
 
 def path_directory_identity(path: Path) -> tuple[int, int]:
+    path = Path(os.path.abspath(path))
+    if not descriptor_operations_supported():
+        return _portable_directory_identity(path)
     flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
-    descriptor = os.open(Path(os.path.abspath(path)), flags)
+    descriptor = os.open(path, flags)
     try:
         return directory_identity(descriptor)
     finally:
@@ -237,6 +390,17 @@ def path_directory_identity(path: Path) -> tuple[int, int]:
 
 
 def anchored_namespace_matches(anchor: AnchoredDirectory) -> bool:
+    if anchor.descriptor is None:
+        try:
+            if _portable_directory_identity(anchor.boundary) != anchor.boundary_identity:
+                return False
+            current = anchor.boundary
+            for component in anchor.relative_parts:
+                current = current / component
+                _portable_directory_identity(current)
+            return _portable_directory_identity(current) == anchor.parent_identity
+        except (OSError, ValueError):
+            return False
     flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
@@ -267,7 +431,7 @@ def atomic_text_write(
     boundary: Path | None = None,
     expected_boundary_identity: tuple[int, int] | None = None,
 ) -> None:
-    """Atomically write text relative to a retained, no-follow directory fd."""
+    """Atomically write text using the strongest available filesystem API."""
 
     path = Path(os.path.abspath(path))
     anchor = open_anchored_directory(path.parent, boundary or path.parent)
@@ -275,10 +439,13 @@ def atomic_text_write(
         expected_boundary_identity is not None
         and anchor.boundary_identity != expected_boundary_identity
     ):
-        os.close(anchor.descriptor)
+        close_anchored_directory(anchor)
         raise ValueError(
             f"output boundary was replaced before write: {anchor.boundary}"
         )
+    if anchor.descriptor is None:
+        _atomic_text_write_portable(path, value, anchor)
+        return
     temporary_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
     descriptor: int | None = None
     replaced = False
@@ -324,6 +491,55 @@ def atomic_text_write(
         os.close(anchor.descriptor)
 
 
+def _require_portable_regular_file(path: Path) -> None:
+    if not os.path.lexists(path):
+        return
+    status = os.lstat(path)
+    if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+        raise ValueError(
+            f"output target must be a regular file, not a link or directory: {path}"
+        )
+
+
+def _atomic_text_write_portable(
+    path: Path,
+    value: str,
+    anchor: AnchoredDirectory,
+) -> None:
+    """Best available atomic write where directory-relative APIs are absent.
+
+    Reparse and identity checks detect namespace replacement, but Windows
+    cannot eliminate the narrow path check/use window without native handles.
+    """
+
+    _require_portable_regular_file(path)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(12)}.tmp")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+            0o600,
+        )
+        encoded = value.encode("utf-8")
+        offset = 0
+        while offset < len(encoded):
+            offset += os.write(descriptor, encoded[offset:])
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = None
+        if not anchored_namespace_matches(anchor):
+            raise ValueError(f"output directory changed before write: {path.parent}")
+        _require_portable_regular_file(path)
+        os.replace(temporary, path)
+        if not anchored_namespace_matches(anchor):
+            raise ValueError(f"output directory changed during write: {path.parent}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        close_anchored_directory(anchor)
+
+
 def read_anchored_regular_bytes(
     path: Path,
     *,
@@ -338,10 +554,33 @@ def read_anchored_regular_bytes(
         expected_boundary_identity is not None
         and anchor.boundary_identity != expected_boundary_identity
     ):
-        os.close(anchor.descriptor)
+        close_anchored_directory(anchor)
         raise ValueError(
             f"input boundary was replaced before read: {anchor.boundary}"
         )
+    if anchor.descriptor is None:
+        try:
+            status = os.lstat(path)
+            if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+                raise ValueError(f"input must be a regular file: {path}")
+            descriptor = os.open(
+                path, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+            )
+            try:
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise ValueError(f"input must be a regular file: {path}")
+                chunks: list[bytes] = []
+                while chunk := os.read(descriptor, 1024 * 1024):
+                    chunks.append(chunk)
+            finally:
+                os.close(descriptor)
+            if not anchored_namespace_matches(anchor):
+                raise ValueError(
+                    f"input directory namespace changed during read: {path.parent}"
+                )
+            return b"".join(chunks)
+        finally:
+            close_anchored_directory(anchor)
     descriptor: int | None = None
     try:
         descriptor = os.open(
@@ -372,7 +611,11 @@ def temporary_output_path(parent: Path, label: str) -> Path:
 
 
 def read_regular_text(path: Path) -> str:
-    if path.is_symlink() or not path.is_file():
+    try:
+        status = os.lstat(path)
+    except OSError as error:
+        raise ValueError(f"backend output must be a regular file: {path}") from error
+    if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
         raise ValueError(f"backend output must be a regular file: {path}")
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     with os.fdopen(descriptor, "r", encoding="utf-8", errors="replace") as source:

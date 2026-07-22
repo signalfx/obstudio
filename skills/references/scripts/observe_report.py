@@ -9,6 +9,8 @@ import html
 import json
 import os
 import re
+import secrets
+import stat
 import sys
 import unicodedata
 from pathlib import Path
@@ -416,6 +418,43 @@ STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT = re.compile(
 TELEMETRY_PROOF_CLAUSE_BOUNDARY = re.compile(
     r"(?:[.!?](?:\s+|$)|;\s*|\n+)"
 )
+TELEMETRY_PROOF_ASSERTION_BOUNDARY = re.compile(
+    r"(?:"
+    r"[.!?](?:\s+|$)|;\s*|\n+|"
+    r"(?:,|\(|\[)\s*(?=(?:(?:but|and)\s+)?(?:not|no|never|without)\b|"
+    r"(?:whereas|while|rather\s+than|instead\s+of)\b)|"
+    r"\s+(?=(?:and\s+(?:not|no|never|without)|"
+    r"but|whereas|while|rather\s+than|instead\s+of)\b)|"
+    r"(?:,\s*|\s+)(?:and|while)\s+"
+    r"(?=(?:(?:an?|the|another)\s+)?(?:span|trace|metric|counter|"
+    r"histogram|gauge|measurement|time[ -]?series|log(?:\s+record)?)\b)"
+    r")",
+    re.IGNORECASE,
+)
+
+ZERO_OR_NO_TELEMETRY_PROOF = re.compile(
+    r"\b(?:zero|0)\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
+    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
+    r"telemetry\s+items?|data\s+points?|samples?|records?)\b|"
+    r"\bno\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
+    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
+    r"telemetry(?:\s+items?)?|data\s+points?|samples?|records?)\b|"
+    r"\brecorded\s+as\s+(?:missing|absent|unobserved)\b",
+    re.IGNORECASE,
+)
+
+SIGNAL_KIND_PROOF = {
+    "span": re.compile(r"\b(?:span|trace)\b", re.IGNORECASE),
+    "metric": re.compile(
+        r"\b(?:metric|counter|histogram|gauge|measurement|time[ -]?series)\b",
+        re.IGNORECASE,
+    ),
+    "log": re.compile(r"\b(?:log|log record)\b", re.IGNORECASE),
+    "resource": re.compile(r"\bresource\b", re.IGNORECASE),
+    "configuration": re.compile(
+        r"\b(?:configuration|config)\b", re.IGNORECASE
+    ),
+}
 
 
 def exact_telemetry_item_is_referenced(
@@ -428,7 +467,7 @@ def exact_telemetry_item_is_referenced(
     if reference_outcome not in {"positive", "negative", "any"}:
         raise ValueError(f"unsupported telemetry reference outcome: {reference_outcome}")
 
-    def exact_token_polarities(source: str, token: str) -> list[bool]:
+    def exact_token_matches(source: str, token: str) -> list[re.Match[str]]:
         parts = token.strip().split()
         if not parts:
             return []
@@ -440,45 +479,251 @@ def exact_telemetry_item_is_referenced(
             rf"{body}(?![{identifier}])(?!(?:[{separators}][{identifier}]))",
             re.IGNORECASE,
         )
+        return list(pattern.finditer(source))
+
+    def exact_token_polarities(source: str, token: str) -> list[bool]:
         return [
             telemetry_mention_is_negated(source, match)
-            for match in pattern.finditer(source)
+            for match in exact_token_matches(source, token)
         ]
 
-    attribute_keys = {
-        attribute.split("=", 1)[0].strip()
+    def kind_matches_for_type(
+        source: str, signal_type: str | None
+    ) -> list[re.Match[str]]:
+        pattern = SIGNAL_KIND_PROOF.get(signal_type)
+        if pattern is None:
+            return []
+        protected_matches = [
+            match
+            for token in (
+                telemetry_item["name"],
+                *telemetry_item.get(attribute_field, []),
+            )
+            for match in exact_token_matches(source, token)
+        ]
+        return [
+            match
+            for match in pattern.finditer(source)
+            if not any(
+                match.start() < protected.end() and protected.start() < match.end()
+                for protected in protected_matches
+            )
+        ]
+
+    def signal_kind_matches(source: str) -> list[re.Match[str]]:
+        return kind_matches_for_type(source, telemetry_item.get("type"))
+
+    def signal_kind_polarities(source: str) -> list[bool]:
+        return [
+            telemetry_mention_is_negated(source, match)
+            for match in signal_kind_matches(source)
+        ]
+
+    def has_competing_signal_kind(source: str) -> bool:
+        signal_type = telemetry_item.get("type")
+        if signal_type not in {"span", "metric", "log"}:
+            return False
+        return any(
+            other_type != signal_type and kind_matches_for_type(source, other_type)
+            for other_type in SIGNAL_KIND_PROOF
+            if other_type in {"span", "metric", "log"}
+        )
+
+    def has_competing_signal_correction(source: str) -> bool:
+        signal_type = telemetry_item.get("type")
+        if signal_type not in {"span", "metric", "log"}:
+            return False
+        competing = {
+            "span": r"span|trace",
+            "metric": r"metric|counter|histogram|gauge|measurement|time[ -]?series",
+            "log": r"log|log\s+record",
+        }
+        other_kinds = "|".join(
+            pattern
+            for kind, pattern in competing.items()
+            if kind != signal_type
+        )
+        return bool(
+            re.search(
+                rf"\b(?:it|this|that|the\s+(?:signal|item))\s+"
+                rf"(?:is|was|were|are)\s+(?:actually\s+|instead\s+)?"
+                rf"(?:an?\s+)?(?:{other_kinds})\b",
+                source,
+                re.IGNORECASE,
+            )
+        )
+
+    def bound_signal_kind_matches(
+        source: str, *, require_positive: bool
+    ) -> list[re.Match[str]]:
+        """Return type words that describe the exact named signal."""
+        name_matches = exact_token_matches(source, telemetry_item["name"])
+        kind_matches = signal_kind_matches(source)
+        if not name_matches or not kind_matches or has_competing_signal_kind(source):
+            return []
+        filler = re.compile(
+            r"^[\s,:()\[\]-]*(?:(?:a|an|the|one|single|server|client|consumer|"
+            r"producer|internal|recording|named|signal)\s+){0,4}"
+            r"[\s,:()\[\]-]*$",
+            re.IGNORECASE,
+        )
+        container = re.compile(
+            r"^[^.!?;\n]{0,120}\b(?:contains?|contained|includes?|included|"
+            r"has|had)\s+(?:(?:a|an|the|one|single|no)\s+)?$",
+            re.IGNORECASE,
+        )
+        emitted_as = re.compile(
+            r"^[^.!?;\n]{0,80}\b(?:is|was|were|are)\s+"
+            r"(?:emitted|recorded|exported|received|captured)\s+as\s+"
+            r"(?:(?:a|an|the|one|single)\s+)?$",
+            re.IGNORECASE,
+        )
+        bound: list[re.Match[str]] = []
+        for kind_match in kind_matches:
+            for name_match in name_matches:
+                if kind_match.end() <= name_match.start():
+                    between = source[kind_match.end() : name_match.start()]
+                    is_bound = bool(
+                        filler.fullmatch(between) or container.fullmatch(between)
+                    )
+                elif name_match.end() <= kind_match.start():
+                    between = source[name_match.end() : kind_match.start()]
+                    is_bound = bool(
+                        filler.fullmatch(between) or emitted_as.fullmatch(between)
+                    )
+                else:
+                    is_bound = True
+                if not is_bound:
+                    continue
+                if require_positive and (
+                    telemetry_mention_is_negated(source, kind_match)
+                    or telemetry_mention_is_negated(source, name_match)
+                ):
+                    continue
+                bound.append(kind_match)
+                break
+        return bound
+
+    def attributes_are_bound_to_signal(
+        source: str,
+        attributes: set[str],
+        bound_kinds: list[re.Match[str]],
+    ) -> bool:
+        """Keep every required attribute on the same typed signal assertion."""
+        if not attributes:
+            return True
+        if not bound_kinds:
+            return False
+        all_kinds = signal_kind_matches(source)
+
+        def distance(first: re.Match[str], second: re.Match[str]) -> int:
+            if first.end() <= second.start():
+                return second.start() - first.end()
+            if second.end() <= first.start():
+                return first.start() - second.end()
+            return 0
+
+        for attribute in attributes:
+            attribute_matches = exact_token_matches(source, attribute)
+            if not attribute_matches:
+                return False
+            bound = False
+            for attribute_match in attribute_matches:
+                nearest = min(
+                    distance(kind_match, attribute_match)
+                    for kind_match in all_kinds
+                )
+                if any(
+                    distance(kind_match, attribute_match) == nearest
+                    for kind_match in bound_kinds
+                ):
+                    bound = True
+                    break
+            if not bound:
+                return False
+        return True
+
+    required_attributes = {
+        attribute.strip()
         for attribute in telemetry_item.get(attribute_field, [])
     }
-    tokens = [telemetry_item["name"], *sorted(attribute_keys)]
-    token_polarities = [exact_token_polarities(value, token) for token in tokens]
-    if any(not polarities for polarities in token_polarities):
-        return False
+    tokens = [telemetry_item["name"], *sorted(required_attributes)]
+    requires_signal_kind = telemetry_item.get("type") in SIGNAL_KIND_PROOF
+    if reference_outcome == "negative" and not requires_signal_kind:
+        token_polarities = [exact_token_polarities(value, token) for token in tokens]
+        return bool(
+            all(token_polarities)
+            and any(
+                negated
+                for polarities in token_polarities
+                for negated in polarities
+            )
+        )
+    positive_match = False
+    negative_match = False
+    any_match = False
+    for assertion in TELEMETRY_PROOF_ASSERTION_BOUNDARY.split(value):
+        if not assertion.strip():
+            continue
+        token_polarities = [
+            exact_token_polarities(assertion, token) for token in tokens
+        ]
+        if any(not polarities for polarities in token_polarities):
+            continue
+        kind_polarities = signal_kind_polarities(assertion)
+        if requires_signal_kind and not kind_polarities:
+            continue
+        bound_kinds = (
+            bound_signal_kind_matches(assertion, require_positive=False)
+            if requires_signal_kind
+            else []
+        )
+        if requires_signal_kind and not bound_kinds:
+            continue
+        if requires_signal_kind and not attributes_are_bound_to_signal(
+            assertion, required_attributes, bound_kinds
+        ):
+            continue
+        any_match = True
+        if reference_outcome == "any":
+            continue
+        assertion_is_negative = bool(
+            ZERO_OR_NO_TELEMETRY_PROOF.search(assertion)
+            or any(
+                negated
+                for polarities in token_polarities
+                for negated in polarities
+            )
+            or (requires_signal_kind and any(kind_polarities))
+        )
+        if assertion_is_negative:
+            negative_match = True
+            continue
+        if (
+            AFFIRMATIVE_TELEMETRY_PROOF.search(assertion)
+            and not ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF.search(assertion)
+            and not STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT.search(assertion)
+            and (not requires_signal_kind or any(not value for value in kind_polarities))
+            and all(
+                any(not negated for negated in polarities)
+                for polarities in token_polarities
+            )
+        ):
+            positive_match = True
     if reference_outcome == "any":
-        return True
-    if reference_outcome == "positive":
-        for clause in TELEMETRY_PROOF_CLAUSE_BOUNDARY.split(value):
-            if (
-                not clause.strip()
-                or not AFFIRMATIVE_TELEMETRY_PROOF.search(clause)
-                or ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF.search(clause)
-                or STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT.search(clause)
-            ):
-                continue
-            clause_polarities = [
-                exact_token_polarities(clause, token) for token in tokens
-            ]
-            if all(
-                polarities and any(not negated for negated in polarities)
-                for polarities in clause_polarities
-            ):
-                return True
+        return any_match
+    if positive_match and has_competing_signal_correction(value):
         return False
-    return any(negated for polarities in token_polarities for negated in polarities)
+    if positive_match and negative_match:
+        return False
+    return positive_match if reference_outcome == "positive" else negative_match
 
 
 TELEMETRY_NEGATION_BEFORE = re.compile(
     r"(?:"
-    r"\b(?:no|without|missing|absent|unobserved)\s+|"
+    r"\b(?:no|not|never|without|rather\s+than|instead\s+of)\s+"
+    r"(?:(?:an?|the)\s+)?|"
+    r"\b(?:missing|absent|unobserved)\s+|"
     r"\bno\s+(?:evidence|data|sign|record)\s+(?:of|for)\s+|"
     r"\b(?:did|does|do|could|can)\s+(?:not|never)\s+"
     r"(?:find|see|observe|record|capture|receive)\s+|"
@@ -549,7 +794,8 @@ def require_exact_telemetry_item_reference(
     ):
         fail(
             f"{path} must reference the exact telemetry item "
-            f"{telemetry_item['name']} and all of its required attribute keys "
+            f"{telemetry_item.get('type', 'signal')} {telemetry_item['name']} and "
+            "all of its required attribute keys and authored values "
             f"with {reference_outcome} proof semantics"
         )
 
@@ -1137,6 +1383,7 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
             and finding["instrument_mode"] in EXECUTABLE_MODES
         ]
         unlocked_ids: set[str] = set()
+        unlocking_option_by_id: dict[str, str] = {}
         for option_index, option in enumerate(decision["decision_options"]):
             for target_id in option["unlocks"]:
                 target = findings_by_id.get(target_id)
@@ -1152,6 +1399,14 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
                         f"{option_path} target {target_id} must directly depend on "
                         f"decision {decision_id}"
                     )
+                previous_option = unlocking_option_by_id.get(target_id)
+                if previous_option is not None:
+                    fail(
+                        f"finding {decision_id} decision_options unlock sets must be "
+                        f"pairwise disjoint; executable finding {target_id} is unlocked "
+                        f"by both {previous_option} and {option['id']}"
+                    )
+                unlocking_option_by_id[target_id] = option["id"]
                 unlocked_ids.add(target_id)
         missing_unlocks = [
             finding["id"]
@@ -1464,6 +1719,16 @@ def instrumentation_digest(instrumentation: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
+def selection_digest(selection: dict[str, Any]) -> str:
+    """Bind instrumentation to the exact normalized reviewer selection."""
+    payload = json.dumps(
+        selection,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
 def decision_answer_map(
     decision_answers: list[dict[str, str]] | dict[str, str] | None,
 ) -> dict[str, str]:
@@ -1510,6 +1775,14 @@ def selection_blockers(
             fail(f"finding dependency cycle includes {dependency_id}")
         dependency = by_id[dependency_id]
         mode = dependency["instrument_mode"]
+        if mode in EXECUTABLE_MODES and dependency["status"] == "done":
+            return
+        if (
+            mode in EXECUTABLE_MODES
+            and dependency["status"] in {"rejected", "deferred"}
+        ):
+            blocked.add(dependency_id)
+            return
         if mode == "manual decision":
             option = selected_decision_option(
                 dependency, answers.get(dependency_id)
@@ -1611,6 +1884,22 @@ def dependency_closure(
     selected: set[str] = set()
     visiting: set[str] = set()
 
+    def include_dependency(finding_id: str) -> None:
+        finding = by_id[finding_id]
+        if finding["instrument_mode"] in EXECUTABLE_MODES:
+            if finding["status"] == "done":
+                return
+            include(finding_id)
+            return
+        if finding["instrument_mode"] != "manual decision":
+            return
+        if finding_id in visiting:
+            fail(f"finding dependency cycle includes {finding_id}")
+        visiting.add(finding_id)
+        for dependency in finding["dependencies"]:
+            include_dependency(dependency)
+        visiting.remove(finding_id)
+
     def include(finding_id: str) -> None:
         if finding_id in selected:
             return
@@ -1627,8 +1916,7 @@ def dependency_closure(
             )
         visiting.add(finding_id)
         for dependency in finding["dependencies"]:
-            if by_id[dependency]["instrument_mode"] in EXECUTABLE_MODES:
-                include(dependency)
+            include_dependency(dependency)
         visiting.remove(finding_id)
         selected.add(finding_id)
 
@@ -1772,16 +2060,16 @@ def normalize_telemetry_change(
                 f"{path} must change an exact expected telemetry item from the "
                 f"audit finding; expected one of {expected}"
             )
-        expected_attribute_keys = {
-            attribute.split("=", 1)[0].strip()
+        expected_attributes = {
+            attribute.strip()
             for item in matching_expected
             for attribute in item["attributes"]
         }
-        actual_attribute_keys = {
-            attribute.split("=", 1)[0].strip()
+        actual_attributes = {
+            attribute.strip()
             for attribute in added_attributes
         }
-        unexpected_attributes = sorted(actual_attribute_keys - expected_attribute_keys)
+        unexpected_attributes = sorted(actual_attributes - expected_attributes)
         if unexpected_attributes:
             fail(
                 f"{path}.added_attributes contains attributes not promised by "
@@ -1923,6 +2211,17 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
         fail("instrumentation.audit_id does not match audit")
     if text(data.get("audit_sha256"), "instrumentation.audit_sha256") != audit_digest(report):
         fail("instrumentation.audit_sha256 does not match audit")
+    supplied_selection_digest = optional_text(
+        data.get("selection_sha256"), "instrumentation.selection_sha256"
+    )
+    expected_selection_digest = selection_digest(selection)
+    if supplied_selection_digest is None:
+        fail(
+            "instrumentation.selection_sha256 is required to bind implementation "
+            "to the exact normalized selection"
+        )
+    if supplied_selection_digest != expected_selection_digest:
+        fail("instrumentation.selection_sha256 does not match selection")
     rows = []
     seen = set()
     telemetry_ids: set[str] = set()
@@ -2024,6 +2323,7 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
         "kind": "otel-instrumentation",
         "audit_id": report["meta"]["audit_id"],
         "audit_sha256": audit_digest(report),
+        "selection_sha256": supplied_selection_digest,
         "meta": {
             "service_name": text(meta.get("service_name"), "instrumentation.meta.service_name"),
             "date": text(meta.get("date"), "instrumentation.meta.date"),
@@ -2363,16 +2663,24 @@ def normalize_verify(
                         "positive" if item_status == "working" else "negative"
                     )
                 observed_text = "\n".join(item_observed)
+                proof_item = source_item
+                if source_item["change_kind"] == "removed":
+                    proof_item = {
+                        "type": source_item["type"],
+                        "name": source_item["name"],
+                        "added_attributes": [],
+                    }
                 require_exact_telemetry_item_reference(
                     observed_text,
                     f"{item_path}.observed_telemetry",
-                    source_item,
+                    proof_item,
                     "added_attributes",
                     reference_outcome,
                 )
                 if source_item["change_kind"] == "removed" and item_status == "working":
                     assert removal_proof is not None
                     replacement_item = {
+                        "type": source_item["type"],
                         "name": removal_proof["replacement_signal"],
                         "attributes": [],
                     }
@@ -5034,6 +5342,7 @@ def render_instrumentation_html(
     summary = render_instrumentation_summary(selection, instrumentation, verify)
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
+    selection_sha = selection_digest(selection)
     verify_instrumentation_sha = (
         verify.get("instrumentation_sha256") if verify is not None else None
     )
@@ -5042,7 +5351,7 @@ def render_instrumentation_html(
     remaining_section = (
         '<section class="panel"><h2>Outside selected scope</h2>'
         f'<p>{unselected_count} audit finding{unselected_suffix} '
-        'were not implemented in this run. Review them in '
+        'were outside this instrumentation run. Review them in '
         '<a href="otel.html">the audit and scope report</a>.</p></section>'
         if unselected_count
         else ""
@@ -5054,6 +5363,7 @@ def render_instrumentation_html(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="otel-audit-sha256" content="{esc(instrumentation['audit_sha256'])}">
+<meta name="otel-selection-sha256" content="{esc(selection_sha)}">
 <meta name="otel-instrumentation-sha256" content="{esc(instrumentation_sha)}">
 <meta name="otel-verify-instrumentation-sha256" content="{esc(verify_instrumentation_sha or 'unbound')}">
 <title>OTel Instrumentation - {title}</title>
@@ -5573,6 +5883,13 @@ function selectionBlockersFor(findingId) {{
       visiting.delete(dependencyId);
       return;
     }}
+    if (["default", "fix all"].includes(dependency.instrument_mode) && dependency.status === "done") {{
+      return;
+    }}
+    if (["default", "fix all"].includes(dependency.instrument_mode) && ["rejected", "deferred"].includes(dependency.status)) {{
+      blocked.add(dependencyId);
+      return;
+    }}
     if (!["default", "fix all"].includes(dependency.instrument_mode)) {{
       blocked.add(dependencyId);
       return;
@@ -5927,11 +6244,15 @@ function syncDependencyClosure() {{
   const closed = new Set();
   const visiting = new Set();
   function include(id) {{
-    if (!isSelectable(id) || closed.has(id) || visiting.has(id)) return;
+    const finding = byId.get(id);
+    if (!finding || closed.has(id) || visiting.has(id)) return;
+    if (["default", "fix all"].includes(finding.instrument_mode) && finding.status === "done") return;
+    const selectable = isSelectable(id);
+    if (!selectable && finding.instrument_mode !== "manual decision") return;
     visiting.add(id);
-    for (const dependency of byId.get(id)?.dependencies || []) include(dependency);
+    for (const dependency of finding.dependencies || []) include(dependency);
     visiting.delete(id);
-    closed.add(id);
+    if (selectable) closed.add(id);
   }}
   for (const finding of REPORT.findings) {{
     if (requested.has(finding.id) && isSelectable(finding.id)) include(finding.id);
@@ -6129,14 +6450,283 @@ window.addEventListener("hashchange", revealCurrentHash);
 """
 
 
-def write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def directory_identity(descriptor: int) -> tuple[int, int]:
+    status = os.fstat(descriptor)
+    return status.st_dev, status.st_ino
+
+
+def output_directory_matches(
+    boundary: Path,
+    relative_parts: tuple[str, ...],
+    boundary_identity: tuple[int, int],
+    parent_identity: tuple[int, int],
+) -> bool:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(boundary, flags)
+    except OSError:
+        return False
+    try:
+        if directory_identity(descriptor) != boundary_identity:
+            return False
+        for component in relative_parts:
+            next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        return directory_identity(descriptor) == parent_identity
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
+
+
+def open_output_parent(
+    path: Path,
+) -> tuple[int, Path, tuple[str, ...], tuple[int, int], tuple[int, int]]:
+    path = Path(os.path.abspath(path))
+    parent = path.parent
+    boundary = parent
+    while not os.path.lexists(boundary):
+        next_boundary = boundary.parent
+        if next_boundary == boundary:
+            fail(f"could not find an existing output boundary for {path}")
+        boundary = next_boundary
+    relative_parts = parent.relative_to(boundary).parts
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(boundary, flags)
+    boundary_identity = directory_identity(descriptor)
+    try:
+        for component in relative_parts:
+            try:
+                next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(component, mode=0o755, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+                next_descriptor = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        return (
+            descriptor,
+            boundary,
+            relative_parts,
+            boundary_identity,
+            directory_identity(descriptor),
+        )
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def descriptor_atomic_writes_supported() -> bool:
+    # CPython does not advertise os.replace in supports_dir_fd on every POSIX
+    # platform where its signature happens to accept dir_fd. Use the
+    # equivalently atomic POSIX rename operation and gate that exact primitive.
+    required_dir_fd = {os.open, os.stat, os.mkdir, os.unlink, os.rename}
+    required_follow_symlinks = {os.stat}
+    return (
+        os.name == "posix"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and required_dir_fd.issubset(os.supports_dir_fd)
+        and required_follow_symlinks.issubset(os.supports_follow_symlinks)
+    )
+
+
+def path_is_link_or_reparse(status: os.stat_result) -> bool:
+    reparse_mask = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = getattr(status, "st_file_attributes", 0)
+    return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
+
+
+def portable_parent_chain(parent: Path) -> list[tuple[Path, tuple[int, int]]]:
+    lineage: list[Path] = []
+    current = parent
+    while True:
+        lineage.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    identities: list[tuple[Path, tuple[int, int]]] = []
+    for directory in reversed(lineage):
+        if identities and not portable_parent_chain_matches(identities):
+            fail(
+                "output ancestor changed during portable parent creation; this "
+                "platform lacks descriptor-relative filesystem operations"
+            )
+        if not os.path.lexists(directory):
+            try:
+                directory.mkdir()
+            except FileExistsError:
+                pass
+            if identities and not portable_parent_chain_matches(identities):
+                fail(
+                    "output ancestor changed while creating a portable parent; "
+                    "this platform lacks descriptor-relative filesystem operations"
+                )
+        status = os.lstat(directory)
+        if path_is_link_or_reparse(status) or not stat.S_ISDIR(status.st_mode):
+            fail(
+                "portable output parent must contain only real directories, "
+                f"not symlinks or reparse points: {directory}"
+            )
+        identities.append((directory, (status.st_dev, status.st_ino)))
+    return identities
+
+
+def portable_parent_chain_matches(
+    identities: list[tuple[Path, tuple[int, int]]],
+) -> bool:
+    for directory, expected in identities:
+        try:
+            status = os.lstat(directory)
+        except OSError:
+            return False
+        if (
+            path_is_link_or_reparse(status)
+            or not stat.S_ISDIR(status.st_mode)
+            or (status.st_dev, status.st_ino) != expected
+        ):
+            return False
+    return True
+
+
+def require_portable_regular_target(path: Path) -> None:
+    if not os.path.lexists(path):
+        return
+    status = os.lstat(path)
+    if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+        fail(
+            "portable output target must be a regular file, not a symlink, "
+            f"reparse point, or directory: {path}"
+        )
+
+
+def write_text_portable(path: Path, value: str) -> None:
+    """Atomic fallback for platforms without descriptor-relative APIs.
+
+    Python on Windows cannot bind path operations to a retained directory
+    handle. Reparse checks plus before/after directory identity checks detect
+    namespace replacement, but cannot eliminate the narrow check/use window
+    between validation and a path-based open or replace.
+    """
+
+    identities = portable_parent_chain(path.parent)
+    require_portable_regular_target(path)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(12)}.tmp")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+            0o600,
+        )
+        payload = value.encode("utf-8")
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = None
+        if not portable_parent_chain_matches(identities):
+            fail(
+                "output parent changed before portable atomic replace; this "
+                "platform lacks descriptor-relative filesystem operations"
+            )
+        require_portable_regular_target(path)
+        os.replace(temporary, path)
+        if not portable_parent_chain_matches(identities):
+            fail(
+                "output parent changed during portable atomic replace; this "
+                "platform lacks descriptor-relative filesystem operations"
+            )
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        # A failed path-based write may have observed a replaced namespace.
+        # Leave the mode-0600 random temporary entry rather than risk unlinking
+        # an entry substituted by another process.
+
+
+def write_text_descriptor(path: Path, value: str) -> None:
+    path = Path(os.path.abspath(path))
+    (
+        parent_descriptor,
+        boundary,
+        relative_parts,
+        boundary_identity,
+        parent_identity,
+    ) = open_output_parent(path)
+    temporary_name = f".{path.name}.{secrets.token_hex(12)}.tmp"
+    descriptor: int | None = None
+    try:
+        try:
+            target_status = os.stat(
+                path.name, dir_fd=parent_descriptor, follow_symlinks=False
+            )
+        except FileNotFoundError:
+            target_status = None
+        if target_status is not None and not stat.S_ISREG(target_status.st_mode):
+            fail(f"output target must be a regular file, not a symlink or directory: {path}")
+        descriptor = os.open(
+            temporary_name,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent_descriptor,
+        )
+        payload = value.encode("utf-8")
+        offset = 0
+        while offset < len(payload):
+            offset += os.write(descriptor, payload[offset:])
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = None
+        os.rename(
+            temporary_name,
+            path.name,
+            src_dir_fd=parent_descriptor,
+            dst_dir_fd=parent_descriptor,
+        )
+        os.fsync(parent_descriptor)
+        if not output_directory_matches(
+            boundary,
+            relative_parts,
+            boundary_identity,
+            parent_identity,
+        ):
+            fail(f"output directory namespace changed during write: {path.parent}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        # Do not unlink a failed temporary name: even under the retained parent
+        # fd, another process could have exchanged that directory entry.
+        os.close(parent_descriptor)
 
 
 def write_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(value, encoding="utf-8")
+    path = Path(os.path.abspath(path))
+    if not path.name:
+        fail(f"output path must name a file: {path}")
+    if descriptor_atomic_writes_supported():
+        write_text_descriptor(path, value)
+    else:
+        write_text_portable(path, value)
+
+
+def write_json(path: Path, data: dict[str, Any]) -> None:
+    write_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
 def load_flow(
@@ -6380,6 +6970,7 @@ def cmd_instrumentation_final_gate(args: argparse.Namespace) -> int:
         "kind": "otel-instrumentation-final-gate",
         "audit_id": report["meta"]["audit_id"],
         "audit_sha256": audit_digest(report),
+        "selection_sha256": selection_digest(selection),
         "instrumentation_sha256": instrumentation_digest(instrumentation),
         "passed": passed,
         "verification_result": verify["meta"]["result"],

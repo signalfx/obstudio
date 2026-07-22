@@ -177,6 +177,7 @@ def canonical_digest(value: dict) -> str:
 
 def validate_overlay_bindings(
     audit_json: dict,
+    selection_json: dict,
     instrumentation_json: dict,
     overlay_json: dict,
     verify_overlay: bool,
@@ -200,6 +201,18 @@ def validate_overlay_bindings(
         fail("instrumentation audit_id does not match canonical audit JSON")
     if instrumentation_json.get("audit_sha256") != audit_sha256:
         fail("instrumentation audit_sha256 does not match canonical audit JSON")
+    if (
+        selection_json.get("schema_version") not in {1, 2}
+        or selection_json.get("kind") != "otel-selection"
+    ):
+        fail("canonical selection JSON must use a supported schema and kind otel-selection")
+    if instrumentation_json.get("selection_sha256") != canonical_digest(
+        selection_json
+    ):
+        fail(
+            "instrumentation selection_sha256 does not match the authoritative "
+            "selection JSON"
+        )
 
     expected_kind = "otel-verify" if verify_overlay else "otel-instrumentation"
     if overlay_json.get("schema_version") != 1 or overlay_json.get("kind") != expected_kind:
@@ -408,11 +421,17 @@ def validate_json_projection(
     instrumentation_json = load_json(
         authoritative_instrumentation_path, "instrumentation"
     )
+    selection_path = (
+        selection_json_path
+        or audit_json_path.parent / "otel-selection.json"
+    )
+    selection_json = load_json(selection_path, "selection")
     overlay_json_path = verify_json_path or instrumentation_json_path
     assert overlay_json_path is not None
     overlay_json = load_json(overlay_json_path, "overlay")
     validate_overlay_bindings(
         audit_json,
+        selection_json,
         instrumentation_json,
         overlay_json,
         verify_json_path is not None,
