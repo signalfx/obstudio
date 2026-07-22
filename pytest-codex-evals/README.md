@@ -169,6 +169,33 @@ uv run pytest -n 4 evals --skill skills/<skill-dir> --codex-eval-kind rubric --a
 The plugin writes per-worker result payloads and merges them into the same
 aggregate reports at session finish.
 
+Live agent execution trees are intentionally quarantined instead of being
+deleted by pathname. Agent code can retain a concurrent directory renamer, so
+portable cleanup could otherwise delete a replacement outside the evaluated
+tree. Each harness process creates a random private directory named like
+`$TMPDIR/codex-eval-quarantine-v1-<uid>-<random>` on POSIX (the numeric user ID
+is omitted where unavailable). Each case consumes one of 1,024 fixed
+reservation names inside that process-local root. The harness never
+deliberately releases a reservation, including when an agent renames the nested
+execution tree, and fails before starting a backend when every visible name is
+occupied or the quarantine contains an unexpected entry. A later harness
+process gets a fresh random root, so normal retained reservations do not
+permanently exhaust future invocations. Default temporary storage has no
+harness-managed byte or inode quota; its operating-system lifecycle owns
+eventual reclamation.
+
+Set `CODEX_EVAL_QUARANTINE_ROOT` to use a pre-provisioned absolute directory
+owned by the current user with mode `0700`. For untrusted evals, that directory
+must be on a disposable filesystem or volume with an externally enforced byte
+and inode quota plus process and lifecycle isolation. The 1,024 names limit
+cooperative harness allocation only; it is not a same-UID security or resource
+boundary. Evaluated code running as that user can move a top-level reservation
+and make its name reusable, and the harness cannot safely enforce a byte or
+process boundary after launch. To reclaim space, stop every process from the
+explicit quarantine and destroy the isolated volume or apply an external
+retention policy. Published run artifacts remain under
+`.workspace/codex-evals/` and exclude the raw backend scratch directory.
+
 Print per-item progress with:
 
 ```bash
