@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Validate generated Splunk detector Terraform against verified metrics."""
+"""Validate generated Splunk detector and delegated dashboard artifacts."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -29,6 +32,22 @@ DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
 BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
 REPORT_STATUS = re.compile(r"^\*\*Result:\*\*\s*(Pass|Partial|Fail|Blocked)\s*$", re.I | re.M)
+TABLE_SEPARATOR = re.compile(r"^:?-{3,}:?$")
+SUCCESS_RESULTS = {"pass", "passed", "success", "succeeded", "working"}
+NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE = re.compile(
+    r"\b(?:could\s+not|did\s+not|never|unable|unavailable|"
+    r"(?:couldn|didn|wasn|weren|isn|aren|hasn|haven|hadn)['’]t|"
+    r"fail(?:ed|ure)?|errored|(?:returned|raised|encountered|produced|with)"
+    r"\s+(?:an?\s+)?errors?(?=\s*(?:[.,;:]|$))|errors?\s+(?:occurred|"
+    r"returned|reported|raised|blocked|prevented)|rejected|denied|blocked|pending|"
+    r"unknown|uncertain|unproven|perhaps|possibly|maybe|"
+    r"(?:might|may)\s+(?:have|be|succeed(?:ed)?|pass(?:ed)?|compile(?:d)?|"
+    r"validate(?:d)?|accept(?:ed)?|work(?:ed)?)|"
+    r"appears?\s+to|seems?\s+to|not\s+(?:run|executed|completed|"
+    r"successful|accepted|compiled|validated|proven|confirmed)|"
+    r"no\s+(?:evidence|result|output|plan|compile|validation))\b",
+    re.I,
+)
 CONFIGURE_VERIFY_HEADINGS = (
     "Executive Summary",
     "What Was Added",
@@ -45,6 +64,81 @@ FORBIDDEN_PROGRAM_PATTERNS = {
 
 def markdown_cells(line: str) -> list[str]:
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def normalize_markdown(value: str) -> str:
+    value = re.sub(r"[`*_]", "", value).strip().lower()
+    return re.sub(r"\s+", " ", value)
+
+
+def markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^## {re.escape(heading)}\s*$\n?(.*?)(?=^## |\Z)",
+        text,
+        re.M | re.S,
+    )
+    return match.group(1).strip() if match else ""
+
+
+def markdown_table_rows(section: str) -> list[dict[str, str]]:
+    lines = section.splitlines()
+    rows: list[dict[str, str]] = []
+    index = 0
+    while index + 1 < len(lines):
+        if not lines[index].lstrip().startswith("|") or not lines[index + 1].lstrip().startswith("|"):
+            index += 1
+            continue
+        header = markdown_cells(lines[index])
+        separator = markdown_cells(lines[index + 1])
+        if len(header) != len(separator) or not all(
+            TABLE_SEPARATOR.fullmatch(cell.replace(" ", "")) for cell in separator
+        ):
+            index += 1
+            continue
+        index += 2
+        while index < len(lines) and lines[index].lstrip().startswith("|"):
+            cells = markdown_cells(lines[index])
+            if len(cells) == len(header):
+                rows.append(dict(zip(header, cells)))
+            index += 1
+    return rows
+
+
+def normalized_row(row: dict[str, str]) -> dict[str, str]:
+    return {normalize_markdown(key): value.strip() for key, value in row.items()}
+
+
+def row_result(row: dict[str, str]) -> str:
+    normalized = normalized_row(row)
+    return normalize_markdown(normalized.get("result", normalized.get("status", "")))
+
+
+def row_evidence(row: dict[str, str]) -> str:
+    normalized = normalized_row(row)
+    for key, value in normalized.items():
+        if key.startswith("evidence"):
+            return value.strip()
+    return ""
+
+
+def has_substantive_content(section: str) -> bool:
+    content = []
+    for line in section.splitlines():
+        stripped = re.sub(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", line).strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        content.append(normalize_markdown(stripped).rstrip(".!"))
+    if not content:
+        return False
+    harmless = {
+        "none",
+        "nothing",
+        "n/a",
+        "not applicable",
+        "no outstanding proof gaps",
+        "no required checks remain unproven",
+    }
+    return any(line not in harmless for line in content)
 
 
 def working_metrics(report: Path) -> set[str]:
@@ -982,8 +1076,246 @@ def validate_heading_order(text: str, name: str, errors: list[str]) -> None:
         errors.append(f"{name}: reader-first headings are out of order")
 
 
+def has_authenticated_detector_plan(rows: list[dict[str, str]], detector_count: int) -> bool:
+    count_pattern = re.compile(rf"\b{detector_count}\s+(?:generated\s+)?detectors?\b", re.I)
+    all_pattern = re.compile(r"\b(?:all|every)\s+(?:generated\s+)?detectors?\b", re.I)
+    for row in rows:
+        if row_result(row) not in SUCCESS_RESULTS:
+            continue
+        joined = " ".join(row.values())
+        normalized = normalize_markdown(joined)
+        proves_plan = "authenticated" in normalized and "terraform plan" in normalized
+        proves_compile = "signalflow" in normalized or "/v2/detector/validate" in normalized
+        proves_full_set = bool(count_pattern.search(joined) or all_pattern.search(joined))
+        if (
+            proves_plan
+            and proves_compile
+            and proves_full_set
+            and row_evidence(row)
+            and not NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE.search(joined)
+        ):
+            return True
+    return False
+
+
+def canonical_flow_paths(
+    terraform_dir: Path, args: argparse.Namespace
+) -> dict[str, Path]:
+    root = terraform_dir.parent
+    return {
+        "audit": getattr(args, "audit_json", None) or root / "otel-audit.json",
+        "selection": getattr(args, "selection_json", None)
+        or root / "otel-selection.json",
+        "instrumentation": getattr(args, "instrumentation_json", None)
+        or root / "otel-instrumentation.json",
+        "verification": getattr(args, "verification_json", None)
+        or root / "otel-verify.json",
+    }
+
+
+def run_checked_validator(
+    command: list[str], label: str, errors: list[str]
+) -> bool:
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode == 0:
+        return True
+    detail = (completed.stderr or completed.stdout).strip()
+    errors.append(f"{label} failed{': ' + detail if detail else ''}")
+    return False
+
+
+def canonical_working_metrics(
+    terraform_dir: Path,
+    verify_report: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+) -> set[str] | None:
+    """Return JSON-authoritative metrics, or None for a true legacy flow."""
+
+    paths = canonical_flow_paths(terraform_dir, args)
+    explicit_paths = any(
+        getattr(args, name, None) is not None
+        for name in (
+            "audit_json",
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+        )
+    )
+    present = {name for name, path in paths.items() if path.is_file()}
+    if "audit" not in present:
+        if explicit_paths or present:
+            errors.append(
+                "canonical verification flow is incomplete; otel-audit.json is "
+                "required when any JSON overlay is present"
+            )
+            return set()
+        return None
+
+    missing = [name for name, path in paths.items() if not path.is_file()]
+    if missing:
+        errors.append(
+            "canonical verification flow is incomplete; missing "
+            + ", ".join(missing)
+        )
+        return set()
+
+    shared_validator = (
+        Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    )
+    reader_validator = (
+        Path(__file__).parents[2]
+        / "otel-verify"
+        / "scripts"
+        / "validate_reader_report.py"
+    )
+    for label, script in (
+        ("canonical verification flow validator", shared_validator),
+        ("verify reader projection validator", reader_validator),
+    ):
+        if not script.is_file():
+            errors.append(f"missing {label}: {script}")
+            return set()
+
+    try:
+        snapshots = {name: path.read_bytes() for name, path in paths.items()}
+        reader_snapshot = verify_report.read_bytes()
+    except OSError as error:
+        errors.append(f"cannot capture canonical verification flow: {error}")
+        return set()
+
+    with tempfile.TemporaryDirectory(prefix="configure-flow-") as directory:
+        snapshot_root = Path(directory)
+        snapshot_paths = {
+            name: snapshot_root / f"{name}.json" for name in snapshots
+        }
+        reader_path = snapshot_root / "otel-verification.md"
+        for name, value in snapshots.items():
+            snapshot_paths[name].write_bytes(value)
+        reader_path.write_bytes(reader_snapshot)
+
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(shared_validator),
+                "validate-flow",
+                str(snapshot_paths["audit"]),
+                "--selection-json",
+                str(snapshot_paths["selection"]),
+                "--instrumentation-json",
+                str(snapshot_paths["instrumentation"]),
+                "--verify-json",
+                str(snapshot_paths["verification"]),
+            ],
+            "canonical verification flow validation",
+            errors,
+        ):
+            return set()
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(reader_validator),
+                str(reader_path),
+                "--instrumentation-json",
+                str(snapshot_paths["instrumentation"]),
+                "--verify-json",
+                str(snapshot_paths["verification"]),
+            ],
+            "verify Markdown projection validation",
+            errors,
+        ):
+            return set()
+
+    try:
+        instrumentation = json.loads(snapshots["instrumentation"])
+        verification = json.loads(snapshots["verification"])
+    except json.JSONDecodeError as error:
+        errors.append(f"cannot read validated canonical verification flow: {error}")
+        return set()
+
+    instrumentation_items = {
+        item.get("id"): item
+        for finding in instrumentation.get("findings", [])
+        if isinstance(finding, dict)
+        for item in finding.get("telemetry_changes", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    metrics: set[str] = set()
+    for finding in verification.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        for proof in finding.get("item_results", []):
+            if not isinstance(proof, dict) or proof.get("status") != "working":
+                continue
+            source = instrumentation_items.get(proof.get("id"), {})
+            if (
+                source.get("type") == "metric"
+                and source.get("change_kind") != "removed"
+                and isinstance(source.get("name"), str)
+            ):
+                metrics.add(source["name"])
+    return metrics
+
+
+def run_dashboard_validator(
+    terraform_dir: Path,
+    dashboards_report: Path,
+    dashboard_preview: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+) -> dict[str, object]:
+    script = Path(__file__).parents[2] / "splunk-dashboard" / "scripts" / "validate_dashboard_output.py"
+    if not script.is_file():
+        errors.append(f"missing shared dashboard validator: {script}")
+        return {}
+    spec = importlib.util.spec_from_file_location("splunk_dashboard_output_validator", script)
+    if spec is None or spec.loader is None:
+        errors.append(f"could not load shared dashboard validator: {script}")
+        return {}
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    verification = getattr(args, "dashboard_verification", None)
+    if verification is None:
+        candidate = terraform_dir.parent / "otel-verify.json"
+        verification = candidate if candidate.is_file() else None
+    tfvars = getattr(args, "dashboard_tfvars", None)
+    if tfvars is None:
+        candidate = terraform_dir / "terraform.tfvars"
+        tfvars = candidate if candidate.is_file() else None
+    result = module.validate(
+        argparse.Namespace(
+            terraform=terraform_dir / "dashboards.tf",
+            preview=dashboard_preview,
+            report=dashboards_report,
+            variables=terraform_dir / "variables.tf",
+            tfvars=tfvars,
+            verification=verification,
+            allow_source_only_item=getattr(args, "allow_source_only_item", []),
+            allow_inherited_partial=True,
+        )
+    )
+    for error in result.get("errors", []):
+        errors.append(f"dashboard validator: {error}")
+    return result
+
+
 def validate(args: argparse.Namespace) -> dict[str, object]:
     terraform_dir: Path = args.terraform_dir
+    dashboards_tf = terraform_dir / "dashboards.tf"
+    dashboard_emitted = dashboards_tf.is_file()
+    dashboards_report = getattr(args, "dashboards_report", None)
+    if dashboards_report is None:
+        dashboards_report = terraform_dir.parent / "dashboards.md"
+    dashboard_preview = getattr(args, "dashboard_preview", None)
+    if dashboard_preview is None:
+        dashboard_preview = terraform_dir.parent / "dashboards.preview.json"
     required = {
         "detectors.tf": terraform_dir / "detectors.tf",
         "variables.tf": terraform_dir / "variables.tf",
@@ -992,6 +1324,13 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         "detectors report": args.detectors_report,
         "configure verification report": args.configure_verify_report,
     }
+    if dashboard_emitted:
+        required.update(
+            {
+                "dashboards report": dashboards_report,
+                "dashboard preview": dashboard_preview,
+            }
+        )
     errors = [f"missing {name}: {path}" for name, path in required.items() if not path.is_file()]
     if errors:
         return {"result": "FAIL", "errors": errors}
@@ -1010,6 +1349,13 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             f"{detector_status} != {configure_status}"
         )
     validate_heading_order(configure_verify_text, "configure verification report", errors)
+    if configure_status == "Pass" and has_substantive_content(
+        markdown_section(configure_verify_text, "Not Yet Proven")
+    ):
+        errors.append(
+            "configure verification report: Result Pass conflicts with substantive "
+            "## Not Yet Proven content"
+        )
     try:
         blocks = detector_blocks(detectors_text)
     except ValueError as error:
@@ -1019,6 +1365,42 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if len(ids) != len(set(ids)):
         errors.append("duplicate signalfx_detector resource identifiers")
 
+    tested_rows = markdown_table_rows(markdown_section(configure_verify_text, "Tested And Working"))
+    if configure_status == "Pass" and blocks:
+        if not tested_rows:
+            errors.append(
+                "configure verification report: Result Pass requires structured "
+                "Tested And Working evidence"
+            )
+        elif not has_authenticated_detector_plan(tested_rows, len(blocks)):
+            errors.append(
+                "configure verification report: Result Pass requires a successful authenticated "
+                "terraform plan / SignalFlow compile row covering every generated detector"
+            )
+
+    dashboard_chart_count = 0
+    preview_chart_count = 0
+    if dashboard_emitted:
+        dashboard_result = run_dashboard_validator(
+            terraform_dir,
+            dashboards_report,
+            dashboard_preview,
+            args,
+            errors,
+        )
+        dashboard_chart_count = int(dashboard_result.get("chart_count", 0))
+        preview_chart_count = int(dashboard_result.get("preview_chart_count", 0))
+        dashboard_status = dashboard_result.get("reported_status")
+        if (
+            isinstance(dashboard_status, str)
+            and configure_status is not None
+            and dashboard_status != configure_status
+        ):
+            errors.append(
+                "dashboards report status does not match configure verification status: "
+                f"{dashboard_status} != {configure_status}"
+            )
+
     # Discover variable declarations on a comment- and string-blanked view so a
     # commented-out `# variable "realm" {` or a `variable "..." {`-shaped string
     # value cannot poison the `declared` set -- otherwise a variable that is not
@@ -1026,7 +1408,14 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     # api_token/realm presence checks below.
     variables_searchable = _blank_hcl_string_values(_blank_comment_lines(variables_text))
     declared = set(VARIABLE_DECLARATION.findall(variables_searchable))
-    verified = working_metrics(args.verify_report)
+    verified = canonical_working_metrics(
+        terraform_dir,
+        args.verify_report,
+        args,
+        errors,
+    )
+    if verified is None:
+        verified = working_metrics(args.verify_report)
     allowed = verified | set(args.allow_source_only_metric)
     detector_metrics: list[str] = []
     detector_signatures: list[tuple[str, str | None, str]] = []
@@ -1193,6 +1582,8 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         "detector_count": len(blocks),
         "detector_metrics": sorted(detector_metrics),
         "working_metric_count": len(verified),
+        "dashboard_chart_count": dashboard_chart_count,
+        "preview_chart_count": preview_chart_count,
         "reported_status": configure_status,
         "source_only_exceptions": sorted(args.allow_source_only_metric),
         "errors": errors,
@@ -1205,7 +1596,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--detectors-report", type=Path, required=True)
     parser.add_argument("--configure-verify-report", type=Path, required=True)
     parser.add_argument("--verify-report", type=Path, required=True)
+    parser.add_argument(
+        "--audit-json",
+        type=Path,
+        help="canonical audit JSON; defaults to <terraform-dir>/../otel-audit.json",
+    )
+    parser.add_argument(
+        "--selection-json",
+        type=Path,
+        help="canonical selection JSON; defaults to <terraform-dir>/../otel-selection.json",
+    )
+    parser.add_argument(
+        "--instrumentation-json",
+        type=Path,
+        help="canonical instrumentation JSON; defaults to <terraform-dir>/../otel-instrumentation.json",
+    )
+    parser.add_argument(
+        "--verification-json",
+        type=Path,
+        help="canonical verification JSON; defaults to <terraform-dir>/../otel-verify.json",
+    )
+    parser.add_argument(
+        "--dashboards-report",
+        type=Path,
+        help="defaults to <terraform-dir>/../dashboards.md when dashboards.tf exists",
+    )
+    parser.add_argument(
+        "--dashboard-preview",
+        type=Path,
+        help="defaults to <terraform-dir>/../dashboards.preview.json when dashboards.tf exists",
+    )
+    parser.add_argument(
+        "--dashboard-verification",
+        type=Path,
+        help="canonical otel-verify.json used by the shared dashboard validator",
+    )
+    parser.add_argument(
+        "--dashboard-tfvars",
+        type=Path,
+        help="optional non-secret tfvars used to resolve dashboard preview values",
+    )
     parser.add_argument("--allow-source-only-metric", action="append", default=[])
+    parser.add_argument("--allow-source-only-item", action="append", default=[])
     return parser.parse_args()
 
 

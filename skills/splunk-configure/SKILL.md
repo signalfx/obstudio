@@ -2,10 +2,11 @@
 name: splunk-configure
 description: >-
   Generate Splunk Observability Cloud detector and dashboard Terraform from
-  existing observability reports. Reads .observe/otel.md plus instrumentation
-  and verification reports when available, classifies proven or explicitly
-  accepted metrics and readiness gaps, outputs HCL with SignalFlow program_text,
-  and writes local configure verification. Use when the user types
+  canonical .observe/otel-audit.json plus approved instrumentation and
+  verification overlays, with legacy .observe/otel.md fallback only when JSON
+  is absent. Classifies proven or explicitly accepted metrics and readiness
+  gaps, outputs HCL with SignalFlow program_text, and writes local configure
+  verification. Use when the user types
   $splunk-configure, asks to generate detectors or dashboards, audit alert
   coverage, distinguish app-down from degraded impact, build blast-radius
   views, improve MTTD or incident localization, or add GenAI/LLM detector
@@ -20,15 +21,20 @@ metadata:
 
 ## Overview
 
-Read existing `.observe/` observability reports, classify detector-ready metrics
-into generic, incident-readiness, and GenAI categories, and generate Terraform
-configuration for Splunk Observability Cloud detectors and dashboards. Generate
-resources only from source-backed metrics that are verified or explicitly
-accepted as source-only inputs. Report missing or unverified readiness coverage
-as instrumentation prerequisites instead of inventing alerts from absent data.
+Prefer the canonical audit and matching selection, instrumentation, and
+verification JSON overlays. Classify detector-ready metrics into generic,
+incident-readiness, and GenAI categories, and generate Terraform configuration
+for Splunk Observability Cloud detectors and dashboards. Generate resources only
+from source-backed metrics that are verified or explicitly accepted as
+source-only inputs. Report missing or unverified readiness coverage as
+instrumentation prerequisites instead of inventing alerts from absent data.
 
 Before writing outputs, read `../references/report-flow-contract.md` and follow
 the Splunk Configure Contract plus Splunk Configure Verification.
+
+Preserve this handoff:
+
+`audit JSON -> HTML approval -> selection JSON -> instrumentation JSON -> verify JSON -> configure Terraform -> $splunk-detector-publish / $splunk-dashboard-publish`
 
 When a prompt mentions MTTD, faster incident detection, better alerts, easier
 incident debugging, or blast-radius visibility, generate detectors and
@@ -47,7 +53,8 @@ instrumentation prerequisites instead of inventing detectors from absent data.
 
 ## When to Use
 
-- After running `$otel-audit` to generate `.observe/otel.md`
+- After `$otel-audit` generated `.observe/otel-audit.json` and the user reviewed
+  `.observe/otel.html`
 - After `$otel-instrument` and `$otel-verify` when the user wants detectors for
   newly implemented signals
 - When the user wants alerting/detection Terraform for their service
@@ -84,29 +91,54 @@ implemented as report sections or Terraform output, not as separate skills.
 
 If existing Splunk detectors or dashboards are not available in the repository
 or through an approved API/source, do not claim they were audited. Generate the
-desired-state coverage matrix and clearly label it as based on `.observe/otel.md`
-and local Terraform/config evidence only.
+desired-state coverage matrix and clearly label it as based on the canonical
+audit chain, or the legacy `.observe/otel.md` fallback, plus local
+Terraform/config evidence only.
 
-### Step 1 -- Locate Source Reports
+### Step 1 -- Locate Canonical Inputs
 
-Look for `.observe/otel.md` in the repository root.
+Look for `.observe/otel-audit.json` in the repository root.
 
-- If the file exists, proceed to Step 2.
-- If the file is missing, stop and respond:
+- If it exists, validate and use it as the audit authority. Load
+  `.observe/otel-selection.json`, `.observe/otel-instrumentation.json`, and
+  `.observe/otel-verify.json` when present. Require every overlay's `audit_id`
+  and `audit_sha256` to match the canonical audit, instrumentation's
+  `selection_sha256` to match the exact normalized selection, and verification's
+  `instrumentation_sha256` to match the exact normalized instrumentation. A
+  stale or invalid JSON artifact is an error; do not fall back to Markdown or
+  fill JSON gaps from it.
+- Only when `.observe/otel-audit.json` is absent, fall back to the legacy
+  `.observe/otel.md`, `.observe/otel-instrumentation.md`, and
+  `.observe/otel-verify.md` chain. Do not mix legacy Markdown with JSON overlays.
+- If neither audit artifact exists, stop and respond:
 
-> No audit report found at `.observe/otel.md`. Please run `$otel-audit` first
-> to generate the observability coverage report.
-
-Also look for optional downstream reports:
-
-- `.observe/otel-instrumentation.md` for implemented signal changes and
-  detector handoff.
-- `.observe/otel-verify.md` for emitted metric proof, OTLP evidence, and
-  unverified rows.
+> No audit report found at `.observe/otel-audit.json` or legacy
+> `.observe/otel.md`. Please run `$otel-audit` first.
 
 ### Step 2 -- Parse Metadata, Metrics, Verification, and Readiness Coverage
 
-Extract from `.observe/otel.md`:
+In canonical JSON mode:
+
+1. Read service metadata from `meta`, existing candidates from
+   `current_instrumentation.metrics`, and gaps/readiness from `findings`,
+   `current_instrumentation.incident_readiness`, and `genai_readiness`.
+2. Use `.observe/otel-selection.json` `approved_ids` to scope implemented and
+   verified finding rows. Never infer approval from Markdown, audit priority, or
+   prose.
+3. Read exact added or modified metrics from the matching instrumentation
+   finding's `telemetry_changes`, preserving `type`, `name`, `source`, and
+   `product_view`.
+4. Join verification by finding ID. Treat a metric as proof-ready only when the
+   metric's stable instrumentation telemetry item ID has a matching `working`
+   verification `item_results` row and its mapped scenario evidence proves the
+   exact emitted name, unit, and required dimensions. Do not infer proof from
+   aggregate counts, finding-level status, or similarly named telemetry.
+5. Preserve unselected findings in the audit view, but do not treat them as
+   implementation or verification results. Put missing, non-working, and
+   unproven inputs in prerequisites or skipped metrics.
+
+Only in legacy fallback mode, extract from `.observe/otel.md` and its optional
+Markdown instrumentation and verification companions:
 
 1. **Service metadata** from the report header:
    - Service name (from the `# Observability Report: {service-name}` heading)
@@ -199,8 +231,9 @@ If the audit has no metrics and downstream reports contain no implemented or
 verified metrics, continue processing gaps and readiness sections. If none are
 present, stop and respond:
 
-> The audit report contains no metrics. Detectors require metric data.
-> Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
+> The audit report contains no metrics. Detectors require metric data. Review
+> `.observe/otel.html`, approve applicable findings, run `$otel-instrument`, then
+> run `$otel-verify`.
 
 If there are no detector-ready metrics but gap, incident-readiness, or GenAI
 readiness sections exist, do not generate detector or dashboard resources.
@@ -229,9 +262,11 @@ off the smallest set of metrics the route actually emits -- not one
 detector per candidate metric.
 
 Only classify metrics that are present in source evidence and either verified
-by `.observe/otel-verify.md` or explicitly accepted by the user as source-only
-detector inputs. Put unverified metrics in `Skipped Metrics` with the reason
-`unverified metric emission` and the next step `$otel-verify`.
+by a matching `working` row in authoritative `.observe/otel-verify.json` plus
+exact scenario evidence, or explicitly accepted by the user as source-only
+detector inputs. In legacy fallback mode, use exact `Working` metric rows from
+`.observe/otel-verify.md`. Put unverified metrics in `Skipped Metrics` with the
+reason `unverified metric emission` and the next step `$otel-verify`.
 
 Assign each accepted metric to exactly one category. Apply GenAI-specific rules
 first when the audit has a `## GenAI Readiness` section or when metric names or
@@ -466,8 +501,10 @@ If a dimension is not present on the target metric, omit the filter/group-by and
 document the missing dimension in `.observe/dashboards.md`. Never group by a
 dimension solely because instrumentation code intended to emit it.
 Only generate a dashboard panel for a metric name that is source-backed and
-either `Working` in `.observe/otel-verify.md` or explicitly accepted by the user
-as a source-only or approved external input. If using a provider-derived,
+either proven by a matching `working` finding and exact scenario evidence in
+`.observe/otel-verify.json`, or explicitly accepted by the user as a source-only
+or approved external input. In legacy fallback mode, an exact `Working` row in
+`.observe/otel-verify.md` supplies proof. If using a provider-derived,
 precomputed, or transformed metric name instead of the audited OTel name,
 record its live metadata provenance and acceptance in `.observe/dashboards.md`.
 Live metric metadata alone is not enough to claim source-backed coverage when
@@ -518,6 +555,24 @@ after an update, reload the dashboard URL without a stale `configId` parameter
 or reset saved dashboard overrides so the browser uses the updated dashboard
 definition.
 
+Whenever dashboard resources are generated, also write
+`.observe/dashboards.preview.json` using the same resolved preview contract as
+`$splunk-dashboard`: schema version 1, group → dashboard → charts, fully
+resolved `programText`, supported chart type, and 12-column layout. Keep it in
+exact lockstep with `dashboards.tf`; every chart must appear once with the same
+telemetry item ID provenance, label, type, resolved query, and placement.
+Use the same machine-readable projection as `$splunk-dashboard`: put an exact
+`# telemetry-item:` value in every chart resource, repeat it as preview
+`telemetryItemId`, record the item-specific dashboard follow-up as preview
+`productAction`, and include the canonical `## Panels` provenance table in
+`.observe/dashboards.md`. Use `OTEL-###.<item>` for proven implemented items and
+`SOURCE-METRIC.<exact-metric-name>` only for explicitly accepted pre-existing
+metrics; never manufacture an `OTEL-###` ID.
+Generating this sidecar proves only the local preview contract. Record
+Observer-render evidence separately, and never imply that the preview rendered
+or that live values were plausible without a direct UI/API witness and value
+sanity evidence.
+
 #### `.observe/terraform/terraform.tfvars.example`
 
 Generate a `.tfvars.example` file the user copies and fills in to apply:
@@ -541,9 +596,16 @@ dashboard resources or a desired-state dashboard specification are generated.
 The detector report owns the configure result, every detector's classification
 rationale, skipped metrics, instrumentation prerequisites, and alert coverage.
 The dashboard document is a subordinate inventory of panels, filters,
-dimensions, units, and evidence; it must not define a separate result or
-duplicate the report-flow contract. `.observe/splunk-configure-verify.md`
-remains the authoritative proof report.
+dimensions, units, and evidence. Its `**Result:**` must mirror the configure
+result exactly; it must not calculate an independent verdict or duplicate the
+report-flow contract. `.observe/splunk-configure-verify.md` remains the
+authoritative proof report.
+
+When dashboards are generated, include a `## Preview And Validation` section in
+`.observe/dashboards.md` covering exact telemetry item mapping,
+Terraform-to-sidecar parity, Observer render status, live value/unit/dimension
+sanity, and publish/apply status. In a configure run, inherit the configure
+result rather than inventing a second verdict.
 
 Use the following structure:
 
@@ -552,9 +614,10 @@ Use the following structure:
 
 **Result:** Pass | Partial | Fail | Blocked
 **Language:** <lang> | **Framework:** <framework> | **Date:** <YYYY-MM-DD>
-**Source audit:** `.observe/otel.md`
-**Source instrumentation:** `.observe/otel-instrumentation.md` | not found
-**Source verification:** `.observe/otel-verify.md` | not found
+**Source audit:** `.observe/otel-audit.json` | legacy `.observe/otel.md`
+**Selection:** `.observe/otel-selection.json` | legacy audit scope | not found
+**Source instrumentation:** `.observe/otel-instrumentation.json` | legacy Markdown | not found
+**Source verification:** `.observe/otel-verify.json` | legacy Markdown | not found
 **Output:** `.observe/terraform/`
 
 ## Executive Summary
@@ -564,7 +627,7 @@ Use the following structure:
 - <next action>
 
 ## Flow
-`audit -> instrument -> verify -> configure -> configure-verify`
+`audit -> approve -> instrument -> verify -> configure -> publish`
 
 ## Summary
 
@@ -661,9 +724,9 @@ report when readiness coverage is partial or missing.
 
 ## GenAI Instrumentation Prerequisites
 
-Include this section when `## GenAI Readiness` or
-`## GenAI Readiness Closure` exists and any required GenAI signal is missing or
-partial.
+Include this section when canonical `genai_readiness`, legacy
+`## GenAI Readiness`, or legacy `## GenAI Readiness Closure` exists and any
+required GenAI signal is missing or partial.
 
 | Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
 |---------|--------------|----------------|-------------------------------|-----------|
@@ -687,8 +750,9 @@ partial.
 1. Review configure verification and resolve any unproven inputs
 2. Copy and fill in credentials
 3. Review threshold defaults and run `terraform init` plus `terraform plan`
-4. Use `$splunk-sync` to publish confirmed detector gaps, or apply reviewed
-   Terraform when Terraform will own detectors and dashboards
+4. Use `$splunk-detector-publish` for confirmed detector gaps and
+   `$splunk-dashboard-publish` for confirmed dashboard gaps, or apply reviewed
+   Terraform when Terraform will own those resources
 5. Tune thresholds based on production baselines
 
 ---
@@ -712,6 +776,7 @@ Validation requirements:
    - `.observe/detectors.md`
    - `.observe/terraform/dashboards.tf` and `.observe/dashboards.md` when
      dashboard resources were generated
+   - `.observe/dashboards.preview.json` when dashboard resources were generated
 2. If Terraform is installed, run:
    - `terraform fmt -check -recursive .observe/terraform`
    - `terraform -chdir=.observe/terraform init -backend=false -input=false`
@@ -737,10 +802,11 @@ Validation requirements:
      approved token is available, report `Partial` and name remote SignalFlow
      compilation as the one unproven check. Applying resources is not required
      for configure verification.
-   - when dashboards are generated, `Pass` also requires the value sanity check
-     from Step 4 for every chart. If live chart evaluation is unavailable,
-     report `Partial` and name dashboard values, dimensions, and units as
-     unproven.
+   - when dashboards are generated, `Pass` also requires exact
+     Terraform/preview parity, a successful Observer render witness, and the
+     value sanity check from Step 4 for every chart. If local rendering or live
+     chart evaluation is unavailable, report `Partial` and name the exact UI,
+     value, dimension, or unit evidence still unproven.
 3. If Terraform is unavailable, record Terraform validation as `Skipped` or
    `Blocked` with the missing prerequisite. Do not mark it `Pass`.
 4. Validate SignalFlow shape without contacting Splunk:
@@ -755,9 +821,11 @@ Validation requirements:
      `program_text`
    - no user/session/request/trace IDs, raw prompts, raw content, API tokens,
      or secrets appear in filters, group-bys, or example variables
-   - the exact set of metrics referenced by `data(...)` is a subset of the
-     `Working` metric rows in `.observe/otel-verify.md`, unless a source-only
-     exception was explicitly accepted and recorded
+   - the exact set of metrics referenced by `data(...)` is a subset of metrics
+     proven by `working` findings and exact scenario evidence in
+     `.observe/otel-verify.json`, unless a source-only exception was explicitly
+     accepted and recorded; in legacy fallback mode, use exact `Working` metric
+     rows in `.observe/otel-verify.md`
    - metric names, units, and required dimensions used by detector logic match
      verification evidence; do not silently substitute an alternate
      semantic-convention name
@@ -780,9 +848,44 @@ python3 <splunk-configure-skill-dir>/scripts/validate_configure_output.py \
   --verify-report .observe/otel-verify.md
 ```
 
+When dashboard Terraform exists, the configure validator delegates exact
+projection checks to the shared dashboard validator automatically; do not
+maintain a second HCL/preview parser in this skill. Run the shared validator
+directly only when isolating a dashboard failure:
+
+```bash
+python3 <splunk-dashboard-skill-dir>/scripts/validate_dashboard_output.py \
+  --terraform .observe/terraform/dashboards.tf \
+  --preview .observe/dashboards.preview.json \
+  --report .observe/dashboards.md \
+  --verification .observe/otel-verify.json
+```
+
+For an explicitly accepted source-only chart, use
+`SOURCE-METRIC.<exact-metric-name>` and append that same value as
+`--allow-source-only-item` to the configure validator command (or to the direct
+dashboard command), with the acceptance recorded in the dashboard report.
+Treat a delegated validator failure as configure failure.
+
+The dashboard report inherits the configure verification result so the two
+reports cannot disagree. In a combined run, the delegated validator therefore
+accepts an inherited `Partial` when every dashboard-specific check passed but a
+detector-side prerequisite such as authenticated SignalFlow compilation remains
+unproven. The standalone dashboard validator still rejects an all-checks-pass
+`Partial` because there is no parent result to inherit.
+
+The validator's `--verify-report` argument consumes the generated readable
+compatibility report. When `.observe/otel-audit.json` exists, the validator also
+loads the sibling selection, instrumentation, and verification JSON, validates
+the complete bound flow, and requires the Markdown to be its exact per-item
+projection. Classification authority comes only from that validated JSON chain;
+never use Markdown to override or supplement it. Markdown-only authorization is
+reserved for a legacy run with no canonical JSON artifacts.
+
 For every metric the user explicitly accepted as source-only, append
 `--allow-source-only-metric <exact-metric-name>`. Never use that option merely
-because `.observe/otel-verify.md` is absent.
+because verification JSON or its generated Markdown compatibility report is
+absent.
 
 Treat validator failure as configure failure and repair the generated files.
 The script validates file presence, HCL resource/variable references,
@@ -791,10 +894,11 @@ sensitive identifiers, local-state ignore rules, reader-first heading order,
 matching configure statuses, and exact metric reconciliation against
 reader-first `Working` metric rows. `.observe/detectors.md` must inherit the
 result from `.observe/splunk-configure-verify.md`; the plan and its verification
-must never disagree. The script does not replace `terraform validate`; run both
-when Terraform is available. The bundled script validates detector resources,
-not dashboard resources; use the explicit dashboard evidence checks above and
-do not attribute dashboard proof to the script.
+must never disagree. The configure validator owns detector shape and
+cross-report result consistency. It checks dashboard presence, structured proof
+rows, and chart counts; the shared dashboard validator owns exact
+HCL/query/type/layout/item parity. Neither script replaces `terraform validate`,
+an Observer render witness, or live value sanity evidence.
 
 Use this report shape:
 
@@ -819,10 +923,23 @@ Use this report shape:
 | throughput_<id> | <metric_name> | rate anomaly (out-of-band) | Major |
 
 ## Tested And Working
+
+| Check | Result | Evidence |
+|---|---|---|
+| Authenticated detector SignalFlow compile | Pass | Authenticated `terraform plan -refresh=false -input=false` accepted all <N> generated detectors through `/v2/detector/validate`. |
+
 ## Not Yet Proven
 ## Validation Notes
 ## Next Steps
 ```
+
+Keep the exact `Check | Result | Evidence` table shape under
+`## Tested And Working`. For a `Pass` report with detector resources, include
+the authenticated compile row shown above, replace `<N>` with the generated
+detector count (or retain the word `all`), and cite either `SignalFlow` or
+`/v2/detector/validate` in concrete evidence. Local `terraform validate` alone
+does not satisfy this row. For `Partial`, record the unavailable authenticated
+plan under `## Not Yet Proven` instead of claiming this row passed.
 
 For a prerequisites-only run with no detector-ready metrics, still write the
 configure verification report, record that Terraform validation was not run,
@@ -873,6 +990,7 @@ Files:
 - `.observe/terraform/.terraform.lock.hcl` — provider selection produced by successful init
 - `.observe/detectors.md` — full detectors report with classification details
 - `.observe/dashboards.md` — dashboard panels, filters, evidence, and readiness prerequisites
+- `.observe/dashboards.preview.json` — local Observer preview model kept in lockstep with dashboard Terraform
 - `.observe/splunk-configure-verify.md` — Terraform/SignalFlow/coverage/safety validation
 
 **Configure verification:** Pass | Partial | Fail | Blocked
@@ -881,9 +999,9 @@ Next:
 1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
 2. Fill in `realm`, `api_token`, and `notification_channel` in `terraform.tfvars`
 3. `cd .observe/terraform && terraform init && terraform plan`
-4. Use `$splunk-sync` to compare and publish only confirmed detector gaps, or
-   apply the reviewed Terraform when the user chooses Terraform-managed
-   detectors and dashboards
+4. Use `$splunk-detector-publish` to compare and publish confirmed detector
+   gaps and `$splunk-dashboard-publish` for confirmed dashboard gaps, or apply
+   the reviewed Terraform when the user chooses Terraform-managed resources
 ```
 
 ## Output Templates
