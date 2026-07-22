@@ -51,6 +51,37 @@ def test_instrument_genai_progressive_disclosure_route_resolves():
     assert "### GenAI Span Ownership And Context" in INSTRUMENT_GENAI_REF.read_text()
 
 
+def test_genai_owner_mapped_guidance_requires_validator_accepted_detail():
+    reference = AUDIT_GENAI_REF.read_text()
+    normalized = " ".join(reference.split())
+    assert "`Provider/platform-owned: billing API`" in reference
+    assert "`Provider/platform-owned` by itself" in normalized
+    assert "a generic team label is not an exact owner" in normalized
+    assert "fails audit validation" in normalized
+
+
+def test_broad_genai_request_cannot_bypass_canonical_selection_gate():
+    reference = INSTRUMENT_GENAI_REF.read_text()
+    normalized = " ".join(reference.split())
+    skill = (SKILLS_DIR / "otel-instrument" / "SKILL.md").read_text()
+    skill_normalized = " ".join(skill.split())
+
+    assert "broad request is not selection authority for a canonical audit" in normalized
+    assert "Inventory the matching selectable finding IDs" in normalized
+    assert "pause for the user to supply exact `--ids`" in normalized
+    assert "do not create or bind a selection from broad prose" in normalized
+    assert "Only on the legacy no-audit path" in normalized
+    assert (
+        "resolve that broad scope to exact IDs and create the bound selection before editing"
+        not in normalized
+    )
+    assert (
+        "A direct request is scope authority only on the legacy "
+        "no-canonical-audit path"
+    ) in skill_normalized
+    assert "a canonical audit requires its validated bound selection" in skill_normalized
+
+
 def test_genai_reference_covers_otel_semconv_signals():
     text = _read(GENAI_REF)
     required_terms = [
