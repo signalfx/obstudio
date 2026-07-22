@@ -2,16 +2,36 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import os
+import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "validate_configure_output.py"
+SKILL = Path(__file__).parents[1] / "SKILL.md"
 SPEC = importlib.util.spec_from_file_location("validate_configure_output", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+DASHBOARD_TESTS = (
+    Path(__file__).parents[2]
+    / "splunk-dashboard"
+    / "tests"
+    / "test_validate_dashboard_output.py"
+)
+DASHBOARD_SPEC = importlib.util.spec_from_file_location(
+    "dashboard_test_helpers_for_configure", DASHBOARD_TESTS
+)
+assert DASHBOARD_SPEC and DASHBOARD_SPEC.loader
+DASHBOARD_HELPERS = importlib.util.module_from_spec(DASHBOARD_SPEC)
+sys.modules[DASHBOARD_SPEC.name] = DASHBOARD_HELPERS
+DASHBOARD_SPEC.loader.exec_module(DASHBOARD_HELPERS)
 
 METRIC = "http.server.request.duration"
 
@@ -85,13 +105,15 @@ Validation passed.
 One detector.
 
 ## Tested And Working
-Local validation.
+| Check | Result | Evidence |
+|---|---|---|
+| Authenticated detector SignalFlow compile | Pass | Authenticated `terraform plan -refresh=false -input=false` accepted all generated detectors through `/v2/detector/validate`. |
 
 ## Not Yet Proven
-Remote apply.
+None.
 
 ## Validation Notes
-Fixture evidence.
+Publishing/applying was not run because it is not required for configure verification.
 
 ## Next Steps
 Apply with credentials.
@@ -100,11 +122,7 @@ Apply with credentials.
     )
     verify_report = root / "otel-verify.md"
     verify_report.write_text(
-        f"""## Tested And Working
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
-| `{verified_metric}` | Metric | Exporter | Working | OTLP | collector |
-""",
+        strict_legacy_verify_report(verified_metric),
         encoding="utf-8",
     )
     return argparse.Namespace(
@@ -116,21 +134,381 @@ Apply with credentials.
     )
 
 
-class WorkingMetricsTest(unittest.TestCase):
-    def test_reads_working_metric_on_python_39_compatible_path(self) -> None:
-        report = """## Tested And Working
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
-| `http.server.request.duration` | Metric | Exporter | Working | OTLP | collector |
-| `http.server.active_requests` | Metric | Exporter | Not proven | OTLP | absent |
+def strict_legacy_verify_report(metric: str) -> str:
+    return f"""# OpenTelemetry Verification Report
+
+**Result:** Pass
+
+## Tested And Working
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| SOURCE-METRIC.{metric} | `{metric}` | Metric | Existing metric retained | Working | proof_mode=full_runtime; scenarios=metric.runtime | Metric datapoint accepted; visibility=otlp_accepted | .observe/evidence/metric-runtime.json |
 """
+
+
+def write_canonical_reader_report(args: argparse.Namespace) -> None:
+    root = args.terraform_dir.parent
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    proofs = {
+        item["id"]: item
+        for finding in verification["findings"]
+        for item in finding["item_results"]
+    }
+    status_labels = {
+        "working": "Working",
+        "not_working": "Not working",
+        "not_proven": "Not proven",
+        "not_configured": "Not configured",
+        "blocked": "Not proven",
+    }
+    rows = []
+    non_working = []
+    for finding in instrumentation["findings"]:
+        for source in finding["telemetry_changes"]:
+            proof = proofs[source["id"]]
+            status = status_labels[proof["status"]]
+            if status != "Working":
+                non_working.append(source["id"])
+            rows.append(
+                "| {id} | {name} | {type} | {change} | {status} | {tested} | "
+                "{product} | {evidence} |".format(
+                    id=source["id"],
+                    name=source["name"],
+                    type=source["type"],
+                    change=source["change"],
+                    status=status,
+                    tested=(
+                        f"proof_mode={proof['proof_mode']}; scenarios="
+                        + ", ".join(proof["scenarios"])
+                    ),
+                    product="; ".join(
+                        [
+                            *proof["product_validation"],
+                            f"visibility={proof['visibility']}",
+                        ]
+                    ),
+                    evidence="; ".join(proof["evidence"]),
+                )
+            )
+    working = len(rows) - len(non_working)
+    gaps = "None." if not non_working else "\n".join(f"- {item}" for item in non_working)
+    args.verify_report.write_text(
+        f"""# OpenTelemetry Verification Report
+
+**Result:** {verification['meta']['result']}
+
+## What Changed
+Canonical verification results were projected for readers.
+
+## Tested And Working
+**Individual result:** {working}/{len(rows)} working: metrics {working}/{len(rows)}.
+
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+{chr(10).join(rows)}
+
+## Not Working Or Not Proven
+{gaps}
+
+## Proof
+Canonical JSON contains the bound commands and evidence.
+""",
+        encoding="utf-8",
+    )
+
+
+def write_canonical_configure_flow(args: argparse.Namespace) -> None:
+    root = args.terraform_dir.parent
+    DASHBOARD_HELPERS.write_bound_flow(root, root / "otel-verify.json")
+    write_canonical_reader_report(args)
+
+
+def add_scenario_only_metric_to_canonical_flow(
+    args: argparse.Namespace, metric: str
+) -> None:
+    root = args.terraform_dir.parent
+    report_module = DASHBOARD_HELPERS.REPORT_MODULE
+    audit = json.loads((root / "otel-audit.json").read_text(encoding="utf-8"))
+    audit["findings"][0]["expected_telemetry"].append(
+        {
+            "type": "metric",
+            "name": metric,
+            "attributes": ["service.name"],
+            "product_view": "Request size chart",
+        }
+    )
+    audit = report_module.normalize_audit_report(audit)
+    audit_digest = report_module.audit_digest(audit)
+
+    selection = json.loads(
+        (root / "otel-selection.json").read_text(encoding="utf-8")
+    )
+    selection["audit_sha256"] = audit_digest
+    selection = report_module.normalize_selection(selection, audit)
+
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    instrumentation["audit_sha256"] = audit_digest
+    instrumentation["selection_sha256"] = report_module.selection_digest(selection)
+    instrumentation = report_module.normalize_instrumentation(
+        instrumentation, audit, selection
+    )
+
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    verification["audit_sha256"] = audit_digest
+    verification["instrumentation_sha256"] = report_module.instrumentation_digest(
+        instrumentation
+    )
+    verification["findings"][0]["scenarios"][0]["observed_telemetry"].append(
+        f"Metric {metric} emitted with service.name=checkout"
+    )
+    verification = report_module.normalize_verify(
+        verification, audit, selection, instrumentation
+    )
+
+    (root / "otel-audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    (root / "otel-selection.json").write_text(
+        json.dumps(selection), encoding="utf-8"
+    )
+    (root / "otel-instrumentation.json").write_text(
+        json.dumps(instrumentation), encoding="utf-8"
+    )
+    (root / "otel-verify.json").write_text(
+        json.dumps(verification), encoding="utf-8"
+    )
+    write_canonical_reader_report(args)
+
+
+def add_current_metric_to_canonical_flow(
+    args: argparse.Namespace, metric: str
+) -> None:
+    root = args.terraform_dir.parent
+    report_module = DASHBOARD_HELPERS.REPORT_MODULE
+    audit = json.loads((root / "otel-audit.json").read_text(encoding="utf-8"))
+    audit["current_instrumentation"]["metrics"] = [
+        {
+            "name": metric,
+            "source": "metrics.go:12",
+            "type": "histogram",
+        }
+    ]
+    audit = report_module.normalize_audit_report(audit)
+    audit_digest = report_module.audit_digest(audit)
+
+    selection = json.loads(
+        (root / "otel-selection.json").read_text(encoding="utf-8")
+    )
+    selection["audit_sha256"] = audit_digest
+    selection = report_module.normalize_selection(selection, audit)
+
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    instrumentation["audit_sha256"] = audit_digest
+    instrumentation["selection_sha256"] = report_module.selection_digest(selection)
+    instrumentation = report_module.normalize_instrumentation(
+        instrumentation, audit, selection
+    )
+
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    verification["audit_sha256"] = audit_digest
+    verification["instrumentation_sha256"] = report_module.instrumentation_digest(
+        instrumentation
+    )
+    verification = report_module.normalize_verify(
+        verification, audit, selection, instrumentation
+    )
+
+    (root / "otel-audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    (root / "otel-selection.json").write_text(
+        json.dumps(selection), encoding="utf-8"
+    )
+    (root / "otel-instrumentation.json").write_text(
+        json.dumps(instrumentation), encoding="utf-8"
+    )
+    (root / "otel-verify.json").write_text(
+        json.dumps(verification), encoding="utf-8"
+    )
+    write_canonical_reader_report(args)
+
+
+def write_dashboard_fixture(
+    args: argparse.Namespace,
+    *,
+    result: str = "Pass",
+    observer_result: str = "Pass",
+    live_value_result: str = "Pass",
+) -> None:
+    (args.terraform_dir / "dashboards.tf").write_text(
+        '''resource "signalfx_time_chart" "latency" {
+  # telemetry-item: OTEL-001.http-duration
+  name = "P99 Latency"
+  program_text = <<-EOF
+    data('http.server.request.duration', filter=filter('service.name', 'checkout')).percentile(pct=99).publish(label='P99 Latency')
+  EOF
+}
+
+resource "signalfx_dashboard_group" "overview" {
+  name = "Checkout Overview"
+}
+
+resource "signalfx_dashboard" "red" {
+  name            = "Checkout RED"
+  dashboard_group = signalfx_dashboard_group.overview.id
+  chart {
+    chart_id = signalfx_time_chart.latency.id
+    column   = 0
+    row      = 0
+    width    = 6
+    height   = 3
+  }
+}
+''',
+        encoding="utf-8",
+    )
+    (args.terraform_dir.parent / "dashboards.preview.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "groups": [
+                    {
+                        "name": "Checkout Overview",
+                        "dashboards": [
+                            {
+                                "name": "Checkout RED",
+                                "charts": [
+                                    {
+                                        "label": "latency",
+                                        "title": "P99 Latency",
+                                        "chartType": "time_series",
+                                        "telemetryItemId": "OTEL-001.http-duration",
+                                        "productAction": "Add the verified latency metric to the RED dashboard.",
+                                        "programText": "data('http.server.request.duration', filter=filter('service.name', 'checkout')).percentile(pct=99).publish(label='P99 Latency')",
+                                        "text": None,
+                                        "layout": {
+                                            "column": 0,
+                                            "row": 0,
+                                            "width": 6,
+                                            "height": 3,
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (args.terraform_dir.parent / "dashboards.md").write_text(
+        f"""# Dashboards Report: checkout
+
+**Result:** {result}
+**Preview:** `.observe/dashboards.preview.json`
+
+## Panels
+
+| # | Telemetry Item ID | Panel | Metric | Chart Type | Grid (col,row,w,h) | Product action / rationale |
+|---|---|---|---|---|---|---|
+| 1 | OTEL-001.http-duration | P99 Latency | http.server.request.duration | time_series | 0,0,6,3 | Add the verified latency metric to the RED dashboard. |
+
+## Preview And Validation
+
+| Check | Result | What it proves | Evidence / next step |
+|---|---|---|---|
+| Verified metric item mapping | Pass | Every chart maps to a working telemetry item | `OTEL-001.http-duration` and verification evidence |
+| Terraform ↔ preview parity | Pass | HCL and sidecar agree | `validate_dashboard_output.py` validator passed for 1 chart |
+| Observer render | {observer_result} | Observer accepted and rendered the sidecar | local Observer render witness for 1 chart |
+| Live value sanity | {live_value_result} | Query returned plausible values and dimensions | saved recent-window query evidence for `http.server.request.duration` |
+| Publish/apply | Not run | Review remains local | publish only after human approval |
+""",
+        encoding="utf-8",
+    )
+    write_canonical_configure_flow(args)
+
+
+class WorkingMetricsTest(unittest.TestCase):
+    def test_reads_metric_from_strict_legacy_proof(self) -> None:
+        report = strict_legacy_verify_report("http.server.request.duration")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "otel-verify.md"
             path.write_text(report, encoding="utf-8")
+            errors: list[str] = []
             self.assertEqual(
-                MODULE.working_metrics(path),
+                MODULE.working_metrics(path, errors),
                 {"http.server.request.duration"},
             )
+            self.assertEqual(errors, [])
+
+    def test_rejects_incomplete_legacy_metric_proof_contract(self) -> None:
+        metric = "http.server.request.duration"
+        valid = strict_legacy_verify_report(metric)
+        loose = f"""**Result:** Pass
+
+## Tested And Working
+| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
+|---|---|---|---|---|---|
+| `{metric}` | Metric | Exporter | Working | OTLP | collector |
+"""
+        cases = {
+            "missing overall result": (
+                valid.replace("**Result:** Pass\n\n", ""),
+                "expected exactly one Result status",
+            ),
+            "missing full item schema": (loose, "must contain the full"),
+            "mismatched item ID": (
+                valid.replace(f"SOURCE-METRIC.{metric}", "OTEL-001.duration"),
+                "Item ID must equal",
+            ),
+            "non-executed proof mode": (
+                valid.replace("proof_mode=full_runtime", "proof_mode=not_run"),
+                "executed proof mode",
+            ),
+            "missing scenario IDs": (
+                valid.replace("scenarios=metric.runtime", "scenarios=none"),
+                "exact executed scenario IDs",
+            ),
+            "unknown visibility": (
+                valid.replace("visibility=otlp_accepted", "visibility=not_proven"),
+                "cannot have visibility=not_proven",
+            ),
+            "source-only evidence": (
+                valid.replace(
+                    ".observe/evidence/metric-runtime.json",
+                    "main.go:12",
+                ),
+                "positive durable evidence",
+            ),
+        }
+        for name, (report, expected) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "otel-verify.md"
+                path.write_text(report, encoding="utf-8")
+                errors: list[str] = []
+
+                self.assertEqual(MODULE.working_metrics(path, errors), set())
+                self.assertTrue(
+                    any(expected in error for error in errors),
+                    errors,
+                )
+
+    def test_skill_documents_structured_authenticated_plan_evidence(self) -> None:
+        text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("| Check | Result | Evidence |", text)
+        self.assertIn("| Authenticated detector SignalFlow compile | Pass |", text)
+        self.assertIn("`/v2/detector/validate`", text)
 
 
 class ValidateConfigureOutputTest(unittest.TestCase):
@@ -142,6 +520,1024 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         self.assertEqual(result["detector_count"], 1)
         self.assertEqual(result["detector_metrics"], [METRIC])
         self.assertEqual(result["reported_status"], "Pass")
+
+    def test_rejects_loose_legacy_detector_metric_assertion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            args.verify_report.write_text(
+                f"""**Result:** Pass
+
+## Tested And Working
+| OTel item | Type | Working status |
+|---|---|---|
+| `{METRIC}` | Metric | Working |
+""",
+                encoding="utf-8",
+            )
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any("must contain the full" in error for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_accepts_detector_authorized_by_bound_canonical_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["working_metric_count"], 2)
+
+    def test_rejects_instrumentation_bound_to_a_stale_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            path = args.terraform_dir.parent / "otel-instrumentation.json"
+            instrumentation = json.loads(path.read_text(encoding="utf-8"))
+            instrumentation["selection_sha256"] = "sha256:" + "f" * 64
+            path.write_text(json.dumps(instrumentation), encoding="utf-8")
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_metric_authorized_only_by_same_named_span_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            verify_path = args.terraform_dir.parent / "otel-verify.json"
+            verification = json.loads(verify_path.read_text(encoding="utf-8"))
+            wrong_kind = (
+                "The generated trace captured span "
+                "http.server.request.duration with service.name=checkout."
+            )
+            finding = verification["findings"][0]
+            finding["scenarios"][0]["observed_telemetry"] = [wrong_kind]
+            finding["item_results"][0]["observed_telemetry"] = [wrong_kind]
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            write_canonical_reader_report(args)
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_markdown_metric_not_authorized_by_canonical_json(self) -> None:
+        detector_metric = "custom.unverified.metric"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory),
+                detector_metric=detector_metric,
+                verified_metric=detector_metric,
+            )
+            write_canonical_configure_flow(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {detector_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_uses_the_exact_canonical_snapshot_that_was_validated(self) -> None:
+        detector_metric = "custom.post-validation.metric"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory), detector_metric=detector_metric
+            )
+            write_canonical_configure_flow(args)
+            original_validator = MODULE.run_checked_validator
+            validator_calls = 0
+
+            def mutate_after_validation(command, label, errors):
+                nonlocal validator_calls
+                result = original_validator(command, label, errors)
+                validator_calls += 1
+                if validator_calls == 2:
+                    path = args.terraform_dir.parent / "otel-instrumentation.json"
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    payload["findings"][0]["telemetry_changes"][0]["name"] = (
+                        detector_metric
+                    )
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                return result
+
+            with mock.patch.object(
+                MODULE, "run_checked_validator", side_effect=mutate_after_validation
+            ):
+                result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {detector_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_rejects_scenario_only_metric_without_working_item_result(self) -> None:
+        scenario_only_metric = "http.server.request.size"
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(
+                Path(directory), detector_metric=scenario_only_metric
+            )
+            write_canonical_configure_flow(args)
+            add_scenario_only_metric_to_canonical_flow(args, scenario_only_metric)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            f"latency: metric {scenario_only_metric!r} is not a Working verified metric",
+            result["errors"],
+        )
+
+    def test_rejects_markdown_that_disagrees_with_canonical_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            args.verify_report.write_text(
+                args.verify_report.read_text(encoding="utf-8").replace(
+                    METRIC, "custom.forged.metric", 1
+                ),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "verify Markdown projection validation failed" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_pass_with_substantive_not_yet_proven_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            report = args.configure_verify_report.read_text(encoding="utf-8").replace(
+                "## Not Yet Proven\nNone.",
+                "## Not Yet Proven\nRemote SignalFlow compilation was not run.",
+            )
+            args.configure_verify_report.write_text(report, encoding="utf-8")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "configure verification report: Result Pass conflicts with substantive "
+            "## Not Yet Proven content",
+            result["errors"],
+        )
+
+    def test_rejects_pass_without_authenticated_detector_compile_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            report = args.configure_verify_report.read_text(encoding="utf-8").replace(
+                "| Authenticated detector SignalFlow compile | Pass | Authenticated `terraform plan -refresh=false -input=false` accepted all generated detectors through `/v2/detector/validate`. |",
+                "| Local Terraform validation | Pass | `terraform validate -json` returned valid. |",
+            )
+            args.configure_verify_report.write_text(report, encoding="utf-8")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "configure verification report: Result Pass requires a successful authenticated "
+            "terraform plan / SignalFlow compile row covering every generated detector",
+            result["errors"],
+        )
+
+    def test_rejects_authenticated_plan_row_with_negative_or_uncertain_evidence(self) -> None:
+        contradictions = (
+            "Authenticated terraform plan failed; SignalFlow compile returned no "
+            "validation result for all 1 generated detector.",
+            "Authenticated terraform plan may have succeeded; SignalFlow validation "
+            "is pending for all 1 generated detector.",
+        )
+        for contradictory in contradictions:
+            with self.subTest(contradictory=contradictory), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                report = args.configure_verify_report.read_text(encoding="utf-8")
+                report = re.sub(
+                    r"Authenticated `terraform plan[^|]+",
+                    contradictory + " ",
+                    report,
+                )
+                args.configure_verify_report.write_text(report, encoding="utf-8")
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertIn(
+                "configure verification report: Result Pass requires a successful authenticated "
+                "terraform plan / SignalFlow compile row covering every generated detector",
+                result["errors"],
+            )
+
+    def test_authenticated_plan_claims_must_all_come_from_evidence(self) -> None:
+        evidence_values = (
+            "N/A",
+            (
+                "N/A; Authenticated terraform plan and SignalFlow compile "
+                "accepted all 1 generated detector."
+            ),
+            "Authenticated terraform plan evidence saved.",
+            "SignalFlow compile accepted all 1 generated detector.",
+            "Authenticated terraform plan and SignalFlow compile succeeded.",
+            (
+                "Unauthenticated terraform plan and SignalFlow compile accepted "
+                "all 1 generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not all generated detectors."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not all 1 generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile accepted "
+                "not-every generated detector."
+            ),
+            (
+                "Authenticated terraform plan and SignalFlow compile not-run "
+                "for all 1 generated detector."
+            ),
+        )
+        valid_row = (
+            "| Authenticated detector SignalFlow compile | Pass | Authenticated "
+            "`terraform plan -refresh=false -input=false` accepted all generated "
+            "detectors through `/v2/detector/validate`. |"
+        )
+        for evidence in evidence_values:
+            with self.subTest(evidence=evidence), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                report = args.configure_verify_report.read_text(encoding="utf-8")
+                misleading_row = (
+                    "| Authenticated terraform plan / SignalFlow compile for all 1 "
+                    f"generated detector | Pass | {evidence} |"
+                )
+                args.configure_verify_report.write_text(
+                    report.replace(valid_row, misleading_row), encoding="utf-8"
+                )
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertIn(
+                "configure verification report: Result Pass requires a successful "
+                "authenticated terraform plan / SignalFlow compile row covering every "
+                "generated detector",
+                result["errors"],
+            )
+
+    def test_accepts_dashboard_proof_with_publish_not_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["dashboard_chart_count"], 1)
+        self.assertEqual(result["preview_chart_count"], 1)
+
+    def test_dashboard_delegate_forwards_canonical_path_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            custom = args.terraform_dir.parent / "canonical"
+            custom.mkdir()
+            for attribute, filename in (
+                ("audit_json", "otel-audit.json"),
+                ("selection_json", "otel-selection.json"),
+                ("instrumentation_json", "otel-instrumentation.json"),
+                ("verification_json", "otel-verify.json"),
+            ):
+                destination = custom / filename
+                (args.terraform_dir.parent / filename).rename(destination)
+                setattr(args, attribute, destination)
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_dashboard_verification_alias_is_canonical_and_cannot_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            custom_verification = root / "custom-otel-verify.json"
+            (root / "otel-verify.json").rename(custom_verification)
+            args.dashboard_verification = custom_verification
+
+            alias_only = MODULE.validate(args)
+
+            conflicting_verification = root / "conflicting-otel-verify.json"
+            conflicting_verification.write_bytes(custom_verification.read_bytes())
+            args.verification_json = conflicting_verification
+            conflict = MODULE.validate(args)
+
+        self.assertEqual(alias_only["result"], "PASS", alias_only["errors"])
+        self.assertEqual(conflict["result"], "FAIL")
+        self.assertIn(
+            "--dashboard-verification and --verification-json must refer to the "
+            "same canonical verification artifact",
+            conflict["errors"],
+        )
+
+    def test_dashboard_delegate_ignores_implicit_tfvars_but_checks_explicit_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            tfvars = args.terraform_dir / "terraform.tfvars"
+            tfvars.write_text(
+                'api_token = "must-not-be-read"\nservice_name = "wrong"\n',
+                encoding="utf-8",
+            )
+            implicit = MODULE.validate(args)
+            self.assertEqual(implicit["result"], "PASS", implicit["errors"])
+
+            args.dashboard_tfvars = tfvars
+            explicit = MODULE.validate(args)
+
+        self.assertEqual(explicit["result"], "FAIL")
+        self.assertTrue(
+            any("--tfvars must not contain api_token" in error for error in explicit["errors"]),
+            explicit["errors"],
+        )
+
+    def test_dashboard_delegate_rejects_layout_outside_observer_int_range(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            row = 1 << 63
+            dashboards_tf = args.terraform_dir / "dashboards.tf"
+            dashboards_tf.write_text(
+                dashboards_tf.read_text(encoding="utf-8").replace(
+                    "row      = 0", f"row      = {row}"
+                ),
+                encoding="utf-8",
+            )
+            preview = args.terraform_dir.parent / "dashboards.preview.json"
+            data = json.loads(preview.read_text(encoding="utf-8"))
+            data["groups"][0]["dashboards"][0]["charts"][0]["layout"]["row"] = row
+            preview.write_text(json.dumps(data), encoding="utf-8")
+            report = args.terraform_dir.parent / "dashboards.md"
+            report.write_text(
+                report.read_text(encoding="utf-8").replace(
+                    "time_series | 0,0,6,3 |", f"time_series | 0,{row},6,3 |"
+                ),
+                encoding="utf-8",
+            )
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "dashboard validator:" in error
+                and "row must fit the signed 64-bit Observer int range" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_dashboard_delegate_accepts_explicit_legacy_working_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            for filename in (
+                "otel-audit.json",
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (args.terraform_dir.parent / filename).unlink()
+            source_id = "SOURCE-METRIC.http.server.request.duration"
+            legacy_report = args.verify_report.read_text(encoding="utf-8")
+            for old, new in (
+                ("OTEL-001.http-duration", source_id),
+                (
+                    "OTEL-002.http-errors",
+                    "SOURCE-METRIC.http.server.errors.total",
+                ),
+            ):
+                legacy_report = legacy_report.replace(old, new)
+            args.verify_report.write_text(legacy_report, encoding="utf-8")
+            for path in (
+                args.terraform_dir / "dashboards.tf",
+                args.terraform_dir.parent / "dashboards.preview.json",
+                args.terraform_dir.parent / "dashboards.md",
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        "OTEL-001.http-duration", source_id
+                    ),
+                    encoding="utf-8",
+                )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_accepts_inherited_partial_when_dashboard_checks_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args, result="Partial")
+            args.detectors_report.write_text(
+                args.detectors_report.read_text(encoding="utf-8").replace(
+                    "**Result:** Pass", "**Result:** Partial"
+                ),
+                encoding="utf-8",
+            )
+            args.configure_verify_report.write_text(
+                args.configure_verify_report.read_text(encoding="utf-8").replace(
+                    "**Result:** Pass", "**Result:** Partial"
+                ),
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["reported_status"], "Partial")
+
+    def test_delegates_explicit_source_metric_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
+            source_id = "SOURCE-METRIC.http.server.request.duration"
+            dashboards_tf = args.terraform_dir / "dashboards.tf"
+            dashboards_tf.write_text(
+                dashboards_tf.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            preview = args.terraform_dir.parent / "dashboards.preview.json"
+            preview.write_text(
+                preview.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            report = args.terraform_dir.parent / "dashboards.md"
+            report.write_text(
+                report.read_text(encoding="utf-8").replace(
+                    "OTEL-001.http-duration", source_id
+                ),
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_accepts_audit_only_source_metric_and_rejects_partial_downstream(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            root = args.terraform_dir.parent
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            args.allow_source_only_metric = [METRIC]
+
+            missing_source = MODULE.validate(args)
+
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            result = MODULE.validate(args)
+
+            (root / "otel-selection.json").write_text("{}", encoding="utf-8")
+            partial_downstream = MODULE.validate(args)
+
+        self.assertEqual(missing_source["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "is absent from audit current_instrumentation.metrics" in error
+                for error in missing_source["errors"]
+            ),
+            missing_source["errors"],
+        )
+        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(partial_downstream["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical verification flow is incomplete" in error
+                for error in partial_downstream["errors"]
+            ),
+            partial_downstream["errors"],
+        )
+
+    def test_rejects_occupied_invalid_canonical_artifact_entries(self) -> None:
+        artifact_files = {
+            "audit": "otel-audit.json",
+            "selection": "otel-selection.json",
+            "instrumentation": "otel-instrumentation.json",
+            "verification": "otel-verify.json",
+        }
+        invalid_kinds = ["broken symlink", "symlink", "directory"]
+        if hasattr(os, "mkfifo"):
+            invalid_kinds.append("FIFO")
+
+        for artifact, filename in artifact_files.items():
+            for invalid_kind in invalid_kinds:
+                with self.subTest(artifact=artifact, invalid_kind=invalid_kind):
+                    with tempfile.TemporaryDirectory() as directory:
+                        args = write_validation_fixture(Path(directory))
+                        write_canonical_configure_flow(args)
+                        add_current_metric_to_canonical_flow(args, METRIC)
+                        root = args.terraform_dir.parent
+                        original_payload = (root / filename).read_bytes()
+                        for downstream in (
+                            "otel-selection.json",
+                            "otel-instrumentation.json",
+                            "otel-verify.json",
+                        ):
+                            (root / downstream).unlink()
+                        if artifact == "audit":
+                            (root / "otel-audit.json").unlink()
+                        invalid_path = root / filename
+                        if invalid_kind == "broken symlink":
+                            invalid_path.symlink_to(root / "missing.json")
+                        elif invalid_kind == "symlink":
+                            target = root / f"{filename}.target"
+                            target.write_bytes(original_payload)
+                            invalid_path.symlink_to(target)
+                        elif invalid_kind == "directory":
+                            invalid_path.mkdir()
+                        else:
+                            os.mkfifo(invalid_path)
+                        args.allow_source_only_metric = [METRIC]
+
+                        result = MODULE.validate(args)
+
+                    self.assertEqual(result["result"], "FAIL", result["errors"])
+                    self.assertTrue(
+                        any(
+                            f"canonical {artifact} artifact" in error
+                            for error in result["errors"]
+                        ),
+                        result["errors"],
+                    )
+
+    def test_rejects_unreadable_canonical_artifact_before_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
+            root = args.terraform_dir.parent
+            for downstream in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / downstream).unlink()
+            unreadable = root / "otel-selection.json"
+            unreadable.write_text("{}", encoding="utf-8")
+            args.allow_source_only_metric = [METRIC]
+            real_open = os.open
+
+            def deny_selected(path: object, flags: int, *values: object, **kwargs: object) -> int:
+                if Path(path) == unreadable:
+                    raise PermissionError("permission denied by test")
+                return real_open(path, flags, *values, **kwargs)
+
+            with mock.patch.object(MODULE.os, "open", side_effect=deny_selected):
+                result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "cannot capture canonical selection artifact" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO creation is unavailable")
+    def test_rejects_swap_to_fifo_during_canonical_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            real_open = os.open
+            swapped = False
+
+            def swap_before_open(
+                path: object, flags: int, *values: object, **kwargs: object
+            ) -> int:
+                nonlocal swapped
+                if Path(path) == target and not swapped:
+                    target.unlink()
+                    os.mkfifo(target)
+                    swapped = True
+                return real_open(path, flags, *values, **kwargs)
+
+            with mock.patch.object(
+                MODULE.os,
+                "open",
+                side_effect=swap_before_open,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical selection artifact changed to a non-regular entry"
+                in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_regular_replacement_during_canonical_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            original_payload = target.read_bytes()
+            real_open = os.open
+            real_read = os.read
+            target_descriptor: int | None = None
+            swapped = False
+
+            def remember_target(
+                path: object, flags: int, *values: object, **kwargs: object
+            ) -> int:
+                nonlocal target_descriptor
+                descriptor = real_open(path, flags, *values, **kwargs)
+                if Path(path) == target:
+                    target_descriptor = descriptor
+                return descriptor
+
+            def replace_after_read(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                payload = real_read(descriptor, size)
+                if descriptor == target_descriptor and payload and not swapped:
+                    target.unlink()
+                    target.write_bytes(original_payload)
+                    swapped = True
+                return payload
+
+            with mock.patch.object(
+                MODULE.os,
+                "open",
+                side_effect=remember_target,
+            ), mock.patch.object(
+                MODULE.os,
+                "read",
+                side_effect=replace_after_read,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical selection artifact changed during capture" in error
+                or "canonical selection artifact namespace changed during capture"
+                in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_oversized_canonical_artifact_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "otel-selection.json"
+            path.write_bytes(b"x" * 33)
+            errors: list[str] = []
+            with mock.patch.object(MODULE, "MAX_CANONICAL_ARTIFACT_BYTES", 32):
+                snapshots = MODULE.capture_canonical_artifacts(
+                    {"selection": path},
+                    errors,
+                )
+
+        self.assertEqual(snapshots, {})
+        self.assertTrue(
+            any("32-byte capture limit" in error for error in errors),
+            errors,
+        )
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO creation is unavailable")
+    def test_uses_snapshots_after_canonical_path_swaps_to_fifo(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            write_dashboard_fixture(args)
+            target = args.terraform_dir.parent / "otel-selection.json"
+            original_capture = MODULE.capture_canonical_artifacts
+            swapped = False
+
+            def capture_then_swap(
+                paths: dict[str, Path], errors: list[str]
+            ) -> dict[str, bytes]:
+                nonlocal swapped
+                snapshots = original_capture(paths, errors)
+                target.unlink()
+                os.mkfifo(target)
+                swapped = True
+                return snapshots
+
+            with mock.patch.object(
+                MODULE,
+                "capture_canonical_artifacts",
+                side_effect=capture_then_swap,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(swapped)
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_uses_snapshots_after_canonical_path_regular_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            write_dashboard_fixture(args)
+            target = args.terraform_dir.parent / "otel-audit.json"
+            original_capture = MODULE.capture_canonical_artifacts
+            replaced = False
+
+            def capture_then_replace(
+                paths: dict[str, Path], errors: list[str]
+            ) -> dict[str, bytes]:
+                nonlocal replaced
+                snapshots = original_capture(paths, errors)
+                target.unlink()
+                target.write_text("{}", encoding="utf-8")
+                replaced = True
+                return snapshots
+
+            with mock.patch.object(
+                MODULE,
+                "capture_canonical_artifacts",
+                side_effect=capture_then_replace,
+            ):
+                result = MODULE.validate(args)
+
+        self.assertTrue(replaced)
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_rejects_malformed_audit_only_source_metric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            root = args.terraform_dir.parent
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit["schema_version"] = 999
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            args.allow_source_only_metric = [METRIC]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical audit validation failed" in error
+                and "audit schema_version" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_missing_optional_audit_metric_inventory_fails_cleanly(self) -> None:
+        for omitted in ("current_instrumentation", "metrics"):
+            with self.subTest(omitted=omitted), tempfile.TemporaryDirectory() as directory:
+                args = write_validation_fixture(Path(directory))
+                write_canonical_configure_flow(args)
+                root = args.terraform_dir.parent
+                for name in (
+                    "otel-selection.json",
+                    "otel-instrumentation.json",
+                    "otel-verify.json",
+                ):
+                    (root / name).unlink()
+                audit_path = root / "otel-audit.json"
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                if omitted == "current_instrumentation":
+                    audit.pop("current_instrumentation")
+                else:
+                    audit["current_instrumentation"].pop("metrics")
+                audit_path.write_text(json.dumps(audit), encoding="utf-8")
+                args.allow_source_only_metric = [METRIC]
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL", result["errors"])
+            self.assertIn(
+                "source-only provenance: metric "
+                f"{METRIC!r} is absent from audit current_instrumentation.metrics",
+                result["errors"],
+            )
+
+    def test_audit_only_source_metrics_use_the_validated_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_canonical_configure_flow(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
+            audit_path = args.terraform_dir.parent / "otel-audit.json"
+            replacement = json.loads(audit_path.read_text(encoding="utf-8"))
+            replacement["current_instrumentation"]["metrics"][0]["name"] = (
+                "replacement.metric"
+            )
+            original_validator = MODULE.run_checked_validator
+
+            def validate_then_replace(
+                command: list[str], label: str, errors: list[str]
+            ) -> bool:
+                validated = original_validator(command, label, errors)
+                audit_path.write_text(json.dumps(replacement), encoding="utf-8")
+                return validated
+
+            errors: list[str] = []
+            with mock.patch.object(
+                MODULE,
+                "run_checked_validator",
+                side_effect=validate_then_replace,
+            ):
+                metrics = MODULE.canonical_source_metrics(
+                    args.terraform_dir,
+                    args,
+                    errors,
+                )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(metrics, {METRIC})
+
+    def test_dashboard_delegate_accepts_audit_only_source_metric(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            source_id = f"SOURCE-METRIC.{METRIC}"
+            for path in (
+                args.terraform_dir / "dashboards.tf",
+                root / "dashboards.preview.json",
+                root / "dashboards.md",
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        "OTEL-001.http-duration", source_id
+                    ),
+                    encoding="utf-8",
+                )
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            (args.terraform_dir / "detectors.tf").write_text(
+                '''provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+''',
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "PASS", result["errors"])
+
+    def test_dashboard_only_source_item_rejects_malformed_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            audit_path = root / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": METRIC,
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit["schema_version"] = 999
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            source_id = f"SOURCE-METRIC.{METRIC}"
+            for path in (
+                args.terraform_dir / "dashboards.tf",
+                root / "dashboards.preview.json",
+                root / "dashboards.md",
+            ):
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        "OTEL-001.http-duration", source_id
+                    ),
+                    encoding="utf-8",
+                )
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
+            (args.terraform_dir / "detectors.tf").write_text(
+                '''provider "signalfx" {
+  auth_token = var.api_token
+  api_url    = "https://api.${var.realm}.signalfx.com"
+}
+''',
+                encoding="utf-8",
+            )
+            args.allow_source_only_item = [source_id]
+
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL", result["errors"])
+        self.assertTrue(
+            any(
+                "canonical audit validation failed" in error
+                and "audit schema_version" in error
+                for error in result["errors"]
+            ),
+            result["errors"],
+        )
+
+    def test_rejects_dashboard_terraform_without_report_and_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            (args.terraform_dir / "dashboards.tf").write_text(
+                'resource "signalfx_time_chart" "latency" {}\n',
+                encoding="utf-8",
+            )
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertTrue(
+            any(error.startswith("missing dashboards report:") for error in result["errors"]),
+            result["errors"],
+        )
+        self.assertTrue(
+            any(error.startswith("missing dashboard preview:") for error in result["errors"]),
+            result["errors"],
+        )
+
+    def test_rejects_dashboard_pass_without_render_and_live_value_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args, observer_result="Not run", live_value_result="Blocked")
+            result = MODULE.validate(args)
+
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "dashboard validator: report: Result Pass requires Observer render and "
+            "Live value sanity to be Pass",
+            result["errors"],
+        )
 
     def test_rejects_detector_without_working_metric_evidence(self) -> None:
         detector_metric = "custom.unverified.metric"

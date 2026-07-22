@@ -1,0 +1,22 @@
+{
+  "skill": "splunk-configure",
+  "language": "dashboards",
+  "service": "checkout-configure",
+  "prompts": [
+    {
+      "id": "accepted-source-metric",
+      "task": "Treat ./service as the project root. Create ./service/.observe and copy ./service/otel-audit-source-only.json to ./service/.observe/otel-audit.json. The user explicitly accepts source-only detector generation for the exact source-backed metric http.server.request.duration. No selection, instrumentation, or verification overlays exist; do not fabricate them and do not use the legacy otel-report.md as classification authority. Use $splunk-configure to generate detector Terraform, variables, example tfvars, the detectors report, and the configure verification report for the accepted metric. Keep the unimplemented checkout.queue.depth finding out of detector Terraform and record it as a prerequisite or skipped metric. Run the bundled configure validator with --allow-source-only-metric http.server.request.duration. Do not call a network, run terraform, publish, or apply resources."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe/otel-audit.json and every generated file under ./service/.observe and ./service/.observe/terraform.",
+    "Read ./trace.jsonl and ./last_message.md for the validator command and final handoff."
+  ],
+  "rubric": [
+    "Uses the canonical audit JSON as authority without creating selection, instrumentation, or verification overlays and without supplementing it from legacy Markdown.",
+    "Generates detector Terraform only for http.server.request.duration, includes a service.name filter and valid detection logic, and does not generate a detector for the unimplemented checkout.queue.depth metric.",
+    "Labels http.server.request.duration as an explicitly accepted source-only input rather than verified runtime telemetry, and records checkout.queue.depth as skipped or as an instrumentation prerequisite.",
+    "Runs the bundled configure validator with --allow-source-only-metric http.server.request.duration and obtains a local pass, while leaving authenticated SignalFlow compilation unproven because network access is forbidden.",
+    "Does not call a network, run terraform, publish, or apply resources."
+  ]
+}

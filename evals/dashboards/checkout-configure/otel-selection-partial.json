@@ -1,0 +1,14 @@
+{
+  "approved_at": null,
+  "approved_by": null,
+  "approved_ids": [
+    "OTEL-001"
+  ],
+  "audit_id": "checkout-source-only-fixture",
+  "audit_sha256": "sha256:4d9b65d08b571eb21a80ca5585669f45fbc955a7ba224813833cd74ddf2158e5",
+  "kind": "otel-selection",
+  "requested_ids": [
+    "OTEL-001"
+  ],
+  "schema_version": 1
+}
