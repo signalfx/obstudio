@@ -251,6 +251,140 @@ class InspectOtelProjectTest(unittest.TestCase):
             )
             self.assertGreaterEqual(result.skipped["walk_errors"], 1)
 
+    def test_entry_and_depth_budgets_bound_both_walkers(self) -> None:
+        walkers = [
+            (
+                "portable",
+                SCANNER_MODULE.collect_scan_input_portable,
+            )
+        ]
+        if SCANNER_MODULE.descriptor_operations_supported():
+            walkers.append(
+                (
+                    "descriptor",
+                    SCANNER_MODULE.collect_scan_input_descriptor,
+                )
+            )
+
+        for walker_name, walker in walkers:
+            with self.subTest(walker=walker_name):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    first = root / "a"
+                    first.mkdir()
+                    (root / "b").mkdir()
+                    for index in range(4):
+                        (first / f"unsupported-{index}.bin").write_bytes(b"")
+
+                    entry_limited = walker(
+                        root,
+                        max_files=10,
+                        max_total_bytes=10_000,
+                        max_entries=3,
+                        max_depth=10,
+                    )
+
+                self.assertFalse(entry_limited.complete)
+                self.assertEqual(entry_limited.skipped["entry_limit"], 1)
+                self.assertEqual(entry_limited.files, [])
+                self.assertTrue(
+                    any(
+                        "directory entries" in warning
+                        for warning in entry_limited.warnings
+                    )
+                )
+
+            with self.subTest(walker=walker_name, limit="depth"):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    nested = root / "level-1" / "level-2"
+                    nested.mkdir(parents=True)
+                    (nested / "app.py").write_text(
+                        "print('too deep')\n", encoding="utf-8"
+                    )
+
+                    depth_limited = walker(
+                        root,
+                        max_files=10,
+                        max_total_bytes=10_000,
+                        max_entries=100,
+                        max_depth=1,
+                    )
+
+                self.assertFalse(depth_limited.complete)
+                self.assertEqual(depth_limited.skipped["depth_limit"], 1)
+                self.assertEqual(depth_limited.files, [])
+                self.assertTrue(
+                    any(
+                        "beyond depth 1" in warning
+                        for warning in depth_limited.warnings
+                    )
+                )
+
+    def test_entry_budget_stops_enumeration_at_one_over_limit(self) -> None:
+        class FakeEntry:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        class EndlessScandir:
+            def __init__(self, maximum_yields: int) -> None:
+                self.maximum_yields = maximum_yields
+                self.yielded = 0
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args) -> None:
+                return None
+
+            def __iter__(self):
+                return self
+
+            def __next__(self) -> FakeEntry:
+                if self.yielded >= self.maximum_yields:
+                    raise AssertionError("directory enumeration exceeded budget + 1")
+                self.yielded += 1
+                return FakeEntry(f"entry-{self.yielded}")
+
+        walkers = [
+            ("portable", SCANNER_MODULE.collect_scan_input_portable)
+        ]
+        if SCANNER_MODULE.descriptor_operations_supported():
+            walkers.append(
+                ("descriptor", SCANNER_MODULE.collect_scan_input_descriptor)
+            )
+
+        max_entries = 3
+        for walker_name, walker in walkers:
+            with self.subTest(walker=walker_name):
+                enumerations: list[EndlessScandir] = []
+
+                def scandir(_directory):
+                    enumeration = EndlessScandir(max_entries + 1)
+                    enumerations.append(enumeration)
+                    return enumeration
+
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    with mock.patch.object(
+                        SCANNER_MODULE.os,
+                        "scandir",
+                        side_effect=scandir,
+                    ):
+                        result = walker(
+                            root,
+                            max_files=10,
+                            max_total_bytes=10_000,
+                            max_entries=max_entries,
+                            max_depth=10,
+                        )
+
+                self.assertEqual(len(enumerations), 1)
+                self.assertEqual(enumerations[0].yielded, max_entries + 1)
+                self.assertFalse(result.complete)
+                self.assertEqual(result.skipped["entry_limit"], 1)
+                self.assertEqual(result.files, [])
+
     def test_truncation_counts_preserve_total_findings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -372,6 +506,37 @@ class InspectOtelProjectTest(unittest.TestCase):
         self.assertEqual(result["project_commands"], [])
         self.assertEqual(result["routes"][0]["route"], "/health")
 
+    def test_non_object_package_json_does_not_abort_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text("[]", encoding="utf-8")
+            (root / "app.js").write_text(
+                'app.get("/health", handler);\n', encoding="utf-8"
+            )
+
+            result = self.inspect(root)
+
+        self.assertEqual(result["project_commands"], [])
+        self.assertEqual(result["routes"][0]["route"], "/health")
+
+    def test_requirements_suffix_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "requirements.TXT").write_text(
+                "opentelemetry-api\n", encoding="utf-8"
+            )
+
+            result = self.inspect(root)
+
+        self.assertIn(
+            {
+                "path": "requirements.TXT",
+                "language": "python",
+                "kind": "python-requirements",
+            },
+            result["manifests"],
+        )
+
     def test_excludes_eval_docs_and_lockfiles_from_otel_evidence(self) -> None:
         root = REPO_ROOT / "evals" / "go" / "chi-partial"
         source_lines = (root / "main.go").read_text(encoding="utf-8").splitlines()
@@ -482,6 +647,26 @@ class InspectOtelProjectTest(unittest.TestCase):
         )
         self.assertEqual(result["lockfiles"], ["services/api/uv.lock"])
         self.assertEqual(result["version_files"], ["services/api/.python-version"])
+
+    def test_windows_virtualenv_uses_one_exact_runner_and_probe_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pyproject.toml").write_text(
+                "[project]\nname = 'windows-venv'\n",
+                encoding="utf-8",
+            )
+            interpreter = root / ".venv" / "Scripts" / "python.exe"
+            interpreter.parent.mkdir(parents=True)
+            interpreter.write_bytes(b"")
+
+            result = self.inspect(root)
+
+        candidate = result["runtime_candidates"][0]
+        self.assertEqual(candidate["runner"], ".venv/Scripts/python.exe")
+        self.assertEqual(
+            candidate["probe"],
+            f"{candidate['runner']} --version",
+        )
 
     def test_output_writes_full_inventory_and_prints_summary(self) -> None:
         root = REPO_ROOT / "evals" / "node" / "express-basic"
@@ -655,6 +840,36 @@ class InspectOtelProjectTest(unittest.TestCase):
         )
         self.assertNotEqual(invalid_bytes.returncode, 0)
         self.assertIn("--max-total-bytes must be at least 1", invalid_bytes.stderr)
+
+        invalid_entries = subprocess.run(
+            [
+                sys.executable,
+                str(SCANNER),
+                str(REPO_ROOT),
+                "--max-entries",
+                "0",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid_entries.returncode, 0)
+        self.assertIn("--max-entries must be at least 1", invalid_entries.stderr)
+
+        invalid_depth = subprocess.run(
+            [
+                sys.executable,
+                str(SCANNER),
+                str(REPO_ROOT),
+                "--max-depth",
+                "-1",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid_depth.returncode, 0)
+        self.assertIn("--max-depth must be at least 0", invalid_depth.stderr)
 
 
 if __name__ == "__main__":
