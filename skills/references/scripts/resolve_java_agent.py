@@ -2157,13 +2157,20 @@ def select_candidate(
 
 def family_from_path(path: Path) -> str | None:
     lowered = path.as_posix().lower()
-    if "splunk" in lowered:
+    name = path.name.lower()
+    if (
+        "com/splunk/splunk-otel-javaagent" in lowered
+        or "com.splunk/splunk-otel-javaagent" in lowered
+    ):
         return "splunk"
     if (
         "io/opentelemetry/javaagent" in lowered
-        or re.search(r"opentelemetry-javaagent-\d", path.name.lower())
+        or "io.opentelemetry.javaagent/opentelemetry-javaagent" in lowered
+        or re.search(r"opentelemetry-javaagent-\d", name)
     ):
         return "opentelemetry"
+    if "splunk-otel-javaagent" in name:
+        return "splunk"
     return None
 
 
@@ -2469,13 +2476,6 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             )
             result["claims"]["repository_configuration_match"] = "mismatch"
             return result
-    elif len({candidate["family"] for candidate in eligible}) > 1:
-        result["status"] = "ambiguous"
-        result["message"] = (
-            "Valid Splunk and upstream OpenTelemetry Java agents were both found, "
-            "but source did not select a provider family."
-        )
-        return result
 
     if expected_version is not None:
         exact_version_candidates = [
@@ -2501,6 +2501,36 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
             result["claims"]["verification_pin_match"] = "mismatch"
             return result
         eligible = exact_digest_candidates
+
+    if (
+        expected_family is None
+        and len({candidate["family"] for candidate in eligible}) > 1
+    ):
+        highest_source_rank = max(
+            SOURCE_RANK.get(candidate["source"], 0)
+            for candidate in eligible
+        )
+        highest_authority = [
+            candidate
+            for candidate in eligible
+            if SOURCE_RANK.get(candidate["source"], 0) == highest_source_rank
+        ]
+        authoritative_families = {
+            candidate["family"] for candidate in highest_authority
+        }
+        if len(authoritative_families) > 1:
+            result["status"] = "ambiguous"
+            result["message"] = (
+                "Equally authoritative Java-agent candidates name both Splunk and "
+                "upstream OpenTelemetry families; select one exact source path."
+            )
+            return result
+        authoritative_family = next(iter(authoritative_families))
+        eligible = [
+            candidate
+            for candidate in eligible
+            if candidate["family"] == authoritative_family
+        ]
 
     selected = select_candidate(eligible, expected_version)
     same_pin = [

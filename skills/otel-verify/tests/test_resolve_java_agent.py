@@ -129,6 +129,87 @@ RESOLVER_MODULE = load_shared_resolver()
 
 
 class ResolveJavaAgentTest(unittest.TestCase):
+    def test_upstream_agent_name_overrides_unrelated_splunk_ancestor(self) -> None:
+        path = Path(
+            "/workspace/splunk/service/opentelemetry-javaagent-2.1.0.jar"
+        )
+
+        self.assertEqual(
+            RESOLVER_MODULE.family_from_path(path),
+            "opentelemetry",
+        )
+
+    def test_splunk_coordinate_overrides_renamed_upstream_filename(self) -> None:
+        path = Path(
+            "/m2/com/splunk/splunk-otel-javaagent/2.1.0/"
+            "opentelemetry-javaagent-2.1.0.jar"
+        )
+
+        self.assertEqual(
+            RESOLVER_MODULE.family_from_path(path),
+            "splunk",
+        )
+
+    def test_generic_agent_name_does_not_inherit_workspace_family(self) -> None:
+        path = Path(
+            "/workspace/splunk/service/opentelemetry-javaagent.jar"
+        )
+
+        self.assertIsNone(RESOLVER_MODULE.family_from_path(path))
+
+    def test_generic_upstream_agent_resolves_inside_splunk_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "splunk" / "service"
+            project.mkdir(parents=True)
+            candidate = project / "opentelemetry-javaagent.jar"
+            write_agent(candidate, version="2.1.0")
+
+            result = self.run_resolver(
+                project,
+                maven_repo=root / "missing-m2",
+                extra=("--candidate", str(candidate)),
+                unset_env=tuple(
+                    RESOLVER_MODULE.ENV_AGENT_PATHS
+                    + RESOLVER_MODULE.ENV_AGENT_OPTIONS
+                ),
+            )
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(result["selected"]["family"], "opentelemetry")
+
+    def test_explicit_generic_upstream_agent_outranks_splunk_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "splunk" / "service"
+            project.mkdir(parents=True)
+            candidate = project / "opentelemetry-javaagent.jar"
+            write_agent(candidate, version="2.1.0")
+            cached = (
+                root
+                / "m2/com/splunk/splunk-otel-javaagent/2.2.0"
+                / "splunk-otel-javaagent-2.2.0.jar"
+            )
+            write_agent(
+                cached,
+                version="splunk-2.2.0-otel-2.2.0",
+                premain=SPLUNK_PREMAIN,
+            )
+
+            result = self.run_resolver(
+                project,
+                maven_repo=root / "m2",
+                extra=("--candidate", str(candidate)),
+                unset_env=tuple(
+                    RESOLVER_MODULE.ENV_AGENT_PATHS
+                    + RESOLVER_MODULE.ENV_AGENT_OPTIONS
+                ),
+            )
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(result["selected"]["path"], str(candidate.resolve()))
+        self.assertEqual(result["selected"]["family"], "opentelemetry")
+
     def run_resolver(
         self,
         project: Path,
@@ -1394,6 +1475,90 @@ class ResolveJavaAgentTest(unittest.TestCase):
                 result["claims"]["repository_configuration_match"], "exact"
             )
             self.assertEqual(result["claims"]["production_parity"], "not_proven")
+
+    def test_expected_version_precedes_cross_family_source_rank(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            upstream = project / "opentelemetry-javaagent-1.0.0.jar"
+            write_agent(upstream, version="1.0.0")
+            expected = (
+                root
+                / "m2/com/splunk/splunk-otel-javaagent/2.0.0"
+                / "splunk-otel-javaagent-2.0.0.jar"
+            )
+            write_agent(
+                expected,
+                version="splunk-2.0.0-otel-2.0.0",
+                premain=SPLUNK_PREMAIN,
+            )
+
+            result = self.run_resolver(
+                project,
+                maven_repo=root / "m2",
+                extra=(
+                    "--candidate",
+                    str(upstream),
+                    "--expected-version",
+                    "2.0.0",
+                ),
+                unset_env=tuple(
+                    RESOLVER_MODULE.ENV_AGENT_PATHS
+                    + RESOLVER_MODULE.ENV_AGENT_OPTIONS
+                ),
+            )
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(result["selected"]["path"], str(expected.resolve()))
+        self.assertEqual(result["selected"]["family"], "splunk")
+        self.assertEqual(result["selected"]["artifact_version"], "2.0.0")
+        self.assertEqual(result["searched"]["valid_candidates"], 2)
+        self.assertEqual(
+            result["claims"]["repository_configuration_match"], "exact"
+        )
+
+    def test_expected_digest_precedes_cross_family_source_rank(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            upstream = project / "opentelemetry-javaagent-1.0.0.jar"
+            write_agent(upstream, version="1.0.0")
+            expected = (
+                root
+                / "m2/com/splunk/splunk-otel-javaagent/2.0.0"
+                / "splunk-otel-javaagent-2.0.0.jar"
+            )
+            write_agent(
+                expected,
+                version="splunk-2.0.0-otel-2.0.0",
+                premain=SPLUNK_PREMAIN,
+            )
+            expected_sha256 = hashlib.sha256(expected.read_bytes()).hexdigest()
+
+            result = self.run_resolver(
+                project,
+                maven_repo=root / "m2",
+                extra=(
+                    "--candidate",
+                    str(upstream),
+                    "--expected-sha256",
+                    expected_sha256,
+                ),
+                unset_env=tuple(
+                    RESOLVER_MODULE.ENV_AGENT_PATHS
+                    + RESOLVER_MODULE.ENV_AGENT_OPTIONS
+                ),
+            )
+
+        self.assertEqual(result["status"], "resolved")
+        self.assertEqual(result["selected"]["path"], str(expected.resolve()))
+        self.assertEqual(result["selected"]["family"], "splunk")
+        self.assertEqual(result["searched"]["valid_candidates"], 2)
+        self.assertEqual(
+            result["claims"]["verification_pin_match"], "exact"
+        )
 
     def test_signalfx_base_image_selects_splunk_family_for_generic_container_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
