@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 VALIDATOR = Path(__file__).parents[1] / "scripts" / "validate_reader_report.py"
+SKILL = Path(__file__).parents[1] / "SKILL.md"
 
 
 def digest(value: dict) -> str:
@@ -97,6 +98,45 @@ class ValidateReaderReportTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("2 individual OTel items", result.stdout)
+
+    def test_skill_and_validator_reject_stale_six_column_item_contract(self) -> None:
+        expected_header = (
+            "| Item ID | OTel item | Type | Added or modified | Working status | "
+            "How it was tested | Product result / visibility | Evidence |"
+        )
+        stale_header = (
+            "| OTel item | Type | Added or modified | Working status | "
+            "How it was tested | Evidence |"
+        )
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertGreaterEqual(skill.count(expected_header), 2)
+        self.assertNotIn(stale_header, skill)
+
+        stale_report = """# OTel Verification Report: stale
+
+**Result:** Pass
+
+## What Changed
+One metric changed.
+
+## Tested And Working
+
+**Individual result:** 1/1 working.
+
+| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
+|---|---|---|---|---|---|
+| http.server.request.duration | Metric | Exporter | Working | full runtime | collector.txt |
+
+## Not Working Or Not Proven
+None
+
+## Proof
+Collector output.
+"""
+        result = self.validate(stale_report, "http.server.request.duration\n")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing per-OTel table with header", result.stderr)
 
     def test_duplicate_items_are_compared_after_normalization(self) -> None:
         duplicate = REPORT.replace(

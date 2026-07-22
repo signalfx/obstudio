@@ -770,6 +770,50 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 result["errors"],
             )
 
+    def test_resource_discovery_ignores_commented_and_string_decoys(self) -> None:
+        wrappers = {
+            "block comment": lambda source: f"/*\n{source}\n*/\n",
+            "heredoc string": lambda source: (
+                "locals {\n  decoy = <<-HCL\n"
+                f"{source}\n"
+                "HCL\n}\n"
+            ),
+        }
+        for name, wrap in wrappers.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                args = write_fixture(Path(directory))
+                source = args.terraform.read_text(encoding="utf-8")
+                args.terraform.write_text(wrap(source), encoding="utf-8")
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertTrue(
+                any(
+                    "no supported signalfx_*_chart resources found" in error
+                    for error in result["errors"]
+                ),
+                result["errors"],
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_fixture(Path(directory))
+            source = args.terraform.read_text(encoding="utf-8")
+            original_mask = MODULE.hcl_structure_mask
+            with mock.patch.object(
+                MODULE,
+                "hcl_structure_mask",
+                wraps=original_mask,
+            ) as mask:
+                blocks = MODULE.resource_blocks(source, MODULE.CHART_RESOURCE)
+
+        self.assertEqual(len(blocks), 2)
+        self.assertEqual(
+            mask.call_count,
+            1,
+            "resource brace matching must reuse the precomputed HCL mask",
+        )
+
     def test_rejects_missing_sensitive_api_token_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_fixture(Path(directory))
@@ -1255,7 +1299,7 @@ resource "signalfx_dashboard" "empty_dashboard" {
             )
         )
 
-    def test_accepts_explicit_source_metric_provenance_without_verification(self) -> None:
+    def test_accepts_audit_only_source_metric_and_rejects_partial_downstream(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_fixture(Path(directory))
             item_id = "SOURCE-METRIC.http.server.request.duration"
@@ -1290,11 +1334,44 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 line for line in report.splitlines() if "OTEL-002.http-errors" not in line
             ) + "\n"
             args.report.write_text(report, encoding="utf-8")
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (args.preview.parent / name).unlink()
             args.verification = None
             args.allow_source_only_item = [item_id]
             result = MODULE.validate(args)
 
+            legacy = args.preview.parent / "legacy-otel-verify.md"
+            legacy.write_text("legacy proof must not be read\n", encoding="utf-8")
+            args.legacy_verification = legacy
+            audit_with_legacy = MODULE.validate(args)
+            args.legacy_verification = None
+
+            (args.preview.parent / "otel-selection.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            partial_downstream = MODULE.validate(args)
+
         self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(audit_with_legacy["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "legacy Markdown must not supplement" in error
+                for error in audit_with_legacy["errors"]
+            ),
+            audit_with_legacy["errors"],
+        )
+        self.assertEqual(partial_downstream["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "canonical otel-verify.json is required" in error
+                for error in partial_downstream["errors"]
+            ),
+            partial_downstream["errors"],
+        )
 
     def test_rejects_source_metric_id_that_does_not_match_data_metric(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1341,6 +1418,49 @@ resource "signalfx_dashboard" "empty_dashboard" {
             "report: Result Pass requires Observer render and Live value sanity to be Pass",
             result["errors"],
         )
+
+    def test_all_direct_evidence_rows_reject_negative_pass_claims(self) -> None:
+        contradictions = {
+            "Verified metric item mapping": (
+                "verification item IDs",
+                "without verification item IDs",
+            ),
+            "Terraform ↔ preview parity": (
+                "validator output",
+                "validator not-run for dashboards.tf",
+            ),
+            "Observer render": (
+                "saved Observer screenshot render witness",
+                "missing Observer screenshot render witness",
+            ),
+            "Live value sanity": (
+                "saved recent-window query series evidence",
+                "absent query series evidence for recent-window",
+            ),
+        }
+        for row_name, (valid, contradictory) in contradictions.items():
+            with self.subTest(row=row_name), tempfile.TemporaryDirectory() as directory:
+                args = write_fixture(Path(directory))
+                report = args.report.read_text(encoding="utf-8")
+                report = report.replace("**Result:** Partial", "**Result:** Pass")
+                report = report.replace(
+                    "| Observer render | Not run | Local UI render | Open the Dashboards tab |",
+                    "| Observer render | Pass | Local UI render | saved Observer screenshot render witness |",
+                )
+                report = report.replace(
+                    "| Live value sanity | Not run | Query values | Start the Observer and emit traffic |",
+                    "| Live value sanity | Pass | Query values | saved recent-window query series evidence |",
+                )
+                report = report.replace(valid, contradictory, 1)
+                args.report.write_text(report, encoding="utf-8")
+
+                result = MODULE.validate(args)
+
+            self.assertEqual(result["result"], "FAIL")
+            self.assertIn(
+                f"report: {row_name} Pass row contradicts its negative or uncertain evidence",
+                result["errors"],
+            )
 
     def test_accepts_pass_report_with_direct_render_and_value_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

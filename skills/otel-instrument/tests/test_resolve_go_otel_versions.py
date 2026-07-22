@@ -600,6 +600,73 @@ class ResolveGoOtelVersionsTest(unittest.TestCase):
         self.assertEqual(result["status"], "incomplete")
         self.assertIn("requires-newer-go", transitive["issues"])
 
+    def test_module_path_major_rules_gate_file_proxy_readiness(self) -> None:
+        cases = (
+            ("example.test/unstable", "v0.9.0", True),
+            ("example.test/stable", "v1.2.3", True),
+            ("example.test/legacy", "v2.0.0", False),
+            ("example.test/legacy", "v2.0.0+incompatible", True),
+            ("example.test/lib/v1", "v1.0.0", False),
+            ("example.test/lib/v2", "v1.0.0", False),
+            ("example.test/lib/v2", "v2.0.0", True),
+            ("gopkg.in/check.v1", "v1.0.0", True),
+            ("gopkg.in/check.v2", "v1.0.0", False),
+        )
+        for module, version, expected_ready in cases:
+            with self.subTest(module=module, version=version):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    project = root / "project"
+                    cache = root / "cache"
+                    write_project(project, "1.23.0")
+                    write_complete_bundle(
+                        cache,
+                        otelhttp_version="v0.63.0",
+                        otelhttp_go="1.23.0",
+                        core_version="v1.38.0",
+                        companion_go="1.23.0",
+                    )
+                    write_module(
+                        cache,
+                        "go.opentelemetry.io/otel/sdk",
+                        "v1.38.0",
+                        "1.23.0",
+                        requirements=((module, version),),
+                        proxy_artifacts=PROXY_ARTIFACTS,
+                    )
+                    write_module(
+                        cache,
+                        module,
+                        version,
+                        "1.23.0",
+                        proxy_artifacts=PROXY_ARTIFACTS,
+                    )
+
+                    result = self.run_resolver(project, cache)
+
+                if expected_ready:
+                    dependency = next(
+                        item
+                        for item in result["verification"]
+                        if item["module"] == module
+                    )
+                    self.assertEqual(result["status"], "complete")
+                    self.assertEqual(dependency["status"], "ready")
+                    self.assertTrue(result["go_get"]["ready"])
+                else:
+                    rejection = result["candidate_rejections"][0]
+                    dependency = next(
+                        item
+                        for item in rejection["not_ready_modules"]
+                        if item["module"] == module
+                    )
+                    self.assertEqual(result["status"], "incomplete")
+                    self.assertIn(
+                        "module-path-major-version-mismatch",
+                        dependency["issues"],
+                    )
+                    self.assertFalse(result["go_get"]["ready"])
+
     def test_transitive_module_without_go_directive_is_compatible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

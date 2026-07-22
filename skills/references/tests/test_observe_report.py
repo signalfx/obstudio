@@ -1126,6 +1126,48 @@ class ObserveReportTest(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ReportError, "requires at least one not_working"):
             MODULE.normalize_verify(verify, report, selection, instrumentation)
 
+    def test_unknown_verify_finding_fails_cleanly_before_proof_lookup(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        instrumentation = MODULE.normalize_instrumentation(
+            sample_instrumentation(report, digest), report, selection
+        )
+
+        for scenario_status in ("working", "not_working"):
+            with self.subTest(scenario_status=scenario_status):
+                verify = sample_verify(
+                    report,
+                    digest,
+                    MODULE.instrumentation_digest(instrumentation),
+                )
+                finding = verify["findings"][0]  # type: ignore[index]
+                finding["id"] = "OTEL-999"
+                scenario = finding["scenarios"][0]
+                scenario["status"] = scenario_status
+                scenario["observed_telemetry"] = [
+                    "The expected GET /checkout server span with http.route "
+                    + ("was emitted." if scenario_status == "working" else "was absent.")
+                ]
+
+                with self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    r"verify\.findings\[0\]\.id OTEL-999 is not present in the bound audit",
+                ):
+                    MODULE.normalize_verify(
+                        verify, report, selection, instrumentation
+                    )
+
     def test_blocked_scenario_requires_structured_reader_context(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         digest = MODULE.audit_digest(report)
@@ -3411,6 +3453,14 @@ class ObserveReportTest(unittest.TestCase):
         html = MODULE.render_html(report, selection)
 
         self.assertIn("const decisionAnswers = new Map", html)
+        self.assertIn('"OTEL-001":"Decide now"', html)
+        action_label_start = html.index("function findingActionLabelFor(finding)")
+        action_label_end = html.index(
+            "\nfunction decisionSelectionControl(finding)", action_label_start
+        )
+        self.assertNotIn(
+            "Decision recorded", html[action_label_start:action_label_end]
+        )
         self.assertIn("decisionAnswers.set(decisionId, optionId)", html)
         self.assertIn("document.decision_answers = answers", html)
         self.assertIn(

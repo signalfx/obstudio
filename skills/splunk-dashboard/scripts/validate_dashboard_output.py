@@ -36,6 +36,9 @@ VARIABLE_INTERPOLATION = re.compile(r"\$\{\s*var\.([A-Za-z_][A-Za-z0-9_]*)\s*\}"
 UNRESOLVED_VARIABLE = re.compile(
     r"\$\{\s*var\.[A-Za-z_][A-Za-z0-9_]*\s*\}|(?<![A-Za-z0-9_.])var\.[A-Za-z_][A-Za-z0-9_]*"
 )
+HCL_HEREDOC_START = re.compile(
+    r'<<(-?)\s*"?([A-Za-z_][A-Za-z0-9_-]*)"?[ \t]*\r?\n'
+)
 SERVICE_FILTER = re.compile(
     r"filter\s*\(\s*['\"](?:service\.name|sf_service)['\"]\s*,",
     re.I,
@@ -149,6 +152,13 @@ NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE = re.compile(
     r"witness|query|series|data|values?|evidence|result))\b",
     re.I,
 )
+NEGATED_DIRECT_PROOF = re.compile(
+    r"\b(?:without|missing|absent|no)\s+"
+    r"(?:(?:direct|observer|recent[- ]window)\s+)*(?:verification|"
+    r"validator|mapping|parity|screenshot|render(?:\s+witness)?|witness|"
+    r"query|series|data|values?|evidence|result|proof)\b",
+    re.I,
+)
 METRIC_NEGATION_BEFORE = re.compile(
     r"(?:\b(?:no|without|missing|absent|unobserved)\s+|"
     r"\bno\s+(?:evidence|data|sign|record)\s+(?:of|for)\s+|"
@@ -214,63 +224,100 @@ class DashboardTopology:
     dashboards: tuple[tuple[str, str], ...]
 
 
-def matching_brace(source: str, opening: int) -> int:
-    """Return the matching brace while ignoring quoted strings and comments."""
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    line_comment = False
-    block_comment = False
-    index = opening
+def hcl_structure_mask(source: str) -> list[bool]:
+    """Mark HCL structure while excluding comments and every string body."""
+
+    structural = [True] * len(source)
+    index = 0
     while index < len(source):
         char = source[index]
         next_char = source[index + 1] if index + 1 < len(source) else ""
-        if line_comment:
-            if char == "\n":
-                line_comment = False
-            index += 1
+        if char == "#" or (char == "/" and next_char == "/"):
+            end = index
+            while end < len(source) and source[end] not in "\r\n":
+                structural[end] = False
+                end += 1
+            index = end
             continue
-        if block_comment:
-            if char == "*" and next_char == "/":
-                block_comment = False
-                index += 2
-            else:
-                index += 1
+        if char == "/" and next_char == "*":
+            end = index
+            while end < len(source):
+                structural[end] = False
+                if end > index and source[end - 1 : end + 1] == "*/":
+                    end += 1
+                    break
+                end += 1
+            index = end
             continue
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            index += 1
+        heredoc = HCL_HEREDOC_START.match(source, index)
+        if heredoc is not None:
+            indented, marker = heredoc.groups()
+            indent = r"[ \t]*" if indented else ""
+            closing = re.search(
+                rf"^{indent}{re.escape(marker)}[ \t]*\r?$",
+                source[heredoc.end() :],
+                re.M,
+            )
+            body_end = (
+                heredoc.end() + closing.end()
+                if closing is not None
+                else len(source)
+            )
+            for offset in range(heredoc.end(), body_end):
+                structural[offset] = False
+            index = body_end
             continue
         if char in {'"', "'"}:
             quote = char
-        elif char == "#":
-            line_comment = True
-        elif char == "/" and next_char == "/":
-            line_comment = True
+            escaped = False
+            structural[index] = False
             index += 1
-        elif char == "/" and next_char == "*":
-            block_comment = True
-            index += 1
-        elif char == "{":
+            while index < len(source):
+                structural[index] = False
+                if escaped:
+                    escaped = False
+                elif source[index] == "\\":
+                    escaped = True
+                elif source[index] == quote:
+                    index += 1
+                    break
+                index += 1
+            continue
+        index += 1
+    return structural
+
+
+def matching_brace(
+    source: str,
+    opening: int,
+    structural: list[bool] | None = None,
+) -> int:
+    """Return the matching structural brace, ignoring comments and strings."""
+
+    if structural is None:
+        structural = hcl_structure_mask(source)
+    depth = 0
+    for index in range(opening, len(source)):
+        if not structural[index]:
+            continue
+        char = source[index]
+        if char == "{":
             depth += 1
         elif char == "}":
             depth -= 1
             if depth == 0:
                 return index
-        index += 1
     raise ValueError("unbalanced HCL resource block")
 
 
 def resource_blocks(source: str, pattern: re.Pattern[str]) -> list[tuple[tuple[str, ...], str]]:
     blocks: list[tuple[tuple[str, ...], str]] = []
+    structural = hcl_structure_mask(source)
     for match in pattern.finditer(source):
+        if not structural[match.start()]:
+            continue
         opening = source.find("{", match.start(), match.end())
-        closing = matching_brace(source, opening)
+        closing = matching_brace(source, opening, structural)
         blocks.append((match.groups(), source[opening + 1 : closing]))
     return blocks
 
@@ -529,9 +576,16 @@ def parse_placement_model(
                 )
         dashboards.append((group_name, dashboard_name))
         in_dashboard: list[tuple[str, tuple[int, int, int, int]]] = []
+        dashboard_structure = hcl_structure_mask(dashboard_body)
         for chart_match in re.finditer(r"^\s*chart\s*\{", dashboard_body, re.M):
+            if not dashboard_structure[chart_match.start()]:
+                continue
             opening = dashboard_body.find("{", chart_match.start(), chart_match.end())
-            closing = matching_brace(dashboard_body, opening)
+            closing = matching_brace(
+                dashboard_body,
+                opening,
+                dashboard_structure,
+            )
             body = dashboard_body[opening + 1 : closing]
             reference = re.search(
                 r"^\s*chart_id\s*=\s*(signalfx_[A-Za-z0-9_]+_chart)\.([A-Za-z0-9_]+)\.id\s*$",
@@ -1399,10 +1453,10 @@ def validate_report(
         evidence = normalized_result(row.get("Evidence / next step", ""))
         if not any(token in evidence for token in tokens):
             errors.append(f"report: {name} Pass row lacks direct evidence")
-        if name in {"Observer render", "Live value sanity"} and (
-            NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE.search(
-                " ".join(row.values())
-            )
+        row_text = normalized_result(" ".join(row.values()))
+        if (
+            NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE.search(row_text)
+            or NEGATED_DIRECT_PROOF.search(row_text)
         ):
             errors.append(
                 f"report: {name} Pass row contradicts its negative or uncertain evidence"
@@ -1569,8 +1623,9 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if verification_path is None:
         candidate = preview_path.parent / "otel-verify.json"
         verification_path = candidate if candidate.is_file() else None
-    canonical_candidates = []
-    canonical_explicit = False
+    canonical_candidates: dict[str, Path] = {}
+    canonical_explicit = getattr(args, "verification", None) is not None
+    downstream_explicit = getattr(args, "verification", None) is not None
     for name, filename in (
         ("audit", "otel-audit.json"),
         ("selection", "otel-selection.json"),
@@ -1578,15 +1633,28 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     ):
         explicit = getattr(args, name, None)
         canonical_explicit = canonical_explicit or explicit is not None
-        canonical_candidates.append(explicit or preview_path.parent / filename)
-    canonical_explicit = canonical_explicit or getattr(args, "verification", None) is not None
-    canonical_mode = canonical_explicit or verification_path is not None or any(
-        path.is_file() for path in canonical_candidates
+        canonical_candidates[name] = explicit or preview_path.parent / filename
+        if name in {"selection", "instrumentation"} and explicit is not None:
+            downstream_explicit = True
+    downstream_present = downstream_explicit or verification_path is not None or any(
+        canonical_candidates[name].is_file()
+        for name in ("selection", "instrumentation")
+    )
+    uses_otel_items = any(
+        chart.telemetry_item_id
+        and not SOURCE_METRIC_ID.fullmatch(chart.telemetry_item_id)
+        for chart in preview.values()
+    )
+    require_canonical = downstream_present or uses_otel_items
+    canonical_json_mode = (
+        canonical_explicit
+        or verification_path is not None
+        or any(path.is_file() for path in canonical_candidates.values())
     )
     legacy_verification: Path | None = getattr(args, "legacy_verification", None)
     legacy_metrics: set[str] = set()
     if legacy_verification is not None:
-        if canonical_mode:
+        if canonical_json_mode:
             errors.append(
                 "verification: legacy Markdown must not supplement or replace a "
                 "canonical JSON flow"
@@ -1594,11 +1662,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         else:
             legacy_metrics = legacy_working_metrics(legacy_verification, errors)
     source_only_items = set(getattr(args, "allow_source_only_item", []))
-    require_canonical = canonical_mode or any(
-        chart.telemetry_item_id
-        and not SOURCE_METRIC_ID.fullmatch(chart.telemetry_item_id)
-        for chart in preview.values()
-    )
     instrumentation_items, prevalidated_working = validate_bound_verification_flow(
         preview_path,
         verification_path,

@@ -354,7 +354,7 @@ def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
         "incident-readiness or GenAI/LLM",
         "Audit-Driven Readiness path",
         "validated canonical selection already defines the scope",
-        "implement only the safe scoped signals",
+        "Implement only the safe scoped signals",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing

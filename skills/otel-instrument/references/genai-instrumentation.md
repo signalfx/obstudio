@@ -81,11 +81,14 @@ GenAI gaps.
 ## Scope And Detector-Ready Signals
 
 When the user asks broadly to apply GenAI readiness skills, improve GenAI MTTD,
-or fix found GenAI gaps, treat the scope as **all discovered app-owned GenAI
-gaps**. Do not select one representative or highest-value gap unless the user
-explicitly narrows the scope to that gap.
-For a canonical audit, resolve that broad scope to exact IDs and create the
-bound selection before editing.
+or fix found GenAI gaps, the desired coverage is **all discovered app-owned
+GenAI gaps**, but that broad request is not selection authority for a canonical
+audit. Inventory the matching selectable finding IDs and pause for the user to
+supply exact `--ids` (or use an existing validated bound selection); do not
+create or bind a selection from broad prose. After the user selects IDs, do not
+silently reduce them to one representative or highest-value gap. Only on the
+legacy no-audit path does the broad request directly authorize all safely
+patchable discovered GenAI gaps.
 
 Close code-evidenced AI pathway surfaces from
 `../../references/genai-readiness.md`: provider/model gateway, agent/workflow

@@ -48,7 +48,7 @@ SEMVER = re.compile(
     r"(?P<minor>0|[1-9]\d*)\."
     r"(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
-    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+    r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
 
 
@@ -237,6 +237,52 @@ def semver_key(version: str) -> tuple[Any, ...] | None:
         )
     except ValueError:
         return None
+
+
+def module_path_major(module: str) -> tuple[str, bool]:
+    """Return the Go semantic-import-version suffix and its validity."""
+
+    if module.startswith("gopkg.in/"):
+        stable_path = (
+            module[: -len("-unstable")]
+            if module.endswith("-unstable")
+            else module
+        )
+        match = re.search(r"\.v(?P<major>0|[1-9]\d*)$", stable_path)
+        if match is None:
+            return "", False
+        return f".v{match.group('major')}", True
+
+    match = re.search(r"/v(?P<major>[0-9.]+)$", module)
+    if match is None:
+        return "", True
+    major_text = match.group("major")
+    if (
+        "." in major_text
+        or major_text.startswith("0")
+        or major_text == "1"
+    ):
+        return "", False
+    return f"/v{major_text}", True
+
+
+def module_version_path_compatible(module: str, version: str) -> bool:
+    """Match Go's module path-major, v0/v1, and +incompatible rules."""
+
+    version_match = SEMVER.fullmatch(version)
+    if version_match is None:
+        return False
+    path_major, path_valid = module_path_major(module)
+    if not path_valid:
+        return False
+    version_major = f"v{version_match.group('major')}"
+    if path_major == "":
+        return version_major in {"v0", "v1"} or (
+            version_match.group("build") == "incompatible"
+        )
+    if path_major == ".v1" and version.startswith("v0.0.0-"):
+        return True
+    return version_major == path_major[1:]
 
 
 def read_go_mod(path: Path, warnings: Warnings, label: str) -> str | None:
@@ -491,6 +537,8 @@ def verify_proxy_module(
 ) -> dict[str, Any]:
     artifacts, missing_artifacts = proxy_artifacts(cache, module, version)
     issues: list[str] = []
+    if not module_version_path_compatible(module, version):
+        issues.append("module-path-major-version-mismatch")
     if missing_artifacts:
         issues.append("missing-file-proxy-artifacts")
 
@@ -796,6 +844,16 @@ def resolve(project_arg: Path, gomodcache_arg: Path | None) -> dict[str, Any]:
     ]
     if invalid_project_requirements:
         project_reasons.append("project-requirement-version-unsupported")
+    incompatible_project_requirements = [
+        requirement
+        for requirement in project_requirements
+        if semver_key(requirement["version"]) is not None
+        and not module_version_path_compatible(
+            requirement["module"], requirement["version"]
+        )
+    ]
+    if incompatible_project_requirements:
+        project_reasons.append("project-requirement-path-major-mismatch")
     if project_reasons:
         result["reasons"] = project_reasons
         return finish(result, warnings)
@@ -811,9 +869,14 @@ def resolve(project_arg: Path, gomodcache_arg: Path | None) -> dict[str, Any]:
     compatible: list[dict[str, Any]] = []
     for version, version_sources in sources.items():
         version_key = semver_key(version)
-        if version_key is None:
+        if version_key is None or not module_version_path_compatible(
+            OTELHTTP_MODULE, version
+        ):
             result["scan"]["unusable_versions"] += 1
-            warnings.add(f"ignored cached otelhttp version with invalid semver: {version}")
+            warnings.add(
+                "ignored cached otelhttp version with invalid or "
+                f"path-incompatible semver: {version}"
+            )
             continue
 
         parsed: dict[str, Any] | None = None
@@ -841,7 +904,12 @@ def resolve(project_arg: Path, gomodcache_arg: Path | None) -> dict[str, Any]:
                 or core_version is None
             ):
                 continue
-            if semver_key(core_version) is None:
+            if (
+                semver_key(core_version) is None
+                or not module_version_path_compatible(
+                    "go.opentelemetry.io/otel", core_version
+                )
+            ):
                 continue
             parsed = {
                 "module": OTELHTTP_MODULE,

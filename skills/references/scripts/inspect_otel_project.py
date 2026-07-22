@@ -37,6 +37,8 @@ MAX_FILE_BYTES = 2_000_000
 DEFAULT_MAX_ITEMS = 80
 DEFAULT_MAX_FILES = 5_000
 DEFAULT_MAX_TOTAL_BYTES = 50_000_000
+DEFAULT_MAX_ENTRIES = 100_000
+DEFAULT_MAX_DEPTH = 64
 MAX_WARNINGS = 50
 
 SKIP_COUNT_KEYS = (
@@ -49,6 +51,8 @@ SKIP_COUNT_KEYS = (
     "walk_errors",
     "file_limit",
     "byte_limit",
+    "entry_limit",
+    "depth_limit",
     "warnings_omitted",
 )
 
@@ -322,7 +326,10 @@ GENERIC_ROUTE = re.compile(
 
 def is_supported_text(path: Path) -> bool:
     is_env = path.name == ".env" or path.name.startswith(".env.")
-    is_requirements = path.name.startswith("requirements") and path.suffix.lower() == ".txt"
+    is_requirements = (
+        path.name.lower().startswith("requirements")
+        and path.suffix.lower() == ".txt"
+    )
     return (
         path.name in TEXT_NAMES
         or path.name in LOCKFILE_NAMES
@@ -352,6 +359,34 @@ class ScanInput:
             self.skipped["warnings_omitted"] += 1
 
 
+@dataclass
+class TraversalBudget:
+    max_entries: int
+    max_depth: int
+    entries_seen: int = 0
+
+
+def bounded_directory_names(
+    directory: int | Path, budget: TraversalBudget
+) -> tuple[list[str], bool]:
+    """Read a deterministic directory only when its entries fit the budget.
+
+    One extra entry is enough to prove truncation. In that case the partial,
+    filesystem-ordered prefix is discarded so results never depend on native
+    directory enumeration order.
+    """
+
+    remaining = max(0, budget.max_entries - budget.entries_seen)
+    names: list[str] = []
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            names.append(entry.name)
+            if len(names) > remaining:
+                return [], True
+    budget.entries_seen += len(names)
+    return sorted(names), False
+
+
 def relative_label(root: Path, path: Path) -> str:
     try:
         return path.relative_to(root).as_posix()
@@ -364,19 +399,25 @@ def collect_scan_input(
     *,
     max_files: int,
     max_total_bytes: int,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    max_depth: int = DEFAULT_MAX_DEPTH,
     root_descriptor: int | None = None,
 ) -> ScanInput:
-    if descriptor_operations_supported() and os.listdir in os.supports_fd:
+    if descriptor_operations_supported() and os.scandir in os.supports_fd:
         return collect_scan_input_descriptor(
             root,
             max_files=max_files,
             max_total_bytes=max_total_bytes,
+            max_entries=max_entries,
+            max_depth=max_depth,
             root_descriptor=root_descriptor,
         )
     return collect_scan_input_portable(
         root,
         max_files=max_files,
         max_total_bytes=max_total_bytes,
+        max_entries=max_entries,
+        max_depth=max_depth,
     )
 
 
@@ -401,11 +442,14 @@ def collect_scan_input_descriptor(
     *,
     max_files: int,
     max_total_bytes: int,
-    root_descriptor: int | None,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+    root_descriptor: int | None = None,
 ) -> ScanInput:
     """Scan through retained directory descriptors without following links."""
 
     scan = ScanInput()
+    budget = TraversalBudget(max_entries=max_entries, max_depth=max_depth)
     directory_flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
@@ -422,15 +466,27 @@ def collect_scan_input_descriptor(
         else os.open(root, directory_flags)
     )
 
-    def visit(directory_descriptor: int, relative: Path) -> bool:
+    def visit(
+        directory_descriptor: int, relative: Path, depth: int
+    ) -> bool:
         try:
-            names = sorted(os.listdir(directory_descriptor))
+            names, entry_limit_reached = bounded_directory_names(
+                directory_descriptor, budget
+            )
         except OSError as error:
             scan.skipped["walk_errors"] += 1
             scan.warn(
                 f"directory walk failed at {relative.as_posix() or '.'}: {error}"
             )
             return False
+
+        if entry_limit_reached:
+            scan.skipped["entry_limit"] += 1
+            scan.warn(
+                f"stopped after {max_entries} directory entries; "
+                "additional entries were not inspected"
+            )
+            return True
 
         directories: list[tuple[str, os.stat_result]] = []
         files: list[tuple[str, os.stat_result]] = []
@@ -543,6 +599,12 @@ def collect_scan_input_descriptor(
                 scan.skipped["symlink_directories"] += 1
                 scan.warn(f"skipped symlink directory: {label}")
                 continue
+            if depth >= budget.max_depth:
+                scan.skipped["depth_limit"] += 1
+                scan.warn(
+                    f"skipped directory beyond depth {max_depth}: {label}"
+                )
+                continue
             child: int | None = None
             try:
                 child = os.open(name, directory_flags, dir_fd=directory_descriptor)
@@ -552,7 +614,7 @@ def collect_scan_input_descriptor(
                     or descriptor_identity(opened) != descriptor_identity(details)
                 ):
                     raise OSError("directory entry changed before it was opened")
-                if visit(child, relative / name):
+                if visit(child, relative / name, depth + 1):
                     return True
             except OSError as error:
                 scan.skipped["walk_errors"] += 1
@@ -566,7 +628,7 @@ def collect_scan_input_descriptor(
         root_status = os.fstat(descriptor)
         if not stat.S_ISDIR(root_status.st_mode):
             raise SecureOutputError(f"project root is not a directory: {root}")
-        visit(descriptor, Path())
+        visit(descriptor, Path(), 0)
     finally:
         os.close(descriptor)
     return scan
@@ -654,25 +716,53 @@ def portable_read_payload(
 
 
 def collect_scan_input_portable(
-    root: Path, *, max_files: int, max_total_bytes: int
+    root: Path,
+    *,
+    max_files: int,
+    max_total_bytes: int,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> ScanInput:
     scan = ScanInput()
+    budget = TraversalBudget(max_entries=max_entries, max_depth=max_depth)
 
-    def walk_error(error: OSError) -> None:
-        scan.skipped["walk_errors"] += 1
-        scan.warn(f"directory walk failed: {error}")
+    def visit(
+        current_path: Path,
+        relative: Path,
+        depth: int,
+        expected: os.stat_result | None,
+    ) -> bool:
+        try:
+            identities = portable_directory_chain(root, current_path)
+            if (
+                expected is not None
+                and identities[-1][1] != descriptor_identity(expected)
+            ):
+                raise OSError("directory entry changed before portable walk")
+            names, entry_limit_reached = bounded_directory_names(
+                current_path, budget
+            )
+            if not portable_chain_matches(identities):
+                raise OSError("directory namespace changed during portable walk")
+        except OSError as error:
+            scan.skipped["walk_errors"] += 1
+            scan.warn(
+                f"directory walk failed at {relative.as_posix() or '.'}: {error}"
+            )
+            return False
 
-    stop = False
-    for current, dirnames, filenames in os.walk(
-        root, onerror=walk_error, followlinks=False
-    ):
-        current_path = Path(current)
-        retained_dirs = []
-        for name in sorted(dirnames):
+        if entry_limit_reached:
+            scan.skipped["entry_limit"] += 1
+            scan.warn(
+                f"stopped after {max_entries} directory entries; "
+                "additional entries were not inspected"
+            )
+            return True
+
+        directories: list[tuple[str, os.stat_result]] = []
+        files: list[tuple[str, os.stat_result]] = []
+        for name in names:
             path = current_path / name
-            if name in SKIP_DIRS:
-                scan.skipped["configured_directories"] += 1
-                continue
             try:
                 details = os.lstat(path)
             except OSError as error:
@@ -681,64 +771,47 @@ def collect_scan_input_portable(
                     f"could not stat {relative_label(root, path)}: {error}"
                 )
                 continue
-            if path_is_link_or_reparse(details):
-                scan.skipped["symlink_directories"] += 1
-                scan.warn(f"skipped symlink directory: {relative_label(root, path)}")
-                continue
-            if not stat.S_ISDIR(details.st_mode):
-                scan.skipped["walk_errors"] += 1
-                scan.warn(
-                    f"skipped non-directory entry: {relative_label(root, path)}"
-                )
-                continue
-            retained_dirs.append(name)
-        dirnames[:] = retained_dirs
+            if stat.S_ISDIR(details.st_mode):
+                directories.append((name, details))
+            else:
+                files.append((name, details))
 
-        for name in sorted(filenames):
+        for name, details in files:
+            relative_path = relative / name
             path = current_path / name
             if not is_supported_text(path):
                 continue
-            try:
-                details = os.lstat(path)
-            except OSError as error:
-                scan.skipped["stat_errors"] += 1
-                scan.warn(
-                    f"could not stat {relative_label(root, path)}: {error}"
-                )
-                continue
             if path_is_link_or_reparse(details):
                 scan.skipped["symlink_files"] += 1
-                scan.warn(f"skipped symlink file: {relative_label(root, path)}")
+                scan.warn(f"skipped symlink file: {relative_path.as_posix()}")
                 continue
             if len(scan.files) >= max_files:
                 scan.skipped["file_limit"] += 1
                 scan.warn(
                     f"stopped after {max_files} text files; additional files were not scanned"
                 )
-                stop = True
-                break
+                return True
             if not stat.S_ISREG(details.st_mode):
                 scan.skipped["read_errors"] += 1
                 scan.warn(
-                    f"skipped non-regular file: {relative_label(root, path)}"
+                    f"skipped non-regular file: {relative_path.as_posix()}"
                 )
                 continue
             size = details.st_size
             if size > MAX_FILE_BYTES:
                 scan.skipped["oversized_files"] += 1
                 scan.warn(
-                    f"skipped oversized file {relative_label(root, path)} "
+                    f"skipped oversized file {relative_path.as_posix()} "
                     f"({size} bytes; limit {MAX_FILE_BYTES})"
                 )
                 continue
             if scan.bytes_scanned + size > max_total_bytes:
                 scan.skipped["byte_limit"] += 1
                 scan.warn(
-                    f"stopped before {relative_label(root, path)} because the "
+                    f"stopped before {relative_path.as_posix()} because the "
                     f"{max_total_bytes}-byte scan limit was reached"
                 )
-                stop = True
-                break
+                return True
             try:
                 payload = portable_read_payload(
                     root,
@@ -749,30 +822,50 @@ def collect_scan_input_portable(
             except OSError as error:
                 scan.skipped["read_errors"] += 1
                 scan.warn(
-                    f"could not read {relative_label(root, path)}: {error}"
+                    f"could not read {relative_path.as_posix()}: {error}"
                 )
                 continue
             if len(payload) > MAX_FILE_BYTES:
                 scan.skipped["oversized_files"] += 1
                 scan.warn(
-                    f"skipped oversized file {relative_label(root, path)} "
+                    f"skipped oversized file {relative_path.as_posix()} "
                     f"(grew beyond limit {MAX_FILE_BYTES})"
                 )
                 continue
             if scan.bytes_scanned + len(payload) > max_total_bytes:
                 scan.skipped["byte_limit"] += 1
                 scan.warn(
-                    f"stopped before {relative_label(root, path)} because the "
+                    f"stopped before {relative_path.as_posix()} because the "
                     f"{max_total_bytes}-byte scan limit was reached"
                 )
-                stop = True
-                break
-            lines = tuple(payload.decode("utf-8", errors="replace").splitlines())
+                return True
             scan.files.append(path)
-            scan.lines[path] = lines
+            scan.lines[path] = tuple(
+                payload.decode("utf-8", errors="replace").splitlines()
+            )
             scan.bytes_scanned += len(payload)
-        if stop:
-            break
+
+        for name, details in directories:
+            path = current_path / name
+            label = (relative / name).as_posix()
+            if name in SKIP_DIRS:
+                scan.skipped["configured_directories"] += 1
+                continue
+            if path_is_link_or_reparse(details):
+                scan.skipped["symlink_directories"] += 1
+                scan.warn(f"skipped symlink directory: {label}")
+                continue
+            if depth >= budget.max_depth:
+                scan.skipped["depth_limit"] += 1
+                scan.warn(
+                    f"skipped directory beyond depth {max_depth}: {label}"
+                )
+                continue
+            if visit(path, relative / name, depth + 1, details):
+                return True
+        return False
+
+    visit(root, Path(), 0, None)
 
     return scan
 
@@ -846,7 +939,10 @@ def detect_manifests(root: Path, files: list[Path]) -> tuple[list[dict[str, str]
             manifests.append({"path": relative, "language": language, "kind": kind})
         elif path.suffix.lower() in {".csproj", ".sln"}:
             manifests.append({"path": relative, "language": "dotnet", "kind": "dotnet-project"})
-        elif path.name.startswith("requirements") and path.suffix == ".txt":
+        elif (
+            path.name.lower().startswith("requirements")
+            and path.suffix.lower() == ".txt"
+        ):
             manifests.append({"path": relative, "language": "python", "kind": "python-requirements"})
         if path.name in LOCKFILE_NAMES:
             lockfiles.append(relative)
@@ -1037,6 +1133,19 @@ def detect_startup_surfaces(
     return surfaces, total
 
 
+def project_python_runner(module_root: Path) -> str | None:
+    platform_runners = (
+        ".venv/Scripts/python.exe",
+        ".venv/bin/python",
+    )
+    if os.name != "nt":
+        platform_runners = tuple(reversed(platform_runners))
+    for runner in platform_runners:
+        if (module_root / runner).is_file():
+            return runner
+    return None
+
+
 def detect_runtime_candidates(
     root: Path,
     manifests: list[dict[str, str]],
@@ -1073,13 +1182,13 @@ def detect_runtime_candidates(
                     "uv run --locked",
                     "uv run --locked python --version",
                 )
-            elif (module_root / ".venv" / "bin" / "python").exists():
+            elif (python_runner := project_python_runner(module_root)) is not None:
                 add(
                     "python",
                     cwd,
                     manifest["path"] + " + .venv",
-                    ".venv/bin/python",
-                    ".venv/bin/python --version",
+                    python_runner,
+                    f"{python_runner} --version",
                 )
             else:
                 add("python", cwd, manifest["path"], "project-selected Python", "python --version")
@@ -1138,6 +1247,8 @@ def detect_project_commands(
                 package = json.loads("\n".join(lines_by_path[path]))
             except json.JSONDecodeError:
                 continue
+            if not isinstance(package, dict):
+                continue
             scripts = package.get("scripts", {})
             if isinstance(scripts, dict):
                 for name, command in sorted(scripts.items()):
@@ -1168,12 +1279,16 @@ def inspect(
     *,
     max_files: int = DEFAULT_MAX_FILES,
     max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    max_depth: int = DEFAULT_MAX_DEPTH,
     root_descriptor: int | None = None,
 ) -> dict[str, object]:
     scan = collect_scan_input(
         root,
         max_files=max_files,
         max_total_bytes=max_total_bytes,
+        max_entries=max_entries,
+        max_depth=max_depth,
         root_descriptor=root_descriptor,
     )
     files = scan.files
@@ -1332,6 +1447,24 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--max-entries",
+        type=int,
+        default=DEFAULT_MAX_ENTRIES,
+        help=(
+            "Maximum total directory entries to inspect "
+            f"(default: {DEFAULT_MAX_ENTRIES})."
+        ),
+    )
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=DEFAULT_MAX_DEPTH,
+        help=(
+            "Maximum directory depth below the project root "
+            f"(default: {DEFAULT_MAX_DEPTH})."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Write the full JSON inventory to this path and print only its summary.",
@@ -1352,11 +1485,17 @@ def main() -> int:
         raise SystemExit("--max-files must be at least 1")
     if args.max_total_bytes < 1:
         raise SystemExit("--max-total-bytes must be at least 1")
+    if args.max_entries < 1:
+        raise SystemExit("--max-entries must be at least 1")
+    if args.max_depth < 0:
+        raise SystemExit("--max-depth must be at least 0")
     result = inspect(
         root,
         args.max_items,
         max_files=args.max_files,
         max_total_bytes=args.max_total_bytes,
+        max_entries=args.max_entries,
+        max_depth=args.max_depth,
         root_descriptor=project.descriptor,
     )
     try:

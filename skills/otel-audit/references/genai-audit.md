@@ -130,7 +130,10 @@ surface name as the human-facing identifier. Split surfaces whose required
 signals have different owners or acceptance criteria. Required signals must be
 concrete signal names or intents. Use owners `App-owned + patchable`,
 `App-owned but unsafe/too large`, `Provider/platform-owned`, or
-`Already covered`.
+`Already covered`. For an `owner-mapped` row, the owner must include a concrete
+external source after the category prefix, for example
+`Provider/platform-owned: billing API`. `Provider/platform-owned` by itself or
+a generic team label is not an exact owner and fails audit validation.
 
 | Ledger result | Rule |
 |---|---|

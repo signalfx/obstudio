@@ -210,6 +210,62 @@ def test_go_metric_guidance_requires_version_specific_proof() -> None:
     )
 
 
+def test_python_guidance_does_not_map_plain_starlette_to_fastapi() -> None:
+    references = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "python.md",
+    )
+    for reference in references:
+        text = reference.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        assert "| `fastapi` | `opentelemetry-instrumentation-fastapi` |" in text
+        assert "| `starlette` | `opentelemetry-instrumentation-starlette` |" in text
+        assert "`fastapi` / `starlette`" not in text
+        assert "Do not substitute the FastAPI instrumentor for a plain Starlette" in normalized
+
+
+def test_python_guidance_splits_aiohttp_client_and_server_surfaces() -> None:
+    references = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "python.md",
+    )
+    for reference in references:
+        text = reference.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        assert (
+            "| `aiohttp.ClientSession` (client) | "
+            "`opentelemetry-instrumentation-aiohttp-client` |"
+        ) in text
+        assert (
+            "| `aiohttp.web` (server) | "
+            "`opentelemetry-instrumentation-aiohttp-server` |"
+        ) in text
+        assert "| `aiohttp` | `opentelemetry-instrumentation-aiohttp-client` |" not in text
+        assert "an application using both surfaces needs both packages" in normalized
+
+
+def test_go_audit_distinguishes_route_attributes_from_span_names() -> None:
+    guide = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(guide.split())
+    assert "for bounded `http.route` attributes" in normalized
+    assert "`WithRouteTag` does not rename the outer `otelhttp` server span" in normalized
+    assert "renaming the current outer server span after route matching" in normalized
+    assert "do not start a second server span" in normalized
+    assert "for bounded route names" not in normalized
+
+
 def test_go_resolver_guidance_requires_full_closure_and_preserves_existing_pins() -> None:
     skill = (ROOT / "skills" / "otel-instrument" / "SKILL.md").read_text(
         encoding="utf-8"
