@@ -31,6 +31,8 @@ from pytest_codex_evals.backends import (
     _merge_stream_observations,
     atomic_text_write,
     ensure_anchored_directory,
+    path_directory_identity,
+    read_regular_text,
     run_streamed_command,
 )
 from pytest_codex_evals.graders.runtime import (
@@ -1336,6 +1338,276 @@ def test_atomic_writer_refuses_parent_namespace_swap(tmp_path: Path):
     assert sentinel.read_text(encoding="utf-8") == "keep\n"
     assert not (outside / "nested/result.json").exists()
     assert not (stolen / "nested/result.json").exists()
+
+
+def test_anchored_reader_rejects_parent_namespace_swap_during_read(
+    tmp_path: Path,
+):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    if not backends_module.descriptor_operations_supported():
+        _pytest.skip("descriptor-relative filesystem APIs are unavailable")
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_text("trusted\n", encoding="utf-8")
+    expected_identity = path_directory_identity(boundary)
+    stolen = tmp_path / "stolen-root"
+    real_stat = os.stat
+    swapped = False
+
+    def stat_after_parent_swap(path, *args, **kwargs):
+        nonlocal swapped
+        if (
+            not swapped
+            and path == target.name
+            and kwargs.get("dir_fd") is not None
+        ):
+            boundary.rename(stolen)
+            boundary.mkdir()
+            (boundary / target.name).write_text("attacker\n", encoding="utf-8")
+            swapped = True
+        return real_stat(path, *args, **kwargs)
+
+    with patch("pytest_codex_evals.backends.os.stat", stat_after_parent_swap):
+        with _pytest.raises(ValueError, match="namespace changed during read"):
+            read_regular_text(
+                target,
+                boundary=boundary,
+                expected_boundary_identity=expected_identity,
+            )
+
+    assert swapped
+    assert (stolen / target.name).read_text(encoding="utf-8") == "trusted\n"
+    assert (boundary / target.name).read_text(encoding="utf-8") == "attacker\n"
+
+
+def test_anchored_reader_rejects_same_inode_mutation_during_read(tmp_path: Path):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    if not backends_module.descriptor_operations_supported():
+        _pytest.skip("descriptor-relative filesystem APIs are unavailable")
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_bytes(b"A" * (2 * 1024 * 1024))
+    expected_identity = path_directory_identity(boundary)
+    original_identity = target.stat().st_dev, target.stat().st_ino
+    real_read = os.read
+    mutated = False
+
+    def read_then_mutate_same_inode(descriptor, size):
+        nonlocal mutated
+        payload = real_read(descriptor, size)
+        if payload and not mutated:
+            with target.open("r+b", buffering=0) as destination:
+                destination.write(b"B" * (2 * 1024 * 1024))
+            mutated = True
+        return payload
+
+    with patch("pytest_codex_evals.backends.os.read", read_then_mutate_same_inode):
+        with _pytest.raises(ValueError, match="input changed during read"):
+            read_regular_text(
+                target,
+                boundary=boundary,
+                expected_boundary_identity=expected_identity,
+            )
+
+    assert mutated
+    assert (target.stat().st_dev, target.stat().st_ino) == original_identity
+
+
+def test_portable_reader_rejects_same_inode_mutation_during_read(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_bytes(b"A" * (2 * 1024 * 1024))
+    expected_identity = path_directory_identity(boundary)
+    original_identity = target.stat().st_dev, target.stat().st_ino
+    real_read = os.read
+    mutated = False
+
+    monkeypatch.setattr(
+        backends_module, "descriptor_operations_supported", lambda: False
+    )
+
+    def read_then_mutate_same_inode(descriptor, size):
+        nonlocal mutated
+        payload = real_read(descriptor, size)
+        if payload and not mutated:
+            with target.open("r+b", buffering=0) as destination:
+                destination.write(b"B" * (2 * 1024 * 1024))
+            mutated = True
+        return payload
+
+    with patch("pytest_codex_evals.backends.os.read", read_then_mutate_same_inode):
+        with _pytest.raises(ValueError, match="input changed during read"):
+            read_regular_text(
+                target,
+                boundary=boundary,
+                expected_boundary_identity=expected_identity,
+            )
+
+    assert mutated
+    assert (target.stat().st_dev, target.stat().st_ino) == original_identity
+
+
+def test_anchored_reader_accepts_stable_regular_text(tmp_path: Path):
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_text("trusted\n", encoding="utf-8")
+
+    assert read_regular_text(
+        target,
+        boundary=boundary,
+        expected_boundary_identity=path_directory_identity(boundary),
+    ) == "trusted\n"
+
+
+def test_anchored_reader_rejects_regular_leaf_swap(tmp_path: Path):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    if not backends_module.descriptor_operations_supported():
+        _pytest.skip("descriptor-relative filesystem APIs are unavailable")
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    replacement = boundary / "replacement.json"
+    target.write_text("trusted\n", encoding="utf-8")
+    replacement.write_text("attacker\n", encoding="utf-8")
+    expected_identity = path_directory_identity(boundary)
+    real_open = os.open
+    swapped = False
+
+    def open_after_leaf_swap(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if (
+            not swapped
+            and path == target.name
+            and kwargs.get("dir_fd") is not None
+        ):
+            target.unlink()
+            replacement.replace(target)
+            swapped = True
+        return real_open(path, flags, *args, **kwargs)
+
+    with patch("pytest_codex_evals.backends.os.open", open_after_leaf_swap):
+        with _pytest.raises(ValueError, match="input changed before read"):
+            read_regular_text(
+                target,
+                boundary=boundary,
+                expected_boundary_identity=expected_identity,
+            )
+
+    assert swapped
+    assert target.read_text(encoding="utf-8") == "attacker\n"
+
+
+def test_anchored_reader_rejects_fifo_leaf_without_blocking(tmp_path: Path):
+    import os
+    import pytest as _pytest
+    from unittest.mock import patch
+    from pytest_codex_evals import backends as backends_module
+
+    if not hasattr(os, "mkfifo"):
+        _pytest.skip("FIFO creation is unavailable")
+    if not backends_module.descriptor_operations_supported():
+        _pytest.skip("descriptor-relative filesystem APIs are unavailable")
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_text("trusted\n", encoding="utf-8")
+    expected_identity = path_directory_identity(boundary)
+    real_open = os.open
+    swapped = False
+
+    def open_after_fifo_swap(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if (
+            not swapped
+            and path == target.name
+            and kwargs.get("dir_fd") is not None
+        ):
+            target.unlink()
+            os.mkfifo(target)
+            swapped = True
+            assert flags & os.O_NONBLOCK
+        return real_open(path, flags, *args, **kwargs)
+
+    with patch("pytest_codex_evals.backends.os.open", open_after_fifo_swap):
+        with _pytest.raises(ValueError, match="input must be a regular file"):
+            read_regular_text(
+                target,
+                boundary=boundary,
+                expected_boundary_identity=expected_identity,
+            )
+
+    assert swapped
+
+
+def test_portable_reader_rejects_fifo_leaf_without_blocking(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import os
+    import pytest as _pytest
+    from pytest_codex_evals import backends as backends_module
+
+    if not hasattr(os, "mkfifo"):
+        _pytest.skip("FIFO creation is unavailable")
+
+    boundary = tmp_path / "output-root"
+    boundary.mkdir()
+    target = boundary / "result.json"
+    target.write_text("trusted\n", encoding="utf-8")
+    expected_identity = path_directory_identity(boundary)
+    real_open = os.open
+    swapped = False
+
+    monkeypatch.setattr(
+        backends_module, "descriptor_operations_supported", lambda: False
+    )
+
+    def open_after_fifo_swap(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and Path(path) == target:
+            target.unlink()
+            os.mkfifo(target)
+            swapped = True
+            assert flags & os.O_NONBLOCK
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(backends_module.os, "open", open_after_fifo_swap)
+    with _pytest.raises(ValueError, match="input must be a regular file"):
+        read_regular_text(
+            target,
+            boundary=boundary,
+            expected_boundary_identity=expected_identity,
+        )
+
+    assert swapped
 
 
 def test_anchored_directory_creation_never_follows_swapped_parent(

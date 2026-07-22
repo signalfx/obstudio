@@ -220,6 +220,19 @@ def path_is_link_or_reparse(status: os.stat_result) -> bool:
     return stat.S_ISLNK(status.st_mode) or bool(attributes & reparse_mask)
 
 
+def regular_file_stability(status: os.stat_result) -> tuple[int, ...]:
+    """Return metadata that must remain stable across an authenticated read."""
+
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_mode,
+        status.st_size,
+        getattr(status, "st_mtime_ns", int(status.st_mtime * 1_000_000_000)),
+        getattr(status, "st_ctime_ns", int(status.st_ctime * 1_000_000_000)),
+    )
+
+
 def _detect_descriptor_operations() -> bool:
     required_dir_fd = {os.open, os.mkdir, os.stat, os.rename, os.unlink}
     return (
@@ -546,7 +559,7 @@ def read_anchored_regular_bytes(
     boundary: Path,
     expected_boundary_identity: tuple[int, int] | None = None,
 ) -> bytes:
-    """Read one regular file through a retained, no-follow directory fd."""
+    """Read one stable regular file through a retained directory anchor."""
 
     path = Path(os.path.abspath(path))
     anchor = open_anchored_directory(path.parent, boundary)
@@ -563,17 +576,40 @@ def read_anchored_regular_bytes(
             status = os.lstat(path)
             if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
                 raise ValueError(f"input must be a regular file: {path}")
+            if not anchored_namespace_matches(anchor):
+                raise ValueError(
+                    f"input directory namespace changed before read: {path.parent}"
+                )
             descriptor = os.open(
-                path, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0),
             )
             try:
-                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                opened = os.fstat(descriptor)
+                if (
+                    path_is_link_or_reparse(opened)
+                    or not stat.S_ISREG(opened.st_mode)
+                ):
                     raise ValueError(f"input must be a regular file: {path}")
+                if (opened.st_dev, opened.st_ino) != (status.st_dev, status.st_ino):
+                    raise ValueError(f"input changed before read: {path}")
                 chunks: list[bytes] = []
                 while chunk := os.read(descriptor, 1024 * 1024):
                     chunks.append(chunk)
+                after = os.fstat(descriptor)
             finally:
                 os.close(descriptor)
+            current = os.lstat(path)
+            if (
+                regular_file_stability(opened) != regular_file_stability(after)
+                or path_is_link_or_reparse(current)
+                or not stat.S_ISREG(current.st_mode)
+                or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
+            ):
+                raise ValueError(f"input changed during read: {path}")
             if not anchored_namespace_matches(anchor):
                 raise ValueError(
                     f"input directory namespace changed during read: {path.parent}"
@@ -583,16 +619,41 @@ def read_anchored_regular_bytes(
             close_anchored_directory(anchor)
     descriptor: int | None = None
     try:
+        status = os.stat(
+            path.name,
+            dir_fd=anchor.descriptor,
+            follow_symlinks=False,
+        )
+        if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+            raise ValueError(f"input must be a regular file: {path}")
         descriptor = os.open(
             path.name,
-            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            os.O_RDONLY
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
             dir_fd=anchor.descriptor,
         )
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        opened = os.fstat(descriptor)
+        if path_is_link_or_reparse(opened) or not stat.S_ISREG(opened.st_mode):
             raise ValueError(f"input must be a regular file: {path}")
+        if (opened.st_dev, opened.st_ino) != (status.st_dev, status.st_ino):
+            raise ValueError(f"input changed before read: {path}")
         chunks: list[bytes] = []
         while chunk := os.read(descriptor, 1024 * 1024):
             chunks.append(chunk)
+        after = os.fstat(descriptor)
+        current = os.stat(
+            path.name,
+            dir_fd=anchor.descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            regular_file_stability(opened) != regular_file_stability(after)
+            or path_is_link_or_reparse(current)
+            or not stat.S_ISREG(current.st_mode)
+            or (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            raise ValueError(f"input changed during read: {path}")
         if not anchored_namespace_matches(anchor):
             raise ValueError(
                 f"input directory namespace changed during read: {path.parent}"
@@ -610,16 +671,24 @@ def temporary_output_path(parent: Path, label: str) -> Path:
     return Path(name)
 
 
-def read_regular_text(path: Path) -> str:
+def read_regular_text(
+    path: Path,
+    *,
+    boundary: Path | None = None,
+    expected_boundary_identity: tuple[int, int] | None = None,
+) -> str:
+    """Read UTF-8 text without following a replaced parent or special leaf."""
+
+    path = Path(os.path.abspath(path))
     try:
-        status = os.lstat(path)
+        value = read_anchored_regular_bytes(
+            path,
+            boundary=boundary or path.parent,
+            expected_boundary_identity=expected_boundary_identity,
+        )
     except OSError as error:
         raise ValueError(f"backend output must be a regular file: {path}") from error
-    if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
-        raise ValueError(f"backend output must be a regular file: {path}")
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    with os.fdopen(descriptor, "r", encoding="utf-8", errors="replace") as source:
-        return source.read()
+    return value.decode("utf-8", errors="replace")
 
 
 def rubric_failure_payload(returncode: int, stderr: str) -> str:
@@ -708,7 +777,11 @@ class CodexBackend:
                 timeout=timeout,
                 env=_codex_subprocess_env(exec_dir),
             )
-            final_value = read_regular_text(raw_final_path)
+            final_value = read_regular_text(
+                raw_final_path,
+                boundary=exec_dir,
+                expected_boundary_identity=exec_dir_identity,
+            )
             atomic_text_write(
                 final_path,
                 final_value,
@@ -771,7 +844,11 @@ class CodexBackend:
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
-            output = read_regular_text(raw_output_path)
+            output = read_regular_text(
+                raw_output_path,
+                boundary=exec_dir,
+                expected_boundary_identity=exec_dir_identity,
+            )
             if completed.returncode != 0 and not output.strip():
                 output = rubric_failure_payload(
                     completed.returncode, completed.stderr
@@ -849,7 +926,11 @@ class CursorBackend:
             )
             atomic_text_write(
                 final_path,
-                read_regular_text(raw_final_path),
+                read_regular_text(
+                    raw_final_path,
+                    boundary=exec_dir,
+                    expected_boundary_identity=exec_dir_identity,
+                ),
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
@@ -908,7 +989,11 @@ class CursorBackend:
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
-            output = read_regular_text(raw_output_path)
+            output = read_regular_text(
+                raw_output_path,
+                boundary=exec_dir,
+                expected_boundary_identity=exec_dir_identity,
+            )
             if completed.returncode != 0 and not output.strip():
                 output = rubric_failure_payload(
                     completed.returncode, completed.stderr
@@ -1047,7 +1132,11 @@ class ClaudeBackend:
             trace_path, output_path, exec_dir_identity=exec_dir_identity
         )
 
-        if completed.returncode != 0 and not read_regular_text(output_path).strip():
+        if completed.returncode != 0 and not read_regular_text(
+            output_path,
+            boundary=exec_dir,
+            expected_boundary_identity=exec_dir_identity,
+        ).strip():
             atomic_text_write(
                 output_path,
                 rubric_failure_payload(completed.returncode, completed.stderr),
@@ -1080,7 +1169,11 @@ def _extract_claude_final_message(
 ) -> None:
     """Extract the last assistant text from Claude JSON output."""
     try:
-        raw = read_regular_text(trace_path)
+        raw = read_regular_text(
+            trace_path,
+            boundary=trace_path.parent,
+            expected_boundary_identity=exec_dir_identity,
+        )
         data = json.loads(raw) if raw.strip() else {}
         result_text = ""
         if isinstance(data, dict):

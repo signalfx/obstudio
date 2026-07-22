@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +22,7 @@ from .backends import (
     atomic_text_write,
     ensure_anchored_directory,
     path_directory_identity,
+    read_anchored_regular_bytes,
     read_regular_text,
 )
 from .eval_contracts import (
@@ -83,8 +83,15 @@ def write_capture_manifest(run_root: Path) -> Path:
 
     if run_root.is_symlink() or not run_root.is_dir():
         raise ValueError(f"capture run root must be a real directory: {run_root}")
-    records = [capture_file_record(run_root, path) for path in capture_files(run_root)]
     run_root_identity = path_directory_identity(run_root)
+    records = [
+        capture_file_record(
+            run_root,
+            path,
+            expected_run_root_identity=run_root_identity,
+        )
+        for path in capture_files(run_root)
+    ]
     payload = {
         "schema_version": 1,
         "files": records,
@@ -102,11 +109,18 @@ def write_capture_manifest(run_root: Path) -> Path:
 def verify_capture_manifest(run_root: Path) -> dict[str, bytes]:
     """Verify every sealed artifact and retain the exact authenticated bytes."""
 
+    run_root_identity = path_directory_identity(run_root)
     manifest_path = run_root / CAPTURE_MANIFEST_FILE
     if not path_is_within(manifest_path, run_root) or manifest_path.is_symlink():
         raise ValueError(f"capture manifest is unsafe: {manifest_path}")
     try:
-        manifest = json.loads(read_regular_text(manifest_path))
+        manifest = json.loads(
+            read_regular_text(
+                manifest_path,
+                boundary=run_root,
+                expected_boundary_identity=run_root_identity,
+            )
+        )
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"capture manifest is unreadable: {error}") from error
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
@@ -127,7 +141,11 @@ def verify_capture_manifest(run_root: Path) -> dict[str, bytes]:
         path = confined_run_artifact(run_root, value)
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"captured artifact is missing or unsafe: {value}")
-        current_bytes = regular_file_bytes(path)
+        current_bytes = regular_file_bytes(
+            path,
+            boundary=run_root,
+            expected_boundary_identity=run_root_identity,
+        )
         current_digest = hashlib.sha256(current_bytes).hexdigest()
         if current_digest != digest:
             raise ValueError(f"captured artifact changed after capture: {value}")
@@ -185,10 +203,19 @@ def capture_files(run_root: Path) -> list[Path]:
     return sorted(set(files), key=lambda path: path.relative_to(run_root).as_posix())
 
 
-def capture_file_record(run_root: Path, path: Path) -> dict[str, object]:
+def capture_file_record(
+    run_root: Path,
+    path: Path,
+    *,
+    expected_run_root_identity: tuple[int, int] | None = None,
+) -> dict[str, object]:
     if not path_is_within(path, run_root):
         raise ValueError(f"capture artifact escapes run root: {path}")
-    captured = regular_file_bytes(path)
+    captured = regular_file_bytes(
+        path,
+        boundary=run_root,
+        expected_boundary_identity=expected_run_root_identity,
+    )
     return {
         "path": path.relative_to(run_root).as_posix(),
         "sha256": hashlib.sha256(captured).hexdigest(),
@@ -200,18 +227,20 @@ def regular_file_sha256(path: Path) -> str:
     return hashlib.sha256(regular_file_bytes(path)).hexdigest()
 
 
-def regular_file_bytes(path: Path) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+def regular_file_bytes(
+    path: Path,
+    *,
+    boundary: Path | None = None,
+    expected_boundary_identity: tuple[int, int] | None = None,
+) -> bytes:
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ValueError(f"artifact must be a regular file: {path}")
-        chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 1024 * 1024):
-            chunks.append(chunk)
-        return b"".join(chunks)
-    finally:
-        os.close(descriptor)
+        return read_anchored_regular_bytes(
+            path,
+            boundary=boundary or path.parent,
+            expected_boundary_identity=expected_boundary_identity,
+        )
+    except OSError as error:
+        raise ValueError(f"artifact must be a stable regular file: {path}") from error
 
 
 def write_raw_run_result(
