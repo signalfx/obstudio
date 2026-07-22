@@ -1064,6 +1064,7 @@ def validate_item_provenance(
     verification_path: Path | None,
     instrumentation_items: dict[str, dict[str, Any]],
     allowed_source_only: set[str],
+    source_metric_ids: set[str],
     errors: list[str],
     prevalidated_working: dict[str, dict[str, Any]] | None = None,
     legacy_working: set[str] | None = None,
@@ -1072,6 +1073,11 @@ def validate_item_provenance(
         if not SOURCE_METRIC_ID.fullmatch(item_id):
             errors.append(
                 f"source-only item {item_id!r}: must be SOURCE-METRIC.<exact-metric-name>"
+            )
+        elif item_id not in source_metric_ids:
+            errors.append(
+                f"source-only item {item_id!r}: exact metric is absent from audit "
+                "current_instrumentation.metrics"
             )
     working: dict[str, dict[str, Any]] = {}
     legacy_working = legacy_working or set()
@@ -1151,6 +1157,59 @@ def validate_item_provenance(
     for item_id in unused_exceptions:
         errors.append(f"provenance: source-only exception {item_id!r} is not used by a chart")
     return len(working) + len(legacy_working)
+
+
+def audit_source_metric_ids(path: Path, errors: list[str]) -> set[str]:
+    """Return stable IDs for metrics explicitly observed in the canonical audit."""
+
+    if not path.is_file():
+        errors.append(
+            "source-only provenance: canonical otel-audit.json is required for "
+            "--allow-source-only-item"
+        )
+        return set()
+    try:
+        audit = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        errors.append(f"source-only provenance: cannot read canonical audit: {error}")
+        return set()
+    if not isinstance(audit, dict):
+        errors.append("source-only provenance: canonical audit must be an object")
+        return set()
+    current = audit.get("current_instrumentation")
+    if not isinstance(current, dict):
+        errors.append(
+            "source-only provenance: audit current_instrumentation must be an object"
+        )
+        return set()
+    metrics = current.get("metrics")
+    if not isinstance(metrics, list):
+        errors.append(
+            "source-only provenance: audit current_instrumentation.metrics must be a list"
+        )
+        return set()
+    result: set[str] = set()
+    for index, row in enumerate(metrics):
+        if not isinstance(row, dict):
+            errors.append(
+                "source-only provenance: audit metric row "
+                f"{index + 1} must be an object"
+            )
+            continue
+        name = row.get("name")
+        source = row.get("source")
+        metric_type = row.get("type")
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (name, source, metric_type)
+        ):
+            errors.append(
+                "source-only provenance: every audit metric needs non-empty "
+                "name, source, and type"
+            )
+            continue
+        result.add(f"SOURCE-METRIC.{name}")
+    return result
 
 
 def exact_metric_observed(metric: str, observed: str) -> bool:
@@ -1662,6 +1721,11 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         else:
             legacy_metrics = legacy_working_metrics(legacy_verification, errors)
     source_only_items = set(getattr(args, "allow_source_only_item", []))
+    source_metric_ids = (
+        audit_source_metric_ids(canonical_candidates["audit"], errors)
+        if source_only_items
+        else set()
+    )
     instrumentation_items, prevalidated_working = validate_bound_verification_flow(
         preview_path,
         verification_path,
@@ -1674,6 +1738,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         verification_path,
         instrumentation_items,
         source_only_items,
+        source_metric_ids,
         errors,
         prevalidated_working,
         legacy_metrics,

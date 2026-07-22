@@ -148,6 +148,13 @@ Collector output.
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("duplicate OTel item row", result.stderr)
 
+        canonical = self.validate(
+            duplicate,
+            "http.server.request.duration\n",
+            ["OTEL-001.http-duration", "OTEL-002.stdout-correlation"],
+        )
+        self.assertEqual(canonical.returncode, 0, canonical.stderr)
+
     def test_escaped_pipe_inside_table_cell_is_not_a_column_separator(self) -> None:
         escaped = REPORT.replace(
             "proof_mode=full_runtime; scenarios=http.duration.runtime",
@@ -288,6 +295,18 @@ Collector output.
             ] = missing_visibility
             verify_path.write_text(json.dumps(verification), encoding="utf-8")
 
+            for invalid_meta in (None, "Pass", []):
+                verification["meta"] = invalid_meta
+                verify_path.write_text(json.dumps(verification), encoding="utf-8")
+                malformed_meta = subprocess.run(
+                    command, check=False, capture_output=True, text=True
+                )
+                self.assertNotEqual(malformed_meta.returncode, 0)
+                self.assertIn("verify meta must be an object", malformed_meta.stderr)
+                self.assertNotIn("Traceback", malformed_meta.stderr)
+            verification["meta"] = {"result": "Partial"}
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+
             instrumentation.pop("selection_sha256")
             instrumentation_path.write_text(
                 json.dumps(instrumentation), encoding="utf-8"
@@ -389,6 +408,22 @@ Finding-level scenarios remain authoritative.
         self.assertIn(
             "unexpected item IDs in Not Working Or Not Proven: OTEL-999.unrelated",
             unexpected.stderr,
+        )
+
+    def test_gap_mirror_rejects_a_contradictory_state(self) -> None:
+        contradictory = self.validate(
+            REPORT.replace(
+                "| OTEL-002.stdout-correlation | Not proven |",
+                "| OTEL-002.stdout-correlation | Not working |",
+            ),
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+
+        self.assertNotEqual(contradictory.returncode, 0)
+        self.assertIn(
+            "OTEL-002.stdout-correlation: gap State 'Not working' does not match "
+            "Working status 'Not proven'",
+            contradictory.stderr,
         )
 
 
