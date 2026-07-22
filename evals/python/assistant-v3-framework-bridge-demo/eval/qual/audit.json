@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "framework-bridge",
-      "task": "Scan the assistant v3 FastAPI service in ./service. It has app-owned GenAI spans and a startup command that preloads framework instrumentation. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "task": "Scan the assistant v3 FastAPI service in ./service. It has app-owned GenAI spans and a startup command that preloads framework instrumentation. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
     }
   ],
   "judge_inputs": [

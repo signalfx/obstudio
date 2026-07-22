@@ -13,6 +13,54 @@ BOUNDARY_EVAL = (
 SOURCE_BACKED_DEFAULT_EVAL = (
     ROOT / "evals" / "go" / "chi-partial" / "eval" / "qual" / "audit.json"
 )
+FASTAPI_CELERY_EVAL = (
+    ROOT / "evals" / "python" / "fastapi-celery" / "eval" / "qual" / "audit.json"
+)
+SPRING_BOOT_EVAL = (
+    ROOT / "evals" / "java" / "springboot-basic" / "eval" / "qual" / "audit.json"
+)
+
+
+def test_qualitative_audit_prompts_write_only_observe_artifacts() -> None:
+    audit_definitions = []
+    for eval_path in sorted(ROOT.glob("evals/**/eval/qual/*.json")):
+        definition = json.loads(eval_path.read_text(encoding="utf-8"))
+        if definition.get("skill") != "otel-audit":
+            continue
+        audit_definitions.append((eval_path, definition))
+
+    assert audit_definitions
+    for eval_path, definition in audit_definitions:
+        for prompt in definition["prompts"]:
+            task = prompt["task"]
+            assert "Do not modify service code, dependencies, configuration, or tests" in task, (
+                f"{eval_path}:{prompt['id']} must preserve the full audit read-only boundary"
+            )
+            assert "Only the required .observe audit artifacts may be written" in task
+            for artifact in (
+                "./service/.observe/otel-audit.json",
+                "./service/.observe/otel.html",
+                "./service/.observe/otel.md",
+            ):
+                assert artifact in task, (
+                    f"{eval_path}:{prompt['id']} must require {artifact}"
+                )
+            assert "Do not modify files" not in task
+
+
+def test_framework_audit_rubrics_match_supported_instrumentation_boundaries() -> None:
+    fastapi = " ".join(
+        json.loads(FASTAPI_CELERY_EVAL.read_text(encoding="utf-8"))["rubric"]
+    )
+    spring = " ".join(
+        json.loads(SPRING_BOOT_EVAL.read_text(encoding="utf-8"))["rubric"]
+    )
+
+    assert "one supported FastAPI/ASGI instrumentation path" in fastapi
+    assert "HTTP-client instrumentation only when repository source uses" in fastapi
+    assert "this fixture does not" in fastapi
+    assert "official OpenTelemetry Java agent as the primary" in spring
+    assert "starter may be named only as an evidenced fallback" in spring
 
 
 def test_audit_routes_to_only_the_detected_language_reference() -> None:
@@ -29,6 +77,10 @@ def test_go_reference_does_not_recommend_nonexistent_otelchi_module() -> None:
     normalized = " ".join(text.split())
     assert "no official contrib `otelchi` module" in text
     assert "otelhttp.WithRouteTag" in text
+    assert "only when that exact source exports it" in normalized
+    assert "absent in v0.65.0 and later" in normalized
+    assert "trace.SpanFromContext" in text
+    assert "otelhttp.LabelerFromContext" in text
     assert "name `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`" in normalized
     assert 'Do not write only "add HTTP instrumentation,"' in text
     assert (
@@ -281,3 +333,43 @@ def test_audit_eval_keeps_non_telemetry_debt_out_of_every_artifact_section() -> 
 
     assert "component map followed by" not in rubric
     assert "decision-first .observe/otel.html" in rubric
+
+
+def test_audit_reconciles_source_inventory_before_writing_reports() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+
+    assert "### Source-to-Report Reconciliation Gate" in text
+    assert text.index("### Source-to-Report Reconciliation Gate") < text.index(
+        "### Step 3 -- Report"
+    )
+    assert "terminal pre-report gate" in normalized
+    for source_surface in (
+        "process entrypoint and runtime configuration",
+        "messaging direction, topic, group, and commit-or-ack behavior",
+        "silent branches and bounded source-defined outcomes",
+        "dependency instrumentation coverage",
+    ):
+        assert source_surface in normalized
+
+
+def test_audit_preserves_operator_distinct_bounded_outcome_reasons() -> None:
+    normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
+
+    for term in (
+        "multiple bounded source-defined reasons share one status or outcome",
+        "operator-distinct",
+        "bounded reason attribute",
+    ):
+        assert term in normalized
+
+
+def test_audit_business_aggregates_are_recommended_signal_candidates() -> None:
+    normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
+
+    assert "source-computed bounded business aggregates" in normalized
+    assert "recommended custom-signal candidates" in normalized
+    assert (
+        "must not become required solely because the source computes them"
+        in normalized
+    )

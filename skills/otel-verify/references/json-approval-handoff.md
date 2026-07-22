@@ -96,6 +96,7 @@ Write `.observe/otel-verify.json` with this shape:
       "remaining": []
     }
   ],
+  "stop_boundaries": [],
   "next_steps": []
 }
 ```
@@ -231,6 +232,32 @@ mapping retains the affected confirmation scope. When verification is called
 from instrumentation, return the result to that repair loop; after the repair,
 the instrumentation workflow automatically invokes `$otel-verify` to confirm
 the result instead of asking the user to start either workflow again.
+
+When a failed `instrumentation_child` repair loop cannot continue because it
+reached unselected work, a material decision, new authority, or an external
+prerequisite, keep `remaining` and `next_steps` repair-only and add a separate
+top-level boundary entry:
+
+```json
+"stop_boundaries": [
+  {
+    "finding_ids": ["OTEL-001"],
+    "kind": "external_prerequisite",
+    "reason": "Artifactory authentication is expired.",
+    "required_action": "Restore Artifactory authentication for the locked dependency source.",
+    "evidence": [".observe/evidence/runtime/dependency-restore.txt"]
+  }
+]
+```
+
+The allowed `kind` values are `unselected_work`, `material_decision`,
+`new_authority`, and `external_prerequisite`. The validator accepts this field
+only for `workflow_mode: instrumentation_child`, `result: Fail`, and
+`lifecycle: intermediate`; every `finding_ids` value must identify a failed
+finding. `reason` states the cause, `required_action` states the user or
+external action that unblocks the parent, and `evidence` contains durable
+proof. Omit `stop_boundaries` when the child is still an ordinary repair packet
+or after the repair succeeds.
 
 For a child invocation from an active instrumentation workflow, the canonical
 failure fields are the repair packet: failed finding, item, and scenario IDs;

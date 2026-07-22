@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "benchmark",
-      "task": "Audit the Go chi service in ./service for OpenTelemetry coverage. Do not modify application code or configuration. Write canonical ./service/.observe/otel-audit.json, render the self-contained ./service/.observe/otel.html, and retain ./service/.observe/otel.md for compatibility. Validate the JSON, then run the bundled observe_report.py gate against .observe/otel-audit.json with --fail-on required as a headless CI/MR policy check. Report exit 1 as an invalid artifact/tool error and exit 2 as an explicit unresolved-required-finding policy match; do not claim that an external CI system was configured."
+      "task": "Audit the Go chi service in ./service for OpenTelemetry coverage. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json, render the self-contained ./service/.observe/otel.html, and retain ./service/.observe/otel.md for compatibility. Validate the JSON, then run the bundled observe_report.py gate against .observe/otel-audit.json with --fail-on required as a headless CI/MR policy check. Report exit 1 as an invalid artifact/tool error and exit 2 as an explicit unresolved-required-finding policy match; do not claim that an external CI system was configured."
     }
   ],
   "judge_inputs": [

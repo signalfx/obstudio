@@ -885,7 +885,7 @@ def test_audit_json_and_renderer_own_reader_first_compatibility():
         '"findings": [',
         '"verification": {',
         "`render-markdown` command owns the complete `.observe/otel.md` compatibility schema",
-        "`render-markdown` and `../references/report-flow-contract.md` determine all compatibility layout",
+        "`render-markdown` owns all compatibility layout",
         'python3 "<directory-containing-loaded-SKILL.md>/scripts/validate_audit_report.py"',
     ]
     missing = [term for term in required_terms if term not in audit_normalized]

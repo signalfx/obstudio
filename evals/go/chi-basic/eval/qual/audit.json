@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify application code. Write canonical ./service/.observe/otel-audit.json, render the self-contained human review report at ./service/.observe/otel.html, and retain ./service/.observe/otel.md as the compatibility report."
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json, render the self-contained human review report at ./service/.observe/otel.html, and retain ./service/.observe/otel.md as the compatibility report."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify application code. Write canonical ./service/.observe/otel-audit.json, render ./service/.observe/otel.html for human review and finding selection, and retain ./service/.observe/otel.md as the compatibility report."
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json, render ./service/.observe/otel.html for human review and finding selection, and retain ./service/.observe/otel.md as the compatibility report."
     }
   ],
   "judge_inputs": [

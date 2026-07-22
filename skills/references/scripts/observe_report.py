@@ -185,6 +185,18 @@ VISIBILITY_STATES = {
 }
 VERIFY_WORKFLOW_MODES = {"standalone", "instrumentation_child"}
 VERIFY_LIFECYCLES = {"intermediate", "final"}
+STOP_BOUNDARY_KINDS = {
+    "unselected_work",
+    "material_decision",
+    "new_authority",
+    "external_prerequisite",
+}
+IMPERATIVE_STOP_BOUNDARY_REASON = re.compile(
+    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|configure|"
+    r"obtain|use|record|execute|exercise|capture|inspect|verify|prove|repair|"
+    r"fix|change|remove|add|choose|decide|approve|authorize)\b",
+    re.IGNORECASE,
+)
 EPHEMERAL_ARTIFACT_PREFIXES = (
     "/tmp",
     "/private/tmp",
@@ -337,6 +349,11 @@ def object_list(value: Any, path: str) -> list[dict[str, Any]]:
 def normalized_words(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return " ".join(re.sub(r"[^a-z0-9._/]+", " ", normalized).split())
+
+
+def normalized_action_words(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
 
 
 def validate_otel_closure_text(
@@ -2437,6 +2454,23 @@ def normalize_verify(
         fail(
             f"verify.meta.lifecycle must be one of {sorted(VERIFY_LIFECYCLES)}"
         )
+    raw_stop_boundaries = object_list(
+        data.get("stop_boundaries", []), "verify.stop_boundaries"
+    )
+    if raw_stop_boundaries and not (
+        workflow_mode == "instrumentation_child"
+        and result == "Fail"
+        and lifecycle == "intermediate"
+    ):
+        fail(
+            "verify.stop_boundaries is allowed only for an instrumentation_child "
+            "overlay with result Fail and lifecycle intermediate"
+        )
+    if raw_stop_boundaries and instrumentation["meta"]["result"] != "Fail":
+        fail(
+            "verify.stop_boundaries requires the bound instrumentation "
+            "meta.result to be Fail"
+        )
     if stable_id(data.get("audit_id"), "verify.audit_id") != report["meta"]["audit_id"]:
         fail("verify.audit_id does not match audit")
     if text(data.get("audit_sha256"), "verify.audit_sha256") != audit_digest(report):
@@ -2975,6 +3009,149 @@ def normalize_verify(
             "failed instrumentation-child verification must be intermediate; "
             "the parent repair loop cannot finalize it"
         )
+    failed_id_order = {row["id"]: index for index, row in enumerate(failed_rows)}
+    stop_boundaries: list[dict[str, Any]] = []
+    for boundary_index, boundary in enumerate(raw_stop_boundaries):
+        boundary_path = f"verify.stop_boundaries[{boundary_index}]"
+        finding_ids = [
+            stable_id(
+                value,
+                f"{boundary_path}.finding_ids[{finding_index}]",
+            )
+            for finding_index, value in enumerate(
+                as_list(
+                    boundary.get("finding_ids"),
+                    f"{boundary_path}.finding_ids",
+                )
+            )
+        ]
+        if not finding_ids:
+            fail(f"{boundary_path}.finding_ids must not be empty")
+        if len(finding_ids) != len(set(finding_ids)):
+            fail(f"{boundary_path}.finding_ids must not contain duplicates")
+        unknown_failed_ids = [
+            finding_id
+            for finding_id in finding_ids
+            if finding_id not in failed_id_order
+        ]
+        if unknown_failed_ids:
+            fail(
+                f"{boundary_path}.finding_ids must reference only failed "
+                f"verify findings: {unknown_failed_ids}"
+            )
+        kind = text(boundary.get("kind"), f"{boundary_path}.kind")
+        if kind not in STOP_BOUNDARY_KINDS:
+            fail(
+                f"{boundary_path}.kind must be one of "
+                f"{sorted(STOP_BOUNDARY_KINDS)}"
+            )
+        reason = text(boundary.get("reason"), f"{boundary_path}.reason").strip()
+        if IMPERATIVE_STOP_BOUNDARY_REASON.match(reason):
+            fail(
+                f"{boundary_path}.reason must state the observed boundary "
+                "declaratively, not as an action"
+            )
+        required_action = text(
+            boundary.get("required_action"), f"{boundary_path}.required_action"
+        ).strip()
+        evidence = durable_artifact_list(
+            boundary.get("evidence", []), f"{boundary_path}.evidence"
+        )
+        if not evidence:
+            fail(f"{boundary_path}.evidence must contain durable evidence")
+        stop_boundaries.append(
+            {
+                "finding_ids": sorted(
+                    finding_ids, key=failed_id_order.__getitem__
+                ),
+                "kind": kind,
+                "reason": reason,
+                "required_action": required_action,
+                "evidence": evidence,
+            }
+        )
+    if stop_boundaries:
+        instrumentation_findings_by_id = {
+            row["id"]: row for row in instrumentation["findings"]
+        }
+        non_failed_instrumentation_ids = sorted(
+            {
+                finding_id
+                for boundary in stop_boundaries
+                for finding_id in boundary["finding_ids"]
+                if instrumentation_findings_by_id[finding_id]["status"]
+                != "not_working"
+            },
+            key=failed_id_order.__getitem__,
+        )
+        if non_failed_instrumentation_ids:
+            fail(
+                "verify.stop_boundaries finding_ids require matching bound "
+                "instrumentation findings with status not_working: "
+                f"{non_failed_instrumentation_ids}"
+            )
+        covered_failed_ids = {
+            finding_id
+            for boundary in stop_boundaries
+            for finding_id in boundary["finding_ids"]
+        }
+        missing_failed_ids = [
+            row["id"] for row in failed_rows if row["id"] not in covered_failed_ids
+        ]
+        if missing_failed_ids:
+            fail(
+                "verify.stop_boundaries must identify every failed finding when a "
+                f"stopped child boundary is recorded: {missing_failed_ids}"
+            )
+        rows_by_id = {row["id"]: row for row in rows}
+        for boundary_index, boundary in enumerate(stop_boundaries):
+            normalized_required_action = normalized_action_words(
+                boundary["required_action"]
+            )
+            duplicated_locations: list[str] = []
+            for finding_id in boundary["finding_ids"]:
+                for remaining_index, action in enumerate(
+                    rows_by_id[finding_id]["remaining"]
+                ):
+                    normalized_action = normalized_action_words(action)
+                    if (
+                        f" {normalized_required_action} "
+                        in f" {normalized_action} "
+                        or f" {normalized_action} "
+                        in f" {normalized_required_action} "
+                    ):
+                        duplicated_locations.append(
+                            f"verify.findings[{finding_id}].remaining"
+                            f"[{remaining_index}]"
+                        )
+            for next_step_index, action in enumerate(next_steps):
+                normalized_action = normalized_action_words(action)
+                if (
+                    f" {normalized_required_action} "
+                    in f" {normalized_action} "
+                    or f" {normalized_action} "
+                    in f" {normalized_required_action} "
+                ):
+                    duplicated_locations.append(
+                        f"verify.next_steps[{next_step_index}]"
+                    )
+            if duplicated_locations:
+                fail(
+                    f"verify.stop_boundaries[{boundary_index}].required_action "
+                    "must remain only in stop_boundaries and cannot be duplicated "
+                    "as an application code/config repair in "
+                    f"{duplicated_locations}"
+                )
+        stop_boundaries.sort(
+            key=lambda boundary: (
+                min(
+                    failed_id_order[finding_id]
+                    for finding_id in boundary["finding_ids"]
+                ),
+                boundary["kind"],
+                boundary["reason"],
+            )
+        )
     normalized_for_runtime_checks = {"findings": rows}
     if verification_attached_java_agent(normalized_for_runtime_checks):
         stale_requests = [
@@ -3025,7 +3202,7 @@ def normalize_verify(
             "verify.next_steps cannot claim no further action while selected findings "
             "remain unresolved"
         )
-    return {
+    normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
         "kind": "otel-verify",
         "audit_id": report["meta"]["audit_id"],
@@ -3041,6 +3218,9 @@ def normalize_verify(
         "findings": rows,
         "next_steps": next_steps,
     }
+    if stop_boundaries:
+        normalized["stop_boundaries"] = stop_boundaries
+    return normalized
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -5595,6 +5775,45 @@ def render_unselected_findings(report: dict[str, Any], selection: dict[str, Any]
     )
 
 
+def render_stop_boundaries(verify: dict[str, Any] | None) -> str:
+    if verify is None or not verify.get("stop_boundaries"):
+        return ""
+    kind_labels = {
+        "unselected_work": "Unselected work",
+        "material_decision": "Material decision",
+        "new_authority": "New authority",
+        "external_prerequisite": "External prerequisite",
+    }
+    rows = []
+    for boundary in verify["stop_boundaries"]:
+        affected = ", ".join(
+            f'<a class="finding-jump" href="#selected-{esc(finding_id)}">'
+            f'<code>{esc(finding_id)}</code></a>'
+            for finding_id in boundary["finding_ids"]
+        )
+        rows.append(
+            '<article class="stop-boundary">'
+            f'<h3>{esc(kind_labels[boundary["kind"]])}</h3>'
+            f'<p><strong>Affected failed findings:</strong> {affected}</p>'
+            f'<p><strong>Why instrumentation stopped:</strong> '
+            f'{esc(reader_prose(boundary["reason"]))}</p>'
+            '<p><strong>Required action outside the instrumentation repair scope:</strong> '
+            f'{esc(reader_prose(boundary["required_action"]))}</p>'
+            '<div><strong>Durable evidence:</strong>'
+            f'{render_list(boundary["evidence"])}</div>'
+            '</article>'
+        )
+    return (
+        '<section class="panel stop-boundaries" aria-labelledby="stop-boundaries-heading">'
+        '<h2 id="stop-boundaries-heading">Why the repair loop stopped</h2>'
+        '<p class="review-note">The executed verification failures remain recorded. '
+        'Instrumentation cannot safely continue until the boundary action below is '
+        'completed; it is not another application code/config repair.</p>'
+        f'<div class="stop-boundary-list">{"".join(rows)}</div>'
+        '</section>'
+    )
+
+
 def render_instrumentation_html(
     report: dict[str, Any],
     selection: dict[str, Any],
@@ -5607,6 +5826,8 @@ def render_instrumentation_html(
     summary = render_instrumentation_summary(selection, instrumentation, verify)
     genai_closure = render_genai_closure_summary(instrumentation)
     genai_closure_section = f"  {genai_closure}\n" if genai_closure else ""
+    stop_boundaries = render_stop_boundaries(verify)
+    stop_boundaries_section = f"  {stop_boundaries}\n" if stop_boundaries else ""
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
     selection_sha = selection_digest(selection)
@@ -5661,6 +5882,11 @@ main {{ padding-top:18px !important; padding-bottom:34px !important; }}
 .verification-limits {{ background:#fff8e8; border:1px solid #ead7a2; border-radius:7px; margin:12px 0; padding:11px 12px; }}
 .verification-limits h3 {{ font-size:14px; margin:0 0 6px; }}
 .verification-limits p:last-child {{ margin-bottom:0; }}
+.stop-boundary-list {{ display:grid; gap:10px; }}
+.stop-boundary {{ background:#fff8e8; border:1px solid #ead7a2; border-left:4px solid #b7791f; border-radius:7px; padding:11px 12px; }}
+.stop-boundary h3 {{ font-size:15px; margin:0 0 7px; }}
+.stop-boundary p:last-of-type {{ margin-bottom:8px; }}
+.stop-boundary ul {{ margin-top:4px; }}
 .selected-issues {{ display:grid; gap:12px; list-style:none; margin:12px 0 0; padding:0; }}
 .selected-issue {{ background:#fbfcfe; border:1px solid var(--line); border-radius:8px; padding:14px; }}
 .selected-issue-header {{ align-items:flex-start; display:flex; gap:16px; justify-content:space-between; }}
@@ -5734,7 +5960,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
-{genai_closure_section}  <section class="panel" aria-labelledby="selected-issues-heading">
+{stop_boundaries_section}{genai_closure_section}  <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>
     <p class="review-note">Each issue shows what changed, how observability improves, telemetry-item proof, scenario coverage, and any remaining uncertainty.</p>

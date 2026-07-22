@@ -14,7 +14,7 @@ matching the frameworks and clients detected in the codebase.
 | ------------------------ | ----------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
 | `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans and version-dependent duration/body-size metrics                |
 | `gorilla/mux`            | `go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux`              | spans only      | Route-aware HTTP spans                                                                  |
-| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` + `otelhttp.WithRouteTag` | spans + metrics | HTTP server spans/metrics with explicit low-cardinality chi route patterns              |
+| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` + version-aware current-span/labeler annotation | spans + metrics | HTTP server spans/metrics with explicit low-cardinality chi route patterns              |
 | `gin-gonic/gin`          | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`            | spans only      | Route-aware HTTP spans                                                                  |
 | `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc`             | spans + metrics | gRPC client/server spans and metrics                                                    |
 | `database/sql`           | `github.com/XSAM/otelsql`                                                                 | spans only      | SQL query spans with `db.statement`                                                     |
@@ -62,21 +62,45 @@ http.ListenAndServe(":8080", handler)
 There is no official OpenTelemetry Go contrib `otelchi` module. Do not probe
 for or add the nonexistent
 `go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`
-package. For route-aware chi telemetry, annotate each registered handler with
-the low-cardinality route pattern while retaining the outer `otelhttp` handler:
+package. Inspect the selected `otelhttp` module source once before writing the
+route wrapper. Use `otelhttp.WithRouteTag` only when that exact source exports
+it; the API is absent in v0.65.0 and later. Do not discover the mismatch by
+repeated compile-and-repair probes.
+
+For v0.65.0 and later, annotate the current outer server span and its existing
+metric labeler without starting a span:
+
+```go
+func withRoute(pattern string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		route := attribute.String("http.route", pattern)
+		trace.SpanFromContext(r.Context()).SetAttributes(route)
+		if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+			labeler.Add(route)
+		}
+		next(w, r)
+	}
+}
+
+r.Get("/tasks/{id}", withRoute("/tasks/{id}", getTask))
+handler := otelhttp.NewHandler(r, "server")
+```
+
+When the selected pre-v0.65.0 source does export `WithRouteTag`, it may replace
+the helper above, but adapt its returned `http.Handler` to chi's
+`http.HandlerFunc` registration:
 
 ```go
 r.Get("/tasks/{id}", otelhttp.WithRouteTag(
 	"/tasks/{id}",
 	http.HandlerFunc(getTask),
 ).ServeHTTP)
-handler := otelhttp.NewHandler(r, "server")
 ```
 
-`WithRouteTag` sets `http.route` on the current span and the `otelhttp` metric
-labeler. It does not rename the outer span. If route-pattern span names are an
-explicit requirement, rename that current span after route matching and prove
-the name in a recorder test; do not start a second server span.
+It sets `http.route` on the current span and the `otelhttp` metric labeler; it
+does not rename the outer span. If route-pattern span names are an explicit
+requirement, rename that current span after route matching and prove the name
+in a recorder test; do not start a second server span.
 
 ### gin
 
@@ -251,6 +275,16 @@ recursive `chmod`, or another cleanup command. Never recover with a manual
 telemetry bookkeeping below the isolated `HOME`; that state cannot reach the
 user's home directory and is not a build/module cache payload.
 
+Run this cleanup exactly once after the applicable terminal check: the canonical
+`instrumentation-final-gate`, the explicit canonical no-child validation when
+verification was opted out or concretely blocked before an overlay could be
+written, or the legacy no-audit validation defined by the skill. Successful
+cleanup is the terminal boundary: emit the final response immediately. Do not
+follow it with `git status`, `git diff`, a `go.sum` inspection, cache
+inspection/removal, file or artifact listings, repeated validators/tests, or
+duplicate final review. If cleanup fails, report that exact failure immediately
+rather than starting a manual cleanup or inspection branch.
+
 For `incomplete` or `no-candidate`, use only an eligible runner bootstrap probe.
 If it is ineligible or blocked, do not execute `go_get`, inspect rejection rows
 to choose pins, run a version/cache lookup, or start a probe loop. An
@@ -424,11 +458,13 @@ http.ListenAndServe(":8080", handler)
 ```
 
 For router-specific integration, see the Framework Selection Guide above. For
-chi, `otelhttp.WithRouteTag` annotates the current span and metrics without
-renaming the span. `otelmux` and `otelgin` emit spans; do not stack either under
-another span-producing wrapper. Use a non-span-producing route annotator with
-the outer `otelhttp.NewHandler` when both one server span and HTTP server
-metrics are required.
+chi, use `otelhttp.WithRouteTag` only when the selected module source exports
+it. With v0.65.0 and later, annotate the current span through
+`trace.SpanFromContext` and the current request metrics through
+`otelhttp.LabelerFromContext` without starting another span. `otelmux` and
+`otelgin` emit spans; do not stack either under another span-producing wrapper.
+Use a non-span-producing route annotator with the outer `otelhttp.NewHandler`
+when both one server span and HTTP server metrics are required.
 
 ### HTTP Client Instrumentation
 
@@ -579,7 +615,11 @@ span.SetStatus(codes.Error, "payment gateway timeout")
 span.RecordError(err)
 ```
 
-The `otelhttp` handler auto-sets ERROR on 5xx responses.
+Use that pattern for actual application/transport errors and custom-span
+failures. For an `otelhttp` SERVER span, preserve HTTP semantic conventions:
+the handler auto-sets ERROR for 5xx responses, while an ordinary handled 4xx
+response leaves span status unset. Do not add `RecordError`/`SetStatus` merely
+because a handler intentionally returned 400, 404, or 409.
 
 ---
 

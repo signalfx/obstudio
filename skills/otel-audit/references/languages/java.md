@@ -11,7 +11,10 @@ instruments these detected surfaces without application code changes:
 - JDBC drivers
 
 For Spring Boot, name the application entry point, controller files, build
-wrapper, and Java-agent startup surface. For Kafka services, name producer and
-consumer wrappers, batch-poll loops, `@KafkaListener` methods, Streams topology
-and lifecycle code, topics, consumer groups, commit behavior, uncaught-exception
-handling, and missing processed/failed/lag/latency signals.
+wrapper, and Java-agent startup surface. Recommend the official OpenTelemetry
+Java agent as the primary baseline path; name an official supported Spring Boot
+starter only as a source-evidenced fallback when the runtime cannot use the
+agent. For Kafka services, name producer and consumer wrappers, batch-poll
+loops, `@KafkaListener` methods, Streams topology and lifecycle code, topics,
+consumer groups, commit behavior, uncaught-exception handling, and missing
+processed/failed/lag/latency signals.

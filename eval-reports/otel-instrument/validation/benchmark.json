@@ -6,7 +6,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260722T122817451918Z",
+    "run_id": "20260722T172408672932Z",
     "repo_root": ".",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
@@ -23,7 +23,7 @@
       "expected_prompt_count": 39,
       "selected_prompt_ids": [
         "go/chi-basic/qual/benchmark-instrument/benchmark",
-        "go/chi-basic/qual/instrument/decision-gated",
+        "go/chi-basic/qual/instrument-decision-gated/decision-gated",
         "go/chi-basic/qual/instrument/direct",
         "go/chi-basic/qual/instrument/runtime-preserving",
         "go/chi-basic/runtime/instrument/runtime-preserving",
@@ -90,9 +90,8 @@
       "case": "go/chi-basic",
       "language": "go",
       "service": "chi-basic",
-      "prompt_count": 3,
+      "prompt_count": 2,
       "prompts": [
-        "decision-gated",
         "direct",
         "runtime-preserving"
       ],
@@ -100,7 +99,23 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 8,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/qual/instrument-decision-gated",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "decision-gated"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/instrument-decision-gated.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -500,11 +515,11 @@
     }
   ],
   "summary": {
-    "eval_count": 26,
+    "eval_count": 27,
     "case_count": 39,
     "prompt_count": 39,
     "sanity_check_count": 0,
-    "rubric_check_count": 183,
+    "rubric_check_count": 179,
     "runtime_check_count": 6
   }
 }

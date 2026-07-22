@@ -23,6 +23,18 @@ VERIFY_EVAL = (
 CHI_CANONICAL_VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
 )
+CHI_DIRECT_INSTRUMENT_EVAL = (
+    ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "instrument.json"
+)
+CHI_DECISION_INSTRUMENT_EVAL = (
+    ROOT
+    / "evals"
+    / "go"
+    / "chi-basic"
+    / "eval"
+    / "qual"
+    / "instrument-decision-gated.json"
+)
 
 
 def _read(path: Path) -> str:
@@ -76,6 +88,117 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
     assert 'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py"' in audit
     assert "--normalized-out" not in audit
     assert "otel-audit.normalized.json" not in audit
+
+
+def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> None:
+    instrument = _read(INSTRUMENT_SKILL)
+    handoff = _read(INSTRUMENT_HANDOFF)
+    opening = instrument.split("## Workflow", 1)[0]
+    canonical_gate = instrument.split(
+        "#### Canonical Audit And Selection Gate", 1
+    )[1].split("### Fast Path", 1)[0]
+
+    assert (
+        "Before editing application code, read "
+        "`../references/report-flow-contract.md`" not in instrument
+    )
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
+    assert "For a canonical JSON flow, read" in opening
+    assert "`./references/json-approval-handoff.md`" in opening
+    assert "legacy no-audit flow" in opening
+    assert "contained in this `SKILL.md`" in opening
+    assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
+        canonical_gate.split()
+    )
+    assert "this file is the scoped instrumentation and reader-report authority" in " ".join(
+        handoff.split()
+    )
+    assert "Do not also load `../../references/report-flow-contract.md`" in handoff
+    assert "unless a conditional downstream workflow explicitly requires" in " ".join(
+        handoff.split()
+    )
+
+
+def test_audit_does_not_duplicate_the_shared_report_contract_up_front() -> None:
+    audit = _read(AUDIT_SKILL)
+    opening = audit.split("## Process", 1)[0]
+    normalized = " ".join(opening.split())
+
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
+    assert "This `SKILL.md` contains the audit finding" in normalized
+    assert "reader-report, selection-handoff, and finalization contract" in normalized
+    assert "only when a conditional downstream workflow explicitly requires" in normalized
+    assert audit.count("`../references/report-flow-contract.md`") == 1
+
+
+def test_instrument_terminal_boundary_forbids_post_gate_inspection() -> None:
+    instrument = " ".join(_read(INSTRUMENT_SKILL).split())
+    handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
+    go_guide = " ".join(
+        _read(
+            ROOT
+            / "skills"
+            / "otel-instrument"
+            / "references"
+            / "languages"
+            / "go.md"
+        ).split()
+    )
+
+    assert "passing `instrumentation-final-gate`" in instrument
+    assert "successful explicit no-child" in instrument
+    assert "successful terminal stopped-failure validation" in instrument
+    assert "emit the final response without another command" in instrument
+    assert "`git status`" in instrument
+    assert "`git diff`" in instrument
+    assert "inspect `go.sum`" in instrument
+    assert "repeat a validator/test" in instrument
+    assert "duplicate final review" in instrument
+    assert "do not fabricate one" in instrument.lower()
+    assert "without `--verify-json`" in instrument
+    assert "terminal validation for this explicit no-child branch" in instrument
+    assert "do not set the overall result to `Blocked` or `Not run`" in instrument
+    assert "terminal stopped-failure validation" in instrument
+    assert "not a completed or verified handoff" in instrument
+    assert "`meta.result: Fail`" in instrument
+    assert "authority boundary does not turn an observed telemetry failure" in instrument
+    assert "top-level `stop_boundaries[]`" in instrument
+    assert "finding `remaining` and top-level `next_steps` repair-only" in instrument
+
+    assert "Do not run `instrumentation-final-gate`" in handoff
+    assert "fixed-Go cleanup, or the final response from this Step 5 reference" in handoff
+    assert "the parent `SKILL.md` owns the actual gate" in handoff
+    assert "This is preliminary Step 5 validation" in handoff
+    assert "stopped-failure handoff" in handoff
+    assert "not a completed or verified instrumentation result" in handoff
+    assert "`meta.result: Fail`" in handoff
+    assert "do not relabel observed failure as `Blocked` or `not_proven`" in handoff
+    assert "top-level `stop_boundaries[]`" in handoff
+    assert "finding `remaining` and top-level `next_steps` repair-only" in handoff
+    assert "Treat a passing `instrumentation-final-gate`" not in handoff
+
+    terminal = instrument.index("After completing every Step 7")
+    assert instrument.index("### 7. Finalize") < terminal
+    assert instrument.index("## Credential Safety") < terminal
+    assert instrument.index("Verify no tokens in tracked files") < terminal
+    assert instrument.index("## Scope") < terminal
+    assert instrument.rfind("## ") == instrument.index("## Terminal Sequence")
+    assert instrument.index("Write `.observe/otel-instrumentation.md`") < terminal
+    assert instrument.index("render `.observe/otel-instrumentation.html`") < terminal
+    assert instrument.index("On the fixed Go bundle branch") < terminal
+    assert "requested detector/configure workflow" in instrument
+    assert "last validation before fixed-Go cleanup" in instrument
+    assert "For a legacy no-audit flow" in instrument
+    assert "successful legacy terminal validation" in instrument
+    assert "do not look for or invoke the canonical gate" in instrument
+    assert "do not fabricate audit" in instrument
+    assert instrument.index("When verified metric evidence exists") < terminal
+    assert "Successful cleanup is the terminal boundary" in go_guide
+    assert "explicit canonical no-child validation" in go_guide
+    assert "legacy no-audit validation" in go_guide
+    assert "emit the final response immediately" in go_guide
+    assert "a `go.sum` inspection" in go_guide
+    assert "repeated validators/tests" in go_guide
 
 
 def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
@@ -165,6 +288,30 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-verify.json" in verify
 
 
+def test_decision_gated_instrumentation_has_a_scope_specific_rubric() -> None:
+    direct = json.loads(_read(CHI_DIRECT_INSTRUMENT_EVAL))
+    decision = json.loads(_read(CHI_DECISION_INSTRUMENT_EVAL))
+    direct_contract = " ".join(
+        [item["task"] for item in direct["prompts"]] + direct["rubric"]
+    )
+    decision_contract = " ".join(
+        [item["task"] for item in decision["prompts"]] + decision["rubric"]
+    )
+
+    assert {item["id"] for item in direct["prompts"]} == {
+        "direct",
+        "runtime-preserving",
+    }
+    assert [item["id"] for item in decision["prompts"]] == ["decision-gated"]
+    assert direct["judge_inputs"] == decision["judge_inputs"]
+    assert "For the decision-gated prompt" not in direct_contract
+    assert "OTEL-001" not in decision_contract
+    assert "OTEL-003=metric-counter" in decision_contract
+    assert "only the unlocked OTEL-002" in decision_contract
+    assert "unchosen OTEL-004" in decision_contract
+    assert "unrelated HTTP tracing" in decision_contract
+
+
 def test_canonical_verify_eval_requires_only_real_item_local_proof() -> None:
     verify = _eval_contract(CHI_CANONICAL_VERIFY_EVAL)
 
@@ -221,6 +368,28 @@ def test_canonical_overlays_join_code_telemetry_product_action_and_item_proof() 
         "explorer_visible",
     ):
         assert term in verify
+
+
+def test_failed_child_stop_boundaries_are_separate_from_repairs() -> None:
+    instrument = " ".join(
+        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
+    )
+    verify = " ".join((_read(VERIFY_SKILL) + _read(VERIFY_HANDOFF)).split())
+    flow = " ".join(_read(REPORT_FLOW).split())
+
+    for text in (instrument, verify, flow):
+        assert "stop_boundaries[]" in text
+        assert "remaining" in text and "next_steps" in text
+        assert "repair-only" in text
+        assert "external_prerequisite" in text
+        assert "lifecycle: intermediate" in text
+    for kind in (
+        "unselected_work",
+        "material_decision",
+        "new_authority",
+        "external_prerequisite",
+    ):
+        assert kind in verify
 
 
 def test_item_proof_cannot_borrow_aggregate_or_different_signal_evidence() -> None:

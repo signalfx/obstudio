@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | splunk-detector-publish |
-| Run ID | 20260722T122817133757Z |
+| Run ID | 20260722T172408350729Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 | Report scope | full |

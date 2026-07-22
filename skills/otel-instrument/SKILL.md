@@ -21,8 +21,13 @@ Add OpenTelemetry observability to applications using auto-instrumentation and o
 
 Prefer the application's current runtime shape. If the project already uses Docker/Compose or Kubernetes, fit instrumentation into that path. If the user does not have Docker or does not want Docker, do not introduce containers just for observability; use the host/native runtime patterns.
 
-Before editing application code, read `../references/report-flow-contract.md`
-and follow the Instrumentation Contract plus Reader-First Report Order.
+Do not load `../references/report-flow-contract.md` as an up-front
+prerequisite. For a canonical JSON flow, read
+`./references/json-approval-handoff.md`; it is the scoped instrumentation and
+reader-report contract. For a legacy no-audit flow, use the report and
+finalization contract contained in this `SKILL.md`. Read the shared report-flow
+contract only when a conditional downstream workflow explicitly requires one
+of its additional field or rollup rules.
 
 Resolve every reference and script path from the directory containing the
 loaded `otel-instrument/SKILL.md`. Here, `../references/<file>` means the shared
@@ -638,7 +643,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 
 **Critical for APM error tracking:**
 - Set `otel.status_code` to `ERROR` on failures -- this is how APM backends identify errors
-- For HTTP server spans, 5xx responses set ERROR automatically per OTel semantic conventions
+- For HTTP server spans, preserve semantic-convention status ownership: ordinary
+  4xx responses leave a SERVER span status unset, while 5xx responses set ERROR
+  automatically. Record actual transport/application exceptions and custom-span
+  failures explicitly; do not mark every handled 4xx business response ERROR.
 - For custom spans wrapping business logic, explicitly set error status on exceptions
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
@@ -695,6 +703,21 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   requirement depends on them, the service can observe the value accurately,
   and privacy/cardinality rules permit it. Do not invent custom spans, metrics,
   or attributes where a semantic-convention signal satisfies the requirement.
+- This outcome pass never broadens canonical selected scope. In a canonical
+  flow, implement a non-standard reason attribute only when a selected
+  finding's expected telemetry authors that attribute; otherwise leave code
+  untouched, record the scope mismatch, and require a corrected audit/selection
+  before implementation. In a legacy no-audit request to fix or complete the
+  service's instrumentation, source-evidenced collision work is in scope.
+- Before editing HTTP outcome instrumentation, make one bounded pass over the
+  service's non-success response call sites and group them by stable
+  `(method, route, status code)`. When two source-evidenced, operator-distinct
+  conditions share that same standard attribute tuple, the status code cannot
+  distinguish them. Use the language's per-call metric-attribute hook to add a
+  bounded reason on the existing RED metric when available; otherwise use the
+  approved custom-signal fallback below. Exercise every collided reason in a
+  focused test and assert the resulting metric attributes. Never derive a
+  metric attribute from a response body or other unbounded payload value.
 - Before adding any custom counter or histogram for an outcome that occurs
   inside a call already covered by an auto-instrumented RED metric, check
   whether that outcome can instead be recorded as an attribute on the existing
@@ -838,15 +861,21 @@ Node.js:
 Go:
 - For HTTP services that need `otelhttp` request metrics, use
   `otelhttp.NewHandler` as the outermost and sole server-span producer.
-- For chi, use `otelhttp.WithRouteTag` to put the low-cardinality route pattern
-  in `http.route` on the existing server span and HTTP metrics. It does **not**
-  rename the span. Prove the route attribute and prove one server span per
-  request. If route-pattern span names are an explicit requirement, update the
-  current outer span after route matching and test its name; do not add a
-  second span-producing server middleware. Apply the same one-span rule to
-  gin, mux, and other routers: use a non-span-producing route annotator with
-  the outer `otelhttp.NewHandler`, or use the framework middleware alone and
-  report that `otelhttp` server metrics were not added.
+- For chi, inspect the selected `otelhttp` module source before choosing the
+  route annotator. Use `otelhttp.WithRouteTag` only when that exact source
+  exports it; `otelhttp` v0.65.0 and later do not. With v0.65.0+, annotate the
+  low-cardinality route pattern in `http.route` on the current outer span with
+  `trace.SpanFromContext(r.Context()).SetAttributes` and add the same attribute
+  to the existing metric labeler from `otelhttp.LabelerFromContext`. This
+  annotator must not start a span. `WithRouteTag`, when available, annotates the
+  current span and metric labeler. It does **not** rename the span. Prove the
+  route attribute and prove one server span per request. If route-pattern span
+  names are an explicit requirement, update the current outer span after route
+  matching and test its name; do not add a second span-producing server
+  middleware. Apply the same one-span rule to gin, mux, and other routers: use
+  a non-span-producing route annotator with the outer `otelhttp.NewHandler`, or
+  use the framework middleware alone and report that `otelhttp` server metrics
+  were not added.
 - Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
 - In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
 - `otelhttp.NewHandler` already sets `http.response.status_code` on
@@ -872,6 +901,12 @@ Go:
   Non-Standard Outcome Attribute" rule, which generates an attribute-filtered
   outcome detector directly from an evidenced non-standard histogram
   attribute.
+- Apply the bounded outcome-grouping pass above to every in-scope chi handler
+  before final review. For each selected or legacy-direct same-route/same-status
+  collision, call `labeler.Add` immediately before the corresponding response
+  and add a focused `otelhttp.NewHandler` test that drives every reason and
+  asserts the distinct `outcome.reason` values on
+  `http.server.request.duration`.
 
 Java:
 - Use the Java agent for Spring Boot unless custom business spans are explicitly requested.
@@ -1067,10 +1102,6 @@ blocking prerequisite and do not describe the instrumentation as verified.
 When `.observe/otel-verify.json` is produced, validate and render the complete
 flow with the same reference, then refresh
 `.observe/otel-instrumentation.html` with verification proof before finalizing.
-Run the shared `instrumentation-final-gate` command after the final child
-verification overlay. It must pass before the instrumentation workflow can
-return a completed handoff; `Partial` proof may pass when no executed check
-failed, but an intermediate or `not_working` child result cannot.
 Do not render downstream state into `.observe/otel.html`.
 
 When verified metric evidence exists and the user requested detectors,
@@ -1175,3 +1206,70 @@ When that env-file condition is met:
 
 - **New apps**: Full scaffold matching the current runtime shape: instrumentation, SDK init, env var config
 - **Existing apps**: Incremental -- detect what's already present, add only what's missing
+
+## Terminal Sequence
+
+After completing every Step 7 report/artifact requirement, any requested
+detector/configure workflow, conditional full-runtime work, applicable
+Credential Safety work, final code review, and all required validation, run the
+final applicable terminal check:
+
+- When the final child `.observe/otel-verify.json` has no executed failure and
+  is `lifecycle: final`, run the shared gate now, not during Step 5:
+
+  ```bash
+  python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" instrumentation-final-gate \
+    .observe/otel-audit.json \
+    --selection-json .observe/otel-selection.json \
+    --instrumentation-json .observe/otel-instrumentation.json \
+    --verify-json .observe/otel-verify.json
+  ```
+
+  It must pass before a completed handoff; `Partial` proof may pass when no
+  executed check failed, but an intermediate or `not_working` child cannot.
+- When a child still has `not_working` after every safe in-scope
+  instrumentation-owned repair and the repair loop reached an evidenced
+  unselected-work, material-decision, new-authority, or external-prerequisite
+  boundary, do not run `instrumentation-final-gate` and do not relabel the
+  child final. Preserve `lifecycle: intermediate` and the executed failure.
+  Keep finding `remaining` and top-level `next_steps` repair-only. Record the
+  exact stop boundary separately in top-level `stop_boundaries[]` with its
+  affected failed finding IDs, bounded `kind`, declarative `reason`,
+  `required_action`, and durable `evidence`. Keep instrumentation
+  `meta.result: Fail` and the affected finding `not_working`; an authority
+  boundary does not turn an observed telemetry failure into `Blocked` or
+  `not_proven`. Run canonical
+  `validate-flow` and
+  `render-instrumentation-html` with `--verify-json`. Their success is the
+  terminal stopped-failure validation, not a completed or verified handoff.
+- When the user explicitly opted out or a concrete prerequisite prevented a
+  child verify overlay, do not fabricate one and do not run the gate that
+  requires it. Preserve the overall instrumentation result derivation: when
+  compile/focused implementation proof passed, `meta.result` remains `Partial`
+  and selected findings remain `not_proven`; do not set the overall result to
+  `Blocked` or `Not run` solely because child verification is absent. Record
+  `Verification: Not run` or `Verification: Blocked` and the exact reason in
+  finding evidence, `next_steps`, and the compatibility report, then rerun the
+  canonical `validate-flow` and `render-instrumentation-html` commands from
+  `./references/json-approval-handoff.md` without `--verify-json`. Their success
+  is the terminal validation for this explicit no-child branch.
+- For a legacy no-audit flow, do not look for or invoke the canonical gate.
+  Finish the compatibility reports and run the last applicable project tests,
+  child verification/report validator (or record its exact skip/blocker), and
+  legacy report validation required by this skill. The last successful
+  applicable validation is the terminal check; do not fabricate audit,
+  selection, instrumentation, or verification JSON.
+
+The applicable branch above is the last validation before fixed-Go cleanup,
+when required, and the final response.
+
+Treat a passing `instrumentation-final-gate`, successful terminal
+stopped-failure validation, successful explicit no-child terminal validation,
+or successful legacy terminal validation as the start of the terminal
+sequence. Run the required fixed-Go `--action cleanup` exactly once after that
+terminal check. When cleanup succeeds, or immediately after the terminal check
+when cleanup does not apply, emit the final response without another command.
+Do not run `git status`, `git diff`, inspect `go.sum`, inspect or remove caches,
+list files/artifacts, repeat a validator/test, or perform any duplicate final
+review after this terminal boundary. If the required cleanup fails, report that
+exact failure immediately; do not start a manual cleanup or inspection branch.

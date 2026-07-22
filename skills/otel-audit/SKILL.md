@@ -31,9 +31,11 @@ sibling under the parent skills directory, while `references/<file>` and
 `scripts/<file>` are local to `otel-audit`. Never probe the service root or
 repository root for these paths.
 
-Before writing audit artifacts, read
-`../references/report-flow-contract.md` and follow the Audit Contract plus the
-Reader-First Report Order.
+Do not load `../references/report-flow-contract.md` as an up-front
+prerequisite. This `SKILL.md` contains the audit finding, canonical JSON,
+reader-report, selection-handoff, and finalization contract. Read the shared
+report-flow contract only when a conditional downstream workflow explicitly
+requires an additional field or rollup rule that is not defined here.
 
 ## Process
 
@@ -290,6 +292,23 @@ proof.
 saturation coverage as ordinary entries in `## Current Instrumentation`,
 `## Gaps`, or `## Verification Plan` with exact source paths and signal names.
 
+When multiple bounded source-defined reasons share one status or outcome and
+remain operator-distinct, preserve that distinction with a bounded reason
+attribute or metric dimension when it changes diagnosis or response. Derive
+the allowed values from source branches, not payload text, identifiers,
+exception messages, or other unbounded values. One status code by itself is not
+complete outcome coverage when the repository already proves several
+materially different causes.
+
+Treat source-computed bounded business aggregates such as accepted/rejected
+counts, critical/noncritical counts, or another finite classification as
+recommended custom-signal candidates when they materially improve diagnosis or
+a product decision. They must not become required solely because the source
+computes them; use `required` only when the user request or a detector-critical
+correctness requirement explicitly makes that signal mandatory. Do not propose
+an aggregate merely because it can be computed; cite the owning source branch
+and the chart, detector, filter, or group-by it would enable.
+
 **OTel finding boundary** -- a canonical finding is eligible only when closing
 it necessarily changes or proves at least one OpenTelemetry concern: span,
 metric, or log emission; trace/log correlation or context propagation;
@@ -418,10 +437,10 @@ top-level gap section, named `## Gaps`. Record GenAI detail in
 `## GenAI Readiness` table rows and add concise `## Gaps` references that point
 back to the human-readable readiness surface name.
 
-Write `## Gaps` as the prioritized table defined in
-`../references/report-flow-contract.md`. Use only `required`, `recommended`, or
-`deferred` priorities and only `default`, `fix all`, `manual decision`, or
-`external follow-up` instrument modes. Put baseline correctness, trace continuity, error
+Populate canonical `findings` so `render-markdown` can project the single
+prioritized `## Gaps` table; do not hand-author its layout. Use only `required`,
+`recommended`, or `deferred` priorities and only `default`, `fix all`, `manual
+decision`, or `external follow-up` instrument modes. Put baseline correctness, trace continuity, error
 attribution, exporter/resource identity, cardinality safety, and duplicate
 signal ownership in `required`. Put safe deeper diagnostics, business metrics,
 and opt-in log export in `recommended` unless the request already makes them
@@ -446,7 +465,7 @@ choice, use `manual decision`; do not hand `$otel-instrument` an unresolved
 
 **Evidence and flow contract** -- write source evidence as a compact
 `## Audit Evidence` table and create one `## Signal Flow` / `### Component Flow
-Map` using the exact marker semantics in `report-flow-contract.md`. The map is
+Map` using the exact marker semantics defined in this skill. The map is
 a reader aid, not runtime proof. Show only major process, dependency, and
 telemetry edges; keep independent roots separate and point human-readable gap
 markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
@@ -479,6 +498,33 @@ For partially instrumented Go services, explicitly check and report:
 - high-cardinality span names such as `GetTask-{id}`
 - missing `otel.SetTextMapPropagator(...)`
 - missing `MeterProvider`, missing `service.name`, and missing provider shutdown/flush
+
+### Source-to-Report Reconciliation Gate
+
+This terminal pre-report gate runs immediately before writing the canonical
+audit. Reconcile the final inventory, findings, readiness rows, and verification
+scenarios against the inspected source. This is the last source-analysis step,
+not a runtime check. Confirm all of the following:
+
+- Reconcile the process entrypoint and runtime configuration when one exists. A
+  cited file without its role is not a reconciled process inventory.
+- Reconcile messaging direction, topic, group, and commit-or-ack behavior,
+  including produced versus consumed, queue identity, send results, and errors.
+- Reconcile silent branches and bounded source-defined outcomes that change
+  operator diagnosis, including distinct reasons that share one status/outcome
+  and source-computed bounded aggregates under the priority rules above.
+- Reconcile dependency instrumentation coverage against the loaded language map
+  and manifest: name the supported instrumentation that is present, or cite
+  manifest evidence that matching instrumentation is absent. Do not report a
+  generic dependency gap without this package-level proof.
+- Every final finding can be traced back to inspected source evidence and every
+  inspected source fact used to justify a finding survives into the canonical
+  JSON. Remove stale candidates, guessed symbols, and report claims that the
+  final evidence ledger no longer supports.
+
+Do not proceed to Step 3 until this gate is complete. If reconciliation exposes
+missing source evidence, inspect only the cited files needed to resolve it and
+rerun the gate; do not restart broad repository discovery.
 
 ### Step 3 -- Report
 
@@ -974,9 +1020,9 @@ Keep these essential input semantics in the canonical JSON:
 - Audit scenarios and signal inventory are source-derived plans, not runtime
   proof. Keep bulky evidence outside JSON and cite its path.
 
-`render-markdown` and `../references/report-flow-contract.md` determine all
-compatibility layout. Change Markdown structure in the shared renderer and its
-tests, never in this skill.
+`render-markdown` owns all compatibility layout. Change Markdown structure in
+the shared renderer and its tests, never by embedding another template in this
+skill.
 
 After writing the report, run the dependency-free validator bundled with this
 skill:

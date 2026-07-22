@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the FastAPI and Celery service in ./service for observability gaps. Do not modify files."
+      "task": "Scan the FastAPI and Celery service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the FastAPI and Celery service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify files."
+      "task": "Produce an observability readiness review for the FastAPI and Celery service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
     }
   ],
   "judge_inputs": [
@@ -18,7 +18,7 @@
   "rubric": [
     "Distinguishes the FastAPI web process from the Celery worker process.",
     "Identifies pyproject.toml, app.py, worker.py, Dockerfile, and docker-compose.yml as relevant runtime surfaces.",
-    "Reports missing FastAPI, ASGI, HTTP client, and Celery instrumentation where applicable.",
+    "Reports missing FastAPI server coverage through one supported FastAPI/ASGI instrumentation path rather than requiring overlapping server instrumentors, reports missing Celery instrumentation, and requires HTTP-client instrumentation only when repository source uses a supported client dependency (this fixture does not).",
     "Calls out start-command and environment wiring gaps in docker-compose.",
     "Does not collapse the worker and web service into a single invented entrypoint."
   ]

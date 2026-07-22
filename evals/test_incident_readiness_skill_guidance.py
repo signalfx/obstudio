@@ -635,7 +635,7 @@ def test_audit_keeps_current_canonical_report_contract():
         '"environments": [',
         '"scenarios": [',
         "`render-markdown` command owns the complete `.observe/otel.md`",
-        "`render-markdown` and `../references/report-flow-contract.md` determine all",
+        "`render-markdown` owns all compatibility layout",
     ]
     assert not [term for term in canonical_terms if term not in audit]
     assert "# Observability Report: {service-name}" not in audit

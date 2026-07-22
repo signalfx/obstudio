@@ -2015,6 +2015,275 @@ class ObserveReportTest(unittest.TestCase):
             self.assertEqual(gate.returncode, 2)
             self.assertIn("REPAIR REQUIRED", gate.stdout)
 
+    def test_stopped_failed_child_validates_and_renders_external_boundary(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        raw_instrumentation = sample_instrumentation(report, digest, selection)
+        raw_instrumentation["meta"]["result"] = "Fail"  # type: ignore[index]
+        instrumentation_finding = raw_instrumentation["findings"][0]  # type: ignore[index]
+        instrumentation_finding["status"] = "not_working"
+        instrumentation = MODULE.normalize_instrumentation(
+            raw_instrumentation, report, selection
+        )
+        verify = sample_verify(
+            report, digest, MODULE.instrumentation_digest(instrumentation)
+        )
+        verify["meta"].update(  # type: ignore[union-attr]
+            {
+                "result": "Fail",
+                "workflow_mode": "instrumentation_child",
+                "lifecycle": "intermediate",
+            }
+        )
+        finding = verify["findings"][0]  # type: ignore[index]
+        finding["status"] = "not_working"
+        finding["scenarios"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["item_results"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["remaining"] = ["Repair the server span wiring."]
+        verify["next_steps"] = ["Repair the server span wiring."]
+        external_action = (
+            "Renew the private module registry credential and restore the exact "
+            "locked dependencies."
+        )
+        verify["stop_boundaries"] = [
+            {
+                "finding_ids": ["OTEL-001"],
+                "kind": "external_prerequisite",
+                "reason": (
+                    "The private module registry rejected the locked dependency "
+                    "restore because its repository credential had expired."
+                ),
+                "required_action": external_action,
+                "evidence": [
+                    ".observe/evidence/run/dependency-restore.log"
+                ],
+            }
+        ]
+
+        non_failed_instrumentation = MODULE.normalize_instrumentation(
+            sample_instrumentation(report, digest, selection), report, selection
+        )
+        result_mismatch = copy.deepcopy(verify)
+        result_mismatch["instrumentation_sha256"] = (
+            MODULE.instrumentation_digest(non_failed_instrumentation)
+        )
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"bound instrumentation meta\.result to be Fail",
+        ):
+            MODULE.normalize_verify(
+                result_mismatch, report, selection, non_failed_instrumentation
+            )
+
+        status_mismatch_instrumentation = copy.deepcopy(instrumentation)
+        status_mismatch_instrumentation["findings"][0]["status"] = "not_proven"
+        status_mismatch = copy.deepcopy(verify)
+        status_mismatch["instrumentation_sha256"] = MODULE.instrumentation_digest(
+            status_mismatch_instrumentation
+        )
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"instrumentation findings with status not_working",
+        ):
+            MODULE.normalize_verify(
+                status_mismatch,
+                report,
+                selection,
+                status_mismatch_instrumentation,
+            )
+
+        duplicate_action = (
+            "RENEW the private module-registry credential, and restore the exact "
+            "locked dependencies!"
+        )
+        duplicated_remaining = copy.deepcopy(verify)
+        duplicated_remaining["findings"][0]["remaining"] = [duplicate_action]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                duplicated_remaining, report, selection, instrumentation
+            )
+
+        duplicated_next_step = copy.deepcopy(verify)
+        duplicated_next_step["next_steps"] = [duplicate_action]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                duplicated_next_step, report, selection, instrumentation
+            )
+
+        shortened_external_action = "Configure the private module registry credential."
+        shortened_remaining = copy.deepcopy(verify)
+        shortened_remaining["stop_boundaries"][0]["required_action"] = (
+            "Configure the private module registry credential and restore the "
+            "locked dependencies."
+        )
+        shortened_remaining["findings"][0]["remaining"] = [
+            shortened_external_action
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                shortened_remaining, report, selection, instrumentation
+            )
+
+        shortened_next_step = copy.deepcopy(shortened_remaining)
+        shortened_next_step["findings"][0]["remaining"] = [
+            "Repair the server span wiring."
+        ]
+        shortened_next_step["next_steps"] = [shortened_external_action]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            r"required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                shortened_next_step, report, selection, instrumentation
+            )
+
+        normalized = MODULE.normalize_verify(
+            verify, report, selection, instrumentation
+        )
+        self.assertEqual(
+            normalized["stop_boundaries"], verify["stop_boundaries"]
+        )
+        self.assertEqual(
+            normalized["findings"][0]["remaining"],
+            ["Repair the server span wiring."],
+        )
+        self.assertEqual(
+            normalized["next_steps"], ["Repair the server span wiring."]
+        )
+        self.assertIsNone(
+            MODULE.failed_verification_repair_action(external_action)
+        )
+
+        wrong_workflow = copy.deepcopy(verify)
+        wrong_workflow["meta"]["workflow_mode"] = "standalone"  # type: ignore[index]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            "stop_boundaries is allowed only for an instrumentation_child",
+        ):
+            MODULE.normalize_verify(
+                wrong_workflow, report, selection, instrumentation
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audit_path = root / "otel-audit.json"
+            selection_path = root / "otel-selection.json"
+            instrumentation_path = root / "otel-instrumentation.json"
+            verify_path = root / "otel-verify.json"
+            html_path = root / "otel-instrumentation.html"
+            audit_path.write_text(json.dumps(report), encoding="utf-8")
+            selection_path.write_text(json.dumps(selection), encoding="utf-8")
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            verify_path.write_text(json.dumps(verify), encoding="utf-8")
+
+            flow = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "validate-flow",
+                    str(audit_path),
+                    "--selection-json",
+                    str(selection_path),
+                    "--instrumentation-json",
+                    str(instrumentation_path),
+                    "--verify-json",
+                    str(verify_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(flow.returncode, 0, flow.stderr)
+            self.assertIn(
+                "PASS: audit -> selection -> instrumentation -> verify",
+                flow.stdout,
+            )
+
+            render = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "render-instrumentation-html",
+                    str(audit_path),
+                    "-o",
+                    str(html_path),
+                    "--selection-json",
+                    str(selection_path),
+                    "--instrumentation-json",
+                    str(instrumentation_path),
+                    "--verify-json",
+                    str(verify_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(render.returncode, 0, render.stderr)
+            html = html_path.read_text(encoding="utf-8")
+            self.assertIn("Why the repair loop stopped", html)
+            self.assertIn("External prerequisite", html)
+            self.assertIn(external_action, html)
+            self.assertIn(
+                "Required action outside the instrumentation repair scope", html
+            )
+            self.assertIn("dependency-restore.log", html)
+
+            gate = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "instrumentation-final-gate",
+                    str(audit_path),
+                    "--selection-json",
+                    str(selection_path),
+                    "--instrumentation-json",
+                    str(instrumentation_path),
+                    "--verify-json",
+                    str(verify_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(gate.returncode, 2)
+            self.assertIn("REPAIR REQUIRED", gate.stdout)
+
     def test_parses_component_flow_lanes_and_markers(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         lanes = MODULE.component_flow_lanes(report["signal_flow"]["component_flow_map"])

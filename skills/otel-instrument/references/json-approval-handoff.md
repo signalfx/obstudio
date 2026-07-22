@@ -2,6 +2,10 @@
 
 Use this reference when `.observe/otel-audit.json` exists or the user supplies
 finding IDs. It defines the deterministic executable-scope gate and machine handoff.
+For that canonical JSON flow, this file is the scoped instrumentation and
+reader-report authority. Do not also load `../../references/report-flow-contract.md`
+unless a conditional downstream workflow explicitly requires an additional
+field or rollup rule from it.
 
 ## Selection Gate
 
@@ -279,19 +283,38 @@ After a repair passes, replace every superseded failure status, repair action,
 trace ID, and run-level next step in the final overlays. Retain prior attempts
 only as explicitly superseded technical evidence under `.observe/evidence/`;
 never leave them in the current reader summary or next action.
-After the current child overlay has no executed failures and is marked
-`lifecycle: final`, run:
+Do not run `instrumentation-final-gate`, fixed-Go cleanup, or the final response
+from this Step 5 reference. When the current child overlay has no executed
+failures, it may become the candidate `lifecycle: final` overlay, but the parent
+`SKILL.md` owns the actual gate only after mandatory Steps 6 and 7, applicable
+Credential Safety work, requested downstream work, final review, and all other
+validation finish. A child with `not_working` remains `lifecycle: intermediate`
+until repaired or until the parent workflow records an evidenced stop boundary.
+If the user explicitly opted out or a concrete prerequisite prevented a child
+verify overlay, do not fabricate one and do not run
+`instrumentation-final-gate`, which requires it. Preserve the overall result
+derivation: when compile/focused implementation proof passed, keep
+`meta.result: Partial` and the affected findings `not_proven`; do not set the
+overall result to `Blocked` or `Not run` solely because child verification is
+absent. Record `Verification: Not run` or `Verification: Blocked` plus the exact
+reason in finding evidence, `next_steps`, and compatibility Markdown, then rerun the
+`validate-flow` and `render-instrumentation-html` commands above without
+`--verify-json`. This is preliminary Step 5 validation. The parent terminal
+sequence reruns the applicable validation after every later report, safety,
+review, and downstream requirement is complete.
 
-```bash
-python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" instrumentation-final-gate \
-  .observe/otel-audit.json \
-  --selection-json .observe/otel-selection.json \
-  --instrumentation-json .observe/otel-instrumentation.json \
-  --verify-json .observe/otel-verify.json
-```
-
-This gate may pass a `Partial` proof result with zero executed failures; it
-rejects missing/stale instrumentation binding, standalone mode, intermediate
-child state, or any `not_working` result. Do not finalize until it passes.
+When a child contains `not_working` and the repair loop reaches an evidenced
+unselected-work, material-decision, new-authority, or external-prerequisite
+boundary, preserve the child as `lifecycle: intermediate` and preserve the
+executed failure. Keep finding `remaining` and top-level `next_steps`
+repair-only. Record the boundary separately in top-level `stop_boundaries[]`:
+use the affected failed `finding_ids`, one `kind` from `unselected_work`,
+`material_decision`, `new_authority`, or `external_prerequisite`, a declarative
+`reason`, the user or external `required_action`, and durable `evidence`. Keep
+instrumentation `meta.result: Fail` and the affected finding `not_working`; do
+not relabel observed failure as `Blocked` or `not_proven`. Validate and render
+that stopped state with
+`--verify-json`, then continue to the parent terminal sequence. This is a
+stopped-failure handoff, not a completed or verified instrumentation result.
 Leave `.observe/otel.html` as the audit and scope-planning surface; never render the
 instrumentation or verification overlays into it.

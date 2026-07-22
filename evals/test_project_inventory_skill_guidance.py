@@ -141,6 +141,17 @@ def test_go_resolver_guidance_cleans_only_owned_state_compactly() -> None:
     assert "Never recover with a manual `GOCACHE`, `GOMODCACHE`, or `go` branch" in normalized
     assert "small local telemetry bookkeeping" in normalized.lower()
     assert "not a build/module cache payload" in normalized.lower()
+    assert "Successful cleanup is the terminal boundary" in normalized
+    assert "emit the final response immediately" in normalized
+    for forbidden_follow_up in (
+        "`git status`",
+        "`git diff`",
+        "a `go.sum` inspection",
+        "cache inspection/removal",
+        "artifact listings",
+        "repeated validators/tests",
+    ):
+        assert forbidden_follow_up in normalized
 
 
 def test_instrument_frontloads_language_route_and_scoped_go_resolver_gate() -> None:
@@ -200,7 +211,19 @@ def test_go_metric_guidance_requires_version_specific_proof() -> None:
     assert "version- and semantic-convention-mode-dependent" in normalized
     assert "do not claim `http.server.active_requests`" in normalized
     assert "never infer `http.server.active_requests`" in normalized
-    assert "For chi, use `otelhttp.WithRouteTag`" in normalized
+    assert "v0.68.0" in (
+        ROOT / "evals" / "go" / "chi-partial" / "go.mod"
+    ).read_text(encoding="utf-8")
+    assert (
+        "Use `otelhttp.WithRouteTag` only when that exact source exports it"
+        in normalized
+    )
+    assert "v0.65.0 and later do not" in normalized
+    assert "trace.SpanFromContext(r.Context()).SetAttributes" in normalized
+    assert "otelhttp.LabelerFromContext" in normalized
+    assert "This annotator must not start a span" in normalized
+    assert "http.HandlerFunc(getTask)" in normalized
+    assert ").ServeHTTP" in normalized
     assert "It does **not** rename the span" in normalized
     assert "one server span per request" in normalized
     assert (
@@ -208,6 +231,41 @@ def test_go_metric_guidance_requires_version_specific_proof() -> None:
         "`http.server.active_requests`"
         not in guide
     )
+
+
+def test_go_http_outcome_guidance_groups_collisions_without_misclassifying_4xx() -> None:
+    skill = (
+        ROOT / "skills" / "otel-instrument" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    guide = (
+        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join((skill + "\n" + guide).split())
+    partial_eval = json.loads(
+        (
+            ROOT
+            / "evals"
+            / "go"
+            / "chi-partial"
+            / "eval"
+            / "qual"
+            / "instrument.json"
+        ).read_text(encoding="utf-8")
+    )
+    rubric = " ".join(partial_eval["rubric"])
+
+    assert "one bounded pass over the service's non-success response call sites" in normalized
+    assert "group them by stable `(method, route, status code)`" in normalized
+    assert "never broadens canonical selected scope" in normalized
+    assert "selected finding's expected telemetry authors that attribute" in normalized
+    assert "leave code untouched, record the scope mismatch" in normalized
+    assert "legacy no-audit request" in normalized
+    assert "same-route/same-status collision" in normalized
+    assert "asserts the distinct `outcome.reason` values" in normalized
+    assert "ordinary handled 4xx response leaves span status unset" in normalized
+    assert "Do not add `RecordError`/`SetStatus` merely" in normalized
+    assert "leaves ordinary handled 4xx SERVER responses unset" in rubric
+    assert "records errors/status on failure paths" not in rubric
 
 
 def test_python_guidance_does_not_map_plain_starlette_to_fastapi() -> None:
@@ -259,8 +317,12 @@ def test_go_audit_distinguishes_route_attributes_from_span_names() -> None:
         ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
     ).read_text(encoding="utf-8")
     normalized = " ".join(guide.split())
-    assert "for bounded `http.route` attributes" in normalized
-    assert "`WithRouteTag` does not rename the outer `otelhttp` server span" in normalized
+    assert "bounded `http.route`" in normalized
+    assert "Use `otelhttp.WithRouteTag` only when that exact source exports it" in normalized
+    assert "the API is absent in v0.65.0 and later" in normalized
+    assert "trace.SpanFromContext" in normalized
+    assert "otelhttp.LabelerFromContext" in normalized
+    assert "`WithRouteTag`, when available, does not rename" in normalized
     assert "renaming the current outer server span after route matching" in normalized
     assert "do not start a second server span" in normalized
     assert "for bounded route names" not in normalized

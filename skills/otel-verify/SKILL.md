@@ -49,6 +49,11 @@ Contract plus Reader-First Report Order.
   `meta.workflow_mode: instrumentation_child`. A failed child result is
   `meta.lifecycle: intermediate`, never `final`. A post-repair child overlay is
   `final` only after no executed finding, scenario, or item is `not_working`.
+- Keep failed finding `remaining` and top-level `next_steps` repair-only. If a
+  parent instrumentation repair loop stops at unselected work, a material
+  decision, new authority, or an external prerequisite, record that boundary
+  separately in top-level `stop_boundaries[]`; never disguise it as an
+  application code/config repair.
 - Bind canonical verification to the exact normalized instrumentation overlay
   with `instrumentation_sha256`. Recompute it after every instrumentation
   repair; matching audit and item IDs alone are not freshness proof. Before
@@ -712,6 +717,14 @@ Report requirements:
   after `$otel-instrument` applies the change, its workflow invokes verification
   automatically only to confirm whether the repair worked. Do not tell the
   user to execute each scenario manually.
+- For a failed `instrumentation_child` whose parent repair loop has reached a
+  real stop boundary, add a top-level `stop_boundaries[]` entry with the
+  affected failed `finding_ids`, bounded `kind` (`unselected_work`,
+  `material_decision`, `new_authority`, or `external_prerequisite`),
+  declarative `reason`, external/user `required_action`, and durable
+  `evidence`. This field explains why the parent cannot safely apply the
+  repair; it does not replace or weaken repair-only `remaining` and
+  `next_steps`.
 - In `Proof`, explain the strength of evidence in plain language. Distinguish
   application tests, temporary app-code harnesses, OTLP collector acceptance,
   and source/config checks. Never present source presence as runtime proof.
@@ -843,7 +856,9 @@ When this verification was invoked by an active `$otel-instrument` workflow,
 write `meta.workflow_mode: instrumentation_child` and return a repair packet to
 that workflow using the existing canonical fields:
 failed finding/item/scenario IDs, direct evidence, and repair-only `remaining`
-actions. Set `meta.lifecycle: intermediate` for this failed artifact. Do not
+actions. If the parent reports a stop boundary after exhausting safe in-scope
+repairs, preserve that boundary in structured `stop_boundaries[]`, not in the
+repair arrays. Set `meta.lifecycle: intermediate` for this failed artifact. Do not
 emit the terminal reader-facing handoff yet and do not ask the user to start
 `$otel-instrument` again. The parent instrumentation workflow
 classifies ownership, applies every safe in-scope repair, and invokes the

@@ -877,6 +877,16 @@ active instrumentation workflow uses `workflow_mode: instrumentation_child`;
 a failed repair packet is `lifecycle: intermediate`, and the post-repair
 current-state overlay may be `final` only after no executed check is
 `not_working`. The shared `instrumentation-final-gate` enforces that boundary.
+For an intermediate failed child that stops at unselected work, a material
+decision, new authority, or an external prerequisite, keep finding `remaining`
+and run-level `next_steps` repair-only. Put the stop reason in top-level
+`stop_boundaries[]` with affected failed finding IDs, bounded kind,
+declarative reason, required external/user action, and durable evidence. The
+field is valid only on an `instrumentation_child` `Fail` with
+`lifecycle: intermediate`; it never turns the observed failure into `Blocked`
+or a completed handoff.
+Allowed kinds are `unselected_work`, `material_decision`, `new_authority`, and
+`external_prerequisite`.
 
 Write verification reports for a reader deciding whether the instrumentation
 works. The first screen must answer, in this order:
