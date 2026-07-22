@@ -1129,13 +1129,26 @@ def canonical_flow_paths(
     terraform_dir: Path, args: argparse.Namespace
 ) -> dict[str, Path]:
     root = terraform_dir.parent
+    verification_json = getattr(args, "verification_json", None)
+    dashboard_verification = getattr(args, "dashboard_verification", None)
+    if verification_json is not None and dashboard_verification is not None:
+        canonical_verification = verification_json.expanduser().resolve(strict=False)
+        canonical_dashboard_verification = dashboard_verification.expanduser().resolve(
+            strict=False
+        )
+        if canonical_verification != canonical_dashboard_verification:
+            raise ValueError(
+                "--dashboard-verification and --verification-json must refer to "
+                "the same canonical verification artifact"
+            )
     return {
         "audit": getattr(args, "audit_json", None) or root / "otel-audit.json",
         "selection": getattr(args, "selection_json", None)
         or root / "otel-selection.json",
         "instrumentation": getattr(args, "instrumentation_json", None)
         or root / "otel-instrumentation.json",
-        "verification": getattr(args, "verification_json", None)
+        "verification": verification_json
+        or dashboard_verification
         or root / "otel-verify.json",
     }
 
@@ -1172,6 +1185,7 @@ def canonical_working_metrics(
             "selection_json",
             "instrumentation_json",
             "verification_json",
+            "dashboard_verification",
         )
     )
     present = {name for name, path in paths.items() if path.is_file()}
@@ -1300,12 +1314,6 @@ def run_dashboard_validator(
     if module is None:
         return {}
 
-    verification = getattr(args, "dashboard_verification", None) or getattr(
-        args, "verification_json", None
-    )
-    if verification is None:
-        candidate = terraform_dir.parent / "otel-verify.json"
-        verification = candidate if candidate.is_file() else None
     tfvars = getattr(args, "dashboard_tfvars", None)
     paths = canonical_flow_paths(terraform_dir, args)
     canonical_mode = any(path.is_file() for path in paths.values()) or any(
@@ -1318,6 +1326,7 @@ def run_dashboard_validator(
             "dashboard_verification",
         )
     )
+    verification = paths["verification"] if canonical_mode else None
     result = module.validate(
         argparse.Namespace(
             terraform=terraform_dir / "dashboards.tf",
@@ -1327,9 +1336,9 @@ def run_dashboard_validator(
             tfvars=tfvars,
             verification=verification,
             legacy_verification=(None if canonical_mode else args.verify_report),
-            audit=getattr(args, "audit_json", None),
-            selection=getattr(args, "selection_json", None),
-            instrumentation=getattr(args, "instrumentation_json", None),
+            audit=paths["audit"] if canonical_mode else None,
+            selection=paths["selection"] if canonical_mode else None,
+            instrumentation=paths["instrumentation"] if canonical_mode else None,
             allow_source_only_item=getattr(args, "allow_source_only_item", []),
             allow_inherited_partial=True,
         )
@@ -1367,6 +1376,10 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     errors = [f"missing {name}: {path}" for name, path in required.items() if not path.is_file()]
     if errors:
         return {"result": "FAIL", "errors": errors}
+    try:
+        canonical_flow_paths(terraform_dir, args)
+    except ValueError as error:
+        return {"result": "FAIL", "errors": [str(error)]}
 
     detectors_text = required["detectors.tf"].read_text(encoding="utf-8")
     variables_text = required["variables.tf"].read_text(encoding="utf-8")
@@ -1662,7 +1675,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dashboard-verification",
         type=Path,
-        help="canonical otel-verify.json used by the shared dashboard validator",
+        help=(
+            "backward-compatible alias for --verification-json; when both are "
+            "provided they must identify the same canonical artifact"
+        ),
     )
     parser.add_argument(
         "--dashboard-tfvars",

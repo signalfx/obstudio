@@ -1141,7 +1141,7 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 "type": "span",
             }
             MODULE.validate_item_provenance(
-                preview, args.verification, items, set(), errors
+                preview, args.verification, items, set(), set(), errors
             )
 
         self.assertTrue(
@@ -1184,7 +1184,7 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 "type": "span",
             }
             MODULE.validate_item_provenance(
-                preview, args.verification, items, set(), errors
+                preview, args.verification, items, set(), set(), errors
             )
 
         self.assertTrue(
@@ -1342,6 +1342,18 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 (args.preview.parent / name).unlink()
             args.verification = None
             args.allow_source_only_item = [item_id]
+            missing_source = MODULE.validate(args)
+
+            audit_path = args.preview.parent / "otel-audit.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            audit["current_instrumentation"]["metrics"] = [
+                {
+                    "name": "http.server.request.duration",
+                    "source": "metrics.go:12",
+                    "type": "histogram",
+                }
+            ]
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
             result = MODULE.validate(args)
 
             legacy = args.preview.parent / "legacy-otel-verify.md"
@@ -1355,6 +1367,15 @@ resource "signalfx_dashboard" "empty_dashboard" {
             )
             partial_downstream = MODULE.validate(args)
 
+        self.assertEqual(missing_source["result"], "FAIL")
+        self.assertTrue(
+            any(
+                "exact metric is absent from audit current_instrumentation.metrics"
+                in error
+                for error in missing_source["errors"]
+            ),
+            missing_source["errors"],
+        )
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertEqual(audit_with_legacy["result"], "FAIL")
         self.assertTrue(

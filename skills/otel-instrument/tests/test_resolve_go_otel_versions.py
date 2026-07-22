@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -8,11 +9,16 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 
 RESOLVER = (
     Path(__file__).parents[1] / "scripts" / "resolve_go_otel_versions.py"
 )
+SPEC = importlib.util.spec_from_file_location("resolve_go_otel_versions", RESOLVER)
+assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
 OTELHTTP = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 COMPANIONS = (
     "go.opentelemetry.io/otel",
@@ -986,6 +992,53 @@ class ResolveGoOtelVersionsTest(unittest.TestCase):
         self.assertLessEqual(len(result["warnings"]), 32)
         self.assertGreater(result["warnings_omitted"], 0)
         self.assertEqual(result["scan"]["unusable_versions"], 40)
+
+    def test_cache_directory_entry_limit_fails_closed(self) -> None:
+        for source in ("extracted", "download"):
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                project = root / "project"
+                cache = root / "cache"
+                write_project(project, "1.23.0")
+                write_complete_bundle(
+                    cache,
+                    otelhttp_version="v0.63.0",
+                    otelhttp_go="1.23.0",
+                    core_version="v1.38.0",
+                    companion_go="1.23.0",
+                    download=source == "download",
+                )
+                if source == "extracted":
+                    parent = cache.joinpath(*OTELHTTP.split("/")[:-1])
+                    for index in range(4):
+                        (parent / f"unrelated-{index}").mkdir()
+                else:
+                    download_artifact(
+                        cache, OTELHTTP, "v0.63.0", "extra"
+                    ).write_text("extra\n", encoding="utf-8")
+
+                with mock.patch.object(
+                    MODULE, "MAX_CACHE_DIRECTORY_ENTRIES", 4
+                ):
+                    result = MODULE.resolve(project, cache)
+
+            self.assertEqual(result["status"], "incomplete")
+            self.assertFalse(result["complete"])
+            self.assertIsNone(result["selection"])
+            self.assertFalse(result["go_get"]["ready"])
+            self.assertEqual(
+                result["reasons"], ["otelhttp-cache-scan-failed"]
+            )
+            self.assertEqual(result["scan"]["cache_entry_limit"], 4)
+            self.assertEqual(
+                result["scan"]["cache_directories_truncated"], 1
+            )
+            self.assertEqual(
+                result["scan"]["cache_entries_omitted_at_least"], 1
+            )
+            self.assertTrue(
+                any("entry scan limit" in warning for warning in result["warnings"])
+            )
 
 
 if __name__ == "__main__":

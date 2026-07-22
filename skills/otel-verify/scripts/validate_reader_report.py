@@ -131,8 +131,8 @@ def parse_signal_table(
     )
 
 
-def parse_gap_item_ids(section: str) -> list[str]:
-    """Return exact item-ID cells from the reader-facing gap table."""
+def parse_gap_items(section: str) -> list[tuple[str, str]]:
+    """Return exact item-ID and state cells from the reader-facing gap table."""
     lines = section.splitlines()
     for index, line in enumerate(lines):
         if not line.lstrip().startswith("|"):
@@ -143,7 +143,12 @@ def parse_gap_item_ids(section: str) -> list[str]:
             for column_index, cell in enumerate(header)
             if cell in {"Item", "Item ID"}
         ]
-        if len(item_columns) != 1:
+        state_columns = [
+            column_index
+            for column_index, cell in enumerate(header)
+            if cell == "State"
+        ]
+        if len(item_columns) != 1 or len(state_columns) != 1:
             continue
         separator = split_row(lines[index + 1]) if index + 1 < len(lines) else ()
         if len(separator) != len(header) or not all(
@@ -151,14 +156,20 @@ def parse_gap_item_ids(section: str) -> list[str]:
         ):
             continue
         item_column = item_columns[0]
-        item_ids: list[str] = []
+        state_column = state_columns[0]
+        items: list[tuple[str, str]] = []
         for row_line in lines[index + 2 :]:
             if not row_line.lstrip().startswith("|"):
                 break
             row = split_row(row_line)
             if len(row) == len(header) and row[item_column]:
-                item_ids.append(normalize_item(row[item_column]))
-        return item_ids
+                items.append(
+                    (
+                        normalize_item(row[item_column]),
+                        normalize_item(row[state_column]),
+                    )
+                )
+        return items
     return []
 
 
@@ -291,7 +302,7 @@ def validate(
     )
     item_ids: list[str] = []
     item_labels: set[str] = set()
-    non_working: list[str] = []
+    non_working: dict[str, str] = {}
     errors: list[str] = []
 
     for item_id, item, item_type, changed, status, tested, product_result, evidence in rows:
@@ -305,7 +316,7 @@ def validate(
             errors.append("a per-OTel row has an empty item")
             continue
         item_identity = normalize_item(item)
-        if item_identity in item_labels:
+        if instrumentation_data is None and item_identity in item_labels:
             errors.append(f"duplicate OTel item row: {item}")
         item_labels.add(item_identity)
         if not item_type:
@@ -321,7 +332,7 @@ def validate(
         if status == "Working" and evidence.casefold() in PLACEHOLDERS:
             errors.append(f"{item}: Working row lacks direct evidence")
         if status != "Working":
-            non_working.append(item_id)
+            non_working[item_id] = status
 
     result_match = re.search(
         r"\*\*Individual result:\*\*\s*(\d+)\s*/\s*(\d+)\s+working\b",
@@ -341,8 +352,12 @@ def validate(
 
     gaps_start, gaps_end = bounds["Not Working Or Not Proven"]
     gaps_section = text[gaps_start:gaps_end]
-    gap_item_ids = parse_gap_item_ids(gaps_section)
-    expected_gap_ids = [normalize_item(item) for item in non_working]
+    gap_items = parse_gap_items(gaps_section)
+    gap_item_ids = [item_id for item_id, _state in gap_items]
+    expected_gap_states = {
+        normalize_item(item_id): status for item_id, status in non_working.items()
+    }
+    expected_gap_ids = list(expected_gap_states)
     actual_gap_counts = Counter(gap_item_ids)
     missing_gap_ids = sorted(
         item for item in set(expected_gap_ids) if actual_gap_counts[item] == 0
@@ -366,6 +381,13 @@ def validate(
             "unexpected item IDs in Not Working Or Not Proven: "
             + ", ".join(unexpected_gap_ids)
         )
+    for item_id, state in gap_items:
+        expected_state = expected_gap_states.get(item_id)
+        if expected_state is not None and state != expected_state:
+            errors.append(
+                f"{item_id}: gap State {state!r} does not match "
+                f"Working status {expected_state!r}"
+            )
 
     if expected_items_path:
         expected_items = load_expected_items(expected_items_path)
@@ -414,7 +436,12 @@ def validate(
                 text,
                 re.MULTILINE,
             )
-            verify_result = verify_data.get("meta", {}).get("result")
+            verify_meta = verify_data.get("meta")
+            if not isinstance(verify_meta, dict):
+                errors.append("verify meta must be an object")
+                verify_result = None
+            else:
+                verify_result = verify_meta.get("result")
             if result_match is None or result_match.group(1) != verify_result:
                 errors.append(
                     "reader Result does not match verify JSON: "

@@ -131,7 +131,7 @@ def test_audit_human_report_is_decision_first_and_preserves_requested_scope() ->
         "ready to implement",
         "decision needed",
         "external follow-up",
-        "has no checkbox and cannot enter selection JSON",
+        "has no checkbox and its finding ID cannot enter `requested_ids` or `approved_ids`",
         "N in selection · R of T required fixes",
         "Save selection",
         "Do not require an intermediate review panel",

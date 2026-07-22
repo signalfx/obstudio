@@ -595,6 +595,63 @@ class ValidateGapClosureTest(unittest.TestCase):
             "Partial",
         )
 
+        for command in (
+            "./gradlew test",
+            "./mvnw -DskipTests=false verify",
+            "dotnet test Service.Tests",
+        ):
+            project_native_proof = copy.deepcopy(no_proof)
+            project_native_proof["findings"][0].update(
+                {
+                    "status": "working",
+                    "tests": [command],
+                    "evidence": [".observe/evidence/project-test.txt"],
+                }
+            )
+            with self.subTest(command=command):
+                self.assertTrue(
+                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                        project_native_proof
+                    )
+                )
+                self.assertEqual(
+                    VALIDATOR_MODULE.expected_report_result(
+                        project_native_proof,
+                        blocked_verify,
+                        verification_overlay=True,
+                    ),
+                    "Partial",
+                )
+
+        for command in (
+            "./gradlew test --dry-run",
+            "./gradlew check -x test",
+            "./mvnw -DskipTests verify",
+            "./mvnw verify -Dmaven.test.skip=true",
+        ):
+            skipped_project_proof = copy.deepcopy(no_proof)
+            skipped_project_proof["findings"][0].update(
+                {
+                    "status": "working",
+                    "tests": [command],
+                    "evidence": [".observe/evidence/project-test.txt"],
+                }
+            )
+            with self.subTest(command=command):
+                self.assertFalse(
+                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                        skipped_project_proof
+                    )
+                )
+                self.assertEqual(
+                    VALIDATOR_MODULE.expected_report_result(
+                        skipped_project_proof,
+                        blocked_verify,
+                        verification_overlay=True,
+                    ),
+                    "Blocked",
+                )
+
     def test_blocked_verify_ignores_unproven_source_refs_and_not_run_text(self) -> None:
         blocked_verify = {"meta": {"result": "Blocked"}}
         unproven = {

@@ -70,7 +70,7 @@ Each document has one job. Do not mix these responsibilities.
 | `.observe/otel-audit.json` | `$otel-audit` | Canonical source-derived audit with stable finding/scenario IDs and dependency edges | Selection, implementation, or verification state |
 | `.observe/otel.html` | `$otel-audit` renderer + human reviewer | Interactive review of the canonical audit and selection export | Independent audit state or hidden selection state |
 | `.observe/otel-instrumentation.html` | `$otel-instrument` renderer, refreshed by `$otel-verify` | Concise verification status followed by every selected finding's change, observability impact, item proof, and coverage | Aggregate technical ledgers, audit selection controls, unbound overlays, or an independently rewritten baseline |
-| `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers` plus requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
+| `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers` plus requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs in `requested_ids` or `approved_ids`, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
 | `.observe/otel-instrumentation.json` | `$otel-instrument` | Authoritative implementation result for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized selection by `selection_sha256` | Unselected findings, stale decision answers, or a rewritten audit baseline |
 | `.observe/otel-verify.json` | `$otel-verify` | Authoritative scenario proof for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized instrumentation overlay by `instrumentation_sha256` | Unselected findings, stale/unbound instrumentation proof, or unsupported `working` claims |
 | `.observe/otel.md` | `$otel-audit` | Generated readable compatibility view of the canonical audit | State that differs from `.observe/otel-audit.json` |
@@ -145,8 +145,9 @@ findings remain non-interactive and cannot enter selection JSON. An unanswered
 manual dependency is blocked. Once answered, only executable findings listed
 in that option's `unlocks` become selectable; nonmatching branches remain
 blocked, and the answer does not auto-select matching work.
-A manual decision has no checkbox and cannot enter selection JSON; only its
-stable answer ID is persisted separately.
+A manual decision has no checkbox and its finding ID cannot enter
+`requested_ids` or `approved_ids`; `decision_answers` separately persists the
+stable `finding_id`/`option_id` pair.
 
 Keep each primary finding disclosure button separate from its selection checkbox. Give
 every checkbox a unique accessible name, bind that disclosure to its body with
@@ -400,8 +401,9 @@ and stable `decision_answers`, then requests a browser download named
 or overwrite `.observe/otel-selection.json` or confirm the browser's download
 destination. Tell the reviewer to place the downloaded file at that exact path
 before running `$otel-instrument`. State that manual/external finding IDs remain
-in the audit and are never exported to instrumentation scope; only stable manual
-answer IDs are carried separately in `decision_answers`. Announce answer,
+in the audit and are never exported through `requested_ids` or `approved_ids`;
+`decision_answers` separately carries stable `finding_id`/`option_id` pairs for
+answered manual findings. Announce answer,
 dependency, and save/download guidance through an `aria-live="polite"`,
 `aria-atomic="true"` status region. Keep the tray and action usable as a
 single-column layout on narrow screens.

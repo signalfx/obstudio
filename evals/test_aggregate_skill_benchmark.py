@@ -663,7 +663,7 @@ raise SystemExit(0)
 
         self.assertTrue(result["complete"])
 
-    def test_system_loaded_unique_skill_is_proven_by_message_and_reference_read(
+    def test_message_and_reference_read_do_not_prove_the_skill_was_loaded(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -756,7 +756,14 @@ raise SystemExit(0)
 
             result = build_benchmark(root, repo, ["verify"], 1)
 
-        self.assertTrue(result["complete"])
+        self.assertFalse(result["complete"])
+        run = result["skills"][0]["sides"]["after"]["runs"][0]
+        self.assertEqual(len(run["errors"]), 1)
+        self.assertIn("skill load mismatch", run["errors"][0])
+        self.assertIn(
+            "a reference read or agent message cannot prove",
+            run["errors"][0],
+        )
 
     def test_stale_skill_read_marks_run_incomplete_even_if_discovery_mentions_expected_path(
         self,

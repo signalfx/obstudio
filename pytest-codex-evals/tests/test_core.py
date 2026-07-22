@@ -30,6 +30,9 @@ from pytest_codex_evals.backends import (
     _codex_subprocess_env,
     _merge_stream_observations,
     atomic_text_write,
+    cleanup_anchored_temporary_output,
+    create_anchored_temporary_output,
+    descriptor_operations_supported,
     ensure_anchored_directory,
     path_directory_identity,
     read_regular_text,
@@ -1384,6 +1387,53 @@ def test_anchored_reader_rejects_parent_namespace_swap_during_read(
     assert swapped
     assert (stolen / target.name).read_text(encoding="utf-8") == "trusted\n"
     assert (boundary / target.name).read_text(encoding="utf-8") == "attacker\n"
+
+
+def test_temporary_output_cleanup_uses_retained_parent_after_namespace_swap(
+    tmp_path: Path,
+):
+    import pytest as _pytest
+
+    if not descriptor_operations_supported():
+        _pytest.skip("requires directory-relative cleanup")
+    exec_dir = tmp_path / "exec"
+    exec_dir.mkdir()
+    output = create_anchored_temporary_output(
+        exec_dir,
+        ".agent-final-",
+        expected_parent_identity=path_directory_identity(exec_dir),
+    )
+    output.path.write_text("generated\n", encoding="utf-8")
+    stolen = tmp_path / "stolen-exec"
+    exec_dir.rename(stolen)
+    exec_dir.mkdir()
+    decoy = exec_dir / output.name
+    decoy.write_text("keep\n", encoding="utf-8")
+
+    cleanup_anchored_temporary_output(output)
+
+    assert decoy.read_text(encoding="utf-8") == "keep\n"
+    assert not (stolen / output.name).exists()
+
+
+def test_temporary_output_cleanup_preserves_replaced_leaf(tmp_path: Path):
+    import pytest as _pytest
+
+    if not descriptor_operations_supported():
+        _pytest.skip("requires directory-relative cleanup")
+    exec_dir = tmp_path / "exec"
+    exec_dir.mkdir()
+    output = create_anchored_temporary_output(
+        exec_dir,
+        ".agent-final-",
+        expected_parent_identity=path_directory_identity(exec_dir),
+    )
+    output.path.unlink()
+    output.path.write_text("replacement\n", encoding="utf-8")
+
+    cleanup_anchored_temporary_output(output)
+
+    assert output.path.read_text(encoding="utf-8") == "replacement\n"
 
 
 def test_anchored_reader_rejects_same_inode_mutation_during_read(tmp_path: Path):

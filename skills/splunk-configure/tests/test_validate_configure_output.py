@@ -286,6 +286,61 @@ def add_scenario_only_metric_to_canonical_flow(
     write_canonical_reader_report(args)
 
 
+def add_current_metric_to_canonical_flow(
+    args: argparse.Namespace, metric: str
+) -> None:
+    root = args.terraform_dir.parent
+    report_module = DASHBOARD_HELPERS.REPORT_MODULE
+    audit = json.loads((root / "otel-audit.json").read_text(encoding="utf-8"))
+    audit["current_instrumentation"]["metrics"] = [
+        {
+            "name": metric,
+            "source": "metrics.go:12",
+            "type": "histogram",
+        }
+    ]
+    audit = report_module.normalize_audit_report(audit)
+    audit_digest = report_module.audit_digest(audit)
+
+    selection = json.loads(
+        (root / "otel-selection.json").read_text(encoding="utf-8")
+    )
+    selection["audit_sha256"] = audit_digest
+    selection = report_module.normalize_selection(selection, audit)
+
+    instrumentation = json.loads(
+        (root / "otel-instrumentation.json").read_text(encoding="utf-8")
+    )
+    instrumentation["audit_sha256"] = audit_digest
+    instrumentation["selection_sha256"] = report_module.selection_digest(selection)
+    instrumentation = report_module.normalize_instrumentation(
+        instrumentation, audit, selection
+    )
+
+    verification = json.loads(
+        (root / "otel-verify.json").read_text(encoding="utf-8")
+    )
+    verification["audit_sha256"] = audit_digest
+    verification["instrumentation_sha256"] = report_module.instrumentation_digest(
+        instrumentation
+    )
+    verification = report_module.normalize_verify(
+        verification, audit, selection, instrumentation
+    )
+
+    (root / "otel-audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    (root / "otel-selection.json").write_text(
+        json.dumps(selection), encoding="utf-8"
+    )
+    (root / "otel-instrumentation.json").write_text(
+        json.dumps(instrumentation), encoding="utf-8"
+    )
+    (root / "otel-verify.json").write_text(
+        json.dumps(verification), encoding="utf-8"
+    )
+    write_canonical_reader_report(args)
+
+
 def write_dashboard_fixture(
     args: argparse.Namespace,
     *,
@@ -778,6 +833,30 @@ class ValidateConfigureOutputTest(unittest.TestCase):
 
         self.assertEqual(result["result"], "PASS", result["errors"])
 
+    def test_dashboard_verification_alias_is_canonical_and_cannot_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            args = write_validation_fixture(Path(directory))
+            write_dashboard_fixture(args)
+            root = args.terraform_dir.parent
+            custom_verification = root / "custom-otel-verify.json"
+            (root / "otel-verify.json").rename(custom_verification)
+            args.dashboard_verification = custom_verification
+
+            alias_only = MODULE.validate(args)
+
+            conflicting_verification = root / "conflicting-otel-verify.json"
+            conflicting_verification.write_bytes(custom_verification.read_bytes())
+            args.verification_json = conflicting_verification
+            conflict = MODULE.validate(args)
+
+        self.assertEqual(alias_only["result"], "PASS", alias_only["errors"])
+        self.assertEqual(conflict["result"], "FAIL")
+        self.assertIn(
+            "--dashboard-verification and --verification-json must refer to the "
+            "same canonical verification artifact",
+            conflict["errors"],
+        )
+
     def test_dashboard_delegate_ignores_implicit_tfvars_but_checks_explicit_one(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
@@ -897,6 +976,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
             write_dashboard_fixture(args)
+            add_current_metric_to_canonical_flow(args, METRIC)
             source_id = "SOURCE-METRIC.http.server.request.duration"
             dashboards_tf = args.terraform_dir / "dashboards.tf"
             dashboards_tf.write_text(

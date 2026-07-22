@@ -665,10 +665,96 @@ def read_anchored_regular_bytes(
         os.close(anchor.descriptor)
 
 
-def temporary_output_path(parent: Path, label: str) -> Path:
-    descriptor, name = tempfile.mkstemp(prefix=label, suffix=".tmp", dir=parent)
-    os.close(descriptor)
-    return Path(name)
+@dataclass
+class AnchoredTemporaryOutput:
+    path: Path
+    name: str
+    anchor: AnchoredDirectory
+    identity: tuple[int, int]
+
+
+def create_anchored_temporary_output(
+    parent: Path,
+    label: str,
+    *,
+    expected_parent_identity: tuple[int, int],
+) -> AnchoredTemporaryOutput:
+    """Create a temporary output while retaining its authenticated parent."""
+
+    parent = Path(os.path.abspath(parent))
+    anchor = open_anchored_directory(parent, parent)
+    if anchor.parent_identity != expected_parent_identity:
+        close_anchored_directory(anchor)
+        raise ValueError(f"temporary output directory was replaced: {parent}")
+    descriptor: int | None = None
+    try:
+        if anchor.descriptor is None:
+            descriptor, raw_name = tempfile.mkstemp(
+                prefix=label,
+                suffix=".tmp",
+                dir=parent,
+            )
+            status = os.fstat(descriptor)
+            name = Path(raw_name).name
+        else:
+            name = f"{label}{secrets.token_hex(12)}.tmp"
+            descriptor = os.open(
+                name,
+                os.O_RDWR
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=anchor.descriptor,
+            )
+            status = os.fstat(descriptor)
+        if path_is_link_or_reparse(status) or not stat.S_ISREG(status.st_mode):
+            raise ValueError(f"temporary output must be a regular file: {parent / name}")
+        if not anchored_namespace_matches(anchor):
+            raise ValueError(f"temporary output directory was replaced: {parent}")
+        return AnchoredTemporaryOutput(
+            path=parent / name,
+            name=name,
+            anchor=anchor,
+            identity=(status.st_dev, status.st_ino),
+        )
+    except BaseException:
+        close_anchored_directory(anchor)
+        raise
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def cleanup_anchored_temporary_output(output: AnchoredTemporaryOutput) -> None:
+    """Remove only the exact temporary file through its retained parent."""
+
+    try:
+        descriptor = output.anchor.descriptor
+        if descriptor is None:
+            # Pathname cleanup cannot be made race-free on the portable
+            # fallback. Leave the untrusted temporary output in place.
+            return
+        try:
+            status = os.stat(
+                output.name,
+                dir_fd=descriptor,
+                follow_symlinks=False,
+            )
+        except OSError:
+            return
+        if (
+            path_is_link_or_reparse(status)
+            or not stat.S_ISREG(status.st_mode)
+            or (status.st_dev, status.st_ino) != output.identity
+        ):
+            return
+        try:
+            os.unlink(output.name, dir_fd=descriptor)
+        except OSError:
+            pass
+    finally:
+        close_anchored_directory(output.anchor)
 
 
 def read_regular_text(
@@ -751,7 +837,11 @@ class CodexBackend:
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
-        raw_final_path = temporary_output_path(exec_dir, ".codex-final-")
+        raw_final = create_anchored_temporary_output(
+            exec_dir,
+            ".codex-final-",
+            expected_parent_identity=exec_dir_identity,
+        )
 
         cmd = [
             self.command,
@@ -762,7 +852,7 @@ class CodexBackend:
             "--cd",
             str(exec_dir),
             "--output-last-message",
-            str(raw_final_path),
+            str(raw_final.path),
             *self.extra_args,
         ]
         if model:
@@ -778,7 +868,7 @@ class CodexBackend:
                 env=_codex_subprocess_env(exec_dir),
             )
             final_value = read_regular_text(
-                raw_final_path,
+                raw_final.path,
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
@@ -789,7 +879,7 @@ class CodexBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
         finally:
-            raw_final_path.unlink(missing_ok=True)
+            cleanup_anchored_temporary_output(raw_final)
 
         return AgentResult(
             returncode=completed.returncode,
@@ -809,7 +899,11 @@ class CodexBackend:
     ) -> AgentResult:
         exec_dir_identity = path_directory_identity(exec_dir)
         output_path = exec_dir / "rubric_grade.json"
-        raw_output_path = temporary_output_path(exec_dir, ".codex-rubric-")
+        raw_output = create_anchored_temporary_output(
+            exec_dir,
+            ".codex-rubric-",
+            expected_parent_identity=exec_dir_identity,
+        )
         trace_path = exec_dir / "rubric_trace.jsonl"
         stderr_path = exec_dir / "rubric_stderr.txt"
 
@@ -825,7 +919,7 @@ class CodexBackend:
         ]
         if schema_path:
             cmd.extend(["--output-schema", str(schema_path)])
-        cmd.extend(["--output-last-message", str(raw_output_path), *self.extra_args])
+        cmd.extend(["--output-last-message", str(raw_output.path), *self.extra_args])
         if model:
             cmd.extend(["--model", model])
         cmd.append(prompt)
@@ -845,7 +939,7 @@ class CodexBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
             output = read_regular_text(
-                raw_output_path,
+                raw_output.path,
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
@@ -860,7 +954,7 @@ class CodexBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
         finally:
-            raw_output_path.unlink(missing_ok=True)
+            cleanup_anchored_temporary_output(raw_output)
 
         return AgentResult(
             returncode=completed.returncode,
@@ -899,7 +993,11 @@ class CursorBackend:
         trace_path = exec_dir / "trace.jsonl"
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
-        raw_final_path = temporary_output_path(exec_dir, ".cursor-final-")
+        raw_final = create_anchored_temporary_output(
+            exec_dir,
+            ".cursor-final-",
+            expected_parent_identity=exec_dir_identity,
+        )
 
         cmd = [
             self.command,
@@ -910,7 +1008,7 @@ class CursorBackend:
             "--cd",
             str(exec_dir),
             "--output-last-message",
-            str(raw_final_path),
+            str(raw_final.path),
             *self.extra_args,
         ]
         if model:
@@ -927,7 +1025,7 @@ class CursorBackend:
             atomic_text_write(
                 final_path,
                 read_regular_text(
-                    raw_final_path,
+                    raw_final.path,
                     boundary=exec_dir,
                     expected_boundary_identity=exec_dir_identity,
                 ),
@@ -935,7 +1033,7 @@ class CursorBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
         finally:
-            raw_final_path.unlink(missing_ok=True)
+            cleanup_anchored_temporary_output(raw_final)
 
         return AgentResult(
             returncode=completed.returncode,
@@ -955,7 +1053,11 @@ class CursorBackend:
     ) -> AgentResult:
         exec_dir_identity = path_directory_identity(exec_dir)
         output_path = exec_dir / "rubric_grade.json"
-        raw_output_path = temporary_output_path(exec_dir, ".cursor-rubric-")
+        raw_output = create_anchored_temporary_output(
+            exec_dir,
+            ".cursor-rubric-",
+            expected_parent_identity=exec_dir_identity,
+        )
         trace_path = exec_dir / "rubric_trace.jsonl"
         stderr_path = exec_dir / "rubric_stderr.txt"
 
@@ -970,7 +1072,7 @@ class CursorBackend:
         ]
         if schema_path:
             cmd.extend(["--output-schema", str(schema_path)])
-        cmd.extend(["--output-last-message", str(raw_output_path), *self.extra_args])
+        cmd.extend(["--output-last-message", str(raw_output.path), *self.extra_args])
         if model:
             cmd.extend(["--model", model])
         cmd.append(prompt)
@@ -990,7 +1092,7 @@ class CursorBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
             output = read_regular_text(
-                raw_output_path,
+                raw_output.path,
                 boundary=exec_dir,
                 expected_boundary_identity=exec_dir_identity,
             )
@@ -1005,7 +1107,7 @@ class CursorBackend:
                 expected_boundary_identity=exec_dir_identity,
             )
         finally:
-            raw_output_path.unlink(missing_ok=True)
+            cleanup_anchored_temporary_output(raw_output)
 
         return AgentResult(
             returncode=completed.returncode,

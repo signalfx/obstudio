@@ -494,8 +494,11 @@ class RunGoOtelCommandTest(unittest.TestCase):
                 ("--", "go", "clean", "-modcache"),
                 ("--", "sh", "-c", "echo bad"),
                 ("--", "go", "test", "-exec=/tmp/helper", "./..."),
+                ("--", "go", "test", "--exec=/tmp/helper", "./..."),
                 ("--", "go", "build", "-toolexec", "/tmp/helper", "./..."),
+                ("--", "go", "build", "--toolexec", "/tmp/helper", "./..."),
                 ("--", "go", "test", "-vettool=/tmp/helper", "./..."),
+                ("--", "go", "test", "--vettool=/tmp/helper", "./..."),
             )
 
             results = [
@@ -542,6 +545,53 @@ class RunGoOtelCommandTest(unittest.TestCase):
                 MODULE.atomic_write(target, b'{"ok":true}\n')
 
             self.assertEqual(target.read_bytes(), b'{"ok":true}\n')
+
+    def test_atomic_write_rejects_substituted_temporary_identity(self) -> None:
+        if not MODULE.descriptor_publication_supported():
+            self.skipTest("requires descriptor-relative publication")
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "accepted-plan.json"
+            temporary = target.with_name(
+                f".{target.name}.{os.getpid()}.tmp"
+            )
+            original_stat = MODULE.os.stat
+            substituted = False
+
+            def substitute_before_identity_check(path, *args, **kwargs):
+                nonlocal substituted
+                if (
+                    not substituted
+                    and path == temporary.name
+                    and kwargs.get("dir_fd") is not None
+                ):
+                    parent = kwargs["dir_fd"]
+                    MODULE.os.unlink(path, dir_fd=parent)
+                    attacker = MODULE.os.open(
+                        path,
+                        MODULE.os.O_WRONLY
+                        | MODULE.os.O_CREAT
+                        | MODULE.os.O_EXCL,
+                        0o600,
+                        dir_fd=parent,
+                    )
+                    try:
+                        MODULE.os.write(attacker, b"attacker\n")
+                    finally:
+                        MODULE.os.close(attacker)
+                    substituted = True
+                return original_stat(path, *args, **kwargs)
+
+            with mock.patch.object(
+                MODULE.os, "stat", side_effect=substitute_before_identity_check
+            ):
+                with self.assertRaisesRegex(
+                    MODULE.CommandError, "temporary file identity changed"
+                ):
+                    MODULE.atomic_write(target, b"trusted\n")
+
+            self.assertTrue(substituted)
+            self.assertFalse(target.exists())
+            self.assertEqual(temporary.read_bytes(), b"attacker\n")
 
     def test_bookkeeping_cleanup_has_portable_no_dir_fd_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1018,6 +1068,104 @@ class RunGoOtelCommandTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 17, completed.stderr)
         self.assertEqual(restored_mod, original_mod)
         self.assertEqual(restored_sum, original_sum)
+
+    def test_bootstrap_rejects_one_and_two_dash_mutation_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, cache, _ = self.make_bootstrap_fixture(root)
+            fake_bin = self.make_fake_go(root)
+            self.probe(project, cache, fake_bin, root / "probe.json")
+            applied = self.run_command(
+                project,
+                cache,
+                fake_bin,
+                root / "get.json",
+                "--action",
+                "go-get",
+                extra_env={"FAKE_GO_EDIT_PROJECT": "1"},
+            )
+            cases = (
+                ("single-mod", "-mod=mod"),
+                ("double-mod", "--mod=mod"),
+                ("single-modfile", "-modfile=/tmp/alternate.mod"),
+                ("double-modfile", "--modfile=/tmp/alternate.mod"),
+                ("single-overlay", "-overlay=/tmp/overlay.json"),
+                ("double-overlay", "--overlay=/tmp/overlay.json"),
+            )
+            results = []
+            for name, flag in cases:
+                log = root / f"must-not-run-{name}.json"
+                completed = self.run_command(
+                    project,
+                    cache,
+                    fake_bin,
+                    log,
+                    "--",
+                    "go",
+                    "test",
+                    flag,
+                    "./...",
+                )
+                results.append((completed, log.exists()))
+
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        for completed, log_exists in results:
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn(
+                "dependency-mutating Go flags are not allowed",
+                completed.stderr,
+            )
+            self.assertFalse(log_exists)
+
+    def test_failed_bootstrap_tidy_preserves_exit_and_rolls_back(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, cache, _ = self.make_bootstrap_fixture(root)
+            fake_bin = self.make_fake_go(root)
+            self.probe(project, cache, fake_bin, root / "probe.json")
+            applied = self.run_command(
+                project,
+                cache,
+                fake_bin,
+                root / "get.json",
+                "--action",
+                "go-get",
+                extra_env={"FAKE_GO_EDIT_PROJECT": "1"},
+            )
+            ledger_path = (
+                project
+                / ".observe"
+                / "tmp"
+                / "go-otel-resolver"
+                / "accepted-plan.json"
+            )
+            before_mod = (project / "go.mod").read_bytes()
+            before_sum = (project / "go.sum").read_bytes()
+            before_ledger = ledger_path.read_bytes()
+
+            completed = self.run_command(
+                project,
+                cache,
+                fake_bin,
+                root / "tidy.json",
+                "--",
+                "go",
+                "mod",
+                "tidy",
+                extra_env={
+                    "FAKE_GO_TIDY_APPEND": "1",
+                    "FAKE_GO_EXIT": "17",
+                },
+            )
+            restored_mod = (project / "go.mod").read_bytes()
+            restored_sum = (project / "go.sum").read_bytes()
+            restored_ledger = ledger_path.read_bytes()
+
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertEqual(completed.returncode, 17, completed.stderr)
+        self.assertEqual(restored_mod, before_mod)
+        self.assertEqual(restored_sum, before_sum)
+        self.assertEqual(restored_ledger, before_ledger)
 
     def test_bootstrap_state_machine_applies_pins_advances_tidy_and_rejects_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
