@@ -20,6 +20,9 @@ INSTRUMENT_EVAL = (
 VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-partial" / "eval" / "qual" / "benchmark-verify.json"
 )
+CHI_CANONICAL_VERIFY_EVAL = (
+    ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
+)
 
 
 def _read(path: Path) -> str:
@@ -107,6 +110,20 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     ) in handoff
     assert "An answer never auto-selects work" in handoff
     assert "work outside the recorded option's `unlocks`" in instrument
+    assert (
+        "its finding ID cannot enter `requested_ids` or `approved_ids`"
+        in flow
+    )
+    assert (
+        "`decision_answers` separately persists the stable "
+        "`finding_id`/`option_id` pair"
+    ) in flow
+    assert (
+        "`decision_answers` separately carries stable `finding_id`/`option_id` pairs"
+        in flow
+    )
+    assert "A manual decision has no checkbox and cannot enter selection JSON" not in flow
+    assert "only stable manual answer IDs are carried separately" not in flow
 
 
 def test_audit_v2_and_legacy_overlay_versions_are_explicit() -> None:
@@ -146,6 +163,16 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-instrumentation.json" in instrument
     assert ".observe/otel-instrumentation.html" in instrument
     assert ".observe/otel-verify.json" in verify
+
+
+def test_canonical_verify_eval_requires_only_real_item_local_proof() -> None:
+    verify = _eval_contract(CHI_CANONICAL_VERIFY_EVAL)
+
+    assert "single OTEL-001.http-health-span item result" in verify
+    assert "GET /health with http.route=/health" in verify
+    assert "Does not fabricate a removed HttpRequest telemetry item" in verify
+    assert "both telemetry item results" not in verify
+    assert "structured removal_proof for HttpRequest" not in verify
 
 
 def test_ci_gate_is_headless_and_has_distinct_policy_exit_codes() -> None:

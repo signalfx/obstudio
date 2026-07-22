@@ -64,9 +64,9 @@
       "surface": "Assistant GenAI lifecycle",
       "status": "missing",
       "evidence": "app.py:58-187",
-      "required_signals": "gen_ai.client.operation span with gen_ai.operation.name, gen_ai.provider.name, and gen_ai.request.model; execute_tool span with gen_ai.tool.name; gen_ai.client.token.usage metric with gen_ai.token.type; assistant.stream.active metric",
+      "required_signals": "chat demo-gpt-4o-mini span with gen_ai.operation.name=chat, gen_ai.provider.name=demo-provider, and gen_ai.request.model=demo-gpt-4o-mini; execute_tool {tool} spans bounded to execute_tool search_docs and execute_tool lookup_customer, each with gen_ai.operation.name=execute_tool and its matching gen_ai.tool.name; gen_ai.client.token.usage metric with gen_ai.token.type; assistant.stream.active metric",
       "owner": "App-owned: app.py:58-187",
-      "acceptance_criteria": "A bounded chat run emits gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics without prompt, completion, session, or tool-argument dimensions.",
+      "acceptance_criteria": "A bounded chat run emits the chat demo-gpt-4o-mini, execute_tool search_docs, and execute_tool lookup_customer spans plus gen_ai.client.token.usage and assistant.stream.active metrics without prompt, completion, session, or tool-argument dimensions.",
       "impact": "Operators cannot localize model, tool, token-pressure, or streaming failures in the assistant lifecycle."
     }
   ],
@@ -97,7 +97,7 @@
         "app.py:58-187"
       ],
       "acceptance_criteria": [
-        "A bounded chat run emits gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics."
+        "A bounded chat run emits the chat demo-gpt-4o-mini, execute_tool search_docs, and execute_tool lookup_customer spans plus gen_ai.client.token.usage and assistant.stream.active metrics."
       ],
       "constraints": [
         "Do not record raw prompts, completions, session IDs, user values, request IDs, or tool arguments as metric dimensions."
@@ -105,21 +105,31 @@
       "expected_telemetry": [
         {
           "type": "span",
-          "name": "gen_ai.client.operation",
+          "name": "chat demo-gpt-4o-mini",
           "attributes": [
-            "gen_ai.operation.name",
-            "gen_ai.provider.name",
-            "gen_ai.request.model"
+            "gen_ai.operation.name=chat",
+            "gen_ai.provider.name=demo-provider",
+            "gen_ai.request.model=demo-gpt-4o-mini"
           ],
           "product_view": "App-owned model-call trace waterfall"
         },
         {
           "type": "span",
-          "name": "execute_tool",
+          "name": "execute_tool search_docs",
           "attributes": [
-            "gen_ai.tool.name"
+            "gen_ai.operation.name=execute_tool",
+            "gen_ai.tool.name=search_docs"
           ],
-          "product_view": "Bounded tool-call trace waterfall"
+          "product_view": "Bounded search_docs tool-call trace waterfall"
+        },
+        {
+          "type": "span",
+          "name": "execute_tool lookup_customer",
+          "attributes": [
+            "gen_ai.operation.name=execute_tool",
+            "gen_ai.tool.name=lookup_customer"
+          ],
+          "product_view": "Bounded lookup_customer tool-call trace waterfall"
         },
         {
           "type": "metric",
@@ -155,9 +165,9 @@
     "scenarios": [
       {
         "id": "genai.turn.lifecycle",
-        "trigger": "POST /v1/chat with bounded input and one bounded tool name",
+        "trigger": "POST /v1/chat with bounded input and the registered search_docs and lookup_customer tools",
         "entrypoint": "app.py:93",
-        "expected_signals": "gen_ai.client.operation and execute_tool spans plus gen_ai.client.token.usage and assistant.stream.active metrics",
+        "expected_signals": "chat demo-gpt-4o-mini, execute_tool search_docs, and execute_tool lookup_customer spans plus gen_ai.client.token.usage and assistant.stream.active metrics",
         "proof_level": "full runtime",
         "acceptance_criteria": "The generated telemetry contains the exact bounded GenAI signal names and required semantic attributes without raw content or identifier dimensions.",
         "environments": [

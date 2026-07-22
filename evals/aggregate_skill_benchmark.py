@@ -97,14 +97,8 @@ HASH_IGNORED_SUFFIXES = (".db", ".pyc")
 SKILL_PATH_PATTERN = re.compile(
     r"(?P<path>(?:/|~/?|\.\.?/)[^\s\"'`;&|()<>]+/SKILL\.md)"
 )
-CONTENT_PATH_PATTERN = re.compile(
-    r"(?P<path>(?:/|~/?|\.\.?/)[^\s\"'`;&|()<>]+)"
-)
 SKILL_READ_PATTERN = re.compile(
     r"(?:^|[\s\"'])(?:(?:/usr)?/bin/)?(?:cat|sed|head|tail|awk|perl|python\d*(?:\.\d+)?)\b"
-)
-CONTENT_READ_PATTERN = re.compile(
-    r"(?:^|[\s\"'])(?:(?:/usr)?/bin/)?(?:cat|sed|head|tail|awk)\b"
 )
 
 
@@ -1180,12 +1174,8 @@ def load_run_provenance(
     return provenance, task, errors
 
 
-def traced_skill_evidence(
-    trace_bytes: bytes, trace_label: str
-) -> tuple[list[Path], list[Path], list[str]]:
+def traced_skill_evidence(trace_bytes: bytes, trace_label: str) -> list[Path]:
     skill_reads: list[Path] = []
-    content_reads: list[Path] = []
-    messages: list[str] = []
     for line_number, line in enumerate(
         trace_bytes.decode("utf-8").splitlines(), 1
     ):
@@ -1200,9 +1190,6 @@ def traced_skill_evidence(
         item = event.get("item")
         if not isinstance(item, dict):
             continue
-        if item.get("type") == "agent_message" and isinstance(item.get("text"), str):
-            messages.append(str(item["text"]))
-            continue
         if item.get("type") != "command_execution":
             continue
         if item.get("exit_code") != 0 or not isinstance(item.get("command"), str):
@@ -1215,29 +1202,7 @@ def traced_skill_evidence(
                 skill_file(match.group("path"))
                 for match in SKILL_PATH_PATTERN.finditer(segment)
             )
-            if CONTENT_READ_PATTERN.search(segment):
-                content_reads.extend(
-                    Path(match.group("path")).expanduser()
-                    for match in CONTENT_PATH_PATTERN.finditer(segment)
-                )
-    return skill_reads, content_reads, messages
-
-
-def path_is_within(path: Path, root: Path) -> bool:
-    candidate = Path(lexical_path(path))
-    boundary = Path(lexical_path(root))
-    try:
-        candidate.relative_to(boundary)
-    except ValueError:
-        return False
-    return candidate != boundary
-
-
-def message_names_skill(messages: list[str], skill_name: str) -> bool:
-    pattern = re.compile(
-        rf"(?<![A-Za-z0-9_-]){re.escape(skill_name)}(?![A-Za-z0-9_-])"
-    )
-    return any(pattern.search(message) for message in messages)
+    return skill_reads
 
 
 def validate_skill_load(
@@ -1272,7 +1237,7 @@ def validate_skill_load(
         declared_name, expected = expected_skill(
             captured_json(validation_path, run_dir, captured_files), skill
         )
-        skill_reads, content_reads, messages = traced_skill_evidence(
+        skill_reads = traced_skill_evidence(
             captured_bytes(trace_path, run_dir, captured_files), str(trace_path)
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -1288,17 +1253,6 @@ def validate_skill_load(
             if file_hash(candidate) == expected_hash:
                 return []
 
-    skill_dir = expected.parent
-    shared_references = skill_dir.parent / "references"
-    package_read = any(
-        path_is_within(candidate, skill_dir)
-        or path_is_within(candidate, shared_references)
-        for candidate in content_reads
-    )
-    named_skill = message_names_skill(messages, declared_name)
-    if package_read and named_skill:
-        return []
-
     if skill_reads:
         loaded = ", ".join(
             sorted({lexical_path(candidate) for candidate in skill_reads})
@@ -1306,14 +1260,11 @@ def validate_skill_load(
     else:
         loaded = "no successful SKILL.md content reads"
     hash_note = "unavailable" if expected_hash is None else expected_hash
-    fallback = (
-        f"package/reference read={'yes' if package_read else 'no'}, "
-        f"agent named {declared_name}={'yes' if named_skill else 'no'}"
-    )
     return [
         "skill load mismatch: validation expected "
         f"{expected_lexical} (sha256={hash_note}), but trace loaded {loaded}; "
-        f"system-load evidence: {fallback}"
+        "a reference read or agent message cannot prove that the governing "
+        "SKILL.md was loaded"
     ]
 
 

@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "canonical-proof-packet",
-      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical proof rather than changing application code. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, and report the exact validated result."
+      "task": "Create ./service/.observe and copy the four canonical JSON files from ./service/eval/inputs into it. Use $otel-verify read-only to validate the complete bound audit -> selection -> instrumentation -> verify proof packet. Preserve the supplied canonical proof rather than changing application code or inventing a removed telemetry item for a signal this fixture never emitted. Write the reader-first compatibility verification report, describe the captured trace as the generated trace without exposing a trace ID, and report the exact validated result."
     }
   ],
   "judge_inputs": [
@@ -13,9 +13,9 @@
   ],
   "rubric": [
     "Runs the canonical bound-flow validator and preserves exact audit_sha256, selection_sha256, and instrumentation_sha256 bindings rather than treating the four JSON files independently.",
-    "Keeps the verify aggregate result Pass only because the selected finding, mapped scenario, and both telemetry item results are working with direct proof.",
-    "Preserves structured removal_proof for HttpRequest with both absence_assertion_passed and replacement_assertion_passed true and the distinct GET /health replacement signal.",
-    "Requires direct item-local proof for GET /health with http.route and does not let the HttpRequest absence assertion prove the replacement item by itself.",
+    "Keeps the verify aggregate result Pass only because the selected finding, mapped scenario, and single OTEL-001.http-health-span item result are working with direct proof.",
+    "Requires direct item-local proof that the generated trace contains GET /health with http.route=/health for OTEL-001.http-health-span.",
+    "Does not fabricate a removed HttpRequest telemetry item or removal_proof; the evidence that no manual HttpRequest span appears is contextual absence evidence, not proof that an app-owned item was removed.",
     "Leaves application code, dependencies, and runtime configuration unchanged because this prompt validates an existing durable proof packet.",
     "Writes a reader-first .observe/otel-verify.md that says generated trace rather than exposing raw trace or span identifiers."
   ]
