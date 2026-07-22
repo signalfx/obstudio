@@ -147,7 +147,7 @@ def test_audit_excludes_general_operational_hygiene_from_otel_findings():
         "Omit unrelated non-telemetry debt from summary, top-level evidence, readiness, anti-patterns, recommendations, findings, and scenarios",
         "Apply instrument modes only after the OTel finding boundary",
         "Omit non-telemetry service code, configuration, contract, documentation, policy, or general test work instead of splitting it into another finding",
-        "`done`, `rejected`, and `deferred` findings do not satisfy a partial/missing row",
+        "`done`, `rejected`, and `deferred` findings do not satisfy an unresolved readiness row",
         "Render authored Incident and GenAI telemetry-readiness tables as visible panels",
     ]
     assert not [term for term in required_flow_terms if term not in report_flow]
@@ -412,7 +412,7 @@ def test_audit_maps_incident_readiness_to_current_gap_contract():
     assert "## Gap Ledger" not in audit
     required_contract_terms = [
         "one `### Incident Readiness` subsection",
-        "Every telemetry-scoped `partial` or `missing` row",
+        "Every telemetry-scoped `partial`, `missing`, or `owner-mapped` Incident Readiness row",
         "`Area` cell is identical",
         "Do not add a readiness row solely for API behavior",
         "not a second top-level gap ledger",
