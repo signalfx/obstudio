@@ -2473,6 +2473,13 @@ def normalize_verify(
     for index, row in enumerate(object_list(data.get("findings", []), "verify.findings")):
         row_path = f"verify.findings[{index}]"
         finding_id = stable_id(row.get("id"), f"{row_path}.id")
+        if finding_id not in audit_findings_by_id:
+            fail(f"{row_path}.id {finding_id} is not present in the bound audit")
+        if finding_id not in expected_items_by_finding:
+            fail(
+                f"{row_path}.id {finding_id} is not present in the bound "
+                "instrumentation overlay"
+            )
         if finding_id in seen:
             fail(f"duplicate verify finding ID: {finding_id}")
         seen.add(finding_id)
@@ -5748,16 +5755,8 @@ def render_html(
     mode_guidance_payload = json.dumps(MODE_GUIDANCE, separators=(",", ":"))
     finding_action_labels_payload = json.dumps(
         {
-            finding["id"]: (
-                "Decision recorded"
-                if finding["instrument_mode"] == "manual decision"
-                and selected_decision_option(
-                    finding,
-                    decision_answer_map(initial_decision_answers).get(finding["id"]),
-                )
-                else finding_action_label(
-                    finding, selection_eligibility[finding["id"]]["blockers"]
-                )
+            finding["id"]: finding_action_label(
+                finding, selection_eligibility[finding["id"]]["blockers"]
             )
             for finding in report["findings"]
         },
@@ -6200,9 +6199,7 @@ function findingLifecycleTag(lifecycle) {{
 
 function findingActionLabelFor(finding) {{
   if (finding.instrument_mode === "manual decision") {{
-    return selectedDecisionOption(finding)
-      ? "Decision recorded"
-      : finding.priority === "required" ? "Decide now" : "Decide first";
+    return finding.priority === "required" ? "Decide now" : "Decide first";
   }}
   if (finding.instrument_mode === "external follow-up") return "Track external follow-up";
   if ((selectionEligibility[finding.id]?.blockers || []).length) return "Resolve prerequisite first";

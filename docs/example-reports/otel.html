@@ -324,9 +324,7 @@ function findingLifecycleTag(lifecycle) {
 
 function findingActionLabelFor(finding) {
   if (finding.instrument_mode === "manual decision") {
-    return selectedDecisionOption(finding)
-      ? "Decision recorded"
-      : finding.priority === "required" ? "Decide now" : "Decide first";
+    return finding.priority === "required" ? "Decide now" : "Decide first";
   }
   if (finding.instrument_mode === "external follow-up") return "Track external follow-up";
   if ((selectionEligibility[finding.id]?.blockers || []).length) return "Resolve prerequisite first";
