@@ -37,7 +37,7 @@ checksum:
 
 release:
   github:
-    owner: adiagne-c21
+    owner: signalfx
     name: obstudio
 
 changelog:
