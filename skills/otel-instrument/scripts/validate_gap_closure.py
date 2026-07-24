@@ -82,6 +82,50 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
+NEGATIVE_OR_UNCERTAIN_PROOF = re.compile(
+    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
+    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
+    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
+    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
+    r"\btests?\s+(?:are\s+)?blocked\b)",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_EXECUTED_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"go\s+test|pytest|cargo\s+test|(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+test|"
+    r"(?:gradle|gradlew|mvn|mvnw)\b[^\r\n;|]*\b(?:test|check|verify)|"
+    r"dotnet\s+test|bundle\s+exec\s+(?:rspec|rake\s+test)|"
+    r"(?:composer\s+(?:exec\s+)?)?(?:vendor/bin/)?phpunit)\b",
+    re.IGNORECASE,
+)
+NON_EXECUTING_TEST_PROOF = re.compile(
+    r"(?:\b(?:gradle|gradlew)\b[^\r\n;|]*"
+    r"(?:--dry-run|(?<!\S)-m(?=\s|$)|"
+    r"(?:--exclude-task|-x)(?:=|\s+)(?:test|check|verify)\b)|"
+    r"\b(?:mvn|mvnw)\b[^\r\n;|]*"
+    r"-D(?:skipTests|maven\.test\.skip)"
+    r"(?:=(?:true|1|yes))?(?=\s|$))",
+    re.IGNORECASE,
+)
+POSITIVE_PROOF_EVIDENCE = re.compile(
+    r"(?:^|/)\.observe/evidence/|"
+    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
+    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
+    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
+    r"exported|recorded|assertion)\b",
+    re.IGNORECASE,
+)
+DURABLE_ARTIFACT_REFERENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
+    re.IGNORECASE,
+)
+NON_PROOF_ARTIFACT_LABEL = re.compile(
+    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
+    r"pending|skipped|unknown)\b",
+    re.IGNORECASE,
+)
 JSON_STATUS_LABELS = {
     "working": "Working",
     "not_working": "Not working",
@@ -93,6 +137,66 @@ JSON_STATUS_LABELS = {
 
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
+
+
+def has_meaningful_instrumentation_proof(instrumentation_json: dict) -> bool:
+    """Return whether implementation-owned scope records any completed proof."""
+
+    def affirmative_entries(value: object, pattern: re.Pattern[str]) -> bool:
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(
+                isinstance(item, str)
+                and bool(item.strip())
+                and not NON_EXECUTING_TEST_PROOF.search(item)
+                and not NEGATIVE_OR_UNCERTAIN_PROOF.search(
+                    re.sub(r"[._/-]+", " ", item)
+                )
+                and pattern.search(re.sub(r"[._/-]+", " ", item))
+                for item in value
+            )
+        )
+
+    def positive_evidence(value: object) -> bool:
+        def positive_item(item: object) -> bool:
+            if not isinstance(item, str) or not item.strip():
+                return False
+            artifact_refs = list(DURABLE_ARTIFACT_REFERENCE.finditer(item))
+            if any(
+                NON_PROOF_ARTIFACT_LABEL.search(
+                    re.sub(r"[._/\\-]+", " ", match.group(0))
+                )
+                for match in artifact_refs
+            ):
+                return False
+            outcome_prose = DURABLE_ARTIFACT_REFERENCE.sub(" ", item)
+            return bool(
+                not NEGATIVE_OR_UNCERTAIN_PROOF.search(
+                    re.sub(r"[._/\\-]+", " ", outcome_prose)
+                )
+                and POSITIVE_PROOF_EVIDENCE.search(item)
+            )
+
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(positive_item(item) for item in value)
+        )
+
+    for finding in instrumentation_json.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        if (
+            finding.get("status") == "working"
+            and affirmative_entries(
+                finding.get("tests"), AFFIRMATIVE_EXECUTED_PROOF
+            )
+            and positive_evidence(finding.get("evidence"))
+        ):
+            return True
+
+    return False
 
 
 def expected_report_result(
@@ -111,13 +215,9 @@ def expected_report_result(
     if verification_result == "Fail":
         return "Fail"
     if verification_result == "Blocked":
-        has_working_implementation = any(
-            isinstance(finding, dict) and finding.get("status") == "working"
-            for finding in instrumentation_json.get("findings", [])
-        )
         return (
             "Partial"
-            if has_working_implementation
+            if has_meaningful_instrumentation_proof(instrumentation_json)
             else "Blocked"
         )
     return "Partial" if verification_result == "Not run" else verification_result

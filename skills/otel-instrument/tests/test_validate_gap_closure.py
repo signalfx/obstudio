@@ -418,7 +418,7 @@ class ValidateGapClosureTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_blocked_verify_uses_structured_implementation_status(self) -> None:
+    def test_blocked_verify_is_partial_when_implementation_owned_proof_exists(self) -> None:
         blocked_verify = {"meta": {"result": "Blocked"}}
         no_proof = {
             "findings": [
@@ -440,13 +440,149 @@ class ValidateGapClosureTest(unittest.TestCase):
         finding_proof["findings"][0].update(
             {
                 "status": "working",
-                "tests": [],
-                "evidence": [],
+                "tests": ["go test ./..."],
+                "evidence": [".observe/evidence/go-test.txt"],
             }
         )
         self.assertEqual(
             VALIDATOR_MODULE.expected_report_result(
                 finding_proof, blocked_verify, verification_overlay=True
+            ),
+            "Partial",
+        )
+
+        for command in (
+            "./gradlew test",
+            "./mvnw -DskipTests=false verify",
+            "dotnet test Service.Tests",
+        ):
+            project_native_proof = copy.deepcopy(no_proof)
+            project_native_proof["findings"][0].update(
+                {
+                    "status": "working",
+                    "tests": [command],
+                    "evidence": [".observe/evidence/project-test.txt"],
+                }
+            )
+            with self.subTest(command=command):
+                self.assertTrue(
+                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                        project_native_proof
+                    )
+                )
+                self.assertEqual(
+                    VALIDATOR_MODULE.expected_report_result(
+                        project_native_proof,
+                        blocked_verify,
+                        verification_overlay=True,
+                    ),
+                    "Partial",
+                )
+
+        for command in (
+            "./gradlew test --dry-run",
+            "./gradlew check -x test",
+            "./mvnw -DskipTests verify",
+            "./mvnw verify -Dmaven.test.skip=true",
+        ):
+            skipped_project_proof = copy.deepcopy(no_proof)
+            skipped_project_proof["findings"][0].update(
+                {
+                    "status": "working",
+                    "tests": [command],
+                    "evidence": [".observe/evidence/project-test.txt"],
+                }
+            )
+            with self.subTest(command=command):
+                self.assertFalse(
+                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                        skipped_project_proof
+                    )
+                )
+                self.assertEqual(
+                    VALIDATOR_MODULE.expected_report_result(
+                        skipped_project_proof,
+                        blocked_verify,
+                        verification_overlay=True,
+                    ),
+                    "Blocked",
+                )
+
+    def test_blocked_verify_ignores_unproven_source_refs_and_not_run_text(self) -> None:
+        blocked_verify = {"meta": {"result": "Blocked"}}
+        unproven = {
+            "findings": [
+                {
+                    "status": "not_proven",
+                    "tests": ["not run: Docker unavailable"],
+                    "evidence": ["main.go:12"],
+                }
+            ],
+        }
+
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(unproven)
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                unproven, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
+
+        source_only_working_label = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./..."],
+                    "evidence": ["main.go:12"],
+                }
+            ],
+        }
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                source_only_working_label
+            )
+        )
+
+        failed_test_label = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./... failed"],
+                    "evidence": [".observe/evidence/go-test.log"],
+                }
+            ],
+        }
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(failed_test_label)
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                failed_test_label, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
+
+        failure_scenario_artifact = {
+            "findings": [
+                {
+                    "status": "working",
+                    "tests": ["go test ./... passed"],
+                    "evidence": [".observe/evidence/http-failure.json"],
+                }
+            ],
+        }
+        self.assertTrue(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
+                failure_scenario_artifact
+            )
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                failure_scenario_artifact,
+                blocked_verify,
+                verification_overlay=True,
             ),
             "Partial",
         )
