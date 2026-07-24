@@ -3,6 +3,7 @@
   "prompts": [
     {
       "id": "local-java-agent-resolution",
+      "eval_inputs": ["eval/inputs/build_java_agent_fixtures.py"],
       "task": "Use $otel-verify to resolve a local Java agent before making any provisioning claim. Run ./service/eval/inputs/build_java_agent_fixtures.py to create candidates under ./service/.observe/eval-java-agents, then run the bundled read-only Java-agent resolver with every generated JAR as an explicit candidate and write ./service/.observe/java-agent-resolution.json. Report the exact selected path, full artifact SemVer, Premain-Class, and SHA-256 separately from production-parity status. Do not download an agent or modify application code."
     }
   ],

@@ -851,6 +851,17 @@ class InspectOtelProjectTest(unittest.TestCase):
                 "curl -b=session=short-equals-cookie-secret "
                 "https://service.example/health"
             ): "curl -b=<redacted> https://service.example/health",
+            (
+                "curl -HCookie:session=attached-header-secret "
+                "https://service.example/health"
+            ): "curl -HCookie:<redacted> https://service.example/health",
+            (
+                "curl.exe -HSet-Cookie:session=attached-set-cookie-secret "
+                "https://service.example/health"
+            ): (
+                "curl.exe -HSet-Cookie:<redacted> "
+                "https://service.example/health"
+            ),
         }
         for source, expected in cases.items():
             with self.subTest(source=source):

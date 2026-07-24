@@ -347,7 +347,7 @@ CURL_COOKIE_VALUE = re.compile(
     r"(?P<value>'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|[^\s,}\]]+)"
 )
 CURL_COOKIE_HEADER = re.compile(
-    r"(?i)(?P<prefix>(?:^|\s)(?:-H|--header)(?:\s+|=)"
+    r"(?i)(?P<prefix>(?:^|\s)(?:-H(?:\s+|=)?|--header(?:\s+|=))"
     r"(?:set-cookie|cookie)\s*:\s*)"
     r"(?P<value>[^\s,}\]]+)"
 )
