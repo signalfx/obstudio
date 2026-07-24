@@ -98,6 +98,20 @@ VISIBILITY_STATES = {
     "not_proven",
     "not_applicable",
 }
+VERIFY_WORKFLOW_MODES = {"standalone", "instrumentation_child"}
+VERIFY_LIFECYCLES = {"intermediate", "final"}
+STOP_BOUNDARY_KINDS = {
+    "unselected_work",
+    "material_decision",
+    "new_authority",
+    "external_prerequisite",
+}
+IMPERATIVE_STOP_BOUNDARY_REASON = re.compile(
+    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|configure|"
+    r"obtain|use|record|execute|exercise|capture|inspect|verify|prove|repair|"
+    r"fix|change|remove|add|choose|decide|approve|authorize)\b",
+    re.IGNORECASE,
+)
 EPHEMERAL_ARTIFACT_PREFIXES = (
     "/tmp",
     "/private/tmp",
@@ -234,6 +248,11 @@ def object_list(value: Any, path: str) -> list[dict[str, Any]]:
 def normalized_words(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return " ".join(re.sub(r"[^a-z0-9._/]+", " ", normalized).split())
+
+
+def normalized_action_words(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
 
 
 def validate_audit_review_next_step(value: str, path: str) -> None:
@@ -1593,6 +1612,36 @@ def normalize_verify(
     result = text(meta.get("result"), "verify.meta.result")
     if result not in RESULT_STATUSES:
         fail(f"verify.meta.result must be one of {sorted(RESULT_STATUSES)}")
+    workflow_mode = text(
+        meta.get("workflow_mode", "standalone"), "verify.meta.workflow_mode"
+    )
+    if workflow_mode not in VERIFY_WORKFLOW_MODES:
+        fail(
+            f"verify.meta.workflow_mode must be one of "
+            f"{sorted(VERIFY_WORKFLOW_MODES)}"
+        )
+    lifecycle = text(meta.get("lifecycle", "final"), "verify.meta.lifecycle")
+    if lifecycle not in VERIFY_LIFECYCLES:
+        fail(
+            f"verify.meta.lifecycle must be one of {sorted(VERIFY_LIFECYCLES)}"
+        )
+    raw_stop_boundaries = object_list(
+        data.get("stop_boundaries", []), "verify.stop_boundaries"
+    )
+    if raw_stop_boundaries and not (
+        workflow_mode == "instrumentation_child"
+        and result == "Fail"
+        and lifecycle == "intermediate"
+    ):
+        fail(
+            "verify.stop_boundaries is allowed only for an instrumentation_child "
+            "overlay with result Fail and lifecycle intermediate"
+        )
+    if raw_stop_boundaries and instrumentation["meta"]["result"] != "Fail":
+        fail(
+            "verify.stop_boundaries requires the bound instrumentation "
+            "meta.result to be Fail"
+        )
     if stable_id(data.get("audit_id"), "verify.audit_id") != report["meta"]["audit_id"]:
         fail("verify.audit_id does not match audit")
     if text(data.get("audit_sha256"), "verify.audit_sha256") != audit_digest(report):
@@ -2008,6 +2057,163 @@ def normalize_verify(
             f"verify.meta.result must be {expected_result} for the recorded "
             "scenario and telemetry-item proof"
         )
+    if lifecycle == "intermediate" and result != "Fail":
+        fail(
+            "verify.meta.lifecycle intermediate is reserved for a failed child "
+            "repair packet"
+        )
+    if (
+        workflow_mode == "instrumentation_child"
+        and result == "Fail"
+        and lifecycle != "intermediate"
+    ):
+        fail(
+            "failed instrumentation-child verification must be intermediate; "
+            "the parent repair loop cannot finalize it"
+        )
+    failed_id_order = {row["id"]: index for index, row in enumerate(failed_rows)}
+    stop_boundaries: list[dict[str, Any]] = []
+    for boundary_index, boundary in enumerate(raw_stop_boundaries):
+        boundary_path = f"verify.stop_boundaries[{boundary_index}]"
+        finding_ids = [
+            stable_id(
+                value,
+                f"{boundary_path}.finding_ids[{finding_index}]",
+            )
+            for finding_index, value in enumerate(
+                as_list(
+                    boundary.get("finding_ids"),
+                    f"{boundary_path}.finding_ids",
+                )
+            )
+        ]
+        if not finding_ids:
+            fail(f"{boundary_path}.finding_ids must not be empty")
+        if len(finding_ids) != len(set(finding_ids)):
+            fail(f"{boundary_path}.finding_ids must not contain duplicates")
+        unknown_failed_ids = [
+            finding_id
+            for finding_id in finding_ids
+            if finding_id not in failed_id_order
+        ]
+        if unknown_failed_ids:
+            fail(
+                f"{boundary_path}.finding_ids must reference only failed "
+                f"verify findings: {unknown_failed_ids}"
+            )
+        kind = text(boundary.get("kind"), f"{boundary_path}.kind")
+        if kind not in STOP_BOUNDARY_KINDS:
+            fail(
+                f"{boundary_path}.kind must be one of "
+                f"{sorted(STOP_BOUNDARY_KINDS)}"
+            )
+        reason = text(boundary.get("reason"), f"{boundary_path}.reason").strip()
+        if IMPERATIVE_STOP_BOUNDARY_REASON.match(reason):
+            fail(
+                f"{boundary_path}.reason must state the observed boundary "
+                "declaratively, not as an action"
+            )
+        required_action = text(
+            boundary.get("required_action"), f"{boundary_path}.required_action"
+        ).strip()
+        evidence = durable_artifact_list(
+            boundary.get("evidence", []), f"{boundary_path}.evidence"
+        )
+        if not evidence:
+            fail(f"{boundary_path}.evidence must contain durable evidence")
+        stop_boundaries.append(
+            {
+                "finding_ids": sorted(
+                    finding_ids, key=failed_id_order.__getitem__
+                ),
+                "kind": kind,
+                "reason": reason,
+                "required_action": required_action,
+                "evidence": evidence,
+            }
+        )
+    if stop_boundaries:
+        instrumentation_findings_by_id = {
+            row["id"]: row for row in instrumentation["findings"]
+        }
+        non_failed_instrumentation_ids = sorted(
+            {
+                finding_id
+                for boundary in stop_boundaries
+                for finding_id in boundary["finding_ids"]
+                if instrumentation_findings_by_id[finding_id]["status"]
+                != "not_working"
+            },
+            key=failed_id_order.__getitem__,
+        )
+        if non_failed_instrumentation_ids:
+            fail(
+                "verify.stop_boundaries finding_ids require matching bound "
+                "instrumentation findings with status not_working: "
+                f"{non_failed_instrumentation_ids}"
+            )
+        covered_failed_ids = {
+            finding_id
+            for boundary in stop_boundaries
+            for finding_id in boundary["finding_ids"]
+        }
+        missing_failed_ids = [
+            row["id"] for row in failed_rows if row["id"] not in covered_failed_ids
+        ]
+        if missing_failed_ids:
+            fail(
+                "verify.stop_boundaries must identify every failed finding when a "
+                f"stopped child boundary is recorded: {missing_failed_ids}"
+            )
+        rows_by_id = {row["id"]: row for row in rows}
+        for boundary_index, boundary in enumerate(stop_boundaries):
+            normalized_required_action = normalized_action_words(
+                boundary["required_action"]
+            )
+            duplicated_locations: list[str] = []
+            for finding_id in boundary["finding_ids"]:
+                for remaining_index, action in enumerate(
+                    rows_by_id[finding_id]["remaining"]
+                ):
+                    normalized_action = normalized_action_words(action)
+                    if (
+                        f" {normalized_required_action} "
+                        in f" {normalized_action} "
+                        or f" {normalized_action} "
+                        in f" {normalized_required_action} "
+                    ):
+                        duplicated_locations.append(
+                            f"verify.findings[{finding_id}].remaining"
+                            f"[{remaining_index}]"
+                        )
+            for next_step_index, action in enumerate(next_steps):
+                normalized_action = normalized_action_words(action)
+                if (
+                    f" {normalized_required_action} "
+                    in f" {normalized_action} "
+                    or f" {normalized_action} "
+                    in f" {normalized_required_action} "
+                ):
+                    duplicated_locations.append(
+                        f"verify.next_steps[{next_step_index}]"
+                    )
+            if duplicated_locations:
+                fail(
+                    f"verify.stop_boundaries[{boundary_index}].required_action "
+                    "must remain only in stop_boundaries and cannot be duplicated "
+                    "as an application code/config repair in "
+                    f"{duplicated_locations}"
+                )
+        stop_boundaries.sort(
+            key=lambda boundary: (
+                min(
+                    failed_id_order[finding_id]
+                    for finding_id in boundary["finding_ids"]
+                ),
+                boundary["kind"],
+                boundary["reason"],
+            )
+        )
     normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
         "kind": "otel-verify",
@@ -2018,10 +2224,14 @@ def normalize_verify(
             "service_name": text(meta.get("service_name"), "verify.meta.service_name"),
             "date": text(meta.get("date"), "verify.meta.date"),
             "result": result,
+            "workflow_mode": workflow_mode,
+            "lifecycle": lifecycle,
         },
         "findings": rows,
         "next_steps": next_steps,
     }
+    if stop_boundaries:
+        normalized["stop_boundaries"] = stop_boundaries
     return normalized
 
 
@@ -3973,6 +4183,46 @@ def render_unselected_findings(report: dict[str, Any], selection: dict[str, Any]
     )
 
 
+def render_stop_boundaries(verify: dict[str, Any] | None) -> str:
+    if verify is None or not verify.get("stop_boundaries"):
+        return ""
+    kind_labels = {
+        "unselected_work": "Unselected work",
+        "material_decision": "Material decision",
+        "new_authority": "New authority",
+        "external_prerequisite": "External prerequisite",
+    }
+    rows = []
+    for boundary in verify["stop_boundaries"]:
+        affected = ", ".join(
+            f'<a class="finding-jump" href="#selected-{esc(finding_id)}">'
+            f'<code>{esc(finding_id)}</code></a>'
+            for finding_id in boundary["finding_ids"]
+        )
+        rows.append(
+            '<article class="stop-boundary">'
+            f'<h3>{esc(kind_labels[boundary["kind"]])}</h3>'
+            f'<p><strong>Affected failed findings:</strong> {affected}</p>'
+            f'<p><strong>Why instrumentation stopped:</strong> '
+            f'{esc(reader_prose(boundary["reason"]))}</p>'
+            '<p><strong>Required action outside the instrumentation repair '
+            f'scope:</strong> {esc(reader_prose(boundary["required_action"]))}</p>'
+            '<div><strong>Durable evidence:</strong>'
+            f'{render_list(boundary["evidence"])}</div>'
+            '</article>'
+        )
+    return (
+        '<section class="panel stop-boundaries" '
+        'aria-labelledby="stop-boundaries-heading">'
+        '<h2 id="stop-boundaries-heading">Why the repair loop stopped</h2>'
+        '<p class="review-note">The executed verification failures remain recorded. '
+        'Instrumentation cannot safely continue until the boundary action below is '
+        'completed; it is not another application code/config repair.</p>'
+        f'<div class="stop-boundary-list">{"".join(rows)}</div>'
+        '</section>'
+    )
+
+
 def render_instrumentation_html(
     report: dict[str, Any],
     selection: dict[str, Any],
@@ -3983,6 +4233,7 @@ def render_instrumentation_html(
 ) -> str:
     title = esc(report["meta"]["service_name"])
     summary = render_instrumentation_summary(selection, instrumentation, verify)
+    stop_boundaries = render_stop_boundaries(verify)
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
     selection_sha = selection_digest(selection)
@@ -4107,6 +4358,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
+  {stop_boundaries}
   <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>

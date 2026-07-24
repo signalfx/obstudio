@@ -27,6 +27,11 @@ Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
 
+Resolve every reference and script path from the directory containing this
+loaded `otel-verify/SKILL.md`. `../references/<file>` is the shared sibling
+under the parent skills directory; `./references/<file>` and `scripts/<file>`
+are local. Never probe the service root or repository root for these paths.
+
 ## Contract
 
 - Default output: `.observe/otel-verify.md`; in canonical flow also write
@@ -36,9 +41,20 @@ schema, digest binding, status rollup, and the HTML refresh.
   Read Markdown only for reader detail. Without canonical JSON, use the direct
   user request, current source, and `.observe/otel-instrumentation.md` when it
   exists; never fabricate canonical state.
-- Default mode: read-only for application code.
-- Do not add instrumentation. Use `$otel-instrument` for instrumentation
-  changes.
+- Default mode: read-only for application code. Verification never repairs
+  application code. Use `$otel-instrument` for instrumentation changes.
+- Determine invocation ownership before checks. A standalone request produces
+  the final reader result. An active `$otel-instrument` child stays read-only,
+  writes proof, returns its repair packet, and returns control to the parent
+  repair loop.
+- Canonical standalone overlays use `meta.workflow_mode: standalone` and
+  `meta.lifecycle: final`. A failed instrumentation child uses
+  `instrumentation_child` with `lifecycle: intermediate`; only a child with no
+  executed finding, scenario, or item failure is final.
+- Keep failed finding `remaining` and top-level `next_steps` repair-only.
+  Record an evidenced boundary separately in `stop_boundaries[]`, using one of
+  `unselected_work`, `material_decision`, `new_authority`, or
+  `external_prerequisite`.
 - In canonical flow, verify exactly dependency-closed `approved_ids`, their
   expected telemetry and referenced scenarios, plus every bound instrumentation
   item. Bind verification to the normalized instrumentation overlay with
@@ -326,7 +342,8 @@ Rules:
   `instrumentation-introduced` unless evidence proves otherwise. Classify
   missing configured runtimes, declared dependencies, private registries, or
   credentials as `environment`. Use `pre-existing` or `unknown` only with
-  concrete evidence.
+  concrete evidence. An unchanged selected OTel wiring defect is
+  `pre-existing`, not `instrumentation-introduced`.
 - Verification remains read-only for application code. For an
   instrumentation-introduced failure, mark affected signal/path rows
   `Blocked`, set the overall result to `Fail`, name `$otel-instrument` as the

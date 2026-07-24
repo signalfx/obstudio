@@ -32,8 +32,8 @@ This step is required whenever `.vscode/launch.json` exists.
   action, not only files, packages, or signal names.
 - State the selected project runtime, affected-module compile/type/import
   result, focused tests that ran, and verification result or exact blocker.
-- Write `.observe/otel-instrumentation.md` using
-  `instrumentation-report.md`. Include added, modified, and removed
+- Write `.observe/otel-instrumentation.md` using the parent `SKILL.md`'s
+  instrumentation report contract. Include added, modified, and removed
   traces/spans, metrics, logs/events, runtime/config, and dependencies. With no
   prior audit, state that this establishes the implementation baseline.
 - In canonical flow, write instrumentation JSON with exactly dependency-closed
@@ -52,8 +52,8 @@ This step is required whenever `.vscode/launch.json` exists.
   remaining detector prerequisite and owner. Do not call the pass complete
   while app-owned required telemetry is only a follow-up unless scope was
   explicitly narrowed.
-- For GenAI, follow `genai-instrumentation.md` finalization and remaining-signal
-  rules.
+- For GenAI, follow the parent `SKILL.md`'s GenAI finalization and
+  remaining-signal rules.
 - Include `$otel-verify` results and `.observe/otel-verify.md` when run. If
   detector/configuration work was requested, include its outputs and
   `.observe/splunk-configure-verify.md` status.

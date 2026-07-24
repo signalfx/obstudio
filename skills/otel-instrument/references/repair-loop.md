@@ -96,8 +96,9 @@ evidence rather than saying verification is pending.
 If a child remains `not_working`, preserve `lifecycle: intermediate`, the
 executed failure, repair-only finding `remaining`, and repair-only top-level
 `next_steps`. Record the boundary separately in `stop_boundaries[]` with its
-affected failed finding IDs, bounded `kind`, declarative `reason`, external or
-user `required_action`, and durable `evidence`. Keep instrumentation
+affected failed finding IDs, a bounded `kind` of `unselected_work`,
+`material_decision`, `new_authority`, or `external_prerequisite`, declarative
+`reason`, external or user `required_action`, and durable `evidence`. Keep instrumentation
 `meta.result: Fail` and the finding `not_working`; a boundary never turns an
 observed telemetry failure into `Blocked` or `not_proven`.
 

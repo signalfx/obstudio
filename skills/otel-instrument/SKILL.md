@@ -26,6 +26,23 @@ and follow the Instrumentation Contract plus Reader-First Report Order. When
 `.observe/otel-audit.json` exists, also read
 `./references/json-approval-handoff.md` before editing; it owns canonical
 selection, instrumentation JSON, and human HTML. The technical Markdown report contract is defined inline below.
+Load `./references/finalization.md` exactly once at the finalization boundary;
+it owns the terminal validation sequence and prevents post-gate project
+inspection.
+
+Resolve every reference and script path from the directory containing the
+loaded `otel-instrument/SKILL.md`. Here, `../references/<file>` means the shared
+sibling under the parent skills directory, while `references/<file>`,
+`./references/<file>`, and `scripts/<file>` are local to `otel-instrument`.
+Never probe the service root or repository root for these paths.
+
+When this workflow invokes its `$otel-verify` child, resolve that skill exactly
+once as
+`<directory-containing-loaded-SKILL.md>/../otel-verify/SKILL.md`. Treat that
+sibling as the only authoritative verifier because it belongs to the same
+installed skill bundle as this workflow. Never search a home directory, the
+service root, or the repository root for another verifier, and never compare
+alternate installed copies.
 
 ## Workflow
 

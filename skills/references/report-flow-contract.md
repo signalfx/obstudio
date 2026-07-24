@@ -628,6 +628,15 @@ or any material instrumentation change invalidates older proof. Write
 one verification finding for every dependency-closed selected ID
 (`approved_ids`) in canonical audit order.
 
+Verification records invocation state in `meta.workflow_mode` and
+`meta.lifecycle`. Standalone verification is `standalone` / `final`. A failed
+child invoked by instrumentation is `instrumentation_child` with
+`lifecycle: intermediate` until repair succeeds. Keep failed finding
+`remaining` and top-level `next_steps` repair-only. If the repair loop must
+stop, preserve the executed failure and record an evidenced boundary separately
+in `stop_boundaries[]`; its `kind` is `unselected_work`, `material_decision`,
+`new_authority`, or `external_prerequisite`.
+
 Write verification reports for a reader deciding whether the instrumentation
 works. The first screen must answer, in this order:
 

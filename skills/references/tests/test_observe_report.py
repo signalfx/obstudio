@@ -399,6 +399,111 @@ class ObserveReportTest(unittest.TestCase):
         )
         return paths
 
+    def write_finalize_flow(
+        self,
+        root: Path,
+        *,
+        failed_child: bool = False,
+        stale_parent_handoff: bool = False,
+        stale_telemetry_handoff: bool = False,
+        generic_product_verification: bool = False,
+        workflow_mode: str = "instrumentation_child",
+    ) -> SimpleNamespace:
+        report = MODULE.normalize_audit_report(sample_report())
+        audit_digest = MODULE.audit_digest(report)
+        selection = {
+            "schema_version": 1,
+            "kind": "otel-selection",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": audit_digest,
+            "requested_ids": ["OTEL-001"],
+            "approved_ids": ["OTEL-001"],
+        }
+        normalized_selection = MODULE.normalize_selection(selection, report)
+        instrumentation = sample_instrumentation(
+            report, audit_digest, normalized_selection
+        )
+        if not stale_parent_handoff:
+            instrumentation["findings"][0]["follow_up_actions"] = [  # type: ignore[index]
+                "Capture the remaining route topology proof."
+            ]
+            instrumentation["next_steps"] = [
+                "Capture the remaining route topology proof."
+            ]
+        telemetry_change = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
+        if stale_telemetry_handoff:
+            telemetry_change["follow_up_actions"] = [
+                "Run $otel-verify, then filter the trace waterfall by http.route."
+            ]
+        elif generic_product_verification:
+            telemetry_change["follow_up_actions"] = [
+                "Run verification in Splunk Observability Cloud, then filter the "
+                "trace waterfall by http.route."
+            ]
+        normalized_instrumentation = MODULE.normalize_instrumentation(
+            instrumentation, report, normalized_selection
+        )
+        verify = sample_verify(
+            report,
+            audit_digest,
+            MODULE.instrumentation_digest(normalized_instrumentation),
+        )
+        verify["meta"].update(  # type: ignore[union-attr]
+            {"workflow_mode": workflow_mode, "lifecycle": "final"}
+        )
+        if failed_child:
+            verify["meta"].update(  # type: ignore[union-attr]
+                {"result": "Fail", "lifecycle": "intermediate"}
+            )
+            finding = verify["findings"][0]  # type: ignore[index]
+            finding["status"] = "not_working"
+            finding["remaining"] = ["Repair the server span wiring."]
+            scenario = finding["scenarios"][0]
+            scenario.update(
+                {
+                    "status": "not_working",
+                    "observed_telemetry": [
+                        "The GET /checkout server span with http.route was absent."
+                    ],
+                }
+            )
+            item = finding["item_results"][0]
+            item.update(
+                {
+                    "status": "not_working",
+                    "observed_telemetry": [
+                        "The GET /checkout server span with http.route was absent."
+                    ],
+                }
+            )
+            verify["next_steps"] = ["Repair the server span wiring."]
+
+        paths = SimpleNamespace(
+            audit_json=root / "otel-audit.json",
+            selection_json=root / "otel-selection.json",
+            instrumentation_json=root / "otel-instrumentation.json",
+            verify_json=root / "otel-verify.json",
+            audit_markdown=None,
+            instrumentation_markdown=None,
+            verify_markdown=None,
+            output=root / "otel-instrumentation.html",
+            repo_root=root,
+            gate_output=root / "otel-instrumentation-gate.json",
+        )
+        paths.audit_json.write_text(json.dumps(sample_report()), encoding="utf-8")
+        paths.selection_json.write_text(json.dumps(selection), encoding="utf-8")
+        paths.instrumentation_json.write_text(
+            json.dumps(instrumentation), encoding="utf-8"
+        )
+        paths.verify_json.write_text(json.dumps(verify), encoding="utf-8")
+        for markdown in (
+            root / "otel.md",
+            root / "otel-instrumentation.md",
+            root / "otel-verify.md",
+        ):
+            markdown.write_text("projection\n", encoding="utf-8")
+        return paths
+
     def test_instrumentation_digest_prints_only_bound_canonical_digest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = self.write_bound_instrumentation_flow(Path(directory))
@@ -774,6 +879,117 @@ class ObserveReportTest(unittest.TestCase):
             self.assertFalse(gate["passed"])
             self.assertEqual(gate["verification_lifecycle"], "intermediate")
             self.assertEqual(gate["failed_findings"], ["OTEL-001"])
+
+    def test_verify_preserves_runtime_repair_envelope_and_stop_boundary(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        audit_sha256 = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": audit_sha256,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        raw_instrumentation = sample_instrumentation(
+            report, audit_sha256, selection
+        )
+        raw_instrumentation["meta"]["result"] = "Fail"  # type: ignore[index]
+        raw_instrumentation["findings"][0]["status"] = "not_working"  # type: ignore[index]
+        instrumentation = MODULE.normalize_instrumentation(
+            raw_instrumentation, report, selection
+        )
+        verify = sample_verify(
+            report,
+            audit_sha256,
+            MODULE.instrumentation_digest(instrumentation),
+        )
+        verify["meta"].update(  # type: ignore[union-attr]
+            {
+                "result": "Fail",
+                "workflow_mode": "instrumentation_child",
+                "lifecycle": "intermediate",
+            }
+        )
+        finding = verify["findings"][0]  # type: ignore[index]
+        finding["status"] = "not_working"
+        finding["scenarios"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["item_results"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["remaining"] = ["Repair the server span wiring."]
+        verify["next_steps"] = ["Repair the server span wiring."]
+        external_action = (
+            "Renew the private module registry credential and restore the exact "
+            "locked dependencies."
+        )
+        verify["stop_boundaries"] = [
+            {
+                "finding_ids": ["OTEL-001"],
+                "kind": "external_prerequisite",
+                "reason": (
+                    "The private module registry rejected the locked dependency "
+                    "restore because its repository credential had expired."
+                ),
+                "required_action": external_action,
+                "evidence": [".observe/evidence/run/dependency-restore.log"],
+            }
+        ]
+
+        normalized = MODULE.normalize_verify(
+            verify, report, selection, instrumentation
+        )
+
+        self.assertEqual(
+            normalized["meta"]["workflow_mode"], "instrumentation_child"
+        )
+        self.assertEqual(normalized["meta"]["lifecycle"], "intermediate")
+        self.assertEqual(normalized["stop_boundaries"], verify["stop_boundaries"])
+        html = MODULE.render_instrumentation_html(
+            report, selection, instrumentation, normalized
+        )
+        self.assertIn("Why the repair loop stopped", html)
+        self.assertIn(
+            "Required action outside the instrumentation repair scope", html
+        )
+
+        final_failed_child = copy.deepcopy(verify)
+        final_failed_child.pop("stop_boundaries")
+        final_failed_child["meta"]["lifecycle"] = "final"  # type: ignore[index]
+        with self.assertRaisesRegex(MODULE.ReportError, "must be intermediate"):
+            MODULE.normalize_verify(
+                final_failed_child, report, selection, instrumentation
+            )
+
+        duplicated_boundary_action = copy.deepcopy(verify)
+        duplicated_boundary_action["findings"][0]["remaining"] = [  # type: ignore[index]
+            external_action
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            "required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                duplicated_boundary_action,
+                report,
+                selection,
+                instrumentation,
+            )
 
     def test_example_report_companions_are_canonical_and_bound(self) -> None:
         repo_root = Path(__file__).parents[3]

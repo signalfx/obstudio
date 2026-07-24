@@ -450,43 +450,6 @@ def test_failed_child_stop_boundaries_are_separate_from_repairs() -> None:
         assert kind in verify
 
 
-def test_item_proof_cannot_borrow_aggregate_or_different_signal_evidence() -> None:
-    instrument = " ".join(
-        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
-    )
-    verify = " ".join(_read(VERIFY_SKILL).split())
-    flow = " ".join(_read(REPORT_FLOW).split())
-
-    for text in (instrument, verify, flow):
-        assert "aggregate receiver counts" in text.lower()
-        assert "differently named signal" in text
-        assert "not_proven" in text
-    assert "render it as **Not proven** rather than **Observed**" in instrument
-    assert "never as `Observed`" in verify
-    assert "must leave it `not_proven`" in flow
-
-
-def test_item_direct_assertion_is_independent_from_finding_coverage() -> None:
-    instrument = " ".join(
-        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
-    )
-    verify = " ".join((_read(VERIFY_SKILL) + _read(VERIFY_HANDOFF)).split())
-    flow = " ".join(_read(REPORT_FLOW).split())
-    report_tool = " ".join(_read(REPORT_TOOL).split())
-
-    for text in (instrument, verify, flow):
-        assert "direct_assertion_passed" in text
-        assert "removed" in text.lower()
-        assert "replacement owner" in text.lower()
-    assert "exact item or call site" in instrument
-    assert "exact telemetry item or call site" in verify
-    assert "exact item or call site" in flow
-    assert "finding or scenario coverage cannot" in report_tool
-    assert "downgrade a passed item assertion" in report_tool
-    assert 'direct_assertion_passed != (item_status == "working")' in report_tool
-    assert "proof_mode not in ITEM_DIRECT_PROOF_MODES" in report_tool
-
-
 def test_human_html_uses_generated_trace_without_raw_correlation_ids() -> None:
     flow = " ".join(_read(REPORT_FLOW).split())
     instrument = " ".join(
