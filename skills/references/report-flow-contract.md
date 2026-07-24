@@ -652,18 +652,6 @@ Instrumentation is a goal workflow, not just a code edit:
    When verification JSON is produced, refresh
    `.observe/otel-instrumentation.html` with item and scenario proof. Do not
    regenerate `.observe/otel.html` with downstream state.
-   Before finalizing a failed result, apply the instrumentation skill's
-   pre-finalization repair gate. Instrumentation-owned failures include current
-   instrumentation regressions, missing wiring/config required by the current
-   change, and pre-existing OTel defects inside selected scope that prevent a
-   selected outcome. They exclude unrelated business logic and external or
-   unselected dependencies. For every safe in-scope instrumentation-owned
-   failure, keep the same workflow active, make a concrete repair attempt,
-   rerun affected compile/focused tests, and automatically invoke verification
-   for the affected scenarios again. A failing verification overlay written
-   during this loop is intermediate, not the final instrumentation handoff.
-   Present the repair as the user-facing action and the recheck as confirmation,
-   never as a second action that could be mistaken for the fix.
 7. If verified metric evidence exists and the user requested alerting/detectors,
    invoke or apply `$splunk-configure`.
 
@@ -831,23 +819,6 @@ Reconcile delivery claims across that join. `otlp_accepted` and
 `product_view` denies any OTLP pipeline or export path. Do not confuse absence
 of an application-owned exporter with absence of an agent- or platform-owned
 delivery path.
-
-Record invocation state in verification metadata. Standalone verification uses
-`workflow_mode: standalone` and `lifecycle: final`. Verification called by an
-active instrumentation workflow uses `workflow_mode: instrumentation_child`;
-a failed repair packet is `lifecycle: intermediate`, and the post-repair
-current-state overlay may be `final` only after no executed check is
-`not_working`. The shared `instrumentation-final-gate` enforces that boundary.
-For an intermediate failed child that stops at unselected work, a material
-decision, new authority, or an external prerequisite, keep finding `remaining`
-and run-level `next_steps` repair-only. Put the stop reason in top-level
-`stop_boundaries[]` with affected failed finding IDs, bounded kind,
-declarative reason, required external/user action, and durable evidence. The
-field is valid only on an `instrumentation_child` `Fail` with
-`lifecycle: intermediate`; it never turns the observed failure into `Blocked`
-or a completed handoff.
-Allowed kinds are `unselected_work`, `material_decision`, `new_authority`, and
-`external_prerequisite`.
 
 Verification records invocation state in `meta.workflow_mode` and
 `meta.lifecycle`. Standalone verification is `standalone` / `final`. A failed

@@ -287,61 +287,6 @@ old item status. The overlay remains schema version 1 because this is a
 validation tightening of the still-evolving canonical flow, not a second
 accepted wire format.
 
-For each `not_working` finding, put the concrete observed failure in its failed
-scenario's `observed_telemetry`. Use finding-level `remaining` only for the
-repair-only plan: the concrete in-scope application code/config change that
-`$otel-instrument` must make now. Do not append the verification rerun, proof
-capture, or product inspection as another repair action. For `Fail`, use
-top-level `next_steps` for the same immediate repair only. Do not describe a
-failed row as pending, and do not turn exact scenario IDs or counts into manual
-user instructions. `$otel-verify` never repairs application code; the scenario
-mapping retains the affected confirmation scope. When verification is called
-from instrumentation, return the result to that repair loop; after the repair,
-the instrumentation workflow automatically invokes `$otel-verify` to confirm
-the result instead of asking the user to start either workflow again.
-
-When a failed `instrumentation_child` repair loop cannot continue because it
-reached unselected work, a material decision, new authority, or an external
-prerequisite, keep `remaining` and `next_steps` repair-only and add a separate
-top-level boundary entry:
-
-```json
-"stop_boundaries": [
-  {
-    "finding_ids": ["OTEL-001"],
-    "kind": "external_prerequisite",
-    "reason": "Artifactory authentication is expired.",
-    "required_action": "Restore Artifactory authentication for the locked dependency source.",
-    "evidence": [".observe/evidence/runtime/dependency-restore.txt"]
-  }
-]
-```
-
-The allowed `kind` values are `unselected_work`, `material_decision`,
-`new_authority`, and `external_prerequisite`. The validator accepts this field
-only for `workflow_mode: instrumentation_child`, `result: Fail`, and
-`lifecycle: intermediate`; every `finding_ids` value must identify a failed
-finding. `reason` states the cause, `required_action` states the user or
-external action that unblocks the parent, and `evidence` contains durable
-proof. Omit `stop_boundaries` when the child is still an ordinary repair packet
-or after the repair succeeds.
-
-For a child invocation from an active instrumentation workflow, the canonical
-failure fields are the repair packet: failed finding, item, and scenario IDs;
-direct evidence; and repair-only `remaining`/`next_steps`. Mark that failed
-artifact `workflow_mode: instrumentation_child` and `lifecycle: intermediate`.
-Write and validate the artifacts, then return control without presenting a
-terminal user handoff.
-The parent instrumentation workflow owns classification and mutation. For a
-standalone invocation, remain read-only and present `$otel-instrument` as the
-single repair workflow. Never let invocation mode change verification evidence,
-statuses, or scenario coverage.
-
-The final verification overlay is current state. After a repair succeeds,
-remove superseded failure observations, repair actions, trace IDs, and run-level
-next steps from the final JSON. Preserve prior attempts only as explicitly
-superseded evidence files; they are not current `remaining` work.
-
 ## Validate And Render
 
 After the Markdown reader validator passes, run:
@@ -359,22 +304,11 @@ python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" rende
   --selection-json .observe/otel-selection.json \
   --instrumentation-json .observe/otel-instrumentation.json \
   --verify-json .observe/otel-verify.json
-
-# Active $otel-instrument child only, after the post-repair overlay is final:
-python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" instrumentation-final-gate \
-  .observe/otel-audit.json \
-  --selection-json .observe/otel-selection.json \
-  --instrumentation-json .observe/otel-instrumentation.json \
-  --verify-json .observe/otel-verify.json
 ```
 
 The shared validator requires instrumentation JSON whenever verify JSON is
 present. Repair every binding, ID/order, scenario coverage, status, or evidence
 failure before finalizing.
-The final gate allows incomplete proof with zero executed failures, but rejects
-an unbound, standalone, intermediate, or `not_working` child artifact. Do not
-run it merely to convert an intermediate failure into a user-facing error;
-return that repair packet to the active instrumentation workflow first.
 
 The refreshed instrumentation HTML is the concise human proof surface. Start
 with one verification-state heading and one proof-and-delivery sentence, then

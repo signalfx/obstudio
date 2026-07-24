@@ -349,20 +349,6 @@ runtime verification is unavailable**, mapped working item evidence under
 not infer a blocker from finding `remaining`, which owns remediation rather
 than cause.
 
-When current verification is `Fail`, render **Verification failures and
-remaining proof**, not pending language. A failed finding shows **What
-verification found** from scenario evidence followed by **Code repair
-required** from its repair-only `remaining` actions, then **How the repair is
-confirmed**. For a standalone verification label the primary action **Next
-repair steps**; for an instrumentation child label it **Active repair loop**.
-Explain that
-`$otel-verify` never changes application code: `$otel-instrument` applies the
-repair and automatically invokes the affected checks afterward only to confirm
-the result. Do not render that automatic recheck as a second repair bullet or
-user action. A `not_proven` finding keeps its incomplete coverage in the neutral
-**Coverage details** disclosure; keep exact scenario IDs and counts in canonical
-proof artifacts and do not add a per-finding action list.
-
 ## Validate And Render Instrumentation
 
 After writing instrumentation JSON, run:
@@ -385,53 +371,36 @@ After `$otel-verify` writes `.observe/otel-verify.json`, rerun validation and
 `--instrumentation-json .observe/otel-instrumentation.json` and
 `--verify-json .observe/otel-verify.json` paths. Do not infer the implementation
 overlay from the verification file's directory.
-The verify overlay must carry `instrumentation_sha256` for the exact normalized
-instrumentation overlay, which includes the bound `selection_sha256`, plus
-`meta.workflow_mode: instrumentation_child`.
-Repair every binding, digest, ID order, status, or evidence error before finalizing.
-When executed verification reports `not_working`, do not treat successful JSON
-validation or HTML rendering as completion. Apply the pre-finalization repair
-gate from `SKILL.md`: classify every failure, make a concrete repair for each
-safe in-scope instrumentation-owned failure, update the
-instrumentation change/test/evidence rows, and automatically re-run the
-affected verification scenarios. The failed overlay is an intermediate
-artifact until the repair loop passes or reaches an evidenced stop boundary.
-After a repair passes, replace every superseded failure status, repair action,
-trace ID, and run-level next step in the final overlays. Retain prior attempts
-only as explicitly superseded technical evidence under `.observe/evidence/`;
-never leave them in the current reader summary or next action.
-Do not run `instrumentation-final-gate`, fixed-Go cleanup, or the final response
-from this Step 5 reference. When the current child overlay has no executed
-failures, it may become the candidate `lifecycle: final` overlay, but the parent
-`SKILL.md` owns the actual gate only after mandatory Steps 6 and 7, applicable
-Credential Safety work, requested downstream work, final review, and all other
-validation finish. A child with `not_working` remains `lifecycle: intermediate`
-until repaired or until the parent workflow records an evidenced stop boundary.
-If the user explicitly opted out or a concrete prerequisite prevented a child
-verify overlay, do not fabricate one and do not run
-`instrumentation-final-gate`, which requires it. Preserve the overall result
-derivation: when compile/focused implementation proof passed, keep
-`meta.result: Partial` and the affected findings `not_proven`; do not set the
-overall result to `Blocked` or `Not run` solely because child verification is
-absent. Record `Verification: Not run` or `Verification: Blocked` plus the exact
-reason in finding evidence, `next_steps`, and technical Markdown, then rerun the
-`validate-flow` and `render-instrumentation-html` commands above without
-`--verify-json`. This is preliminary Step 5 validation. The parent terminal
-sequence reruns the applicable validation after every later report, safety,
-review, and downstream requirement is complete.
+When a verify overlay is available, require its `instrumentation_sha256` to
+match the exact normalized instrumentation overlay, including the bound
+`selection_sha256`. Repair every binding, digest, ID-order, status, or evidence
+error before rendering the reader report.
+The child overlay must also carry
+`meta.workflow_mode: instrumentation_child`. When executed verification reports
+`not_working`, successful JSON validation or HTML rendering is not completion.
+The parent applies the repair loop from `SKILL.md`, updates the instrumentation
+change/test/evidence rows, and automatically reruns affected verification.
 
-When a child contains `not_working` and the repair loop reaches an evidenced
-unselected-work, material-decision, new-authority, or external-prerequisite
-boundary, preserve the child as `lifecycle: intermediate` and preserve the
-executed failure. Keep finding `remaining` and top-level `next_steps`
-repair-only. Record the boundary separately in top-level `stop_boundaries[]`:
-use the affected failed `finding_ids`, one `kind` from `unselected_work`,
-`material_decision`, `new_authority`, or `external_prerequisite`, a declarative
-`reason`, the user or external `required_action`, and durable `evidence`. Keep
-instrumentation `meta.result: Fail` and the affected finding `not_working`; do
-not relabel observed failure as `Blocked` or `not_proven`. Validate and render
-that stopped state with
-`--verify-json`, then continue to the parent terminal sequence. This is a
+Do not run `instrumentation-final-gate`, fixed-Go cleanup, or the final response
+from this Step 5 reference. A child with no executed failures may become the
+candidate `lifecycle: final` overlay, but the parent `SKILL.md` owns the actual
+gate after later report, safety, review, downstream, and validation work. A
+child with `not_working` remains `lifecycle: intermediate` until repaired or
+until the parent records an evidenced stop boundary.
+
+If the user opted out or a concrete prerequisite prevented a child overlay, do
+not fabricate one and do not run `instrumentation-final-gate`. Preserve
+`meta.result: Partial` and selected findings `not_proven` when compile/focused
+implementation proof passed. Record the exact skip or blocker, then run the
+commands above without `--verify-json`. This is preliminary Step 5 validation,
+not a completed or verified instrumentation result.
+
+When the repair loop reaches an evidenced `unselected_work`,
+`material_decision`, `new_authority`, or `external_prerequisite` boundary,
+preserve the child as `lifecycle: intermediate` and keep the executed failure.
+Keep finding `remaining` and top-level `next_steps` repair-only. Record the
+boundary separately in `stop_boundaries[]`, validate and render it with
+`--verify-json`, and return it to the parent terminal sequence. This is a
 stopped-failure handoff, not a completed or verified instrumentation result.
 Leave `.observe/otel.html` as the audit and scope-planning surface; never render the
 instrumentation or verification overlays into it.
