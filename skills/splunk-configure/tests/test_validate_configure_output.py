@@ -40,7 +40,6 @@ def write_validation_fixture(
     root: Path,
     *,
     detector_metric: str = METRIC,
-    verified_metric: str = METRIC,
 ) -> argparse.Namespace:
     terraform_dir = root / "terraform"
     terraform_dir.mkdir()
@@ -121,29 +120,15 @@ Apply with credentials.
         encoding="utf-8",
     )
     verify_report = root / "otel-verify.md"
-    verify_report.write_text(
-        strict_legacy_verify_report(verified_metric),
-        encoding="utf-8",
-    )
-    return argparse.Namespace(
+    args = argparse.Namespace(
         terraform_dir=terraform_dir,
         detectors_report=detectors_report,
         configure_verify_report=configure_verify_report,
         verify_report=verify_report,
         allow_source_only_metric=[],
     )
-
-
-def strict_legacy_verify_report(metric: str) -> str:
-    return f"""# OpenTelemetry Verification Report
-
-**Result:** Pass
-
-## Tested And Working
-| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
-|---|---|---|---|---|---|---|---|
-| SOURCE-METRIC.{metric} | `{metric}` | Metric | Existing metric retained | Working | proof_mode=full_runtime; scenarios=metric.runtime | Metric datapoint accepted; visibility=otlp_accepted | .observe/evidence/metric-runtime.json |
-"""
+    write_canonical_configure_flow(args)
+    return args
 
 
 def write_canonical_reader_report(args: argparse.Namespace) -> None:
@@ -438,71 +423,7 @@ resource "signalfx_dashboard" "red" {
     write_canonical_configure_flow(args)
 
 
-class WorkingMetricsTest(unittest.TestCase):
-    def test_reads_metric_from_strict_legacy_proof(self) -> None:
-        report = strict_legacy_verify_report("http.server.request.duration")
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "otel-verify.md"
-            path.write_text(report, encoding="utf-8")
-            errors: list[str] = []
-            self.assertEqual(
-                MODULE.working_metrics(path, errors),
-                {"http.server.request.duration"},
-            )
-            self.assertEqual(errors, [])
-
-    def test_rejects_incomplete_legacy_metric_proof_contract(self) -> None:
-        metric = "http.server.request.duration"
-        valid = strict_legacy_verify_report(metric)
-        loose = f"""**Result:** Pass
-
-## Tested And Working
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
-| `{metric}` | Metric | Exporter | Working | OTLP | collector |
-"""
-        cases = {
-            "missing overall result": (
-                valid.replace("**Result:** Pass\n\n", ""),
-                "expected exactly one Result status",
-            ),
-            "missing full item schema": (loose, "must contain the full"),
-            "mismatched item ID": (
-                valid.replace(f"SOURCE-METRIC.{metric}", "OTEL-001.duration"),
-                "Item ID must equal",
-            ),
-            "non-executed proof mode": (
-                valid.replace("proof_mode=full_runtime", "proof_mode=not_run"),
-                "executed proof mode",
-            ),
-            "missing scenario IDs": (
-                valid.replace("scenarios=metric.runtime", "scenarios=none"),
-                "exact executed scenario IDs",
-            ),
-            "unknown visibility": (
-                valid.replace("visibility=otlp_accepted", "visibility=not_proven"),
-                "cannot have visibility=not_proven",
-            ),
-            "source-only evidence": (
-                valid.replace(
-                    ".observe/evidence/metric-runtime.json",
-                    "main.go:12",
-                ),
-                "positive durable evidence",
-            ),
-        }
-        for name, (report, expected) in cases.items():
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "otel-verify.md"
-                path.write_text(report, encoding="utf-8")
-                errors: list[str] = []
-
-                self.assertEqual(MODULE.working_metrics(path, errors), set())
-                self.assertTrue(
-                    any(expected in error for error in errors),
-                    errors,
-                )
-
+class ConfigureReportContractTest(unittest.TestCase):
     def test_skill_documents_structured_authenticated_plan_evidence(self) -> None:
         text = (
             Path(__file__).parents[1]
@@ -530,7 +451,14 @@ class ValidateConfigureOutputTest(unittest.TestCase):
     def test_source_only_detector_does_not_load_dashboard_validator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
+            add_current_metric_to_canonical_flow(args, METRIC)
             args.allow_source_only_metric = [METRIC]
+            for name in (
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (args.terraform_dir.parent / name).unlink()
             args.verify_report.unlink()
             args.verify_report = None
 
@@ -547,7 +475,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         self.assertEqual(result["working_metric_count"], 0)
         self.assertEqual(result["source_only_exceptions"], [METRIC])
 
-    def test_cli_does_not_require_legacy_verify_report(self) -> None:
+    def test_cli_does_not_require_explicit_verify_reader_report(self) -> None:
         with mock.patch.object(
             sys,
             "argv",
@@ -576,7 +504,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         self.assertEqual(result["result"], "PASS", result["errors"])
         self.assertGreaterEqual(result["working_metric_count"], 1)
 
-    def test_explicit_missing_legacy_verify_report_fails(self) -> None:
+    def test_explicit_missing_canonical_verify_reader_report_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
             args.allow_source_only_metric = [METRIC]
@@ -586,7 +514,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
 
         self.assertEqual(result["result"], "FAIL")
         self.assertIn(
-            "legacy verification report is not a file",
+            "cannot capture canonical verification flow",
             "\n".join(result["errors"]),
         )
 
@@ -611,6 +539,14 @@ class ValidateConfigureOutputTest(unittest.TestCase):
     def test_input_preflight_requires_canonical_audit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
+            root = args.terraform_dir.parent
+            for name in (
+                "otel-audit.json",
+                "otel-selection.json",
+                "otel-instrumentation.json",
+                "otel-verify.json",
+            ):
+                (root / name).unlink()
 
             result = MODULE.validate_inputs(args)
 
@@ -656,7 +592,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
         self.assertEqual(result["detector_metrics"], [METRIC])
         self.assertEqual(result["reported_status"], "Pass")
 
-    def test_rejects_loose_legacy_detector_metric_assertion(self) -> None:
+    def test_rejects_loose_reader_report_metric_assertion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
             args.verify_report.write_text(
@@ -674,7 +610,10 @@ class ValidateConfigureOutputTest(unittest.TestCase):
 
         self.assertEqual(result["result"], "FAIL")
         self.assertTrue(
-            any("must contain the full" in error for error in result["errors"]),
+            any(
+                "verify Markdown projection validation failed" in error
+                for error in result["errors"]
+            ),
             result["errors"],
         )
 
@@ -740,7 +679,6 @@ class ValidateConfigureOutputTest(unittest.TestCase):
             args = write_validation_fixture(
                 Path(directory),
                 detector_metric=detector_metric,
-                verified_metric=detector_metric,
             )
             write_canonical_configure_flow(args)
             result = MODULE.validate(args)
@@ -1050,7 +988,7 @@ class ValidateConfigureOutputTest(unittest.TestCase):
             result["errors"],
         )
 
-    def test_dashboard_delegate_accepts_explicit_legacy_working_proof(self) -> None:
+    def test_dashboard_delegate_rejects_markdown_only_working_proof(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             args = write_validation_fixture(Path(directory))
             write_dashboard_fixture(args)
@@ -1085,7 +1023,11 @@ class ValidateConfigureOutputTest(unittest.TestCase):
                 )
             result = MODULE.validate(args)
 
-        self.assertEqual(result["result"], "PASS", result["errors"])
+        self.assertEqual(result["result"], "FAIL")
+        self.assertIn(
+            "otel-audit.json is required before configure",
+            "\n".join(result["errors"]),
+        )
 
     def test_accepts_inherited_partial_when_dashboard_checks_pass(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

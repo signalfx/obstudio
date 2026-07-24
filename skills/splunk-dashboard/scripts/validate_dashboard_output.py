@@ -51,53 +51,6 @@ TELEMETRY_ITEM_ID = re.compile(
     r"^(?:OTEL-\d{3}|SOURCE-METRIC)\.[A-Za-z0-9][A-Za-z0-9._/-]*$"
 )
 REPORT_RESULT = re.compile(r"^\*\*Result:\*\*\s*(Pass|Partial|Blocked)\s*$", re.I | re.M)
-LEGACY_VERIFY_RESULT = re.compile(
-    r"^\*\*Result:\*\*\s*(Pass|Partial|Fail|Blocked|Not run)\s*$",
-    re.I | re.M,
-)
-LEGACY_VERIFY_HEADERS = (
-    "Item ID",
-    "OTel item",
-    "Type",
-    "Added or modified",
-    "Working status",
-    "How it was tested",
-    "Product result / visibility",
-    "Evidence",
-)
-LEGACY_AUDIT_METRIC_HEADERS = ("Name", "Source", "Type")
-LEGACY_WORKING_STATUSES = {
-    "working",
-    "not working",
-    "not proven",
-    "not configured",
-}
-LEGACY_TEST_PROJECTION = re.compile(
-    r"^proof_mode=(app_test|unit|unit\+otlp|full_runtime|contract_only|static|not_run); "
-    r"scenarios=(.+)$"
-)
-LEGACY_SCENARIO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
-LEGACY_VISIBILITY_PROJECTION = re.compile(
-    r"(?:^|;\s*)visibility=(explorer_visible|otlp_accepted|"
-    r"not_explorer_visible|not_proven|not_applicable)\s*$"
-)
-LEGACY_DURABLE_EVIDENCE = re.compile(
-    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
-    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])|"
-    r"\b(?:saved\s+(?:collector\s+)?(?:capture|response)|"
-    r"assertion\s+(?:output|report)|test\s+report)\b",
-    re.I,
-)
-LEGACY_DURABLE_ARTIFACT_REFERENCE = re.compile(
-    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
-    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
-    re.I,
-)
-NON_PROOF_LEGACY_ARTIFACT_LABEL = re.compile(
-    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
-    r"pending|skipped|unknown)\b",
-    re.I,
-)
 VALIDATION_ROWS = (
     "Verified metric item mapping",
     "Terraform ↔ preview parity",
@@ -785,130 +738,6 @@ def working_items(path: Path, errors: list[str]) -> dict[str, dict[str, Any]]:
     return working_items_data(data, errors)
 
 
-def legacy_working_metrics(path: Path, errors: list[str]) -> set[str]:
-    """Read directly proven Working metrics from a strict legacy reader report."""
-
-    if not path.is_file():
-        errors.append(f"legacy verification: missing Markdown report: {path}")
-        return set()
-    source = path.read_text(encoding="utf-8")
-    results = LEGACY_VERIFY_RESULT.findall(source)
-    if len(results) != 1:
-        errors.append(
-            "legacy verification: expected exactly one Result status, found "
-            f"{len(results)}"
-        )
-        return set()
-    report_result = results[0].lower()
-    section = markdown_section(source, "Tested And Working")
-    if section is None:
-        errors.append("legacy verification: missing ## Tested And Working")
-        return set()
-    rows = exact_markdown_table(section, LEGACY_VERIFY_HEADERS, errors)
-    if rows is None:
-        errors.append(
-            "legacy verification: ## Tested And Working must contain the full "
-            "Item ID / OTel item / Type / Added or modified / Working status / "
-            "How it was tested / Product result / visibility / Evidence contract"
-        )
-        return set()
-    if not rows:
-        errors.append("legacy verification: Tested And Working has no item rows")
-        return set()
-
-    metrics: set[str] = set()
-    statuses: list[str] = []
-    for index, row in enumerate(rows):
-        context = f"legacy verification row {index + 1}"
-        status = " ".join(row.get("Working status", "").lower().split())
-        statuses.append(status)
-        if status not in LEGACY_WORKING_STATUSES:
-            errors.append(f"{context}: unsupported Working status {status!r}")
-            continue
-        if status != "working":
-            continue
-        row_errors = len(errors)
-        if row.get("Type", "").strip().lower() != "metric":
-            errors.append(f"{context}: Working dashboard proof must have Type metric")
-        metric = row.get("OTel item", "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", metric):
-            errors.append(f"{context}: OTel item must be one exact metric name")
-        item_id = row.get("Item ID", "").strip()
-        if not TELEMETRY_ITEM_ID.fullmatch(item_id):
-            errors.append(f"{context}: Item ID must be a stable telemetry item ID")
-        elif item_id != f"SOURCE-METRIC.{metric}":
-            errors.append(
-                f"{context}: Item ID must equal "
-                f"'SOURCE-METRIC.{metric}' for the exact OTel item"
-            )
-        if not row.get("Added or modified", "").strip():
-            errors.append(f"{context}: Added or modified must describe the item")
-
-        tested = row.get("How it was tested", "").strip()
-        tested_match = LEGACY_TEST_PROJECTION.fullmatch(tested)
-        if tested_match is None:
-            errors.append(
-                f"{context}: How it was tested must be the exact proof_mode/scenarios projection"
-            )
-        else:
-            proof_mode, scenario_text = tested_match.groups()
-            scenarios = [value.strip() for value in scenario_text.split(",")]
-            if proof_mode not in ITEM_DIRECT_PROOF_MODES:
-                errors.append(f"{context}: Working metric needs an executed proof mode")
-            if (
-                not scenarios
-                or scenarios == ["none"]
-                or any(not LEGACY_SCENARIO_ID.fullmatch(value) for value in scenarios)
-            ):
-                errors.append(f"{context}: Working metric needs exact executed scenario IDs")
-
-        product = row.get("Product result / visibility", "").strip()
-        visibility_match = LEGACY_VISIBILITY_PROJECTION.search(product)
-        if visibility_match is None:
-            errors.append(f"{context}: product result must end with an explicit visibility state")
-        else:
-            product_result = product[: visibility_match.start()].strip(" ;")
-            if not product_result:
-                errors.append(f"{context}: product result must name the observed outcome")
-            if visibility_match.group(1) == "not_proven":
-                errors.append(f"{context}: Working metric cannot have visibility=not_proven")
-
-        evidence = row.get("Evidence", "").strip()
-        artifact_refs = list(LEGACY_DURABLE_ARTIFACT_REFERENCE.finditer(evidence))
-        non_proof_artifact = any(
-            NON_PROOF_LEGACY_ARTIFACT_LABEL.search(
-                re.sub(r"[._/\\-]+", " ", match.group(0))
-            )
-            for match in artifact_refs
-        )
-        outcome_prose = LEGACY_DURABLE_ARTIFACT_REFERENCE.sub(" ", evidence)
-        if (
-            not evidence
-            or non_proof_artifact
-            or NEGATIVE_OR_UNCERTAIN_DIRECT_EVIDENCE.search(outcome_prose)
-            or not LEGACY_DURABLE_EVIDENCE.search(evidence)
-        ):
-            errors.append(
-                f"{context}: Working metric needs positive durable evidence, not source-only prose"
-            )
-        if len(errors) == row_errors:
-            if metric in metrics:
-                errors.append(f"{context}: duplicate Working metric {metric!r}")
-            else:
-                metrics.add(metric)
-
-    if report_result in {"blocked", "not run"} and metrics:
-        errors.append(
-            f"legacy verification: Result {results[0]} cannot contain directly proven Working metrics"
-        )
-        metrics.clear()
-    if report_result == "pass" and any(status != "working" for status in statuses):
-        errors.append(
-            "legacy verification: Result Pass requires every telemetry item row to be Working"
-        )
-    return metrics
-
-
 def working_items_data(
     data: Any, errors: list[str]
 ) -> dict[str, dict[str, Any]]:
@@ -1068,7 +897,6 @@ def validate_item_provenance(
     source_metric_ids: set[str],
     errors: list[str],
     prevalidated_working: dict[str, dict[str, Any]] | None = None,
-    legacy_working: set[str] | None = None,
 ) -> int:
     for item_id in sorted(allowed_source_only):
         if not SOURCE_METRIC_ID.fullmatch(item_id):
@@ -1081,20 +909,16 @@ def validate_item_provenance(
                 "current_instrumentation.metrics"
             )
     working: dict[str, dict[str, Any]] = {}
-    legacy_working = legacy_working or set()
-    legacy_item_ids = {
-        f"SOURCE-METRIC.{metric}" for metric in legacy_working
-    }
     if verification_path is not None and verification_path.is_file():
         working = (
             prevalidated_working
             if prevalidated_working is not None
             else working_items(verification_path, errors)
         )
-    elif not allowed_source_only and not legacy_working:
+    elif not allowed_source_only:
         errors.append(
-            "verification: canonical otel-verify.json or explicit legacy Markdown "
-            "Working metric proof is required unless every chart item is explicitly "
+            "verification: canonical otel-verify.json is required unless every chart "
+            "item is explicitly "
             "allowed with --allow-source-only-item"
         )
     chart_items = {chart.telemetry_item_id for chart in preview.values() if chart.telemetry_item_id}
@@ -1102,25 +926,13 @@ def validate_item_provenance(
         if not SOURCE_METRIC_ID.fullmatch(chart.telemetry_item_id):
             continue
         metrics = DATA_METRIC.findall(chart.program_text or "")
-        if chart.telemetry_item_id in legacy_item_ids:
-            if metrics and (
-                len(metrics) != 1
-                or chart.telemetry_item_id != f"SOURCE-METRIC.{metrics[0]}"
-            ):
-                errors.append(
-                    f"provenance: legacy-proven chart {chart.label!r} must use "
-                    "SOURCE-METRIC.<exact data() metric>"
-                )
-            continue
         expected = f"SOURCE-METRIC.{metrics[0]}" if len(metrics) == 1 else ""
         if chart.telemetry_item_id != expected:
             errors.append(
                 f"provenance: source-only chart {chart.label!r} must use "
                 "SOURCE-METRIC.<exact data() metric>"
             )
-    unknown = sorted(
-        chart_items - set(working) - legacy_item_ids - allowed_source_only
-    )
+    unknown = sorted(chart_items - set(working) - allowed_source_only)
     for item_id in unknown:
         errors.append(f"provenance: chart item {item_id!r} is not a Working verification item")
     for chart in preview.values():
@@ -1157,7 +969,7 @@ def validate_item_provenance(
     unused_exceptions = sorted(allowed_source_only - chart_items)
     for item_id in unused_exceptions:
         errors.append(f"provenance: source-only exception {item_id!r} is not used by a chart")
-    return len(working) + len(legacy_working)
+    return len(working)
 
 
 def audit_source_metric_ids(path: Path, errors: list[str]) -> set[str]:
@@ -1213,90 +1025,40 @@ def audit_source_metric_ids(path: Path, errors: list[str]) -> set[str]:
     return result
 
 
-def legacy_audit_source_metric_ids(path: Path, errors: list[str]) -> set[str]:
-    """Return stable IDs from one exact legacy ``### Metrics`` table."""
+def validate_canonical_audit(path: Path, errors: list[str]) -> bool:
+    """Validate one captured canonical audit without consulting reader output."""
 
     if not path.is_file():
-        errors.append(f"source-only provenance: missing legacy audit Markdown: {path}")
-        return set()
-    source = path.read_text(encoding="utf-8")
-    headings = list(re.finditer(r"^###[ \t]+Metrics[ \t]*$", source, re.I | re.M))
-    if len(headings) != 1:
         errors.append(
-            "source-only provenance: legacy audit must contain exactly one Metrics heading"
+            "canonical input: otel-audit.json is required before dashboard validation"
         )
-        return set()
-    heading = headings[0]
-    level = 3
-    section_end = len(source)
-    for candidate in re.finditer(r"^(#{1,6})[ \t]+.+$", source[heading.end() :], re.M):
-        if len(candidate.group(1)) <= level:
-            section_end = heading.end() + candidate.start()
-            break
-    lines = source[heading.end() : section_end].splitlines()
-    table_starts = [
-        index
-        for index, line in enumerate(lines)
-        if line.lstrip().startswith("|")
-        and (index == 0 or not lines[index - 1].lstrip().startswith("|"))
-    ]
-    if len(table_starts) != 1:
+        return False
+    script = Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    if not script.is_file():
+        errors.append(f"canonical input: missing shared validator {script}")
+        return False
+    try:
+        snapshot = path.read_bytes()
+    except OSError as error:
+        errors.append(f"canonical input: cannot capture otel-audit.json: {error}")
+        return False
+    with tempfile.TemporaryDirectory(prefix="dashboard-audit-") as directory:
+        snapshot_path = Path(directory) / "otel-audit.json"
+        snapshot_path.write_bytes(snapshot)
+        completed = subprocess.run(
+            [sys.executable, str(script), "validate", str(snapshot_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
         errors.append(
-            "source-only provenance: legacy Metrics section must contain exactly one table"
+            "canonical input: otel-audit.json validation failed"
+            f"{': ' + detail if detail else ''}"
         )
-        return set()
-    index = table_starts[0]
-    if tuple(markdown_cells(lines[index])) != LEGACY_AUDIT_METRIC_HEADERS:
-        errors.append(
-            "source-only provenance: legacy Metrics table header must be "
-            "Name | Source | Type in that order"
-        )
-        return set()
-    if index + 1 >= len(lines):
-        errors.append("source-only provenance: legacy Metrics table is missing its separator")
-        return set()
-    separator = markdown_cells(lines[index + 1])
-    if len(separator) != len(LEGACY_AUDIT_METRIC_HEADERS) or not all(
-        re.fullmatch(r":?-{3,}:?", cell) for cell in separator
-    ):
-        errors.append("source-only provenance: legacy Metrics table has an invalid separator")
-        return set()
-
-    result: set[str] = set()
-    row_count = 0
-    for candidate in lines[index + 2 :]:
-        if not candidate.lstrip().startswith("|"):
-            break
-        cells = markdown_cells(candidate)
-        if len(cells) != len(LEGACY_AUDIT_METRIC_HEADERS):
-            errors.append(
-                "source-only provenance: legacy Metrics row column count does not match "
-                "Name | Source | Type"
-            )
-            return set()
-        row_count += 1
-        name, source_name, metric_type = cells
-        if not SOURCE_METRIC_ID.fullmatch(f"SOURCE-METRIC.{name}"):
-            errors.append(
-                f"source-only provenance: legacy metric row {row_count} has invalid name {name!r}"
-            )
-            continue
-        if not source_name or not metric_type:
-            errors.append(
-                "source-only provenance: every legacy metric needs non-empty "
-                "Name, Source, and Type"
-            )
-            continue
-        item_id = f"SOURCE-METRIC.{name}"
-        if item_id in result:
-            errors.append(
-                f"source-only provenance: duplicate legacy metric name {name!r}"
-            )
-            continue
-        result.add(item_id)
-    if row_count == 0:
-        errors.append("source-only provenance: legacy Metrics table has no metric rows")
-    return result
+        return False
+    return True
 
 
 def exact_metric_observed(metric: str, observed: str) -> bool:
@@ -1480,55 +1242,6 @@ def markdown_table(section: str, required_headers: tuple[str, ...]) -> list[dict
                 rows.append(dict(zip(header, cells)))
             return rows
     return None
-
-
-def exact_markdown_table(
-    section: str,
-    expected_header: tuple[str, ...],
-    errors: list[str],
-) -> list[dict[str, str]] | None:
-    """Parse one contiguous table with an exact, unambiguous header."""
-
-    lines = section.splitlines()
-    table_indexes = [
-        index
-        for index, line in enumerate(lines)
-        if line.lstrip().startswith("|")
-        and (index == 0 or not lines[index - 1].lstrip().startswith("|"))
-    ]
-    if (
-        len(table_indexes) != 1
-        or tuple(markdown_cells(lines[table_indexes[0]])) != expected_header
-    ):
-        errors.append(
-            "legacy verification: expected exactly one table with the exact "
-            "item-proof header in the documented order"
-        )
-        return None
-    index = table_indexes[0]
-    if index + 1 >= len(lines):
-        errors.append("legacy verification: item-proof table is missing its separator")
-        return None
-    separator = markdown_cells(lines[index + 1])
-    if len(separator) != len(expected_header) or not all(
-        re.fullmatch(r":?-{3,}:?", cell) for cell in separator
-    ):
-        errors.append("legacy verification: item-proof table has an invalid separator")
-        return None
-
-    rows: list[dict[str, str]] = []
-    for candidate in lines[index + 2 :]:
-        if not candidate.lstrip().startswith("|"):
-            break
-        cells = markdown_cells(candidate)
-        if len(cells) != len(expected_header):
-            errors.append(
-                "legacy verification: item-proof row column count does not match "
-                "the exact header"
-            )
-            return None
-        rows.append(dict(zip(expected_header, cells)))
-    return rows
 
 
 def normalized_result(value: str) -> str:
@@ -1770,7 +1483,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         candidate = preview_path.parent / "otel-verify.json"
         verification_path = candidate if candidate.is_file() else None
     canonical_candidates: dict[str, Path] = {}
-    canonical_explicit = getattr(args, "verification", None) is not None
     downstream_explicit = getattr(args, "verification", None) is not None
     for name, filename in (
         ("audit", "otel-audit.json"),
@@ -1778,7 +1490,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         ("instrumentation", "otel-instrumentation.json"),
     ):
         explicit = getattr(args, name, None)
-        canonical_explicit = canonical_explicit or explicit is not None
         canonical_candidates[name] = explicit or preview_path.parent / filename
         if name in {"selection", "instrumentation"} and explicit is not None:
             downstream_explicit = True
@@ -1792,41 +1503,17 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         for chart in preview.values()
     )
     require_canonical = downstream_present or uses_otel_items
-    canonical_json_mode = (
-        canonical_explicit
-        or verification_path is not None
-        or any(path.is_file() for path in canonical_candidates.values())
-    )
-    legacy_verification: Path | None = getattr(args, "legacy_verification", None)
-    legacy_audit: Path | None = getattr(args, "legacy_audit", None)
-    legacy_metrics: set[str] = set()
-    if legacy_audit is not None and canonical_json_mode:
+    audit_path = canonical_candidates["audit"]
+    if not audit_path.is_file():
         errors.append(
-            "source-only provenance: legacy audit Markdown must not supplement or "
-            "replace a canonical JSON flow"
+            "canonical input: otel-audit.json is required before dashboard validation"
         )
-    if legacy_verification is not None:
-        if canonical_json_mode:
-            errors.append(
-                "verification: legacy Markdown must not supplement or replace a "
-                "canonical JSON flow"
-            )
-        else:
-            legacy_metrics = legacy_working_metrics(legacy_verification, errors)
+    elif not downstream_present:
+        validate_canonical_audit(audit_path, errors)
     source_only_items = set(getattr(args, "allow_source_only_item", []))
     source_metric_ids: set[str] = set()
     if source_only_items:
-        if canonical_json_mode:
-            source_metric_ids = audit_source_metric_ids(
-                canonical_candidates["audit"], errors
-            )
-        elif legacy_audit is not None:
-            source_metric_ids = legacy_audit_source_metric_ids(legacy_audit, errors)
-        else:
-            errors.append(
-                "source-only provenance: --allow-source-only-item requires either "
-                "canonical --audit or --legacy-audit"
-            )
+        source_metric_ids = audit_source_metric_ids(audit_path, errors)
     instrumentation_items, prevalidated_working = validate_bound_verification_flow(
         preview_path,
         verification_path,
@@ -1842,7 +1529,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         source_metric_ids,
         errors,
         prevalidated_working,
-        legacy_metrics,
     )
     reported_status = validate_report(
         report_path.read_text(encoding="utf-8"),
@@ -1864,9 +1550,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Validate dashboard HCL, Observer preview JSON, and report parity.",
         epilog=(
-            "Canonical mode: pass --audit, --selection, --instrumentation, and "
-            "--verification. Legacy source-only mode: pass --legacy-audit and one "
-            "exact --allow-source-only-item SOURCE-METRIC.<metric> per accepted metric."
+            "Pass --audit for explicitly accepted audit-only source metrics; "
+            "pass --selection, --instrumentation, and --verification for bound items."
         ),
     )
     parser.add_argument("--terraform", type=Path, required=True)
@@ -1875,19 +1560,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--variables", type=Path)
     parser.add_argument("--tfvars", type=Path)
     parser.add_argument("--verification", type=Path)
-    parser.add_argument(
-        "--legacy-verification",
-        type=Path,
-        help="explicit legacy otel-verify.md; valid only when no canonical JSON artifact exists",
-    )
-    parser.add_argument(
-        "--legacy-audit",
-        type=Path,
-        help=(
-            "legacy otel.md with one exact Name | Source | Type Metrics table; "
-            "valid only when no canonical JSON artifact exists"
-        ),
-    )
     parser.add_argument("--audit", type=Path)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--instrumentation", type=Path)

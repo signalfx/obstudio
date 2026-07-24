@@ -326,7 +326,6 @@ variable "api_token" {
         variables=variables,
         tfvars=None,
         verification=verification,
-        legacy_audit=None,
         allow_source_only_item=[],
     )
 
@@ -344,6 +343,22 @@ def edit_verification(path: Path, edit) -> None:
 
 
 class ValidateDashboardOutputTest(unittest.TestCase):
+    def test_cli_rejects_removed_legacy_input_flags(self) -> None:
+        required = [
+            str(SCRIPT),
+            "--terraform",
+            "dashboards.tf",
+            "--preview",
+            "dashboards.preview.json",
+            "--report",
+            "dashboards.md",
+        ]
+        for flag in ("--legacy-audit", "--legacy-verification"):
+            with self.subTest(flag=flag), mock.patch.object(
+                sys, "argv", [*required, flag, "legacy.md"]
+            ), self.assertRaises(SystemExit):
+                MODULE.parse_args()
+
     def test_accepts_exact_hcl_preview_and_partial_report_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = MODULE.validate(write_fixture(Path(directory)))
@@ -482,250 +497,6 @@ resource "signalfx_dashboard" "empty_dashboard" {
         self.assertTrue(
             any("Terraform dashboard" in error and "missing from preview" in error for error in missing_dashboard["errors"]),
             missing_dashboard["errors"],
-        )
-
-    def test_accepts_explicit_legacy_working_metric_without_source_only_exception(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            args = write_fixture(Path(directory))
-            for name in (
-                "otel-audit.json",
-                "otel-selection.json",
-                "otel-instrumentation.json",
-                "otel-verify.json",
-            ):
-                (args.preview.parent / name).unlink()
-            replacements = {
-                "OTEL-001.http-duration": "SOURCE-METRIC.http.server.request.duration",
-                "OTEL-002.http-errors": "SOURCE-METRIC.http.server.errors.total",
-            }
-            for path in (args.terraform, args.preview, args.report):
-                text = path.read_text(encoding="utf-8")
-                for old, new in replacements.items():
-                    text = text.replace(old, new)
-                path.write_text(text, encoding="utf-8")
-            legacy = args.preview.parent / "legacy-otel-verify.md"
-            legacy.write_text(
-                """# OTel Verification Report: checkout
-
-**Result:** Pass
-
-## Tested And Working
-| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
-|---|---|---|---|---|---|---|---|
-| SOURCE-METRIC.http.server.request.duration | `http.server.request.duration` | Metric | Existing route duration metric | Working | proof_mode=full_runtime; scenarios=http.success | Route latency data accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json |
-| SOURCE-METRIC.http.server.errors.total | `http.server.errors.total` | Metric | Existing route error metric | Working | proof_mode=unit+otlp; scenarios=http.failure | Route error data accepted; visibility=otlp_accepted | .observe/evidence/http-errors.json |
-""",
-                encoding="utf-8",
-            )
-            args.verification = None
-            args.legacy_verification = legacy
-            args.allow_source_only_item = []
-            result = MODULE.validate(args)
-
-        self.assertEqual(result["result"], "PASS", result["errors"])
-        self.assertEqual(result["working_verification_item_count"], 2)
-
-    def test_rejects_bare_legacy_working_labels_as_metric_proof(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            args = write_fixture(Path(directory))
-            for name in (
-                "otel-audit.json",
-                "otel-selection.json",
-                "otel-instrumentation.json",
-                "otel-verify.json",
-            ):
-                (args.preview.parent / name).unlink()
-            for path in (args.terraform, args.preview, args.report):
-                path.write_text(
-                    path.read_text(encoding="utf-8")
-                    .replace(
-                        "OTEL-001.http-duration",
-                        "SOURCE-METRIC.http.server.request.duration",
-                    )
-                    .replace(
-                        "OTEL-002.http-errors",
-                        "SOURCE-METRIC.http.server.errors.total",
-                    ),
-                    encoding="utf-8",
-                )
-            legacy = args.preview.parent / "legacy-otel-verify.md"
-            legacy.write_text(
-                """# OTel Verification Report: checkout
-
-**Result:** Pass
-
-## Tested And Working
-| OTel item | Type | Working status |
-|---|---|---|
-| `http.server.request.duration` | Metric | Working |
-| `http.server.errors.total` | Metric | Working |
-""",
-                encoding="utf-8",
-            )
-            args.verification = None
-            args.legacy_verification = legacy
-            args.allow_source_only_item = []
-
-            result = MODULE.validate(args)
-
-        self.assertEqual(result["result"], "FAIL")
-        self.assertTrue(
-            any("must contain the full" in error for error in result["errors"]),
-            result["errors"],
-        )
-
-    def test_legacy_working_metric_requires_direct_durable_proof(self) -> None:
-        template = """# OTel Verification Report: checkout
-
-**Result:** {result}
-
-## Tested And Working
-| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
-|---|---|---|---|---|---|---|---|
-| SOURCE-METRIC.http.server.request.duration | http.server.request.duration | Metric | Existing route metric | Working | {tested} | {product} | {evidence} |
-"""
-        cases = {
-            "not-run proof": {
-                "result": "Pass",
-                "tested": "proof_mode=not_run; scenarios=none",
-                "product": "Route latency; visibility=not_proven",
-                "evidence": "main.go:12",
-                "expected": "executed proof mode",
-            },
-            "source-only evidence": {
-                "result": "Pass",
-                "tested": "proof_mode=full_runtime; scenarios=http.success",
-                "product": "Route latency; visibility=otlp_accepted",
-                "evidence": "main.go:12",
-                "expected": "positive durable evidence",
-            },
-            "unproven artifact label": {
-                "result": "Pass",
-                "tested": "proof_mode=full_runtime; scenarios=http.success",
-                "product": "Route latency; visibility=otlp_accepted",
-                "evidence": ".observe/evidence/not-proven.log",
-                "expected": "positive durable evidence",
-            },
-            "missing product outcome": {
-                "result": "Pass",
-                "tested": "proof_mode=full_runtime; scenarios=http.success",
-                "product": "visibility=otlp_accepted",
-                "evidence": ".observe/evidence/http-duration.json",
-                "expected": "must name the observed outcome",
-            },
-            "blocked overall result": {
-                "result": "Blocked",
-                "tested": "proof_mode=full_runtime; scenarios=http.success",
-                "product": "Route latency; visibility=otlp_accepted",
-                "evidence": ".observe/evidence/http-duration.json",
-                "expected": "cannot contain directly proven Working metrics",
-            },
-        }
-        for name, case in cases.items():
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "otel-verify.md"
-                path.write_text(template.format(**case), encoding="utf-8")
-                errors: list[str] = []
-
-                metrics = MODULE.legacy_working_metrics(path, errors)
-
-                self.assertEqual(metrics, set())
-                self.assertTrue(
-                    any(case["expected"] in error for error in errors), errors
-                )
-
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "otel-verify.md"
-            path.write_text(
-                template.format(
-                    result="Pass",
-                    tested="proof_mode=full_runtime; scenarios=http.failure",
-                    product="Failure-path telemetry accepted; visibility=otlp_accepted",
-                    evidence=".observe/evidence/http-failure.json",
-                ),
-                encoding="utf-8",
-            )
-            errors = []
-
-            metrics = MODULE.legacy_working_metrics(path, errors)
-
-            self.assertEqual(metrics, {"http.server.request.duration"}, errors)
-            self.assertEqual(errors, [])
-
-    def test_legacy_working_metric_requires_item_id_for_exact_metric(self) -> None:
-        template = """# OTel Verification Report: checkout
-
-**Result:** Pass
-
-## Tested And Working
-| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
-|---|---|---|---|---|---|---|---|
-| {item_id} | http.server.request.duration | Metric | Existing route metric | Working | proof_mode=full_runtime; scenarios=http.success | Route latency accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json |
-"""
-        for item_id in (
-            "SOURCE-METRIC.http.server.errors.total",
-            "OTEL-001.http-duration",
-        ):
-            with self.subTest(item_id=item_id), tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "otel-verify.md"
-                path.write_text(template.format(item_id=item_id), encoding="utf-8")
-                errors: list[str] = []
-
-                metrics = MODULE.legacy_working_metrics(path, errors)
-
-                self.assertEqual(metrics, set())
-                self.assertTrue(
-                    any(
-                        "Item ID must equal "
-                        "'SOURCE-METRIC.http.server.request.duration'" in error
-                        for error in errors
-                    ),
-                    errors,
-                )
-
-    def test_legacy_proof_rejects_duplicate_last_wins_status_header(self) -> None:
-        report = """# OTel Verification Report: checkout
-
-**Result:** Pass
-
-## Tested And Working
-| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence | Working status |
-|---|---|---|---|---|---|---|---|---|
-| SOURCE-METRIC.http.server.request.duration | http.server.request.duration | Metric | Existing route metric | Not working | proof_mode=full_runtime; scenarios=http.success | Route latency accepted; visibility=otlp_accepted | .observe/evidence/http-duration.json | Working |
-"""
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "otel-verify.md"
-            path.write_text(report, encoding="utf-8")
-            errors: list[str] = []
-
-            metrics = MODULE.legacy_working_metrics(path, errors)
-
-        self.assertEqual(metrics, set())
-        self.assertTrue(
-            any("exact item-proof header" in error for error in errors), errors
-        )
-
-    def test_canonical_audit_never_falls_back_to_legacy_markdown(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            args = write_fixture(Path(directory))
-            args.verification.unlink()
-            legacy = args.preview.parent / "legacy-otel-verify.md"
-            legacy.write_text(
-                """## Tested And Working
-| OTel item | Type | Working status |
-|---|---|---|
-| `http.server.request.duration` | Metric | Working |
-""",
-                encoding="utf-8",
-            )
-            args.verification = None
-            args.legacy_verification = legacy
-            result = MODULE.validate(args)
-
-        self.assertEqual(result["result"], "FAIL")
-        self.assertTrue(
-            any("legacy Markdown must not supplement" in error for error in result["errors"]),
-            result["errors"],
         )
 
     def test_rejects_non_bijective_or_mismatched_chart_contracts(self) -> None:
@@ -1357,32 +1128,13 @@ resource "signalfx_dashboard" "empty_dashboard" {
             audit_path.write_text(json.dumps(audit), encoding="utf-8")
             result = MODULE.validate(args)
 
-            legacy = args.preview.parent / "legacy-otel-verify.md"
-            legacy.write_text("legacy proof must not be read\n", encoding="utf-8")
-            args.legacy_verification = legacy
-            audit_with_legacy = MODULE.validate(args)
-            args.legacy_verification = None
-
-            legacy_audit = args.preview.parent / "otel.md"
-            legacy_audit.write_text(
-                """# Observability Report: checkout
-
-### Metrics
-
-| Name | Source | Type |
-|---|---|---|
-| http.server.request.duration | metrics.go:12 | histogram |
-
-## Instrumentation
-""",
-                encoding="utf-8",
-            )
             canonical_audit = audit_path.read_text(encoding="utf-8")
-            args.legacy_audit = legacy_audit
-            canonical_with_legacy_audit = MODULE.validate(args)
             audit_path.unlink()
-            legacy_source_only = MODULE.validate(args)
-            args.legacy_audit = None
+            missing_audit = MODULE.validate(args)
+            invalid_audit = json.loads(canonical_audit)
+            invalid_audit["schema_version"] = 999
+            audit_path.write_text(json.dumps(invalid_audit), encoding="utf-8")
+            invalid_canonical = MODULE.validate(args)
             audit_path.write_text(canonical_audit, encoding="utf-8")
 
             (args.preview.parent / "otel-selection.json").write_text(
@@ -1400,23 +1152,22 @@ resource "signalfx_dashboard" "empty_dashboard" {
             missing_source["errors"],
         )
         self.assertEqual(result["result"], "PASS", result["errors"])
-        self.assertEqual(audit_with_legacy["result"], "FAIL")
+        self.assertEqual(missing_audit["result"], "FAIL")
         self.assertTrue(
             any(
-                "legacy Markdown must not supplement" in error
-                for error in audit_with_legacy["errors"]
+                "otel-audit.json is required" in error
+                for error in missing_audit["errors"]
             ),
-            audit_with_legacy["errors"],
+            missing_audit["errors"],
         )
-        self.assertEqual(canonical_with_legacy_audit["result"], "FAIL")
+        self.assertEqual(invalid_canonical["result"], "FAIL")
         self.assertTrue(
             any(
-                "legacy audit Markdown must not supplement" in error
-                for error in canonical_with_legacy_audit["errors"]
+                "otel-audit.json validation failed" in error
+                for error in invalid_canonical["errors"]
             ),
-            canonical_with_legacy_audit["errors"],
+            invalid_canonical["errors"],
         )
-        self.assertEqual(legacy_source_only["result"], "PASS", legacy_source_only["errors"])
         self.assertEqual(partial_downstream["result"], "FAIL")
         self.assertTrue(
             any(
@@ -1424,58 +1175,6 @@ resource "signalfx_dashboard" "empty_dashboard" {
                 for error in partial_downstream["errors"]
             ),
             partial_downstream["errors"],
-        )
-
-    def test_legacy_audit_source_metric_inventory_is_exact_and_unambiguous(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "otel.md"
-            path.write_text(
-                """# Observability Report: checkout
-
-### Metrics
-
-| Name | Source | Type |
-|---|---|---|
-| http.server.request.duration | otelhttp | auto |
-| checkout.payment.errors | metrics.go:42 | custom |
-
-## Instrumentation
-""",
-                encoding="utf-8",
-            )
-            errors: list[str] = []
-            item_ids = MODULE.legacy_audit_source_metric_ids(path, errors)
-
-            duplicate = path.read_text(encoding="utf-8").replace(
-                "| checkout.payment.errors | metrics.go:42 | custom |",
-                "| checkout.payment.errors | metrics.go:42 | custom |\n"
-                "| http.server.request.duration | duplicate | auto |",
-            )
-            path.write_text(duplicate, encoding="utf-8")
-            duplicate_errors: list[str] = []
-            MODULE.legacy_audit_source_metric_ids(path, duplicate_errors)
-
-            path.write_text(
-                duplicate.replace("### Metrics", "## Metrics"), encoding="utf-8"
-            )
-            heading_errors: list[str] = []
-            MODULE.legacy_audit_source_metric_ids(path, heading_errors)
-
-        self.assertEqual(errors, [])
-        self.assertEqual(
-            item_ids,
-            {
-                "SOURCE-METRIC.http.server.request.duration",
-                "SOURCE-METRIC.checkout.payment.errors",
-            },
-        )
-        self.assertTrue(
-            any("duplicate legacy metric" in error for error in duplicate_errors),
-            duplicate_errors,
-        )
-        self.assertTrue(
-            any("exactly one Metrics heading" in error for error in heading_errors),
-            heading_errors,
         )
 
     def test_rejects_source_metric_id_that_does_not_match_data_metric(self) -> None:

@@ -180,23 +180,6 @@ def load_dashboard_validator(errors: list[str]):
     return module
 
 
-def working_metrics(
-    report: Path | None, errors: list[str] | None = None
-) -> set[str]:
-    """Return only metrics satisfying the strict legacy verification contract."""
-
-    if report is None:
-        return set()
-    validation_errors = errors if errors is not None else []
-    if not report.is_file():
-        validation_errors.append(f"legacy verification report is not a file: {report}")
-        return set()
-    module = load_dashboard_validator(validation_errors)
-    if module is None:
-        return set()
-    return module.legacy_working_metrics(report, validation_errors)
-
-
 def matching_brace(text: str, opening: int) -> int:
     depth = 0
     quote: str | None = None
@@ -1306,20 +1289,10 @@ def canonical_working_metrics(
     args: argparse.Namespace,
     errors: list[str],
     canonical_snapshots: dict[str, bytes] | None = None,
-) -> set[str] | None:
-    """Return JSON-authoritative metrics, or None for a true legacy flow."""
+) -> set[str]:
+    """Return metrics authorized by the canonical audit and bound overlays."""
 
     paths = canonical_flow_paths(terraform_dir, args)
-    explicit_paths = any(
-        getattr(args, name, None) is not None
-        for name in (
-            "audit_json",
-            "selection_json",
-            "instrumentation_json",
-            "verification_json",
-            "dashboard_verification",
-        )
-    )
     if canonical_snapshots is None:
         prior_error_count = len(errors)
         canonical_snapshots = capture_canonical_artifacts(paths, errors)
@@ -1327,13 +1300,11 @@ def canonical_working_metrics(
             return set()
     present = set(canonical_snapshots)
     if "audit" not in present:
-        if explicit_paths or present:
-            errors.append(
-                "canonical verification flow is incomplete; otel-audit.json is "
-                "required when any JSON overlay is present"
-            )
-            return set()
-        return None
+        errors.append(
+            "canonical verification flow is incomplete; otel-audit.json is "
+            "required before configure"
+        )
+        return set()
 
     downstream_explicit = any(
         getattr(args, name, None) is not None
@@ -1539,13 +1510,11 @@ def inspect_configure_inputs(
     present = set(snapshots)
 
     if "audit" not in present:
-        if explicit or present:
-            errors.append(
-                "canonical configure input chain is incomplete; otel-audit.json "
-                "is required when any canonical overlay is present or explicit"
-            )
-            return "incomplete", snapshots
-        return "legacy", snapshots
+        errors.append(
+            "canonical configure input chain is incomplete; otel-audit.json "
+            "is required before configure"
+        )
+        return "incomplete", snapshots
 
     downstream = {"selection", "instrumentation", "verification"}
     if (
@@ -1621,12 +1590,6 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
             "canonical_artifacts": [],
             "errors": [str(error)],
         }
-    if input_mode == "legacy":
-        input_mode = "incomplete"
-        errors.append(
-            "canonical configure input chain is incomplete; otel-audit.json "
-            "is required before configure"
-        )
     return {
         "result": "PASS" if not errors else "FAIL",
         "input_mode": input_mode,
@@ -1654,16 +1617,6 @@ def run_dashboard_validator(
         canonical_snapshots = capture_canonical_artifacts(paths, errors)
         if len(errors) != prior_error_count:
             return {}
-    canonical_mode = bool(canonical_snapshots) or any(
-        getattr(args, name, None) is not None
-        for name in (
-            "audit_json",
-            "selection_json",
-            "instrumentation_json",
-            "verification_json",
-            "dashboard_verification",
-        )
-    )
     verification_explicit = any(
         getattr(args, name, None) is not None
         for name in ("verification_json", "dashboard_verification")
@@ -1697,7 +1650,6 @@ def run_dashboard_validator(
                 variables=terraform_dir / "variables.tf",
                 tfvars=tfvars,
                 verification=delegated_paths["verification"],
-                legacy_verification=(None if canonical_mode else args.verify_report),
                 audit=delegated_paths["audit"],
                 selection=delegated_paths["selection"],
                 instrumentation=delegated_paths["instrumentation"],
@@ -1953,13 +1905,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         errors,
         canonical_snapshots,
     )
-    if verified is None:
-        unresolved_metrics = set(detector_metrics) - source_only
-        verified = (
-            working_metrics(args.verify_report, errors)
-            if args.verify_report is not None or unresolved_metrics
-            else set()
-        )
     allowed = verified | source_only
     for resource_id, metric in detector_metric_rows:
         if metric not in allowed:
@@ -2066,8 +2011,8 @@ def parse_args() -> argparse.Namespace:
         "--verify-report",
         type=Path,
         help=(
-            "actual legacy otel-verify.md proof; omit for canonical JSON or "
-            "explicitly authorized source-only metrics (never pass an audit report)"
+            "canonical otel-verify.md reader projection; defaults to "
+            "<terraform-dir>/../otel-verify.md after bound JSON validation"
         ),
     )
     parser.add_argument(
