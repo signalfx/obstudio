@@ -272,6 +272,21 @@ def test_chi_prompts_expose_only_the_inputs_the_workflow_owns() -> None:
         "eval/inputs/otel-verify.json",
     ]
 
+    ai_instrument = json.loads(
+        _read(
+            ROOT
+            / "evals"
+            / "python"
+            / "ai-assistant-demo"
+            / "eval"
+            / "qual"
+            / "instrument.json"
+        )
+    )
+    assert ai_instrument["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/otel-audit.json"
+    ]
+
 
 def test_audit_does_not_duplicate_the_shared_report_contract_up_front() -> None:
     audit = _read(AUDIT_SKILL)

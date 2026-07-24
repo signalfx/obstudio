@@ -239,3 +239,25 @@ def test_role_schemas_reject_cross_role_fields():
         schema_validator("runtime.schema.json").validate(runtime_with_kind)
     with pytest.raises(ValidationError):
         schema_validator("sanity.schema.json").validate(sanity_payload)
+
+
+def test_prompt_eval_inputs_are_accepted_and_must_be_unique():
+    payload = {
+        "skill": "sample-skill",
+        "prompts": [
+            {
+                "id": "direct",
+                "task": "Run.",
+                "eval_inputs": ["eval/inputs/otel-audit.json"],
+            }
+        ],
+        "rubric": ["Grade quality."],
+    }
+
+    schema_validator("rubric.schema.json").validate(payload)
+    payload["prompts"][0]["eval_inputs"] = [
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-audit.json",
+    ]
+    with pytest.raises(ValidationError):
+        schema_validator("rubric.schema.json").validate(payload)

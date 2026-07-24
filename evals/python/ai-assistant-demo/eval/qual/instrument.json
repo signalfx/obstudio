@@ -3,6 +3,7 @@
   "prompts": [
     {
       "id": "direct",
+      "eval_inputs": ["eval/inputs/otel-audit.json"],
       "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to select OTEL-001, then instrument the AI assistant FastAPI service for the bounded app-owned GenAI lifecycle. Write and validate bound canonical selection and instrumentation JSON, including the exact ordered genai_closure projection from the audit, then render compatibility Markdown and the self-contained instrumentation HTML. Add focused tests and run verification where practical."
     }
   ],
