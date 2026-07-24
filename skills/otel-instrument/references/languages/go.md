@@ -338,7 +338,7 @@ user's home directory and is not a build/module cache payload.
 Run this cleanup exactly once after the applicable terminal check: the canonical
 `instrumentation-final-gate`, the explicit canonical no-child validation when
 verification was opted out or concretely blocked before an overlay could be
-written, or the legacy no-audit validation defined by the skill. Successful
+written, or the direct no-audit validation defined by the skill. Successful
 cleanup is the terminal boundary: emit the final response immediately. Do not
 follow it with `git status`, `git diff`, a `go.sum` inspection, cache
 inspection/removal, file or artifact listings, repeated validators/tests, or

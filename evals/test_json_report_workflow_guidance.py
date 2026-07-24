@@ -281,10 +281,10 @@ def test_instrument_terminal_boundary_forbids_post_gate_inspection() -> None:
     assert finalization_raw.index("## Credential Safety") < terminal
     assert finalization_raw.rfind("\n## ") + 1 == terminal
     assert "requested detector/configure workflow" in finalization
-    assert "Legacy No-Audit Branch" in finalization
+    assert "Direct No-Audit Branch" in finalization
     assert "Successful cleanup is the terminal boundary" in go_guide
     assert "explicit canonical no-child validation" in go_guide
-    assert "legacy no-audit validation" in go_guide
+    assert "direct no-audit validation" in go_guide
     assert "emit the final response immediately" in go_guide
     assert "a `go.sum` inspection" in go_guide
     assert "repeated validators/tests" in go_guide
