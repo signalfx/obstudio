@@ -98,6 +98,20 @@ VISIBILITY_STATES = {
     "not_proven",
     "not_applicable",
 }
+VERIFY_WORKFLOW_MODES = {"standalone", "instrumentation_child"}
+VERIFY_LIFECYCLES = {"intermediate", "final"}
+STOP_BOUNDARY_KINDS = {
+    "unselected_work",
+    "material_decision",
+    "new_authority",
+    "external_prerequisite",
+}
+IMPERATIVE_STOP_BOUNDARY_REASON = re.compile(
+    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|configure|"
+    r"obtain|use|record|execute|exercise|capture|inspect|verify|prove|repair|"
+    r"fix|change|remove|add|choose|decide|approve|authorize)\b",
+    re.IGNORECASE,
+)
 EPHEMERAL_ARTIFACT_PREFIXES = (
     "/tmp",
     "/private/tmp",
@@ -234,6 +248,11 @@ def object_list(value: Any, path: str) -> list[dict[str, Any]]:
 def normalized_words(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return " ".join(re.sub(r"[^a-z0-9._/]+", " ", normalized).split())
+
+
+def normalized_action_words(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
 
 
 def validate_audit_review_next_step(value: str, path: str) -> None:
@@ -1593,6 +1612,36 @@ def normalize_verify(
     result = text(meta.get("result"), "verify.meta.result")
     if result not in RESULT_STATUSES:
         fail(f"verify.meta.result must be one of {sorted(RESULT_STATUSES)}")
+    workflow_mode = text(
+        meta.get("workflow_mode", "standalone"), "verify.meta.workflow_mode"
+    )
+    if workflow_mode not in VERIFY_WORKFLOW_MODES:
+        fail(
+            f"verify.meta.workflow_mode must be one of "
+            f"{sorted(VERIFY_WORKFLOW_MODES)}"
+        )
+    lifecycle = text(meta.get("lifecycle", "final"), "verify.meta.lifecycle")
+    if lifecycle not in VERIFY_LIFECYCLES:
+        fail(
+            f"verify.meta.lifecycle must be one of {sorted(VERIFY_LIFECYCLES)}"
+        )
+    raw_stop_boundaries = object_list(
+        data.get("stop_boundaries", []), "verify.stop_boundaries"
+    )
+    if raw_stop_boundaries and not (
+        workflow_mode == "instrumentation_child"
+        and result == "Fail"
+        and lifecycle == "intermediate"
+    ):
+        fail(
+            "verify.stop_boundaries is allowed only for an instrumentation_child "
+            "overlay with result Fail and lifecycle intermediate"
+        )
+    if raw_stop_boundaries and instrumentation["meta"]["result"] != "Fail":
+        fail(
+            "verify.stop_boundaries requires the bound instrumentation "
+            "meta.result to be Fail"
+        )
     if stable_id(data.get("audit_id"), "verify.audit_id") != report["meta"]["audit_id"]:
         fail("verify.audit_id does not match audit")
     if text(data.get("audit_sha256"), "verify.audit_sha256") != audit_digest(report):
@@ -2008,6 +2057,163 @@ def normalize_verify(
             f"verify.meta.result must be {expected_result} for the recorded "
             "scenario and telemetry-item proof"
         )
+    if lifecycle == "intermediate" and result != "Fail":
+        fail(
+            "verify.meta.lifecycle intermediate is reserved for a failed child "
+            "repair packet"
+        )
+    if (
+        workflow_mode == "instrumentation_child"
+        and result == "Fail"
+        and lifecycle != "intermediate"
+    ):
+        fail(
+            "failed instrumentation-child verification must be intermediate; "
+            "the parent repair loop cannot finalize it"
+        )
+    failed_id_order = {row["id"]: index for index, row in enumerate(failed_rows)}
+    stop_boundaries: list[dict[str, Any]] = []
+    for boundary_index, boundary in enumerate(raw_stop_boundaries):
+        boundary_path = f"verify.stop_boundaries[{boundary_index}]"
+        finding_ids = [
+            stable_id(
+                value,
+                f"{boundary_path}.finding_ids[{finding_index}]",
+            )
+            for finding_index, value in enumerate(
+                as_list(
+                    boundary.get("finding_ids"),
+                    f"{boundary_path}.finding_ids",
+                )
+            )
+        ]
+        if not finding_ids:
+            fail(f"{boundary_path}.finding_ids must not be empty")
+        if len(finding_ids) != len(set(finding_ids)):
+            fail(f"{boundary_path}.finding_ids must not contain duplicates")
+        unknown_failed_ids = [
+            finding_id
+            for finding_id in finding_ids
+            if finding_id not in failed_id_order
+        ]
+        if unknown_failed_ids:
+            fail(
+                f"{boundary_path}.finding_ids must reference only failed "
+                f"verify findings: {unknown_failed_ids}"
+            )
+        kind = text(boundary.get("kind"), f"{boundary_path}.kind")
+        if kind not in STOP_BOUNDARY_KINDS:
+            fail(
+                f"{boundary_path}.kind must be one of "
+                f"{sorted(STOP_BOUNDARY_KINDS)}"
+            )
+        reason = text(boundary.get("reason"), f"{boundary_path}.reason").strip()
+        if IMPERATIVE_STOP_BOUNDARY_REASON.match(reason):
+            fail(
+                f"{boundary_path}.reason must state the observed boundary "
+                "declaratively, not as an action"
+            )
+        required_action = text(
+            boundary.get("required_action"), f"{boundary_path}.required_action"
+        ).strip()
+        evidence = durable_artifact_list(
+            boundary.get("evidence", []), f"{boundary_path}.evidence"
+        )
+        if not evidence:
+            fail(f"{boundary_path}.evidence must contain durable evidence")
+        stop_boundaries.append(
+            {
+                "finding_ids": sorted(
+                    finding_ids, key=failed_id_order.__getitem__
+                ),
+                "kind": kind,
+                "reason": reason,
+                "required_action": required_action,
+                "evidence": evidence,
+            }
+        )
+    if stop_boundaries:
+        instrumentation_findings_by_id = {
+            row["id"]: row for row in instrumentation["findings"]
+        }
+        non_failed_instrumentation_ids = sorted(
+            {
+                finding_id
+                for boundary in stop_boundaries
+                for finding_id in boundary["finding_ids"]
+                if instrumentation_findings_by_id[finding_id]["status"]
+                != "not_working"
+            },
+            key=failed_id_order.__getitem__,
+        )
+        if non_failed_instrumentation_ids:
+            fail(
+                "verify.stop_boundaries finding_ids require matching bound "
+                "instrumentation findings with status not_working: "
+                f"{non_failed_instrumentation_ids}"
+            )
+        covered_failed_ids = {
+            finding_id
+            for boundary in stop_boundaries
+            for finding_id in boundary["finding_ids"]
+        }
+        missing_failed_ids = [
+            row["id"] for row in failed_rows if row["id"] not in covered_failed_ids
+        ]
+        if missing_failed_ids:
+            fail(
+                "verify.stop_boundaries must identify every failed finding when a "
+                f"stopped child boundary is recorded: {missing_failed_ids}"
+            )
+        rows_by_id = {row["id"]: row for row in rows}
+        for boundary_index, boundary in enumerate(stop_boundaries):
+            normalized_required_action = normalized_action_words(
+                boundary["required_action"]
+            )
+            duplicated_locations: list[str] = []
+            for finding_id in boundary["finding_ids"]:
+                for remaining_index, action in enumerate(
+                    rows_by_id[finding_id]["remaining"]
+                ):
+                    normalized_action = normalized_action_words(action)
+                    if (
+                        f" {normalized_required_action} "
+                        in f" {normalized_action} "
+                        or f" {normalized_action} "
+                        in f" {normalized_required_action} "
+                    ):
+                        duplicated_locations.append(
+                            f"verify.findings[{finding_id}].remaining"
+                            f"[{remaining_index}]"
+                        )
+            for next_step_index, action in enumerate(next_steps):
+                normalized_action = normalized_action_words(action)
+                if (
+                    f" {normalized_required_action} "
+                    in f" {normalized_action} "
+                    or f" {normalized_action} "
+                    in f" {normalized_required_action} "
+                ):
+                    duplicated_locations.append(
+                        f"verify.next_steps[{next_step_index}]"
+                    )
+            if duplicated_locations:
+                fail(
+                    f"verify.stop_boundaries[{boundary_index}].required_action "
+                    "must remain only in stop_boundaries and cannot be duplicated "
+                    "as an application code/config repair in "
+                    f"{duplicated_locations}"
+                )
+        stop_boundaries.sort(
+            key=lambda boundary: (
+                min(
+                    failed_id_order[finding_id]
+                    for finding_id in boundary["finding_ids"]
+                ),
+                boundary["kind"],
+                boundary["reason"],
+            )
+        )
     normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
         "kind": "otel-verify",
@@ -2018,10 +2224,14 @@ def normalize_verify(
             "service_name": text(meta.get("service_name"), "verify.meta.service_name"),
             "date": text(meta.get("date"), "verify.meta.date"),
             "result": result,
+            "workflow_mode": workflow_mode,
+            "lifecycle": lifecycle,
         },
         "findings": rows,
         "next_steps": next_steps,
     }
+    if stop_boundaries:
+        normalized["stop_boundaries"] = stop_boundaries
     return normalized
 
 
@@ -3973,6 +4183,46 @@ def render_unselected_findings(report: dict[str, Any], selection: dict[str, Any]
     )
 
 
+def render_stop_boundaries(verify: dict[str, Any] | None) -> str:
+    if verify is None or not verify.get("stop_boundaries"):
+        return ""
+    kind_labels = {
+        "unselected_work": "Unselected work",
+        "material_decision": "Material decision",
+        "new_authority": "New authority",
+        "external_prerequisite": "External prerequisite",
+    }
+    rows = []
+    for boundary in verify["stop_boundaries"]:
+        affected = ", ".join(
+            f'<a class="finding-jump" href="#selected-{esc(finding_id)}">'
+            f'<code>{esc(finding_id)}</code></a>'
+            for finding_id in boundary["finding_ids"]
+        )
+        rows.append(
+            '<article class="stop-boundary">'
+            f'<h3>{esc(kind_labels[boundary["kind"]])}</h3>'
+            f'<p><strong>Affected failed findings:</strong> {affected}</p>'
+            f'<p><strong>Why instrumentation stopped:</strong> '
+            f'{esc(reader_prose(boundary["reason"]))}</p>'
+            '<p><strong>Required action outside the instrumentation repair '
+            f'scope:</strong> {esc(reader_prose(boundary["required_action"]))}</p>'
+            '<div><strong>Durable evidence:</strong>'
+            f'{render_list(boundary["evidence"])}</div>'
+            '</article>'
+        )
+    return (
+        '<section class="panel stop-boundaries" '
+        'aria-labelledby="stop-boundaries-heading">'
+        '<h2 id="stop-boundaries-heading">Why the repair loop stopped</h2>'
+        '<p class="review-note">The executed verification failures remain recorded. '
+        'Instrumentation cannot safely continue until the boundary action below is '
+        'completed; it is not another application code/config repair.</p>'
+        f'<div class="stop-boundary-list">{"".join(rows)}</div>'
+        '</section>'
+    )
+
+
 def render_instrumentation_html(
     report: dict[str, Any],
     selection: dict[str, Any],
@@ -3983,6 +4233,7 @@ def render_instrumentation_html(
 ) -> str:
     title = esc(report["meta"]["service_name"])
     summary = render_instrumentation_summary(selection, instrumentation, verify)
+    stop_boundaries = render_stop_boundaries(verify)
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
     selection_sha = selection_digest(selection)
@@ -4107,6 +4358,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
+  {stop_boundaries}
   <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>
@@ -5715,6 +5967,390 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
     return 0
 
 
+def instrumentation_final_gate_result(
+    report: dict[str, Any],
+    selection: dict[str, Any],
+    instrumentation: dict[str, Any],
+    verify: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Evaluate the shared final gate against an already-normalized flow."""
+    if verify["meta"]["workflow_mode"] != "instrumentation_child":
+        fail(
+            "instrumentation-final-gate requires verify.meta.workflow_mode "
+            "instrumentation_child"
+        )
+    failed_findings = [
+        finding["id"]
+        for finding in verify["findings"]
+        if finding["status"] == "not_working"
+    ]
+    failed_scenarios = [
+        scenario["id"]
+        for finding in verify["findings"]
+        for scenario in finding["scenarios"]
+        if scenario["status"] == "not_working"
+    ]
+    failed_items = [
+        item["id"]
+        for finding in verify["findings"]
+        for item in finding["item_results"]
+        if item["status"] == "not_working"
+    ]
+    passed = (
+        verify["meta"]["lifecycle"] == "final"
+        and not failed_findings
+        and instrumentation["meta"]["result"] != "Fail"
+    )
+    pending = [
+        finding["id"]
+        for finding in verify["findings"]
+        if finding["status"] not in {"working", "not_working"}
+    ]
+    return (
+        {
+            "schema_version": OVERLAY_SCHEMA_VERSION,
+            "kind": "otel-instrumentation-final-gate",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": audit_digest(report),
+            "selection_sha256": selection_digest(selection),
+            "instrumentation_sha256": instrumentation_digest(instrumentation),
+            "passed": passed,
+            "verification_result": verify["meta"]["result"],
+            "verification_lifecycle": verify["meta"]["lifecycle"],
+            "failed_findings": failed_findings,
+            "failed_scenarios": failed_scenarios,
+            "failed_items": failed_items,
+            "proof_pending_findings": pending,
+        },
+        pending,
+    )
+
+
+def print_instrumentation_final_gate(
+    result: dict[str, Any],
+    verify: dict[str, Any],
+    pending: list[str],
+) -> int:
+    if not result["passed"]:
+        failed_findings = result["failed_findings"]
+        print(
+            "REPAIR REQUIRED: instrumentation cannot finalize with an intermediate "
+            "or failed child verification result"
+            + (f"; findings={','.join(failed_findings)}" if failed_findings else "")
+        )
+        return 2
+    print(
+        "PASS: instrumentation final gate "
+        f"({len(verify['findings']) - len(pending)}/{len(verify['findings'])} "
+        "findings at required proof; no executed verification failures)"
+    )
+    return 0
+
+
+def cmd_instrumentation_final_gate(args: argparse.Namespace) -> int:
+    """Prevent an active instrumentation workflow from handing off stale failures."""
+    report = normalize_audit_report(load_json(args.audit_json))
+    raw_verify = load_json(args.verify_json)
+    if not raw_verify.get("instrumentation_sha256"):
+        fail(
+            "final instrumentation verification must include instrumentation_sha256 "
+            "bound to the exact normalized instrumentation overlay"
+        )
+    selection, instrumentation, verify = load_flow(
+        report, args.selection_json, args.instrumentation_json, args.verify_json
+    )
+    if instrumentation is None or verify is None:
+        fail("instrumentation-final-gate requires instrumentation and verification JSON")
+    result, pending = instrumentation_final_gate_result(
+        report, selection, instrumentation, verify
+    )
+    if args.output:
+        write_json(args.output, result)
+    return print_instrumentation_final_gate(result, verify, pending)
+
+
+def run_projection_validator(label: str, command: list[str]) -> str:
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    detail = (completed.stderr or completed.stdout).strip()
+    fail(
+        f"{label} failed"
+        + (f": {detail}" if detail else f" with exit code {completed.returncode}")
+    )
+
+
+def run_go_validation_freshness(command: list[str]) -> dict[str, Any]:
+    """Run and parse one digest-only fixed-Go freshness check."""
+
+    output = run_projection_validator("fixed Go validation freshness", command)
+    try:
+        result = json.loads(output)
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        fail(f"fixed Go validation freshness returned invalid JSON: {exc}")
+    if not isinstance(result, dict) or result.get("status") != "passed":
+        fail("fixed Go validation freshness returned an invalid success result")
+    for key in (
+        "accepted_plan_sha256",
+        "evidence_sha256",
+        "proxy_bundle_sha256",
+        "resolver_plan_sha256",
+        "runtime_sha256",
+        "source_sha256",
+    ):
+        value = result.get(key)
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            fail(f"fixed Go validation freshness omitted valid {key}")
+    return result
+
+
+def stale_parent_verification_actions(
+    instrumentation: dict[str, Any],
+) -> list[str]:
+    """Locate parent CTAs that still ask for the already-present child run."""
+    locations: list[str] = []
+    candidates = [
+        (f"instrumentation.next_steps[{index}]", action)
+        for index, action in enumerate(instrumentation["next_steps"])
+    ]
+    for finding_index, finding in enumerate(instrumentation["findings"]):
+        candidates.extend(
+            (
+                f"instrumentation.findings[{finding_index}].follow_up_actions[{index}]",
+                action,
+            )
+            for index, action in enumerate(finding["follow_up_actions"])
+        )
+        for item_index, item in enumerate(finding["telemetry_changes"]):
+            candidates.extend(
+                (
+                    "instrumentation.findings"
+                    f"[{finding_index}].telemetry_changes[{item_index}]"
+                    f".follow_up_actions[{index}]",
+                    action,
+                )
+                for index, action in enumerate(item["follow_up_actions"])
+            )
+    for location, action in candidates:
+        if is_stale_parent_verification_action(action):
+            locations.append(location)
+    return locations
+
+
+def cmd_finalize_instrumentation(args: argparse.Namespace) -> int:
+    """Validate, atomically render, and gate one bound instrumentation flow."""
+    report = normalize_audit_report(load_json(args.audit_json))
+
+    # This is intentionally first: a stale proof overlay must not invoke other
+    # tools or replace any reader/gate artifacts.
+    selection, instrumentation, verify = load_flow(
+        report, args.selection_json, args.instrumentation_json, args.verify_json
+    )
+    if instrumentation is None or verify is None:
+        fail("finalize-instrumentation requires instrumentation and verification JSON")
+    if verify["meta"]["workflow_mode"] != "instrumentation_child":
+        fail(
+            "finalize-instrumentation requires verify.meta.workflow_mode "
+            "instrumentation_child"
+        )
+    stale_actions = stale_parent_verification_actions(instrumentation)
+    if stale_actions:
+        fail(
+            "finalize-instrumentation found stale parent actions that ask to run "
+            "the already-present child verification: "
+            + ", ".join(stale_actions)
+            + "; replace them with durable implementation/product actions and "
+            "rerun the child so its digest binds the corrected instrumentation overlay"
+        )
+
+    skills_root = Path(__file__).resolve().parents[2]
+    reader_validator = (
+        skills_root / "otel-verify" / "scripts" / "validate_reader_report.py"
+    )
+    gap_validator = (
+        skills_root / "otel-instrument" / "scripts" / "validate_gap_closure.py"
+    )
+    for label, validator in (
+        ("verify reader validator", reader_validator),
+        ("instrumentation gap-closure validator", gap_validator),
+    ):
+        if not validator.is_file():
+            fail(f"{label} is missing from the active skill bundle: {validator}")
+
+    source_root = (args.repo_root or infer_source_root(args.audit_json)).resolve()
+    if not source_root.is_dir():
+        fail(f"source repository root is not a directory: {source_root}")
+
+    go_runner = (
+        skills_root / "otel-instrument" / "scripts" / "run_go_otel_command.py"
+    )
+    go_ledger = (
+        source_root
+        / ".observe"
+        / "tmp"
+        / "go-otel-resolver"
+        / "accepted-plan.json"
+    )
+    go_evidence = source_root / ".observe" / "evidence" / "go-otel-validation.json"
+    if go_ledger.exists() != go_evidence.exists():
+        fail(
+            "fixed Go validation freshness is incomplete: accepted-plan ledger "
+            "and validation evidence must both exist before finalization"
+        )
+    go_check_command: list[str] | None = None
+    first_go_freshness: dict[str, Any] | None = None
+    if go_ledger.exists():
+        if not go_runner.is_file():
+            fail(f"fixed Go validation runner is missing: {go_runner}")
+        raw_go_evidence = load_json(go_evidence)
+        resolver_plan = raw_go_evidence.get("resolver_plan")
+        if not isinstance(resolver_plan, dict):
+            fail("fixed Go validation evidence has no resolver-plan binding")
+        plan_path = resolver_plan.get("path")
+        plan_sha256 = resolver_plan.get("sha256")
+        expected_plan = source_root / ".observe" / "tmp" / "go-otel-version-plan.json"
+        if plan_path != str(expected_plan) or not isinstance(plan_sha256, str):
+            fail("fixed Go validation evidence resolver-plan binding is invalid")
+        go_check_command = [
+            sys.executable,
+            "-I",
+            str(go_runner),
+            "--project",
+            str(source_root),
+            "--plan",
+            plan_path,
+            "--plan-sha256",
+            plan_sha256,
+            "--action",
+            "check-validation",
+        ]
+        first_go_freshness = run_go_validation_freshness(go_check_command)
+
+    audit_markdown = args.audit_markdown or args.audit_json.with_name("otel.md")
+    instrumentation_markdown = (
+        args.instrumentation_markdown
+        or args.instrumentation_json.with_suffix(".md")
+    )
+    verify_markdown = args.verify_markdown or args.verify_json.with_suffix(".md")
+
+    run_projection_validator(
+        "verify reader projection",
+        [
+            sys.executable,
+            "-I",
+            str(reader_validator),
+            str(verify_markdown),
+            "--instrumentation-json",
+            str(args.instrumentation_json),
+            "--verify-json",
+            str(args.verify_json),
+            "--audit-json",
+            str(args.audit_json),
+            "--selection-json",
+            str(args.selection_json),
+        ],
+    )
+    run_projection_validator(
+        "instrumentation gap closure",
+        [
+            sys.executable,
+            "-I",
+            str(gap_validator),
+            str(audit_markdown),
+            str(instrumentation_markdown),
+            "--audit-json",
+            str(args.audit_json),
+            "--selection-json",
+            str(args.selection_json),
+            "--instrumentation-json",
+            str(args.instrumentation_json),
+            "--verify-json",
+            str(args.verify_json),
+        ],
+    )
+
+    html_text = render_instrumentation_html(
+        report,
+        selection,
+        instrumentation,
+        verify,
+        source_root,
+        args.output.resolve().parent,
+    )
+    if go_check_command is not None and first_go_freshness is not None:
+        final_go_freshness = run_go_validation_freshness(go_check_command)
+        if final_go_freshness != first_go_freshness:
+            fail(
+                "fixed Go validation freshness changed between the initial check "
+                "and HTML publication"
+            )
+    write_text(args.output, html_text)
+    result, pending = instrumentation_final_gate_result(
+        report, selection, instrumentation, verify
+    )
+    if args.gate_output:
+        write_json(args.gate_output, result)
+    return print_instrumentation_final_gate(result, verify, pending)
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    report = normalize_audit_report(load_json(args.audit_json))
+    included_priorities = {
+        "none": set(),
+        "required": {"required"},
+        "recommended": {"required", "recommended"},
+        "any": PRIORITIES,
+    }[args.fail_on]
+    unresolved = [
+        finding
+        for finding in report["findings"]
+        if finding["priority"] in included_priorities
+        and finding["status"] in {"proposed", "approved", "in_progress"}
+    ]
+    audit_incomplete = (
+        report["schema_version"] == CURRENT_AUDIT_SCHEMA_VERSION
+        and report["meta"]["status"] == "Blocked"
+    )
+    result = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "kind": "otel-audit-gate",
+        "audit_id": report["meta"]["audit_id"],
+        "audit_sha256": audit_digest(report),
+        "fail_on": args.fail_on,
+        "audit_status": report["meta"]["status"],
+        "policy_evaluated": not audit_incomplete,
+        "passed": not unresolved and not audit_incomplete,
+        "blocking_ids": [finding["id"] for finding in unresolved],
+    }
+    if audit_incomplete:
+        result["scan_blockers"] = [
+            blocker["id"] for blocker in report["scan_blockers"]
+        ]
+    if args.output:
+        write_json(args.output, result)
+    if audit_incomplete:
+        print(
+            "BLOCKED: audit scan is incomplete: "
+            + "; ".join(
+                f"{blocker['id']} {blocker['prerequisite']}"
+                for blocker in report["scan_blockers"]
+            )
+        )
+        return 0 if args.fail_on == "none" else 2
+    if unresolved:
+        print(
+            "GAP: unresolved findings matched the CI policy: "
+            + ",".join(finding["id"] for finding in unresolved)
+        )
+        return 2
+    print(f"PASS: audit gate ({args.fail_on})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -5855,6 +6491,48 @@ def build_parser() -> argparse.ArgumentParser:
         "--instrumentation-json", type=Path, required=True
     )
     instrumentation_digest_command.set_defaults(func=cmd_instrumentation_digest)
+
+    instrumentation_gate = subparsers.add_parser(
+        "instrumentation-final-gate",
+        help="block final instrumentation handoff while child verification needs repair",
+    )
+    instrumentation_gate.add_argument("audit_json", type=Path)
+    instrumentation_gate.add_argument("--selection-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--instrumentation-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--verify-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--output", type=Path)
+    instrumentation_gate.set_defaults(func=cmd_instrumentation_final_gate)
+
+    finalize_instrumentation = subparsers.add_parser(
+        "finalize-instrumentation",
+        help=(
+            "validate reader projections, atomically render instrumentation HTML, "
+            "and apply the final child-verification gate"
+        ),
+    )
+    finalize_instrumentation.add_argument("audit_json", type=Path)
+    finalize_instrumentation.add_argument(
+        "--selection-json", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument(
+        "--instrumentation-json", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument("--verify-json", type=Path, required=True)
+    finalize_instrumentation.add_argument("--instrumentation-markdown", type=Path)
+    finalize_instrumentation.add_argument("--verify-markdown", type=Path)
+    finalize_instrumentation.add_argument(
+        "-o", "--output", "--html-output", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument(
+        "--repo-root",
+        type=Path,
+        help=(
+            "source repository root for portable local-file links "
+            "(inferred from .observe by default)"
+        ),
+    )
+    finalize_instrumentation.add_argument("--gate-output", type=Path)
+    finalize_instrumentation.set_defaults(func=cmd_finalize_instrumentation)
 
     return parser
 

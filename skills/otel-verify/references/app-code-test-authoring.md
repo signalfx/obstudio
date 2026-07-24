@@ -10,6 +10,9 @@ whose only behavior is manually creating SDK spans, metrics, or logs. Synthetic
 SDK emission is useful for exporter smoke tests, but it is not app-code
 verification.
 
+Use the repository's existing test framework, fixtures, naming, and fake
+patterns. Add focused tests near the instrumented code's existing test area.
+
 Each test must be traceable to the audit-derived inventories:
 
 - one or more `Added Telemetry Inventory` rows, naming the exact added span,
@@ -108,6 +111,11 @@ Then map the test to:
 If a test asserts a span name but not parentage, status, required attributes,
 metric datapoints, or log redaction, mark the missing pieces as `Partial` or
 `Not run`.
+
+Run the focused tests and record their paths and results in
+`.observe/otel-verify.md`. If dependency or fixture support is missing, report
+the smallest required seam instead of faking away the behavior in a misleading
+test.
 
 In the final report, the `How tested` field for each added signal should name
 the test or harness, scenario id, app entrypoint, and proof level. Example:

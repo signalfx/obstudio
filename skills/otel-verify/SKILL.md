@@ -27,6 +27,11 @@ Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
 
+Resolve every reference and script path from the directory containing this
+loaded `otel-verify/SKILL.md`. `../references/<file>` is the shared sibling
+under the parent skills directory; `./references/<file>` and `scripts/<file>`
+are local. Never probe the service root or repository root for these paths.
+
 ## Contract
 
 - Default output: `.observe/otel-verify.md`; in canonical flow also write
@@ -36,9 +41,20 @@ schema, digest binding, status rollup, and the HTML refresh.
   Read Markdown only for reader detail. Without canonical JSON, use the direct
   user request, current source, and `.observe/otel-instrumentation.md` when it
   exists; never fabricate canonical state.
-- Default mode: read-only for application code.
-- Do not add instrumentation. Use `$otel-instrument` for instrumentation
-  changes.
+- Default mode: read-only for application code. Verification never repairs
+  application code. Use `$otel-instrument` for instrumentation changes.
+- Determine invocation ownership before checks. A standalone request produces
+  the final reader result. An active `$otel-instrument` child stays read-only,
+  writes proof, returns its repair packet, and returns control to the parent
+  repair loop.
+- Canonical standalone overlays use `meta.workflow_mode: standalone` and
+  `meta.lifecycle: final`. A failed instrumentation child uses
+  `instrumentation_child` with `lifecycle: intermediate`; only a child with no
+  executed finding, scenario, or item failure is final.
+- Keep failed finding `remaining` and top-level `next_steps` repair-only.
+  Record an evidenced boundary separately in `stop_boundaries[]`, using one of
+  `unselected_work`, `material_decision`, `new_authority`, or
+  `external_prerequisite`.
 - In canonical flow, verify exactly dependency-closed `approved_ids`, their
   expected telemetry and referenced scenarios, plus every bound instrumentation
   item. Bind verification to the normalized instrumentation overlay with
@@ -129,7 +145,34 @@ to `$otel-instrument`. When no canonical audit exists, use only the direct user
 request and current instrumentation Markdown/source as scope. Do not fabricate
 canonical JSON.
 
-Inspect the repo before running anything:
+- Use the initial bounded file list as a size gate. When the service has at
+  most 25 non-ignored files, exactly one dependency manifest, and no nested
+  service root, take the direct small-repo path: inspect that list, manifest,
+  entrypoint, and cited source directly, and do not run the inventory helper.
+- For larger, multi-module, nested, or unclear repositories, run one successful
+  invocation of
+  `python3 -I "<directory-containing-loaded-SKILL.md>/scripts/inspect_otel_project.py"
+  "<service-root>" --output
+  "<service-root>/.observe/tmp/otel-project-inventory.json"`. Retry only to
+  correct an invocation/runtime failure. Resolve the helper from this skill;
+  never probe a repository-root `references/` directory.
+- Use its deterministic JSON to seed manifests/languages, entrypoint/route and
+  runtime candidates, startup/test surfaces, and categorized OTel hits. Hits
+  are candidates, not proof of process reachability, runtime availability,
+  app execution, or emission. Inspect `complete`, `warnings`, `skipped`, and
+  `section_counts`; read only needed sections instead of dumping the file.
+- When a section has zero truncation in a `complete: true` inventory, do not
+  repeat the same repository-wide `find` or broad `rg`. Do not follow complete
+  file/OTel sections with recursive `find`, `rg --files`, or repository-wide
+  OTel-pattern searches. Search manually only for incomplete, skipped,
+  unsupported, or truncated surfaces. Record the chosen discovery path and any
+  exact helper/runtime failure.
+
+Read canonical JSON first and Markdown only for reader detail; on the direct
+path read only the instrumentation report. Reconcile all saved
+commands, runtimes, source paths, and expected signals with current source.
+Inspect the target entrypoint, referenced/diffed instrumentation files, provider
+and exporter wiring, startup/shutdown, and signal-affecting branches.
 
 - In canonical flow, read `.observe/otel-audit.json`, the bound
   `.observe/otel-selection.json`, and `.observe/otel-instrumentation.json`
@@ -299,7 +342,8 @@ Rules:
   `instrumentation-introduced` unless evidence proves otherwise. Classify
   missing configured runtimes, declared dependencies, private registries, or
   credentials as `environment`. Use `pre-existing` or `unknown` only with
-  concrete evidence.
+  concrete evidence. An unchanged selected OTel wiring defect is
+  `pre-existing`, not `instrumentation-introduced`.
 - Verification remains read-only for application code. For an
   instrumentation-introduced failure, mark affected signal/path rows
   `Blocked`, set the overall result to `Fail`, name `$otel-instrument` as the
@@ -319,6 +363,14 @@ network, Docker, credentials, or long-running service is required, first look
 for an offline unit/integration alternative.
 
 #### Conditional Full Runtime Acceptance
+
+When full runtime is triggered, read and execute
+`../references/full-runtime-acceptance.md` after viability and focused tests.
+Use the audit proof level and safe fixture to exercise the actual process and
+complete scenario matrix. Before any listener-dependent receiver/harness, run
+its one-shot `scripts/probe_loopback_bind.py` preflight. A blocked result stops
+listener work; an available result only permits the real gate. Keep exact
+unavailable prerequisites and unobserved outcomes rather than weakening proof.
 
 When `../references/full-runtime-acceptance.md` is triggered, execute that gate
 after build/import viability and focused tests. Do not defer it merely because

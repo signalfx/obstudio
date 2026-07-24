@@ -27,6 +27,7 @@ observer/client/public/assets/
 evals/**/.observe/
 evals/**/.venv/
 evals/**/__pycache__/
+evals/**/target/
 evals/**/uv.lock
 !evals/uv.lock
 evals/**/*.db

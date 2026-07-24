@@ -26,6 +26,23 @@ and follow the Instrumentation Contract plus Reader-First Report Order. When
 `.observe/otel-audit.json` exists, also read
 `./references/json-approval-handoff.md` before editing; it owns canonical
 selection, instrumentation JSON, and human HTML. The technical Markdown report contract is defined inline below.
+Load `./references/finalization.md` exactly once at the finalization boundary;
+it owns the terminal validation sequence and prevents post-gate project
+inspection.
+
+Resolve every reference and script path from the directory containing the
+loaded `otel-instrument/SKILL.md`. Here, `../references/<file>` means the shared
+sibling under the parent skills directory, while `references/<file>`,
+`./references/<file>`, and `scripts/<file>` are local to `otel-instrument`.
+Never probe the service root or repository root for these paths.
+
+When this workflow invokes its `$otel-verify` child, resolve that skill exactly
+once as
+`<directory-containing-loaded-SKILL.md>/../otel-verify/SKILL.md`. Treat that
+sibling as the only authoritative verifier because it belongs to the same
+installed skill bundle as this workflow. Never search a home directory, the
+service root, or the repository root for another verifier, and never compare
+alternate installed copies.
 
 ## Workflow
 
@@ -70,7 +87,43 @@ authorized scope and the direct no-audit workflow remains available. Do not
 fabricate audit IDs or selection artifacts; recommend `$otel-audit` before
 claiming audit-gap closure.
 
-- Confirm the language and framework from actual dependency or source files
+- Use the initial bounded file list as a size gate. When the service has at
+  most 25 non-ignored files, exactly one dependency manifest, and no nested
+  service root, take the direct small-repo path: inspect that file list, the
+  manifest, entrypoint, and cited source directly, and do not run the inventory
+  helper. For larger, multi-module, nested, or unclear repositories, run
+  `python3 -I "<directory-containing-loaded-SKILL.md>/scripts/inspect_otel_project.py"
+  "<service-root>" --output
+  "<service-root>/.observe/tmp/otel-project-inventory.json"` before broad
+  manual searches. Resolve the command
+  directly from the directory containing the loaded `otel-instrument/SKILL.md`;
+  do not probe a repository-root `references/` directory. On the inventory
+  path, run one successful invocation; retry only to correct an invocation or runtime failure.
+  Use its deterministic JSON to seed manifests/languages,
+  entrypoint and route candidates, runtime candidates, startup/test surfaces,
+  and categorized OTel source/config hits. Treat all hits as candidates, not
+  proof of target-process reachability, runtime availability, or emission.
+  Inspect `complete`, `warnings`, `skipped`, and `section_counts`, then read only
+  needed JSON sections rather than dumping the full file. Reconcile cited files
+  with the selected process. For a section whose truncation is zero in a
+  `complete: true` inventory, do not repeat the same repository-wide `find` or
+  broad `rg`; use focused source proof. Do not follow complete file/OTel
+  sections with recursive `find`, `rg --files`, or a repository-wide
+  OTel-pattern `rg`. The helper creates the output parent; do not pre-create it.
+  Search manually for incomplete, skipped, unsupported, or truncated surfaces.
+  If Python or the shared helper is unavailable, perform the preflight manually
+  and record the exact failure. Record which discovery path was selected.
+
+- Confirm the language and framework from actual dependency or source files.
+  Immediately load exactly one matching language reference:
+  `./references/languages/{python,node,java,go}.md`. Do not postpone this until
+  after dependency commands and do not load unrelated language references.
+- **Go standard-HTTP bootstrap gate:** first read `go.mod`, then follow the
+  loaded Go reference's `Dependencies` section exactly. It owns the conditional
+  fixed-bundle resolver, digest-bound plan, sibling-runner actions, serial
+  validation, and terminal cleanup rules. Do not apply that branch to existing
+  OTel pins, non-HTTP services, or dependency-free edits, and never reconstruct
+  its commands from memory or an alternate skill copy.
 - Read `./references/project-runtime-validation.md`, inventory the repository's
   configured runtime and build/test commands, and select the locally available
   project runtime before editing. Do not use the shell's default runtime when
@@ -1104,6 +1157,12 @@ selection unless explicitly skipped or concretely blocked, and refresh
 `.observe/otel-instrumentation.html` with the available verification overlay.
 Do not tell the user to rerun `$otel-verify`; name the concrete remaining repair,
 runtime prerequisite, or product-evidence step instead.
+
+If viability or child verification records an executed failure, read
+`./references/repair-loop.md` before classification or repair. Continue every
+safe in-scope instrumentation-owned repair and automatic confirmation until it
+passes or reaches an evidenced stop boundary. Never finalize an intermediate or
+repairable failure.
 
 When verified metric evidence exists and the user requested detectors,
 alerting, monitors, Splunk configuration, or `$splunk-configure`, invoke or

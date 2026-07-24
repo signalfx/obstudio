@@ -60,7 +60,9 @@ Write `.observe/otel-verify.json` with this shape:
   "meta": {
     "service_name": "example-service",
     "date": "2026-07-17",
-    "result": "Partial"
+    "result": "Partial",
+    "workflow_mode": "standalone",
+    "lifecycle": "final"
   },
   "findings": [
     {
@@ -97,6 +99,31 @@ Write `.observe/otel-verify.json` with this shape:
   "next_steps": []
 }
 ```
+
+Use `meta.workflow_mode: standalone` and `meta.lifecycle: final` for a direct
+verification request. A child invoked by `$otel-instrument` uses
+`instrumentation_child`; when an executed failure remains, keep
+`lifecycle: intermediate`, finding `remaining`, and top-level `next_steps`
+repair-only. If the parent repair loop must stop, record the external boundary
+separately:
+
+```json
+{
+  "stop_boundaries": [
+    {
+      "finding_ids": ["OTEL-001"],
+      "kind": "external_prerequisite",
+      "reason": "The locked dependency registry rejected the configured credential.",
+      "required_action": "Renew repository access for the locked dependency restore.",
+      "evidence": [".observe/evidence/run/dependency-restore.log"]
+    }
+  ]
+}
+```
+
+`kind` is one of `unselected_work`, `material_decision`, `new_authority`, or
+`external_prerequisite`. A stop boundary never relabels an executed failure as
+`Blocked` or `not_proven`.
 
 Copy `audit_id` and `audit_sha256` from the selection. Obtain the canonical
 `instrumentation_sha256` exactly once from the active bundle:

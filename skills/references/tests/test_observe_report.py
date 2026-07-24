@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -398,6 +399,111 @@ class ObserveReportTest(unittest.TestCase):
         )
         return paths
 
+    def write_finalize_flow(
+        self,
+        root: Path,
+        *,
+        failed_child: bool = False,
+        stale_parent_handoff: bool = False,
+        stale_telemetry_handoff: bool = False,
+        generic_product_verification: bool = False,
+        workflow_mode: str = "instrumentation_child",
+    ) -> SimpleNamespace:
+        report = MODULE.normalize_audit_report(sample_report())
+        audit_digest = MODULE.audit_digest(report)
+        selection = {
+            "schema_version": 1,
+            "kind": "otel-selection",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": audit_digest,
+            "requested_ids": ["OTEL-001"],
+            "approved_ids": ["OTEL-001"],
+        }
+        normalized_selection = MODULE.normalize_selection(selection, report)
+        instrumentation = sample_instrumentation(
+            report, audit_digest, normalized_selection
+        )
+        if not stale_parent_handoff:
+            instrumentation["findings"][0]["follow_up_actions"] = [  # type: ignore[index]
+                "Capture the remaining route topology proof."
+            ]
+            instrumentation["next_steps"] = [
+                "Capture the remaining route topology proof."
+            ]
+        telemetry_change = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
+        if stale_telemetry_handoff:
+            telemetry_change["follow_up_actions"] = [
+                "Run $otel-verify, then filter the trace waterfall by http.route."
+            ]
+        elif generic_product_verification:
+            telemetry_change["follow_up_actions"] = [
+                "Run verification in Splunk Observability Cloud, then filter the "
+                "trace waterfall by http.route."
+            ]
+        normalized_instrumentation = MODULE.normalize_instrumentation(
+            instrumentation, report, normalized_selection
+        )
+        verify = sample_verify(
+            report,
+            audit_digest,
+            MODULE.instrumentation_digest(normalized_instrumentation),
+        )
+        verify["meta"].update(  # type: ignore[union-attr]
+            {"workflow_mode": workflow_mode, "lifecycle": "final"}
+        )
+        if failed_child:
+            verify["meta"].update(  # type: ignore[union-attr]
+                {"result": "Fail", "lifecycle": "intermediate"}
+            )
+            finding = verify["findings"][0]  # type: ignore[index]
+            finding["status"] = "not_working"
+            finding["remaining"] = ["Repair the server span wiring."]
+            scenario = finding["scenarios"][0]
+            scenario.update(
+                {
+                    "status": "not_working",
+                    "observed_telemetry": [
+                        "The GET /checkout server span with http.route was absent."
+                    ],
+                }
+            )
+            item = finding["item_results"][0]
+            item.update(
+                {
+                    "status": "not_working",
+                    "observed_telemetry": [
+                        "The GET /checkout server span with http.route was absent."
+                    ],
+                }
+            )
+            verify["next_steps"] = ["Repair the server span wiring."]
+
+        paths = SimpleNamespace(
+            audit_json=root / "otel-audit.json",
+            selection_json=root / "otel-selection.json",
+            instrumentation_json=root / "otel-instrumentation.json",
+            verify_json=root / "otel-verify.json",
+            audit_markdown=None,
+            instrumentation_markdown=None,
+            verify_markdown=None,
+            output=root / "otel-instrumentation.html",
+            repo_root=root,
+            gate_output=root / "otel-instrumentation-gate.json",
+        )
+        paths.audit_json.write_text(json.dumps(sample_report()), encoding="utf-8")
+        paths.selection_json.write_text(json.dumps(selection), encoding="utf-8")
+        paths.instrumentation_json.write_text(
+            json.dumps(instrumentation), encoding="utf-8"
+        )
+        paths.verify_json.write_text(json.dumps(verify), encoding="utf-8")
+        for markdown in (
+            root / "otel.md",
+            root / "otel-instrumentation.md",
+            root / "otel-verify.md",
+        ):
+            markdown.write_text("projection\n", encoding="utf-8")
+        return paths
+
     def test_instrumentation_digest_prints_only_bound_canonical_digest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths = self.write_bound_instrumentation_flow(Path(directory))
@@ -437,6 +543,453 @@ class ObserveReportTest(unittest.TestCase):
             self.assertEqual(completed.stderr, "")
             for path, content in inputs.items():
                 self.assertEqual(path.read_bytes(), content)
+
+    def test_finalize_instrumentation_rejects_stale_digest_before_calls_or_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(Path(directory))
+            verify = json.loads(paths.verify_json.read_text(encoding="utf-8"))
+            verify["instrumentation_sha256"] = "sha256:" + "0" * 64
+            paths.verify_json.write_text(json.dumps(verify), encoding="utf-8")
+            instrumentation_before = paths.instrumentation_json.read_bytes()
+            verify_before = paths.verify_json.read_bytes()
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+            with (
+                mock.patch.object(MODULE.subprocess, "run") as run,
+                mock.patch.object(MODULE, "render_instrumentation_html") as render,
+                self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "instrumentation_sha256 does not match instrumentation",
+                ),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            run.assert_not_called()
+            render.assert_not_called()
+            self.assertEqual(paths.instrumentation_json.read_bytes(), instrumentation_before)
+            self.assertEqual(paths.verify_json.read_bytes(), verify_before)
+            self.assertEqual(paths.output.read_text(encoding="utf-8"), "existing html\n")
+            self.assertEqual(
+                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
+            )
+
+    def test_finalize_instrumentation_rejects_stale_parent_verify_cta_before_calls_or_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(
+                Path(directory), stale_parent_handoff=True
+            )
+            instrumentation_before = paths.instrumentation_json.read_bytes()
+            verify_before = paths.verify_json.read_bytes()
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+            with (
+                mock.patch.object(MODULE.subprocess, "run") as run,
+                mock.patch.object(MODULE, "render_instrumentation_html") as render,
+                self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "stale parent actions that ask to run the already-present child",
+                ),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            run.assert_not_called()
+            render.assert_not_called()
+            self.assertEqual(
+                paths.instrumentation_json.read_bytes(), instrumentation_before
+            )
+            self.assertEqual(paths.verify_json.read_bytes(), verify_before)
+            self.assertEqual(
+                paths.output.read_text(encoding="utf-8"), "existing html\n"
+            )
+            self.assertEqual(
+                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
+            )
+
+    def test_stale_parent_verification_action_patterns_are_product_aware(self) -> None:
+        stale = (
+            "Continue the active instrumentation workflow through verification.",
+            "Run $otel-verify.",
+            "Execute the child verification workflow.",
+            "Continue with the verification workflow.",
+            "Run verification.",
+            "Run $otel-verify, then inspect Splunk Observability Cloud.",
+        )
+        durable = (
+            "Run verification in Splunk Observability Cloud.",
+            "Run verification against the target product.",
+            "Run product verification for the generated trace.",
+            "Query Splunk Observability Cloud for the generated trace.",
+            "Capture the remaining route topology proof.",
+        )
+
+        for action in stale:
+            with self.subTest(stale=action):
+                self.assertTrue(MODULE.is_stale_parent_verification_action(action))
+        for action in durable:
+            with self.subTest(durable=action):
+                self.assertFalse(MODULE.is_stale_parent_verification_action(action))
+
+    def test_finalize_instrumentation_rejects_stale_telemetry_verify_cta_before_calls_or_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(
+                Path(directory), stale_telemetry_handoff=True
+            )
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+            with (
+                mock.patch.object(MODULE.subprocess, "run") as run,
+                mock.patch.object(MODULE, "render_instrumentation_html") as render,
+                self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    r"telemetry_changes\[0\]\.follow_up_actions\[0\]",
+                ),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            run.assert_not_called()
+            render.assert_not_called()
+            self.assertEqual(
+                paths.output.read_text(encoding="utf-8"), "existing html\n"
+            )
+            self.assertEqual(
+                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
+            )
+
+    def test_finalize_instrumentation_allows_generic_product_verification_action(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(
+                Path(directory), generic_product_verification=True
+            )
+            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
+            with (
+                mock.patch.object(
+                    MODULE.subprocess, "run", side_effect=[completed, completed]
+                ),
+                mock.patch.object(
+                    MODULE,
+                    "render_instrumentation_html",
+                    return_value="<html>final</html>\n",
+                ),
+            ):
+                result = MODULE.cmd_finalize_instrumentation(paths)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                paths.output.read_text(encoding="utf-8"), "<html>final</html>\n"
+            )
+
+    def test_finalize_instrumentation_rejects_standalone_verify_before_calls_or_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(Path(directory), workflow_mode="standalone")
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+            with (
+                mock.patch.object(MODULE.subprocess, "run") as run,
+                mock.patch.object(MODULE, "render_instrumentation_html") as render,
+                self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "requires verify.meta.workflow_mode instrumentation_child",
+                ),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            run.assert_not_called()
+            render.assert_not_called()
+            self.assertEqual(
+                paths.output.read_text(encoding="utf-8"), "existing html\n"
+            )
+            self.assertEqual(
+                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
+            )
+
+    def test_finalize_instrumentation_projection_failure_prevents_render_and_gate(
+        self,
+    ) -> None:
+        for failing_call in (1, 2):
+            with self.subTest(failing_call=failing_call), tempfile.TemporaryDirectory() as directory:
+                paths = self.write_finalize_flow(Path(directory))
+                success = subprocess.CompletedProcess([], 0, "PASS\n", "")
+                failure = subprocess.CompletedProcess([], 1, "", "bad projection\n")
+                results = [failure] if failing_call == 1 else [success, failure]
+                with (
+                    mock.patch.object(
+                        MODULE.subprocess, "run", side_effect=results
+                    ) as run,
+                    mock.patch.object(
+                        MODULE, "render_instrumentation_html"
+                    ) as render,
+                    self.assertRaisesRegex(MODULE.ReportError, "bad projection"),
+                ):
+                    MODULE.cmd_finalize_instrumentation(paths)
+
+                self.assertEqual(run.call_count, failing_call)
+                render.assert_not_called()
+                self.assertFalse(paths.output.exists())
+                self.assertFalse(paths.gate_output.exists())
+
+    def test_finalize_checks_fixed_go_freshness_before_validators_or_writes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = self.write_finalize_flow(root)
+            ledger = (
+                root
+                / ".observe"
+                / "tmp"
+                / "go-otel-resolver"
+                / "accepted-plan.json"
+            )
+            plan = root / ".observe" / "tmp" / "go-otel-version-plan.json"
+            evidence = root / ".observe" / "evidence" / "go-otel-validation.json"
+            ledger.parent.mkdir(parents=True)
+            evidence.parent.mkdir(parents=True)
+            ledger.write_text("{}\n", encoding="utf-8")
+            plan.write_text("{}\n", encoding="utf-8")
+            evidence.write_text(
+                json.dumps(
+                    {
+                        "resolver_plan": {
+                            "path": str(plan.resolve()),
+                            "sha256": "a" * 64,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+            failure = subprocess.CompletedProcess([], 2, "", "source drift\n")
+            with (
+                mock.patch.object(MODULE.subprocess, "run", return_value=failure) as run,
+                mock.patch.object(MODULE, "render_instrumentation_html") as render,
+                self.assertRaisesRegex(MODULE.ReportError, "source drift"),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            run.assert_called_once()
+            command = run.call_args.args[0]
+            self.assertEqual(command[-2:], ["--action", "check-validation"])
+            render.assert_not_called()
+            self.assertEqual(paths.output.read_text(), "existing html\n")
+            self.assertEqual(paths.gate_output.read_text(), "existing gate\n")
+
+    def test_finalize_rechecks_go_source_immediately_before_html_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = self.write_finalize_flow(root)
+            source = root / "service.go"
+            source.write_text("package service\n", encoding="utf-8")
+            ledger = (
+                root
+                / ".observe"
+                / "tmp"
+                / "go-otel-resolver"
+                / "accepted-plan.json"
+            )
+            plan = root / ".observe" / "tmp" / "go-otel-version-plan.json"
+            evidence = root / ".observe" / "evidence" / "go-otel-validation.json"
+            ledger.parent.mkdir(parents=True)
+            evidence.parent.mkdir(parents=True)
+            ledger.write_text("{}\n", encoding="utf-8")
+            plan.write_text("{}\n", encoding="utf-8")
+            evidence.write_text(
+                json.dumps(
+                    {
+                        "resolver_plan": {
+                            "path": str(plan.resolve()),
+                            "sha256": "a" * 64,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            paths.output.write_text("existing html\n", encoding="utf-8")
+            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
+
+            def freshness(_command: list[str]) -> dict[str, object]:
+                source_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+                return {
+                    "action": "check-validation",
+                    "status": "passed",
+                    "accepted_plan_sha256": "b" * 64,
+                    "evidence_sha256": "c" * 64,
+                    "proxy_bundle_sha256": "d" * 64,
+                    "resolver_plan_sha256": "a" * 64,
+                    "runtime_sha256": "e" * 64,
+                    "source_sha256": source_digest,
+                }
+
+            def render(*_args: object, **_kwargs: object) -> str:
+                source.write_text("package service\n// drift\n", encoding="utf-8")
+                return "<html>stale</html>\n"
+
+            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
+            with (
+                mock.patch.object(
+                    MODULE, "run_go_validation_freshness", side_effect=freshness
+                ) as check,
+                mock.patch.object(MODULE.subprocess, "run", return_value=completed) as run,
+                mock.patch.object(
+                    MODULE, "render_instrumentation_html", side_effect=render
+                ),
+                self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "freshness changed between the initial check and HTML publication",
+                ),
+            ):
+                MODULE.cmd_finalize_instrumentation(paths)
+
+            self.assertEqual(check.call_count, 2)
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(paths.output.read_text(), "existing html\n")
+            self.assertEqual(paths.gate_output.read_text(), "existing gate\n")
+
+    def test_finalize_instrumentation_renders_failed_intermediate_then_exits_two(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self.write_finalize_flow(Path(directory), failed_child=True)
+            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
+            with (
+                mock.patch.object(
+                    MODULE.subprocess, "run", side_effect=[completed, completed]
+                ),
+                mock.patch.object(
+                    MODULE,
+                    "render_instrumentation_html",
+                    return_value="<html>repair required</html>\n",
+                ),
+            ):
+                result = MODULE.cmd_finalize_instrumentation(paths)
+
+            self.assertEqual(result, 2)
+            self.assertTrue(paths.output.is_file())
+            gate = json.loads(paths.gate_output.read_text(encoding="utf-8"))
+            self.assertFalse(gate["passed"])
+            self.assertEqual(gate["verification_lifecycle"], "intermediate")
+            self.assertEqual(gate["failed_findings"], ["OTEL-001"])
+
+    def test_verify_preserves_runtime_repair_envelope_and_stop_boundary(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        audit_sha256 = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": audit_sha256,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        raw_instrumentation = sample_instrumentation(
+            report, audit_sha256, selection
+        )
+        raw_instrumentation["meta"]["result"] = "Fail"  # type: ignore[index]
+        raw_instrumentation["findings"][0]["status"] = "not_working"  # type: ignore[index]
+        instrumentation = MODULE.normalize_instrumentation(
+            raw_instrumentation, report, selection
+        )
+        verify = sample_verify(
+            report,
+            audit_sha256,
+            MODULE.instrumentation_digest(instrumentation),
+        )
+        verify["meta"].update(  # type: ignore[union-attr]
+            {
+                "result": "Fail",
+                "workflow_mode": "instrumentation_child",
+                "lifecycle": "intermediate",
+            }
+        )
+        finding = verify["findings"][0]  # type: ignore[index]
+        finding["status"] = "not_working"
+        finding["scenarios"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["item_results"][0].update(
+            {
+                "status": "not_working",
+                "observed_telemetry": [
+                    "The GET /checkout server span with http.route was absent."
+                ],
+            }
+        )
+        finding["remaining"] = ["Repair the server span wiring."]
+        verify["next_steps"] = ["Repair the server span wiring."]
+        external_action = (
+            "Renew the private module registry credential and restore the exact "
+            "locked dependencies."
+        )
+        verify["stop_boundaries"] = [
+            {
+                "finding_ids": ["OTEL-001"],
+                "kind": "external_prerequisite",
+                "reason": (
+                    "The private module registry rejected the locked dependency "
+                    "restore because its repository credential had expired."
+                ),
+                "required_action": external_action,
+                "evidence": [".observe/evidence/run/dependency-restore.log"],
+            }
+        ]
+
+        normalized = MODULE.normalize_verify(
+            verify, report, selection, instrumentation
+        )
+
+        self.assertEqual(
+            normalized["meta"]["workflow_mode"], "instrumentation_child"
+        )
+        self.assertEqual(normalized["meta"]["lifecycle"], "intermediate")
+        self.assertEqual(normalized["stop_boundaries"], verify["stop_boundaries"])
+        html = MODULE.render_instrumentation_html(
+            report, selection, instrumentation, normalized
+        )
+        self.assertIn("Why the repair loop stopped", html)
+        self.assertIn(
+            "Required action outside the instrumentation repair scope", html
+        )
+
+        final_failed_child = copy.deepcopy(verify)
+        final_failed_child.pop("stop_boundaries")
+        final_failed_child["meta"]["lifecycle"] = "final"  # type: ignore[index]
+        with self.assertRaisesRegex(MODULE.ReportError, "must be intermediate"):
+            MODULE.normalize_verify(
+                final_failed_child, report, selection, instrumentation
+            )
+
+        duplicated_boundary_action = copy.deepcopy(verify)
+        duplicated_boundary_action["findings"][0]["remaining"] = [  # type: ignore[index]
+            external_action
+        ]
+        with self.assertRaisesRegex(
+            MODULE.ReportError,
+            "required_action must remain only in stop_boundaries",
+        ):
+            MODULE.normalize_verify(
+                duplicated_boundary_action,
+                report,
+                selection,
+                instrumentation,
+            )
 
     def test_example_report_companions_are_canonical_and_bound(self) -> None:
         repo_root = Path(__file__).parents[3]
