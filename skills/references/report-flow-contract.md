@@ -301,45 +301,6 @@ proof is pending when the finding or item already meets its authored proof
 level. Keep consolidated run-level proof plans in the canonical overlays and
 generated Markdown rather than adding another HTML action list.
 
-Never use **pending** as an umbrella for a failed verification. For overall
-`Fail`, label the first-screen detail **Verification failures**, label each `not_working` card with **What verification found** and
-**Code repair required**, followed by **How the repair is confirmed**, and
-label a standalone primary action **Next repair steps**. In an active
-instrumentation child, label it **Active repair loop** and do not hand the user
-another workflow invocation. For `not_proven`, do not render the finding's
-`remaining` list as a user checklist. Use named scenario triggers only in the
-neutral coverage disclosure. Keep
-acceptance criteria, commands, scenario IDs, and raw evidence in canonical JSON
-and generated Markdown. Explain workflow ownership once: `$otel-verify` never changes
-application code, `$otel-instrument` repairs in-scope code/config, and the
-instrumentation workflow automatically invokes verification afterward only to
-confirm whether the repair worked. Do not render that automatic recheck as a
-second repair bullet or user action. After instrumentation, do not render
-`$otel-verify` as the user's next command. If child proof is missing, `Not run`,
-blocked, or incomplete, surface the actual repair, runtime prerequisite, or
-product-evidence gap; verification remains an internal child phase of
-`$otel-instrument`. A failed finding's `remaining` list and
-the run-level `next_steps` expose the concrete repair that must happen now;
-scenario mappings retain the affected confirmation scope. Exact scenario IDs
-and counts belong in canonical proof artifacts, not as manual user instructions. Once a
-verification overlay exists, never fall back to stale instrumentation-phase
-next steps when its `next_steps` list is empty.
-
-When current verification exists, label instrumentation-overlay test text as an
-**instrumentation-phase snapshot** so an earlier "not run" statement cannot be
-mistaken for current proof. Current verification status and evidence take
-precedence. A successful full-runtime `-javaagent` attachment suppresses prior
-fixed-path agent-unavailable evidence and forbids current next steps that ask
-the user to provide, locate, install, download, or supply that agent. Future
-work must say to reuse the resolved version/path. Unknown production-version
-parity is a separate limitation, not agent unavailability.
-
-Every final overlay is a current-state projection. A successful repair and
-confirmation supersede earlier `not_working` statuses, observations, repair
-actions, trace IDs, and run-level next steps. Keep optional attempt history only
-as explicitly superseded technical evidence; never mix it into current status,
-remaining work, first-screen text, or the user's next action.
-
 After the concise status, show the complete selected-issue list described above
 without repeating component/provider candidates or appending another technical
 ledger. When the selection is narrower than the audit, an optional final
