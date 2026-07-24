@@ -46,17 +46,16 @@ without making application-code changes.
 When present, verification reads:
 
 - `.observe/otel-audit.json` for the canonical audit baseline and acceptance
-  scenarios. It falls back to `.observe/otel.md` only for older audits.
+  scenarios.
 - `.observe/otel-selection.json` for explicitly requested finding IDs and dependency-
   complete verification scope.
 - `.observe/otel-instrumentation.json` for canonical added or modified signals,
-  finding closure, and prior validation results. It falls back to
-  `.observe/otel-instrumentation.md` for older runs.
+  finding closure, and prior validation results.
 
 With a validated canonical audit and selection, it writes
-`.observe/otel-verify.json` and retains `.observe/otel-verify.md` as the
-human-readable compatibility report. A no-audit legacy run writes only the
-Markdown report and does not fabricate audit identity. The canonical ownership
+`.observe/otel-verify.json` and retains `.observe/otel-verify.md` as a
+human-readable technical report. A direct no-audit run uses the explicit user
+scope and does not fabricate audit identity. The canonical ownership
 and schema for all `.observe` reports remain in the
 [report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract);
 this guide does not repeat that full contract.

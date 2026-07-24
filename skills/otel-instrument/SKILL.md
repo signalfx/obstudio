@@ -143,7 +143,11 @@ claiming audit-gap closure.
   findings and their referenced `verification.scenarios` and environments as
   the implementation and validation plan. Preserve every stable finding,
   scenario, and environment ID. Keep each `proof_level`; do not downgrade a
-  `full runtime` scenario to focused call-site proof.
+  `full runtime` scenario to focused call-site proof. Ignore `signal_flow`; it
+  does not authorize or shape scoped instrumentation.
+- When canonical JSON is absent, use only an explicit current user request and
+  current source as direct scope. Do not fabricate audit IDs, selection state,
+  or audit-derived gap closure.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,
@@ -248,9 +252,9 @@ implementation contract. The
 readiness row names the surface and detection/localization impact; the gap row
 names the complete required fix and instrument mode; its acceptance scenarios
 name the code path, expected telemetry, proof level, and acceptance criteria.
-Do not create a second gap ledger or silently synthesize missing fields. If an
-older audit lacks the current prioritized gaps or verification plan, regenerate
-the audit before claiming one-to-one closure.
+Do not create a second gap ledger or silently synthesize missing fields. In a
+direct no-audit request, derive readiness only from explicit scope and current
+source.
 
 If the user broadly asks to improve incident readiness or MTTD, resolve every
 safe app-owned incident gap to exact IDs and create the selection before

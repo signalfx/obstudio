@@ -775,6 +775,15 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
                 fail(f"duplicate incident readiness area: {row['area']}")
             readiness_areas.add(row["area"])
 
+    signal_flow = as_object(data.get("signal_flow", {}), "signal_flow")
+    component_flow_map = text(
+        signal_flow.get("component_flow_map", ""),
+        "signal_flow.component_flow_map",
+        allow_empty=True,
+    )
+    if not component_flow_map.strip():
+        component_flow_map = ""
+
     report = {
         "schema_version": audit_schema_version,
         "kind": "otel-audit",
@@ -802,10 +811,7 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
         ],
         "routes": normalize_routes(data.get("routes", [])),
         "signal_flow": {
-            "component_flow_map": text(
-                as_object(data.get("signal_flow", {}), "signal_flow").get("component_flow_map"),
-                "signal_flow.component_flow_map",
-            )
+            "component_flow_map": component_flow_map,
         },
         "current_instrumentation": {
             "spans": normalize_signal_rows(current.get("spans", []), "current_instrumentation.spans", ("name", "source", "type")),
@@ -981,22 +987,31 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
             f"{complete_with_unresolved_findings}"
         )
     raw_flow = report["signal_flow"]["component_flow_map"]
-    invalid_markers = sorted(
-        marker for marker in FLOW_BRACKET.findall(raw_flow) if not FLOW_MARKER.fullmatch(marker)
-    )
-    if invalid_markers:
-        fail(f"signal_flow contains unsupported markers: {invalid_markers}")
-    flow_gap_areas = {
-        match.group(2).strip()
-        for match in FLOW_MARKER.finditer(raw_flow)
-        if match.group(2)
-    }
-    unknown_flow_gaps = sorted(flow_gap_areas - set(areas))
-    if unknown_flow_gaps:
-        fail(f"signal_flow gap markers reference undefined finding areas: {unknown_flow_gaps}")
-    unmapped_findings = sorted(set(areas) - flow_gap_areas)
-    if unmapped_findings:
-        fail(f"findings are not associated with a component-flow gap marker: {unmapped_findings}")
+    if raw_flow:
+        invalid_markers = sorted(
+            marker
+            for marker in FLOW_BRACKET.findall(raw_flow)
+            if not FLOW_MARKER.fullmatch(marker)
+        )
+        if invalid_markers:
+            fail(f"signal_flow contains unsupported markers: {invalid_markers}")
+        flow_gap_areas = {
+            match.group(2).strip()
+            for match in FLOW_MARKER.finditer(raw_flow)
+            if match.group(2)
+        }
+        unknown_flow_gaps = sorted(flow_gap_areas - set(areas))
+        if unknown_flow_gaps:
+            fail(
+                "signal_flow gap markers reference undefined finding areas: "
+                f"{unknown_flow_gaps}"
+            )
+        unmapped_findings = sorted(set(areas) - flow_gap_areas)
+        if unmapped_findings:
+            fail(
+                "findings are not associated with a component-flow gap marker: "
+                f"{unmapped_findings}"
+            )
     return report
 
 
@@ -1477,6 +1492,134 @@ def normalize_telemetry_change(
     }
 
 
+def normalize_context_handoff(
+    row: dict[str, Any],
+    path: str,
+    finding_id: str,
+    expected_scenarios: list[str],
+) -> dict[str, Any]:
+    handoff_id = stable_id(row.get("id"), f"{path}.id")
+    if not handoff_id.startswith(f"{finding_id}."):
+        fail(f"{path}.id must start with {finding_id}.")
+    producer = text(row.get("producer"), f"{path}.producer")
+    consumer = text(row.get("consumer"), f"{path}.consumer")
+    if normalized_words(producer) == normalized_words(consumer):
+        fail(f"{path}.consumer must name a downstream component distinct from producer")
+    keys = string_list(row.get("keys", []), f"{path}.keys")
+    if len(keys) != len(set(keys)):
+        fail(f"{path}.keys must not contain duplicates")
+    verification_scenario = stable_id(
+        row.get("verification_scenario"), f"{path}.verification_scenario"
+    )
+    if verification_scenario not in expected_scenarios:
+        fail(
+            f"{path}.verification_scenario must reference one of the finding's "
+            f"audit scenarios: {expected_scenarios}"
+        )
+    return {
+        "id": handoff_id,
+        "producer": producer,
+        "producer_source": durable_artifact_text(
+            text(row.get("producer_source"), f"{path}.producer_source"),
+            f"{path}.producer_source",
+        ),
+        "carrier": text(row.get("carrier"), f"{path}.carrier"),
+        "keys": keys,
+        "consumer": consumer,
+        "consumer_source": durable_artifact_text(
+            text(row.get("consumer_source"), f"{path}.consumer_source"),
+            f"{path}.consumer_source",
+        ),
+        "verification_scenario": verification_scenario,
+    }
+
+
+def normalize_genai_closure(
+    value: Any,
+    report: dict[str, Any],
+) -> list[dict[str, Any]]:
+    rows = object_list(value, "instrumentation.genai_closure")
+    expected_rows = report["genai_readiness"]
+    if not expected_rows:
+        if rows:
+            fail(
+                "instrumentation.genai_closure is valid only when the audit "
+                "declares GenAI ownership"
+            )
+        return []
+    if len(rows) != len(expected_rows):
+        fail(
+            "instrumentation.genai_closure must contain exactly one row for every "
+            "audit GenAI readiness surface"
+        )
+
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, (row, expected) in enumerate(zip(rows, expected_rows, strict=True)):
+        path = f"instrumentation.genai_closure[{index}]"
+        surface = text(row.get("surface"), f"{path}.surface")
+        if surface in seen:
+            fail(f"duplicate instrumentation GenAI closure surface: {surface}")
+        seen.add(surface)
+        if surface != expected["surface"]:
+            fail(
+                "instrumentation.genai_closure surfaces must match the audit in "
+                f"source order; expected {expected['surface']}, got {surface}"
+            )
+        required_signals = text(
+            row.get("required_signals"), f"{path}.required_signals"
+        )
+        if required_signals != expected["required_signals"]:
+            fail(f"{path}.required_signals must exactly match the audit surface")
+        owner = text(row.get("owner"), f"{path}.owner")
+        if owner != expected["owner"]:
+            fail(f"{path}.owner must exactly match the audit surface owner")
+        status = text(row.get("status"), f"{path}.status")
+        if status not in GENAI_CLOSURE_STATUSES:
+            fail(
+                f"{path}.status must be one of "
+                f"{sorted(GENAI_CLOSURE_STATUSES)}"
+            )
+        implemented_proven = string_list(
+            row.get("implemented_proven", []), f"{path}.implemented_proven"
+        )
+        tests = string_list(row.get("tests", []), f"{path}.tests")
+        evidence = durable_artifact_list(
+            row.get("evidence", []), f"{path}.evidence"
+        )
+        remaining_signals = string_list(
+            row.get("remaining_signals", []), f"{path}.remaining_signals"
+        )
+        if status == "working" and (
+            not implemented_proven
+            or not tests
+            or not evidence
+            or remaining_signals
+        ):
+            fail(
+                f"working GenAI closure surface {surface} requires implemented/proven "
+                "signals, executed tests, durable evidence, and no remaining signals"
+            )
+        if status != "working" and not remaining_signals:
+            fail(
+                f"non-working GenAI closure surface {surface} must name remaining "
+                "signals or its exact owner/prerequisite"
+            )
+        normalized.append(
+            {
+                "surface": surface,
+                "required_signals": required_signals,
+                "owner": owner,
+                "implemented_proven": implemented_proven,
+                "tests": tests,
+                "evidence": evidence,
+                "remaining_signals": remaining_signals,
+                "status": status,
+            }
+        )
+    return normalized
+
+
 def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any]:
     if data.get("schema_version") != OVERLAY_SCHEMA_VERSION or data.get("kind") != "otel-instrumentation":
         fail("instrumentation must have schema_version 1 and kind otel-instrumentation")
@@ -1522,17 +1665,50 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
             )
         if status == "working" and (not changes or not tests or not evidence):
             fail(f"working instrumentation row {finding_id} requires changes, tests, and evidence")
+        audit_finding = audit_findings.get(finding_id, {})
+        expected_scenarios = audit_finding.get("verification_scenarios", [])
         telemetry_changes = [
             normalize_telemetry_change(
                 item,
                 f"{row_path}.telemetry_changes[{item_index}]",
                 finding_id,
-                audit_findings.get(finding_id, {}).get("verification_scenarios", []),
+                expected_scenarios,
+                audit_finding.get("expected_telemetry", []),
             )
             for item_index, item in enumerate(
                 object_list(row.get("telemetry_changes", []), f"{row_path}.telemetry_changes")
             )
         ]
+        context_handoffs = [
+            normalize_context_handoff(
+                item,
+                f"{row_path}.context_handoffs[{handoff_index}]",
+                finding_id,
+                expected_scenarios,
+            )
+            for handoff_index, item in enumerate(
+                object_list(
+                    row.get("context_handoffs", []),
+                    f"{row_path}.context_handoffs",
+                )
+            )
+        ]
+        handoff_ids = [item["id"] for item in context_handoffs]
+        if len(handoff_ids) != len(set(handoff_ids)):
+            fail(f"{row_path}.context_handoffs must not contain duplicate IDs")
+        requires_context_handoffs = (
+            "context-propagation" in audit_finding.get("otel_concerns", [])
+        )
+        if requires_context_handoffs and not context_handoffs:
+            fail(
+                f"{row_path}.context_handoffs must inventory every source "
+                "producer-to-consumer edge for a context-propagation finding"
+            )
+        if context_handoffs and not requires_context_handoffs:
+            fail(
+                f"{row_path}.context_handoffs is valid only when the audit "
+                "finding declares context-propagation"
+            )
         local_telemetry_ids = [item["id"] for item in telemetry_changes]
         duplicate_telemetry_ids = sorted(
             {
@@ -1544,20 +1720,23 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
         if duplicate_telemetry_ids:
             fail(f"duplicate instrumentation telemetry item IDs: {duplicate_telemetry_ids}")
         telemetry_ids.update(local_telemetry_ids)
-        rows.append(
-            {
-                "id": finding_id,
-                "status": status,
-                "changes": changes,
-                "telemetry_changes": telemetry_changes,
-                "tests": tests,
-                "evidence": evidence,
-                "follow_up_actions": non_empty_string_list(
-                    row.get("follow_up_actions", []), f"{row_path}.follow_up_actions"
-                ),
-                "resolved_commit": optional_text(row.get("resolved_commit"), f"{row_path}.resolved_commit"),
-            }
-        )
+        normalized_row = {
+            "id": finding_id,
+            "status": status,
+            "changes": changes,
+            "telemetry_changes": telemetry_changes,
+            "tests": tests,
+            "evidence": evidence,
+            "follow_up_actions": non_empty_string_list(
+                row.get("follow_up_actions", []), f"{row_path}.follow_up_actions"
+            ),
+            "resolved_commit": optional_text(
+                row.get("resolved_commit"), f"{row_path}.resolved_commit"
+            ),
+        }
+        if context_handoffs:
+            normalized_row["context_handoffs"] = context_handoffs
+        rows.append(normalized_row)
     approved = selection["approved_ids"]
     if [row["id"] for row in rows] != approved:
         fail(f"instrumentation finding IDs must exactly match dependency-closed selected audit order {approved}")
@@ -1668,6 +1847,10 @@ def normalize_verify(
         finding["id"]: [item["id"] for item in finding["telemetry_changes"]]
         for finding in instrumentation["findings"]
     }
+    expected_context_handoffs_by_finding = {
+        finding["id"]: finding.get("context_handoffs", [])
+        for finding in instrumentation["findings"]
+    }
     instrumentation_items_by_id = {
         item["id"]: item
         for finding in instrumentation["findings"]
@@ -1691,6 +1874,13 @@ def normalize_verify(
         status = text(row.get("status"), f"{row_path}.status")
         if status not in CLOSURE_STATUSES:
             fail(f"{row_path}.status must be one of {sorted(CLOSURE_STATUSES)}")
+        expected_context_handoffs = expected_context_handoffs_by_finding.get(
+            finding_id, []
+        )
+        context_handoffs_by_id = {
+            handoff["id"]: handoff for handoff in expected_context_handoffs
+        }
+        seen_context_handoff_ids: set[str] = set()
         scenarios = []
         scenario_seen = set()
         for scenario_index, scenario in enumerate(object_list(row.get("scenarios", []), f"{row_path}.scenarios")):
@@ -1727,6 +1917,76 @@ def normalize_verify(
             visibility = text(scenario.get("visibility"), f"{scenario_path}.visibility")
             if visibility not in VISIBILITY_STATES:
                 fail(f"{scenario_path}.visibility must be one of {sorted(VISIBILITY_STATES)}")
+            context_propagation_proof = []
+            for proof_index, proof in enumerate(
+                object_list(
+                    scenario.get("context_propagation_proof", []),
+                    f"{scenario_path}.context_propagation_proof",
+                )
+            ):
+                proof_path = (
+                    f"{scenario_path}.context_propagation_proof[{proof_index}]"
+                )
+                handoff_id = stable_id(
+                    proof.get("handoff_id"), f"{proof_path}.handoff_id"
+                )
+                expected_handoff = context_handoffs_by_id.get(handoff_id)
+                if expected_handoff is None:
+                    fail(
+                        f"{proof_path}.handoff_id {handoff_id} is not present in "
+                        "the bound instrumentation context_handoffs"
+                    )
+                if handoff_id in seen_context_handoff_ids:
+                    fail(
+                        f"context handoff {handoff_id} must be proven at most "
+                        "once per finding"
+                    )
+                if expected_handoff["verification_scenario"] != scenario_id:
+                    fail(
+                        f"{proof_path}.handoff_id {handoff_id} must be proven by "
+                        f"scenario {expected_handoff['verification_scenario']}"
+                    )
+                seen_context_handoff_ids.add(handoff_id)
+                same_trace_assertion_passed = proof.get(
+                    "same_trace_assertion_passed"
+                )
+                relationship_assertion_passed = proof.get(
+                    "relationship_assertion_passed"
+                )
+                if not isinstance(same_trace_assertion_passed, bool):
+                    fail(
+                        f"{proof_path}.same_trace_assertion_passed must be a boolean"
+                    )
+                if not isinstance(relationship_assertion_passed, bool):
+                    fail(
+                        f"{proof_path}.relationship_assertion_passed must be a boolean"
+                    )
+                context_propagation_proof.append(
+                    {
+                        "handoff_id": handoff_id,
+                        "same_trace_assertion_passed": (
+                            same_trace_assertion_passed
+                        ),
+                        "relationship_assertion_passed": (
+                            relationship_assertion_passed
+                        ),
+                    }
+                )
+            if context_propagation_proof and proof_mode not in ITEM_DIRECT_PROOF_MODES:
+                fail(
+                    f"{scenario_path}.context_propagation_proof requires a direct "
+                    f"execution proof mode: {sorted(ITEM_DIRECT_PROOF_MODES)}"
+                )
+            failed_context_proof = any(
+                not proof["same_trace_assertion_passed"]
+                or not proof["relationship_assertion_passed"]
+                for proof in context_propagation_proof
+            )
+            if failed_context_proof and scenario_status != "not_working":
+                fail(
+                    f"{scenario_path}.status must be not_working when a context "
+                    "propagation relationship assertion failed"
+                )
             if scenario_status == "blocked":
                 if blocking_reason is None or unobserved_outcome is None:
                     fail(
@@ -1758,6 +2018,30 @@ def normalize_verify(
                 fail(
                     f"working scenario {scenario_id} requires evidence, observed telemetry, "
                     "product validation, an executed proof mode, and a known visibility state"
+                )
+            expected_scenario_handoff_ids = [
+                handoff["id"]
+                for handoff in expected_context_handoffs
+                if handoff["verification_scenario"] == scenario_id
+            ]
+            actual_scenario_handoff_ids = [
+                proof["handoff_id"] for proof in context_propagation_proof
+            ]
+            if (
+                scenario_status == "working"
+                and actual_scenario_handoff_ids != expected_scenario_handoff_ids
+            ):
+                fail(
+                    f"working scenario {scenario_id} must prove mapped context "
+                    f"handoffs in instrumentation order: "
+                    f"{expected_scenario_handoff_ids}"
+                )
+            if scenario_status in {"working", "not_working"}:
+                require_exact_expected_telemetry_reference(
+                    "\n".join(observed_telemetry),
+                    f"{scenario_path}.observed_telemetry",
+                    audit_findings_by_id[finding_id]["expected_telemetry"],
+                    "positive" if scenario_status == "working" else "negative",
                 )
             if scenario_status == "not_working" and (
                 not evidence
@@ -1795,7 +2079,26 @@ def normalize_verify(
             if blocking_reason is not None and unobserved_outcome is not None:
                 normalized_scenario["blocking_reason"] = blocking_reason
                 normalized_scenario["unobserved_outcome"] = unobserved_outcome
+            if context_propagation_proof:
+                normalized_scenario["context_propagation_proof"] = (
+                    context_propagation_proof
+                )
             scenarios.append(normalized_scenario)
+        if status == "working":
+            expected_context_handoff_ids = [
+                handoff["id"] for handoff in expected_context_handoffs
+            ]
+            if seen_context_handoff_ids != set(expected_context_handoff_ids):
+                missing_context_handoff_ids = [
+                    handoff_id
+                    for handoff_id in expected_context_handoff_ids
+                    if handoff_id not in seen_context_handoff_ids
+                ]
+                if missing_context_handoff_ids:
+                    fail(
+                        f"working verify finding {finding_id} is missing context "
+                        f"handoff proof for {missing_context_handoff_ids}"
+                    )
         expected_scenarios = expected_by_finding.get(finding_id, [])
         actual_scenarios = [scenario["id"] for scenario in scenarios]
         if actual_scenarios != expected_scenarios:
@@ -2621,230 +2924,6 @@ def decision_summary_bullets(report: dict[str, Any]) -> list[str]:
     if actions:
         bullets.append("Next: " + "; ".join(actions) + ".")
     return bullets
-
-
-def render_markdown(report: dict[str, Any]) -> str:
-    meta = report["meta"]
-    findings_by_id = {finding["id"]: finding for finding in report["findings"]}
-    ordered_findings = [
-        findings_by_id[finding_id] for finding_id in display_finding_ids(report)
-    ]
-    handoff_rows = []
-    for finding in ordered_findings:
-        if finding["instrument_mode"] == "manual decision":
-            options = "; ".join(
-                f"{option['id']} = {option['label']} ({option['outcome']}; "
-                f"unlocks {', '.join(option['unlocks']) or 'no executable work'})"
-                for option in finding.get("decision_options", [])
-            )
-            handoff = (
-                f"Decision owner: {finding.get('decision_owner', 'Not recorded in schema v1')}; "
-                f"question: {finding.get('decision_question', 'Not recorded in schema v1')}; "
-                f"options: {options or 'Legacy static decision — no selectable options'}"
-            )
-        elif finding["instrument_mode"] == "external follow-up":
-            handoff = (
-                f"External owner: {finding.get('external_owner', 'Not recorded in schema v1')}; "
-                f"required telemetry: {finding.get('external_requirement', 'Not recorded in schema v1')}"
-            )
-        else:
-            continue
-        handoff_rows.append([finding["area"], handoff])
-    lines = [
-        f"# Observability Report: {meta['service_name']}",
-        "",
-        (
-            f"**Language:** {meta['language']} | "
-            f"**Framework:** {meta['framework']} | "
-            f"**Date:** {meta['date']}"
-        ),
-        f"**Status:** {meta['status']}",
-        f"**GenAI ownership detected:** {'Yes' if meta['genai_ownership_detected'] else 'No'}",
-        "**Canonical source:** [otel-audit.json](otel-audit.json)",
-        "**Review report:** [otel.html](otel.html)",
-        "",
-        "## Executive Summary",
-        "",
-        md_bullets(decision_summary_bullets(report)),
-        "",
-        "### Technical Audit Highlights",
-        "",
-        md_bullets(report["summary"]),
-        "",
-        "## Flow",
-        "",
-        report["flow"],
-        "",
-        "## Audit Evidence",
-        "",
-        md_table(
-            ["Check", "Finding", "Source"],
-            [[row["check"], row["finding"], row["source"]] for row in report["evidence"]],
-        ),
-    ]
-    if report.get("scan_blockers"):
-        lines.extend(
-            [
-                "",
-                "## Scan Blockers",
-                "",
-                md_table(
-                    [
-                        "ID",
-                        "Check",
-                        "Blocked scope",
-                        "Prerequisite",
-                        "Evidence",
-                        "Required action",
-                    ],
-                    [
-                        [
-                            row["id"],
-                            row["check"],
-                            row["blocked_scope"],
-                            row["prerequisite"],
-                            row["evidence"],
-                            row["required_action"],
-                        ]
-                        for row in report["scan_blockers"]
-                    ],
-                ),
-            ]
-        )
-    if report["routes"]:
-        lines.extend(
-            [
-                "",
-                "## Routes",
-                "",
-                md_table(
-                    ["Method", "Path"],
-                    [[row["method"], row["path"]] for row in report["routes"]],
-                ),
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            "## Signal Flow",
-            "",
-            "### Component Flow Map",
-            "",
-            "```text",
-            report["signal_flow"]["component_flow_map"],
-            "```",
-            "",
-            "## Current Instrumentation",
-            "",
-            "### Spans",
-            "",
-            md_table(
-                ["Name", "Source", "Type"],
-                [[row["name"], row["source"], row["type"]] for row in report["current_instrumentation"]["spans"]],
-            ),
-            "",
-            "### Metrics",
-            "",
-            md_table(
-                ["Name", "Source", "Type"],
-                [[row["name"], row["source"], row["type"]] for row in report["current_instrumentation"]["metrics"]],
-            ),
-            "",
-            "### Logs",
-            "",
-            md_table(
-                ["Integration", "Source", "Detail"],
-                [[row["integration"], row["source"], row["detail"]] for row in report["current_instrumentation"]["logs"]],
-            ),
-        ]
-    )
-    incident = report["current_instrumentation"]["incident_readiness"]
-    if incident:
-        lines.extend(
-            [
-                "",
-                "### Incident Readiness",
-                "",
-                md_table(
-                    ["Area", "Status", "Evidence", "Required Signals / Gap", "Detection / Localization Impact"],
-                    [[row["area"], row["status"], row["evidence"], row["required_signals"], row["impact"]] for row in incident],
-                ),
-            ]
-        )
-    if report["genai_readiness"]:
-        lines.extend(
-            [
-                "",
-                "## GenAI Readiness",
-                "",
-                md_table(
-                    ["Surface", "Status", "Evidence", "Required Signals", "Owner / Source Files", "Acceptance Criteria", "Detection/Localization Impact"],
-                    [[row["surface"], row["status"], row["evidence"], row["required_signals"], row["owner"], row["acceptance_criteria"], row["impact"]] for row in report["genai_readiness"]],
-                ),
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            "## Gaps",
-            "",
-            md_table(
-                ["Priority", "Area", "Gap", "Why it matters", "Required fix", "Instrument mode", "Verification scenarios"],
-                [[finding["priority"], finding["area"], finding["gap"], finding["impact"], finding["required_fix"], finding["instrument_mode"], finding["verification_scenarios"] or ["N/A"]] for finding in ordered_findings],
-            ),
-        ]
-    )
-    if not report["findings"]:
-        lines.extend(["", "No gaps found."])
-    elif handoff_rows:
-        lines.extend(
-            [
-                "",
-                "### Decision and external handoff",
-                "",
-                md_table(
-                    ["Area", "Decision / external handoff"],
-                    handoff_rows,
-                ),
-            ]
-        )
-    verification = report["verification"]
-    lines.extend(
-        [
-            "",
-            "## Verification Plan",
-            "",
-            "### Test Environments",
-            "",
-            md_table(
-                ["Environment ID", "Surface", "Config Evidence", "Runner / Toolchain", "Scope", "Shared Prerequisites"],
-                [[f"`{row['id']}`", row["surface"], row["config_evidence"], row["runner"], row["scope"], row["prerequisites"]] for row in verification["environments"]],
-            ),
-        ]
-    )
-    if not verification["environments"]:
-        lines.extend(["", "No runnable surface detected."])
-    lines.extend(
-        [
-            "",
-            "### Acceptance Scenarios",
-            "",
-            md_table(
-                ["Scenario ID", "Trigger / Path", "Source Entrypoint", "Expected Signals", "Proof Level", "Acceptance Criteria", "Environment"],
-                [[f"`{row['id']}`", row["trigger"], row["entrypoint"], row["expected_signals"], f"`{row['proof_level']}`", row["acceptance_criteria"], [f"`{item}`" for item in row["environments"]]] for row in verification["scenarios"]],
-            ),
-            "",
-            "## Anti-Patterns",
-            "",
-            md_bullets(report["anti_patterns"]),
-            "",
-            "## Recommendation",
-            "",
-            md_bullets(report["recommendation"]),
-            "",
-        ]
-    )
-    return "\n".join(lines)
 
 
 SOURCE_LOCATION_SUFFIX = re.compile(r":\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
@@ -4656,8 +4735,7 @@ th {{ color: var(--muted); font-size: 12px; }}
       <span>date <b>{esc(report['meta']['date'])}</b></span>
       <span><b>{len(findings)}</b> findings</span>
     </div>
-    <nav class="report-nav" aria-label="Report formats">
-      <a href="otel.md">Technical audit (Markdown)</a>
+    <nav class="report-nav" aria-label="Report data">
       <a href="otel-audit.json">Canonical audit data (JSON)</a>
     </nav>
   </div>
@@ -5580,6 +5658,13 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
     write_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
+def write_compact_json(path: Path, data: dict[str, Any]) -> None:
+    write_text(
+        path,
+        json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n",
+    )
+
+
 def load_flow(
     report: dict[str, Any],
     selection_path: Path | None,
@@ -5600,6 +5685,44 @@ def load_flow(
         else None
     )
     return selection, instrumentation, verify
+
+
+def scoped_report(report: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any]:
+    approved = set(selection["approved_ids"])
+    findings = [finding for finding in report["findings"] if finding["id"] in approved]
+    scenario_ids = {scenario for finding in findings for scenario in finding["verification_scenarios"]}
+    scenarios = [scenario for scenario in report["verification"]["scenarios"] if scenario["id"] in scenario_ids]
+    environment_ids = {environment for scenario in scenarios for environment in scenario["environments"]}
+    environments = [environment for environment in report["verification"]["environments"] if environment["id"] in environment_ids]
+    answers_by_id = decision_answer_map(selection.get("decision_answers", []))
+    decision_answers = []
+    for finding in report["findings"]:
+        option = selected_decision_option(finding, answers_by_id.get(finding["id"]))
+        if option is None:
+            continue
+        decision_answers.append(
+            {
+                "finding_id": finding["id"],
+                "option_id": option["id"],
+                "label": option["label"],
+                "outcome": option["outcome"],
+            }
+        )
+    scoped = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "kind": "otel-audit-scope",
+        "audit_id": report["meta"]["audit_id"],
+        "audit_sha256": audit_digest(report),
+        "meta": report["meta"],
+        "current_instrumentation": report["current_instrumentation"],
+        "genai_readiness": report["genai_readiness"],
+        "approved_ids": selection["approved_ids"],
+        "findings": findings,
+        "verification": {"environments": environments, "scenarios": scenarios},
+    }
+    if decision_answers:
+        scoped["decision_answers"] = decision_answers
+    return scoped
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -5663,6 +5786,8 @@ def cmd_select(args: argparse.Namespace) -> int:
     )
     approved_ids = selection["approved_ids"]
     write_json(args.output, selection)
+    if args.scoped_out:
+        write_compact_json(args.scoped_out, scoped_report(report, selection))
     added = [finding_id for finding_id in approved_ids if finding_id not in raw_ids]
     print(
         f"wrote {args.output} ({len(approved_ids)} findings in scope"
@@ -5722,6 +5847,8 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
         )
         selected_all_from_empty = True
     write_json(args.output, selection)
+    if args.scoped_out:
+        write_compact_json(args.scoped_out, scoped_report(report, selection))
     auto_added = [
         finding_id
         for finding_id in selection["approved_ids"]
@@ -5742,13 +5869,6 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
         )
         + ")"
     )
-    return 0
-
-
-def cmd_render_markdown(args: argparse.Namespace) -> int:
-    report = normalize_audit_report(load_json(args.audit_json))
-    write_text(args.output, render_markdown(report))
-    print(f"wrote {args.output} ({len(report['findings'])} findings)")
     return 0
 
 
@@ -5841,7 +5961,7 @@ def markdown_local_file_link(label: str, path: PurePath) -> str:
 
 
 def cmd_finalize_audit(args: argparse.Namespace) -> int:
-    """Validate once, render both human projections, and run compatibility lint."""
+    """Validate the canonical audit once and render its human HTML view."""
 
     raw_report = load_json(args.audit_json)
     preflight_errors = audit_finalization_preflight_errors(raw_report)
@@ -5855,10 +5975,6 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
     source_root = (args.repo_root or infer_source_root(args.audit_json)).resolve()
     if not source_root.is_dir():
         fail(f"source repository root is not a directory: {source_root}")
-    validator = args.compat_validator.resolve()
-    if not validator.is_file():
-        fail(f"compatibility validator is not a regular file: {validator}")
-
     write_text(
         args.html,
         render_html(
@@ -5868,20 +5984,6 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
             args.html.resolve().parent,
         ),
     )
-    write_text(args.markdown, render_markdown(report))
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-I", str(validator), str(args.markdown)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        fail("audit compatibility validation exceeded 30 seconds")
-    if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "validator failed").strip()
-        fail(f"audit compatibility validation failed: {detail[-2000:]}")
     print(
         json.dumps(
             {
@@ -5891,7 +5993,6 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
                 "scenarios": len(report["verification"]["scenarios"]),
                 "audit": str(args.audit_json.resolve()),
                 "html": str(args.html.resolve()),
-                "markdown": str(args.markdown.resolve()),
                 "links": {
                     "review_report": markdown_local_file_link(
                         "otel.html", args.html.resolve()
@@ -5900,7 +6001,6 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
                         "otel-audit.json", args.audit_json.resolve()
                     ),
                 },
-                "compatibility": "pass",
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -6230,7 +6330,6 @@ def cmd_finalize_instrumentation(args: argparse.Namespace) -> int:
         ]
         first_go_freshness = run_go_validation_freshness(go_check_command)
 
-    audit_markdown = args.audit_markdown or args.audit_json.with_name("otel.md")
     instrumentation_markdown = (
         args.instrumentation_markdown
         or args.instrumentation_json.with_suffix(".md")
@@ -6260,7 +6359,6 @@ def cmd_finalize_instrumentation(args: argparse.Namespace) -> int:
             sys.executable,
             "-I",
             str(gap_validator),
-            str(audit_markdown),
             str(instrumentation_markdown),
             "--audit-json",
             str(args.audit_json),
@@ -6423,11 +6521,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     adopt.set_defaults(func=cmd_adopt_selection)
 
-    markdown = subparsers.add_parser("render-markdown", help="render compatibility Markdown")
-    markdown.add_argument("audit_json", type=Path)
-    markdown.add_argument("-o", "--output", type=Path, required=True)
-    markdown.set_defaults(func=cmd_render_markdown)
-
     render = subparsers.add_parser("render-html", help="render self-contained audit and scope-planning HTML")
     render.add_argument("audit_json", type=Path)
     render.add_argument("-o", "--output", type=Path, required=True)
@@ -6443,12 +6536,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     finalize_audit = subparsers.add_parser(
         "finalize-audit",
-        help="validate canonical audit, render HTML/Markdown, and lint compatibility",
+        help="validate canonical audit and render self-contained HTML",
     )
     finalize_audit.add_argument("audit_json", type=Path)
     finalize_audit.add_argument("--html", type=Path, required=True)
-    finalize_audit.add_argument("--markdown", type=Path, required=True)
-    finalize_audit.add_argument("--compat-validator", type=Path, required=True)
     finalize_audit.add_argument(
         "--repo-root",
         type=Path,
@@ -6534,6 +6625,11 @@ def build_parser() -> argparse.ArgumentParser:
     finalize_instrumentation.add_argument("--gate-output", type=Path)
     finalize_instrumentation.set_defaults(func=cmd_finalize_instrumentation)
 
+    gate = subparsers.add_parser("gate", help="apply a deterministic CI finding policy")
+    gate.add_argument("audit_json", type=Path)
+    gate.add_argument("--fail-on", choices=("none", "required", "recommended", "any"), default="required")
+    gate.add_argument("--output", type=Path)
+    gate.set_defaults(func=cmd_gate)
     return parser
 
 

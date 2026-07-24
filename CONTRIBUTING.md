@@ -69,7 +69,7 @@ PRs cannot be merged if tests are failing.
 | Job | What it checks |
 |-----|---------------|
 | observer | `go vet`, `make build`, `make test` |
-| interactive-otel-scripts | OTel report/selection tests and pytest eval-input handoff tests |
+| skills | Skill, eval-harness, and pytest-plugin unit tests |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
 
@@ -78,7 +78,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 ### Local
 
 ```sh
-make test-all            # Go + observer client + extension + interactive OTel tests
+make test-all            # Go + observer client + extension + skill script tests
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests
 ```

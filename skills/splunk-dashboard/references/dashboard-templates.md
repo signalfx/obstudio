@@ -59,6 +59,7 @@ resource "signalfx_dashboard" "red" {
 
 ```hcl
 resource "signalfx_time_chart" "p99_latency" {
+  # telemetry-item: OTEL-001.http-duration
   name         = "P99 Latency - <metric_name>"
   plot_type    = "LineChart"   # LineChart | AreaChart | ColumnChart | Histogram
 
@@ -76,6 +77,7 @@ resource "signalfx_time_chart" "p99_latency" {
 
 ```hcl
 resource "signalfx_single_value_chart" "kpi_p99_latency" {
+  # telemetry-item: OTEL-001.http-duration
   name         = "P99 Latency"
   color_by     = "Scale"
 
@@ -105,6 +107,7 @@ EOF
 
 ```hcl
 resource "signalfx_single_value_chart" "saturation_connections" {
+  # telemetry-item: OTEL-005.db-connections
   name         = "Active Connections"
   program_text = <<-EOF
     A = data('db.pool.connections.active', filter=filter('service.name', '${var.service_name}')).mean().publish(label='Active Connections')
@@ -123,6 +126,7 @@ resource "signalfx_single_value_chart" "saturation_connections" {
 
 ```hcl
 resource "signalfx_text_chart" "section_red" {
+  # telemetry-item: OTEL-001.http-duration
   name     = "RED Signals"
   markdown = "## RED Signals\nRate, errors, and duration for ${var.service_name}."
 }
@@ -130,6 +134,16 @@ resource "signalfx_text_chart" "section_red" {
 
 A text panel has `markdown` and no `program_text`; in the preview sidecar it maps
 to `chartType: "text"` with `programText: null` and the markdown in `text`.
+
+Every chart resource carries stable provenance as `# telemetry-item:`. Use the
+verified `OTEL-###.<item>` ID for implemented telemetry. For a pre-existing
+metric explicitly accepted without item proof, use
+`SOURCE-METRIC.<exact-metric-name>` and record the same explicit exception in
+the report and validator command; never manufacture an `OTEL-###` ID. The
+preview repeats that exact value in `telemetryItemId` and records the
+item-specific chart/dashboard follow-up in `productAction`; these fields are
+ignored by Terraform and the Observer renderer but are validated before the
+report can pass.
 
 ## Other chart types
 
@@ -171,6 +185,82 @@ service_name = "<service-name from report>"
 ```
 
 `api_token` is `sensitive = true` in `variables.tf` — never commit a real value.
+
+## Exact preview sidecar shape
+
+Use the object-valued `layout` below. Do not encode layout as an array and do
+not use a chart title as `label`; `label` is the exact Terraform resource label.
+Repeat the HCL query, human title, telemetry item ID, and product action
+literally:
+
+```json
+{
+  "schemaVersion": 1,
+  "groups": [
+    {
+      "label": "service_overview",
+      "name": "Service Overview",
+      "dashboards": [
+        {
+          "label": "red",
+          "name": "RED",
+          "charts": [
+            {
+              "label": "p99_latency",
+              "title": "P99 Latency",
+              "chartType": "time_series",
+              "telemetryItemId": "SOURCE-METRIC.http.server.request.duration",
+              "productAction": "Investigate sustained route latency.",
+              "programText": "A = data('http.server.request.duration', filter=filter('service.name', 'checkout')).percentile(pct=99).publish(label='p99')",
+              "text": null,
+              "layout": {"column": 0, "row": 0, "width": 6, "height": 3}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Use resolved service values in preview `programText`; keep `${var.service_name}`
+only in Terraform. Preserve unused groups and empty dashboards as empty arrays.
+
+## Exact dashboard report shape
+
+The validator owns this literal projection. Write one result line and name the
+sidecar exactly:
+
+```markdown
+# Dashboards Report: <service-name>
+
+**Result:** Partial
+**Preview:** `.observe/dashboards.preview.json`
+
+## Panels
+
+| # | Telemetry Item ID | Panel | Metric | Chart Type | Grid (col,row,w,h) | Product action / rationale |
+|---|---|---|---|---|---|---|
+| 1 | SOURCE-METRIC.http.server.request.duration | P99 Latency | http.server.request.duration | time_series | 0,0,6,3 | Investigate sustained route latency. |
+
+## Preview And Validation
+
+| Check | Result | What it proves | Evidence / next step |
+|---|---|---|---|
+| Verified metric item mapping | Pass | Every chart maps to an accepted or verified exact metric item. | Validator accepted SOURCE-METRIC.http.server.request.duration. |
+| Terraform ↔ preview parity | Pass | HCL and preview contain the same charts, queries, and grid. | Validator compared dashboards.tf with dashboards.preview.json. |
+| Observer render | Not run | Whether Observer renders the sidecar. | Open .observe/dashboards.preview.json in Observer. |
+| Live value sanity | Not run | Whether recent series return expected values. | Query a recent window after local render. |
+| Publish/apply | Not run | Whether reviewed resources exist in Splunk Observability Cloud. | Run $splunk-dashboard-publish or reviewed terraform apply. |
+```
+
+For each panel row, copy preview values literally: `Telemetry Item ID` from
+`telemetryItemId`, `Panel` from `title`, `Chart Type` from `chartType`, grid as
+`column,row,width,height`, and `Product action / rationale` from
+`productAction`. `Metric` is the unique `data(...)` metric inventory in query
+order, joined by `, `, or `N/A` for text charts. Mapping and parity become
+`Pass` only after the validator succeeds. Keep render/live checks `Not run`
+without direct evidence and always keep publish/apply `Not run` locally.
 
 ## Placeholder reference
 

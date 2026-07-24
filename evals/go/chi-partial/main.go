@@ -37,6 +37,11 @@ func main() {
 	ctx := context.Background()
 	initTracing(ctx)
 
+	log.Println("listening on :8000")
+	http.ListenAndServe(":8000", newHandler())
+}
+
+func newHandler() http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -146,9 +151,7 @@ func main() {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 
-	log.Println("listening on :8000")
-	handler := otelhttp.NewHandler(r, "chi-partial")
-	http.ListenAndServe(":8000", handler)
+	return otelhttp.NewHandler(r, "chi-partial")
 }
 
 func initTracing(ctx context.Context) {

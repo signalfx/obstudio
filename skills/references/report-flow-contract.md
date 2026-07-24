@@ -42,9 +42,12 @@ Apply these precedence and identity rules throughout the chain:
   and proof surface. `$otel-instrument` creates it from the bound audit,
   selection, and instrumentation overlay; `$otel-verify` refreshes it with the
   verification overlay. It never replaces or rewrites the audit view.
-- Markdown reports are generated, readable compatibility outputs. They never
-  override JSON. If JSON and Markdown disagree, fail or regenerate the Markdown;
-  never merge the conflicting state.
+- Instrumentation and verification Markdown reports are generated reader
+  outputs. They never override or supplement JSON.
+- Audit output is `.observe/otel-audit.json` plus `.observe/otel.html`; there is
+  no audit-Markdown input or fallback. Without canonical audit JSON,
+  instrumentation and verification may use only explicit user scope and current
+  source. Configure and dashboard workflows require canonical audit JSON.
 - Only executable `default`/`fix all` finding IDs in the dependency-closed
   `approved_ids` of `.observe/otel-selection.json` may flow into instrumentation
   and verification. `manual decision` and `external follow-up` findings remain
@@ -68,7 +71,6 @@ Each document has one job. Do not mix these responsibilities.
 | `.observe/otel-selection.json` | Human scope-planning flow | Authoritative manual `decision_answers` plus requested and dependency-closed executable finding IDs (stored in the compatibility field `approved_ids`) | Manual/external finding IDs in `requested_ids` or `approved_ids`, executable work not unlocked by its recorded answer, findings absent from the audit, or silently inferred selection |
 | `.observe/otel-instrumentation.json` | `$otel-instrument` | Authoritative implementation result for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized selection by `selection_sha256` | Unselected findings, stale decision answers, or a rewritten audit baseline |
 | `.observe/otel-verify.json` | `$otel-verify` | Authoritative scenario proof for every dependency-closed selected finding ID (`approved_ids`), bound to the exact normalized instrumentation overlay by `instrumentation_sha256` | Unselected findings, stale/unbound instrumentation proof, or unsupported `working` claims |
-| `.observe/otel.md` | `$otel-audit` | Generated readable compatibility view of the canonical audit | State that differs from `.observe/otel-audit.json` |
 | `.observe/otel-instrumentation.md` | `$otel-instrument` | Generated readable compatibility view of the instrumentation overlay | State that differs from `.observe/otel-instrumentation.json` |
 | `.observe/otel-verify.md` | `$otel-verify` | Generated readable compatibility view of the verification overlay | State that differs from `.observe/otel-verify.json` |
 | `.observe/detectors.md` | `$splunk-configure` | Human-readable detector plan: generated detectors, covered metrics, skipped metrics, prerequisites | Secrets, unverified detector claims |
@@ -111,9 +113,10 @@ canonical order within a priority. Priority controls order only. Do not render
 priority sections, headings, labels, tags, colors, legends, counts, action
 queues, standalone priority or quick-win summary cards, or duplicate finding
 links in the executive summary. Render **Decision needed** or **External
-requirement** only inside the relevant finding. Keep quick-win, effort,
-severity, priority, and execution-state
-information machine-readable in canonical JSON and compatibility Markdown. Do
+requirement** only inside the relevant finding when a validated prerequisite
+blocks executable instrumentation; orphan non-executable findings are invalid
+canonical input. Keep quick-win, effort, severity, priority, and execution-state
+information machine-readable in canonical JSON. Do
 not surface
 canonical `meta.status` as a human outcome; it classifies the machine report and
 does not claim runtime proof. Keep finding-specific missing proof in that
@@ -155,11 +158,11 @@ now`, or `Decide first` as human categories.
 Keep severity in canonical JSON for machine compatibility but
 do not render a severity bar, badge, or filter as a competing human ranking.
 
-Do not render the canonical component flow as a service map, connection list,
-component-coverage groups, linked-area counts, or raw flow text in audit HTML.
-Those views repeat findings without adding a scope decision or runtime
-proof. Keep the canonical flow in JSON and generated Markdown for tooling and
-compatibility. Do not render a duplicate all-findings decision table. Each
+Do not author `signal_flow` for new audits or render a component flow as a
+service map, connection list, component-coverage group, linked-area count, or
+raw flow text. It repeats findings without adding scope or proof; neither audit
+HTML nor scoped instrumentation consumes it. Do not render a duplicate
+all-findings decision table. Each
 finding card must show one `product_outcome` sentence answering what the owner
 should see or gain after implementation and verification. After the card
 header and selection or decision control, keep the expanded narrative
@@ -189,15 +192,13 @@ reports acceptance-check, guardrail, and source-reference counts. Do not render
 raw verification-scenario IDs, repeated full scope
 classification, canonical `follow_up_actions`, resolution metadata, or a
 second dependency list in the finding HTML. Those fields remain in canonical
-JSON for downstream instrumentation and verification; Markdown remains the
-complete compatibility view. Post-instrumentation product actions belong in
+JSON for downstream instrumentation and verification. Post-instrumentation product actions belong in
 `.observe/otel-instrumentation.html`. Keep a manual decision's question and
 owner in its decision control and `Next step`; keep an external prerequisite's
 owner and required telemetry in its primary action and `Next step`.
 
-HTML remains a complete review and selection surface; links to
-`.observe/otel.md` and canonical JSON are optional alternate formats, not
-required reading. After a finding jump, open the target's primary disclosure,
+HTML remains a complete review and selection surface; canonical JSON is its
+only alternate audit format. After a finding jump, open the target's primary disclosure,
 leave its nested `Technical details` closed, and move keyboard focus to the
 primary disclosure button; apply the same behavior to direct report hashes.
 Reserve one collapsed report-level `Technical appendix` for
@@ -205,8 +206,7 @@ cross-finding source-visible instrumentation evidence, the shared verification
 plan, authored notes, audit evidence, and recommendations. Do not render a
 separate Anti-Patterns subsection in decision-focused HTML. An actionable
 anti-pattern belongs in its finding card; distinct compatibility or provenance
-notes remain in canonical JSON and generated Markdown without
-creating a second human action ledger.
+notes remain in canonical JSON without creating a second human action ledger.
 
 For instrumentation, `.observe/otel-instrumentation.html` is a post-change
 decision view. Start with exactly one human verification-state heading and one
@@ -353,102 +353,57 @@ Audit is read-only and baseline-oriented:
 
 - Write and validate `.observe/otel-audit.json` first. Treat it as the immutable
   source of truth for the audit.
-- Render `.observe/otel.html` from the validated JSON for human review and
-  scope planning, then generate `.observe/otel.md` as its readable compatibility
-  view.
+- Render `.observe/otel.html` from the validated JSON for human review and scope
+  planning.
 - Give every actionable finding and acceptance scenario a stable ID. Record
   finding dependencies so selection export can compute dependency closure.
 - Give every finding one concise `product_outcome` sentence stating what the
   owner should see or gain after implementation and verification. Do not claim
   the source audit has already proven that outcome.
-- Declare `**GenAI ownership detected:** Yes` or `No` from source evidence and
-  include a matching `GenAI ownership` row in `## Audit Evidence`.
-- Include `Current Instrumentation`, `GenAI Readiness` when relevant, `Gaps`,
-  and `Verification Plan`.
-- Use only the top-level sections in the reader order below.
+- Set `meta.genai_ownership_detected` from source evidence and include a matching
+  `GenAI ownership` evidence row.
+- Include `current_instrumentation`, `genai_readiness` when relevant, `findings`,
+  and `verification`.
+- Omit `flow` and `signal_flow` for new audits; the workflow is fixed by the
+  skills, and downstream scope comes from findings and verification scenarios.
 - Do not run verification harnesses or claim runtime proof.
 
-Use this reader order after the common title, status, summary, and flow:
+Keep `evidence` as a compact source ledger with manifest, entry point, route
+source, runtime/startup, and exact GenAI ownership rows. A true
+`meta.genai_ownership_detected` requires nonempty `genai_readiness`; false
+requires it to be empty.
 
-1. `## Audit Evidence`
-2. `## Routes` when routes exist
-3. `## Signal Flow`
-4. `## Current Instrumentation`
-5. `## GenAI Readiness` when relevant
-6. `## Gaps`
-7. `## Verification Plan`
-8. `## Anti-Patterns`
-9. `## Recommendation`
+When source evidence shows incident-readiness ownership, record telemetry-scoped
+rows in `current_instrumentation.incident_readiness` with `area`, `status`,
+`evidence`, `required_signals`, and `impact`.
 
-`## Audit Evidence` is a compact source ledger, not a prose list:
+Every telemetry-scoped `partial`, `missing`, or `owner-mapped` Incident
+Readiness row must have an unresolved finding whose `area` is identical and
+whose verification-scenario IDs define the telemetry
+proof handoff. Incident Readiness has no owner field, so `owner-mapped` remains
+unresolved and only `covered` is complete. Use only `covered`, `partial`,
+`missing`, or `owner-mapped`; areas are unique, and `covered` must not conflict
+with an unresolved same-area finding. For GenAI Readiness, `owner-mapped` is
+complete only when its owner names a concrete external/provider/platform
+source in a category-prefixed value such as `Provider/platform-owned: billing
+API`; generic categories or team labels are not exact owners. `done`,
+`rejected`, and `deferred` findings do not satisfy an unresolved readiness row
+and do not conflict with a complete row. These rules prevent `Pass` from hiding
+missing readiness. Do not add a readiness row solely for API
+behavior, policy, documentation, contract, ownership links, or general test
+hygiene. This is a nested current-state view, not a second top-level gap ledger.
 
-```markdown
-| Check | Finding | Source |
-|---|---|---|
-| Manifest | <language/framework/dependency finding> | <path> |
-| Entry point | <process finding> | <path> |
-| Route source | <route finding> | <path(s)> |
-| Runtime/startup | <runtime finding> | <path(s) or none detected> |
-| GenAI ownership | <Yes or No, matching the report declaration> | <owned source paths or repository scan evidence> |
-```
+`verification` has two non-overlapping arrays:
 
-`GenAI ownership detected: Yes` requires `## GenAI Readiness` after
-`## Current Instrumentation`. `No` forbids that section. This explicit decision
-keeps report validation deterministic; do not infer the section from loose
-keywords in prose.
-
-`## Signal Flow` contains one compact `### Component Flow Map`. Show only
-major components and telemetry-distinct edges; do not duplicate every route or
-scenario. Separate independent process roots. Use these exact evidence markers:
-
-- `[SOURCE-COVERED]`: source or configuration supports the edge; runtime
-  emission is not proven.
-- `[GAP: <human-readable area>]`: the edge has an instrumentation, safety, or
-  proof gap described in `## Gaps`.
-
-Use only `[SOURCE-COVERED]` and `[GAP: <area>]` in the component map. The map is
-the compact reader view and `Verification Plan` is the detailed downstream
-handoff.
-
-Put `## Current Instrumentation` immediately after the flow map so readers see
-what exists before they evaluate deficiencies. When present, put
-`## GenAI Readiness` next because it is specialized current-state context. Put
-the prioritized `## Gaps` table after that baseline and before
-`## Verification Plan`. The executive summary remains responsible for keeping
-the most important gaps visible on the first screen.
-
-When source evidence shows incident-readiness ownership, `## Current
-Instrumentation` may contain one `### Incident Readiness` subsection with this
-table:
-
-```markdown
-| Area | Status | Evidence | Required Signals / Gap | Detection / Localization Impact |
-|---|---|---|---|---|
-```
-
-Every `partial` or `missing` row must have a prioritized `## Gaps` row whose
-`Area` cell is identical and whose verification-scenario IDs define the proof
-handoff. This is a nested current-state view, not a second top-level gap ledger.
-
-`## Verification Plan` has two non-overlapping parts:
-
-1. `### Test Environments` defines reusable runtime, toolchain, scope, and
-   prerequisite profiles. Each row has a stable `Environment ID`.
-2. `### Acceptance Scenarios` defines the exact action, expected telemetry,
-   proof level, and acceptance criteria. Its `Environment` cell contains only
-   one or more IDs from `Test Environments`.
+1. `environments` defines reusable runtime, toolchain, scope, and prerequisite
+   profiles with stable IDs.
+2. `scenarios` defines the exact action, expected telemetry, proof level, and
+   acceptance criteria, referencing only defined environment IDs.
 
 Do not repeat fixture or prerequisite prose in every scenario. Add or refine a
-test-environment row and reference its ID instead. Use these headings for every
-audit report and downstream handoff.
-
-Keep exactly one top-level `## Gaps` section and use this prioritized table:
-
-```markdown
-| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |
-|---|---|---|---|---|---|---|
-| required | <human-readable area> | <source-derived gap> | <user/operator impact> | <specific result> | default | <scenario IDs or N/A> |
-```
+environment row and reference its ID instead. Each finding records `priority`,
+`area`, `gap`, `impact`, `required_fix`, `instrument_mode`, and
+`verification_scenarios`.
 
 Allowed priority values are `required`, `recommended`, and `deferred`:
 
@@ -462,15 +417,31 @@ Allowed priority values are `required`, `recommended`, and `deferred`:
 Allowed instrument modes are `default`, `fix all`, `manual decision`, and
 `external follow-up`. Use `default` for safe app-owned required work and
 required verification, `fix all` for safe recommended work, and `manual
-decision` for deferred or externally owned work. Use `external follow-up` for
-work owned outside the service that must remain visible but cannot enter
-instrumentation selection. A required gap may use `manual decision` when it
-cannot be repaired safely without an explicit choice. If no gaps exist, keep
-the table header and write `No gaps found.` below it. Group rows by remediation
-theme; do not repeat every route or flow edge.
+decision` only for an exact OTel signal, pipeline, sampling, cardinality, or
+telemetry-privacy choice required by a separate executable finding. Resolve
+source evidence before assigning that mode: one safe, reversible, app-owned
+OTel implementation is executable and must not become a `manual decision`.
+Use `default` or `fix all` even though the reviewer can leave that work out of
+the selection. A genuine manual choice has two or three materially distinct,
+source-supported answers; do not manufacture approve/decline options around a
+safe default. Use
+`external follow-up` only when a known owner
+outside the service must supply an exact OTel signal, pipeline configuration,
+or telemetry proof required by a separate executable finding; owner discovery
+and independent downstream platform work are evidence, not findings. A required
+gap may use `manual decision` when it cannot be repaired safely without that
+telemetry-specific choice. Apply instrument modes
+only after the OTel finding boundary; safe app ownership does not make generic
+service work selectable. Split mixed telemetry ownership: an external telemetry
+follow-up must never absorb independently executable service-owned OTel work.
+Omit non-telemetry service code, configuration, contract, documentation, policy,
+or general test work instead of splitting it into another finding. If no gaps
+exist, keep `findings` empty. Group findings by remediation theme; do not repeat
+every route or call site.
 
-Canonical manual-decision findings must carry `decision_owner`,
-`decision_question`, and two or three explicit selectable
+Canonical manual-decision findings must carry `decision_owner` plus an exact
+telemetry-specific `decision_question` naming an actual expected signal,
+attribute, or configuration scope, and two or three explicit selectable
 `decision_options`. Each option carries a unique stable `id`, a concise
 `label`, a concrete `outcome`, and an `unlocks` list of executable findings
 that depend on the manual finding. An empty `unlocks` list records an answer
@@ -495,7 +466,15 @@ Instrumentation is a goal workflow, not just a code edit:
 2. Reconcile only the selection overlay's dependency-closed `approved_ids` with
    current source. If no valid selection overlay exists, return to human review
    in `.observe/otel.html` instead of silently selecting work.
-3. Implement the dependency-closed selected scope.
+3. Implement the dependency-closed selected scope. Treat selected acceptance
+   criteria and telemetry-affecting constraints as binding non-regression
+   obligations. Before removing or replacing a propagation producer, carrier,
+   or key, inventory every source consumer and preserve that handoff or migrate
+   every consumer in the same change. A focused consumer-side relationship
+   assertion is required when the handoff changes. Record one finding-prefixed
+   instrumentation `context_handoffs` row per source consumer, including its
+   producer, carrier and keys, exact source locations, and one mapped audit
+   scenario.
 4. Run project-runtime compile/import and focused tests.
 5. Write and validate `.observe/otel-instrumentation.json`, with one row per
    dependency-closed selected finding in canonical audit order and
@@ -507,6 +486,10 @@ Instrumentation is a goal workflow, not just a code edit:
    `.observe/otel.html` with downstream state.
 7. If verified metric evidence exists and the user requested alerting/detectors,
    invoke or apply `$splunk-configure`.
+
+When `.observe/otel-audit.json` is absent, use only an explicit current user
+request plus current source as direct scope. Do not fabricate audit IDs,
+selection state, or audit-derived closure.
 
 The audit HTML may offer every executable `default` and `fix all` finding; its
 machine-readable priority controls display order, not eligibility. Explicit
@@ -522,10 +505,12 @@ selection overlay, including executable dependency closure, is the final scope a
 untouched executable audit rows and their validated prerequisites remain
 visible in the immutable audit and HTML review.
 
-When the source audit includes Incident Readiness, reconcile those rows through
-the matching prioritized gaps and `## Audit Gap Closure`. Do not create a
-parallel incident closure section or claim a readiness surface is working while
-one of its required signals remains missing or unproven.
+When canonical `current_instrumentation.incident_readiness` is non-empty,
+reconcile those rows through the matching findings and `## Audit Gap Closure`.
+Without canonical audit JSON, derive readiness only from explicit user scope and
+current source. Do not create a parallel incident closure section or claim a
+readiness surface is working while one of its required signals remains missing
+or unproven.
 
 The instrumentation overlay and its Markdown compatibility report must
 reconcile every dependency-closed selected audit row under
@@ -549,8 +534,8 @@ The instrumentation report must include:
 # OTel Instrumentation Report: <service>
 
 **Result:** Pass | Partial | Fail | Blocked
-**Source audit:** `.observe/otel-audit.json` | not found
-**Selection:** `.observe/otel-selection.json` | not found
+**Source audit:** `.observe/otel-audit.json` | direct user scope
+**Selection:** `.observe/otel-selection.json` | direct user scope
 **Verification report:** `.observe/otel-verify.json` | not run
 **Detector report:** `.observe/detectors.md` | not requested | blocked
 
@@ -572,8 +557,9 @@ The instrumentation report must include:
 inventory and belongs only in `.observe/otel-instrumentation.md`.
 
 When incident readiness applies because the user requested faster detection or
-localization, incident evidence was supplied, or the source audit contains
-Incident Readiness, add this nested inventory inside `## Signals Changed`:
+localization, incident evidence was supplied, or canonical
+`current_instrumentation.incident_readiness` is non-empty, add this nested inventory
+inside `## Signals Changed`:
 
 ```markdown
 ### Incident Readiness Signal Roles
@@ -625,8 +611,34 @@ with `instrumentation_sha256`. Because that instrumentation digest includes
 `selection_sha256`, verification is transitively bound to reviewer intent. A
 matching executable or item inventory is not enough: a changed decision answer
 or any material instrumentation change invalidates older proof. Write
-one verification finding for every dependency-closed selected ID
-(`approved_ids`) in canonical audit order.
+one verification finding for every dependency-closed selected ID (`approved_ids`) in canonical audit order. A
+finding may be `working` only when its scenarios cover the audit's required
+scenario IDs and carry direct evidence. If the canonical audit is absent, use
+only explicit user scope and current source; do not fabricate canonical
+overlays.
+
+Reconcile delivery claims across that join. `otlp_accepted` and
+`explorer_visible` are invalid when the matching instrumentation
+`product_view` denies any OTLP pipeline or export path. Do not confuse absence
+of an application-owned exporter with absence of an agent- or platform-owned
+delivery path.
+
+Record invocation state in verification metadata. Standalone verification uses
+`workflow_mode: standalone` and `lifecycle: final`. Verification called by an
+active instrumentation workflow uses `workflow_mode: instrumentation_child`;
+a failed repair packet is `lifecycle: intermediate`, and the post-repair
+current-state overlay may be `final` only after no executed check is
+`not_working`. The shared `instrumentation-final-gate` enforces that boundary.
+For an intermediate failed child that stops at unselected work, a material
+decision, new authority, or an external prerequisite, keep finding `remaining`
+and run-level `next_steps` repair-only. Put the stop reason in top-level
+`stop_boundaries[]` with affected failed finding IDs, bounded kind,
+declarative reason, required external/user action, and durable evidence. The
+field is valid only on an `instrumentation_child` `Fail` with
+`lifecycle: intermediate`; it never turns the observed failure into `Blocked`
+or a completed handoff.
+Allowed kinds are `unselected_work`, `material_decision`, `new_authority`, and
+`external_prerequisite`.
 
 Verification records invocation state in `meta.workflow_mode` and
 `meta.lifecycle`. Standalone verification is `standalone` / `final`. A failed
@@ -669,6 +681,50 @@ Use only `Working`, `Not working`, `Not proven`, or `Not configured` for status.
 Do not group rows merely to make the report or final command response shorter.
 Every `Working` row must name the test mode and direct evidence.
 
+Canonical verification also writes one `item_results` row for every stable
+instrumentation telemetry item ID, in instrumentation order. Each row maps the
+item to its audit scenarios and records status, proof mode, visibility, direct
+evidence, observed telemetry, product validation, and the required
+`direct_assertion_passed` boolean. `Working` requires all of those fields and
+`direct_assertion_passed: true`; every other item status requires it to be
+`false`. Its `observed_telemetry` must put the exact item name and every required
+attribute (including an authored `key=value`) on the same typed signal in one
+affirmative observation clause using direct language such as
+observed, emitted, recorded, exported, received, accepted, or captured.
+Expected, should/may, unconfirmed, zero/no-data results, contradictory
+observations, attributes attached to another same-kind signal, or cross-clause
+token mentions are not proof.
+Keep unit-only proof explicitly `not_explorer_visible`; use
+`explorer_visible` only with saved Observer/query evidence. This item inventory,
+not a hand-authored expected-items file, determines whether every code-to-
+telemetry change was verified.
+
+For a working `change_kind: removed` item, also require structured
+`removal_proof`: `removed_signal` exactly equals the instrumentation item name,
+`replacement_signal` names a distinct intended owner of the same signal type,
+and both
+`absence_assertion_passed` and `replacement_assertion_passed` are true. This is
+in addition to durable evidence and reader prose; a generic success sentence
+cannot stand in for the two bounded assertions.
+
+For each instrumentation `context_handoffs` row mapped to a `working` scenario,
+require one `context_propagation_proof` row referencing that stable handoff ID,
+in instrumentation order, with `same_trace_assertion_passed` and
+`relationship_assertion_passed` both true. Scenarios without mapped handoffs
+need no context proof. Use only `app_test`, `unit`, `unit+otlp`, or
+`full_runtime`, and cite the saved consumer-side assertion in scenario evidence.
+Missing mapped proof is `not_proven`; any false assertion makes the scenario
+`not_working`. Span presence, a child tested with a synthetic parent, or OTLP
+acceptance in a separate execution cannot substitute for the relationship
+assertion. Older context-propagation instrumentation and verification overlays
+without this inventory and proof are not grandfathered; regenerate them.
+
+Every scenario with `status: blocked` also carries nonempty
+`blocking_reason` and `unobserved_outcome` fields. Omit those fields from every
+other status. Preserve remediation separately in finding `remaining` or
+top-level `next_steps`; an unblock action is not the historical reason the
+scenario could not run.
+
 Keep `Not working` distinct from `Not proven`: use `Not working` only when an
 executed check failed or expected telemetry was absent. Use `Not proven` when
 the necessary scenario was not run or a prerequisite was unavailable.
@@ -686,10 +742,17 @@ gap.
 
 Detector generation should be proof-aware:
 
-- Read `.observe/otel.md` for service metadata, gaps, GenAI readiness, and
-  candidate metrics.
-- Read `.observe/otel-instrumentation.md` for implemented signal changes.
-- Read `.observe/otel-verify.md` for verified emitted metrics and OTLP proof.
+- Prefer `.observe/otel-audit.json` for service metadata, findings, current
+  instrumentation, readiness, and candidate metrics.
+- Validate `.observe/otel-selection.json`,
+  `.observe/otel-instrumentation.json`, and `.observe/otel-verify.json` against
+  that audit before consuming them. Scope downstream work to dependency-closed selected finding
+  IDs and join implementation telemetry changes to verification by finding ID.
+- Treat an exact metric as verified only when its source-backed or implemented
+  telemetry item ID is covered by a `working` verification `item_results` row
+  and scenario evidence proves its emitted name, unit, and required dimensions.
+- Require `.observe/otel-audit.json`; never derive configure scope from a
+  Markdown report.
 - Generate Terraform only for metrics that are present in source and either
   verified or explicitly accepted as source-only by the user.
 - Put missing or unverified detector inputs in

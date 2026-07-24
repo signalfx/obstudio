@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Validate generated Splunk detector Terraform against verified metrics."""
+"""Validate generated Splunk detector and delegated dashboard artifacts."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import os
 import re
+import stat
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -26,9 +31,37 @@ DATA_CALL = re.compile(r"\bdata\(")
 DATA_METRIC = re.compile(r"\bdata\(\s*['\"]([^'\"]+)['\"]\s*(?=,|\))")
 AGG_METHOD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 DETECT_LABEL = re.compile(r'detect_label\s*=\s*"([^"]+)"')
-BACKTICK = re.compile(r"`([^`]+)`")
 PROVIDER_START = re.compile(r'provider\s+"signalfx"\s*\{')
 REPORT_STATUS = re.compile(r"^\*\*Result:\*\*\s*(Pass|Partial|Fail|Blocked)\s*$", re.I | re.M)
+TABLE_SEPARATOR = re.compile(r"^:?-{3,}:?$")
+SUCCESS_RESULTS = {"pass", "passed", "success", "succeeded", "working"}
+NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE = re.compile(
+    r"\b(?:could\s+not|did\s+not|never|unable|unavailable|"
+    r"(?:couldn|didn|wasn|weren|isn|aren|hasn|haven|hadn)['’]t|"
+    r"fail(?:ed|ure)?|errored|(?:returned|raised|encountered|produced|with)"
+    r"\s+(?:an?\s+)?errors?(?=\s*(?:[.,;:]|$))|errors?\s+(?:occurred|"
+    r"returned|reported|raised|blocked|prevented)|rejected|denied|blocked|pending|"
+    r"unknown|uncertain|unproven|perhaps|possibly|maybe|"
+    r"(?:might|may)\s+(?:have|be|succeed(?:ed)?|pass(?:ed)?|compile(?:d)?|"
+    r"validate(?:d)?|accept(?:ed)?|work(?:ed)?)|"
+    r"appears?\s+to|seems?\s+to|not\s+(?:run|executed|completed|"
+    r"successful|accepted|compiled|validated|proven|confirmed)|"
+    r"no\s+(?:evidence|result|output|plan|compile|validation))\b",
+    re.I,
+)
+PLAN_PLACEHOLDER_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9])(?:n/a|not\s+applicable|todo)(?![A-Za-z0-9])",
+    re.I,
+)
+NEGATED_AUTHENTICATION = re.compile(
+    r"\b(?:unauthenticated|not[-\s]+authenticated)\b",
+    re.I,
+)
+NEGATED_DETECTOR_COVERAGE = re.compile(
+    r"\bnot[-\s]+(?:all|every)(?:\s+(?:one\s+of|of))?(?:\s+the)?"
+    r"(?:\s+\d+)?\s+(?:generated\s+)?detectors?\b",
+    re.I,
+)
 CONFIGURE_VERIFY_HEADINGS = (
     "Executive Summary",
     "What Was Added",
@@ -37,6 +70,7 @@ CONFIGURE_VERIFY_HEADINGS = (
     "Validation Notes",
     "Next Steps",
 )
+MAX_CANONICAL_ARTIFACT_BYTES = 64 * 1024 * 1024
 FORBIDDEN_PROGRAM_PATTERNS = {
     "raw prompt/content": re.compile(r"\b(raw[._ -]?(?:prompt|content|completion)|prompt[._ -]?text)\b", re.I),
     "request identity": re.compile(r"\b(?:request|session|user|tenant|org|trace)[._-]?(?:id|identifier)\b", re.I),
@@ -47,36 +81,120 @@ def markdown_cells(line: str) -> list[str]:
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
-def working_metrics(report: Path) -> set[str]:
-    if not report.exists():
-        return set()
-    lines = report.read_text(encoding="utf-8").splitlines()
-    in_section = False
-    header: list[str] | None = None
-    metrics: set[str] = set()
-    for line in lines:
-        if line.startswith("## "):
-            in_section = line.strip() == "## Tested And Working"
-            header = None
+def normalize_markdown(value: str) -> str:
+    value = re.sub(r"[`*_]", "", value).strip().lower()
+    return re.sub(r"\s+", " ", value)
+
+
+def markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^## {re.escape(heading)}\s*$\n?(.*?)(?=^## |\Z)",
+        text,
+        re.M | re.S,
+    )
+    return match.group(1).strip() if match else ""
+
+
+def markdown_table_rows(section: str) -> list[dict[str, str]]:
+    lines = section.splitlines()
+    rows: list[dict[str, str]] = []
+    index = 0
+    while index + 1 < len(lines):
+        if not lines[index].lstrip().startswith("|") or not lines[index + 1].lstrip().startswith("|"):
+            index += 1
             continue
-        if not in_section or not line.lstrip().startswith("|"):
-            continue
-        cells = markdown_cells(line)
-        if header is None and "OTel item" in cells and "Working status" in cells:
-            header = cells
-            continue
-        if header is None or set(cells) <= {"---", "--"} or len(cells) != len(header):
-            continue
-        # Column counts are checked above; avoid Python 3.10-only zip(strict=...).
-        row = dict(zip(header, cells))
-        if row.get("Working status") != "Working" or not re.match(
-            r"^metric\b", row.get("Type", ""), re.I
+        header = markdown_cells(lines[index])
+        separator = markdown_cells(lines[index + 1])
+        if len(header) != len(separator) or not all(
+            TABLE_SEPARATOR.fullmatch(cell.replace(" ", "")) for cell in separator
         ):
+            index += 1
             continue
-        item = row["OTel item"]
-        tokens = BACKTICK.findall(item)
-        metrics.add(tokens[0] if tokens else item.strip())
-    return metrics
+        index += 2
+        while index < len(lines) and lines[index].lstrip().startswith("|"):
+            cells = markdown_cells(lines[index])
+            if len(cells) == len(header):
+                rows.append(dict(zip(header, cells)))
+            index += 1
+    return rows
+
+
+def normalized_row(row: dict[str, str]) -> dict[str, str]:
+    return {normalize_markdown(key): value.strip() for key, value in row.items()}
+
+
+def row_result(row: dict[str, str]) -> str:
+    normalized = normalized_row(row)
+    return normalize_markdown(normalized.get("result", normalized.get("status", "")))
+
+
+def row_evidence(row: dict[str, str]) -> str:
+    normalized = normalized_row(row)
+    for key, value in normalized.items():
+        if key.startswith("evidence"):
+            return value.strip()
+    return ""
+
+
+def has_substantive_content(section: str) -> bool:
+    content = []
+    for line in section.splitlines():
+        stripped = re.sub(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", line).strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        content.append(normalize_markdown(stripped).rstrip(".!"))
+    if not content:
+        return False
+    harmless = {
+        "none",
+        "nothing",
+        "n/a",
+        "not applicable",
+        "no outstanding proof gaps",
+        "no required checks remain unproven",
+    }
+    return any(line not in harmless for line in content)
+
+
+def load_dashboard_validator(errors: list[str]):
+    """Load the shared dashboard/provenance validator used by both workflows."""
+
+    script = (
+        Path(__file__).parents[2]
+        / "splunk-dashboard"
+        / "scripts"
+        / "validate_dashboard_output.py"
+    )
+    if not script.is_file():
+        errors.append(f"missing shared dashboard validator: {script}")
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "splunk_dashboard_output_validator", script
+    )
+    if spec is None or spec.loader is None:
+        errors.append(f"could not load shared dashboard validator: {script}")
+        return None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def working_metrics(
+    report: Path | None, errors: list[str] | None = None
+) -> set[str]:
+    """Return only metrics satisfying the strict legacy verification contract."""
+
+    if report is None:
+        return set()
+    validation_errors = errors if errors is not None else []
+    if not report.is_file():
+        validation_errors.append(f"legacy verification report is not a file: {report}")
+        return set()
+    module = load_dashboard_validator(validation_errors)
+    if module is None:
+        return set()
+    return module.legacy_working_metrics(report, validation_errors)
 
 
 def matching_brace(text: str, opening: int) -> int:
@@ -982,8 +1100,643 @@ def validate_heading_order(text: str, name: str, errors: list[str]) -> None:
         errors.append(f"{name}: reader-first headings are out of order")
 
 
+def has_authenticated_detector_plan(rows: list[dict[str, str]], detector_count: int) -> bool:
+    count_pattern = re.compile(rf"\b{detector_count}\s+(?:generated\s+)?detectors?\b", re.I)
+    all_pattern = re.compile(r"\b(?:all|every)\s+(?:generated\s+)?detectors?\b", re.I)
+    for row in rows:
+        if row_result(row) not in SUCCESS_RESULTS:
+            continue
+        evidence = row_evidence(row)
+        normalized = normalize_markdown(evidence).replace(
+            "not-run", "not run"
+        ).rstrip(".!:")
+        if (
+            normalized in {"", "-", "n/a", "none", "not applicable", "todo"}
+            or PLAN_PLACEHOLDER_TOKEN.search(normalized)
+        ):
+            continue
+        proves_plan = bool(
+            re.search(r"\bauthenticated\b", normalized)
+            and "terraform plan" in normalized
+        )
+        proves_compile = "signalflow" in normalized or "/v2/detector/validate" in normalized
+        proves_full_set = bool(
+            count_pattern.search(normalized) or all_pattern.search(normalized)
+        )
+        if (
+            proves_plan
+            and proves_compile
+            and proves_full_set
+            and not NEGATED_AUTHENTICATION.search(normalized)
+            and not NEGATED_DETECTOR_COVERAGE.search(normalized)
+            and not NEGATIVE_OR_UNCERTAIN_PLAN_EVIDENCE.search(normalized)
+        ):
+            return True
+    return False
+
+
+def canonical_flow_paths(
+    terraform_dir: Path, args: argparse.Namespace
+) -> dict[str, Path]:
+    root = terraform_dir.parent
+    verification_json = getattr(args, "verification_json", None)
+    dashboard_verification = getattr(args, "dashboard_verification", None)
+    if verification_json is not None and dashboard_verification is not None:
+        canonical_verification = verification_json.expanduser().resolve(strict=False)
+        canonical_dashboard_verification = dashboard_verification.expanduser().resolve(
+            strict=False
+        )
+        if canonical_verification != canonical_dashboard_verification:
+            raise ValueError(
+                "--dashboard-verification and --verification-json must refer to "
+                "the same canonical verification artifact"
+            )
+    return {
+        "audit": getattr(args, "audit_json", None) or root / "otel-audit.json",
+        "selection": getattr(args, "selection_json", None)
+        or root / "otel-selection.json",
+        "instrumentation": getattr(args, "instrumentation_json", None)
+        or root / "otel-instrumentation.json",
+        "verification": verification_json
+        or dashboard_verification
+        or root / "otel-verify.json",
+    }
+
+
+def artifact_stability(status: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ctime_ns,
+    )
+
+
+def capture_canonical_artifacts(
+    paths: dict[str, Path], errors: list[str]
+) -> dict[str, bytes]:
+    """Capture immutable canonical bytes without following links or blocking."""
+
+    snapshots: dict[str, bytes] = {}
+    for name, path in paths.items():
+        try:
+            namespace_status = os.lstat(path)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            errors.append(
+                f"cannot inspect canonical {name} artifact {path}: {error}"
+            )
+            continue
+
+        if stat.S_ISLNK(namespace_status.st_mode):
+            errors.append(
+                f"canonical {name} artifact must not be a symlink: {path}"
+            )
+            continue
+        if not stat.S_ISREG(namespace_status.st_mode):
+            errors.append(
+                f"canonical {name} artifact must be a readable regular file: {path}"
+            )
+            continue
+
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                errors.append(
+                    "canonical "
+                    f"{name} artifact changed to a non-regular entry: {path}"
+                )
+                continue
+            if artifact_stability(before) != artifact_stability(namespace_status):
+                errors.append(
+                    f"canonical {name} artifact changed before capture: {path}"
+                )
+                continue
+            if before.st_size > MAX_CANONICAL_ARTIFACT_BYTES:
+                errors.append(
+                    f"canonical {name} artifact exceeds the "
+                    f"{MAX_CANONICAL_ARTIFACT_BYTES}-byte capture limit: {path}"
+                )
+                continue
+            payload = bytearray()
+            oversized = False
+            while chunk := os.read(
+                descriptor,
+                min(
+                    1024 * 1024,
+                    MAX_CANONICAL_ARTIFACT_BYTES - len(payload) + 1,
+                ),
+            ):
+                payload.extend(chunk)
+                if len(payload) > MAX_CANONICAL_ARTIFACT_BYTES:
+                    errors.append(
+                        f"canonical {name} artifact exceeds the "
+                        f"{MAX_CANONICAL_ARTIFACT_BYTES}-byte capture limit: {path}"
+                    )
+                    oversized = True
+                    break
+            if oversized:
+                continue
+            after = os.fstat(descriptor)
+            if artifact_stability(after) != artifact_stability(before):
+                errors.append(
+                    f"canonical {name} artifact changed during capture: {path}"
+                )
+                continue
+            try:
+                current = os.lstat(path)
+            except OSError as error:
+                errors.append(
+                    f"canonical {name} artifact namespace changed during capture "
+                    f"{path}: {error}"
+                )
+                continue
+            if (
+                stat.S_ISLNK(current.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or artifact_stability(current) != artifact_stability(before)
+            ):
+                errors.append(
+                    f"canonical {name} artifact namespace changed during capture: "
+                    f"{path}"
+                )
+                continue
+            snapshots[name] = bytes(payload)
+        except OSError as error:
+            errors.append(
+                f"cannot capture canonical {name} artifact {path}: {error}"
+            )
+            continue
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+    return snapshots
+
+
+def run_checked_validator(
+    command: list[str], label: str, errors: list[str]
+) -> bool:
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode == 0:
+        return True
+    detail = (completed.stderr or completed.stdout).strip()
+    errors.append(f"{label} failed{': ' + detail if detail else ''}")
+    return False
+
+
+def canonical_working_metrics(
+    terraform_dir: Path,
+    verify_report: Path | None,
+    args: argparse.Namespace,
+    errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
+) -> set[str] | None:
+    """Return JSON-authoritative metrics, or None for a true legacy flow."""
+
+    paths = canonical_flow_paths(terraform_dir, args)
+    explicit_paths = any(
+        getattr(args, name, None) is not None
+        for name in (
+            "audit_json",
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+            "dashboard_verification",
+        )
+    )
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return set()
+    present = set(canonical_snapshots)
+    if "audit" not in present:
+        if explicit_paths or present:
+            errors.append(
+                "canonical verification flow is incomplete; otel-audit.json is "
+                "required when any JSON overlay is present"
+            )
+            return set()
+        return None
+
+    downstream_explicit = any(
+        getattr(args, name, None) is not None
+        for name in (
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+            "dashboard_verification",
+        )
+    )
+    downstream_present = bool(
+        present.intersection({"selection", "instrumentation", "verification"})
+    )
+    if not downstream_explicit and not downstream_present:
+        # A canonical audit can independently authorize an exact, explicitly
+        # accepted source metric. Once any downstream overlay exists, require
+        # the complete bound selection -> instrumentation -> verify chain.
+        return set()
+
+    missing = [name for name in paths if name not in canonical_snapshots]
+    if missing:
+        errors.append(
+            "canonical verification flow is incomplete; missing "
+            + ", ".join(missing)
+        )
+        return set()
+
+    if verify_report is None:
+        verify_report = terraform_dir.parent / "otel-verify.md"
+
+    shared_validator = (
+        Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    )
+    reader_validator = (
+        Path(__file__).parents[2]
+        / "otel-verify"
+        / "scripts"
+        / "validate_reader_report.py"
+    )
+    for label, script in (
+        ("canonical verification flow validator", shared_validator),
+        ("verify reader projection validator", reader_validator),
+    ):
+        if not script.is_file():
+            errors.append(f"missing {label}: {script}")
+            return set()
+
+    try:
+        reader_snapshot = verify_report.read_bytes()
+    except OSError as error:
+        errors.append(f"cannot capture canonical verification flow: {error}")
+        return set()
+
+    with tempfile.TemporaryDirectory(prefix="configure-flow-") as directory:
+        snapshot_root = Path(directory)
+        snapshot_paths = {
+            name: snapshot_root / f"{name}.json" for name in canonical_snapshots
+        }
+        reader_path = snapshot_root / "otel-verification.md"
+        for name, value in canonical_snapshots.items():
+            snapshot_paths[name].write_bytes(value)
+        reader_path.write_bytes(reader_snapshot)
+
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(shared_validator),
+                "validate-flow",
+                str(snapshot_paths["audit"]),
+                "--selection-json",
+                str(snapshot_paths["selection"]),
+                "--instrumentation-json",
+                str(snapshot_paths["instrumentation"]),
+                "--verify-json",
+                str(snapshot_paths["verification"]),
+            ],
+            "canonical verification flow validation",
+            errors,
+        ):
+            return set()
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(reader_validator),
+                str(reader_path),
+                "--instrumentation-json",
+                str(snapshot_paths["instrumentation"]),
+                "--verify-json",
+                str(snapshot_paths["verification"]),
+                "--audit-json",
+                str(snapshot_paths["audit"]),
+                "--selection-json",
+                str(snapshot_paths["selection"]),
+            ],
+            "verify Markdown projection validation",
+            errors,
+        ):
+            return set()
+
+    try:
+        instrumentation = json.loads(canonical_snapshots["instrumentation"])
+        verification = json.loads(canonical_snapshots["verification"])
+    except json.JSONDecodeError as error:
+        errors.append(f"cannot read validated canonical verification flow: {error}")
+        return set()
+
+    instrumentation_items = {
+        item.get("id"): item
+        for finding in instrumentation.get("findings", [])
+        if isinstance(finding, dict)
+        for item in finding.get("telemetry_changes", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    metrics: set[str] = set()
+    for finding in verification.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        for proof in finding.get("item_results", []):
+            if not isinstance(proof, dict) or proof.get("status") != "working":
+                continue
+            source = instrumentation_items.get(proof.get("id"), {})
+            if (
+                source.get("type") == "metric"
+                and source.get("change_kind") != "removed"
+                and isinstance(source.get("name"), str)
+            ):
+                metrics.add(source["name"])
+    return metrics
+
+
+def canonical_source_metrics(
+    terraform_dir: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
+) -> set[str] | None:
+    """Return exact metric names from one validated canonical-audit snapshot."""
+
+    paths = canonical_flow_paths(terraform_dir, args)
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return set()
+    if "audit" not in canonical_snapshots:
+        return None
+    shared_validator = (
+        Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    )
+    if not shared_validator.is_file():
+        errors.append(f"missing canonical audit validator: {shared_validator}")
+        return set()
+    snapshot = canonical_snapshots["audit"]
+    with tempfile.TemporaryDirectory(prefix="configure-audit-") as directory:
+        snapshot_path = Path(directory) / "otel-audit.json"
+        snapshot_path.write_bytes(snapshot)
+        if not run_checked_validator(
+            [
+                sys.executable,
+                str(shared_validator),
+                "validate",
+                str(snapshot_path),
+            ],
+            "canonical audit validation",
+            errors,
+        ):
+            return set()
+    # Extract from the exact bytes accepted by the canonical validator, not
+    # from the caller-controlled path after validation.
+    canonical_audit = json.loads(snapshot)
+    current = canonical_audit.get("current_instrumentation", {})
+    metrics = current.get("metrics", [])
+    return {
+        row["name"]
+        for row in metrics
+    }
+
+
+def inspect_configure_inputs(
+    terraform_dir: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+) -> tuple[str, dict[str, bytes]]:
+    """Validate the canonical input stage before configure writes outputs."""
+
+    paths = canonical_flow_paths(terraform_dir, args)
+    snapshots = capture_canonical_artifacts(paths, errors)
+    if errors:
+        return "invalid", snapshots
+
+    explicit = {
+        name
+        for name, argument in (
+            ("audit", "audit_json"),
+            ("selection", "selection_json"),
+            ("instrumentation", "instrumentation_json"),
+            ("verification", "verification_json"),
+        )
+        if getattr(args, argument, None) is not None
+    }
+    if getattr(args, "dashboard_verification", None) is not None:
+        explicit.add("verification")
+    present = set(snapshots)
+
+    if "audit" not in present:
+        if explicit or present:
+            errors.append(
+                "canonical configure input chain is incomplete; otel-audit.json "
+                "is required when any canonical overlay is present or explicit"
+            )
+            return "incomplete", snapshots
+        return "legacy", snapshots
+
+    downstream = {"selection", "instrumentation", "verification"}
+    if (
+        not explicit.intersection(downstream)
+        and not present.intersection(downstream)
+    ):
+        canonical_source_metrics(
+            terraform_dir,
+            args,
+            errors,
+            snapshots,
+        )
+        return ("audit_only" if not errors else "invalid"), snapshots
+
+    missing = [name for name in paths if name not in snapshots]
+    if missing:
+        errors.append(
+            "canonical verification flow is incomplete; missing "
+            + ", ".join(missing)
+            + ". Complete the bound selection -> instrumentation -> verification "
+            "chain before configure; source-only acceptance cannot bypass a "
+            "partial canonical chain"
+        )
+        return "incomplete", snapshots
+
+    shared_validator = (
+        Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+    )
+    if not shared_validator.is_file():
+        errors.append(
+            f"missing canonical verification flow validator: {shared_validator}"
+        )
+        return "invalid", snapshots
+
+    with tempfile.TemporaryDirectory(prefix="configure-input-flow-") as directory:
+        snapshot_root = Path(directory)
+        snapshot_paths = {
+            name: snapshot_root / f"{name}.json" for name in snapshots
+        }
+        for name, payload in snapshots.items():
+            snapshot_paths[name].write_bytes(payload)
+        run_checked_validator(
+            [
+                sys.executable,
+                str(shared_validator),
+                "validate-flow",
+                str(snapshot_paths["audit"]),
+                "--selection-json",
+                str(snapshot_paths["selection"]),
+                "--instrumentation-json",
+                str(snapshot_paths["instrumentation"]),
+                "--verify-json",
+                str(snapshot_paths["verification"]),
+            ],
+            "canonical verification flow validation",
+            errors,
+        )
+    return ("canonical" if not errors else "invalid"), snapshots
+
+
+def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
+    errors: list[str] = []
+    try:
+        input_mode, snapshots = inspect_configure_inputs(
+            args.terraform_dir,
+            args,
+            errors,
+        )
+    except ValueError as error:
+        return {
+            "result": "FAIL",
+            "input_mode": "invalid",
+            "canonical_artifacts": [],
+            "errors": [str(error)],
+        }
+    if input_mode == "legacy":
+        input_mode = "incomplete"
+        errors.append(
+            "canonical configure input chain is incomplete; otel-audit.json "
+            "is required before configure"
+        )
+    return {
+        "result": "PASS" if not errors else "FAIL",
+        "input_mode": input_mode,
+        "canonical_artifacts": sorted(snapshots),
+        "errors": errors,
+    }
+
+
+def run_dashboard_validator(
+    terraform_dir: Path,
+    dashboards_report: Path,
+    dashboard_preview: Path,
+    args: argparse.Namespace,
+    errors: list[str],
+    canonical_snapshots: dict[str, bytes] | None = None,
+) -> dict[str, object]:
+    module = load_dashboard_validator(errors)
+    if module is None:
+        return {}
+
+    tfvars = getattr(args, "dashboard_tfvars", None)
+    paths = canonical_flow_paths(terraform_dir, args)
+    if canonical_snapshots is None:
+        prior_error_count = len(errors)
+        canonical_snapshots = capture_canonical_artifacts(paths, errors)
+        if len(errors) != prior_error_count:
+            return {}
+    canonical_mode = bool(canonical_snapshots) or any(
+        getattr(args, name, None) is not None
+        for name in (
+            "audit_json",
+            "selection_json",
+            "instrumentation_json",
+            "verification_json",
+            "dashboard_verification",
+        )
+    )
+    verification_explicit = any(
+        getattr(args, name, None) is not None
+        for name in ("verification_json", "dashboard_verification")
+    )
+    explicit = {
+        "audit": getattr(args, "audit_json", None) is not None,
+        "selection": getattr(args, "selection_json", None) is not None,
+        "instrumentation": getattr(args, "instrumentation_json", None) is not None,
+        "verification": verification_explicit,
+    }
+    with tempfile.TemporaryDirectory(prefix="configure-dashboard-flow-") as directory:
+        snapshot_root = Path(directory)
+        snapshot_paths = {
+            name: snapshot_root / f"{name}.json" for name in paths
+        }
+        for name, payload in canonical_snapshots.items():
+            snapshot_paths[name].write_bytes(payload)
+        delegated_paths = {
+            name: (
+                snapshot_paths[name]
+                if name in canonical_snapshots or explicit[name]
+                else None
+            )
+            for name in paths
+        }
+        result = module.validate(
+            argparse.Namespace(
+                terraform=terraform_dir / "dashboards.tf",
+                preview=dashboard_preview,
+                report=dashboards_report,
+                variables=terraform_dir / "variables.tf",
+                tfvars=tfvars,
+                verification=delegated_paths["verification"],
+                legacy_verification=(None if canonical_mode else args.verify_report),
+                audit=delegated_paths["audit"],
+                selection=delegated_paths["selection"],
+                instrumentation=delegated_paths["instrumentation"],
+                allow_source_only_item=getattr(args, "allow_source_only_item", []),
+                allow_inherited_partial=True,
+            )
+        )
+    for error in result.get("errors", []):
+        errors.append(f"dashboard validator: {error}")
+    return result
+
+
 def validate(args: argparse.Namespace) -> dict[str, object]:
     terraform_dir: Path = args.terraform_dir
+    errors: list[str] = []
+    try:
+        input_mode, canonical_snapshots = inspect_configure_inputs(
+            terraform_dir,
+            args,
+            errors,
+        )
+    except ValueError as error:
+        return {"result": "FAIL", "errors": [str(error)]}
+    if errors:
+        return {
+            "result": "FAIL",
+            "input_mode": input_mode,
+            "canonical_artifacts": sorted(canonical_snapshots),
+            "errors": errors,
+        }
+
+    dashboards_tf = terraform_dir / "dashboards.tf"
+    dashboard_emitted = dashboards_tf.is_file()
+    dashboards_report = getattr(args, "dashboards_report", None)
+    if dashboards_report is None:
+        dashboards_report = terraform_dir.parent / "dashboards.md"
+    dashboard_preview = getattr(args, "dashboard_preview", None)
+    if dashboard_preview is None:
+        dashboard_preview = terraform_dir.parent / "dashboards.preview.json"
     required = {
         "detectors.tf": terraform_dir / "detectors.tf",
         "variables.tf": terraform_dir / "variables.tf",
@@ -992,9 +1745,34 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         "detectors report": args.detectors_report,
         "configure verification report": args.configure_verify_report,
     }
-    errors = [f"missing {name}: {path}" for name, path in required.items() if not path.is_file()]
+    if dashboard_emitted:
+        required.update(
+            {
+                "dashboards report": dashboards_report,
+                "dashboard preview": dashboard_preview,
+            }
+        )
+    errors.extend(
+        f"missing {name}: {path}"
+        for name, path in required.items()
+        if not path.is_file()
+    )
     if errors:
         return {"result": "FAIL", "errors": errors}
+    requested_source_metrics = set(args.allow_source_only_metric)
+    requested_source_items = set(
+        getattr(args, "allow_source_only_item", [])
+    )
+    canonical_source_metric_names: set[str] | None = None
+    if requested_source_metrics or requested_source_items:
+        canonical_source_metric_names = canonical_source_metrics(
+            terraform_dir,
+            args,
+            errors,
+            canonical_snapshots,
+        )
+        if errors:
+            return {"result": "FAIL", "errors": errors}
 
     detectors_text = required["detectors.tf"].read_text(encoding="utf-8")
     variables_text = required["variables.tf"].read_text(encoding="utf-8")
@@ -1010,6 +1788,13 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             f"{detector_status} != {configure_status}"
         )
     validate_heading_order(configure_verify_text, "configure verification report", errors)
+    if configure_status == "Pass" and has_substantive_content(
+        markdown_section(configure_verify_text, "Not Yet Proven")
+    ):
+        errors.append(
+            "configure verification report: Result Pass conflicts with substantive "
+            "## Not Yet Proven content"
+        )
     try:
         blocks = detector_blocks(detectors_text)
     except ValueError as error:
@@ -1019,6 +1804,43 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     if len(ids) != len(set(ids)):
         errors.append("duplicate signalfx_detector resource identifiers")
 
+    tested_rows = markdown_table_rows(markdown_section(configure_verify_text, "Tested And Working"))
+    if configure_status == "Pass" and blocks:
+        if not tested_rows:
+            errors.append(
+                "configure verification report: Result Pass requires structured "
+                "Tested And Working evidence"
+            )
+        elif not has_authenticated_detector_plan(tested_rows, len(blocks)):
+            errors.append(
+                "configure verification report: Result Pass requires a successful authenticated "
+                "terraform plan / SignalFlow compile row covering every generated detector"
+            )
+
+    dashboard_chart_count = 0
+    preview_chart_count = 0
+    if dashboard_emitted:
+        dashboard_result = run_dashboard_validator(
+            terraform_dir,
+            dashboards_report,
+            dashboard_preview,
+            args,
+            errors,
+            canonical_snapshots,
+        )
+        dashboard_chart_count = int(dashboard_result.get("chart_count", 0))
+        preview_chart_count = int(dashboard_result.get("preview_chart_count", 0))
+        dashboard_status = dashboard_result.get("reported_status")
+        if (
+            isinstance(dashboard_status, str)
+            and configure_status is not None
+            and dashboard_status != configure_status
+        ):
+            errors.append(
+                "dashboards report status does not match configure verification status: "
+                f"{dashboard_status} != {configure_status}"
+            )
+
     # Discover variable declarations on a comment- and string-blanked view so a
     # commented-out `# variable "realm" {` or a `variable "..." {`-shaped string
     # value cannot poison the `declared` set -- otherwise a variable that is not
@@ -1026,9 +1848,18 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
     # api_token/realm presence checks below.
     variables_searchable = _blank_hcl_string_values(_blank_comment_lines(variables_text))
     declared = set(VARIABLE_DECLARATION.findall(variables_searchable))
-    verified = working_metrics(args.verify_report)
-    allowed = verified | set(args.allow_source_only_metric)
+    source_only = requested_source_metrics
+    if source_only:
+        if canonical_source_metric_names is not None:
+            for metric in sorted(source_only - canonical_source_metric_names):
+                errors.append(
+                    "source-only provenance: metric "
+                    f"{metric!r} is absent from audit "
+                    "current_instrumentation.metrics"
+                )
+            source_only.intersection_update(canonical_source_metric_names)
     detector_metrics: list[str] = []
+    detector_metric_rows: list[tuple[str, str]] = []
     detector_signatures: list[tuple[str, str | None, str]] = []
 
     for resource_id, block in blocks:
@@ -1046,6 +1877,7 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             continue
         metric = metrics[0]
         detector_metrics.append(metric)
+        detector_metric_rows.append((resource_id, metric))
         try:
             data_signature = data_call_signature(program_body, program_searchable)
         except ValueError as error:
@@ -1057,8 +1889,6 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             errors.append(f"{resource_id}: malformed aggregation call ({error})")
             continue
         detector_signatures.append((metric, data_signature, aggregation))
-        if metric not in allowed:
-            errors.append(f"{resource_id}: metric {metric!r} is not a Working verified metric")
         # Require a bounded occurrence, not a bare substring: a plain
         # `metric in report_text` treats `http.server.duration` as present when
         # the report only mentions the different, longer `http.server.duration.p99`,
@@ -1115,6 +1945,27 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         for description, pattern in FORBIDDEN_PROGRAM_PATTERNS.items():
             if pattern.search(searchable):
                 errors.append(f"{resource_id}: unsafe {description} appears in detector program")
+
+    verified = canonical_working_metrics(
+        terraform_dir,
+        args.verify_report,
+        args,
+        errors,
+        canonical_snapshots,
+    )
+    if verified is None:
+        unresolved_metrics = set(detector_metrics) - source_only
+        verified = (
+            working_metrics(args.verify_report, errors)
+            if args.verify_report is not None or unresolved_metrics
+            else set()
+        )
+    allowed = verified | source_only
+    for resource_id, metric in detector_metric_rows:
+        if metric not in allowed:
+            errors.append(
+                f"{resource_id}: metric {metric!r} is not a Working verified metric"
+            )
 
     if len(detector_signatures) != len(set(detector_signatures)):
         errors.append(
@@ -1193,6 +2044,8 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
         "detector_count": len(blocks),
         "detector_metrics": sorted(detector_metrics),
         "working_metric_count": len(verified),
+        "dashboard_chart_count": dashboard_chart_count,
+        "preview_chart_count": preview_chart_count,
         "reported_status": configure_status,
         "source_only_exceptions": sorted(args.allow_source_only_metric),
         "errors": errors,
@@ -1201,17 +2054,85 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-preflight",
+        action="store_true",
+        help="validate configure inputs before creating Terraform or reports",
+    )
     parser.add_argument("--terraform-dir", type=Path, required=True)
-    parser.add_argument("--detectors-report", type=Path, required=True)
-    parser.add_argument("--configure-verify-report", type=Path, required=True)
-    parser.add_argument("--verify-report", type=Path, required=True)
+    parser.add_argument("--detectors-report", type=Path)
+    parser.add_argument("--configure-verify-report", type=Path)
+    parser.add_argument(
+        "--verify-report",
+        type=Path,
+        help=(
+            "actual legacy otel-verify.md proof; omit for canonical JSON or "
+            "explicitly authorized source-only metrics (never pass an audit report)"
+        ),
+    )
+    parser.add_argument(
+        "--audit-json",
+        type=Path,
+        help="canonical audit JSON; defaults to <terraform-dir>/../otel-audit.json",
+    )
+    parser.add_argument(
+        "--selection-json",
+        type=Path,
+        help="canonical selection JSON; defaults to <terraform-dir>/../otel-selection.json",
+    )
+    parser.add_argument(
+        "--instrumentation-json",
+        type=Path,
+        help="canonical instrumentation JSON; defaults to <terraform-dir>/../otel-instrumentation.json",
+    )
+    parser.add_argument(
+        "--verification-json",
+        type=Path,
+        help="canonical verification JSON; defaults to <terraform-dir>/../otel-verify.json",
+    )
+    parser.add_argument(
+        "--dashboards-report",
+        type=Path,
+        help="defaults to <terraform-dir>/../dashboards.md when dashboards.tf exists",
+    )
+    parser.add_argument(
+        "--dashboard-preview",
+        type=Path,
+        help="defaults to <terraform-dir>/../dashboards.preview.json when dashboards.tf exists",
+    )
+    parser.add_argument(
+        "--dashboard-verification",
+        type=Path,
+        help=(
+            "backward-compatible alias for --verification-json; when both are "
+            "provided they must identify the same canonical artifact"
+        ),
+    )
+    parser.add_argument(
+        "--dashboard-tfvars",
+        type=Path,
+        help="optional non-secret tfvars used to resolve dashboard preview values",
+    )
     parser.add_argument("--allow-source-only-metric", action="append", default=[])
-    return parser.parse_args()
+    parser.add_argument("--allow-source-only-item", action="append", default=[])
+    args = parser.parse_args()
+    if not args.input_preflight:
+        for argument in (
+            "detectors_report",
+            "configure_verify_report",
+        ):
+            if getattr(args, argument) is None:
+                parser.error(
+                    f"--{argument.replace('_', '-')} is required unless "
+                    "--input-preflight is used"
+                )
+    return args
 
 
 def main() -> int:
     try:
-        result = validate(parse_args())
+        args = parse_args()
+        result = validate_inputs(args) if args.input_preflight else validate(args)
     except (OSError, ValueError) as error:
         result = {"result": "FAIL", "errors": [str(error)]}
     print(json.dumps(result, indent=2))

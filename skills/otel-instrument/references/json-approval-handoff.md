@@ -1,8 +1,15 @@
 # JSON Approval Handoff
 
 Use this reference when `.observe/otel-audit.json` exists or the user supplies
-finding IDs. For canonical JSON flow, this file owns executable selection,
-instrumentation JSON, digest binding, and instrumentation HTML.
+finding IDs. It defines the deterministic executable-scope gate and machine handoff.
+For that canonical JSON flow, this file is the scoped instrumentation and
+reader-report authority. Do not also load `../../references/report-flow-contract.md`
+unless a conditional downstream workflow explicitly requires an additional
+field or rollup rule from it.
+Never open or read an audit Markdown report. Ignore `signal_flow`; selected
+findings and their verification scenarios are the complete scoped input.
+After selection succeeds, use the compact `--scoped-out` JSON for implementation
+context instead of reopening the full canonical audit.
 
 ## Selection Gate
 
@@ -112,11 +119,22 @@ Before any application-code, dependency, runtime-config, or test edit:
    normalized selection into `selection_sha256`. Do not hash a hand-authored or
    partially normalized object.
 6. Use only the scoped executable findings, dependencies, and referenced
-   verification scenarios. `manual decision` and `external follow-up` findings
-   cannot appear in either selection ID list. `decision_answers` is separate
-   from `requested_ids` and `approved_ids`; it is a canonical-audit-order list
-   of `{"finding_id":"OTEL-###","option_id":"stable-option-id"}` entries. An
-   answer never auto-selects work. Only executable
+   verification scenarios. Treat their acceptance criteria and
+   telemetry-affecting constraints as binding non-regression obligations.
+   Before removing or replacing a propagation producer, carrier, or key,
+   inventory every source consumer and preserve the producer-to-consumer
+   handoff or migrate all consumers in the same change. Automatic
+   instrumentation ownership does not replace application-defined async
+   context or log-correlation entries. Add or update a focused consumer-side
+   test for every changed handoff; route success, span presence, or export alone
+   is insufficient. In the instrumentation overlay, record one
+   `context_handoffs` row per source consumer for every selected
+   `context-propagation` finding.
+   `manual decision` and `external follow-up` findings cannot appear in either
+   selection ID list. `decision_answers` is separate from `requested_ids` and
+   `approved_ids`; it is a canonical-audit-order list of
+   `{"finding_id":"OTEL-###","option_id":"stable-option-id"}` entries. An answer
+   never auto-selects work. Only executable
    findings listed in that option's `unlocks` may enter requested or approved
    scope; every nonmatching branch remains blocked. Reject an unanswered manual
    dependency, an unknown answer, mismatched executable work, or any unresolved
@@ -169,6 +187,18 @@ Write `.observe/otel-instrumentation.json` with this shape:
           "verification_scenarios": ["http.health.success"]
         }
       ],
+      "context_handoffs": [
+        {
+          "id": "OTEL-001.http-to-health-handler",
+          "producer": "HTTP server instrumentation",
+          "producer_source": "main.go:42",
+          "carrier": "request context",
+          "keys": [],
+          "consumer": "health handler",
+          "consumer_source": "main.go:18",
+          "verification_scenario": "http.health.success"
+        }
+      ],
       "tests": ["go test ./..."],
       "evidence": ["main.go:42"],
       "follow_up_actions": ["Confirm the route span in the trace waterfall after verification."],
@@ -202,6 +232,15 @@ product follow-up. Preserve each audit-authored attribute exactly: a key-only
 promise stays key-only, while `key=value` keeps that exact bounded value. These
 stable item IDs are the inventory that verification must cover exactly; a
 free-text `changes` list is not a substitute.
+
+For every selected audit finding whose `otel_concerns` includes
+`context-propagation`, write a nonempty `context_handoffs` inventory with one
+row per source consumer. Give each row a stable finding-prefixed ID; name the
+producer, carrier, optional carried keys, downstream consumer, exact producer
+and consumer source, and one audit `verification_scenario` that can execute
+that edge. Do not collapse multiple consumers into one row. Verification joins
+proof to these IDs, so changing this inventory invalidates prior proof through
+`instrumentation_sha256`.
 
 Write concise, reader-facing `changes`, `product_view`, and `next_steps`
 because each selected-finding HTML card uses them directly. Each selected finding should

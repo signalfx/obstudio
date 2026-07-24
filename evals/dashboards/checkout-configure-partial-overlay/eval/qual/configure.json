@@ -1,0 +1,21 @@
+{
+  "skill": "splunk-configure",
+  "language": "dashboards",
+  "service": "checkout-configure-partial-overlay",
+  "prompts": [
+    {
+      "id": "partial-overlay-fails-closed",
+      "task": "Treat ./service as the project root. Create ./service/.observe, copy ./service/otel-audit-source-only.json to ./service/.observe/otel-audit.json, and copy the valid bound but deliberately partial ./service/otel-selection-partial.json to ./service/.observe/otel-selection.json. The user accepts source-only use of http.server.request.duration, but the selected OTEL-001 scope has no instrumentation or verification overlays. Use $splunk-configure. Do not create or infer the missing overlays, delete or ignore the selection, fall back to Markdown, generate Terraform from the incomplete chain, call a network, run terraform, publish, or apply resources."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe for the copied canonical audit and selection and confirm whether generated Terraform or reports exist.",
+    "Read ./trace.jsonl and ./last_message.md for the fail-closed diagnosis."
+  ],
+  "rubric": [
+    "Recognizes that the presence of a valid selection makes this a downstream canonical flow and stops because otel-instrumentation.json and otel-verify.json are missing.",
+    "Does not delete or ignore the selection, fall back to Markdown, use --allow-source-only-metric to bypass the partial flow, or generate detector/dashboard Terraform and configure reports from the incomplete chain.",
+    "Explains that instrumentation and verification must complete the bound selected scope before configure can continue, without claiming source-only acceptance repaired that chain.",
+    "Does not call a network, run terraform, publish, or apply resources."
+  ]
+}

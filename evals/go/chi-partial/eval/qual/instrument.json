@@ -16,7 +16,7 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Preserves the existing chi routes and otelhttp wrapping behavior.",
+    "Preserves the existing chi routes and otelhttp wrapping behavior, including the request-context edge from the single otelhttp SERVER span to the task-service custom span for GET /tasks/{id}; tests must prove both spans share one trace and the custom span names the SERVER span as its direct parent, not merely prove that both spans exist.",
     "Adds or fixes MeterProvider setup so HTTP server metrics can export.",
     "Replaces hardcoded collector.example.com configuration with environment-driven OTLP settings.",
     "Moves request hot-path tracer creation to a stable package-level or setup-time pattern.",

@@ -4,8 +4,8 @@
 
 - [x] 1. Create `skills/splunk-configure/SKILL.md` with front matter (`name: splunk-configure`, `version: 0.1.0`, `author: otel-studio`, `category: observability`)
 - [x] 2. Define the 5-step workflow in SKILL.md:
-   - Step 1: Locate `.observe/otel.md`; if missing, instruct the user to run `$otel-audit` first
-   - Step 2: Parse the Metrics table (name, source, type) and service metadata (service name, language, framework) from the report header
+   - Step 1: Locate `.observe/otel-audit.json`; if missing, instruct the user to run `$otel-audit` first
+   - Step 2: Parse the metrics (name, source, type) and service metadata (service name, language, framework) from the canonical JSON
    - Step 3: Classify each metric into a detector category by name pattern (see `references/detector-classification.md`)
    - Step 4: Generate `.observe/terraform/detectors.tf` and `.observe/terraform/variables.tf` using the templates in `references/terraform-templates.md`
    - Step 5: Summarize what was generated in chat

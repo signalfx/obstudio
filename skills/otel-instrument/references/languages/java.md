@@ -85,6 +85,12 @@ Record the trace source of truth in the preflight summary:
   When app source reads `System.getenv("OTEL_...")`, pass actual `OTEL_*`
   environment variables into the relevant test/runtime fork and prove the fork
   inherited them.
+- Before removing or replacing Java async-context code in a filter, interceptor,
+  or middleware, search for both producers and consumers. For Reactor, include
+  `contextWrite`, `deferContextual`, `ContextView.get`, and every carried OTel
+  context or MDC key. Preserve the producer-to-consumer handoff or migrate all
+  consumers in the same change, then add a subscriber-side test that asserts
+  the preserved trace relationship and correlation values.
 
 ---
 

@@ -11,7 +11,7 @@ CheckCategory = Literal["sanity", "runtime"]
 
 
 def validate_eval_input_paths(values: list[str] | None) -> list[str] | None:
-    """Require fixture-root-relative file paths below eval/inputs."""
+    """Require fixture-root-relative regular-file paths below eval/inputs."""
 
     if values is None:
         return None
@@ -31,9 +31,10 @@ def validate_eval_input_paths(values: list[str] | None) -> list[str] | None:
                 "eval_inputs entries must be safe relative file paths under "
                 "eval/inputs"
             )
-        if value in seen:
+        normalized = candidate.as_posix()
+        if normalized in seen:
             raise ValueError("eval_inputs entries must be unique")
-        seen.add(value)
+        seen.add(normalized)
     return values
 
 
@@ -57,6 +58,7 @@ class BaseEvalDefinition(BaseModel):
     prompts: list[PromptVariant]
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+    definition_sha256: str | None = None
 
     @property
     def kind(self) -> EvalRole:
@@ -84,6 +86,8 @@ class BaseEvalCase(BaseModel):
     eval_inputs: list[str] | None = None
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+    definition_sha256: str | None = None
+    collected_contract_sha256: str | None = None
 
     _validate_eval_inputs = field_validator("eval_inputs")(
         validate_eval_input_paths
@@ -172,3 +176,4 @@ class ValidationResult(BaseModel):
     sanity_check_count: int = 0
     rubric_check_count: int = 0
     runtime_check_count: int = 0
+    provenance: dict[str, object] = Field(default_factory=dict)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from pytest_codex_evals.backends import AgentBackend, CodexBackend
+from pytest_codex_evals.backends import AgentBackend, CodexBackend, read_regular_text
 from pytest_codex_evals.definitions import RubricEvalCase
 from pytest_codex_evals.schema_resources import schema_path as packaged_schema_path
 
@@ -84,5 +84,5 @@ def judge_inputs_text(case: RubricEvalCase) -> str:
 
 def validate_rubric_output(output_path: Path, schema_path: Path) -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    data = json.loads(output_path.read_text(encoding="utf-8"))
+    data = json.loads(read_regular_text(output_path))
     Draft202012Validator(schema).validate(data)

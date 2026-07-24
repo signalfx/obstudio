@@ -168,9 +168,11 @@ canonical JSON.
   unsupported, or truncated surfaces. Record the chosen discovery path and any
   exact helper/runtime failure.
 
-Read canonical JSON first and Markdown only for reader detail; on the direct
-path read only the instrumentation report. Reconcile all saved
-commands, runtimes, source paths, and expected signals with current source.
+When canonical JSON exists, never open or read an audit Markdown report. Without
+canonical audit JSON, use only explicit current user scope and current source;
+read the instrumentation report only for prior evidence, never to expand scope.
+Reconcile all saved commands, runtimes, source paths, and expected signals with
+current source. Ignore `signal_flow`; it is not verification scope.
 Inspect the target entrypoint, referenced/diffed instrumentation files, provider
 and exporter wiring, startup/shutdown, and signal-affecting branches.
 

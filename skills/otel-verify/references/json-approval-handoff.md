@@ -2,8 +2,14 @@
 
 Use this reference when `.observe/otel-audit.json` exists or the user supplies
 finding IDs. It binds verification to the approved instrumentation scope.
-For canonical JSON flow, this file owns the approved scope, verification
-schema, digest binding, status rollup, and instrumentation HTML refresh.
+For that canonical JSON flow, this file is the scoped verification and
+reader-report authority. Do not also load `../../references/report-flow-contract.md`
+unless a conditional downstream workflow explicitly requires an additional
+field or rollup rule from it.
+Never open or read an audit Markdown report. Ignore `signal_flow`; selected
+findings and their referenced scenarios define verification scope. After
+selection validation, use the compact `--scoped-out` JSON instead of reopening
+the full canonical audit for scenario planning.
 
 ## Scope Gate
 
@@ -43,8 +49,13 @@ schema, digest binding, status rollup, and instrumentation HTML refresh.
    normalized selection. A changed `decision_answers` entry is stale even when
    `approved_ids` is unchanged.
 4. Verify exactly the approved findings in audit order, their expected
-   telemetry, and referenced scenarios. Unselected findings are outside this
-   result and must not make it partial.
+   telemetry, acceptance criteria, telemetry-affecting constraints, and
+   referenced scenarios. Unselected findings are outside this result and must
+   not make it partial. When instrumentation changed a context producer,
+   carrier, or key, inspect every source consumer and execute the handoff at a
+   downstream consumer. Route success, server-span presence, child-span
+   presence under a synthetic parent, or OTLP acceptance alone does not prove
+   propagation.
 
 ## Verification JSON
 
@@ -77,6 +88,13 @@ Write `.observe/otel-verify.json` with this shape:
           "observed_telemetry": ["span GET /health with http.route=/health"],
           "trace_ids": ["4bf92f3577b34da6a3ce929d0e0e4736"],
           "product_validation": ["Trace waterfall shows route latency."],
+          "context_propagation_proof": [
+            {
+              "handoff_id": "OTEL-001.http-to-health-handler",
+              "same_trace_assertion_passed": true,
+              "relationship_assertion_passed": true
+            }
+          ],
           "proof_mode": "full_runtime",
           "visibility": "explorer_visible"
         }
@@ -164,6 +182,17 @@ scenarios must be working, and `remaining` must be empty. A working scenario
 requires direct evidence, observed telemetry, product validation, an executed
 `proof_mode`, and an explicit visibility state. Preserve empty `trace_ids` when
 unavailable; never invent values.
+
+For each instrumentation `context_handoffs` row mapped to a scenario, that
+scenario is `working` only when `context_propagation_proof` references the
+handoff ID exactly once, in instrumentation order, and both
+`same_trace_assertion_passed` and `relationship_assertion_passed` are `true`.
+Scenarios with no mapped handoff need no context proof. Cite the saved
+consumer-side assertion in scenario evidence and use only `app_test`, `unit`,
+`unit+otlp`, or `full_runtime` proof. Separate observations that a server span
+exists, a child span accepts a synthetic parent, or telemetry reached OTLP do
+not prove the handoff. Missing mapped proof is `not_proven`; any executed false
+same-trace or relationship assertion makes the scenario `not_working`.
 
 `otlp_accepted` and `explorer_visible` are evidence claims even when the row is
 not yet working: require an executed proof mode, durable evidence, observed

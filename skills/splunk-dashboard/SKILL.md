@@ -1,270 +1,143 @@
 ---
 name: splunk-dashboard
 description: >-
-  Generate Splunk Observability Cloud dashboard Terraform from an existing
-  otel-audit report. Reads .observe/otel.md, groups metrics into dashboard
-  panels, and outputs ready-to-apply HCL (signalfx_dashboard_group +
-  signalfx_dashboard + per-panel signalfx_*_chart resources) plus a sidecar
-  preview model for the local Observer. Use when the user types
-  $splunk-dashboard, asks to "generate a dashboard", "build a dashboard from
-  the audit", "create charts for my service", or "visualize my metrics".
+  Generate Splunk Observability Cloud dashboard Terraform from canonical OTel
+  audit JSON and its approved instrumentation and verification overlays. Groups proven or
+  explicitly accepted metrics into dashboard panels and outputs ready-to-apply
+  HCL (signalfx_dashboard_group + signalfx_dashboard + per-panel
+  signalfx_*_chart resources) plus a sidecar preview model for the local
+  Observer. Use when the user types $splunk-dashboard, asks to "generate a dashboard",
+  "build a dashboard from the audit", "create charts for my service", or
+  "visualize my metrics".
 metadata:
   author: otel-studio
   version: 0.1.0
   category: observability
 ---
 
-# Dashboard -- Splunk O11y Dashboard Terraform from Audit Report
+# Splunk dashboard
 
-## Overview
+Generate local dashboard Terraform, an Observer preview, and a concise report
+from one authoritative audit flow. This skill does not publish live resources;
+use `$splunk-dashboard-publish` only after review.
 
-Read an existing `.observe/otel.md` audit report, group detected metrics into
-dashboard panels (RED-style layout), and generate Terraform for Splunk
-Observability Cloud `signalfx_dashboard_group`, `signalfx_dashboard`, and
-per-panel `signalfx_*_chart` resources with inline SignalFlow `program_text`.
-Also emit a sidecar `.observe/dashboards.preview.json` that the local Observer's
-**Dashboards** tab renders against live OTLP data as an approximate preview.
+## Workflow
 
-This is the visualization analogue of `$splunk-configure` (which generates
-detectors). It shares its parsing rules and SignalFlow fragments; it differs in
-that a dashboard is a three-level object — group → dashboard → charts[] — where
-each chart is a separate resource placed on a 12-column grid.
+### 1. Validate Canonical Input Before Loading References
 
-## When to Use
+Require `.observe/otel-audit.json`, then read
+`references/canonical-input-contract.md` completely. Never open or read an audit
+Markdown report. Do not load `../references/report-flow-contract.md` as an
+up-front dashboard dependency; the local contract is complete. If canonical
+audit JSON is absent, stop and ask the user to run `$otel-audit` first.
 
-- After running `$otel-audit` to generate `.observe/otel.md`
-- When the user wants a dashboard / charts / a visual overview for their service
-- When the user wants to preview a dashboard layout locally before pushing it to
-  Splunk (the Observer Dashboards tab reads the preview sidecar this skill writes)
+### 2. Select dashboard-ready metrics
 
-**When NOT to use:** If no audit report exists yet, instruct the user to run
-`$otel-audit` first. For alerting/detection Terraform, use `$splunk-configure`.
-To push the generated dashboards to a live org, use `$splunk-dashboard-publish`.
+Follow the canonical input contract. Preserve exact service metadata,
+metric names, types, sources, stable telemetry item IDs, and direct proof.
+Generate panels only for exact verified metrics or explicitly accepted
+source-only metrics. Missing GenAI readiness signals are instrumentation
+prerequisites, not invented panels. Put every exclusion and its concrete next
+step in `Skipped Metrics`.
 
-## Process
+If the audit has no metrics and no GenAI readiness section, stop: tell the user
+to review `.observe/otel.html`, approve applicable findings, run
+`$otel-instrument`, and then run `$otel-verify`.
 
-### Step 1 -- Locate Audit Report
+### 3. Classify and generate
 
-Look for `.observe/otel.md` in the repository root.
+Read these two references completely:
 
-- If the file exists, proceed to Step 2.
-- If the file is missing, stop and respond:
+- `references/dashboard-classification.md` for deterministic RED, saturation,
+  GenAI, exclusion, and 12-column placement rules.
+- `references/dashboard-templates.md` for HCL resource shapes, standard
+  SignalFlow, and chart-type mappings.
 
-> No audit report found at `.observe/otel.md`. Please run `$otel-audit` first
-> to generate the observability coverage report.
+The templates cover normal RED and saturation charts. Do not load the longer
+`../references/signalflow-patterns.md` unless a proven metric needs a query
+shape absent from the dashboard templates. Do not load
+`../references/terraform-normalization.md` unless a nonstandard heredoc or an
+unresolved `${var.*}` remains; normally resolve variables from tfvars/defaults
+and dedent `<<-` heredocs directly.
 
-### Step 2 -- Parse Service Metadata, Metrics, and GenAI Coverage
+Write exactly:
 
-Extract from `.observe/otel.md`, using the same parsing rules `$splunk-configure`
-documents:
+- `.observe/terraform/dashboards.tf`: one or more
+  `signalfx_dashboard_group` -> `signalfx_dashboard` -> per-panel
+  `signalfx_*_chart` resources.
+- `.observe/terraform/variables.tf`: `realm`, `service_name`, and `api_token`;
+  `api_token` must contain `sensitive = true` and never a real token.
+- `.observe/terraform/terraform.tfvars.example`: empty realm/token and the
+  audited service name.
+- `.observe/dashboards.preview.json`: the fully resolved Observer preview.
+- `.observe/dashboards.md`: the human-readable companion report.
 
-1. **Service metadata** from the report header: service name (from the
-   `# Observability Report: {service-name}` heading), language, framework.
-2. **Metrics table** from the `### Metrics` section: each row gives metric name,
-   source, and type (auto/custom). Record all metrics for grouping in Step 3.
-3. **GenAI Readiness** from the `## GenAI Readiness` section when present. GenAI
-   metrics that exist become their own dashboard group; missing GenAI areas
-   become preview/instrumentation prerequisites, not invented panels.
+For every chart, keep one exact provenance ID across the HCL
+`# telemetry-item:` comment, preview `telemetryItemId`, and report:
 
-If the Metrics section says "No metrics detected." and there are no GenAI
-readiness sections, stop and respond:
+- `OTEL-###.<item>` for an implemented, directly verified metric.
+- `SOURCE-METRIC.<exact-metric-name>` only for an explicitly accepted existing
+  metric. Never invent an `OTEL-###` ID.
 
-> The audit report contains no metrics. Dashboards require metric data.
-> Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
+The preview has integer `schemaVersion: 1` and the hierarchy
+`groups[].dashboards[].charts[]`. Every chart requires `label`, `title`,
+`chartType`, `telemetryItemId`, `productAction`, `programText` or text, and
+integer layout `column,row,width,height`. Allowed `chartType` values are
+`time_series | single_value | list | heatmap | text | table`. Its resolved query,
+type, hierarchy, and 12-column grid placement must match HCL exactly. Include
+unused groups and empty dashboards; never claim the preview rendered or
+returned live values without direct evidence.
 
-### Step 3 -- Group Metrics into Panels
-
-Load `references/dashboard-classification.md` and apply its grouping rules to
-each metric from Step 2. Each metric maps to a panel with a chart type and a grid
-placement:
-
-- **Overview KPI row (top):** a row of `single_value` panels — one per RED
-  signal that exists (p99 latency, error rate, throughput) plus key saturation
-  gauges — giving an at-a-glance service summary.
-- **Latency** (duration histograms) → a `time_series` percentile panel.
-- **Error** (counters whose name carries an error keyword — e.g.
-  `checkout.payment.errors`, `http.server.errors.total` — keyed on counter-ness,
-  not a required `.total`/`.count` suffix) → a `time_series` error-rate panel.
-- **Throughput** (non-error counters — e.g. `checkout.orders.processed`,
-  `http.server.requests.total` — same counter test, no error keyword) → a
-  `time_series` rate panel.
-- **Saturation** (gauges: connections, queues, buffers, lag) → a `single_value`
-  panel (and optionally a `time_series` trend panel).
-- **GenAI** metrics (when present) → their own `signalfx_dashboard` inside a
-  GenAI dashboard group, with latency/token/provider/tool panels.
-
-Skip metrics that match the exclusion rules (auto-instrumented library
-duplicates, informational-only gauges). Record skipped metrics with a reason for
-the report.
-
-### Step 4 -- Generate Terraform
-
-Create the output directory `.observe/terraform/` if it does not exist. Generate
-three files using `references/dashboard-templates.md` plus the shared
-`../references/signalflow-patterns.md` for chart `program_text`:
-
-#### `.observe/terraform/dashboards.tf`
-
-- One `signalfx_dashboard_group` (plus a second GenAI group when GenAI metrics
-  exist).
-- One or more `signalfx_dashboard` referencing the group.
-- One `signalfx_<type>_chart` per panel (`signalfx_time_chart`,
-  `signalfx_single_value_chart`, etc.), with SignalFlow `program_text` built from
-  the shared `signalflow-patterns.md` fragment (no `detect()/when()/threshold()`
-  tail — charts only visualize).
-- Each chart is placed via the dashboard's `chart { chart_id = ...; column; row;
-  width; height }` block on the 12-wide grid: `column` 0-11, `width` 1-12,
-  `row` ≥0, `height` ≥1.
-
-Sanitize metric names for HCL identifiers: replace dots and hyphens with
-underscores, strip leading digits.
-
-#### `.observe/terraform/variables.tf`
-
-> **REQUIRED: `sensitive = true` on `api_token` — no exceptions.**
-> The `api_token` variable MUST include `sensitive   = true`. Omitting it is a
-> hard failure: Terraform will log the value in plaintext. Copy the block below
-> exactly; do not remove `sensitive = true`.
-
-```hcl
-variable "realm" {
-  description = "Splunk Observability Cloud realm (e.g. us1, eu0)"
-  type        = string
-}
-
-variable "api_token" {
-  description = "Splunk Observability Cloud API token"
-  type        = string
-  sensitive   = true   # REQUIRED — must always be present
-}
-
-variable "service_name" {
-  description = "Service name for dashboard naming and chart filters"
-  type        = string
-  default     = "<service-name from report>"
-}
-```
-
-`api_token` is always `sensitive = true` — it is a secret and must never be
-logged, written into a report, or committed with a real value.
-
-#### `.observe/terraform/terraform.tfvars.example`
-
-```hcl
-realm        = ""   # e.g. us1, eu0, lab0
-api_token    = ""   # Splunk O11y API token (org-level, dashboard write)
-service_name = "<service-name from report>"
-```
-
-### Step 5 -- Emit the Observer Preview Sidecar
-
-Write `.observe/dashboards.preview.json` for the local Observer Dashboards tab.
-Because this skill already resolves `${var.*}` and dedents the `<<-EOF` heredocs
-while writing HCL (per `../references/terraform-normalization.md`), write the
-**fully-resolved** `programText` here — the Observer does no HCL parsing.
-
-```jsonc
-{
-  "schemaVersion": 1,
-  "generatedAt": "<RFC3339 timestamp>",
-  "groups": [
-    {
-      "name": "<service-name> Overview",
-      "description": "RED + saturation dashboard for <service-name>",
-      "dashboards": [
-        {
-          "name": "<service-name> RED",
-          "description": "Rate, errors, duration",
-          "charts": [
-            {
-              "label": "p99_latency",
-              "title": "P99 Latency",
-              "chartType": "time_series",
-              "programText": "data('http.server.request.duration', filter=filter('service.name','<service>')).percentile(pct=99).publish(label='P99 Latency')",
-              "text": null,
-              "layout": { "column": 0, "row": 0, "width": 6, "height": 3 }
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-- `chartType` ∈ `time_series | single_value | list | heatmap | text | table`.
-- `programText` carries the resolved SignalFlow (no `${var.*}`, dedented). For a
-  `text` panel, set `programText: null` and put the markdown in `text`.
-- `layout` mirrors the HCL `chart {}` block exactly: `column` 0-11, `row` ≥0,
-  `width` 1-12, `height` ≥1. The grid is 12 columns wide.
-
-Keep the preview sidecar in lockstep with `dashboards.tf`: every chart in the HCL
-appears exactly once in the sidecar with the same label, type, resolved query,
-and grid placement.
-
-### Step 6 -- Generate Report
-
-Create `.observe/dashboards.md` as a human-readable companion:
+Keep the report literal too: copy each panel label without paraphrasing, make
+its Product action / rationale cell exactly equal the preview chart's
+`productAction`, and enumerate the exact `OTEL-###.<item>` or
+`SOURCE-METRIC.<exact-metric-name>` IDs in mapping evidence. These are parity
+fields, not prose summaries. The Panels table header is exactly:
 
 ```markdown
-# Dashboards Report: <service-name>
-
-**Language:** <lang> | **Framework:** <framework> | **Date:** <YYYY-MM-DD>
-**Source:** `.observe/otel.md` | **Output:** `.observe/terraform/`
-
-## Summary
-
-| Dashboard | Group | Panels | Chart Types |
-|-----------|-------|--------|-------------|
-| <service> RED | <service> Overview | N | single_value, time_series |
-
-## Panels
-
-| # | Panel | Metric | Chart Type | Grid (col,row,w,h) | Rationale |
-|---|-------|--------|------------|--------------------|-----------|
-| 1 | P99 Latency | http.server.request.duration | time_series | 0,0,6,3 | latency histogram → percentile time series |
-
-## Grid Map
-
-<ASCII or table sketch of the 12-column placement per dashboard>
-
-## Skipped Metrics
-
-| Metric | Reason |
-|--------|--------|
-
-## GenAI Instrumentation Prerequisites
-
-<when GenAI Readiness exists and a required signal is missing>
-
-## Next Steps
-
-1. `cp .observe/terraform/terraform.tfvars.example .observe/terraform/terraform.tfvars`
-2. Fill in `realm` and `api_token`
-3. Preview locally: open the Observer **Dashboards** tab (localhost:3000)
-4. Push to Splunk: `$splunk-dashboard-publish` (REST-direct, creates only gaps)
-   or `cd .observe/terraform && terraform init && terraform apply`
-
----
-*Generated by splunk-dashboard on <YYYY-MM-DD>*
+| # | Telemetry Item ID | Panel | Metric | Chart Type | Grid (col,row,w,h) | Product action / rationale |
 ```
 
-### Step 7 -- Chat Summary
+For `Metric`, list the unique `data(...)` metric names in query order separated
+by `, `; use `N/A` for text-only charts. The `Preview And Validation` table must
+use these exact row labels:
 
-After all files are written, present a concise summary: the dashboards/panels
-generated, the files written (`dashboards.tf`, `variables.tf`,
-`terraform.tfvars.example`, `.observe/dashboards.md`,
-`.observe/dashboards.preview.json`), and the next steps — preview in the Observer
-Dashboards tab, then `$splunk-dashboard-publish` or `terraform apply`.
+- `Verified metric item mapping`
+- `Terraform ↔ preview parity`
+- `Observer render`
+- `Live value sanity`
+- `Publish/apply`
 
-## Red Flags
+Set overall `Result: Pass` only when the first four checks pass; `Publish/apply`
+is a handoff status and may remain `Not run`. Use `Partial` when deterministic
+mapping/parity passes but local render or live values were not proven. Use
+`Blocked` when meaningful generation or deterministic validation cannot run.
 
-- `api_token` variable in `variables.tf` is missing `sensitive = true` — this is a hard requirement; the token is a secret and must never be logged or committed as plaintext.
-- Audit report has no metrics section and no GenAI readiness — nothing to chart.
-- A chart's resolved `programText` still contains a literal `${var.*}` — the
-  preview sidecar and any future POST will fail; resolve every variable per
-  `../references/terraform-normalization.md` before writing.
-- A panel's grid placement overflows the 12-column grid (`column + width > 12`)
-  — clamp or re-place it; the Observer preview clamps defensively but the HCL
-  should be correct.
-- Service name contains characters invalid for a SignalFlow filter value.
+### 4. Validate once, then repair named errors
+
+Run the dependency-free `python3 scripts/validate_dashboard_output.py` command
+from the canonical input contract with `--terraform`, `--preview`, `--report`,
+and its proof arguments.
+
+Treat the validator as an opaque executable; do not inspect its source or tests
+during normal generation. Repair only the artifact or binding named by compact
+JSON errors, then rerun. Do not create a synthetic audit or weaken a claim to
+make validation pass. A zero exit proves mapping and artifact parity, not
+Observer rendering, live values, or publication.
+
+### 5. Hand off
+
+Summarize the dashboards and panels, five written outputs, exact validation
+result, and remaining unproven checks. Next steps are local Observer preview,
+then `$splunk-dashboard-publish` or reviewed `terraform apply`; never apply or
+publish as part of this skill.
+
+## Stop conditions
+
+- Invalid/stale canonical JSON or digest binding: stop; never switch audit
+  formats or merge states.
+- Newly implemented metric without direct item proof or explicit source-only
+  acceptance: skip it.
+- Missing service filter, unresolved variable, invalid/overlapping grid,
+  missing provenance/product action, report-preview drift, or non-sensitive
+  token variable: repair the generated artifact and revalidate.

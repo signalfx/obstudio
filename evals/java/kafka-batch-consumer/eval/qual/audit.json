@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the plain Java Kafka batch consumer service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
+      "task": "Scan the plain Java Kafka batch consumer service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the plain Java Kafka batch consumer service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, batch-processing risks, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
+      "task": "Produce an observability readiness review for the plain Java Kafka batch consumer service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, batch-processing risks, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     }
   ],
   "judge_inputs": [

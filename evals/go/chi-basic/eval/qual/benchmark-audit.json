@@ -1,0 +1,22 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "benchmark",
+      "eval_inputs": [],
+      "task": "Audit the Go chi service in ./service for OpenTelemetry coverage. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json and render the self-contained ./service/.observe/otel.html. Validate the JSON, then run the bundled observe_report.py gate against .observe/otel-audit.json with --fail-on required as a headless CI/MR policy check. Report exit 1 as an invalid artifact/tool error and exit 2 as an explicit unresolved-required-finding policy match; do not claim that an external CI system was configured."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service/.observe/otel-audit.json and ./service/.observe/otel.html.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Writes valid schema-v2 .observe/otel-audit.json with authored otel_concerns, verification references, and complete downstream instrumentation context plus a self-contained, decision-first .observe/otel.html showing compact signal-type shape, conditional prerequisite IDs, configuration scope beside exact telemetry, and collapsed acceptance checks, implementation guardrails, and evidence without changing application code or configuration; the HTML omits per-card raw scenario IDs and OTel taxonomy and does not duplicate findings as a component/service map or raw flow view.",
+    "Identifies main.go as the process entrypoint and enumerates GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, and DELETE /tasks/{id}.",
+    "Reports that no OpenTelemetry SDK, provider, exporter, or instrumentation is currently configured.",
+    "Provides stable finding IDs and verification-scenario references suitable for selected-ID otel-instrument and otel-verify handoff.",
+    "Runs the headless observe_report.py gate against .observe/otel-audit.json with --fail-on required, distinguishes exit 1 validation/tool failure from exit 2 policy match, and does not claim to install or invoke an external CI agent."
+  ]
+}

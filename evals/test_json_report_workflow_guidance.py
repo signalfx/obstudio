@@ -16,6 +16,11 @@ INSTRUMENT_FINALIZATION = (
     ROOT / "skills" / "otel-instrument" / "references" / "finalization.md"
 )
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
+VERIFY_DIRECT = ROOT / "skills" / "otel-verify" / "references" / "direct-verification.md"
+VERIFY_REPORT = ROOT / "skills" / "otel-verify" / "references" / "verification-report.md"
+JAVA_INSTRUMENT_REFERENCE = (
+    ROOT / "skills" / "otel-instrument" / "references" / "languages" / "java.md"
+)
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
 REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
@@ -116,15 +121,57 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
     assert "unresolved dependency" in handoff_normalized
 
     audit_normalized = " ".join(audit.split())
-    assert "`render-markdown` command owns the complete `.observe/otel.md`" in audit_normalized
-    assert "Do not embed a second Markdown template" in audit_normalized
+    assert "Write two audit artifacts" in audit_normalized
+    assert "Omit `flow` and `signal_flow` from new audits" in audit_normalized
     assert "do not present `$otel-verify` or generic `run verification` as the audit prompt's next step" in audit_normalized.lower()
     assert 'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py"' in audit
     assert "--normalized-out" not in audit
     assert "otel-audit.normalized.json" not in audit
 
 
-def test_instrument_keeps_interactive_contract() -> None:
+def test_context_handoffs_are_binding_and_fail_closed() -> None:
+    instrument = " ".join(_read(INSTRUMENT_HANDOFF).split())
+    verify = " ".join(_read(VERIFY_HANDOFF).split())
+    shared = " ".join(_read(REPORT_FLOW).split())
+    java = " ".join(_read(JAVA_INSTRUMENT_REFERENCE).split())
+
+    for term in (
+        "binding non-regression obligations",
+        "inventory every source consumer",
+        "preserve the producer-to-consumer handoff",
+        "focused consumer-side test",
+        "one `context_handoffs` row per source consumer",
+    ):
+        assert term in instrument
+
+    for term in (
+        "inspect every source consumer",
+        "downstream consumer",
+        "context_propagation_proof",
+        "same_trace_assertion_passed",
+        "relationship_assertion_passed",
+        "Missing mapped proof is `not_proven`",
+        "scenario `not_working`",
+    ):
+        assert term in verify
+
+    for term in (
+        "context_propagation_proof",
+        "Older context-propagation instrumentation and verification overlays",
+        "not grandfathered",
+    ):
+        assert term in shared
+
+    for term in (
+        "contextWrite",
+        "deferContextual",
+        "ContextView.get",
+        "subscriber-side test",
+    ):
+        assert term in java
+
+
+def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> None:
     instrument = _read(INSTRUMENT_SKILL)
     resolved = _resolved_contract(
         INSTRUMENT_SKILL,
@@ -145,7 +192,17 @@ def test_instrument_keeps_interactive_contract() -> None:
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
     )
-    assert "#### Reader Order" in resolved
+    assert "this file is the scoped instrumentation and reader-report authority" in " ".join(
+        handoff.split()
+    )
+    assert "Do not also load `../../references/report-flow-contract.md`" in handoff
+    assert "unless a conditional downstream workflow explicitly requires" in " ".join(
+        handoff.split()
+    )
+    assert "## Reader Order" in report
+    assert "Markdown is output, not scope" in report
+    assert len(instrument.splitlines()) < 500
+    assert len(instrument.split()) < 4500
 
 
 def test_instrument_interactive_references_are_resolvable() -> None:
@@ -197,8 +254,20 @@ def test_verify_keeps_interactive_contract() -> None:
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
     )
-    assert "## Reader Report" in resolved
-    assert "### 9. Final Response" in resolved
+    assert "this file is the scoped verification and reader-report authority" in " ".join(
+        handoff.split()
+    )
+    assert "Do not also load `../../references/report-flow-contract.md`" in handoff
+    assert "unless a conditional downstream workflow explicitly requires" in " ".join(
+        handoff.split()
+    )
+    direct_normalized = " ".join(direct.split())
+    assert "direct explicit-user verification scope" in direct_normalized
+    assert "direct concrete user request and current source as scope" in direct_normalized
+    assert "Never combine this path with canonical" in direct_normalized
+    assert "## Reader Report" in report
+    assert len(verify.splitlines()) < 500
+    assert len(verify.split()) < 3500
 
 
 def test_verify_interactive_reference_is_resolvable() -> None:
@@ -282,8 +351,12 @@ def test_instrument_terminal_boundary_forbids_post_gate_inspection() -> None:
     assert finalization_raw.rfind("\n## ") + 1 == terminal
     assert "requested detector/configure workflow" in finalization
     assert "Direct No-Audit Branch" in finalization
+    assert "Do not seek or invoke a canonical gate" in finalization
+    assert "The last successful applicable validation is terminal" in finalization
+    assert "direct no-audit workflow remains available" in instrument
     assert "Successful cleanup is the terminal boundary" in go_guide
     assert "explicit canonical no-child validation" in go_guide
+    assert "applicable terminal check" in go_guide
     assert "direct no-audit validation" in go_guide
     assert "emit the final response immediately" in go_guide
     assert "a `go.sum` inspection" in go_guide

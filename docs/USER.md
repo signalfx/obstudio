@@ -153,9 +153,10 @@ JSON-backed and HTML-first:
    refreshed. Instrumentation and verification JSON sidecars keep that view
    deterministic.
 
-The Markdown reports remain available for compatibility with older tooling and
-are the only artifacts in explicit legacy/no-audit fallbacks. JSON is canonical
-only for the JSON-backed workflow.
+The audit is JSON-backed and HTML-first; it no longer generates
+`.observe/otel.md`. Instrumentation and verification may still write their
+own technical Markdown ledgers, but those reports never replace the canonical
+JSON handoff.
 
 ## Running the Full Observer
 
@@ -280,9 +281,9 @@ Observability Cloud **dashboards**:
 $splunk-dashboard
 ```
 
-This reads `.observe/otel.md`, groups the service's metrics into RED-style
-panels (latency/duration, error rate, throughput, plus saturation and KPI
-single-value tiles), and writes dashboard Terraform to
+This reads canonical `.observe/otel-audit.json`, groups the service's metrics into
+RED-style panels (latency/duration, error rate, throughput, plus saturation and
+KPI single-value tiles), and writes dashboard Terraform to
 `.observe/terraform/dashboards.tf` — a `signalfx_dashboard_group`, one or more
 `signalfx_dashboard`, and one `signalfx_*_chart` resource per panel placed on
 the real 12-column grid — plus `variables.tf`, `terraform.tfvars.example`, a

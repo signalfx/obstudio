@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from .definitions import EvalCase
+from .eval_contracts import case_from_definition, load_eval_definition
 from .eval_files import iter_eval_files
-from .plugin import case_from_definition, load_eval_definition
 
 
 def discover_cases(

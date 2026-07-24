@@ -17,6 +17,12 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
   traces or metrics in an Observer-compatible API.
 - Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
+Reports keep task and grading usage separate. `agent_tokens` measures the model
+applying the skill to the fixture (including prompt, tool-turn, cached-input,
+and output usage); `rubric_tokens` measures only the later judge; and `tokens`
+is their sum. Use `agent_tokens` for normal-skill-use comparisons. It is an eval
+fixture proxy, not an exact prediction for every future repository.
+
 ## Install
 
 Install from this repository while the plugin is developed:
@@ -44,7 +50,9 @@ The `eval/<kind>/` layout lets jobs select a global-style path pattern such as
 
 If a case needs local source files or other fixtures, place them in the case
 directory above `eval/`. If it does not, the case directory can contain only the
-`eval/` folder.
+`eval/` folder. Fixture, skill, and shared-reference source trees must not
+contain symlinks; provenance hashing rejects them before the fixture is copied
+so executed bytes cannot come from outside the authenticated tree.
 
 Minimal shape:
 
@@ -167,6 +175,33 @@ uv run pytest -n 4 evals --skill skills/<skill-dir> --codex-eval-kind rubric --a
 The plugin writes per-worker result payloads and merges them into the same
 aggregate reports at session finish.
 
+Live agent execution trees are intentionally quarantined instead of being
+deleted by pathname. Agent code can retain a concurrent directory renamer, so
+portable cleanup could otherwise delete a replacement outside the evaluated
+tree. Each harness process creates a random private directory named like
+`$TMPDIR/codex-eval-quarantine-v1-<uid>-<random>` on POSIX (the numeric user ID
+is omitted where unavailable). Each case consumes one of 1,024 fixed
+reservation names inside that process-local root. The harness never
+deliberately releases a reservation, including when an agent renames the nested
+execution tree, and fails before starting a backend when every visible name is
+occupied or the quarantine contains an unexpected entry. A later harness
+process gets a fresh random root, so normal retained reservations do not
+permanently exhaust future invocations. Default temporary storage has no
+harness-managed byte or inode quota; its operating-system lifecycle owns
+eventual reclamation.
+
+Set `CODEX_EVAL_QUARANTINE_ROOT` to use a pre-provisioned absolute directory
+owned by the current user with mode `0700`. For untrusted evals, that directory
+must be on a disposable filesystem or volume with an externally enforced byte
+and inode quota plus process and lifecycle isolation. The 1,024 names limit
+cooperative harness allocation only; it is not a same-UID security or resource
+boundary. Evaluated code running as that user can move a top-level reservation
+and make its name reusable, and the harness cannot safely enforce a byte or
+process boundary after launch. To reclaim space, stop every process from the
+explicit quarantine and destroy the isolated volume or apply an external
+retention policy. Published run artifacts remain under
+`.workspace/codex-evals/` and exclude the raw backend scratch directory.
+
 Print per-item progress with:
 
 ```bash
@@ -249,8 +284,12 @@ uv run codex-eval-harness report --repo-root . --skill <skill-id> --kind sanity
 ```
 
 The report step writes `<kind>/report.md` and `<kind>/benchmark.json` in the
-timestamped run directory and copies the latest summary to
-`eval-reports/<skill>/<kind>/`.
+timestamped run directory. It compares the run's prompt IDs with the current
+complete eval definitions for that skill and kind. Only a full-suite report
+replaces `eval-reports/<skill>/<kind>/report.md` and `benchmark.json`; filtered,
+stale, or otherwise unprovable scopes are preserved under
+`eval-reports/<skill>/<kind>/scoped/<run-id>/`. Scope status and selected versus
+expected prompt counts are included in both report formats.
 
 Each `benchmark.json` is kind-specific. Sanity reports contain only sanity
 check fields, rubric reports contain only rubric judge fields, and runtime
