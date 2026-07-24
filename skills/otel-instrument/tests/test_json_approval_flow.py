@@ -105,6 +105,8 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("validate-flow", completed.stdout)
         self.assertIn("render-html", completed.stdout)
         self.assertIn("render-instrumentation-html", completed.stdout)
+        self.assertIn("instrumentation-final-gate", completed.stdout)
+        self.assertIn("finalize-instrumentation", completed.stdout)
 
     def test_wrapper_missing_helper_is_a_tool_error(self) -> None:
         missing = Path("/definitely/missing/observe_report.py")

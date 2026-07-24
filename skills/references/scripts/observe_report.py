@@ -6492,6 +6492,48 @@ def build_parser() -> argparse.ArgumentParser:
     )
     instrumentation_digest_command.set_defaults(func=cmd_instrumentation_digest)
 
+    instrumentation_gate = subparsers.add_parser(
+        "instrumentation-final-gate",
+        help="block final instrumentation handoff while child verification needs repair",
+    )
+    instrumentation_gate.add_argument("audit_json", type=Path)
+    instrumentation_gate.add_argument("--selection-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--instrumentation-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--verify-json", type=Path, required=True)
+    instrumentation_gate.add_argument("--output", type=Path)
+    instrumentation_gate.set_defaults(func=cmd_instrumentation_final_gate)
+
+    finalize_instrumentation = subparsers.add_parser(
+        "finalize-instrumentation",
+        help=(
+            "validate reader projections, atomically render instrumentation HTML, "
+            "and apply the final child-verification gate"
+        ),
+    )
+    finalize_instrumentation.add_argument("audit_json", type=Path)
+    finalize_instrumentation.add_argument(
+        "--selection-json", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument(
+        "--instrumentation-json", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument("--verify-json", type=Path, required=True)
+    finalize_instrumentation.add_argument("--instrumentation-markdown", type=Path)
+    finalize_instrumentation.add_argument("--verify-markdown", type=Path)
+    finalize_instrumentation.add_argument(
+        "-o", "--output", "--html-output", type=Path, required=True
+    )
+    finalize_instrumentation.add_argument(
+        "--repo-root",
+        type=Path,
+        help=(
+            "source repository root for portable local-file links "
+            "(inferred from .observe by default)"
+        ),
+    )
+    finalize_instrumentation.add_argument("--gate-output", type=Path)
+    finalize_instrumentation.set_defaults(func=cmd_finalize_instrumentation)
+
     return parser
 
 
