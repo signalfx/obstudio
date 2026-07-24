@@ -41,6 +41,39 @@ Reader-First Report Order.
 
 Scan the repository to determine language, framework, and existing instrumentation.
 
+Use the initial bounded file list as a size gate. When the service has at most
+25 non-ignored files, exactly one dependency manifest, and no nested service
+root, take the direct small-repo path: inspect that file list, the manifest,
+the entrypoint, and cited source directly, and do not run the inventory helper.
+For larger, multi-module, nested, or unclear repositories, run the shared
+read-only inventory before broad manual searches:
+
+```bash
+python3 -I "<directory-containing-loaded-SKILL.md>/scripts/inspect_otel_project.py" \
+  "<service-root>" \
+  --output "<service-root>/.observe/tmp/otel-project-inventory.json"
+```
+
+Resolve the command directly from the directory containing the loaded
+`otel-audit/SKILL.md`; do not probe a repository-root `references/` directory.
+On the inventory path, run one successful invocation. Retry only to correct an
+invocation or runtime failure. Its deterministic JSON
+seeds language/manifests, entrypoint and route candidates, runtime candidates,
+startup/test surfaces, and categorized OTel source/config hits. Treat every hit
+as a candidate: the inventory does not prove target-process reachability,
+runtime availability, or telemetry emission. First inspect `complete`,
+`warnings`, `skipped`, and `section_counts`; then read only the JSON sections
+needed for the task instead of dumping the full file into context. Reconcile
+candidates with the actual entrypoint and source before making coverage claims.
+For a section whose truncation is zero in a `complete: true` inventory, do not
+repeat the same repository-wide `find` or broad `rg`; inspect cited files and
+use focused source proof. In particular, do not follow a complete file/OTel
+inventory with recursive `find`, `rg --files`, or a repository-wide OTel-pattern
+`rg`. The helper creates the output parent; do not pre-create it. Search
+manually for incomplete, skipped, unsupported, or truncated surfaces. If Python
+or the shared helper is unavailable, perform the discovery manually and record
+the exact inventory failure. Record which discovery path was selected.
+
 1. Detect primary language and framework:
    - Go: `go.mod`
    - Python: `requirements.txt`, `pyproject.toml`, `setup.py`

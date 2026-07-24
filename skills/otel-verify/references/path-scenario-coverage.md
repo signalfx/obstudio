@@ -135,6 +135,30 @@ Use stable ids such as:
   the code works. Leave `App code proof` empty or `source only` and keep the
   status below fully verified.
 
+## Nested Topology Harnesses
+
+Use a nested temporary harness only when topology is in scope and the real path
+cannot run. Topology is necessary for workflow/agent/tool/retrieval/memory
+traces, GenAI flow graphs, LangGraph, Temporal, queues/jobs, async handoff, MCP
+tool execution, streaming lifecycle, parent/child shape, duplicate-span
+prevention, or an explorer DAG.
+
+- Derive expected edges from the inventories, for example
+  `workflow -> agent -> llm.call`, `agent -> tool`, `tool -> mcp`, or
+  `stream -> send_failed event`.
+- Prefer real instrumented call sites. If imports are blocked, use a generated
+  temporary SDK contract with the same nesting and label it
+  `generated temporary nested SDK contract`.
+- Keep child spans active inside the parent span context. Do not create all
+  spans as siblings under a synthetic root unless topology is out of scope.
+- For async or queue boundaries, use parent/child when context propagates
+  synchronously and span links when the architecture expects links.
+- Assert topology after export by querying parent span ids, links, span depth,
+  or Obstudio flow nodes/edges when available.
+
+Generated SDK topology is contract-only evidence. It does not prove the
+application executed the corresponding path.
+
 ## Report Requirements
 
 Add this section to `.observe/otel-verify.md`:

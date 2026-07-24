@@ -9,6 +9,12 @@ AUDIT_SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
 INSTRUMENT_SKILL = ROOT / "skills" / "otel-instrument" / "SKILL.md"
 VERIFY_SKILL = ROOT / "skills" / "otel-verify" / "SKILL.md"
 INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-approval-handoff.md"
+INSTRUMENT_REPAIR = (
+    ROOT / "skills" / "otel-instrument" / "references" / "repair-loop.md"
+)
+INSTRUMENT_FINALIZATION = (
+    ROOT / "skills" / "otel-instrument" / "references" / "finalization.md"
+)
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
@@ -145,10 +151,28 @@ def test_instrument_keeps_interactive_contract() -> None:
 def test_instrument_interactive_references_are_resolvable() -> None:
     instrument = _read(INSTRUMENT_SKILL)
     resolved = _resolved_contract(INSTRUMENT_SKILL, "instrumentation-report.md")
+    go_reference = (
+        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+    )
 
     assert "./references/json-approval-handoff.md" in instrument
     assert INSTRUMENT_HANDOFF.is_file()
     assert "#### Signals Changed" in resolved
+    for route, reference in (
+        ("./references/repair-loop.md", INSTRUMENT_REPAIR),
+        ("./references/finalization.md", INSTRUMENT_FINALIZATION),
+    ):
+        assert route in instrument
+        assert reference.is_file()
+
+    assert "./references/languages/{python,node,java,go}.md" in instrument
+    assert go_reference.is_file()
+    assert "## Failure Ownership" not in instrument
+    assert "## Failure Ownership" in _read(INSTRUMENT_REPAIR)
+    assert "## Terminal Sequence" not in instrument
+    assert "## Terminal Sequence" in _read(INSTRUMENT_FINALIZATION)
+    assert "scripts/resolve_go_otel_versions.py" not in instrument
+    assert "scripts/resolve_go_otel_versions.py" in _read(go_reference)
 
 
 def test_verify_keeps_interactive_contract() -> None:
@@ -200,6 +224,70 @@ def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
     assert "separately bound `.observe/otel-verify.json`" in handoff
     assert "do not duplicate them as new instrumentation schema fields" in handoff
 
+
+def test_instrument_terminal_boundary_forbids_post_gate_inspection() -> None:
+    skill = _read(INSTRUMENT_SKILL)
+    instrument = " ".join(skill.split())
+    finalization_raw = _read(INSTRUMENT_FINALIZATION)
+    finalization = " ".join(finalization_raw.split())
+    repair = " ".join(_read(INSTRUMENT_REPAIR).split())
+    handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
+    go_guide = " ".join(
+        _read(
+            ROOT
+            / "skills"
+            / "otel-instrument"
+            / "references"
+            / "languages"
+            / "go.md"
+        ).split()
+    )
+
+    assert "`./references/finalization.md` exactly once" in instrument
+    for term in (
+        "`finalize-instrumentation`",
+        "includes `instrumentation-final-gate`",
+        "successful explicit no-child validation",
+        "successful stopped-failure validation",
+        "emit the final response without another command",
+        "`git status`",
+        "`git diff`",
+        "inspect `go.sum`",
+        "repeat a validator/test",
+        "duplicate final review",
+        "without `--verify-json`",
+        "Never fabricate audit, selection, instrumentation, or verification JSON",
+    ):
+        assert term in finalization
+
+    for term in (
+        "`meta.result: Fail`",
+        "`stop_boundaries[]`",
+        "repair-only finding `remaining`",
+        "never turns an observed telemetry failure into `Blocked` or `not_proven`",
+    ):
+        assert term in repair
+
+    assert "Do not run `instrumentation-final-gate`" in handoff
+    assert "the parent `SKILL.md` owns the actual gate" in handoff
+    assert "This is preliminary Step 5 validation" in handoff
+    assert "stopped-failure handoff" in handoff
+    assert "not a completed or verified instrumentation result" in handoff
+    assert "Treat a passing `instrumentation-final-gate`" not in handoff
+
+    terminal = finalization_raw.index("## Terminal Sequence")
+    assert finalization_raw.index("## VS Code Debugging") < terminal
+    assert finalization_raw.index("## Final Report And Response") < terminal
+    assert finalization_raw.index("## Credential Safety") < terminal
+    assert finalization_raw.rfind("\n## ") + 1 == terminal
+    assert "requested detector/configure workflow" in finalization
+    assert "Legacy No-Audit Branch" in finalization
+    assert "Successful cleanup is the terminal boundary" in go_guide
+    assert "explicit canonical no-child validation" in go_guide
+    assert "legacy no-audit validation" in go_guide
+    assert "emit the final response immediately" in go_guide
+    assert "a `go.sum` inspection" in go_guide
+    assert "repeated validators/tests" in go_guide
 
 def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     audit = " ".join(_read(AUDIT_SKILL).split())
@@ -334,6 +422,69 @@ def test_canonical_overlays_join_code_telemetry_product_action_and_item_proof() 
         "explorer_visible",
     ):
         assert term in verify
+
+
+def test_failed_child_stop_boundaries_are_separate_from_repairs() -> None:
+    instrument = " ".join(
+        (
+            _read(INSTRUMENT_SKILL)
+            + _read(INSTRUMENT_HANDOFF)
+            + _read(INSTRUMENT_REPAIR)
+        ).split()
+    )
+    verify = " ".join((_read(VERIFY_SKILL) + _read(VERIFY_HANDOFF)).split())
+    flow = " ".join(_read(REPORT_FLOW).split())
+
+    for text in (instrument, verify, flow):
+        assert "stop_boundaries[]" in text
+        assert "remaining" in text and "next_steps" in text
+        assert "repair-only" in text
+        assert "external_prerequisite" in text
+        assert "lifecycle: intermediate" in text
+    for kind in (
+        "unselected_work",
+        "material_decision",
+        "new_authority",
+        "external_prerequisite",
+    ):
+        assert kind in verify
+
+
+def test_item_proof_cannot_borrow_aggregate_or_different_signal_evidence() -> None:
+    instrument = " ".join(
+        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
+    )
+    verify = " ".join(_read(VERIFY_SKILL).split())
+    flow = " ".join(_read(REPORT_FLOW).split())
+
+    for text in (instrument, verify, flow):
+        assert "aggregate receiver counts" in text.lower()
+        assert "differently named signal" in text
+        assert "not_proven" in text
+    assert "render it as **Not proven** rather than **Observed**" in instrument
+    assert "never as `Observed`" in verify
+    assert "must leave it `not_proven`" in flow
+
+
+def test_item_direct_assertion_is_independent_from_finding_coverage() -> None:
+    instrument = " ".join(
+        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
+    )
+    verify = " ".join((_read(VERIFY_SKILL) + _read(VERIFY_HANDOFF)).split())
+    flow = " ".join(_read(REPORT_FLOW).split())
+    report_tool = " ".join(_read(REPORT_TOOL).split())
+
+    for text in (instrument, verify, flow):
+        assert "direct_assertion_passed" in text
+        assert "removed" in text.lower()
+        assert "replacement owner" in text.lower()
+    assert "exact item or call site" in instrument
+    assert "exact telemetry item or call site" in verify
+    assert "exact item or call site" in flow
+    assert "finding or scenario coverage cannot" in report_tool
+    assert "downgrade a passed item assertion" in report_tool
+    assert 'direct_assertion_passed != (item_status == "working")' in report_tool
+    assert "proof_mode not in ITEM_DIRECT_PROOF_MODES" in report_tool
 
 
 def test_human_html_uses_generated_trace_without_raw_correlation_ids() -> None:

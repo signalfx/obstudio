@@ -42,6 +42,16 @@ project config is not an application failure.
 - For Maven reactors, a focused `-Dtest=...` filter may fail in upstream
   modules with no matching tests. A no-match guard is allowed only for reactor
   traversal; inspect Surefire/Failsafe reports to prove the target test ran.
+- Split OTel provider tests from Java-agent E2E tests. Run tests that construct
+  an `SdkTracerProvider`, install an `OpenTelemetrySdk`, or replace the test
+  global in a fork without `-javaagent`; run real agent startup, automatic
+  spans/metrics, topology, and OTLP assertions in a separate agent E2E fork.
+  Scope `argLine`, `JAVA_TOOL_OPTIONS`, and equivalent Gradle JVM arguments so
+  the agent cannot leak into the provider-owning unit-test fork.
+- Inventory exporter configuration ownership. `-Dotel.*` agent properties are
+  insufficient for an application-owned metric reporter that reads
+  `System.getenv`; pass the actual required `OTEL_*` environment variables to
+  its fork and record their effective non-secret values.
 
 ### Node And TypeScript
 

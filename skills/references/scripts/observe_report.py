@@ -5715,6 +5715,390 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
     return 0
 
 
+def instrumentation_final_gate_result(
+    report: dict[str, Any],
+    selection: dict[str, Any],
+    instrumentation: dict[str, Any],
+    verify: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Evaluate the shared final gate against an already-normalized flow."""
+    if verify["meta"]["workflow_mode"] != "instrumentation_child":
+        fail(
+            "instrumentation-final-gate requires verify.meta.workflow_mode "
+            "instrumentation_child"
+        )
+    failed_findings = [
+        finding["id"]
+        for finding in verify["findings"]
+        if finding["status"] == "not_working"
+    ]
+    failed_scenarios = [
+        scenario["id"]
+        for finding in verify["findings"]
+        for scenario in finding["scenarios"]
+        if scenario["status"] == "not_working"
+    ]
+    failed_items = [
+        item["id"]
+        for finding in verify["findings"]
+        for item in finding["item_results"]
+        if item["status"] == "not_working"
+    ]
+    passed = (
+        verify["meta"]["lifecycle"] == "final"
+        and not failed_findings
+        and instrumentation["meta"]["result"] != "Fail"
+    )
+    pending = [
+        finding["id"]
+        for finding in verify["findings"]
+        if finding["status"] not in {"working", "not_working"}
+    ]
+    return (
+        {
+            "schema_version": OVERLAY_SCHEMA_VERSION,
+            "kind": "otel-instrumentation-final-gate",
+            "audit_id": report["meta"]["audit_id"],
+            "audit_sha256": audit_digest(report),
+            "selection_sha256": selection_digest(selection),
+            "instrumentation_sha256": instrumentation_digest(instrumentation),
+            "passed": passed,
+            "verification_result": verify["meta"]["result"],
+            "verification_lifecycle": verify["meta"]["lifecycle"],
+            "failed_findings": failed_findings,
+            "failed_scenarios": failed_scenarios,
+            "failed_items": failed_items,
+            "proof_pending_findings": pending,
+        },
+        pending,
+    )
+
+
+def print_instrumentation_final_gate(
+    result: dict[str, Any],
+    verify: dict[str, Any],
+    pending: list[str],
+) -> int:
+    if not result["passed"]:
+        failed_findings = result["failed_findings"]
+        print(
+            "REPAIR REQUIRED: instrumentation cannot finalize with an intermediate "
+            "or failed child verification result"
+            + (f"; findings={','.join(failed_findings)}" if failed_findings else "")
+        )
+        return 2
+    print(
+        "PASS: instrumentation final gate "
+        f"({len(verify['findings']) - len(pending)}/{len(verify['findings'])} "
+        "findings at required proof; no executed verification failures)"
+    )
+    return 0
+
+
+def cmd_instrumentation_final_gate(args: argparse.Namespace) -> int:
+    """Prevent an active instrumentation workflow from handing off stale failures."""
+    report = normalize_audit_report(load_json(args.audit_json))
+    raw_verify = load_json(args.verify_json)
+    if not raw_verify.get("instrumentation_sha256"):
+        fail(
+            "final instrumentation verification must include instrumentation_sha256 "
+            "bound to the exact normalized instrumentation overlay"
+        )
+    selection, instrumentation, verify = load_flow(
+        report, args.selection_json, args.instrumentation_json, args.verify_json
+    )
+    if instrumentation is None or verify is None:
+        fail("instrumentation-final-gate requires instrumentation and verification JSON")
+    result, pending = instrumentation_final_gate_result(
+        report, selection, instrumentation, verify
+    )
+    if args.output:
+        write_json(args.output, result)
+    return print_instrumentation_final_gate(result, verify, pending)
+
+
+def run_projection_validator(label: str, command: list[str]) -> str:
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    detail = (completed.stderr or completed.stdout).strip()
+    fail(
+        f"{label} failed"
+        + (f": {detail}" if detail else f" with exit code {completed.returncode}")
+    )
+
+
+def run_go_validation_freshness(command: list[str]) -> dict[str, Any]:
+    """Run and parse one digest-only fixed-Go freshness check."""
+
+    output = run_projection_validator("fixed Go validation freshness", command)
+    try:
+        result = json.loads(output)
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        fail(f"fixed Go validation freshness returned invalid JSON: {exc}")
+    if not isinstance(result, dict) or result.get("status") != "passed":
+        fail("fixed Go validation freshness returned an invalid success result")
+    for key in (
+        "accepted_plan_sha256",
+        "evidence_sha256",
+        "proxy_bundle_sha256",
+        "resolver_plan_sha256",
+        "runtime_sha256",
+        "source_sha256",
+    ):
+        value = result.get(key)
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            fail(f"fixed Go validation freshness omitted valid {key}")
+    return result
+
+
+def stale_parent_verification_actions(
+    instrumentation: dict[str, Any],
+) -> list[str]:
+    """Locate parent CTAs that still ask for the already-present child run."""
+    locations: list[str] = []
+    candidates = [
+        (f"instrumentation.next_steps[{index}]", action)
+        for index, action in enumerate(instrumentation["next_steps"])
+    ]
+    for finding_index, finding in enumerate(instrumentation["findings"]):
+        candidates.extend(
+            (
+                f"instrumentation.findings[{finding_index}].follow_up_actions[{index}]",
+                action,
+            )
+            for index, action in enumerate(finding["follow_up_actions"])
+        )
+        for item_index, item in enumerate(finding["telemetry_changes"]):
+            candidates.extend(
+                (
+                    "instrumentation.findings"
+                    f"[{finding_index}].telemetry_changes[{item_index}]"
+                    f".follow_up_actions[{index}]",
+                    action,
+                )
+                for index, action in enumerate(item["follow_up_actions"])
+            )
+    for location, action in candidates:
+        if is_stale_parent_verification_action(action):
+            locations.append(location)
+    return locations
+
+
+def cmd_finalize_instrumentation(args: argparse.Namespace) -> int:
+    """Validate, atomically render, and gate one bound instrumentation flow."""
+    report = normalize_audit_report(load_json(args.audit_json))
+
+    # This is intentionally first: a stale proof overlay must not invoke other
+    # tools or replace any reader/gate artifacts.
+    selection, instrumentation, verify = load_flow(
+        report, args.selection_json, args.instrumentation_json, args.verify_json
+    )
+    if instrumentation is None or verify is None:
+        fail("finalize-instrumentation requires instrumentation and verification JSON")
+    if verify["meta"]["workflow_mode"] != "instrumentation_child":
+        fail(
+            "finalize-instrumentation requires verify.meta.workflow_mode "
+            "instrumentation_child"
+        )
+    stale_actions = stale_parent_verification_actions(instrumentation)
+    if stale_actions:
+        fail(
+            "finalize-instrumentation found stale parent actions that ask to run "
+            "the already-present child verification: "
+            + ", ".join(stale_actions)
+            + "; replace them with durable implementation/product actions and "
+            "rerun the child so its digest binds the corrected instrumentation overlay"
+        )
+
+    skills_root = Path(__file__).resolve().parents[2]
+    reader_validator = (
+        skills_root / "otel-verify" / "scripts" / "validate_reader_report.py"
+    )
+    gap_validator = (
+        skills_root / "otel-instrument" / "scripts" / "validate_gap_closure.py"
+    )
+    for label, validator in (
+        ("verify reader validator", reader_validator),
+        ("instrumentation gap-closure validator", gap_validator),
+    ):
+        if not validator.is_file():
+            fail(f"{label} is missing from the active skill bundle: {validator}")
+
+    source_root = (args.repo_root or infer_source_root(args.audit_json)).resolve()
+    if not source_root.is_dir():
+        fail(f"source repository root is not a directory: {source_root}")
+
+    go_runner = (
+        skills_root / "otel-instrument" / "scripts" / "run_go_otel_command.py"
+    )
+    go_ledger = (
+        source_root
+        / ".observe"
+        / "tmp"
+        / "go-otel-resolver"
+        / "accepted-plan.json"
+    )
+    go_evidence = source_root / ".observe" / "evidence" / "go-otel-validation.json"
+    if go_ledger.exists() != go_evidence.exists():
+        fail(
+            "fixed Go validation freshness is incomplete: accepted-plan ledger "
+            "and validation evidence must both exist before finalization"
+        )
+    go_check_command: list[str] | None = None
+    first_go_freshness: dict[str, Any] | None = None
+    if go_ledger.exists():
+        if not go_runner.is_file():
+            fail(f"fixed Go validation runner is missing: {go_runner}")
+        raw_go_evidence = load_json(go_evidence)
+        resolver_plan = raw_go_evidence.get("resolver_plan")
+        if not isinstance(resolver_plan, dict):
+            fail("fixed Go validation evidence has no resolver-plan binding")
+        plan_path = resolver_plan.get("path")
+        plan_sha256 = resolver_plan.get("sha256")
+        expected_plan = source_root / ".observe" / "tmp" / "go-otel-version-plan.json"
+        if plan_path != str(expected_plan) or not isinstance(plan_sha256, str):
+            fail("fixed Go validation evidence resolver-plan binding is invalid")
+        go_check_command = [
+            sys.executable,
+            "-I",
+            str(go_runner),
+            "--project",
+            str(source_root),
+            "--plan",
+            plan_path,
+            "--plan-sha256",
+            plan_sha256,
+            "--action",
+            "check-validation",
+        ]
+        first_go_freshness = run_go_validation_freshness(go_check_command)
+
+    audit_markdown = args.audit_markdown or args.audit_json.with_name("otel.md")
+    instrumentation_markdown = (
+        args.instrumentation_markdown
+        or args.instrumentation_json.with_suffix(".md")
+    )
+    verify_markdown = args.verify_markdown or args.verify_json.with_suffix(".md")
+
+    run_projection_validator(
+        "verify reader projection",
+        [
+            sys.executable,
+            "-I",
+            str(reader_validator),
+            str(verify_markdown),
+            "--instrumentation-json",
+            str(args.instrumentation_json),
+            "--verify-json",
+            str(args.verify_json),
+            "--audit-json",
+            str(args.audit_json),
+            "--selection-json",
+            str(args.selection_json),
+        ],
+    )
+    run_projection_validator(
+        "instrumentation gap closure",
+        [
+            sys.executable,
+            "-I",
+            str(gap_validator),
+            str(audit_markdown),
+            str(instrumentation_markdown),
+            "--audit-json",
+            str(args.audit_json),
+            "--selection-json",
+            str(args.selection_json),
+            "--instrumentation-json",
+            str(args.instrumentation_json),
+            "--verify-json",
+            str(args.verify_json),
+        ],
+    )
+
+    html_text = render_instrumentation_html(
+        report,
+        selection,
+        instrumentation,
+        verify,
+        source_root,
+        args.output.resolve().parent,
+    )
+    if go_check_command is not None and first_go_freshness is not None:
+        final_go_freshness = run_go_validation_freshness(go_check_command)
+        if final_go_freshness != first_go_freshness:
+            fail(
+                "fixed Go validation freshness changed between the initial check "
+                "and HTML publication"
+            )
+    write_text(args.output, html_text)
+    result, pending = instrumentation_final_gate_result(
+        report, selection, instrumentation, verify
+    )
+    if args.gate_output:
+        write_json(args.gate_output, result)
+    return print_instrumentation_final_gate(result, verify, pending)
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    report = normalize_audit_report(load_json(args.audit_json))
+    included_priorities = {
+        "none": set(),
+        "required": {"required"},
+        "recommended": {"required", "recommended"},
+        "any": PRIORITIES,
+    }[args.fail_on]
+    unresolved = [
+        finding
+        for finding in report["findings"]
+        if finding["priority"] in included_priorities
+        and finding["status"] in {"proposed", "approved", "in_progress"}
+    ]
+    audit_incomplete = (
+        report["schema_version"] == CURRENT_AUDIT_SCHEMA_VERSION
+        and report["meta"]["status"] == "Blocked"
+    )
+    result = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "kind": "otel-audit-gate",
+        "audit_id": report["meta"]["audit_id"],
+        "audit_sha256": audit_digest(report),
+        "fail_on": args.fail_on,
+        "audit_status": report["meta"]["status"],
+        "policy_evaluated": not audit_incomplete,
+        "passed": not unresolved and not audit_incomplete,
+        "blocking_ids": [finding["id"] for finding in unresolved],
+    }
+    if audit_incomplete:
+        result["scan_blockers"] = [
+            blocker["id"] for blocker in report["scan_blockers"]
+        ]
+    if args.output:
+        write_json(args.output, result)
+    if audit_incomplete:
+        print(
+            "BLOCKED: audit scan is incomplete: "
+            + "; ".join(
+                f"{blocker['id']} {blocker['prerequisite']}"
+                for blocker in report["scan_blockers"]
+            )
+        )
+        return 0 if args.fail_on == "none" else 2
+    if unresolved:
+        print(
+            "GAP: unresolved findings matched the CI policy: "
+            + ",".join(finding["id"] for finding in unresolved)
+        )
+        return 2
+    print(f"PASS: audit gate ({args.fail_on})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
