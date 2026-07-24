@@ -321,6 +321,29 @@ def test_java_agent_eval_fixtures_are_byte_deterministic(tmp_path: Path) -> None
             assert entry.compress_type == zipfile.ZIP_STORED
 
 
+def test_java_agent_eval_prompt_invokes_the_staged_builder_with_output() -> None:
+    definition = json.loads(
+        (
+            ROOT
+            / "evals"
+            / "java"
+            / "springboot-basic"
+            / "eval"
+            / "qual"
+            / "verify.json"
+        ).read_text(encoding="utf-8")
+    )
+    prompt = definition["prompts"][0]
+
+    assert prompt["eval_inputs"] == [
+        "eval/inputs/build_java_agent_fixtures.py"
+    ]
+    assert (
+        "python3 ./service/eval/inputs/build_java_agent_fixtures.py "
+        "./service/.observe/eval-java-agents"
+    ) in prompt["task"]
+
+
 def test_java_provider_and_agent_runtime_proof_use_distinct_live_forks() -> None:
     java = (
         ROOT / "skills" / "otel-instrument" / "references" / "languages" / "java.md"
