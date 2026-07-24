@@ -1079,24 +1079,6 @@ def ensure_contained_regular_path(path: Path, boundary: Path) -> None:
         raise ValueError(f"backend artifact resolves outside execution directory: {path}") from error
 
 
-def workspace_ignore(fixture_dir: Path):
-    fixture_root = fixture_dir.resolve()
-
-    def ignore(directory: str, names: list[str]) -> set[str]:
-        excluded = {
-            name
-            for name in names
-            if name in WORKSPACE_IGNORED_NAMES
-            or name.endswith(WORKSPACE_IGNORED_SUFFIXES)
-            or name.endswith("_eval.json")
-        }
-        if Path(directory).resolve() == fixture_root and "eval" in names:
-            excluded.add("eval")
-        return excluded
-
-    return ignore
-
-
 def artifact_ignore(_directory: str, names: list[str]) -> set[str]:
     return {
         name
@@ -1104,28 +1086,6 @@ def artifact_ignore(_directory: str, names: list[str]) -> set[str]:
         if name in ARTIFACT_IGNORED_NAMES
         or name.endswith(ARTIFACT_IGNORED_SUFFIXES)
     }
-
-
-def copy_eval_inputs(fixture_dir: Path, service_dir: Path) -> None:
-    """Copy only explicit eval seeds while keeping eval definitions private."""
-
-    source = fixture_dir / "eval" / "inputs"
-    if source.is_symlink():
-        raise ValueError(f"eval input seed must be a real directory: {source}")
-    if not source.exists():
-        return
-    if not source.is_dir():
-        raise ValueError(f"eval input seed must be a real directory: {source}")
-    for candidate in source.rglob("*"):
-        if candidate.is_symlink():
-            raise ValueError(f"eval input seed must not contain symlinks: {candidate}")
-        if not candidate.is_dir() and not candidate.is_file():
-            raise ValueError(f"unsupported eval input seed entry: {candidate}")
-    destination = service_dir / "eval" / "inputs"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, destination)
-
-
 def validate_fixture_tree(fixture_dir: Path) -> None:
     """Reject fixture symlinks before copytree can dereference outside content."""
 
