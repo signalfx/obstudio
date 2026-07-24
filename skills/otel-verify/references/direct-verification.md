@@ -1,4 +1,4 @@
-# Legacy Verification Scope
+# Direct Verification Scope
 
 Load this reference only when no canonical `.observe/otel-audit.json` exists.
 It owns the direct-user and Markdown-fallback verification scope. Never combine
@@ -7,11 +7,11 @@ JSON overlays.
 
 ## Scope Sources
 
-Use a direct concrete user request as scope. Otherwise read legacy
-`.observe/otel.md`, then `.observe/otel-instrumentation.md` when present.
-Extract the Verification Plan, prioritized gaps, changed signals, prior gates,
-and every signal-affecting path. Reconcile every command, runtime, source path,
-and expected signal with current source before execution.
+Use a direct concrete user request as scope. Otherwise read
+`.observe/otel-instrumentation.md` when present. Extract changed signals, prior
+gates, and every signal-affecting path. Reconcile every command, runtime,
+source path, and expected signal with current source before execution. Never
+read `.observe/otel.md`; it is not part of the current workflow.
 
 Do not fabricate audit IDs, selection state, instrumentation JSON, or verify
 JSON. If a canonical audit exists but its bound instrumentation JSON is absent,
@@ -38,9 +38,9 @@ session, or identifier data is a cardinality defect even when emission remains
 Write each row's exact `OTel item` label to
 `.observe/tmp/otel-verify-expected-items.txt`. A grouped provider or signal row
 must not absorb a distinct capability, signal, or call site. Use that file only
-with the reader validator's legacy `--expected-items-file` option.
+with the reader validator's `--expected-items-file` option.
 
-## Legacy Result
+## Direct Result
 
 Use the same viability, scenario, item-proof, and result semantics as the main
 skill. Generated SDK contracts remain contract-only. Mark a declared but

@@ -33,7 +33,7 @@ This step is required whenever `.vscode/launch.json` exists.
 - State the selected project runtime, affected-module compile/type/import
   result, focused tests that ran, and verification result or exact blocker.
 - Write `.observe/otel-instrumentation.md` using
-  `legacy-instrumentation-report.md`. Include added, modified, and removed
+  `instrumentation-report.md`. Include added, modified, and removed
   traces/spans, metrics, logs/events, runtime/config, and dependencies. With no
   prior audit, state that this establishes the implementation baseline.
 - In canonical flow, write instrumentation JSON with exactly dependency-closed
@@ -42,7 +42,7 @@ This step is required whenever `.vscode/launch.json` exists.
   verification proof when available. Leave `.observe/otel.html` as audit scope.
 - State audit ID, selected IDs, machine-report path, and HTML path. Never call
   unselected findings implemented.
-- Include compatibility `Audit Gap Closure` counts for `Working`, `Not
+- Include `Audit Gap Closure` counts for `Working`, `Not
   working`, `Not proven`, `Not configured`, and `Deferred`; keep every source
   audit gap visible even when selected scope is narrower.
 - For incident readiness, summarize each in-scope workflow, dependency, input
@@ -129,15 +129,15 @@ do not fabricate one or run a gate that requires it. If compile/focused proof
 passed, preserve instrumentation `meta.result: Partial` and selected findings
 `not_proven`; absence of child verification alone is not overall `Blocked` or
 `Not run`. Record `Verification: Not run` or `Verification: Blocked` plus the
-reason in finding evidence, `next_steps`, and compatibility Markdown. Rerun the
+reason in finding evidence, `next_steps`, and technical Markdown. Rerun the
 canonical `validate-flow` and `render-instrumentation-html` commands from
 `json-approval-handoff.md` without `--verify-json`. That is terminal validation.
 
-### Legacy No-Audit Branch
+### Direct No-Audit Branch
 
-Do not seek or invoke a canonical gate. Finish compatibility reports and run
+Do not seek or invoke a canonical gate. Finish technical reports and run
 the last applicable project tests, child verification/report validator or exact
-skip/blocker, and legacy report validation. The last successful applicable
+skip/blocker, and direct report validation. The last successful applicable
 validation is terminal. Never fabricate audit, selection, instrumentation, or
 verification JSON.
 
@@ -145,7 +145,7 @@ verification JSON.
 
 A passing `finalize-instrumentation` command (which includes
 `instrumentation-final-gate`), successful stopped-failure validation,
-successful explicit no-child validation, or successful legacy validation starts
+successful explicit no-child validation, or successful direct validation starts
 the terminal boundary. On fixed Go, run runner `--action cleanup` exactly once
 after that check. After cleanup—or immediately after the terminal check when it
 does not apply—emit the final response without another command.

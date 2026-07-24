@@ -22,9 +22,9 @@ project runtime.
 
 When canonical JSON exists, use the selected findings' referenced verification
 environments and the matching `.observe/otel-instrumentation.json` tests as
-runtime candidates. Otherwise use legacy `.observe/otel.md` Verification Plan
-test environments and `.observe/otel-instrumentation.md` verification-handoff
-results. Revalidate all candidates against current wrappers,
+runtime candidates. Otherwise use the explicit request, current source, and
+`.observe/otel-instrumentation.md` verification-handoff results. Revalidate all
+candidates against current wrappers,
 toolchain files, manifests, and local availability before execution; a handoff
 can become stale.
 

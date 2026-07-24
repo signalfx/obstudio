@@ -24,8 +24,8 @@ Prefer the application's current runtime shape. If the project already uses Dock
 Do not load `../references/report-flow-contract.md` as an up-front
 prerequisite. For a canonical JSON flow, read
 `./references/json-approval-handoff.md`; it is the scoped instrumentation and
-reader-report contract. For a legacy no-audit flow, load
-`./references/legacy-instrumentation-report.md` only when producing the report.
+reader-report contract. For a direct no-audit flow, load
+`./references/instrumentation-report.md` only when producing the report.
 Load `./references/finalization.md` once at the finalization boundary. Read the
 shared report-flow contract only when a conditional downstream workflow
 explicitly requires one of its additional field or rollup rules.
@@ -59,8 +59,8 @@ Executable scope may come from the audit report's embedded `review_selection`,
 from a materialized `.observe/otel-selection.json`, or from exact IDs supplied
 in the current request; when none are present and the user asks for bare or
 broad instrumentation, use deterministic `select --all`. `.observe/otel.html`
-is the audit and scope-planning surface; `.observe/otel.md` is a compatibility
-reader report, not the implementation queue. Before any application-code,
+is the audit and scope-planning surface. Never open or read an audit Markdown
+report. Before any application-code,
 dependency, runtime-config, or test edit, read and follow
 `./references/json-approval-handoff.md`. Do not proceed without a validated,
 nonempty executable selection. A valid answer-only handoff persists
@@ -83,7 +83,7 @@ with `selection_sha256`, not only to its audit and executable IDs. This digest
 includes `decision_answers`; changing an answer invalidates older
 instrumentation even when `approved_ids` is unchanged.
 When no canonical audit exists, a direct, concrete user request is the
-authorized scope and the legacy no-audit workflow remains available. Do not
+authorized scope and the direct no-audit workflow remains available. Do not
 fabricate audit IDs or selection artifacts; recommend `$otel-audit` before
 claiming audit-gap closure.
 
@@ -107,10 +107,6 @@ claiming audit-gap closure.
   the implementation and validation plan. Preserve every stable finding,
   scenario, and environment ID. Keep each `proof_level`; do not downgrade a
   `full runtime` scenario to focused call-site proof.
-- Only when canonical JSON is absent, use `.observe/otel.md` as the legacy
-  source for `## Verification Plan` and the prioritized `## Gaps` table. If the
-  legacy table is malformed or missing, stop and regenerate the audit rather
-  than inferring an implementation queue.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
   data freshness, input complexity, synthetic/canary checks, auth/edge paths,
@@ -212,9 +208,8 @@ needs to be set up first and continue with the full workflow (Steps 2-3).
 
 When the canonical audit contains partial or missing
 `current_instrumentation.incident_readiness` rows, reconcile each row through
-the selected finding with the same `area`. On the legacy fallback, use
-`### Incident Readiness` and its matching prioritized `## Gaps` row. Treat the
-matched pair as one implementation contract. The
+the selected finding with the same `area`. Treat the matched pair as one
+implementation contract. The
 readiness row names the surface and detection/localization impact; the gap row
 names the complete required fix and instrument mode; its acceptance scenarios
 name the code path, expected telemetry, proof level, and acceptance criteria.
@@ -250,12 +245,12 @@ keep the row `Deferred`, `Not configured`, or `Not proven` as appropriate.
 
 ### Audit-Driven GenAI Readiness
 
-When the canonical audit declares GenAI ownership or, on the legacy fallback,
-`.observe/otel.md` contains `## GenAI Readiness`, read and follow
+When the canonical audit declares GenAI ownership or direct source inspection
+finds GenAI/LLM ownership in a no-audit request, read and follow
 `./references/genai-instrumentation.md`. Treat its audit-driven closure,
 implementation, verification, and finalization rules as part of this skill's
 contract. Preserve the optional `## GenAI Readiness Closure` interaction owned
-by the compatibility-report reference and the custom-instrumentation prompt
+by the instrumentation-report reference and the custom-instrumentation prompt
 trigger in Step 4.
 
 When GenAI ownership is declared, write the authoritative top-level
@@ -304,8 +299,8 @@ references.
 ### Implementation Report And Handoff
 
 Always write `.observe/otel-instrumentation.md`. Load
-`./references/legacy-instrumentation-report.md` once, only when producing
-that compatibility report; it owns its reader order, signal inventory, gap
+`./references/instrumentation-report.md` once, only when producing
+that technical report; it owns its reader order, signal inventory, gap
 closure, validation, and no-audit rules.
 
 When a canonical audit and selection exist, reuse the already loaded
@@ -313,10 +308,10 @@ When a canonical audit and selection exist, reuse the already loaded
 instrumentation-HTML authority. Write and validate
 `.observe/otel-instrumentation.json`, render
 `.observe/otel-instrumentation.html`, keep every selected finding exactly once,
-and leave `.observe/otel.md` and `.observe/otel.html` as audit surfaces. Keep
+and leave `.observe/otel.html` as the audit surface. Keep
 selected-scope closure in the canonical artifacts; the separately bound verify
 overlay owns verification results. When canonical JSON is absent, write only
-the compatibility Markdown and never fabricate flow JSON.
+the direct-scope technical Markdown and never fabricate canonical JSON.
 
 For GenAI scope, the loaded GenAI reference additionally owns the
 `genai_closure` rollup and finalization rules. Do not load the shared report-flow
@@ -400,7 +395,7 @@ When no canonical audit exists, no incident/GenAI readiness path applies, and
 the user did not already request a specific signal, ask once after baseline
 auto-instrumentation whether they want business spans or metrics, then wait.
 Skip the prompt in canonical, readiness, GenAI, or explicit-signal scope.
-A direct request is scope authority only on the legacy no-canonical-audit path;
+A direct request is scope authority only on the direct no-canonical-audit path;
 a validated canonical selection already defines the scope.
 
 For approved custom work, prefer attributes on covered standard RED metrics
@@ -456,5 +451,5 @@ contract and its listener preflight; a safe local profile must be attempted.
 After implementation, child verification, requested downstream work,
 conditional full-runtime work, and final review are complete, read
 `./references/finalization.md` exactly once. It owns VS Code debug setup,
-credential safety, final reports/response, canonical and legacy terminal
+credential safety, final reports/response, canonical and direct terminal
 branches, fixed-Go cleanup, and the no-command-after-terminal boundary.

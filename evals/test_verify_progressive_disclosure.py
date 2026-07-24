@@ -15,7 +15,7 @@ INSTRUMENT_HANDOFF = (
     / "json-approval-handoff.md"
 )
 REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
-LEGACY_REF = VERIFY_DIR / "references" / "legacy-verification.md"
+DIRECT_REF = VERIFY_DIR / "references" / "direct-verification.md"
 REPORT_REF = VERIFY_DIR / "references" / "verification-report.md"
 
 
@@ -63,10 +63,10 @@ def test_verify_frontloads_stable_title_table_and_validator_rules() -> None:
     assert "Do not finalize an unvalidated report" in report
 
 
-def test_legacy_verify_closes_source_visible_runtime_and_cardinality_gaps() -> None:
+def test_direct_verify_closes_source_visible_runtime_and_cardinality_gaps() -> None:
     raw_skill = _read(VERIFY_SKILL)
-    assert "references/legacy-verification.md" in raw_skill
-    skill = " ".join((raw_skill + "\n" + _read(LEGACY_REF)).split())
+    assert "references/direct-verification.md" in raw_skill
+    skill = " ".join((raw_skill + "\n" + _read(DIRECT_REF)).split())
 
     for requirement in (
         "no canonical `.observe/otel-audit.json` exists",

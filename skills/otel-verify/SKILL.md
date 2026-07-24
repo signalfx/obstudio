@@ -4,7 +4,7 @@ description: >-
   Run deterministic verification for existing OpenTelemetry instrumentation and
   produce a report. Use when the user types $otel-verify, asks to verify OTel
   instrumentation, prove spans/metrics/logs are emitted, run observability
-  tests, validate .observe/otel-audit.json or .observe/otel.md, consume approved
+  tests, validate .observe/otel-audit.json, consume approved
   finding IDs from --ids or .observe/otel-selection.json, check GenAI trace
   correctness, prove modified/declared telemetry, derive per-code-path coverage,
   or emit local explorer-visible OTLP contract telemetry without starting the
@@ -22,7 +22,7 @@ Do not load `../references/report-flow-contract.md` as an up-front
 prerequisite. For canonical
 JSON flow, read `./references/json-approval-handoff.md`; it owns deterministic
 scope, schema, digest binding, status rollup, and HTML refresh. When no
-canonical audit exists, read `./references/legacy-verification.md`; never mix
+canonical audit exists, read `./references/direct-verification.md`; never mix
 the two flows. Load `./references/verification-report.md` once at the artifact
 boundary for the Markdown report, validation, and final handoff. Read the
 shared report-flow contract only when a conditional downstream rule requires
@@ -38,7 +38,7 @@ Never probe the service root or repository root for these paths.
 - Outputs are `.observe/otel-verify.md` and, in canonical flow,
   `.observe/otel-verify.json` plus refreshed
   `.observe/otel-instrumentation.html`. Markdown is a reader projection or
-  legacy fallback, never canonical state.
+  direct-scope report, never canonical state.
 - Default to read-only application code. Do not add or repair instrumentation;
   route it to `$otel-instrument`. Temporary harnesses may live inline or under
   `.observe/tmp/`. Add or repair permanent tests only when the user explicitly
@@ -116,10 +116,10 @@ If canonical audit/selection exists but instrumentation JSON is absent, do not
 write verification JSON or infer IDs from instrumentation Markdown. Perform
 only a clearly incomplete read-only check and route the missing bound handoff
 to `$otel-instrument`. When no canonical audit exists, read
-`./references/legacy-verification.md` and use only its direct/Markdown scope.
+`./references/direct-verification.md` and use only its direct/Markdown scope.
 
-Read canonical JSON first and Markdown only for reader detail; on the legacy
-path read the Markdown audit then instrumentation report. Reconcile all saved
+Read canonical JSON first and Markdown only for reader detail; on the direct
+path read only the instrumentation report. Reconcile all saved
 commands, runtimes, source paths, and expected signals with current source.
 Inspect the target entrypoint, referenced/diffed instrumentation files, provider
 and exporter wiring, startup/shutdown, and signal-affecting branches.
@@ -285,8 +285,8 @@ A removed item requires a bounded absence assertion plus presence of its
 intended same-type replacement owner. A `not_proven` scenario with focused
 evidence obtained remains incomplete, never passed.
 
-In legacy flow, follow `./references/legacy-verification.md`. After either
-canonical or legacy proof is classified, load
+In direct flow, follow `./references/direct-verification.md`. After either
+canonical or direct proof is classified, load
 `./references/verification-report.md` exactly once. It owns the complete
 Markdown reader shape, deterministic proof-column projection, zero-item case,
 technical detail boundary, raw-ID redaction, reader validator, canonical HTML

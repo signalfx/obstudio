@@ -14,9 +14,9 @@ Write this order:
 
 **Result:** Pass | Fail | Partial | Blocked | Not run
 **Bottom line:** <one plain-language sentence saying what works and what does not>
-**Source audit:** `.observe/otel-audit.json` | `.observe/otel.md` legacy | not found
-**Approved selection:** `.observe/otel-selection.json` | direct legacy scope
-**Source instrumentation:** `.observe/otel-instrumentation.json` | `.observe/otel-instrumentation.md` legacy | not found
+**Source audit:** `.observe/otel-audit.json` | direct user scope
+**Approved selection:** `.observe/otel-selection.json` | direct scope
+**Source instrumentation:** `.observe/otel-instrumentation.json` | `.observe/otel-instrumentation.md` direct | not found
 
 ## What Changed
 
@@ -100,7 +100,7 @@ In canonical mode add all four bindings:
 --selection-json <service-root>/.observe/otel-selection.json
 ```
 
-Only on the legacy path add
+Only on the direct path add
 `--expected-items-file .observe/tmp/otel-verify-expected-items.txt`. Repair
 every structural, item-coverage, status, count, projection, or gap-mirroring
 error and rerun until the validator passes. Do not finalize an unvalidated

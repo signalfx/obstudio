@@ -1,9 +1,9 @@
-# Instrumentation Compatibility Report
+# Instrumentation Technical Report
 
 Load this reference once, only when writing
-`.observe/otel-instrumentation.md`. It owns the compatibility Markdown for both
-canonical and legacy instrumentation runs. Canonical machine state and the
-human HTML remain owned by `json-approval-handoff.md`.
+`.observe/otel-instrumentation.md`. It owns the technical Markdown projection
+for both canonical and direct no-audit instrumentation runs. Canonical machine
+state and the human HTML remain owned by `json-approval-handoff.md`.
 
 ## Contents
 
@@ -21,7 +21,7 @@ Use this shape:
 # OTel Instrumentation Report: <service>
 
 **Result:** Pass | Partial | Fail | Blocked
-**Source audit:** `.observe/otel-audit.json` | `.observe/otel.md` legacy | not found
+**Source audit:** `.observe/otel-audit.json` | direct user scope
 **Selected scope:** `.observe/otel-selection.json` | direct no-audit request
 **Verification report:** `.observe/otel-verify.md` | not run | blocked
 **Detector report:** `.observe/detectors.md` | not requested | blocked
@@ -89,7 +89,7 @@ gap ledger; reconcile audited surfaces through `Audit Gap Closure`.
 
 ## Audit Gap Closure
 
-This is the reader-facing compatibility reconciliation. Stable IDs and exact
+This is the reader-facing technical reconciliation. Stable IDs and exact
 selected scope live in canonical JSON.
 
 | Priority | Gap | What changed | Tested | Result | Evidence / reason |
@@ -107,7 +107,7 @@ source audit write `No source audit gap table was available.`
 For every selected canonical row, project `What changed`, `Tested`, and
 `Evidence / reason` exactly from instrumentation JSON `changes`, `tests`, and
 `evidence` arrays in source order. After verification, only `Result` comes from
-the bound verify row. Do not paraphrase compatibility cells independently.
+the bound verify row. Do not paraphrase projection cells independently.
 
 For a GenAI audit, `GenAI Readiness Closure` is the detailed signal-level
 reconciliation and `Audit Gap Closure` remains the prioritized user work queue.
@@ -148,6 +148,6 @@ result/report path, and blocked prerequisites. This is not proof of emitted
 telemetry unless a test, harness, or collector actually observed it.
 
 Use the canonical audit, validated selection, and selected findings' referenced
-verification scenarios as the handoff contract. Use Markdown sections only on
-the legacy fallback. Do not copy unrelated report sections into audit or
-instrumentation reports.
+verification scenarios as the handoff contract. On a direct no-audit run, use
+only explicit user scope and current source. Do not copy unrelated report
+sections into audit or instrumentation reports.

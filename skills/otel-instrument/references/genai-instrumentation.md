@@ -22,12 +22,11 @@ evidence rather than inventing app lifecycle metrics.
 ### GenAI Readiness Contract
 
 When `.observe/otel-audit.json` exists, use its `genai_readiness` rows and only
-the findings selected in `.observe/otel-selection.json`. On the legacy fallback,
-use `.observe/otel.md` `## GenAI Readiness`. Parse each row by human-readable
-`surface` plus `required_signals`, owner/source files, and
-`acceptance_criteria`. Use the surface name as the human-facing identifier
-throughout implementation and reporting. The audit is a contract, but only the
-bound selection defines code-change scope.
+the findings selected in `.observe/otel-selection.json`. For a direct no-audit
+request, derive GenAI scope only from the explicit request and current source.
+Use the surface name as the human-facing identifier throughout implementation
+and reporting. The canonical audit is a contract, but only the bound selection
+defines code-change scope.
 
 Reconcile every GenAI audit gap to a required instrumentation result:
 
@@ -73,10 +72,9 @@ state that a source audit is required before one-to-one readiness closure can
 be claimed.
 
 For canonical audits, treat `partial` or `missing` GenAI readiness work as
-in scope only when its matching finding IDs are in the validated selection. On
-the legacy fallback, an explicit user request to instrument those rows remains
-the scope. Do not stop after auto-instrumentation for selected, app-owned
-GenAI gaps.
+in scope only when its matching finding IDs are in the validated selection. In
+a direct no-audit run, only explicitly requested surfaces are in scope. Do not
+stop after auto-instrumentation for selected, app-owned GenAI gaps.
 
 ## Scope And Detector-Ready Signals
 
@@ -87,7 +85,7 @@ audit. Inventory the matching selectable finding IDs and pause for the user to
 supply exact `--ids` (or use an existing validated bound selection); do not
 create or bind a selection from broad prose. After the user selects IDs, do not
 silently reduce them to one representative or highest-value gap. Only on the
-legacy no-audit path does the broad request directly authorize all safely
+direct no-audit path does the broad request directly authorize all safely
 patchable discovered GenAI gaps.
 
 Close code-evidenced AI pathway surfaces from

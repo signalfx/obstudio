@@ -38,7 +38,7 @@ field or rollup rule from it.
      --instrumentation-json .observe/otel-instrumentation.json
    ```
 
-   Selection-only validation can guide a legacy read-only run when the
+   Selection-only validation can guide a direct read-only run when the
    instrumentation JSON is absent, but do not write `.observe/otel-verify.json`
    or claim a complete canonical flow. Route the user to `$otel-instrument` for
    the bound machine handoff.

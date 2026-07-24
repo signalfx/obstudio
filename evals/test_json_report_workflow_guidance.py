@@ -9,18 +9,18 @@ AUDIT_SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
 INSTRUMENT_SKILL = ROOT / "skills" / "otel-instrument" / "SKILL.md"
 VERIFY_SKILL = ROOT / "skills" / "otel-verify" / "SKILL.md"
 INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-approval-handoff.md"
-INSTRUMENT_LEGACY_REPORT = (
+INSTRUMENT_REPORT = (
     ROOT
     / "skills"
     / "otel-instrument"
     / "references"
-    / "legacy-instrumentation-report.md"
+    / "instrumentation-report.md"
 )
 INSTRUMENT_FINALIZATION = (
     ROOT / "skills" / "otel-instrument" / "references" / "finalization.md"
 )
 VERIFY_HANDOFF = ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
-VERIFY_LEGACY = ROOT / "skills" / "otel-verify" / "references" / "legacy-verification.md"
+VERIFY_DIRECT = ROOT / "skills" / "otel-verify" / "references" / "direct-verification.md"
 VERIFY_REPORT = ROOT / "skills" / "otel-verify" / "references" / "verification-report.md"
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
@@ -58,6 +58,15 @@ def _eval_contract(path: Path) -> str:
     return " ".join(
         [item["task"] for item in data["prompts"]] + data.get("rubric", [])
     )
+
+
+def test_active_report_references_do_not_use_legacy_paths() -> None:
+    assert INSTRUMENT_REPORT.is_file()
+    assert VERIFY_DIRECT.is_file()
+    assert not INSTRUMENT_REPORT.with_name(
+        "legacy-instrumentation-report.md"
+    ).exists()
+    assert not VERIFY_DIRECT.with_name("legacy-verification.md").exists()
 
 
 def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
@@ -112,7 +121,7 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
 def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> None:
     instrument = _read(INSTRUMENT_SKILL)
     handoff = _read(INSTRUMENT_HANDOFF)
-    legacy = _read(INSTRUMENT_LEGACY_REPORT)
+    report = _read(INSTRUMENT_REPORT)
     opening = instrument.split("## Workflow", 1)[0]
     canonical_gate = instrument.split(
         "#### Canonical Audit And Selection Gate", 1
@@ -125,8 +134,8 @@ def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> N
     assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
     assert "For a canonical JSON flow, read" in opening
     assert "`./references/json-approval-handoff.md`" in opening
-    assert "legacy no-audit flow" in opening
-    assert "`./references/legacy-instrumentation-report.md`" in instrument
+    assert "direct no-audit flow" in opening
+    assert "`./references/instrumentation-report.md`" in instrument
     assert "only when producing" in instrument
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
@@ -138,7 +147,7 @@ def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> N
     assert "unless a conditional downstream workflow explicitly requires" in " ".join(
         handoff.split()
     )
-    assert "## Reader Order" in legacy
+    assert "## Reader Order" in report
     assert len(instrument.splitlines()) < 500
     assert len(instrument.split()) < 4500
 
@@ -150,7 +159,7 @@ def test_instrument_routes_conditional_detail_to_resolvable_local_references() -
     )
 
     for route, reference in (
-        ("./references/legacy-instrumentation-report.md", INSTRUMENT_LEGACY_REPORT),
+        ("./references/instrumentation-report.md", INSTRUMENT_REPORT),
         ("./references/finalization.md", INSTRUMENT_FINALIZATION),
     ):
         assert route in instrument
@@ -159,7 +168,7 @@ def test_instrument_routes_conditional_detail_to_resolvable_local_references() -
     assert "./references/languages/{python,node,java,go}.md" in instrument
     assert go_reference.is_file()
     assert "## Signals Changed" not in instrument
-    assert "## Signals Changed" in _read(INSTRUMENT_LEGACY_REPORT)
+    assert "## Signals Changed" in _read(INSTRUMENT_REPORT)
     assert "## Terminal Sequence" not in instrument
     assert "## Terminal Sequence" in _read(INSTRUMENT_FINALIZATION)
 
@@ -167,7 +176,7 @@ def test_instrument_routes_conditional_detail_to_resolvable_local_references() -
 def test_verify_progressively_loads_only_the_report_contract_it_needs() -> None:
     verify = _read(VERIFY_SKILL)
     handoff = _read(VERIFY_HANDOFF)
-    legacy = _read(VERIFY_LEGACY)
+    direct = _read(VERIFY_DIRECT)
     report = _read(VERIFY_REPORT)
     opening = verify.split("## Contract", 1)[0]
     opening_normalized = " ".join(opening.split())
@@ -179,7 +188,7 @@ def test_verify_progressively_loads_only_the_report_contract_it_needs() -> None:
     assert "For canonical JSON flow, read" in opening_normalized
     assert "`./references/json-approval-handoff.md`" in opening_normalized
     assert "no canonical audit exists" in opening_normalized
-    assert "`./references/legacy-verification.md`" in opening_normalized
+    assert "`./references/direct-verification.md`" in opening_normalized
     assert "`./references/verification-report.md`" in opening_normalized
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
@@ -191,7 +200,7 @@ def test_verify_progressively_loads_only_the_report_contract_it_needs() -> None:
     assert "unless a conditional downstream workflow explicitly requires" in " ".join(
         handoff.split()
     )
-    assert "Never combine this path with canonical" in " ".join(legacy.split())
+    assert "Never combine this path with canonical" in " ".join(direct.split())
     assert "## Reader Report" in report
     assert len(verify.splitlines()) < 500
     assert len(verify.split()) < 3500
@@ -201,7 +210,7 @@ def test_verify_routes_conditional_detail_to_resolvable_local_references() -> No
     verify = _read(VERIFY_SKILL)
     routes = (
         ("./references/json-approval-handoff.md", VERIFY_HANDOFF),
-        ("./references/legacy-verification.md", VERIFY_LEGACY),
+        ("./references/direct-verification.md", VERIFY_DIRECT),
         ("./references/verification-report.md", VERIFY_REPORT),
     )
     for route, reference in routes:
@@ -211,7 +220,7 @@ def test_verify_routes_conditional_detail_to_resolvable_local_references() -> No
     assert "## Reader Report" not in verify
     assert "## Reader Report" in _read(VERIFY_REPORT)
     assert "## Conservative Closure" not in verify
-    assert "## Conservative Closure" in _read(VERIFY_LEGACY)
+    assert "## Conservative Closure" in _read(VERIFY_DIRECT)
     assert "## Verification JSON" not in verify
     assert "## Verification JSON" in _read(VERIFY_HANDOFF)
 
