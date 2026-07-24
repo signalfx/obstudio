@@ -152,10 +152,12 @@ Use `$otel-audit` to understand what is missing before editing. Use
 and targeted custom signals. It runs the `$otel-verify` workflow by default
 after its implementation gate. The audit writes canonical
 `.observe/otel-audit.json` plus a self-contained `.observe/otel.html`; review
-and select findings in the HTML, press **Save selection**, and save over
-`.observe/otel-audit.json`. If the browser downloads a new audit file instead,
-leave it in the download location; `$otel-instrument` validates and adopts the
-newest matching saved audit automatically. You can alternatively invoke
+and select findings in the HTML, then press **Save selection**. When the browser
+offers a file picker, save the selected audit copy as
+`.observe/otel-audit.selected.json`; the canonical audit remains unchanged. If
+the browser downloads the selected copy instead, leave it there and
+`$otel-instrument` can adopt it after validating its audit digest, provided no
+trusted repository selection already exists. You can alternatively invoke
 `$otel-instrument --ids OTEL-001,OTEL-004` directly; the skill writes the same
 validated selection handoff before editing. Instrumentation writes a separate
 `.observe/otel-instrumentation.html` that maps selected gaps to code changes,

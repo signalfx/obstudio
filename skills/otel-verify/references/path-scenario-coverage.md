@@ -1,8 +1,8 @@
 # Acceptance Scenario Coverage
 
-Use this reference whenever `.observe/otel-audit.json` exists or direct
-verification scope includes workflows, routes, jobs, startup, streaming, tools,
-retrieval, redaction, or error paths.
+Use this reference whenever `.observe/otel.md` exists or the verification scope
+includes workflows, routes, jobs, startup, streaming, tools, retrieval,
+redaction, or error paths.
 
 ## Goal
 
@@ -19,17 +19,35 @@ scenario-specific execution and evidence.
 
 ## Derive Acceptance Scenarios From The Audit
 
-For a canonical flow, read `.observe/otel-audit.json`, the bound
-`.observe/otel-selection.json`, and `.observe/otel-instrumentation.json`.
-Extract only the approved findings' referenced scenarios and environments, and
-preserve their stable IDs. Do not derive verification obligations from
-unselected findings.
+Read `.observe/otel.md` and extract scenarios from these places when present:
 
-Without canonical audit JSON, derive scenarios only from the explicit user
-scope, current source paths, and signal-affecting control flow. A prior
-instrumentation report may supply evidence but must not expand scope.
+- `Verification Plan / Test Environments`: resolve each reusable runtime,
+  fixture, and prerequisite profile by its stable environment ID.
+- `Verification Plan / Acceptance Scenarios`: use these stable scenario IDs,
+  triggers, source entrypoints, expected signals, proof levels, acceptance
+  criteria, and environment references as the initial inventory, then
+  reconcile them with source.
+- `.observe/otel-instrumentation.md` `Verification Handoff / Results` and
+  `Signals Changed`: add every changed-signal scenario and preserve the
+  implementation gate evidence.
+- `Current Instrumentation`: existing spans/metrics/logs that the changed
+  instrumentation depends on.
+- `GenAI Readiness`: workflow, agent, LLM, tool, retrieval, memory, eval,
+  streaming, token usage, parentage, and duplicate-span requirements.
+- `Observability Gaps` or similar sections: missing or weak scenarios that
+  should remain `Not run`, `Source only`, or `Blocked` until verified.
+- Source files referenced by the audit: inspect branch points, decorators,
+  route handlers, middleware, workflow outcomes, exception handlers, and
+  startup wiring.
+- Route/API tables, workflow diagrams, CLI/process entrypoints, schedulers,
+  workers, and service runners: these are the ways a user or runtime can use
+  the application and must be represented even when several paths emit the same
+  instrumentation helper.
+- Exact operation entrypoints: create one row per distinct route, create,
+  batch, update, delete, workflow, tool, or other operation span name. A test
+  of shared helper logic does not prove each exact emitted name.
 
-When canonical or direct scope does not explicitly list paths, derive a conservative scenario
+When the audit does not explicitly list paths, derive a conservative scenario
 set from signal-affecting control flow only. Avoid path explosion: do not create
 separate rows for micro-branches that emit identical telemetry. Split paths
 when span names, parentage, status, events, metrics, log body/severity,

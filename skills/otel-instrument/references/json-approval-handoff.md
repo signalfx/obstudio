@@ -1,11 +1,8 @@
-# JSON Selection Handoff
+# JSON Approval Handoff
 
 Use this reference when `.observe/otel-audit.json` exists or the user supplies
-finding IDs. It defines the deterministic executable-scope gate and machine handoff.
-For that canonical JSON flow, this file is the scoped instrumentation and
-reader-report authority. Do not also load `../../references/report-flow-contract.md`
-unless a conditional downstream workflow explicitly requires an additional
-field or rollup rule from it.
+finding IDs. For canonical JSON flow, this file owns executable selection,
+instrumentation JSON, digest binding, and instrumentation HTML.
 
 ## Selection Gate
 
@@ -19,10 +16,11 @@ Before any application-code, dependency, runtime-config, or test edit:
 
 2. Accept finding IDs from one of these sources, in order:
    the user's current `$otel-instrument --ids OTEL-001,OTEL-002` request;
-   otherwise the newest valid bound state found by `adopt-selection` across an
-   existing `.observe/otel-selection.json`, embedded
-   `.observe/otel-audit.json.review_selection`, or saved
-   `otel-audit*.json`/`otel-selection*.json`; or, only for a bare/broad
+   otherwise a trusted repository state from an existing
+   `.observe/otel-selection.json` or selected audit saved inside `.observe/`;
+   otherwise an explicitly supplied saved-audit candidate; otherwise an
+   automatically discovered matching saved
+   audit only when no trusted repository selection exists; or, only for a bare/broad
    instrumentation request with no saved scope, deterministic `select --all`.
    Accept manual answers only from that bound handoff's `decision_answers` or
    the user's current repeatable `--decision OTEL-###=option-id` arguments; do
@@ -34,15 +32,14 @@ Before any application-code, dependency, runtime-config, or test edit:
    fresh selection from `--all` only after adoption finds no saved scope for a
    bare or broad instrumentation request. The command is
    idempotent: it validates an existing `.observe/otel-selection.json`,
-   extracts `review_selection` from `.observe/otel-audit.json`, or adopts the
-   newest saved/downloaded audit or selection bound to the current audit ID and
-   SHA-256 digest:
+   extracts `review_selection` from a selected audit copy, or adopts a
+   saved/downloaded audit bound to the current audit ID and SHA-256 digest only
+   when no trusted repository state takes precedence:
 
    ```bash
    python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" adopt-selection \
      .observe/otel-audit.json \
-     -o .observe/otel-selection.json \
-     --scoped-out .observe/tmp/otel-selected-findings.json
+     -o .observe/otel-selection.json
    ```
 
    On a bare or broad instrumentation request, add `--all-if-empty` to this
@@ -56,7 +53,10 @@ Before any application-code, dependency, runtime-config, or test edit:
    `~/Downloads` for `otel-audit*.json` and `otel-selection*.json`, including
    browser-generated names such as `otel-audit (3).json` and
    `otel-selection (3).json`. It must validate the canonical audit before
-   materializing `.observe/otel-selection.json`. If it prints `PASS:` or
+   materializing `.observe/otel-selection.json`. Repository state outranks
+   ambient downloads regardless of modification time; use an explicit
+   candidate when the reviewer intentionally replaces existing repository
+   scope. If it prints `PASS:` or
    `wrote`, immediately run Step 5 and continue the same instrumentation run.
    Do not ask the user to move a download, save again, or rerun instrumentation
    after a successful adoption. If it reports that the audit is invalid, the
@@ -73,8 +73,7 @@ Before any application-code, dependency, runtime-config, or test edit:
      .observe/otel-audit.json \
      --ids OTEL-001,OTEL-002 \
      --decision OTEL-003=application-owned \
-     -o .observe/otel-selection.json \
-     --scoped-out .observe/tmp/otel-selected-findings.json
+     -o .observe/otel-selection.json
    ```
 
    Use the exact requested IDs. Let the tool add dependencies and preserve
@@ -87,8 +86,7 @@ Before any application-code, dependency, runtime-config, or test edit:
      .observe/otel-audit.json \
      --all \
      --decision OTEL-003=application-owned \
-     -o .observe/otel-selection.json \
-     --scoped-out .observe/tmp/otel-selected-findings.json
+     -o .observe/otel-selection.json
    ```
 
    Include repeatable `--decision` arguments only when they were supplied by the
@@ -230,20 +228,10 @@ can strengthen its evidence without contradicting the implemented topology.
 
 Keep verification proof and remaining runtime work in the separately bound
 `.observe/otel-verify.json`; do not duplicate them as new instrumentation
-schema fields. Before creating the child overlay, author instrumentation
-`next_steps` and finding `follow_up_actions` as durable implementation or
-product actions, not an instruction to run `$otel-verify`. Once a child report
-exists, the terminal `finalize-instrumentation` command rejects any stale
-pending-verification CTA in those instrumentation fields. Repair that stale
-parent handoff and rerun the child so its digest binds the corrected overlay;
-never hand-edit the child digest.
-The human instrumentation HTML must also avoid presenting `$otel-verify` as the
-next user action. If child proof is absent, `Not run`, or blocked, say the
-instrumentation run has not completed internal verification and name the
-concrete prerequisite, repair, or product evidence gap. Do not claim rerunning
-`$otel-verify` will repair or advance the instrumentation result; verification
-is invoked inside `$otel-instrument` after the repair or prerequisite is
-available.
+schema fields. Author instrumentation `next_steps` and finding
+`follow_up_actions` as durable implementation or product actions, never as an
+instruction for the user to rerun `$otel-verify`. The human HTML must name the
+concrete remaining repair, runtime prerequisite, or product-evidence step.
 
 Render every selected finding once in the instrumentation HTML. Show all of its
 finding-level `changes` values and use the bound audit finding's
@@ -274,65 +262,6 @@ inside `observed_telemetry`. Use **the generated trace** and a named span or
 signal in reader prose. Preserve the exact identifier in verification
 `trace_ids`, durable evidence, and Markdown `Technical Details` when needed.
 
-One direct successful unit, application, or runtime observation proves the
-specific telemetry item it exercised. Mark its `item_results` row `working`;
-keep unexercised scenario coverage independent, so the finding may remain
-`not_proven`. Do not infer success from source/config presence or an unbounded
-or ambiguous absence. A bounded expected-absence assertion for a removed item
-is governed by the direct-assertion rule below.
-
-Require item-specific evidence. Aggregate receiver counts, a differently named
-signal, or a shared helper that never invokes the exact item are context only;
-keep that item `not_proven`, render it as **Not proven** rather than
-**Observed**, and say that the exact item was not directly observed. A
-`not_proven` scenario with useful executed evidence remains incomplete; group
-its trigger as **Focused evidence obtained** in coverage details, never as a
-passed scenario or a request for “stronger proof.”
-
-Every child verification item row carries the required boolean
-`direct_assertion_passed`. Compute it before finding/scenario rollup and set it
-`true` exactly for a passed assertion against the exact item or call site;
-otherwise set it `false`. A removed item needs a bounded executed capture that
-proves both the removed signal's absence and the intended replacement owner's
-presence. The item status is `working` exactly when this boolean is `true`.
-
-On each finding card, show one plain verification status and a **Telemetry
-change / What was observed / Status** table. State local delivery and
-target-product check scope once in the report-level status sentence; do not
-repeat it on each card or add generic **Target product** / **Executed checks**
-lines. Use **Verification incomplete** on an incomplete finding; reserve **no
-observed failures** for the report-level heading. Use the audit scenario's
-`trigger` in one collapsed **Coverage details**
-disclosure, grouped as running service, focused check, not exercised, blocked,
-failed, or not configured. Do not render per-finding `x/y` ratios, a
-stronger-proof group, or a completion checklist. Keep stable IDs, commands,
-and exact counts in the canonical JSON and generated Markdown proof ledgers.
-
-Each verification scenario with `status: blocked` must carry nonempty
-`blocking_reason` and `unobserved_outcome` strings. The first names the exact
-prerequisite failure supported by the scenario's command/evidence; the second
-names the exact runtime, OTLP-delivery, or product observation that could not
-be captured. Omit both fields for non-blocked scenarios. Before **Coverage
-details**, render **Runtime verification unavailable**, followed by **Why
-runtime verification is unavailable**, mapped working item evidence under
-**Already proven**, and the scenario outcomes under **Still unobserved**. Do
-not infer a blocker from finding `remaining`, which owns remediation rather
-than cause.
-
-When current verification is `Fail`, render **Verification failures and
-remaining proof**, not pending language. A failed finding shows **What
-verification found** from scenario evidence followed by **Code repair
-required** from its repair-only `remaining` actions, then **How the repair is
-confirmed**. For a standalone verification label the primary action **Next
-repair steps**; for an instrumentation child label it **Active repair loop**.
-Explain that
-`$otel-verify` never changes application code: `$otel-instrument` applies the
-repair and automatically invokes the affected checks afterward only to confirm
-the result. Do not render that automatic recheck as a second repair bullet or
-user action. A `not_proven` finding keeps its incomplete coverage in the neutral
-**Coverage details** disclosure; keep exact scenario IDs and counts in canonical
-proof artifacts and do not add a per-finding action list.
-
 ## Validate And Render Instrumentation
 
 After writing instrumentation JSON, run:
@@ -355,53 +284,9 @@ After `$otel-verify` writes `.observe/otel-verify.json`, rerun validation and
 `--instrumentation-json .observe/otel-instrumentation.json` and
 `--verify-json .observe/otel-verify.json` paths. Do not infer the implementation
 overlay from the verification file's directory.
-The verify overlay must carry `instrumentation_sha256` for the exact normalized
-instrumentation overlay, which includes the bound `selection_sha256`, plus
-`meta.workflow_mode: instrumentation_child`.
-Repair every binding, digest, ID order, status, or evidence error before finalizing.
-When executed verification reports `not_working`, do not treat successful JSON
-validation or HTML rendering as completion. Apply the pre-finalization repair
-gate from `SKILL.md`: classify every failure, make a concrete repair for each
-safe in-scope instrumentation-owned failure, update the
-instrumentation change/test/evidence rows, and automatically re-run the
-affected verification scenarios. The failed overlay is an intermediate
-artifact until the repair loop passes or reaches an evidenced stop boundary.
-After a repair passes, replace every superseded failure status, repair action,
-trace ID, and run-level next step in the final overlays. Retain prior attempts
-only as explicitly superseded technical evidence under `.observe/evidence/`;
-never leave them in the current reader summary or next action.
-Do not run `instrumentation-final-gate`, fixed-Go cleanup, or the final response
-from this Step 5 reference. When the current child overlay has no executed
-failures, it may become the candidate `lifecycle: final` overlay, but the parent
-`SKILL.md` owns the actual gate only after mandatory Steps 6 and 7, applicable
-Credential Safety work, requested downstream work, final review, and all other
-validation finish. A child with `not_working` remains `lifecycle: intermediate`
-until repaired or until the parent workflow records an evidenced stop boundary.
-If the user explicitly opted out or a concrete prerequisite prevented a child
-verify overlay, do not fabricate one and do not run
-`instrumentation-final-gate`, which requires it. Preserve the overall result
-derivation: when compile/focused implementation proof passed, keep
-`meta.result: Partial` and the affected findings `not_proven`; do not set the
-overall result to `Blocked` or `Not run` solely because child verification is
-absent. Record `Verification: Not run` or `Verification: Blocked` plus the exact
-reason in finding evidence, `next_steps`, and compatibility Markdown, then rerun the
-`validate-flow` and `render-instrumentation-html` commands above without
-`--verify-json`. This is preliminary Step 5 validation. The parent terminal
-sequence reruns the applicable validation after every later report, safety,
-review, and downstream requirement is complete.
-
-When a child contains `not_working` and the repair loop reaches an evidenced
-unselected-work, material-decision, new-authority, or external-prerequisite
-boundary, preserve the child as `lifecycle: intermediate` and preserve the
-executed failure. Keep finding `remaining` and top-level `next_steps`
-repair-only. Record the boundary separately in top-level `stop_boundaries[]`:
-use the affected failed `finding_ids`, one `kind` from `unselected_work`,
-`material_decision`, `new_authority`, or `external_prerequisite`, a declarative
-`reason`, the user or external `required_action`, and durable `evidence`. Keep
-instrumentation `meta.result: Fail` and the affected finding `not_working`; do
-not relabel observed failure as `Blocked` or `not_proven`. Validate and render
-that stopped state with
-`--verify-json`, then continue to the parent terminal sequence. This is a
-stopped-failure handoff, not a completed or verified instrumentation result.
+When a verify overlay is available, require its `instrumentation_sha256` to
+match the exact normalized instrumentation overlay, including the bound
+`selection_sha256`. Repair every binding, digest, ID-order, status, or evidence
+error before rendering the reader report.
 Leave `.observe/otel.html` as the audit and scope-planning surface; never render the
 instrumentation or verification overlays into it.

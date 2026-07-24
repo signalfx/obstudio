@@ -7,9 +7,7 @@
   "meta": {
     "service_name": "go-chi-basic",
     "date": "2026-07-21",
-    "result": "Pass",
-    "workflow_mode": "standalone",
-    "lifecycle": "final"
+    "result": "Pass"
   },
   "findings": [
     {

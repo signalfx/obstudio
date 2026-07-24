@@ -49,7 +49,8 @@ h1 { margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }
 .findings-section > h2 { color: var(--ink); font-size: 18px; margin: 0 0 12px; }
 .findings-total { color: var(--muted); font-size: 13px; font-weight: 600; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-.card.done { opacity: .62; }
+.card.done { border-color: #9bd5b7; }
+.card.done .spine { background: var(--ok); }
 .card.working { border-color: #9bd5b7; }
 .card-head { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; }
 .row { display: grid; grid-template-columns: 5px minmax(72px, auto) minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 13px 14px 13px 0; cursor: pointer; font: inherit; }
@@ -171,7 +172,7 @@ th { color: var(--muted); font-size: 12px; }
   <div class="wrap tray-bar">
     <div class="tray-summary">
       <strong id="planSummary"></strong>
-      <span class="tray-hint" id="saveSelectionHint">Save this audit state over <code>.observe/otel-audit.json</code> before running <code>$otel-instrument</code>. If your browser downloads a saved audit file instead, <code>$otel-instrument</code> can adopt it after validation.</span>
+      <span class="tray-hint" id="saveSelectionHint">Save a selected audit copy as <code>.observe/otel-audit.selected.json</code> before running <code>$otel-instrument</code>. The canonical audit remains unchanged. If your browser downloads the copy instead, <code>$otel-instrument</code> can adopt it after validation when no repository selection already exists.</span>
     </div>
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
       <span class="tray-hint" id="instrumentCommandLabel">Copy/paste terminal fallback when saving is unreliable:</span>
@@ -720,13 +721,35 @@ async function saveSelectionOverlay() {
   if (window.showSaveFilePicker) {
     try {
       const handle = await window.showSaveFilePicker({
-        suggestedName: "otel-audit.json",
+        suggestedName: "otel-audit.selected.json",
         types: [{description: "OpenTelemetry audit JSON with saved selection", accept: {"application/json": [".json"]}}],
       });
+      if (handle.name === "otel-audit.json") {
+        announceSelection("The canonical otel-audit.json is immutable. Choose otel-audit.selected.json or another new selected-audit filename.");
+        return;
+      }
+      const existingFile = await handle.getFile();
+      if (existingFile.size) {
+        let existingDocument;
+        try {
+          existingDocument = JSON.parse(await existingFile.text());
+        } catch (error) {
+          announceSelection("The chosen file already exists and is not a valid selected audit. Choose a new otel-audit.selected.json file.");
+          return;
+        }
+        const existingSelection = existingDocument?.review_selection;
+        const sameAudit = existingDocument?.kind === "otel-audit"
+          && existingDocument?.meta?.audit_id === REPORT.meta.audit_id
+          && existingSelection?.audit_sha256 === DATA.selection.audit_sha256;
+        if (!sameAudit) {
+          announceSelection("The chosen file belongs to a different or newer audit. Choose a new otel-audit.selected.json file.");
+          return;
+        }
+      }
       const writable = await handle.createWritable();
       await writable.write(contents);
       await writable.close();
-      announceSelection("Audit selection saved into the audit report." + dependencyMessage + " Keep it at .observe/otel-audit.json before running $otel-instrument.");
+      announceSelection("Selected audit copy saved." + dependencyMessage + " Keep it in .observe before running $otel-instrument.");
       return;
     } catch (error) {
       if (error && error.name === "AbortError") {
@@ -745,7 +768,7 @@ async function saveSelectionOverlay() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 0);
-  announceSelection("Saved audit download fallback started." + dependencyMessage + " $otel-instrument can adopt the newest matching otel-audit*.json after validation.");
+  announceSelection("Selected audit download fallback started." + dependencyMessage + " $otel-instrument can adopt it after validation when no repository selection already exists.");
 }
 
 document.getElementById("saveSelection").addEventListener("click", () => {

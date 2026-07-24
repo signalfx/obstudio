@@ -34,7 +34,6 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
             "exactly the approved findings in audit order",
             'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" select',
             'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" validate-flow',
-            ".observe/tmp/otel-selected-findings.json",
         )
         for value in required:
             self.assertIn(value, text)
@@ -45,12 +44,11 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn('"kind": "otel-verify"', text)
         self.assertIn('"audit_sha256": "audit-sha256-from-selection"', text)
         self.assertIn("selection_sha256", text)
-        self.assertIn("transitively bound to the exact normalized selection", normalized)
+        self.assertIn("binds the exact normalized selection", normalized)
         self.assertIn("Findings must exactly equal approved IDs in audit order", normalized)
         self.assertIn("one scenario object for every scenario referenced", normalized)
         for value in (
             '"item_results": [',
-            '"direct_assertion_passed": true',
             '"proof_mode": "full_runtime"',
             '"visibility": "explorer_visible"',
             "one `item_results` row for every instrumentation",
@@ -61,25 +59,18 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("render-instrumentation-html", text)
         self.assertIn(".observe/otel-instrumentation.html", text)
 
-    def test_item_assertion_status_is_not_downgraded_by_scenario_rollup(self) -> None:
-        text = " ".join((SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split())
-        for value in (
-            "direct_assertion_passed",
-            "before rolling up scenario or finding coverage",
-            "removed item",
-            "intended replacement owner",
-        ):
-            self.assertIn(value, text)
-
     def test_scenario_references_are_selection_scoped(self) -> None:
-        coverage = (SKILL_DIR / "references" / "path-scenario-coverage.md").read_text(
-            encoding="utf-8"
+        normalized = " ".join(
+            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
         )
-        runtime = (SKILL_DIR / "references" / "project-runtime-resolution.md").read_text(
-            encoding="utf-8"
+        self.assertIn(
+            "verify exactly the approved findings in audit order and their referenced scenarios",
+            normalized,
         )
-        self.assertIn("only the approved findings' referenced scenarios", coverage)
-        self.assertIn("selected findings' referenced verification", runtime)
+        self.assertIn(
+            "Unselected findings are outside this result and must not make it partial",
+            normalized,
+        )
 
     def test_wrapper_exposes_shared_flow_commands(self) -> None:
         completed = subprocess.run(

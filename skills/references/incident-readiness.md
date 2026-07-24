@@ -15,33 +15,6 @@ Create traces, metrics, and logs that can answer these questions quickly:
   capacity saturation, or release/config related?
 - What signal can become a detector or dashboard without manual trace search?
 
-## Scope Boundary
-
-This is a telemetry-readiness reference, not a general production-readiness
-audit. Use the checklist to ask whether OTel signals accurately describe
-existing product and operational behavior. Do not use it to design or repair the
-underlying API contract, documentation or ownership links, retry/timeout/cache
-semantics, liveness/readiness policy, capacity or rejection limits, deployment
-policy, runbooks, or general tests.
-
-A readiness surface belongs in canonical OTel findings only when its missing or
-partial condition has an independently useful telemetry closure: an OTel span,
-metric, log, resource, propagation/correlation behavior, OTel pipeline
-configuration, or telemetry-specific proof. If removing all behavior, policy,
-contract, documentation, and general test work leaves no OTel closure, omit the
-surface from `current_instrumentation.incident_readiness`, findings, and audit
-verification scenarios. Do not call API specifications, links, policy decisions,
-or behavior-only checks `configuration` telemetry.
-
-For a mixed concern, keep the current non-telemetry behavior only as evidence or
-a constraint of a retained telemetry finding when it directly explains what the
-signal observes or prevents instrumentation from changing behavior. Omit
-unrelated contract, documentation, link, policy, security, or product debt from
-all audit sections. A general policy may constrain or explain telemetry, but it
-cannot block or become an OTel finding. If no useful signal or proof can be
-defined without first choosing that policy, omit the candidate until the
-remaining choice is telemetry-specific.
-
 ## Audit Checklist
 
 - API/workflow paths: route spans, workflow spans, status code, error class,
@@ -82,13 +55,6 @@ remaining choice is telemetry-specific.
   workflow, dependency call, queue publish/consume, worker job, and scheduled job.
 - Emit metrics only from values the service can observe accurately. Do not create
   placeholder instruments for unavailable signals.
-- Instrument current approved behavior; do not make an OTel finding responsible
-  for choosing or enforcing product semantics. When limits, retries, timeouts,
-  fallback, readiness, rollout, or compatibility behavior lacks an approved
-  policy, record the existing uncertainty only as a constraint when it directly
-  bounds a retained signal. Keep only independently useful telemetry work in
-  the finding; otherwise omit the candidate. Recommendations and follow-up
-  actions stay telemetry-specific.
 - Treat time since last success/update as detector-ready freshness only when the
   source proves an expected cadence, pending/backlogged work, or accepted input
   that should have produced an update. Healthy idle time also makes a bare age
@@ -207,12 +173,6 @@ keep the verification result `Partial`.
   schema/migration version when present, expected-vs-running version, rollout
   progress or stalled rollout, compatibility failure class, and decision
   outcome when code or deployment sources expose them.
-
-These patterns define signal targets for behavior the system already owns. They
-do not authorize adding API behavior, limits, rejection rules, retry/fallback
-semantics, deployment controls, documentation, ownership links, or general
-contract tests as OTel work. Split those prerequisites from the telemetry signal
-and proof; omit the finding when no telemetry-specific closure remains.
 
 ## Signal Targets
 

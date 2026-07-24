@@ -109,9 +109,7 @@ INSTRUMENT_INCIDENT = INSTRUMENT_NO_GENAI.replace(
 
 
 class ValidateGapClosureTest(unittest.TestCase):
-    def canonical_audit(
-        self, *, genai: bool = False, schema_version: int = 2
-    ) -> dict:
+    def canonical_audit(self, *, schema_version: int = 2) -> dict:
         raw = copy.deepcopy(SHARED.sample_report())
         raw["schema_version"] = schema_version
         raw["findings"] = [raw["findings"][0]]
@@ -119,41 +117,6 @@ class ValidateGapClosureTest(unittest.TestCase):
         raw["signal_flow"]["component_flow_map"] = (
             "service startup [GAP: runtime bootstrap]"
         )
-        if genai:
-            raw["meta"]["genai_ownership_detected"] = True
-            for row in raw["evidence"]:
-                if row["check"] == "GenAI ownership":
-                    row["finding"] = "Yes"
-                    row["source"] = "app.py; logging.py"
-            raw["genai_readiness"] = [
-                {
-                    "surface": "Workflow/agent trace",
-                    "status": "covered",
-                    "evidence": "Workflow span source is present.",
-                    "required_signals": "`invoke_workflow`",
-                    "owner": "App-owned: app.py",
-                    "acceptance_criteria": "Trace proves workflow parentage.",
-                    "impact": "Workflow failures are localized.",
-                },
-                {
-                    "surface": "Provider/model call",
-                    "status": "covered",
-                    "evidence": "Provider span source is present.",
-                    "required_signals": "`chat`; provider and model attributes",
-                    "owner": "App-owned: app.py",
-                    "acceptance_criteria": "Trace proves provider attributes.",
-                    "impact": "Model failures are localized.",
-                },
-                {
-                    "surface": "Privacy/cardinality",
-                    "status": "covered",
-                    "evidence": "Bounded metadata policy is source-defined.",
-                    "required_signals": "metadata-only capture; bounded dimensions",
-                    "owner": "App-owned: logging.py",
-                    "acceptance_criteria": "Sentinel export is clean.",
-                    "impact": "Telemetry excludes identifiers.",
-                },
-            ]
         return REPORT_MODULE.normalize_audit_report(raw)
 
     def canonical_selection(self, audit: dict) -> dict:
@@ -173,15 +136,9 @@ class ValidateGapClosureTest(unittest.TestCase):
         self,
         audit: dict,
         selection: dict,
-        *,
-        genai_closure: list[dict] | None = None,
     ) -> dict:
         raw = SHARED.sample_instrumentation(audit, REPORT_MODULE.audit_digest(audit))
-        genai_complete = genai_closure is None or all(
-            row["status"] in {"working", "deferred", "owner_mapped"}
-            for row in genai_closure
-        )
-        raw["meta"]["result"] = "Pass" if genai_complete else "Partial"
+        raw["meta"]["result"] = "Pass"
         raw["findings"][0].update(
             {
                 "status": "working",
@@ -190,8 +147,6 @@ class ValidateGapClosureTest(unittest.TestCase):
                 "evidence": ["Export test passed"],
             }
         )
-        if genai_closure is not None:
-            raw["genai_closure"] = genai_closure
         return REPORT_MODULE.normalize_instrumentation(raw, audit, selection)
 
     def validate(
@@ -320,146 +275,6 @@ class ValidateGapClosureTest(unittest.TestCase):
                 text=True,
             )
 
-    def validate_genai_with_json(
-        self,
-        instrumentation: str = INSTRUMENT_GENAI,
-        *,
-        edit_closure=None,
-        write_instrumentation_json: bool = True,
-        use_verify: bool = False,
-    ) -> subprocess.CompletedProcess[str]:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            audit_path = root / "otel.md"
-            instrumentation_path = root / "otel-instrumentation.md"
-            audit_json_path = root / "otel-audit.json"
-            selection_json_path = root / "otel-selection.json"
-            instrumentation_json_path = root / "otel-instrumentation.json"
-            verify_json_path = root / "otel-verify.json"
-            audit_path.write_text(AUDIT_GENAI, encoding="utf-8")
-            instrumentation_path.write_text(instrumentation, encoding="utf-8")
-            audit_json = self.canonical_audit(genai=True)
-            selection_json = self.canonical_selection(audit_json)
-            closure = [
-                {
-                    "surface": "Workflow/agent trace",
-                    "required_signals": "`invoke_workflow`",
-                    "owner": "App-owned: app.py",
-                    "implemented_proven": ["Workflow span emitted with parentage"],
-                    "tests": ["trace.success"],
-                    "evidence": [".observe/evidence/trace-success.json"],
-                    "remaining_signals": [],
-                    "status": "working",
-                },
-                {
-                    "surface": "Provider/model call",
-                    "required_signals": "`chat`; provider and model attributes",
-                    "owner": "App-owned: app.py",
-                    "implemented_proven": [
-                        "Chat span emitted with bounded attributes and parentage"
-                    ],
-                    "tests": ["chat.success"],
-                    "evidence": [".observe/evidence/chat-success.json"],
-                    "remaining_signals": [],
-                    "status": "working",
-                },
-                {
-                    "surface": "Privacy/cardinality",
-                    "required_signals": "metadata-only capture; bounded dimensions",
-                    "owner": "App-owned: logging.py",
-                    "implemented_proven": ["Span dimensions are bounded"],
-                    "tests": ["telemetry.redaction"],
-                    "evidence": [".observe/evidence/redaction.json"],
-                    "remaining_signals": ["OTLP log policy"],
-                    "status": "partial",
-                },
-            ]
-            if edit_closure is not None:
-                edit_closure(closure)
-            try:
-                instrumentation_json = self.canonical_instrumentation(
-                    audit_json, selection_json, genai_closure=closure
-                )
-            except REPORT_MODULE.ReportError as error:
-                return subprocess.CompletedProcess([], 1, "", f"FAIL: {error}")
-            audit_json_path.write_text(json.dumps(audit_json), encoding="utf-8")
-            selection_json_path.write_text(
-                json.dumps(selection_json), encoding="utf-8"
-            )
-            if write_instrumentation_json:
-                instrumentation_json_path.write_text(
-                    json.dumps(instrumentation_json), encoding="utf-8"
-                )
-            overlay_arguments = [
-                "--instrumentation-json",
-                str(instrumentation_json_path),
-            ]
-            if use_verify:
-                verify_json = SHARED.sample_verify(
-                    audit_json,
-                    REPORT_MODULE.audit_digest(audit_json),
-                    REPORT_MODULE.instrumentation_digest(instrumentation_json),
-                )
-                verify_json["meta"]["result"] = "Pass"
-                verify_finding = verify_json["findings"][0]
-                verify_finding["status"] = "working"
-                verify_finding["remaining"] = []
-                verify_finding["scenarios"][0].update(
-                    {
-                        "status": "working",
-                        "evidence": [".observe/evidence/runtime.json"],
-                        "observed_telemetry": [
-                            "Span GET /checkout emitted with http.route=/checkout"
-                        ],
-                        "product_validation": [
-                            "The local receiver accepted the generated trace."
-                        ],
-                        "proof_mode": "full_runtime",
-                        "visibility": "otlp_accepted",
-                    }
-                )
-                verify_finding["item_results"][0].update(
-                    {
-                        "status": "working",
-                        "direct_assertion_passed": True,
-                        "evidence": [".observe/evidence/runtime.json"],
-                        "observed_telemetry": [
-                            "Span GET /checkout emitted with http.route=/checkout"
-                        ],
-                        "product_validation": [
-                            "The local receiver accepted the generated trace."
-                        ],
-                        "proof_mode": "full_runtime",
-                        "visibility": "otlp_accepted",
-                    }
-                )
-                verify_json = REPORT_MODULE.normalize_verify(
-                    verify_json, audit_json, selection_json, instrumentation_json
-                )
-                verify_json_path.write_text(json.dumps(verify_json), encoding="utf-8")
-                overlay_arguments = [
-                    "--instrumentation-json",
-                    str(instrumentation_json_path),
-                    "--verify-json",
-                    str(verify_json_path),
-                ]
-            return subprocess.run(
-                [
-                    sys.executable,
-                    str(VALIDATOR),
-                    str(audit_path),
-                    str(instrumentation_path),
-                    "--audit-json",
-                    str(audit_json_path),
-                    "--selection-json",
-                    str(selection_json_path),
-                    *overlay_arguments,
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-
     def test_json_overlay_rejects_stale_markdown_result(self) -> None:
         result = self.validate_with_json(
             INSTRUMENT_NO_GENAI,
@@ -487,8 +302,6 @@ class ValidateGapClosureTest(unittest.TestCase):
         ):
             VALIDATOR_MODULE.validate_json_projection(
                 [],
-                [],
-                False,
                 "Pass",
                 Path("otel-audit.json"),
                 Path("otel-selection.json"),
@@ -566,16 +379,6 @@ class ValidateGapClosureTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_instrumentation_json_projects_genai_closure(self) -> None:
-        result = self.validate_genai_with_json()
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_verify_result_is_aggregated_with_instrumentation_genai_closure(self) -> None:
-        result = self.validate_genai_with_json(use_verify=True)
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     def test_blocked_verify_is_partial_when_implementation_owned_proof_exists(self) -> None:
         blocked_verify = {"meta": {"result": "Blocked"}}
         no_proof = {
@@ -586,30 +389,10 @@ class ValidateGapClosureTest(unittest.TestCase):
                     "evidence": [],
                 }
             ],
-            "genai_closure": [],
         }
         self.assertEqual(
             VALIDATOR_MODULE.expected_report_result(
                 no_proof, blocked_verify, verification_overlay=True
-            ),
-            "Blocked",
-        )
-
-        deferred_without_proof = copy.deepcopy(no_proof)
-        deferred_without_proof["genai_closure"] = [
-            {
-                "status": "deferred",
-                "implemented_proven": [],
-                "tests": [],
-                "evidence": [],
-                "remaining_signals": ["External owner decision"],
-            }
-        ]
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                deferred_without_proof,
-                blocked_verify,
-                verification_overlay=True,
             ),
             "Blocked",
         )
@@ -625,22 +408,6 @@ class ValidateGapClosureTest(unittest.TestCase):
         self.assertEqual(
             VALIDATOR_MODULE.expected_report_result(
                 finding_proof, blocked_verify, verification_overlay=True
-            ),
-            "Partial",
-        )
-
-        genai_proof = copy.deepcopy(no_proof)
-        genai_proof["genai_closure"] = [
-            {
-                "status": "working",
-                "implemented_proven": ["Provider span emitted."],
-                "tests": ["provider.success"],
-                "evidence": [".observe/evidence/provider.json"],
-            }
-        ]
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                genai_proof, blocked_verify, verification_overlay=True
             ),
             "Partial",
         )
@@ -712,14 +479,6 @@ class ValidateGapClosureTest(unittest.TestCase):
                     "evidence": ["main.go:12"],
                 }
             ],
-            "genai_closure": [
-                {
-                    "status": "partial",
-                    "implemented_proven": ["Provider call site mapped in app.py"],
-                    "tests": ["tests are blocked by missing credentials"],
-                    "evidence": ["app.py:42"],
-                }
-            ],
         }
 
         self.assertFalse(
@@ -740,7 +499,6 @@ class ValidateGapClosureTest(unittest.TestCase):
                     "evidence": ["main.go:12"],
                 }
             ],
-            "genai_closure": [],
         }
         self.assertFalse(
             VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
@@ -748,17 +506,6 @@ class ValidateGapClosureTest(unittest.TestCase):
             )
         )
 
-        negative_artifact_label = {
-            "findings": [],
-            "genai_closure": [
-                {
-                    "status": "partial",
-                    "implemented_proven": ["Provider span emitted."],
-                    "tests": ["not proven"],
-                    "evidence": [".observe/evidence/not-proven.log"],
-                }
-            ],
-        }
         failed_test_label = {
             "findings": [
                 {
@@ -767,18 +514,16 @@ class ValidateGapClosureTest(unittest.TestCase):
                     "evidence": [".observe/evidence/go-test.log"],
                 }
             ],
-            "genai_closure": [],
         }
-        for candidate in (negative_artifact_label, failed_test_label):
-            self.assertFalse(
-                VALIDATOR_MODULE.has_meaningful_instrumentation_proof(candidate)
-            )
-            self.assertEqual(
-                VALIDATOR_MODULE.expected_report_result(
-                    candidate, blocked_verify, verification_overlay=True
-                ),
-                "Blocked",
-            )
+        self.assertFalse(
+            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(failed_test_label)
+        )
+        self.assertEqual(
+            VALIDATOR_MODULE.expected_report_result(
+                failed_test_label, blocked_verify, verification_overlay=True
+            ),
+            "Blocked",
+        )
 
         failure_scenario_artifact = {
             "findings": [
@@ -788,7 +533,6 @@ class ValidateGapClosureTest(unittest.TestCase):
                     "evidence": [".observe/evidence/http-failure.json"],
                 }
             ],
-            "genai_closure": [],
         }
         self.assertTrue(
             VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
@@ -803,119 +547,6 @@ class ValidateGapClosureTest(unittest.TestCase):
             ),
             "Partial",
         )
-
-        configured_only_test = {
-            "findings": [],
-            "genai_closure": [
-                {
-                    "status": "partial",
-                    "implemented_proven": ["span implemented"],
-                    "tests": ["collector configured"],
-                    "evidence": [".observe/evidence/config.json"],
-                }
-            ],
-        }
-        self.assertFalse(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                configured_only_test
-            )
-        )
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                configured_only_test, blocked_verify, verification_overlay=True
-            ),
-            "Blocked",
-        )
-
-    def test_blocked_verify_accepts_positive_partial_genai_proof(self) -> None:
-        blocked_verify = {"meta": {"result": "Blocked"}}
-        partial_genai_proof = {
-            "findings": [],
-            "genai_closure": [
-                {
-                    "status": "partial",
-                    "implemented_proven": ["Provider span emitted."],
-                    "tests": ["provider.success"],
-                    "evidence": [".observe/evidence/provider-success.json"],
-                }
-            ],
-        }
-
-        self.assertTrue(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                partial_genai_proof
-            )
-        )
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                partial_genai_proof,
-                blocked_verify,
-                verification_overlay=True,
-            ),
-            "Partial",
-        )
-
-    def test_genai_fails_without_authoritative_instrumentation(self) -> None:
-        result = self.validate_genai_with_json(write_instrumentation_json=False)
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("authoritative instrumentation JSON", result.stderr)
-
-    def test_json_overlay_rejects_stale_genai_closure_content(self) -> None:
-        result = self.validate_genai_with_json(
-            edit_closure=lambda rows: rows[0].__setitem__(
-                "implemented_proven", ["Changed workflow proof"]
-            )
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Markdown GenAI closure disagrees", result.stderr)
-
-    def test_json_overlay_rejects_genai_closure_out_of_audit_order(self) -> None:
-        result = self.validate_genai_with_json(
-            edit_closure=lambda rows: rows.__setitem__(slice(0, 2), [rows[1], rows[0]])
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must match the audit in source order", result.stderr)
-
-    def test_json_projection_joins_lists_and_maps_owner_status(self) -> None:
-        report = INSTRUMENT_GENAI.replace(
-            "Workflow span emitted with parentage | trace.success",
-            "Workflow span emitted; Parentage proven | trace.success; trace.parentage",
-        ).replace("| OTLP log policy | Partial |", "| OTLP log policy | Owner-mapped |")
-        report = report.replace("**Result:** Partial", "**Result:** Pass")
-
-        def edit(rows) -> None:
-            rows[0]["implemented_proven"] = ["Workflow span emitted", "Parentage proven"]
-            rows[0]["tests"] = ["trace.success", "trace.parentage"]
-            rows[2]["status"] = "owner_mapped"
-
-        result = self.validate_genai_with_json(report, edit_closure=edit)
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_json_projection_allows_empty_nonworking_proof_lists(self) -> None:
-        old_row = (
-            "| Privacy/cardinality | metadata-only capture; bounded dimensions "
-            "| Span dimensions are bounded | telemetry.redaction | OTLP log policy | Partial |"
-        )
-        new_row = (
-            "| Privacy/cardinality | metadata-only capture; bounded dimensions "
-            "|  |  | OTLP log policy | Owner-mapped |"
-        )
-        report = INSTRUMENT_GENAI.replace(old_row, new_row)
-        report = report.replace("**Result:** Partial", "**Result:** Pass")
-
-        def edit(rows) -> None:
-            rows[2]["implemented_proven"] = []
-            rows[2]["tests"] = []
-            rows[2]["evidence"] = []
-            rows[2]["status"] = "owner_mapped"
-
-        result = self.validate_genai_with_json(report, edit_closure=edit)
-
-        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_accepts_one_to_one_genai_surface_closure(self) -> None:
         result = self.validate(AUDIT_GENAI, INSTRUMENT_GENAI)

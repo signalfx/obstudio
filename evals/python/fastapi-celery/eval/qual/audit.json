@@ -18,7 +18,7 @@
   "rubric": [
     "Distinguishes the FastAPI web process from the Celery worker process.",
     "Identifies pyproject.toml, app.py, worker.py, Dockerfile, and docker-compose.yml as relevant runtime surfaces.",
-    "Reports missing FastAPI server coverage through one supported FastAPI/ASGI instrumentation path rather than requiring overlapping server instrumentors, reports missing Celery instrumentation, and requires HTTP-client instrumentation only when repository source uses a supported client dependency (this fixture does not).",
+    "Reports missing FastAPI, ASGI, HTTP client, and Celery instrumentation where applicable.",
     "Calls out start-command and environment wiring gaps in docker-compose.",
     "Does not collapse the worker and web service into a single invented entrypoint."
   ]

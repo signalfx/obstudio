@@ -34,7 +34,6 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
             "Before any application-code, dependency, runtime-config, or test edit",
             'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" select',
             'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" validate-flow',
-            ".observe/tmp/otel-selected-findings.json",
         )
         for value in required:
             self.assertIn(value, text)
@@ -85,28 +84,16 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("render-instrumentation-html", text)
         self.assertIn(".observe/otel-instrumentation.html", text)
 
-    def test_genai_reference_does_not_bypass_selection(self) -> None:
-        text = (SKILL_DIR / "references" / "genai-instrumentation.md").read_text(
-            encoding="utf-8"
-        )
-        normalized = " ".join(text.split())
+    def test_inline_genai_work_does_not_bypass_selection(self) -> None:
+        normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
         self.assertIn(
-            "only the findings selected in `.observe/otel-selection.json`",
+            "Implement exactly the selected IDs plus executable dependencies added by `select`",
             normalized,
         )
-        self.assertIn("only the bound selection defines code-change scope", normalized)
-
-    def test_child_verification_records_item_local_assertion_before_rollup(self) -> None:
-        text = " ".join(
-            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+        self.assertIn(
+            "A direct request is scope authority only when no canonical audit exists",
+            normalized,
         )
-        for value in (
-            "direct_assertion_passed",
-            "before finding/scenario rollup",
-            "removed item",
-            "replacement owner",
-        ):
-            self.assertIn(value, text)
 
     def test_wrapper_exposes_shared_flow_commands(self) -> None:
         completed = subprocess.run(
@@ -120,8 +107,6 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("validate-flow", completed.stdout)
         self.assertIn("render-html", completed.stdout)
         self.assertIn("render-instrumentation-html", completed.stdout)
-        self.assertIn("finalize-instrumentation", completed.stdout)
-        self.assertIn("instrumentation-digest", completed.stdout)
 
     def test_wrapper_missing_helper_is_a_tool_error(self) -> None:
         missing = Path("/definitely/missing/observe_report.py")

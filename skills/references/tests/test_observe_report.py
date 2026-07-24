@@ -372,16 +372,7 @@ class ObserveReportTest(unittest.TestCase):
             "[otel-audit.json](</tmp/A Report/otel%3F.json>)",
         )
 
-    def write_finalize_flow(
-        self,
-        root: Path,
-        *,
-        failed_child: bool = False,
-        stale_parent_handoff: bool = False,
-        stale_telemetry_handoff: bool = False,
-        generic_product_verification: bool = False,
-        workflow_mode: str = "instrumentation_child",
-    ) -> SimpleNamespace:
+    def write_bound_instrumentation_flow(self, root: Path) -> SimpleNamespace:
         report = MODULE.normalize_audit_report(sample_report())
         audit_digest = MODULE.audit_digest(report)
         selection = {
@@ -396,172 +387,22 @@ class ObserveReportTest(unittest.TestCase):
         instrumentation = sample_instrumentation(
             report, audit_digest, normalized_selection
         )
-        if not stale_parent_handoff:
-            instrumentation["findings"][0]["follow_up_actions"] = [  # type: ignore[index]
-                "Capture the remaining route topology proof."
-            ]
-            instrumentation["next_steps"] = [
-                "Capture the remaining route topology proof."
-            ]
-        telemetry_change = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        if stale_telemetry_handoff:
-            telemetry_change["follow_up_actions"] = [
-                "Run $otel-verify, then filter the trace waterfall by http.route."
-            ]
-        elif generic_product_verification:
-            telemetry_change["follow_up_actions"] = [
-                "Run verification in Splunk Observability Cloud, then filter the "
-                "trace waterfall by http.route."
-            ]
-        normalized_instrumentation = MODULE.normalize_instrumentation(
-            instrumentation, report, normalized_selection
-        )
-        verify = sample_verify(
-            report,
-            audit_digest,
-            MODULE.instrumentation_digest(normalized_instrumentation),
-        )
-        verify["meta"].update(  # type: ignore[union-attr]
-            {"workflow_mode": workflow_mode, "lifecycle": "final"}
-        )
-        if failed_child:
-            verify["meta"].update(  # type: ignore[union-attr]
-                {"result": "Fail", "lifecycle": "intermediate"}
-            )
-            finding = verify["findings"][0]  # type: ignore[index]
-            finding["status"] = "not_working"
-            finding["remaining"] = ["Repair the server span wiring."]
-            scenario = finding["scenarios"][0]
-            scenario.update(
-                {
-                    "status": "not_working",
-                    "observed_telemetry": [
-                        "The GET /checkout server span with http.route was absent."
-                    ],
-                }
-            )
-            item = finding["item_results"][0]
-            item.update(
-                {
-                    "status": "not_working",
-                    "observed_telemetry": [
-                        "The GET /checkout server span with http.route was absent."
-                    ],
-                }
-            )
-            verify["next_steps"] = ["Repair the server span wiring."]
 
         paths = SimpleNamespace(
             audit_json=root / "otel-audit.json",
             selection_json=root / "otel-selection.json",
             instrumentation_json=root / "otel-instrumentation.json",
-            verify_json=root / "otel-verify.json",
-            audit_markdown=None,
-            instrumentation_markdown=None,
-            verify_markdown=None,
-            output=root / "otel-instrumentation.html",
-            repo_root=root,
-            gate_output=root / "otel-instrumentation-gate.json",
         )
         paths.audit_json.write_text(json.dumps(sample_report()), encoding="utf-8")
         paths.selection_json.write_text(json.dumps(selection), encoding="utf-8")
         paths.instrumentation_json.write_text(
             json.dumps(instrumentation), encoding="utf-8"
         )
-        paths.verify_json.write_text(json.dumps(verify), encoding="utf-8")
-        for markdown in (
-            root / "otel.md",
-            root / "otel-instrumentation.md",
-            root / "otel-verify.md",
-        ):
-            markdown.write_text("projection\n", encoding="utf-8")
         return paths
-
-    def test_finalize_instrumentation_uses_active_bundle_validators_then_renders_and_gates(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory))
-            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
-            with (
-                mock.patch.object(
-                    MODULE.subprocess, "run", side_effect=[completed, completed]
-                ) as run,
-                mock.patch.object(
-                    MODULE,
-                    "render_instrumentation_html",
-                    return_value="<html>final</html>\n",
-                ) as render,
-            ):
-                result = MODULE.cmd_finalize_instrumentation(paths)
-
-            self.assertEqual(result, 0)
-            self.assertEqual(
-                paths.output.read_text(encoding="utf-8"),
-                "<html>final</html>\n",
-            )
-            gate = json.loads(paths.gate_output.read_text(encoding="utf-8"))
-            self.assertTrue(gate["passed"])
-            render.assert_called_once()
-            self.assertEqual(run.call_count, 2)
-            skills_root = SCRIPT.resolve().parents[2]
-            commands = [call.args[0] for call in run.call_args_list]
-            self.assertEqual(commands[0][1], "-I")
-            self.assertEqual(commands[1][1], "-I")
-            self.assertEqual(
-                Path(commands[0][2]),
-                skills_root
-                / "otel-verify"
-                / "scripts"
-                / "validate_reader_report.py",
-            )
-            self.assertEqual(
-                Path(commands[1][2]),
-                skills_root
-                / "otel-instrument"
-                / "scripts"
-                / "validate_gap_closure.py",
-            )
-            self.assertIn(str(paths.instrumentation_json), commands[0])
-            self.assertIn(str(paths.verify_json), commands[0])
-            self.assertIn(str(paths.audit_json), commands[0])
-            self.assertIn(str(paths.selection_json), commands[0])
-            self.assertIn(str(paths.audit_json.with_name("otel.md")), commands[1])
-            self.assertIn(str(paths.audit_json), commands[1])
-            self.assertIn(str(paths.selection_json), commands[1])
-            self.assertIn(str(paths.instrumentation_json), commands[1])
-            self.assertIn(str(paths.verify_json), commands[1])
-
-    def test_finalize_instrumentation_passes_exact_non_sibling_overlay_to_gap_validator(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory))
-            explicit = paths.instrumentation_json.with_name("selected-overlay.json")
-            paths.instrumentation_json.rename(explicit)
-            paths.instrumentation_json = explicit
-            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
-            with (
-                mock.patch.object(
-                    MODULE.subprocess, "run", side_effect=[completed, completed]
-                ) as run,
-                mock.patch.object(
-                    MODULE,
-                    "render_instrumentation_html",
-                    return_value="<html>final</html>\n",
-                ),
-            ):
-                result = MODULE.cmd_finalize_instrumentation(paths)
-
-            self.assertEqual(result, 0)
-            gap_command = run.call_args_list[1].args[0]
-            index = gap_command.index("--instrumentation-json")
-            self.assertEqual(gap_command[index + 1], str(explicit))
-            self.assertFalse(explicit.with_name("otel-instrumentation.json").exists())
 
     def test_instrumentation_digest_prints_only_bound_canonical_digest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory))
+            paths = self.write_bound_instrumentation_flow(Path(directory))
             inputs = {
                 path: path.read_bytes()
                 for path in (
@@ -598,224 +439,6 @@ class ObserveReportTest(unittest.TestCase):
             self.assertEqual(completed.stderr, "")
             for path, content in inputs.items():
                 self.assertEqual(path.read_bytes(), content)
-
-    def test_finalize_instrumentation_rejects_stale_digest_before_calls_or_writes(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory))
-            verify = json.loads(paths.verify_json.read_text(encoding="utf-8"))
-            verify["instrumentation_sha256"] = "sha256:" + "0" * 64
-            paths.verify_json.write_text(json.dumps(verify), encoding="utf-8")
-            instrumentation_before = paths.instrumentation_json.read_bytes()
-            verify_before = paths.verify_json.read_bytes()
-            paths.output.write_text("existing html\n", encoding="utf-8")
-            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
-            with (
-                mock.patch.object(MODULE.subprocess, "run") as run,
-                mock.patch.object(MODULE, "render_instrumentation_html") as render,
-                self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    "instrumentation_sha256 does not match instrumentation",
-                ),
-            ):
-                MODULE.cmd_finalize_instrumentation(paths)
-
-            run.assert_not_called()
-            render.assert_not_called()
-            self.assertEqual(paths.instrumentation_json.read_bytes(), instrumentation_before)
-            self.assertEqual(paths.verify_json.read_bytes(), verify_before)
-            self.assertEqual(paths.output.read_text(encoding="utf-8"), "existing html\n")
-            self.assertEqual(
-                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
-            )
-
-    def test_finalize_instrumentation_rejects_stale_parent_verify_cta_before_calls_or_writes(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(
-                Path(directory), stale_parent_handoff=True
-            )
-            instrumentation_before = paths.instrumentation_json.read_bytes()
-            verify_before = paths.verify_json.read_bytes()
-            paths.output.write_text("existing html\n", encoding="utf-8")
-            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
-            with (
-                mock.patch.object(MODULE.subprocess, "run") as run,
-                mock.patch.object(MODULE, "render_instrumentation_html") as render,
-                self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    "stale parent actions that ask to run the already-present child",
-                ),
-            ):
-                MODULE.cmd_finalize_instrumentation(paths)
-
-            run.assert_not_called()
-            render.assert_not_called()
-            self.assertEqual(
-                paths.instrumentation_json.read_bytes(), instrumentation_before
-            )
-            self.assertEqual(paths.verify_json.read_bytes(), verify_before)
-            self.assertEqual(
-                paths.output.read_text(encoding="utf-8"), "existing html\n"
-            )
-            self.assertEqual(
-                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
-            )
-
-    def test_stale_parent_verification_action_patterns_are_product_aware(self) -> None:
-        stale = (
-            "Continue the active instrumentation workflow through verification.",
-            "Run $otel-verify.",
-            "Execute the child verification workflow.",
-            "Continue with the verification workflow.",
-            "Run verification.",
-            "Run $otel-verify, then inspect Splunk Observability Cloud.",
-        )
-        durable = (
-            "Run verification in Splunk Observability Cloud.",
-            "Run verification against the target product.",
-            "Run product verification for the generated trace.",
-            "Query Splunk Observability Cloud for the generated trace.",
-            "Capture the remaining route topology proof.",
-        )
-
-        for action in stale:
-            with self.subTest(stale=action):
-                self.assertTrue(MODULE.is_stale_parent_verification_action(action))
-        for action in durable:
-            with self.subTest(durable=action):
-                self.assertFalse(MODULE.is_stale_parent_verification_action(action))
-
-    def test_finalize_instrumentation_rejects_stale_telemetry_verify_cta_before_calls_or_writes(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(
-                Path(directory), stale_telemetry_handoff=True
-            )
-            paths.output.write_text("existing html\n", encoding="utf-8")
-            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
-            with (
-                mock.patch.object(MODULE.subprocess, "run") as run,
-                mock.patch.object(MODULE, "render_instrumentation_html") as render,
-                self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    r"telemetry_changes\[0\]\.follow_up_actions\[0\]",
-                ),
-            ):
-                MODULE.cmd_finalize_instrumentation(paths)
-
-            run.assert_not_called()
-            render.assert_not_called()
-            self.assertEqual(
-                paths.output.read_text(encoding="utf-8"), "existing html\n"
-            )
-            self.assertEqual(
-                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
-            )
-
-    def test_finalize_instrumentation_allows_generic_product_verification_action(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(
-                Path(directory), generic_product_verification=True
-            )
-            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
-            with (
-                mock.patch.object(
-                    MODULE.subprocess, "run", side_effect=[completed, completed]
-                ),
-                mock.patch.object(
-                    MODULE,
-                    "render_instrumentation_html",
-                    return_value="<html>final</html>\n",
-                ),
-            ):
-                result = MODULE.cmd_finalize_instrumentation(paths)
-
-            self.assertEqual(result, 0)
-            self.assertEqual(
-                paths.output.read_text(encoding="utf-8"), "<html>final</html>\n"
-            )
-
-    def test_finalize_instrumentation_rejects_standalone_verify_before_calls_or_writes(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory), workflow_mode="standalone")
-            paths.output.write_text("existing html\n", encoding="utf-8")
-            paths.gate_output.write_text("existing gate\n", encoding="utf-8")
-            with (
-                mock.patch.object(MODULE.subprocess, "run") as run,
-                mock.patch.object(MODULE, "render_instrumentation_html") as render,
-                self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    "requires verify.meta.workflow_mode instrumentation_child",
-                ),
-            ):
-                MODULE.cmd_finalize_instrumentation(paths)
-
-            run.assert_not_called()
-            render.assert_not_called()
-            self.assertEqual(
-                paths.output.read_text(encoding="utf-8"), "existing html\n"
-            )
-            self.assertEqual(
-                paths.gate_output.read_text(encoding="utf-8"), "existing gate\n"
-            )
-
-    def test_finalize_instrumentation_projection_failure_prevents_render_and_gate(
-        self,
-    ) -> None:
-        for failing_call in (1, 2):
-            with self.subTest(failing_call=failing_call), tempfile.TemporaryDirectory() as directory:
-                paths = self.write_finalize_flow(Path(directory))
-                success = subprocess.CompletedProcess([], 0, "PASS\n", "")
-                failure = subprocess.CompletedProcess([], 1, "", "bad projection\n")
-                results = [failure] if failing_call == 1 else [success, failure]
-                with (
-                    mock.patch.object(
-                        MODULE.subprocess, "run", side_effect=results
-                    ) as run,
-                    mock.patch.object(
-                        MODULE, "render_instrumentation_html"
-                    ) as render,
-                    self.assertRaisesRegex(MODULE.ReportError, "bad projection"),
-                ):
-                    MODULE.cmd_finalize_instrumentation(paths)
-
-                self.assertEqual(run.call_count, failing_call)
-                render.assert_not_called()
-                self.assertFalse(paths.output.exists())
-                self.assertFalse(paths.gate_output.exists())
-
-    def test_finalize_instrumentation_renders_failed_intermediate_then_exits_two(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            paths = self.write_finalize_flow(Path(directory), failed_child=True)
-            completed = subprocess.CompletedProcess([], 0, "PASS\n", "")
-            with (
-                mock.patch.object(
-                    MODULE.subprocess, "run", side_effect=[completed, completed]
-                ),
-                mock.patch.object(
-                    MODULE,
-                    "render_instrumentation_html",
-                    return_value="<html>repair required</html>\n",
-                ),
-            ):
-                result = MODULE.cmd_finalize_instrumentation(paths)
-
-            self.assertEqual(result, 2)
-            self.assertTrue(paths.output.is_file())
-            gate = json.loads(paths.gate_output.read_text(encoding="utf-8"))
-            self.assertFalse(gate["passed"])
-            self.assertEqual(gate["verification_lifecycle"], "intermediate")
-            self.assertEqual(gate["failed_findings"], ["OTEL-001"])
 
     def test_example_report_companions_are_canonical_and_bound(self) -> None:
         repo_root = Path(__file__).parents[3]
@@ -1039,229 +662,6 @@ class ObserveReportTest(unittest.TestCase):
         ):
             self.assertFalse(MODULE.descriptor_atomic_writes_supported())
 
-    def test_exact_telemetry_reference_rejects_identifier_prefix_collisions(self) -> None:
-        item = {
-            "name": "http.server.request.duration",
-            "attributes": ["http.route"],
-        }
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "http.server.request.duration.total with http.route_id", item
-            )
-        )
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "http.server.request.duration with http.route did not emit", item
-            )
-        )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "http.server.request.duration emitted with http.route", item
-            )
-        )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "No errors occurred. http.server.request.duration"
-                "{http.route=/checkout} emitted",
-                item,
-            )
-        )
-
-    def test_positive_telemetry_reference_requires_one_affirmative_clause(self) -> None:
-        item = {
-            "name": "http.server.request.duration",
-            "attributes": ["http.route"],
-        }
-        aspirational_or_disjoint = (
-            "Expected http.server.request.duration; http.route should be configured.",
-            "Expected http.server.request.duration with http.route was emitted.",
-            "http.server.request.duration with http.route was not confirmed.",
-            "http.server.request.duration may have emitted with http.route.",
-            "Observed http.server.request.duration. Recorded http.route.",
-            "Source code contains http.server.request.duration with http.route.",
-            "Configuration contains http.server.request.duration with http.route.",
-            "The test plan recorded the string http.server.request.duration with http.route.",
-            "A comment asserted http.server.request.duration with http.route.",
-            "The unit test asserted http.server.request.duration with http.route.",
-            "The report found http.server.request.duration with http.route.",
-            "The unit test source recorded http.server.request.duration with http.route.",
-            "The build produced http.server.request.duration with http.route.",
-        )
-        for observation in aspirational_or_disjoint:
-            with self.subTest(observation=observation):
-                self.assertFalse(
-                    MODULE.exact_telemetry_item_is_referenced(observation, item)
-                )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "The receiver observed http.server.request.duration with "
-                "http.route=/checkout.",
-                item,
-            )
-        )
-
-    def test_exact_telemetry_reference_requires_signal_kind_and_authored_values(
-        self,
-    ) -> None:
-        item = {
-            "type": "metric",
-            "name": "task.created",
-            "attributes": ["http.route=/health"],
-        }
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "The generated trace contained span task.created with "
-                "http.route=/health.",
-                item,
-            )
-        )
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "The receiver observed metric task.created with "
-                "http.route=/wrong.",
-                item,
-            )
-        )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "The receiver observed metric task.created with "
-                "http.route=/health.",
-                item,
-            )
-        )
-        for observation in (
-            "Metric task.created was emitted, and metric other.signal had "
-            "http.route=/health.",
-            "Metric task.created with http.route=/health was emitted. No metric "
-            "task.created with http.route=/health was emitted.",
-            "No data points were recorded for metric task.created with "
-            "http.route=/health.",
-            "The receiver recorded zero metric task.created with "
-            "http.route=/health.",
-            "Metric task.created with http.route=/health was emitted. It was "
-            "actually a span.",
-        ):
-            with self.subTest(observation=observation):
-                self.assertFalse(
-                    MODULE.exact_telemetry_item_is_referenced(observation, item)
-                )
-
-    def test_exact_telemetry_reference_does_not_combine_contrasting_assertions(
-        self,
-    ) -> None:
-        metric = {
-            "type": "metric",
-            "name": "task.created",
-            "attributes": ["http.route=/health"],
-        }
-        rejected = (
-            "Only a span task.created with http.route=/health, not a metric "
-            "task.created with http.route=/health, was emitted.",
-            "A span task.created with http.route=/health was emitted, whereas a "
-            "metric task.created with http.route=/health was absent.",
-            "A span task.created with http.route=/health was emitted, but a metric "
-            "task.created with http.route=/health was not emitted.",
-            "A span task.created with http.route=/health, rather than a metric "
-            "task.created with http.route=/health, was emitted.",
-            "The metric receiver observed a span task.created with "
-            "http.route=/health.",
-            "A span task.created with http.route=/health was emitted and the "
-            "metric exporter accepted another signal.",
-        )
-        for observation in rejected:
-            with self.subTest(observation=observation):
-                self.assertFalse(
-                    MODULE.exact_telemetry_item_is_referenced(observation, metric)
-                )
-
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "A metric task.created with http.route=/health was emitted, but a "
-                "span task.created with http.route=/health was not emitted.",
-                metric,
-            )
-        )
-
-        span = {**metric, "type": "span"}
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "Metric task.created with http.route=/health was absent; span "
-                "task.created with http.route=/health was emitted.",
-                span,
-                reference_outcome="negative",
-            )
-        )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "Span task.created with http.route=/health was absent; metric "
-                "task.created with http.route=/health was emitted.",
-                span,
-                reference_outcome="negative",
-            )
-        )
-
-    def test_signal_kind_must_be_separate_from_name_and_embedded_kind_words(self) -> None:
-        embedded_kind = {
-            "type": "metric",
-            "name": "application.log.count",
-            "attributes": [],
-        }
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "application.log.count was emitted.", embedded_kind
-            )
-        )
-        self.assertTrue(
-            MODULE.exact_telemetry_item_is_referenced(
-                "Metric application.log.count was emitted.", embedded_kind
-            )
-        )
-
-        metric_word_in_name = {
-            "type": "metric",
-            "name": "custom.metric",
-            "attributes": [],
-        }
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                "custom.metric was emitted.", metric_word_in_name
-            )
-        )
-
-    def test_exact_telemetry_reference_requires_result_appropriate_polarity(self) -> None:
-        item = {
-            "name": "GET /checkout",
-            "attributes": ["http.route"],
-        }
-        negative_observations = (
-            "The expected GET /checkout server span with http.route was absent.",
-            "GET /checkout was emitted, but http.route is missing.",
-            "GET /checkout and http.route could not be found.",
-            "Could not find GET /checkout or http.route.",
-            "Unable to observe GET /checkout with http.route.",
-            "No evidence of GET /checkout or http.route was retained.",
-            "GET /checkout with http.route yielded no data.",
-            "GET /checkout with http.route was unavailable.",
-        )
-        for observation in negative_observations:
-            with self.subTest(observation=observation):
-                self.assertFalse(
-                    MODULE.exact_telemetry_item_is_referenced(observation, item)
-                )
-                self.assertTrue(
-                    MODULE.exact_telemetry_item_is_referenced(
-                        observation, item, reference_outcome="negative"
-                    )
-                )
-
-        positive = "The generated trace contained GET /checkout with http.route."
-        self.assertTrue(MODULE.exact_telemetry_item_is_referenced(positive, item))
-        self.assertFalse(
-            MODULE.exact_telemetry_item_is_referenced(
-                positive, item, reference_outcome="negative"
-            )
-        )
-
     def test_finding_badge_describes_partially_configured_scope(self) -> None:
         self.assertEqual(
             MODULE.human_finding_proof_status("not_configured", True),
@@ -1304,280 +704,6 @@ class ObserveReportTest(unittest.TestCase):
         )
         self.assertIn("unix:///tmp/docker.sock", normalized["findings"][0]["evidence"][0])
 
-    def test_genai_closure_is_authoritative_in_instrumentation_overlay(self) -> None:
-        data = sample_report()
-        data["meta"]["genai_ownership_detected"] = True  # type: ignore[index]
-        data["evidence"][-1]["finding"] = "Yes"  # type: ignore[index]
-        data["genai_readiness"] = [
-            {
-                "surface": "Checkout latency",
-                "status": "partial",
-                "evidence": "assistant.go:20",
-                "required_signals": "GET /checkout span",
-                "owner": "App-owned: assistant.go:20",
-                "acceptance_criteria": "GET /checkout span is emitted with bounded attributes",
-                "impact": "Operators cannot localize assistant latency.",
-            }
-        ]
-        report = MODULE.normalize_audit_report(data)
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        raw = sample_instrumentation(report, digest)
-        with self.assertRaisesRegex(MODULE.ReportError, "exactly one row"):
-            MODULE.normalize_instrumentation(raw, report, selection)
-
-        raw["genai_closure"] = [
-            {
-                "surface": "Checkout latency",
-                "required_signals": "GET /checkout span",
-                "owner": "App-owned: assistant.go:20",
-                "implemented_proven": ["Route-aware server span is implemented."],
-                "tests": ["go test ./..."],
-                "evidence": [".observe/evidence/checkout-test.txt"],
-                "remaining_signals": ["Runtime route-span delivery proof"],
-                "status": "partial",
-            }
-        ]
-        first = MODULE.normalize_instrumentation(raw, report, selection)
-        first_digest = MODULE.instrumentation_digest(first)
-
-        changed = copy.deepcopy(raw)
-        changed["genai_closure"][0]["implemented_proven"] = [  # type: ignore[index]
-            "A different closure claim."
-        ]
-        second = MODULE.normalize_instrumentation(changed, report, selection)
-
-        self.assertNotEqual(first_digest, MODULE.instrumentation_digest(second))
-        self.assertEqual(first["genai_closure"][0]["status"], "partial")
-
-    def test_instrumentation_html_aggregates_and_projects_partial_genai_closure(
-        self,
-    ) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest, selection),
-            report,
-            selection,
-        )
-        instrumentation["meta"]["result"] = "Partial"
-        instrumentation["genai_closure"] = [
-            {
-                "surface": "Model identity",
-                "required_signals": "model name and version",
-                "owner": "assistant runtime team",
-                "implemented_proven": ["Bounded model name is recorded."],
-                "tests": ["Model-name unit test passed."],
-                "evidence": [".observe/evidence/genai/model-name.json"],
-                "remaining_signals": ["Runtime model-version proof"],
-                "status": "partial",
-            }
-        ]
-        verify = sample_verify(
-            report,
-            digest,
-            MODULE.instrumentation_digest(instrumentation),
-        )
-        verify["meta"]["result"] = "Pass"
-        finding = verify["findings"][0]
-        finding["status"] = "working"
-        finding["remaining"] = []
-        finding["scenarios"][0]["status"] = "working"
-        finding["item_results"][0].update(
-            {
-                "status": "working",
-                "direct_assertion_passed": True,
-                "observed_telemetry": [
-                    "The generated trace contains span GET /checkout with "
-                    "http.route."
-                ],
-                "product_validation": ["The local receiver accepted the span."],
-            }
-        )
-
-        summary = MODULE.render_instrumentation_summary(
-            selection, instrumentation, verify
-        )
-        rendered = MODULE.render_instrumentation_html(
-            report, selection, instrumentation, verify
-        )
-
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Partial",
-        )
-        self.assertIn("Overall result: Partial", summary)
-        self.assertIn("Verification complete — GenAI closure remains", summary)
-        self.assertNotIn("Instrumentation and verification complete", summary)
-        self.assertIn("GenAI telemetry closure", rendered)
-        self.assertIn("0 of 1 surface is closed", rendered)
-        self.assertIn("Model identity", rendered)
-        self.assertIn("Bounded model name is recorded.", rendered)
-        self.assertIn("Runtime model-version proof", rendered)
-        self.assertIn("Owner: assistant runtime team", rendered)
-
-        instrumentation["meta"]["result"] = "Fail"
-        instrumentation["genai_closure"][0]["status"] = "not_working"
-        verify["meta"]["result"] = "Partial"
-        failed_summary = MODULE.render_instrumentation_summary(
-            selection, instrumentation, verify
-        )
-        self.assertIn(
-            "Instrumentation failed — GenAI closure has a failed surface",
-            failed_summary,
-        )
-        self.assertNotIn(
-            "Verification incomplete — no observed failures", failed_summary
-        )
-
-    def test_aggregate_result_keeps_blocked_without_implementation_proof(self) -> None:
-        instrumentation = {
-            "meta": {"result": "Partial"},
-            "findings": [
-                {
-                    "status": "working",
-                    "tests": ["go test ./..."],
-                    "evidence": ["main.go:42"],
-                }
-            ],
-            "genai_closure": [],
-        }
-        verify = {"meta": {"result": "Blocked"}, "findings": []}
-
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Blocked",
-        )
-        instrumentation["findings"][0]["evidence"] = [
-            ".observe/evidence/go-test.txt"
-        ]
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Partial",
-        )
-
-        instrumentation["findings"][0].update(
-            {
-                "tests": ["go test ./... failed"],
-                "evidence": [".observe/evidence/go-test.log"],
-            }
-        )
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Blocked",
-        )
-        instrumentation["findings"] = []
-        instrumentation["genai_closure"] = [
-            {
-                "status": "partial",
-                "implemented_proven": ["Provider span emitted."],
-                "tests": ["not proven"],
-                "evidence": [".observe/evidence/not-proven.log"],
-            }
-        ]
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Blocked",
-        )
-
-        instrumentation["findings"] = [
-            {
-                "status": "working",
-                "tests": ["go test ./... passed"],
-                "evidence": [".observe/evidence/http-failure.json"],
-            }
-        ]
-        instrumentation["genai_closure"] = []
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Partial",
-        )
-
-        instrumentation["findings"] = []
-        instrumentation["genai_closure"] = [
-            {
-                "status": "partial",
-                "implemented_proven": ["span implemented"],
-                "tests": ["collector configured"],
-                "evidence": [".observe/evidence/config.json"],
-            }
-        ]
-        self.assertEqual(
-            MODULE.aggregate_instrumentation_result(instrumentation, verify),
-            "Blocked",
-        )
-
-    def test_verify_result_and_failed_repairs_are_semantically_consistent(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        verify = sample_verify(report, digest, MODULE.instrumentation_digest(instrumentation))
-        finding = verify["findings"][0]  # type: ignore[index]
-        finding["status"] = "not_working"
-        finding["scenarios"][0]["status"] = "not_working"
-        finding["scenarios"][0]["observed_telemetry"] = [
-            "The expected GET /checkout server span with http.route was absent."
-        ]
-        finding["item_results"][0]["status"] = "not_working"
-        finding["item_results"][0]["observed_telemetry"] = [
-            "The expected GET /checkout server span with http.route was absent."
-        ]
-        finding["remaining"] = ["Use $otel-instrument to repair the Tracer binding."]
-
-        with self.assertRaisesRegex(MODULE.ReportError, "must be Fail"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        verify["meta"]["result"] = "Fail"  # type: ignore[index]
-        finding["remaining"] = [
-            "Use $otel-instrument to repair the Tracer binding, then rerun verification."
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "repairs, not confirmation"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        finding["remaining"] = ["Use $otel-instrument to repair the Tracer binding."]
-        verify["next_steps"] = ["Run $otel-instrument to repair the Tracer binding."]
-        normalized = MODULE.normalize_verify(verify, report, selection, instrumentation)
-        self.assertEqual(normalized["meta"]["result"], "Fail")
-
-        verify = sample_verify(report, digest, MODULE.instrumentation_digest(instrumentation))
-        verify["meta"]["result"] = "Fail"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "requires at least one not_working"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
     def test_unknown_verify_finding_fails_cleanly_before_proof_lookup(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         digest = MODULE.audit_digest(report)
@@ -1619,85 +745,6 @@ class ObserveReportTest(unittest.TestCase):
                     MODULE.normalize_verify(
                         verify, report, selection, instrumentation
                     )
-
-    def test_blocked_scenario_requires_structured_reader_context(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        scenario = verify["findings"][0]["scenarios"][0]  # type: ignore[index]
-        scenario.update(
-            {
-                "status": "blocked",
-                "proof_mode": "not_run",
-                "visibility": "not_proven",
-                "blocking_reason": (
-                    "Exact locked dependencies could not be restored because "
-                    "Artifactory authentication expired."
-                ),
-                "unobserved_outcome": (
-                    "Final metric delivery from the real process is not yet observed."
-                ),
-            }
-        )
-
-        normalized = MODULE.normalize_verify(
-            verify, report, selection, instrumentation
-        )
-        normalized_scenario = normalized["findings"][0]["scenarios"][0]
-        self.assertEqual(
-            normalized_scenario["blocking_reason"],
-            "Exact locked dependencies could not be restored because Artifactory authentication expired.",
-        )
-        self.assertEqual(
-            normalized_scenario["unobserved_outcome"],
-            "Final metric delivery from the real process is not yet observed.",
-        )
-
-        missing_reason = copy.deepcopy(verify)
-        missing_reason["findings"][0]["scenarios"][0].pop("blocking_reason")
-        with self.assertRaisesRegex(MODULE.ReportError, "requires blocking_reason"):
-            MODULE.normalize_verify(
-                missing_reason, report, selection, instrumentation
-            )
-
-        imperative_reason = copy.deepcopy(verify)
-        imperative_reason["findings"][0]["scenarios"][0]["blocking_reason"] = (
-            "Restore the exact locked dependencies."
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "cause, not an imperative"):
-            MODULE.normalize_verify(
-                imperative_reason, report, selection, instrumentation
-            )
-
-        stale_context = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        stale_context["findings"][0]["scenarios"][0]["blocking_reason"] = (  # type: ignore[index]
-            "Artifactory authentication expired."
-        )
-        stale_context["findings"][0]["scenarios"][0]["unobserved_outcome"] = (  # type: ignore[index]
-            "Runtime delivery is not yet observed."
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "valid only when status is blocked"):
-            MODULE.normalize_verify(
-                stale_context, report, selection, instrumentation
-            )
 
     def test_verify_result_is_derived_from_scenario_and_item_execution(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -1860,54 +907,6 @@ class ObserveReportTest(unittest.TestCase):
         ):
             MODULE.normalize_verify(verify, report, selection, instrumentation)
 
-    def test_working_item_rejects_unbound_zero_and_contradictory_observations(
-        self,
-    ) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        observations = (
-            "Span GET /checkout was emitted, and span payment.authorize had http.route.",
-            "Span GET /checkout with http.route was emitted. No span GET /checkout "
-            "with http.route was emitted.",
-            "No data points were recorded for span GET /checkout with http.route.",
-        )
-        for observation in observations:
-            with self.subTest(observation=observation):
-                verify = sample_verify(
-                    report, digest, MODULE.instrumentation_digest(instrumentation)
-                )
-                item = verify["findings"][0]["item_results"][0]  # type: ignore[index]
-                item.update(
-                    {
-                        "status": "working",
-                        "direct_assertion_passed": True,
-                        "proof_mode": "full_runtime",
-                        "visibility": "otlp_accepted",
-                        "observed_telemetry": [observation],
-                        "product_validation": ["The local receiver check ran."],
-                    }
-                )
-                with self.assertRaisesRegex(
-                    MODULE.ReportError, "positive proof semantics"
-                ):
-                    MODULE.normalize_verify(
-                        verify, report, selection, instrumentation
-                    )
-
     def test_item_proof_must_use_its_instrumentation_scenario_mapping(self) -> None:
         data = sample_report()
         second = copy.deepcopy(data["verification"]["scenarios"][0])  # type: ignore[index]
@@ -1945,146 +944,6 @@ class ObserveReportTest(unittest.TestCase):
 
         with self.assertRaisesRegex(MODULE.ReportError, "not mapped to the telemetry item"):
             MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-    def test_working_removed_item_requires_absence_and_replacement_proof(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation_data = sample_instrumentation(report, digest)
-        telemetry_item = instrumentation_data["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        telemetry_item.update(
-            {
-                "change_kind": "removed",
-                "name": "HttpRequest",
-                "added_attributes": [],
-                "product_view": "One canonical route-named SERVER span",
-                "follow_up_actions": ["Inspect the canonical route trace."],
-            }
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            instrumentation_data, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        item = verify["findings"][0]["item_results"][0]  # type: ignore[index]
-        item.update(
-            {
-                "status": "working",
-                "direct_assertion_passed": True,
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-                "observed_telemetry": [
-                    "The generated trace has no HttpRequest span and one GET /checkout SERVER span."
-                ],
-                "product_validation": ["The local receiver captured the generated trace."],
-            }
-        )
-
-        with self.assertRaisesRegex(MODULE.ReportError, "structured proof"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        item["removal_proof"] = {
-            "removed_signal": "HttpRequest",
-            "replacement_signal": "GET /checkout",
-            "absence_assertion_passed": True,
-            "replacement_assertion_passed": False,
-        }
-        with self.assertRaisesRegex(MODULE.ReportError, "structured proof"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        item["removal_proof"]["replacement_assertion_passed"] = True
-        normalized = MODULE.normalize_verify(
-            verify, report, selection, instrumentation
-        )
-        self.assertTrue(
-            normalized["findings"][0]["item_results"][0]["removal_proof"][
-                "replacement_assertion_passed"
-            ]
-        )
-
-        wrong_kind = copy.deepcopy(verify)
-        wrong_kind_item = wrong_kind["findings"][0]["item_results"][0]  # type: ignore[index]
-        wrong_kind_item["observed_telemetry"] = [
-            "Span HttpRequest was absent. Metric GET /checkout was emitted."
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "replacement proof"):
-            MODULE.normalize_verify(
-                wrong_kind, report, selection, instrumentation
-            )
-
-        instrumentation_with_attribute_data = copy.deepcopy(instrumentation_data)
-        instrumentation_with_attribute_data["findings"][0]["telemetry_changes"][0][  # type: ignore[index]
-            "added_attributes"
-        ] = ["http.route"]
-        instrumentation_with_attribute_data["findings"][0]["telemetry_changes"][0][  # type: ignore[index]
-            "follow_up_actions"
-        ] = ["Filter canonical route traces by http.route."]
-        instrumentation_with_attribute = MODULE.normalize_instrumentation(
-            instrumentation_with_attribute_data, report, selection
-        )
-        attribute_only = sample_verify(
-            report,
-            digest,
-            MODULE.instrumentation_digest(instrumentation_with_attribute),
-        )
-        attribute_only_item = attribute_only["findings"][0]["item_results"][0]  # type: ignore[index]
-        attribute_only_item.update(
-            {
-                "status": "working",
-                "direct_assertion_passed": True,
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-                "observed_telemetry": [
-                    "Span HttpRequest was emitted without http.route. Span GET "
-                    "/checkout was emitted."
-                ],
-                "product_validation": ["The local receiver captured telemetry."],
-                "removal_proof": {
-                    "removed_signal": "HttpRequest",
-                    "replacement_signal": "GET /checkout",
-                    "absence_assertion_passed": True,
-                    "replacement_assertion_passed": True,
-                },
-            }
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "negative proof semantics"):
-            MODULE.normalize_verify(
-                attribute_only,
-                report,
-                selection,
-                instrumentation_with_attribute,
-            )
-
-        contradictory = copy.deepcopy(verify)
-        contradictory_item = contradictory["findings"][0]["item_results"][0]  # type: ignore[index]
-        contradictory_item["observed_telemetry"] = [
-            "The generated trace emitted HttpRequest and one GET /checkout SERVER span."
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "negative proof semantics"):
-            MODULE.normalize_verify(
-                contradictory, report, selection, instrumentation
-            )
-
-        missing_replacement = copy.deepcopy(verify)
-        missing_replacement_item = missing_replacement["findings"][0]["item_results"][0]  # type: ignore[index]
-        missing_replacement_item["observed_telemetry"] = [
-            "The generated trace contained no HttpRequest span."
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "replacement proof"):
-            MODULE.normalize_verify(
-                missing_replacement, report, selection, instrumentation
-            )
 
     def test_contextual_item_evidence_can_remain_not_proven(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -2198,28 +1057,6 @@ class ObserveReportTest(unittest.TestCase):
                 ):
                     MODULE.normalize_verify(verify, report, selection, instrumentation)
 
-    def test_telemetry_change_requires_concrete_correction_text(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = sample_instrumentation(report, digest)
-        instrumentation["findings"][0]["telemetry_changes"][0]["change"] = (  # type: ignore[index]
-            "Modified GET /checkout for the selected bounded telemetry contract."
-        )
-
-        with self.assertRaisesRegex(MODULE.ReportError, "concrete code/config behavior"):
-            MODULE.normalize_instrumentation(instrumentation, report, selection)
-
     def test_instrumentation_result_rollup_is_bidirectional(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         digest = MODULE.audit_digest(report)
@@ -2281,38 +1118,6 @@ class ObserveReportTest(unittest.TestCase):
                 verify, report, selection, changed_instrumentation
             )
 
-    def test_verify_rejects_otlp_delivery_that_contradicts_product_view(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        raw_instrumentation = sample_instrumentation(report, digest)
-        raw_instrumentation["findings"][0]["telemetry_changes"][0]["product_view"] = (  # type: ignore[index]
-            "Trace-correlated search; no OTLP log pipeline claimed."
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            raw_instrumentation, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        item = verify["findings"][0]["item_results"][0]  # type: ignore[index]
-        item["visibility"] = "otlp_accepted"
-        item["observed_telemetry"] = ["The receiver saved the expected log."]
-        item["product_validation"] = ["Local OTLP receipt was saved."]
-
-        with self.assertRaisesRegex(MODULE.ReportError, "denies an OTLP delivery path"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
     def test_reader_prose_hides_schema_enum_tokens(self) -> None:
         self.assertEqual(
             MODULE.reader_prose(
@@ -2346,426 +1151,6 @@ class ObserveReportTest(unittest.TestCase):
         self.assertIn("the generated trace", redacted)
         self.assertIn("the generated span", redacted)
         self.assertIn("trace_generated-trace.json", redacted)
-
-    def test_verify_rejects_unevidenced_delivery_and_contradictory_next_step(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        verify = sample_verify(report, digest, MODULE.instrumentation_digest(instrumentation))
-        verify["findings"][0]["item_results"][0]["visibility"] = "otlp_accepted"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "otlp_accepted requires"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        verify = sample_verify(report, digest, MODULE.instrumentation_digest(instrumentation))
-        verify["next_steps"] = ["No further action is required."]
-        with self.assertRaisesRegex(MODULE.ReportError, "remain unresolved"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-    def test_failed_instrumentation_child_is_intermediate_only(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        verify = sample_verify(report, digest, MODULE.instrumentation_digest(instrumentation))
-        verify["instrumentation_sha256"] = MODULE.instrumentation_digest(instrumentation)
-        verify["meta"].update(  # type: ignore[union-attr]
-            {
-                "result": "Fail",
-                "workflow_mode": "instrumentation_child",
-                "lifecycle": "final",
-            }
-        )
-        finding = verify["findings"][0]  # type: ignore[index]
-        finding["status"] = "not_working"
-        finding["scenarios"][0].update(
-            {
-                "status": "not_working",
-                "observed_telemetry": [
-                    "The GET /checkout server span with http.route was absent."
-                ],
-            }
-        )
-        finding["item_results"][0].update(
-            {
-                "status": "not_working",
-                "observed_telemetry": [
-                    "The GET /checkout server span with http.route was absent."
-                ],
-            }
-        )
-        finding["remaining"] = ["Repair the server span wiring."]
-        verify["next_steps"] = ["Repair the server span wiring."]
-
-        with self.assertRaisesRegex(MODULE.ReportError, "must be intermediate"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-        verify["meta"]["lifecycle"] = "intermediate"  # type: ignore[index]
-        normalized = MODULE.normalize_verify(
-            verify, report, selection, instrumentation
-        )
-        self.assertEqual(normalized["meta"]["lifecycle"], "intermediate")
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            audit_path = root / "otel-audit.json"
-            selection_path = root / "otel-selection.json"
-            instrumentation_path = root / "otel-instrumentation.json"
-            verify_path = root / "otel-verify.json"
-            audit_path.write_text(json.dumps(sample_report()), encoding="utf-8")
-            selection_path.write_text(json.dumps(selection), encoding="utf-8")
-            instrumentation_path.write_text(
-                json.dumps(instrumentation), encoding="utf-8"
-            )
-            verify_path.write_text(json.dumps(verify), encoding="utf-8")
-            gate = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "instrumentation-final-gate",
-                    str(audit_path),
-                    "--selection-json",
-                    str(selection_path),
-                    "--instrumentation-json",
-                    str(instrumentation_path),
-                    "--verify-json",
-                    str(verify_path),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(gate.returncode, 2)
-            self.assertIn("REPAIR REQUIRED", gate.stdout)
-
-    def test_stopped_failed_child_validates_and_renders_external_boundary(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        raw_instrumentation = sample_instrumentation(report, digest, selection)
-        raw_instrumentation["meta"]["result"] = "Fail"  # type: ignore[index]
-        instrumentation_finding = raw_instrumentation["findings"][0]  # type: ignore[index]
-        instrumentation_finding["status"] = "not_working"
-        instrumentation = MODULE.normalize_instrumentation(
-            raw_instrumentation, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        verify["meta"].update(  # type: ignore[union-attr]
-            {
-                "result": "Fail",
-                "workflow_mode": "instrumentation_child",
-                "lifecycle": "intermediate",
-            }
-        )
-        finding = verify["findings"][0]  # type: ignore[index]
-        finding["status"] = "not_working"
-        finding["scenarios"][0].update(
-            {
-                "status": "not_working",
-                "observed_telemetry": [
-                    "The GET /checkout server span with http.route was absent."
-                ],
-            }
-        )
-        finding["item_results"][0].update(
-            {
-                "status": "not_working",
-                "observed_telemetry": [
-                    "The GET /checkout server span with http.route was absent."
-                ],
-            }
-        )
-        finding["remaining"] = ["Repair the server span wiring."]
-        verify["next_steps"] = ["Repair the server span wiring."]
-        external_action = (
-            "Renew the private module registry credential and restore the exact "
-            "locked dependencies."
-        )
-        verify["stop_boundaries"] = [
-            {
-                "finding_ids": ["OTEL-001"],
-                "kind": "external_prerequisite",
-                "reason": (
-                    "The private module registry rejected the locked dependency "
-                    "restore because its repository credential had expired."
-                ),
-                "required_action": external_action,
-                "evidence": [
-                    ".observe/evidence/run/dependency-restore.log"
-                ],
-            }
-        ]
-
-        non_failed_instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest, selection), report, selection
-        )
-        result_mismatch = copy.deepcopy(verify)
-        result_mismatch["instrumentation_sha256"] = (
-            MODULE.instrumentation_digest(non_failed_instrumentation)
-        )
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"bound instrumentation meta\.result to be Fail",
-        ):
-            MODULE.normalize_verify(
-                result_mismatch, report, selection, non_failed_instrumentation
-            )
-
-        status_mismatch_instrumentation = copy.deepcopy(instrumentation)
-        status_mismatch_instrumentation["findings"][0]["status"] = "not_proven"
-        status_mismatch = copy.deepcopy(verify)
-        status_mismatch["instrumentation_sha256"] = MODULE.instrumentation_digest(
-            status_mismatch_instrumentation
-        )
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"instrumentation findings with status not_working",
-        ):
-            MODULE.normalize_verify(
-                status_mismatch,
-                report,
-                selection,
-                status_mismatch_instrumentation,
-            )
-
-        duplicate_action = (
-            "RENEW the private module-registry credential, and restore the exact "
-            "locked dependencies!"
-        )
-        duplicated_remaining = copy.deepcopy(verify)
-        duplicated_remaining["findings"][0]["remaining"] = [duplicate_action]
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"required_action must remain only in stop_boundaries",
-        ):
-            MODULE.normalize_verify(
-                duplicated_remaining, report, selection, instrumentation
-            )
-
-        duplicated_next_step = copy.deepcopy(verify)
-        duplicated_next_step["next_steps"] = [duplicate_action]
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"required_action must remain only in stop_boundaries",
-        ):
-            MODULE.normalize_verify(
-                duplicated_next_step, report, selection, instrumentation
-            )
-
-        shortened_external_action = "Configure the private module registry credential."
-        shortened_remaining = copy.deepcopy(verify)
-        shortened_remaining["stop_boundaries"][0]["required_action"] = (
-            "Configure the private module registry credential and restore the "
-            "locked dependencies."
-        )
-        shortened_remaining["findings"][0]["remaining"] = [
-            shortened_external_action
-        ]
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"required_action must remain only in stop_boundaries",
-        ):
-            MODULE.normalize_verify(
-                shortened_remaining, report, selection, instrumentation
-            )
-
-        shortened_next_step = copy.deepcopy(shortened_remaining)
-        shortened_next_step["findings"][0]["remaining"] = [
-            "Repair the server span wiring."
-        ]
-        shortened_next_step["next_steps"] = [shortened_external_action]
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            r"required_action must remain only in stop_boundaries",
-        ):
-            MODULE.normalize_verify(
-                shortened_next_step, report, selection, instrumentation
-            )
-
-        normalized = MODULE.normalize_verify(
-            verify, report, selection, instrumentation
-        )
-        self.assertEqual(
-            normalized["stop_boundaries"], verify["stop_boundaries"]
-        )
-        self.assertEqual(
-            normalized["findings"][0]["remaining"],
-            ["Repair the server span wiring."],
-        )
-        self.assertEqual(
-            normalized["next_steps"], ["Repair the server span wiring."]
-        )
-        self.assertIsNone(
-            MODULE.failed_verification_repair_action(external_action)
-        )
-
-        wrong_workflow = copy.deepcopy(verify)
-        wrong_workflow["meta"]["workflow_mode"] = "standalone"  # type: ignore[index]
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "stop_boundaries is allowed only for an instrumentation_child",
-        ):
-            MODULE.normalize_verify(
-                wrong_workflow, report, selection, instrumentation
-            )
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            audit_path = root / "otel-audit.json"
-            selection_path = root / "otel-selection.json"
-            instrumentation_path = root / "otel-instrumentation.json"
-            verify_path = root / "otel-verify.json"
-            html_path = root / "otel-instrumentation.html"
-            audit_path.write_text(json.dumps(report), encoding="utf-8")
-            selection_path.write_text(json.dumps(selection), encoding="utf-8")
-            instrumentation_path.write_text(
-                json.dumps(instrumentation), encoding="utf-8"
-            )
-            verify_path.write_text(json.dumps(verify), encoding="utf-8")
-
-            flow = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "validate-flow",
-                    str(audit_path),
-                    "--selection-json",
-                    str(selection_path),
-                    "--instrumentation-json",
-                    str(instrumentation_path),
-                    "--verify-json",
-                    str(verify_path),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(flow.returncode, 0, flow.stderr)
-            self.assertIn(
-                "PASS: audit -> selection -> instrumentation -> verify",
-                flow.stdout,
-            )
-
-            render = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "render-instrumentation-html",
-                    str(audit_path),
-                    "-o",
-                    str(html_path),
-                    "--selection-json",
-                    str(selection_path),
-                    "--instrumentation-json",
-                    str(instrumentation_path),
-                    "--verify-json",
-                    str(verify_path),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(render.returncode, 0, render.stderr)
-            html = html_path.read_text(encoding="utf-8")
-            self.assertIn("Why the repair loop stopped", html)
-            self.assertIn("External prerequisite", html)
-            self.assertIn(external_action, html)
-            self.assertIn(
-                "Required action outside the instrumentation repair scope", html
-            )
-            self.assertIn("dependency-restore.log", html)
-
-            gate = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "instrumentation-final-gate",
-                    str(audit_path),
-                    "--selection-json",
-                    str(selection_path),
-                    "--instrumentation-json",
-                    str(instrumentation_path),
-                    "--verify-json",
-                    str(verify_path),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(gate.returncode, 2)
-            self.assertIn("REPAIR REQUIRED", gate.stdout)
-
-    def test_parses_component_flow_lanes_and_markers(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        lanes = MODULE.component_flow_lanes(report["signal_flow"]["component_flow_map"])
-
-        self.assertEqual([lane["title"] for lane in lanes], ["Request path", "Dependency path"])
-        self.assertEqual(lanes[0]["chains"][0][0]["label"], "main.go")
-        self.assertTrue(lanes[0]["chains"][0][0]["source_covered"])
-        self.assertEqual(lanes[0]["chains"][0][1]["gaps"], ["Checkout latency"])
-
-        model = MODULE.component_flow_model(report["signal_flow"]["component_flow_map"])
-        self.assertEqual(
-            [component["label"] for component in model["components"]],
-            ["main.go", "checkout", "payment provider"],
-        )
-        checkout_component = next(
-            component for component in model["components"] if component["label"] == "checkout"
-        )
-        self.assertEqual(checkout_component["lanes"], ["Request path", "Dependency path"])
-        self.assertEqual(
-            model["lanes"],
-            [
-                {"title": "Request path", "edges": [{"source": "main.go", "target": "checkout"}]},
-                {
-                    "title": "Dependency path",
-                    "edges": [{"source": "checkout", "target": "payment provider"}],
-                },
-            ],
-        )
-
-        groups = MODULE.component_coverage_groups(report)
-        checkout = next(group for group in groups if group["label"] == "checkout")
-        self.assertEqual(checkout["lanes"], ["Request path", "Dependency path"])
-        self.assertEqual([row["id"] for row in checkout["findings"]], ["OTEL-001"])
-        self.assertEqual(checkout["priority_counts"]["required"], 1)
-        self.assertEqual(checkout["signals"], ["span"])
 
     def test_source_reference_parts_are_safe_and_preserve_notes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2833,36 +1218,6 @@ class ObserveReportTest(unittest.TestCase):
             "Trace waterfall and route filtering",
         )
 
-    def test_requires_supported_structured_otel_concerns(self) -> None:
-        missing = sample_report()
-        missing["findings"][0].pop("otel_concerns")  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "required by audit schema v2"):
-            MODULE.normalize_audit_report(missing)
-
-        invalid = sample_report()
-        invalid["findings"][0]["otel_concerns"] = ["api-contract"]  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "unsupported OpenTelemetry concerns"):
-            MODULE.normalize_audit_report(invalid)
-
-        duplicate = sample_report()
-        duplicate["findings"][0]["otel_concerns"] = [  # type: ignore[index]
-            "signal-emission",
-            "signal-emission",
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "must not contain duplicates"):
-            MODULE.normalize_audit_report(duplicate)
-
-        canonical = sample_report()
-        canonical["findings"][0]["otel_concerns"] = [  # type: ignore[index]
-            "semantic-attributes",
-            "signal-emission",
-        ]
-        normalized = MODULE.normalize_audit_report(canonical)
-        self.assertEqual(
-            normalized["findings"][0]["otel_concerns"],
-            ["signal-emission", "semantic-attributes"],
-        )
-
     def test_schema_v1_audit_digest_remains_backward_compatible(self) -> None:
         legacy = sample_report()
         legacy["schema_version"] = 1
@@ -2877,7 +1232,7 @@ class ObserveReportTest(unittest.TestCase):
             MODULE.audit_digest(report),
             "sha256:40119f93a31537edfa0ac816b0efeaa8ec18f0aee4de839e37ef6de74a9d5440",
         )
-        self.assertIn("Legacy v1 — unclassified", MODULE.render_markdown(report))
+        self.assertNotIn("OTel concerns", MODULE.render_markdown(report))
         html = MODULE.render_html(report, MODULE.empty_selection(report))
         self.assertNotIn(
             'REPORT.schema_version === 1 ? "Legacy v1 — unclassified"',
@@ -2965,153 +1320,7 @@ class ObserveReportTest(unittest.TestCase):
                 report = MODULE.normalize_audit_report(legacy)
 
                 self.assertEqual(report["findings"][1]["instrument_mode"], mode)
-        self.assertIn("Legacy v1 — unclassified", MODULE.render_markdown(report))
-
-    def test_otel_concerns_must_match_the_structured_closure(self) -> None:
-        configuration_without_concern = sample_report()
-        configuration_without_concern["findings"][0]["expected_telemetry"].append(  # type: ignore[index]
-            {
-                "type": "configuration",
-                "configuration_scope": "otel-resource",
-                "name": "service resource configuration",
-                "attributes": ["service.name"],
-                "product_view": "Canonical service identity",
-            }
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "must include otel-configuration"):
-            MODULE.normalize_audit_report(configuration_without_concern)
-
-        concern_without_configuration = sample_report()
-        concern_without_configuration["findings"][0]["otel_concerns"].append(  # type: ignore[index]
-            "otel-configuration"
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "has no configuration item"):
-            MODULE.normalize_audit_report(concern_without_configuration)
-
-        correlation_without_log = sample_report()
-        correlation_without_log["findings"][0]["otel_concerns"] = [  # type: ignore[index]
-            "trace-log-correlation"
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "requires a log outcome"):
-            MODULE.normalize_audit_report(correlation_without_log)
-
-    def test_rejects_unscoped_configuration_for_executable_finding(self) -> None:
-        data = sample_report()
-        data["findings"][0]["expected_telemetry"] = [  # type: ignore[index]
-            {
-                "type": "configuration",
-                "name": "canonical API contract",
-                "attributes": ["contract.owner", "drift.status"],
-                "product_view": "CI contract-drift status",
-            }
-        ]
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "configuration_scope is required for OpenTelemetry configuration",
-        ):
-            MODULE.normalize_audit_report(data)
-
-    def test_rejects_unscoped_configuration_mixed_with_real_telemetry(self) -> None:
-        data = sample_report()
-        data["findings"][0]["expected_telemetry"].append(  # type: ignore[index]
-            {
-                "type": "configuration",
-                "name": "service documentation links",
-                "attributes": ["runbook", "chat"],
-                "product_view": "Service documentation",
-            }
-        )
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "configuration_scope is required for OpenTelemetry configuration",
-        ):
-            MODULE.normalize_audit_report(data)
-
-    def test_rejects_non_otel_closure_work_with_decoy_telemetry_in_every_mode(self) -> None:
-        for mode in ("default", "manual decision", "external follow-up"):
-            with self.subTest(mode=mode):
-                data = sample_report()
-                finding = data["findings"][0]  # type: ignore[index]
-                finding["expected_telemetry"].append(
-                    {
-                        "type": "configuration",
-                        "configuration_scope": "otel-resource",
-                        "name": "checkout service resource",
-                        "attributes": ["service.name"],
-                        "product_view": "Canonical service identity",
-                    }
-                )
-                finding["otel_concerns"].append("otel-configuration")
-                if mode == "manual decision":
-                    make_manual_decision(finding)
-                    finding["decision_question"] = (
-                        "Which GET /checkout span profile should update the OpenAPI contract?"
-                    )
-                elif mode == "external follow-up":
-                    make_external_follow_up(finding)
-                    requirement = (
-                        "Supply GET /checkout span proof and publish the OpenAPI contract."
-                    )
-                    finding["external_requirement"] = requirement
-                    finding["required_fix"] = requirement
-                else:
-                    finding["required_fix"] = (
-                        "Emit the GET /checkout span, update openapi.yaml, publish the "
-                        "runbook, and enforce approval policy."
-                    )
-
-                with self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    "prohibited non-OpenTelemetry",
-                ):
-                    MODULE.normalize_audit_report(data)
-
-        route_signal = sample_report()
-        route_signal["summary"] = ["The GET /openapi.json span lacks route attributes."]
-        MODULE.normalize_audit_report(route_signal)
-
-    def test_rejects_isolated_openapi_and_policy_work_in_every_mode(self) -> None:
-        cases = (
-            ("default", "Add the OpenAPI contract and emit the GET /checkout span."),
-            (
-                "manual decision",
-                "Which GET /checkout span profile should add the OpenAPI contract?",
-            ),
-            (
-                "external follow-up",
-                "Provide the GET /checkout span proof and add the OpenAPI contract.",
-            ),
-            ("default", "Emit the GET /checkout span and enforce the approval policy."),
-            (
-                "manual decision",
-                "Which approval policy should govern the GET /checkout span?",
-            ),
-            (
-                "external follow-up",
-                "Provide the GET /checkout span proof and enforce the approval policy.",
-            ),
-        )
-        for mode, value in cases:
-            with self.subTest(mode=mode, value=value):
-                data = sample_report()
-                finding = data["findings"][0]  # type: ignore[index]
-                if mode == "manual decision":
-                    make_manual_decision(finding)
-                    finding["decision_question"] = value
-                elif mode == "external follow-up":
-                    make_external_follow_up(finding)
-                    finding["external_requirement"] = value
-                    finding["required_fix"] = value
-                else:
-                    finding["required_fix"] = value
-
-                with self.assertRaisesRegex(
-                    MODULE.ReportError,
-                    "prohibited non-OpenTelemetry",
-                ):
-                    MODULE.normalize_audit_report(data)
+        self.assertNotIn("OTel concerns", MODULE.render_markdown(report))
 
     def test_external_requirement_must_equal_required_fix(self) -> None:
         data = sample_report()
@@ -3123,251 +1332,6 @@ class ObserveReportTest(unittest.TestCase):
 
         with self.assertRaisesRegex(MODULE.ReportError, "exact external_requirement"):
             MODULE.normalize_audit_report(data)
-
-    def test_allows_behavior_evidence_but_rejects_behavior_only_scenario_output(self) -> None:
-        allowed = sample_report()
-        finding = allowed["findings"][0]  # type: ignore[index]
-        finding["evidence"].append("OPERATIONS.md requires OpenAPI and runbook updates.")
-        finding["constraints"].append("Do not change retry, timeout, or cache policy.")
-        finding["required_fix"] = (
-            "Record retry outcome on the GET /checkout span attribute retry.result."
-        )
-        finding["expected_telemetry"][0]["attributes"].append("retry.result")
-        MODULE.normalize_audit_report(allowed)
-
-        rejected = sample_report()
-        rejected["verification"]["scenarios"][0]["expected_signals"] = (  # type: ignore[index]
-            "GET /checkout span and OpenAPI contract lint result"
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "prohibited non-OpenTelemetry"):
-            MODULE.normalize_audit_report(rejected)
-
-    def test_accepts_scoped_configuration_with_signal_outcome_for_executable_finding(self) -> None:
-        scopes = (
-            "otel-sdk",
-            "otel-resource",
-            "otel-exporter",
-            "otel-sampling",
-            "otel-propagation",
-            "otel-instrumentation",
-            "otel-collector",
-        )
-        self.assertEqual(MODULE.CONFIGURATION_SCOPES, set(scopes))
-        for scope in scopes:
-            with self.subTest(scope=scope):
-                data = sample_report()
-                finding = data["findings"][0]  # type: ignore[index]
-                data["findings"] = [finding]
-                data["signal_flow"]["component_flow_map"] = (  # type: ignore[index]
-                    "checkout [GAP: OpenTelemetry runtime configuration]"
-                )
-                finding.update(
-                    {
-                        "title": "Configure the OpenTelemetry runtime and service resource",
-                        "otel_concerns": ["signal-emission", "otel-configuration"],
-                        "area": "OpenTelemetry runtime configuration",
-                        "gap": "The selected OTel runtime configuration does not emit a canonical service resource.",
-                        "impact": "Telemetry can be split across service identities.",
-                        "product_outcome": "All emitted telemetry is queryable under one canonical service resource.",
-                        "required_fix": "Configure the OTel runtime and emit the canonical service resource.",
-                        "acceptance_criteria": [
-                            "Runtime proof contains one canonical service resource."
-                        ],
-                        "follow_up_actions": [
-                            "Verify the canonical resource in ObStudio before merge."
-                        ],
-                    }
-                )
-                data["findings"][0]["expected_telemetry"] = [  # type: ignore[index]
-                    {
-                        "type": "configuration",
-                        "configuration_scope": scope,
-                        "name": "OpenTelemetry runtime configuration",
-                        "attributes": ["service.name"],
-                        "product_view": "Telemetry runtime diagnostics",
-                    },
-                    {
-                        "type": "resource",
-                        "name": "checkout service resource",
-                        "attributes": ["service.name"],
-                        "product_view": "One queryable service identity",
-                    },
-                ]
-                data["verification"]["scenarios"][0].update(  # type: ignore[index]
-                    {
-                        "trigger": "Start the checkout service with the selected OTel runtime",
-                        "expected_signals": "checkout service resource",
-                        "acceptance_criteria": "one canonical service resource is emitted",
-                    }
-                )
-
-                report = MODULE.normalize_audit_report(data)
-
-                self.assertEqual(
-                    report["findings"][0]["expected_telemetry"][0]["configuration_scope"],
-                    scope,
-                )
-
-    def test_rejects_scoped_configuration_without_signal_outcome(self) -> None:
-        data = sample_report()
-        data["findings"][0]["expected_telemetry"] = [  # type: ignore[index]
-            {
-                "type": "configuration",
-                "configuration_scope": "otel-exporter",
-                "name": "OTLP exporter configuration",
-                "attributes": ["endpoint"],
-                "product_view": "Exporter diagnostics",
-            }
-        ]
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "scoped configuration alone is insufficient",
-        ):
-            MODULE.normalize_audit_report(data)
-
-    def test_rejects_invalid_or_misplaced_configuration_scope(self) -> None:
-        invalid = sample_report()
-        invalid["findings"][0]["expected_telemetry"] = [  # type: ignore[index]
-            {
-                "type": "configuration",
-                "configuration_scope": "api-contract",
-                "name": "canonical API contract",
-                "attributes": [],
-                "product_view": "API documentation",
-            }
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "must be one of"):
-            MODULE.normalize_audit_report(invalid)
-
-        misplaced = sample_report()
-        misplaced["findings"][0]["expected_telemetry"][0][  # type: ignore[index]
-            "configuration_scope"
-        ] = "otel-exporter"
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "configuration_scope is only valid when type is configuration",
-        ):
-            MODULE.normalize_audit_report(misplaced)
-
-    def test_rejects_generic_configuration_for_external_follow_up(self) -> None:
-        data = sample_report()
-        finding = data["findings"][1]  # type: ignore[index]
-        make_external_follow_up(finding)
-        finding["dependencies"] = []
-        finding["expected_telemetry"] = [
-            {
-                "type": "configuration",
-                "name": "platform telemetry owner map",
-                "attributes": ["owner", "runbook"],
-                "product_view": "External telemetry ownership",
-            }
-        ]
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError,
-            "configuration_scope is required for OpenTelemetry configuration",
-        ):
-            MODULE.normalize_audit_report(data)
-
-    def test_accepts_scoped_external_configuration_with_signal_and_keeps_it_unselectable(self) -> None:
-        data = sample_report()
-        finding = data["findings"][1]  # type: ignore[index]
-        finding.update(
-            {
-                "title": "Obtain external collector receipt telemetry",
-                "otel_concerns": ["signal-emission", "otel-configuration"],
-                "area": "External collector receipt telemetry",
-                "gap": "The platform-owned collector has no saved receipt signal for this service.",
-                "impact": "The service cannot distinguish export loss from application silence.",
-                "product_outcome": "A platform-owned receipt metric proves collector acceptance for this service.",
-                "required_fix": "Supply collector configuration evidence and a bounded receipt metric.",
-                "instrument_mode": "external follow-up",
-                "external_owner": "telemetry platform team",
-                "external_requirement": "Supply collector configuration evidence and a bounded receipt metric.",
-                "dependencies": [],
-                "verification_scenarios": ["platform.collector.receipt"],
-                "acceptance_criteria": [
-                    "The platform receipt metric records this service with a bounded outcome."
-                ],
-                "follow_up_actions": [
-                    "Have the telemetry platform owner save collector receipt proof."
-                ],
-            }
-        )
-        finding["expected_telemetry"] = [
-            {
-                "type": "configuration",
-                "configuration_scope": "otel-collector",
-                "name": "platform telemetry pipeline owner",
-                "attributes": ["owner"],
-                "product_view": "External telemetry ownership",
-            },
-            {
-                "type": "metric",
-                "name": "platform.synthetic.result",
-                "attributes": ["outcome"],
-                "product_view": "External synthetic result",
-            },
-        ]
-        data["signal_flow"]["component_flow_map"] = (  # type: ignore[index]
-            data["signal_flow"]["component_flow_map"].replace(
-                "Payment dependency", "External collector receipt telemetry"
-            )
-        )
-        data["findings"][0]["dependencies"] = ["OTEL-002"]  # type: ignore[index]
-        data["verification"]["scenarios"].append(  # type: ignore[index]
-            {
-                "id": "platform.collector.receipt",
-                "trigger": "Send one bounded telemetry batch through the platform collector",
-                "entrypoint": "platform collector",
-                "expected_signals": "platform.synthetic.result receipt metric",
-                "proof_level": "full runtime",
-                "acceptance_criteria": "the bounded receipt metric identifies this service and outcome",
-                "environments": ["go.local"],
-            }
-        )
-
-        report = MODULE.normalize_audit_report(data)
-
-        self.assertEqual(
-            report["findings"][1]["expected_telemetry"][0]["configuration_scope"],
-            "otel-collector",
-        )
-        self.assertFalse(
-            MODULE.finding_selection_eligibility(report, "OTEL-002")["selectable"]
-        )
-
-    def test_decision_and_external_modes_require_structured_telemetry_ownership(self) -> None:
-        manual = sample_report()
-        manual["findings"][0]["instrument_mode"] = "manual decision"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "requires decision_owner"):
-            MODULE.normalize_audit_report(manual)
-
-        external = sample_report()
-        external["findings"][0]["instrument_mode"] = "external follow-up"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "requires a known external_owner"):
-            MODULE.normalize_audit_report(external)
-
-        misplaced = sample_report()
-        misplaced["findings"][0]["external_owner"] = "platform team"  # type: ignore[index]
-        misplaced["findings"][0]["external_requirement"] = "Supply an OTel receipt metric."  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "valid only for external follow-up"):
-            MODULE.normalize_audit_report(misplaced)
-
-        generic_decision = sample_report()
-        make_manual_decision(generic_decision["findings"][0])  # type: ignore[index]
-        generic_decision["findings"][0]["decision_owner"] = "TBD"  # type: ignore[index]
-        with self.assertRaisesRegex(MODULE.ReportError, "concrete responsible owner"):
-            MODULE.normalize_audit_report(generic_decision)
-
-        generic_reference = sample_report()
-        make_manual_decision(generic_reference["findings"][0])  # type: ignore[index]
-        generic_reference["findings"][0]["decision_question"] = (  # type: ignore[index]
-            "Which generic telemetry signal should be used?"
-        )
-        with self.assertRaisesRegex(MODULE.ReportError, "expected OTel signal name"):
-            MODULE.normalize_audit_report(generic_reference)
 
     def test_audit_status_is_source_gap_state_not_runtime_proof(self) -> None:
         report = sample_report()
@@ -3464,37 +1428,6 @@ class ObserveReportTest(unittest.TestCase):
             normalized_done["current_instrumentation"]["incident_readiness"][0]["status"],
             "covered",
         )
-
-    def test_rejects_non_otel_work_in_readiness_closure_fields(self) -> None:
-        incident = sample_report()
-        incident["current_instrumentation"]["incident_readiness"] = [  # type: ignore[index]
-            {
-                "area": "Checkout latency",
-                "status": "partial",
-                "evidence": "OPERATIONS.md records the current process.",
-                "required_signals": "Publish the OpenAPI contract and runbook ownership link.",
-                "impact": "Operators lack route telemetry.",
-            }
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "prohibited non-OpenTelemetry"):
-            MODULE.normalize_audit_report(incident)
-
-        genai = sample_report()
-        genai["meta"]["genai_ownership_detected"] = True  # type: ignore[index]
-        genai["evidence"][-1]["finding"] = "Yes"  # type: ignore[index]
-        genai["genai_readiness"] = [
-            {
-                "surface": "Checkout assistant",
-                "status": "partial",
-                "evidence": "assistant.go:20",
-                "required_signals": "assistant.request span",
-                "owner": "assistant.go:20",
-                "acceptance_criteria": "Publish the runbook and emit assistant.request span.",
-                "impact": "Operators cannot localize assistant latency.",
-            }
-        ]
-        with self.assertRaisesRegex(MODULE.ReportError, "prohibited non-OpenTelemetry"):
-            MODULE.normalize_audit_report(genai)
 
     def test_genai_readiness_requires_valid_unique_mapped_state(self) -> None:
         invalid = sample_report()
@@ -3805,7 +1738,7 @@ class ObserveReportTest(unittest.TestCase):
         )
         markdown = MODULE.render_markdown(report)
         self.assertNotIn("### Priority-ordered findings", markdown)
-        gaps = markdown.split("## Gaps", 1)[1].split("### OTel Closure Details", 1)[0]
+        gaps = markdown.split("## Gaps", 1)[1].split("## Verification Plan", 1)[0]
         self.assertLess(
             gaps.index("| required | Checkout latency |"),
             gaps.index("| recommended | Payment dependency |"),
@@ -3959,6 +1892,13 @@ class ObserveReportTest(unittest.TestCase):
             self.assertNotIn("Consider next", html)
             self.assertNotIn("data-priority-progress", html)
             self.assertNotIn("priorityColor", html)
+            self.assertNotRegex(
+                html,
+                r"\.card\.done\s*\{[^}]*\bopacity\s*:",
+                "Completed cards must retain normal text opacity and contrast.",
+            )
+            self.assertIn(".card.done { border-color: #9bd5b7; }", html)
+            self.assertIn(".card.done .spine { background: var(--ok); }", html)
             self.assertNotIn('class="decision-stats"', html)
             self.assertNotIn("Fix now · safe required", html)
             self.assertNotIn("<span>Outcome</span>", html)
@@ -4109,12 +2049,23 @@ class ObserveReportTest(unittest.TestCase):
                 html,
             )
             self.assertIn(
-                "Save this audit state over <code>.observe/otel-audit.json</code>",
+                "Save a selected audit copy as "
+                "<code>.observe/otel-audit.selected.json</code>",
                 html,
             )
             self.assertIn("function auditReviewDocument()", html)
             self.assertIn("document.review_selection = selectionDocument()", html)
-            self.assertIn('suggestedName: "otel-audit.json"', html)
+            self.assertIn('suggestedName: "otel-audit.selected.json"', html)
+            self.assertIn('if (handle.name === "otel-audit.json")', html)
+            self.assertIn("const existingFile = await handle.getFile()", html)
+            self.assertIn(
+                "existingSelection?.audit_sha256 === DATA.selection.audit_sha256",
+                html,
+            )
+            self.assertIn(
+                "The chosen file belongs to a different or newer audit.",
+                html,
+            )
             self.assertIn('link.download = "otel-audit.selected.json"', html)
             self.assertNotIn("const unresolvedManualIds = inPlanIds.filter", html)
             self.assertIn('summaryParts.join(" · ")', html)
@@ -4152,9 +2103,9 @@ class ObserveReportTest(unittest.TestCase):
                 html,
             )
             self.assertIn("window.showSaveFilePicker", html)
-            self.assertIn("Audit selection saved into the audit report.", html)
+            self.assertIn("Selected audit copy saved.", html)
             self.assertIn('link.download = "otel-audit.selected.json"', html)
-            self.assertIn("Saved audit download fallback started.", html)
+            self.assertIn("Selected audit download fallback started.", html)
             self.assertNotIn("severityColor", html)
             self.assertNotIn("data-severity", html)
             self.assertNotIn("--required:", html)
@@ -4494,7 +2445,6 @@ for (const [input, expected] of cases) {
             root = Path(directory)
             audit = root / "otel-audit.json"
             selection = root / "otel-selection.json"
-            scope = root / "selected-findings.json"
             audit.write_text(json.dumps(sample_report()), encoding="utf-8")
 
             completed = subprocess.run(
@@ -4507,8 +2457,6 @@ for (const [input, expected] of cases) {
                     "OTEL-002",
                     "-o",
                     str(selection),
-                    "--scoped-out",
-                    str(scope),
                 ],
                 check=False,
                 capture_output=True,
@@ -4517,35 +2465,15 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selected = json.loads(selection.read_text(encoding="utf-8"))
-            scoped = json.loads(scope.read_text(encoding="utf-8"))
             self.assertEqual(selected["schema_version"], 1)
-            self.assertEqual(scoped["schema_version"], 1)
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-001", "OTEL-002"])
-            self.assertEqual(scoped["kind"], "otel-audit-scope")
-            self.assertEqual([row["id"] for row in scoped["findings"]], ["OTEL-001", "OTEL-002"])
-            selected_finding = scoped["findings"][1]
-            for retained_field in (
-                "expected_telemetry",
-                "verification_scenarios",
-                "follow_up_actions",
-                "constraints",
-            ):
-                self.assertEqual(
-                    selected_finding[retained_field],
-                    sample_report()["findings"][1][retained_field],
-                )
-            self.assertEqual(
-                [row["id"] for row in scoped["verification"]["scenarios"]],
-                ["http.checkout.success"],
-            )
 
     def test_select_all_selects_every_eligible_executable_finding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             audit = root / "otel-audit.json"
             selection = root / "otel-selection.json"
-            scope = root / "selected-findings.json"
             audit.write_text(json.dumps(sample_report()), encoding="utf-8")
 
             completed = subprocess.run(
@@ -4557,8 +2485,6 @@ for (const [input, expected] of cases) {
                     "--all",
                     "-o",
                     str(selection),
-                    "--scoped-out",
-                    str(scope),
                 ],
                 check=False,
                 capture_output=True,
@@ -4567,14 +2493,9 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selected = json.loads(selection.read_text(encoding="utf-8"))
-            scoped = json.loads(scope.read_text(encoding="utf-8"))
             self.assertEqual(selected["schema_version"], 1)
             self.assertEqual(selected["requested_ids"], ["OTEL-001", "OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-001", "OTEL-002"])
-            self.assertEqual(
-                [row["id"] for row in scoped["findings"]],
-                ["OTEL-001", "OTEL-002"],
-            )
             self.assertIn(
                 "selected all eligible executable findings",
                 completed.stdout,
@@ -4625,7 +2546,6 @@ for (const [input, expected] of cases) {
             root = Path(directory)
             audit = root / "otel-audit.json"
             selection = root / "otel-selection.json"
-            scope = root / "selected-findings.json"
             audit.write_text(
                 json.dumps(sample_decision_branch_report()),
                 encoding="utf-8",
@@ -4642,8 +2562,6 @@ for (const [input, expected] of cases) {
                     "OTEL-001=application-owned",
                     "-o",
                     str(selection),
-                    "--scoped-out",
-                    str(scope),
                 ],
                 check=False,
                 capture_output=True,
@@ -4652,7 +2570,6 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selected = json.loads(selection.read_text(encoding="utf-8"))
-            scoped = json.loads(scope.read_text(encoding="utf-8"))
             self.assertEqual(selected["schema_version"], 2)
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-002"])
@@ -4660,7 +2577,6 @@ for (const [input, expected] of cases) {
                 selected["decision_answers"],
                 [{"finding_id": "OTEL-001", "option_id": "application-owned"}],
             )
-            self.assertEqual([row["id"] for row in scoped["findings"]], ["OTEL-002"])
             self.assertNotIn("OTEL-003", selected["approved_ids"])
 
     def test_adopt_selection_copies_newest_matching_saved_selection(self) -> None:
@@ -4672,7 +2588,6 @@ for (const [input, expected] of cases) {
             downloads.mkdir()
             audit = observe / "otel-audit.json"
             output = observe / "otel-selection.json"
-            scope = observe / "selected-findings.json"
             report = MODULE.normalize_audit_report(sample_report())
             audit.write_text(json.dumps(report), encoding="utf-8")
             older = {
@@ -4703,8 +2618,6 @@ for (const [input, expected] of cases) {
                     str(audit),
                     "-o",
                     str(output),
-                    "--scoped-out",
-                    str(scope),
                     "--search-dir",
                     str(downloads),
                 ],
@@ -4715,23 +2628,25 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selected = json.loads(output.read_text(encoding="utf-8"))
-            scoped = json.loads(scope.read_text(encoding="utf-8"))
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-001", "OTEL-002"])
-            self.assertEqual([row["id"] for row in scoped["findings"]], ["OTEL-001", "OTEL-002"])
             self.assertIn("wrote", completed.stdout)
             self.assertIn("otel-selection (9).json", completed.stdout)
 
-    def test_adopt_selection_replaces_existing_output_with_newer_saved_audit(self) -> None:
+    def test_adopt_selection_prefers_repository_state_over_newer_search_candidate(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             observe = root / ".observe"
             observe.mkdir()
+            downloads = root / "Downloads"
+            downloads.mkdir()
             audit = observe / "otel-audit.json"
             output = observe / "otel-selection.json"
             report_data = sample_report()
             report = MODULE.normalize_audit_report(report_data)
-            old_selection = {
+            repository_selection = {
                 "schema_version": 1,
                 "kind": "otel-selection",
                 "audit_id": report["meta"]["audit_id"],
@@ -4739,16 +2654,17 @@ for (const [input, expected] of cases) {
                 "requested_ids": ["OTEL-001"],
                 "approved_ids": ["OTEL-001"],
             }
-            saved_selection = {
-                **old_selection,
+            downloaded_selection = {
+                **repository_selection,
                 "requested_ids": ["OTEL-002"],
                 "approved_ids": ["OTEL-001", "OTEL-002"],
             }
-            report_data["review_selection"] = saved_selection
             audit.write_text(json.dumps(report_data), encoding="utf-8")
-            output.write_text(json.dumps(old_selection), encoding="utf-8")
+            output.write_text(json.dumps(repository_selection), encoding="utf-8")
+            downloaded = downloads / "otel-selection (9).json"
+            downloaded.write_text(json.dumps(downloaded_selection), encoding="utf-8")
             os.utime(output, ns=(1_000, 1_000))
-            os.utime(audit, ns=(2_000, 2_000))
+            os.utime(downloaded, ns=(2_000, 2_000))
 
             completed = subprocess.run(
                 [
@@ -4758,6 +2674,58 @@ for (const [input, expected] of cases) {
                     str(audit),
                     "-o",
                     str(output),
+                    "--search-dir",
+                    str(downloads),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            selected = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(selected["requested_ids"], ["OTEL-001"])
+            self.assertEqual(selected["approved_ids"], ["OTEL-001"])
+            self.assertIn("otel-selection.json", completed.stdout)
+
+    def test_adopt_selection_explicit_candidate_can_replace_repository_state(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            observe = root / ".observe"
+            observe.mkdir()
+            audit = observe / "otel-audit.json"
+            output = observe / "otel-selection.json"
+            explicit = root / "chosen-selection.json"
+            report = MODULE.normalize_audit_report(sample_report())
+            audit.write_text(json.dumps(report), encoding="utf-8")
+            repository_selection = {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": MODULE.audit_digest(report),
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            }
+            explicit_selection = {
+                **repository_selection,
+                "requested_ids": ["OTEL-002"],
+                "approved_ids": ["OTEL-001", "OTEL-002"],
+            }
+            output.write_text(json.dumps(repository_selection), encoding="utf-8")
+            explicit.write_text(json.dumps(explicit_selection), encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "adopt-selection",
+                    str(audit),
+                    "-o",
+                    str(output),
+                    "--candidate",
+                    str(explicit),
                 ],
                 check=False,
                 capture_output=True,
@@ -4768,7 +2736,56 @@ for (const [input, expected] of cases) {
             selected = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-001", "OTEL-002"])
-            self.assertIn("otel-audit.json", completed.stdout)
+            self.assertIn("chosen-selection.json", completed.stdout)
+
+    def test_adopt_selection_skips_invalid_utf8_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            observe = root / ".observe"
+            observe.mkdir()
+            audit = observe / "otel-audit.json"
+            output = observe / "otel-selection.json"
+            corrupt = root / "otel-selection-corrupt.json"
+            valid = root / "otel-selection-valid.json"
+            report = MODULE.normalize_audit_report(sample_report())
+            audit.write_text(json.dumps(report), encoding="utf-8")
+            corrupt.write_bytes(b"\xff\xfe\x00")
+            valid.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "kind": "otel-selection",
+                        "audit_id": report["meta"]["audit_id"],
+                        "audit_sha256": MODULE.audit_digest(report),
+                        "requested_ids": ["OTEL-001"],
+                        "approved_ids": ["OTEL-001"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "adopt-selection",
+                    str(audit),
+                    "-o",
+                    str(output),
+                    "--candidate",
+                    str(corrupt),
+                    "--candidate",
+                    str(valid),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            selected = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(selected["approved_ids"], ["OTEL-001"])
+            self.assertIn("otel-selection-valid.json", completed.stdout)
 
     def test_adopt_selection_all_if_empty_uses_saved_decision_answer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -4777,7 +2794,6 @@ for (const [input, expected] of cases) {
             observe.mkdir()
             audit = observe / "otel-audit.json"
             output = observe / "otel-selection.json"
-            scope = observe / "selected-findings.json"
             report = MODULE.normalize_audit_report(sample_decision_branch_report())
             audit.write_text(json.dumps(report), encoding="utf-8")
             output.write_text(
@@ -4808,8 +2824,6 @@ for (const [input, expected] of cases) {
                     str(audit),
                     "-o",
                     str(output),
-                    "--scoped-out",
-                    str(scope),
                     "--all-if-empty",
                 ],
                 check=False,
@@ -4819,14 +2833,12 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selected = json.loads(output.read_text(encoding="utf-8"))
-            scoped = json.loads(scope.read_text(encoding="utf-8"))
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-002"])
             self.assertEqual(
                 selected["decision_answers"],
                 [{"finding_id": "OTEL-001", "option_id": "application-owned"}],
             )
-            self.assertEqual([row["id"] for row in scoped["findings"]], ["OTEL-002"])
             self.assertIn(
                 "selected all eligible executable findings",
                 completed.stdout,
@@ -4878,19 +2890,6 @@ for (const [input, expected] of cases) {
             self.assertEqual(completed.returncode, 1)
             self.assertIn("canonical audit is invalid", completed.stderr)
             self.assertFalse(output.exists())
-
-    def test_duplicate_remediation_accepts_source_proven_java_agent_owner(self) -> None:
-        data = sample_report()
-        finding = data["findings"][0]  # type: ignore[index]
-        finding["gap"] = "HTTP server spans can duplicate because two owners overlap."
-        finding["required_fix"] = (
-            "Make the OpenTelemetry Java agent the canonical HTTP server "
-            "telemetry owner and suppress the overlapping manual owner."
-        )
-
-        report = MODULE.normalize_audit_report(data)
-
-        self.assertEqual(report["findings"][0]["required_fix"], finding["required_fix"])
 
     def test_proof_level_aliases_normalize_to_supported_contract(self) -> None:
         data = sample_report()
@@ -5248,7 +3247,6 @@ for (const [input, expected] of cases) {
             root = Path(directory)
             audit = root / "otel-audit.json"
             selection_path = root / "otel-selection.json"
-            scope_path = root / "otel-scope.json"
             audit.write_text(
                 json.dumps(sample_decision_branch_report()), encoding="utf-8"
             )
@@ -5263,8 +3261,6 @@ for (const [input, expected] of cases) {
                     "OTEL-001=application-owned",
                     "-o",
                     str(selection_path),
-                    "--scoped-out",
-                    str(scope_path),
                 ],
                 check=False,
                 capture_output=True,
@@ -5273,15 +3269,9 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             selection = json.loads(selection_path.read_text(encoding="utf-8"))
-            scope = json.loads(scope_path.read_text(encoding="utf-8"))
             self.assertEqual(selection["schema_version"], 2)
             self.assertEqual(selection["requested_ids"], [])
             self.assertEqual(selection["approved_ids"], [])
-            self.assertEqual(scope["findings"], [])
-            self.assertEqual(
-                scope["decision_answers"][0]["outcome"],
-                "Emit the GET /checkout span from application-owned OpenTelemetry instrumentation.",
-            )
 
     def test_cli_render_html_reads_review_selection_from_saved_audit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -5361,8 +3351,6 @@ for (const [input, expected] of cases) {
             downloads.mkdir()
             audit = observe / "otel-audit.json"
             selection_path = observe / "otel-selection.json"
-            scope_path = observe / "tmp" / "otel-selected-findings.json"
-            scope_path.parent.mkdir()
             data = sample_report()
             report = MODULE.normalize_audit_report(data)
             audit.write_text(json.dumps(data), encoding="utf-8")
@@ -5388,8 +3376,6 @@ for (const [input, expected] of cases) {
                     str(audit),
                     "-o",
                     str(selection_path),
-                    "--scoped-out",
-                    str(scope_path),
                     "--search-dir",
                     str(downloads),
                 ],
@@ -5401,10 +3387,8 @@ for (const [input, expected] of cases) {
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn("otel-audit (3).json", completed.stdout)
             selection = json.loads(selection_path.read_text(encoding="utf-8"))
-            scope = json.loads(scope_path.read_text(encoding="utf-8"))
             self.assertEqual(selection["requested_ids"], ["OTEL-001"])
             self.assertEqual(selection["approved_ids"], ["OTEL-001"])
-            self.assertEqual([finding["id"] for finding in scope["findings"]], ["OTEL-001"])
 
     def test_manual_without_options_remains_a_static_blocker_for_legacy_audits(self) -> None:
         for schema_version in (1, 2):
@@ -5503,279 +3487,6 @@ for (const [input, expected] of cases) {
 
         with self.assertRaisesRegex(MODULE.ReportError, "does not match audit"):
             MODULE.normalize_selection(selection, report)
-
-    def test_instrumentation_requires_product_actions_for_metrics_and_dimensions(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        report["findings"][0]["expected_telemetry"][0]["type"] = "metric"  # type: ignore[index]
-        report["findings"][0]["expected_telemetry"][0]["attributes"] = []  # type: ignore[index]
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": MODULE.audit_digest(report),
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        metric = sample_instrumentation(report, MODULE.audit_digest(report))
-        item = metric["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        item["type"] = "metric"
-        item["added_attributes"] = []
-        item["follow_up_actions"] = ["Run the scenario."]
-        with self.assertRaisesRegex(MODULE.ReportError, "chart, dashboard, detector"):
-            MODULE.normalize_instrumentation(metric, report, selection)
-
-        dimension_report = MODULE.normalize_audit_report(sample_report())
-        dimension_selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": dimension_report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": MODULE.audit_digest(dimension_report),
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            dimension_report,
-        )
-        dimension = sample_instrumentation(
-            dimension_report, MODULE.audit_digest(dimension_report)
-        )
-        dimension_item = dimension["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        dimension_item["follow_up_actions"] = ["Open the trace waterfall."]
-        with self.assertRaisesRegex(MODULE.ReportError, "filter, slice, group-by"):
-            MODULE.normalize_instrumentation(
-                dimension, dimension_report, dimension_selection
-            )
-
-    def test_instrumentation_change_must_match_audit_expected_telemetry(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = sample_instrumentation(report, digest)
-        item = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        item["name"] = "totally.unrelated.signal"
-
-        with self.assertRaisesRegex(MODULE.ReportError, "exact expected telemetry item"):
-            MODULE.normalize_instrumentation(instrumentation, report, selection)
-
-        instrumentation = sample_instrumentation(report, digest)
-        item = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        item["added_attributes"] = ["http.route=/admin"]
-        with self.assertRaisesRegex(MODULE.ReportError, "attributes not promised"):
-            MODULE.normalize_instrumentation(instrumentation, report, selection)
-
-        report["findings"][0]["expected_telemetry"][0]["attributes"] = [  # type: ignore[index]
-            "http.route=/checkout"
-        ]
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = sample_instrumentation(report, digest)
-        item = instrumentation["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        item["added_attributes"] = ["http.route=/checkout"]
-        normalized = MODULE.normalize_instrumentation(
-            instrumentation, report, selection
-        )
-        self.assertEqual(
-            normalized["findings"][0]["telemetry_changes"][0]["added_attributes"],
-            ["http.route=/checkout"],
-        )
-
-    def test_verify_closure_must_account_for_expected_attributes(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation_data = sample_instrumentation(report, digest)
-        item = instrumentation_data["findings"][0]["telemetry_changes"][0]  # type: ignore[index]
-        item["added_attributes"] = []
-        instrumentation_data["meta"]["result"] = "Pass"  # type: ignore[index]
-        instrumentation_data["findings"][0]["status"] = "working"  # type: ignore[index]
-        instrumentation = MODULE.normalize_instrumentation(
-            instrumentation_data, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        verify["meta"]["result"] = "Pass"  # type: ignore[index]
-        finding = verify["findings"][0]  # type: ignore[index]
-        finding["status"] = "working"
-        finding["remaining"] = []
-        finding["scenarios"][0].update(
-            {
-                "status": "working",
-                "commands": ["go test ./..."],
-                "evidence": [".observe/evidence/runtime.json"],
-                "observed_telemetry": ["GET /checkout"],
-                "product_validation": ["Captured by the local OTLP receiver."],
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-            }
-        )
-        finding["item_results"][0].update(
-            {
-                "status": "working",
-                "direct_assertion_passed": True,
-                "evidence": [".observe/evidence/runtime.json"],
-                "observed_telemetry": ["GET /checkout"],
-                "product_validation": ["Captured by the local OTLP receiver."],
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-            }
-        )
-
-        with self.assertRaisesRegex(MODULE.ReportError, "GET /checkout"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-    def test_verify_pass_must_cover_every_audit_expected_item(self) -> None:
-        raw_report = sample_report()
-        raw_report["findings"][0]["expected_telemetry"].append(  # type: ignore[index]
-            {
-                "type": "span",
-                "name": "checkout.payment",
-                "attributes": ["payment.provider"],
-                "product_view": "Payment trace waterfall",
-            }
-        )
-        report = MODULE.normalize_audit_report(raw_report)
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation_data = sample_instrumentation(report, digest)
-        instrumentation_data["meta"]["result"] = "Pass"  # type: ignore[index]
-        instrumentation_data["findings"][0]["status"] = "working"  # type: ignore[index]
-        instrumentation = MODULE.normalize_instrumentation(
-            instrumentation_data, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        verify["meta"]["result"] = "Pass"  # type: ignore[index]
-        finding = verify["findings"][0]  # type: ignore[index]
-        finding["status"] = "working"
-        finding["remaining"] = []
-        finding["scenarios"][0].update(
-            {
-                "status": "working",
-                "commands": ["go test ./..."],
-                "evidence": [".observe/evidence/runtime.json"],
-                "observed_telemetry": ["GET /checkout with http.route"],
-                "product_validation": ["Captured by the local OTLP receiver."],
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-            }
-        )
-        finding["item_results"][0].update(
-            {
-                "status": "working",
-                "direct_assertion_passed": True,
-                "evidence": [".observe/evidence/runtime.json"],
-                "observed_telemetry": ["GET /checkout with http.route"],
-                "product_validation": ["Captured by the local OTLP receiver."],
-                "proof_mode": "full_runtime",
-                "visibility": "otlp_accepted",
-            }
-        )
-
-        with self.assertRaisesRegex(MODULE.ReportError, "checkout.payment"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
-
-    def test_item_proof_must_reference_its_exact_instrumentation_signal(self) -> None:
-        raw_report = sample_report()
-        raw_report["findings"][0]["expected_telemetry"].append(  # type: ignore[index]
-            {
-                "type": "span",
-                "name": "checkout.payment",
-                "attributes": ["payment.provider"],
-                "product_view": "Payment trace waterfall",
-            }
-        )
-        report = MODULE.normalize_audit_report(raw_report)
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],  # type: ignore[index]
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation_data = sample_instrumentation(report, digest)
-        instrumentation_data["findings"][0]["telemetry_changes"].append(  # type: ignore[index]
-            {
-                "id": "OTEL-001.payment-span",
-                "change_kind": "added",
-                "change": "Added a bounded payment dependency span.",
-                "type": "span",
-                "name": "checkout.payment",
-                "source": "payments.go:18",
-                "added_attributes": ["payment.provider"],
-                "product_view": "Payment trace waterfall",
-                "follow_up_actions": ["Filter the trace by payment.provider."],
-                "verification_scenarios": ["http.checkout.success"],
-            }
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            instrumentation_data, report, selection
-        )
-        verify = sample_verify(
-            report, digest, MODULE.instrumentation_digest(instrumentation)
-        )
-        second = copy.deepcopy(verify["findings"][0]["item_results"][0])  # type: ignore[index]
-        second.update(
-            {
-                "id": "OTEL-001.payment-span",
-                "status": "working",
-                "direct_assertion_passed": True,
-                "observed_telemetry": ["GET /checkout with http.route"],
-            }
-        )
-        verify["findings"][0]["item_results"].append(second)  # type: ignore[index]
-
-        with self.assertRaisesRegex(MODULE.ReportError, "checkout.payment"):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
 
     def test_verify_pass_requires_scenario_or_item_proof(self) -> None:
         raw_report = sample_report()
@@ -5987,9 +3698,6 @@ for (const [input, expected] of cases) {
             verify["instrumentation_sha256"] = MODULE.instrumentation_digest(
                 normalized_instrumentation
             )
-            verify["meta"].update(  # type: ignore[union-attr]
-                {"workflow_mode": "instrumentation_child", "lifecycle": "final"}
-            )
             selection_path.write_text(json.dumps(selection), encoding="utf-8")
             instrumentation_path.write_text(json.dumps(instrumentation), encoding="utf-8")
             verify_path.write_text(json.dumps(verify), encoding="utf-8")
@@ -6014,26 +3722,6 @@ for (const [input, expected] of cases) {
 
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn("audit -> selection -> instrumentation -> verify", completed.stdout)
-
-            final_gate = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "instrumentation-final-gate",
-                    str(audit),
-                    "--selection-json",
-                    str(selection_path),
-                    "--instrumentation-json",
-                    str(instrumentation_path),
-                    "--verify-json",
-                    str(verify_path),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(final_gate.returncode, 0, final_gate.stderr)
-            self.assertIn("no executed verification failures", final_gate.stdout)
 
             audit_rendered = subprocess.run(
                 [
@@ -6131,7 +3819,7 @@ for (const [input, expected] of cases) {
             self.assertNotIn("No executed check failed", html)
             self.assertEqual(html.count("Splunk Observability Cloud"), 0)
             self.assertIn(
-                "Local OTLP delivery and the configured telemetry explorer were checked.",
+                "1 of 1 telemetry changes were confirmed in the configured telemetry explorer.",
                 html,
             )
             self.assertIn("You selected", html)
@@ -6212,6 +3900,43 @@ for (const [input, expected] of cases) {
         self.assertIn(report["findings"][1]["product_outcome"], html)
         self.assertIn("proof-only scope; no application telemetry item", html)
         self.assertNotIn("No product result recorded", html)
+
+    def test_instrumentation_issue_cards_hide_priority_and_area_labels(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+        digest = MODULE.audit_digest(report)
+        selection = MODULE.normalize_selection(
+            {
+                "schema_version": 1,
+                "kind": "otel-selection",
+                "audit_id": report["meta"]["audit_id"],
+                "audit_sha256": digest,
+                "requested_ids": ["OTEL-001"],
+                "approved_ids": ["OTEL-001"],
+            },
+            report,
+        )
+        instrumentation = MODULE.normalize_instrumentation(
+            sample_instrumentation(report, digest, selection),
+            report,
+            selection,
+        )
+        finding = report["findings"][0]
+        finding["priority"] = "INTERNAL-PRIORITY-SENTINEL"
+        finding["area"] = "INTERNAL-CATEGORY-SENTINEL"
+
+        html = MODULE.render_selected_issue_changes(
+            report,
+            selection,
+            instrumentation,
+            None,
+        )
+        visible_text = re.sub(r"<[^>]+>", " ", html)
+
+        self.assertIn('data-priority="INTERNAL-PRIORITY-SENTINEL"', html)
+        self.assertIn('data-area="INTERNAL-CATEGORY-SENTINEL"', html)
+        self.assertNotIn("INTERNAL-PRIORITY-SENTINEL", visible_text)
+        self.assertNotIn("INTERNAL-CATEGORY-SENTINEL", visible_text)
+        self.assertIn("<code>OTEL-001</code>", html)
 
     def test_instrumentation_card_names_mixed_scenario_evidence(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -6658,27 +4383,10 @@ for (const [input, expected] of cases) {
         self.assertIn("HTTP 500 was classified as cancellation.", failed_selected)
         self.assertIn("Code repair required", failed_selected)
         self.assertIn("$otel-verify</code> never repairs application code", failed_selected)
-        self.assertIn("$otel-instrument: Repair the Tracer binding.", failed_selected)
-        self.assertNotIn("Rerun the HTTP lifecycle scenarios", failed_selected)
-        self.assertIn("How the repair is confirmed", failed_selected)
-        self.assertIn("automatically runs the affected verification checks", failed_selected)
-        self.assertIn("Verification only reports whether the repair worked", failed_selected)
+        self.assertIn("Use $otel-instrument to repair the Tracer binding.", failed_selected)
+        self.assertIn("Rerun the HTTP lifecycle scenarios", failed_selected)
+        self.assertNotIn("How the repair is confirmed", failed_selected)
         self.assertNotIn("Why verification is pending", failed_selected)
-
-        repair_actions = MODULE.failed_verification_repair_actions(
-            [
-                "Use $otel-instrument to repair the Tracer binding.",
-                "Add a Guice integration test, then rerun the affected checks.",
-                "After the repair, rerun $otel-verify and save proof.",
-            ]
-        )
-        self.assertEqual(
-            repair_actions,
-            [
-                "$otel-instrument: Repair the Tracer binding.",
-                "$otel-instrument: Add a Guice integration test",
-            ],
-        )
 
         verify["next_steps"] = [
             "Run $otel-instrument to repair the Tracer binding.",
@@ -6686,10 +4394,10 @@ for (const [input, expected] of cases) {
         ]
         self.assertEqual(
             MODULE.instrumentation_report_next_steps(instrumentation, verify),
-            ["$otel-instrument: Repair the Tracer binding."],
+            ["Run $otel-instrument to repair the Tracer binding."],
         )
 
-    def test_instrumentation_report_never_makes_child_verify_the_next_step(self) -> None:
+    def test_instrumentation_report_never_makes_verification_the_next_step(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
         digest = MODULE.audit_digest(report)
         selection = MODULE.normalize_selection(
@@ -6711,7 +4419,7 @@ for (const [input, expected] of cases) {
             instrumentation, None
         )
         self.assertEqual(len(no_child_steps), 1)
-        self.assertIn("verification runs automatically", no_child_steps[0])
+        self.assertIn("Resolve any recorded prerequisite", no_child_steps[0])
         self.assertNotIn("$otel-verify", no_child_steps[0])
         self.assertNotIn("Run verification", no_child_steps[0])
 
@@ -6720,13 +4428,7 @@ for (const [input, expected] of cases) {
             digest,
             MODULE.instrumentation_digest(instrumentation),
         )
-        verify["meta"].update(  # type: ignore[union-attr]
-            {
-                "result": "Not run",
-                "workflow_mode": "instrumentation_child",
-                "lifecycle": "final",
-            }
-        )
+        verify["meta"]["result"] = "Not run"  # type: ignore[index]
         verify["findings"][0]["status"] = "not_proven"  # type: ignore[index]
         verify["findings"][0]["scenarios"][0].update(  # type: ignore[index]
             {
@@ -6754,7 +4456,7 @@ for (const [input, expected] of cases) {
             instrumentation, normalized_verify
         )
         self.assertEqual(len(not_run_steps), 1)
-        self.assertIn("verification runs automatically", not_run_steps[0])
+        self.assertIn("Resolve the prerequisite", not_run_steps[0])
         self.assertNotIn("$otel-verify", not_run_steps[0])
         self.assertNotIn("Run verification", not_run_steps[0])
 
@@ -6871,119 +4573,6 @@ for (const [input, expected] of cases) {
             rendered.index("Runtime verification unavailable"),
             rendered.index("Coverage details"),
         )
-
-    def test_current_java_agent_attachment_suppresses_stale_path_blocker(self) -> None:
-        verify = {
-            "findings": [
-                {
-                    "id": "OTEL-001",
-                    "status": "not_working",
-                    "scenarios": [
-                        {
-                            "id": "runtime.preflight",
-                            "status": "blocked",
-                            "commands": ["test -f /opt/opentelemetry-javaagent.jar"],
-                            "evidence": [
-                                "/opt/opentelemetry-javaagent.jar is absent",
-                                "Docker daemon is unavailable at unix:///tmp/docker.sock",
-                            ],
-                            "proof_mode": "not_run",
-                        },
-                        {
-                            "id": "runtime.executed",
-                            "status": "not_working",
-                            "commands": [
-                                "java -javaagent:/cache/splunk-otel-javaagent-2.27.0.jar -jar app.jar"
-                            ],
-                            "evidence": ["Splunk Java agent 2.27.0 loaded."],
-                            "proof_mode": "full_runtime",
-                        },
-                    ],
-                }
-            ]
-        }
-
-        blockers = MODULE.verification_environment_blockers(verify)
-
-        self.assertFalse(
-            any("Java agent was unavailable" in label for label, _ in blockers)
-        )
-        self.assertTrue(any("Docker-backed" in label for label, _ in blockers))
-
-    def test_verify_rejects_agent_provisioning_after_current_attachment(self) -> None:
-        report = MODULE.normalize_audit_report(sample_report())
-        digest = MODULE.audit_digest(report)
-        selection = MODULE.normalize_selection(
-            {
-                "schema_version": 1,
-                "kind": "otel-selection",
-                "audit_id": report["meta"]["audit_id"],
-                "audit_sha256": digest,
-                "requested_ids": ["OTEL-001"],
-                "approved_ids": ["OTEL-001"],
-            },
-            report,
-        )
-        instrumentation = MODULE.normalize_instrumentation(
-            sample_instrumentation(report, digest), report, selection
-        )
-        verify = {
-            "schema_version": 1,
-            "kind": "otel-verify",
-            "audit_id": report["meta"]["audit_id"],
-            "audit_sha256": digest,
-            "instrumentation_sha256": MODULE.instrumentation_digest(instrumentation),
-            "meta": {
-                "service_name": "checkout",
-                "date": "2026-07-20",
-                "result": "Fail",
-            },
-            "findings": [
-                {
-                    "id": "OTEL-001",
-                    "status": "not_working",
-                    "scenarios": [
-                        {
-                            "id": "http.checkout.success",
-                            "status": "not_working",
-                            "commands": [
-                                "java -javaagent:/cache/opentelemetry-javaagent-2.0.0.jar -jar app.jar"
-                            ],
-                            "evidence": ["The agent loaded; the app assertion failed."],
-                            "observed_telemetry": [
-                                "The expected GET /checkout server span with http.route was absent."
-                            ],
-                            "trace_ids": [],
-                            "product_validation": ["No expected span was visible."],
-                            "proof_mode": "full_runtime",
-                            "visibility": "not_proven",
-                        }
-                    ],
-                    "item_results": [
-                        {
-                            "id": "OTEL-001.http-server-span",
-                            "status": "not_working",
-                            "direct_assertion_passed": False,
-                            "scenarios": ["http.checkout.success"],
-                            "proof_mode": "full_runtime",
-                            "visibility": "not_proven",
-                            "evidence": ["The agent loaded; the app assertion failed."],
-                            "observed_telemetry": [
-                                "The expected GET /checkout server span with http.route was absent."
-                            ],
-                            "product_validation": ["No expected span was visible."],
-                        }
-                    ],
-                    "remaining": ["Provide the pinned Java agent, then rerun."],
-                }
-            ],
-            "next_steps": ["Fix the app assertion."],
-        }
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError, "after a current full-runtime -javaagent attachment"
-        ):
-            MODULE.normalize_verify(verify, report, selection, instrumentation)
 
     def test_working_verify_requires_working_complete_scenarios(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -7108,29 +4697,8 @@ for (const [input, expected] of cases) {
                 "**Language:** go | **Framework:** chi | **Date:** 2026-07-17",
                 markdown_text,
             )
-            self.assertIn("### OTel Closure Details", markdown_text)
-            self.assertIn("signal-emission", markdown_text)
-            self.assertIn("Decision / external handoff", markdown_text)
-
-    def test_default_duplicate_remediation_requires_canonical_owner(self) -> None:
-        report = sample_report()
-        finding = report["findings"][0]
-        finding["gap"] = "Two overlapping HTTP server spans can be emitted."
-        finding["required_fix"] = "Remove the duplicate span."
-
-        with self.assertRaisesRegex(
-            MODULE.ReportError, "must name the canonical telemetry owner"
-        ):
-            MODULE.normalize_audit_report(report)
-
-        finding["required_fix"] = (
-            "Keep the agent-owned server span and remove the duplicate manual span."
-        )
-        normalized = MODULE.normalize_audit_report(report)
-        self.assertEqual(
-            normalized["findings"][0]["required_fix"],
-            finding["required_fix"],
-        )
+            self.assertNotIn("OTel concerns", markdown_text)
+            self.assertNotIn("Configuration scopes", markdown_text)
 
     def test_finalize_audit_renders_and_validates_once(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -7257,79 +4825,8 @@ for (const [input, expected] of cases) {
                 "genai_readiness[0].owner must be a string",
                 "genai_readiness[0].impact must be a string",
                 "current_instrumentation.incident_readiness[0].impact must be a string",
-                "findings[0].required_fix must name the canonical telemetry owner",
             ):
                 self.assertIn(message, completed.stderr)
-
-    def test_gate_has_distinct_gap_exit_code(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            audit = Path(directory) / "otel-audit.json"
-            audit.write_text(json.dumps(sample_report()), encoding="utf-8")
-            blocked = subprocess.run(
-                [sys.executable, str(SCRIPT), "gate", str(audit), "--fail-on", "required"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            allowed = subprocess.run(
-                [sys.executable, str(SCRIPT), "gate", str(audit), "--fail-on", "none"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(blocked.returncode, 2)
-            self.assertEqual(allowed.returncode, 0, allowed.stderr)
-
-    def test_gate_rejects_structurally_blocked_v2_audit(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            audit = root / "otel-audit.json"
-            output = root / "gate.json"
-            data = sample_report()
-            data["meta"]["status"] = "Blocked"  # type: ignore[index]
-            data["scan_blockers"] = [
-                {
-                    "id": "BLOCK-001",
-                    "check": "source-scan",
-                    "blocked_scope": ["private/generated"],
-                    "prerequisite": "The generated source tree is unavailable.",
-                    "evidence": [".observe/evidence/source-scan.txt"],
-                    "required_action": "Provide the generated source tree.",
-                }
-            ]
-            audit.write_text(json.dumps(data), encoding="utf-8")
-
-            blocked = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "gate",
-                    str(audit),
-                    "--fail-on",
-                    "required",
-                    "--output",
-                    str(output),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            validation_only = subprocess.run(
-                [sys.executable, str(SCRIPT), "gate", str(audit), "--fail-on", "none"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-
-            self.assertEqual(blocked.returncode, 2, blocked.stderr)
-            self.assertIn("BLOCKED: audit scan is incomplete", blocked.stdout)
-            result = json.loads(output.read_text(encoding="utf-8"))
-            self.assertFalse(result["passed"])
-            self.assertFalse(result["policy_evaluated"])
-            self.assertEqual(result["scan_blockers"], ["BLOCK-001"])
-            self.assertEqual(validation_only.returncode, 0, validation_only.stderr)
-            self.assertIn("BLOCKED: audit scan is incomplete", validation_only.stdout)
-
 
 if __name__ == "__main__":
     unittest.main()

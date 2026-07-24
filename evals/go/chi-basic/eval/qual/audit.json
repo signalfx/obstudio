@@ -14,7 +14,7 @@
   ],
   "judge_inputs": [
     "Inspect ./service/.observe/otel-audit.json, ./service/.observe/otel.md, and ./service/.observe/otel.html when present.",
-    "Read ./last_message.md and confirm the final response also omits unrelated operational debt.",
+    "Read ./last_message.md for the agent final response.",
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
@@ -22,9 +22,8 @@
     "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
-    "Mentions otelhttp with explicit low-cardinality chi route tagging as the appropriate Go HTTP instrumentation path.",
-    "Does not promote the OpenAPI, contract-lint, runbook-link, ownership-link, page-limit, rejection-policy, retry/timeout/cache/fallback, liveness/readiness, deployment-policy, or behavior-only-test follow-ups in OPERATIONS.md into the final response or any audit summary, evidence row, readiness row, finding, expected telemetry, anti-pattern, recommendation, or verification scenario; these unrelated non-telemetry tasks are omitted from all generated audit artifacts.",
-    "Writes schema-v2 .observe/otel-audit.json with authored canonical otel_concerns, verification references, stable selectable finding IDs, and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with a compact signal-type shape, conditional prerequisite IDs, configuration scope beside exact telemetry, and collapsed acceptance checks, implementation guardrails, and evidence, without a component/service map, raw flow duplication, raw per-card scenario IDs, or OTel taxonomy; canonical flow and omitted machine detail remain available in JSON and compatibility Markdown.",
+    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
+    "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, copyable instrumentation handoff, and collapsed technical details while retaining complete machine context in canonical JSON.",
     "Retains .observe/otel.md for compatibility with GenAI ownership detected as No, a matching Audit Evidence row, Current Instrumentation before Gaps, and GenAI Readiness omitted when ownership is No.",
     "Ends the final response with clickable Markdown links whose targets are the absolute .observe/otel.html and .observe/otel-audit.json paths; bare relative report paths are not sufficient."
   ]

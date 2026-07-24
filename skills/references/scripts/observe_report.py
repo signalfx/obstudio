@@ -57,47 +57,7 @@ PROOF_LEVEL_ALIASES = {
     "focused and runtime": "full runtime",
     "either": "either",
 }
-CANONICAL_OWNER_TERMS = (
-    "app-owned",
-    "service-owned",
-    "framework-owned",
-    "bridge-owned",
-    "agent-owned",
-    "runtime-owned",
-    "sdk-owned",
-    "callback",
-    "provider sdk",
-    "opentelemetry java agent",
-    "otel java agent",
-    "java agent",
-    "opentelemetry agent",
-    "otel agent",
-    "auto-instrumentation",
-    "auto instrumentation",
-    "framework instrumentation",
-    "micronaut",
-    "spring",
-)
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
-CONFIGURATION_SCOPES = {
-    "otel-sdk",
-    "otel-resource",
-    "otel-exporter",
-    "otel-sampling",
-    "otel-propagation",
-    "otel-instrumentation",
-    "otel-collector",
-}
-OTEL_CONCERN_ORDER = (
-    "signal-emission",
-    "context-propagation",
-    "trace-log-correlation",
-    "semantic-attributes",
-    "cardinality-safety",
-    "otel-configuration",
-    "telemetry-proof",
-)
-OTEL_CONCERNS = set(OTEL_CONCERN_ORDER)
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {
@@ -109,54 +69,6 @@ SCAN_BLOCKER_CHECKS = {
     "genai-ownership",
     "source-scan",
 }
-PROHIBITED_CLOSURE_RULES = (
-    (
-        "API or OpenAPI contract work",
-        re.compile(r"\b(?:add|author|update|publish|generate|lint|validate|approve|sync|enforce|version)(?:s|ed|ing)?\b"),
-        re.compile(r"\b(?:openapi|swagger|api contract|client contract|contract schema|generated (?:sdk|client))\b"),
-    ),
-    (
-        "documentation or runbook work",
-        re.compile(r"\b(?:add|create|write|update|publish|fix|validate|link|maintain)(?:s|ed|ing)?\b"),
-        re.compile(r"\b(?:documentation|runbook|playbook|readme|wiki|confluence|owner(?:ship)? link|chat link|slack link)\b"),
-    ),
-    (
-        "behavior-only testing",
-        re.compile(r"\b(?:add|create|write|fix|enable|enforce|update)(?:s|ed|ing)?\b"),
-        re.compile(r"\b(?:behavior only (?:test|check)|contract lint|docs? lint|link lint|ci (?:job|workflow|check)|coverage threshold|(?:unit|integration|e2e) test)\b"),
-    ),
-    (
-        "product behavior or policy work",
-        re.compile(r"\b(?:implement|change|define|choose|decide|select|govern|apply|adopt|approve|enforce|tune|set|enable|disable|increase|decrease|fix)(?:s|d|ed|ing)?\b"),
-        re.compile(
-            r"\b(?:retry (?:policy|behavior)|backoff (?:policy|behavior)|circuit breaker (?:policy|behavior)|"
-            r"timeout (?:policy|value)|deadline (?:policy|value)|cache (?:policy|ttl|invalidation)|"
-            r"fallback (?:policy|target|behavior)|rate limit|quota|product limit|page (?:size|limit)|"
-            r"request limit|rejection (?:policy|response)|liveness semantics|readiness semantics|"
-            r"health semantics|deployment policy|release policy|rollout policy|auth(?:entication|orization)? policy|security policy)\b"
-            r"|\bapproval policy\b"
-        ),
-    ),
-    (
-        "ownership administration",
-        re.compile(r"\b(?:create|update|publish|maintain|assign|discover)(?:s|ed|ing)?\b"),
-        re.compile(r"\b(?:owner map|ownership map|ownership link|contact list|escalation policy|on call rotation)\b"),
-    ),
-    (
-        "general service configuration",
-        re.compile(r"\b(?:change|configure|set|update)(?:s|d|ed|ing)?\b"),
-        re.compile(r"\b(?:feature flag|application config|service config|helm values|kubernetes manifest|docker config|deployment manifest|environment variable)\b"),
-    ),
-)
-PROHIBITED_TELEMETRY_OUTPUT = re.compile(
-    r"\b(?:runbook|documentation|owner link|contract lint|contract drift|"
-    r"contract approval|ci status|lint result|test result|policy approval)\b"
-)
-PROHIBITED_AUDIT_SECTION_OUTPUT = re.compile(
-    r"\b(?:openapi|swagger|api contract|runbook|playbook|documentation|"
-    r"owner(?:ship)? link|owner discovery|behavior only test|contract lint|"
-    r"link validation)\b"
-)
 OWNER_PLACEHOLDER = re.compile(r"^(?:tbd|unknown|owner|someone|team|n/?a)$", re.IGNORECASE)
 EXTERNAL_OWNER_CATEGORY = re.compile(
     r"(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
@@ -175,47 +87,6 @@ EXTERNAL_ACTION = re.compile(
     re.IGNORECASE,
 )
 CLOSURE_STATUSES = {"working", "not_working", "not_proven", "not_configured", "deferred"}
-GENAI_CLOSURE_STATUSES = CLOSURE_STATUSES | {"partial", "owner_mapped"}
-GENAI_PASS_STATUSES = {"working", "deferred", "owner_mapped"}
-NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF = re.compile(
-    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
-    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
-    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
-    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
-    r"\btests?\s+(?:are\s+)?blocked\b)",
-    re.IGNORECASE,
-)
-AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
-    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
-    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
-    r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
-    r"npm(?:\s+run)?\s+test)\b",
-    re.IGNORECASE,
-)
-AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF = re.compile(
-    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
-    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
-    r"go\s+test|pytest|cargo\s+test|npm(?:\s+run)?\s+test)\b",
-    re.IGNORECASE,
-)
-POSITIVE_INSTRUMENTATION_EVIDENCE = re.compile(
-    r"(?:^|/)\.observe/evidence/|"
-    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
-    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
-    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
-    r"exported|recorded|assertion)\b",
-    re.IGNORECASE,
-)
-DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE = re.compile(
-    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
-    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
-    re.IGNORECASE,
-)
-NON_PROOF_INSTRUMENTATION_ARTIFACT_LABEL = re.compile(
-    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
-    r"pending|skipped|unknown)\b",
-    re.IGNORECASE,
-)
 SCENARIO_STATUSES = {"working", "not_working", "not_proven", "not_configured", "blocked"}
 CHANGE_KINDS = {"added", "modified", "removed"}
 PROOF_MODES = {"app_test", "unit", "unit+otlp", "full_runtime", "contract_only", "static", "not_run"}
@@ -227,20 +98,6 @@ VISIBILITY_STATES = {
     "not_proven",
     "not_applicable",
 }
-VERIFY_WORKFLOW_MODES = {"standalone", "instrumentation_child"}
-VERIFY_LIFECYCLES = {"intermediate", "final"}
-STOP_BOUNDARY_KINDS = {
-    "unselected_work",
-    "material_decision",
-    "new_authority",
-    "external_prerequisite",
-}
-IMPERATIVE_STOP_BOUNDARY_REASON = re.compile(
-    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|configure|"
-    r"obtain|use|record|execute|exercise|capture|inspect|verify|prove|repair|"
-    r"fix|change|remove|add|choose|decide|approve|authorize)\b",
-    re.IGNORECASE,
-)
 EPHEMERAL_ARTIFACT_PREFIXES = (
     "/tmp",
     "/private/tmp",
@@ -249,24 +106,6 @@ EPHEMERAL_ARTIFACT_PREFIXES = (
 )
 FLOW_MARKER = re.compile(r"\[(SOURCE-COVERED|GAP:\s*([^\]]+))\]")
 FLOW_BRACKET = re.compile(r"\[[^\]]+\]")
-METRIC_PRODUCT_ACTION = re.compile(r"\b(chart|dashboard|detector|alert|monitor)\b", re.IGNORECASE)
-DIMENSION_PRODUCT_ACTION = re.compile(r"\b(filter|slice|group(?:-?by)?|breakdown)\b", re.IGNORECASE)
-GENERIC_TELEMETRY_CHANGE = re.compile(
-    r"\b(?:for|to satisfy) the selected bounded telemetry contract\b",
-    re.IGNORECASE,
-)
-DENIES_OTLP_DELIVERY = re.compile(
-    r"\bno\b.{0,40}\botlp\b.{0,40}\b(?:pipeline|export(?:er| path)?)\b",
-    re.IGNORECASE,
-)
-CLOUD_PRODUCT_EVIDENCE = re.compile(
-    r"\b(?:Splunk Observability Cloud|Splunk O11y Cloud)\b", re.IGNORECASE
-)
-NO_FURTHER_ACTION = re.compile(
-    r"\b(?:no|nothing)\s+(?:further|remaining|else|more)?\s*"
-    r"(?:action|work|proof|verification|change)s?\s+(?:is|are)\s+required\b",
-    re.IGNORECASE,
-)
 AUDIT_VERIFY_NEXT_STEP = re.compile(
     r"(?:\b(?:run|rerun|re-run|use|invoke|execute|launch|start)\s+"
     r"(?:the\s+)?(?:\$?otel[- ]verify|verification(?:\s+workflow)?)\b|"
@@ -397,69 +236,6 @@ def normalized_words(value: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9._/]+", " ", normalized).split())
 
 
-def normalized_action_words(value: str) -> str:
-    normalized = unicodedata.normalize("NFKC", value).casefold()
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
-
-
-def validate_otel_closure_text(
-    value: str,
-    path: str,
-    *,
-    telemetry_output: bool = False,
-    audit_section: bool = False,
-) -> None:
-    clauses = [
-        normalized_words(clause)
-        for clause in re.split(r"[;\n]|(?<=[.!?])\s+", value)
-        if clause.strip()
-    ]
-    for clause in clauses:
-        audit_match = (
-            PROHIBITED_AUDIT_SECTION_OUTPUT.search(clause)
-            if audit_section
-            else None
-        )
-        allowed_openapi_route_signal = bool(
-            audit_match
-            and audit_match.group(0) in {"openapi", "swagger"}
-            and re.search(r"/(?:openapi|swagger)(?:\.json)?(?:\b|$)", clause)
-            and re.search(
-                r"\b(?:span|metric|trace|otel|opentelemetry|telemetry|attribute)\b",
-                clause,
-            )
-        )
-        if audit_match and not allowed_openapi_route_signal:
-            fail(
-                f"{path} contains prohibited non-OpenTelemetry audit content in "
-                f"clause {clause!r}; move this fact to evidence/constraints or remove it"
-            )
-        if telemetry_output and PROHIBITED_TELEMETRY_OUTPUT.search(clause):
-            fail(
-                f"{path} contains prohibited non-OpenTelemetry output in clause "
-                f"{clause!r}; move this fact to evidence/constraints or remove it"
-            )
-        for category, action_pattern, object_pattern in PROHIBITED_CLOSURE_RULES:
-            if not action_pattern.search(clause) or not object_pattern.search(clause):
-                continue
-            if category == "behavior-only testing" and re.search(
-                r"\b(?:span|metric|trace|otel|opentelemetry|exporter|collector|"
-                r"telemetry|parentage|attribute|context)\b",
-                clause,
-            ):
-                continue
-            if category == "general service configuration" and re.search(
-                r"\b(?:otel|opentelemetry|collector|exporter|provider)\b|otel_",
-                clause,
-            ):
-                continue
-            fail(
-                f"{path} contains prohibited non-OpenTelemetry closure work "
-                f"({category}) in clause {clause!r}; move this fact to "
-                "evidence/constraints or remove it"
-            )
-
-
 def validate_audit_review_next_step(value: str, path: str) -> None:
     if AUDIT_VERIFY_NEXT_STEP.search(value):
         fail(
@@ -467,492 +243,6 @@ def validate_audit_review_next_step(value: str, path: str) -> None:
             "the audit next step; direct reviewers to select/save audit scope "
             "and run $otel-instrument, or state standalone verification as a "
             "separate explicit request"
-        )
-
-
-def expected_telemetry_reference_terms(telemetry: list[dict[str, Any]]) -> set[str]:
-    generic = {
-        "attribute",
-        "configuration",
-        "error",
-        "metric",
-        "name",
-        "otel",
-        "opentelemetry",
-        "outcome",
-        "owner",
-        "resource",
-        "service",
-        "signal",
-        "span",
-        "status",
-        "telemetry",
-        "type",
-    }
-    terms: set[str] = set()
-    for item in telemetry:
-        values = [item["name"], *item["attributes"]]
-        scope = item.get("configuration_scope")
-        if scope:
-            values.append(scope)
-        for value in values:
-            normalized = normalized_words(value)
-            if len(normalized) >= 4:
-                terms.add(normalized)
-            segments = re.sub(r"[^a-z0-9]+", " ", value.casefold()).split()
-            terms.update(
-                word
-                for word in segments
-                if len(word) >= 5 and word not in generic
-            )
-    return terms
-
-
-def require_expected_telemetry_reference(
-    value: str,
-    path: str,
-    telemetry: list[dict[str, Any]],
-) -> None:
-    normalized = normalized_words(value)
-    terms = expected_telemetry_reference_terms(telemetry)
-    if not any(term in normalized for term in terms):
-        fail(
-            f"{path} must reference an expected OTel signal name, attribute, "
-            "or configuration scope"
-        )
-
-
-AFFIRMATIVE_TELEMETRY_PROOF = re.compile(
-    r"\b(?:observed|emitted|recorded|exported|received|accepted|captured)\b|"
-    r"\b(?:is|was|were|are)\s+(?:present|available|visible)\b|"
-    r"\b(?:trace|capture|receiver|collector|exporter|result|payload|response|"
-    r"batch|telemetry|span|metric|log|event|sample|recording)\b"
-    r"[^.!?;\n]{0,160}\b(?:has|had|contains?|contained|included)\b",
-    re.IGNORECASE,
-)
-ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF = re.compile(
-    r"\b(?:should|would|could|can|may|might|must|will|perhaps|possibly|"
-    r"maybe|pending|unknown|uncertain|apparently|expected|supposed)\b|"
-    r"\b(?:appears?|seems?)\s+to\b|"
-    r"\b(?:not|never)\s+(?:confirmed|verified|proven|validated|asserted)\b|"
-    r"\b(?:unconfirmed|unverified|unproven)\b|"
-    r"\b(?:planned|intended)\s+to\b|"
-    r"\b(?:contract|configuration|documentation|specification)\s+"
-    r"(?:says?|states?|describes?|expects?|requires?)\b",
-    re.IGNORECASE,
-)
-STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT = re.compile(
-    r"\b(?:source\s+(?:code|file|scan)|config(?:uration)?\s+file|"
-    r"configuration\s+(?:contains?|records?|asserts?|states?|declares?|"
-    r"shows?|lists?|includes?)|(?:unit\s+|integration\s+|focused\s+|"
-    r"application\s+|app\s+)?test\s+(?:source|code|case|definition|"
-    r"description|fixture|plan|assertion)|code\s+search|static\s+"
-    r"(?:scan|check|analysis)|comment|documentation|readme|contract|"
-    r"specification|schema|manifest|grep|(?:string|literal)\s+"
-    r"(?:contains?|records?|asserts?|shows?|includes?))\b",
-    re.IGNORECASE,
-)
-TELEMETRY_PROOF_CLAUSE_BOUNDARY = re.compile(
-    r"(?:[.!?](?:\s+|$)|;\s*|\n+)"
-)
-TELEMETRY_PROOF_ASSERTION_BOUNDARY = re.compile(
-    r"(?:"
-    r"[.!?](?:\s+|$)|;\s*|\n+|"
-    r"(?:,|\(|\[)\s*(?=(?:(?:but|and)\s+)?(?:not|no|never|without)\b|"
-    r"(?:whereas|while|rather\s+than|instead\s+of)\b)|"
-    r"\s+(?=(?:and\s+(?:not|no|never|without)|"
-    r"but|whereas|while|rather\s+than|instead\s+of)\b)|"
-    r"(?:,\s*|\s+)(?:and|while)\s+"
-    r"(?=(?:(?:an?|the|another)\s+)?(?:span|trace|metric|counter|"
-    r"histogram|gauge|measurement|time[ -]?series|log(?:\s+record)?)\b)"
-    r")",
-    re.IGNORECASE,
-)
-
-ZERO_OR_NO_TELEMETRY_PROOF = re.compile(
-    r"\b(?:zero|0)\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
-    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
-    r"telemetry\s+items?|data\s+points?|samples?|records?)\b|"
-    r"\bno\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
-    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
-    r"telemetry(?:\s+items?)?|data\s+points?|samples?|records?)\b|"
-    r"\brecorded\s+as\s+(?:missing|absent|unobserved)\b",
-    re.IGNORECASE,
-)
-
-SIGNAL_KIND_PROOF = {
-    "span": re.compile(r"\b(?:span|trace)\b", re.IGNORECASE),
-    "metric": re.compile(
-        r"\b(?:metric|counter|histogram|gauge|measurement|time[ -]?series)\b",
-        re.IGNORECASE,
-    ),
-    "log": re.compile(r"\b(?:log|log record)\b", re.IGNORECASE),
-    "resource": re.compile(r"\bresource\b", re.IGNORECASE),
-    "configuration": re.compile(
-        r"\b(?:configuration|config)\b", re.IGNORECASE
-    ),
-}
-
-
-def exact_telemetry_item_is_referenced(
-    value: str,
-    telemetry_item: dict[str, Any],
-    attribute_field: str = "attributes",
-    reference_outcome: str = "positive",
-) -> bool:
-    """Require exact signal tokens with proof polarity appropriate to the result."""
-    if reference_outcome not in {"positive", "negative", "any"}:
-        raise ValueError(f"unsupported telemetry reference outcome: {reference_outcome}")
-
-    def exact_token_matches(source: str, token: str) -> list[re.Match[str]]:
-        parts = token.strip().split()
-        if not parts:
-            return []
-        body = r"\s+".join(re.escape(part) for part in parts)
-        identifier = r"A-Za-z0-9_"
-        separators = r"._:/-"
-        pattern = re.compile(
-            rf"(?<![{identifier}])(?<![{identifier}][{separators}])"
-            rf"{body}(?![{identifier}])(?!(?:[{separators}][{identifier}]))",
-            re.IGNORECASE,
-        )
-        return list(pattern.finditer(source))
-
-    def exact_token_polarities(source: str, token: str) -> list[bool]:
-        return [
-            telemetry_mention_is_negated(source, match)
-            for match in exact_token_matches(source, token)
-        ]
-
-    def kind_matches_for_type(
-        source: str, signal_type: str | None
-    ) -> list[re.Match[str]]:
-        pattern = SIGNAL_KIND_PROOF.get(signal_type)
-        if pattern is None:
-            return []
-        protected_matches = [
-            match
-            for token in (
-                telemetry_item["name"],
-                *telemetry_item.get(attribute_field, []),
-            )
-            for match in exact_token_matches(source, token)
-        ]
-        return [
-            match
-            for match in pattern.finditer(source)
-            if not any(
-                match.start() < protected.end() and protected.start() < match.end()
-                for protected in protected_matches
-            )
-        ]
-
-    def signal_kind_matches(source: str) -> list[re.Match[str]]:
-        return kind_matches_for_type(source, telemetry_item.get("type"))
-
-    def signal_kind_polarities(source: str) -> list[bool]:
-        return [
-            telemetry_mention_is_negated(source, match)
-            for match in signal_kind_matches(source)
-        ]
-
-    def has_competing_signal_kind(source: str) -> bool:
-        signal_type = telemetry_item.get("type")
-        if signal_type not in {"span", "metric", "log"}:
-            return False
-        return any(
-            other_type != signal_type and kind_matches_for_type(source, other_type)
-            for other_type in SIGNAL_KIND_PROOF
-            if other_type in {"span", "metric", "log"}
-        )
-
-    def has_competing_signal_correction(source: str) -> bool:
-        signal_type = telemetry_item.get("type")
-        if signal_type not in {"span", "metric", "log"}:
-            return False
-        competing = {
-            "span": r"span|trace",
-            "metric": r"metric|counter|histogram|gauge|measurement|time[ -]?series",
-            "log": r"log|log\s+record",
-        }
-        other_kinds = "|".join(
-            pattern
-            for kind, pattern in competing.items()
-            if kind != signal_type
-        )
-        return bool(
-            re.search(
-                rf"\b(?:it|this|that|the\s+(?:signal|item))\s+"
-                rf"(?:is|was|were|are)\s+(?:actually\s+|instead\s+)?"
-                rf"(?:an?\s+)?(?:{other_kinds})\b",
-                source,
-                re.IGNORECASE,
-            )
-        )
-
-    def bound_signal_kind_matches(
-        source: str, *, require_positive: bool
-    ) -> list[re.Match[str]]:
-        """Return type words that describe the exact named signal."""
-        name_matches = exact_token_matches(source, telemetry_item["name"])
-        kind_matches = signal_kind_matches(source)
-        if not name_matches or not kind_matches or has_competing_signal_kind(source):
-            return []
-        filler = re.compile(
-            r"^[\s,:()\[\]-]*(?:(?:a|an|the|one|single|server|client|consumer|"
-            r"producer|internal|recording|named|signal)\s+){0,4}"
-            r"[\s,:()\[\]-]*$",
-            re.IGNORECASE,
-        )
-        container = re.compile(
-            r"^[^.!?;\n]{0,120}\b(?:contains?|contained|includes?|included|"
-            r"has|had)\s+(?:(?:a|an|the|one|single|no)\s+)?$",
-            re.IGNORECASE,
-        )
-        emitted_as = re.compile(
-            r"^[^.!?;\n]{0,80}\b(?:is|was|were|are)\s+"
-            r"(?:emitted|recorded|exported|received|captured)\s+as\s+"
-            r"(?:(?:a|an|the|one|single)\s+)?$",
-            re.IGNORECASE,
-        )
-        bound: list[re.Match[str]] = []
-        for kind_match in kind_matches:
-            for name_match in name_matches:
-                if kind_match.end() <= name_match.start():
-                    between = source[kind_match.end() : name_match.start()]
-                    is_bound = bool(
-                        filler.fullmatch(between) or container.fullmatch(between)
-                    )
-                elif name_match.end() <= kind_match.start():
-                    between = source[name_match.end() : kind_match.start()]
-                    is_bound = bool(
-                        filler.fullmatch(between) or emitted_as.fullmatch(between)
-                    )
-                else:
-                    is_bound = True
-                if not is_bound:
-                    continue
-                if require_positive and (
-                    telemetry_mention_is_negated(source, kind_match)
-                    or telemetry_mention_is_negated(source, name_match)
-                ):
-                    continue
-                bound.append(kind_match)
-                break
-        return bound
-
-    def attributes_are_bound_to_signal(
-        source: str,
-        attributes: set[str],
-        bound_kinds: list[re.Match[str]],
-    ) -> bool:
-        """Keep every required attribute on the same typed signal assertion."""
-        if not attributes:
-            return True
-        if not bound_kinds:
-            return False
-        all_kinds = signal_kind_matches(source)
-
-        def distance(first: re.Match[str], second: re.Match[str]) -> int:
-            if first.end() <= second.start():
-                return second.start() - first.end()
-            if second.end() <= first.start():
-                return first.start() - second.end()
-            return 0
-
-        for attribute in attributes:
-            attribute_matches = exact_token_matches(source, attribute)
-            if not attribute_matches:
-                return False
-            bound = False
-            for attribute_match in attribute_matches:
-                nearest = min(
-                    distance(kind_match, attribute_match)
-                    for kind_match in all_kinds
-                )
-                if any(
-                    distance(kind_match, attribute_match) == nearest
-                    for kind_match in bound_kinds
-                ):
-                    bound = True
-                    break
-            if not bound:
-                return False
-        return True
-
-    required_attributes = {
-        attribute.strip()
-        for attribute in telemetry_item.get(attribute_field, [])
-    }
-    tokens = [telemetry_item["name"], *sorted(required_attributes)]
-    requires_signal_kind = telemetry_item.get("type") in SIGNAL_KIND_PROOF
-    if reference_outcome == "negative" and not requires_signal_kind:
-        token_polarities = [exact_token_polarities(value, token) for token in tokens]
-        return bool(
-            all(token_polarities)
-            and any(
-                negated
-                for polarities in token_polarities
-                for negated in polarities
-            )
-        )
-    positive_match = False
-    negative_match = False
-    any_match = False
-    for assertion in TELEMETRY_PROOF_ASSERTION_BOUNDARY.split(value):
-        if not assertion.strip():
-            continue
-        token_polarities = [
-            exact_token_polarities(assertion, token) for token in tokens
-        ]
-        if any(not polarities for polarities in token_polarities):
-            continue
-        kind_polarities = signal_kind_polarities(assertion)
-        if requires_signal_kind and not kind_polarities:
-            continue
-        bound_kinds = (
-            bound_signal_kind_matches(assertion, require_positive=False)
-            if requires_signal_kind
-            else []
-        )
-        if requires_signal_kind and not bound_kinds:
-            continue
-        if requires_signal_kind and not attributes_are_bound_to_signal(
-            assertion, required_attributes, bound_kinds
-        ):
-            continue
-        any_match = True
-        if reference_outcome == "any":
-            continue
-        assertion_is_negative = bool(
-            ZERO_OR_NO_TELEMETRY_PROOF.search(assertion)
-            or any(
-                negated
-                for polarities in token_polarities
-                for negated in polarities
-            )
-            or (requires_signal_kind and any(kind_polarities))
-        )
-        if assertion_is_negative:
-            negative_match = True
-            continue
-        if (
-            AFFIRMATIVE_TELEMETRY_PROOF.search(assertion)
-            and not ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF.search(assertion)
-            and not STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT.search(assertion)
-            and (not requires_signal_kind or any(not value for value in kind_polarities))
-            and all(
-                any(not negated for negated in polarities)
-                for polarities in token_polarities
-            )
-        ):
-            positive_match = True
-    if reference_outcome == "any":
-        return any_match
-    if positive_match and has_competing_signal_correction(value):
-        return False
-    if positive_match and negative_match:
-        return False
-    return positive_match if reference_outcome == "positive" else negative_match
-
-
-TELEMETRY_NEGATION_BEFORE = re.compile(
-    r"(?:"
-    r"\b(?:no|not|never|without|rather\s+than|instead\s+of)\s+"
-    r"(?:(?:an?|the)\s+)?|"
-    r"\b(?:missing|absent|unobserved)\s+|"
-    r"\bno\s+(?:evidence|data|sign|record)\s+(?:of|for)\s+|"
-    r"\b(?:did|does|do|could|can)\s+(?:not|never)\s+"
-    r"(?:find|see|observe|record|capture|receive)\s+|"
-    r"\bnever\s+(?:found|saw|observed|recorded|captured|received)\s+|"
-    r"\bunable\s+to\s+(?:find|see|observe|record|capture|receive)\s+|"
-    r"\b(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|"
-    r"export(?:ed)?|captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))\s+|"
-    r"\b(?:did|does|do|could|can|was|were|is|are|has|have|had|would|should)\s+"
-    r"not\s+(?:(?:be\s+)?(?:found|seen)|emit|observe|record|export|capture|receive|contain|produce)\s+|"
-    r"\b(?:didn|doesn|couldn|wasn|weren|isn|aren|hasn|haven|hadn|wouldn|shouldn)"
-    r"['’]t\s+(?:(?:be\s+)?(?:found|seen)|emit|observe|record|export|capture|receive|contain|produce)\s+|"
-    r"\bfailed\s+to\s+(?:find|see|emit|observe|record|export|capture|receive|contain|produce)\s+"
-    r")$",
-    re.IGNORECASE,
-)
-TELEMETRY_NEGATION_AFTER = re.compile(
-    r"^[\s,:;()\[\]-]*(?:"
-    r"(?:is|was|were|are|remains?|remained)\s+"
-    r"(?:missing|absent|unobserved|unavailable)\b|"
-    r"(?:is|was|were|are|remains?|remained)\s+(?:not|never)\s+"
-    r"(?:present|available|found|seen|observed|recorded|captured|received)\b|"
-    r"(?:could|can|was|were|is|are|has|have|had|would|should)\s+"
-    r"(?:not|never)\s+(?:be\s+)?(?:found|seen|observed|recorded|captured|received)\b|"
-    r"(?:couldn|wasn|weren|isn|aren|hasn|haven|hadn|wouldn|shouldn)"
-    r"['’]t\s+(?:be\s+)?(?:found|seen|observed|recorded|captured|received)\b|"
-    r"(?:is|was|were|are|did|does|do|could|can|has|have|had|would|should)\s+"
-    r"(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|export(?:ed)?|"
-    r"captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))|"
-    r"(?:isn|wasn|weren|aren|didn|doesn|couldn|hasn|haven|hadn|wouldn|shouldn)"
-    r"['’]t\s+(?:emit|observe|record|export|capture|receive|contain|produce)|"
-    r"(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|export(?:ed)?|"
-    r"captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))|"
-    r"failed\s+to\s+(?:find|see|emit|observe|record|export|capture|receive|contain|produce)|"
-    r"(?:yielded|returned|produced|contained|had|has)\s+no\s+"
-    r"(?:data|evidence|samples?|points?|records?)\b|"
-    r"missing\b|absent\b|unobserved\b)",
-    re.IGNORECASE,
-)
-
-
-def telemetry_mention_is_negated(value: str, match: re.Match[str]) -> bool:
-    """Detect negation in the same prose clause as an exact telemetry mention."""
-    before = value[: match.start()]
-    after = value[match.end() :]
-    boundary_matches = list(re.finditer(r"(?:[.!?;]\s+|\n+)", before))
-    clause_start = boundary_matches[-1].end() if boundary_matches else 0
-    clause_prefix = before[clause_start:]
-    clause_end_match = re.search(r"(?:[.!?;]\s+|\n+)", after)
-    clause_suffix = after[: clause_end_match.start()] if clause_end_match else after
-    selector = re.match(r"^\s*\{[^{}\n]{0,256}\}", clause_suffix)
-    if selector is not None:
-        clause_suffix = clause_suffix[selector.end() :]
-    return bool(
-        TELEMETRY_NEGATION_BEFORE.search(clause_prefix)
-        or TELEMETRY_NEGATION_AFTER.search(clause_suffix)
-    )
-
-
-def require_exact_telemetry_item_reference(
-    value: str,
-    path: str,
-    telemetry_item: dict[str, Any],
-    attribute_field: str = "attributes",
-    reference_outcome: str = "positive",
-) -> None:
-    if not exact_telemetry_item_is_referenced(
-        value, telemetry_item, attribute_field, reference_outcome
-    ):
-        fail(
-            f"{path} must reference the exact telemetry item "
-            f"{telemetry_item.get('type', 'signal')} {telemetry_item['name']} and "
-            "all of its required attribute keys and authored values "
-            f"with {reference_outcome} proof semantics"
-        )
-
-
-def require_exact_expected_telemetry_reference(
-    value: str,
-    path: str,
-    telemetry: list[dict[str, Any]],
-    reference_outcome: str,
-) -> None:
-    if not any(
-        exact_telemetry_item_is_referenced(
-            value, item, reference_outcome=reference_outcome
-        )
-        for item in telemetry
-    ):
-        expected = [f"{item['type']} {item['name']}" for item in telemetry]
-        fail(
-            f"{path} must reference at least one exact expected telemetry item "
-            f"with {reference_outcome} proof semantics: {expected}"
         )
 
 
@@ -1051,15 +341,6 @@ def normalize_proof_level(value: Any, path: str, scenario_id: str) -> str:
     return proof_level
 
 
-def names_canonical_telemetry_owner(value: str) -> bool:
-    lowered = re.sub(r"\s+", " ", value.lower())
-    spaced = re.sub(r"[\s_-]+", " ", value.lower()).strip()
-    return any(
-        term in lowered or re.sub(r"[\s_-]+", " ", term).strip() in spaced
-        for term in CANONICAL_OWNER_TERMS
-    )
-
-
 def normalize_verification(value: Any) -> dict[str, Any]:
     verification = as_object(value, "verification")
     environments = []
@@ -1151,50 +432,15 @@ def normalize_finding(
         if explicit_otel_concerns
         else []
     )
-    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and not explicit_otel_concerns:
-        fail(
-            f"{path}.otel_concerns is required by audit schema "
-            f"v{CURRENT_AUDIT_SCHEMA_VERSION}"
-        )
-    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-        if not otel_concerns:
-            fail(f"{path}.otel_concerns must contain at least one item when provided")
-        invalid_concerns = sorted(set(otel_concerns) - OTEL_CONCERNS)
-        if invalid_concerns:
-            fail(
-                f"{path}.otel_concerns contains unsupported OpenTelemetry concerns: "
-                f"{invalid_concerns}; expected only {sorted(OTEL_CONCERNS)}"
-            )
-        if len(otel_concerns) != len(set(otel_concerns)):
-            fail(f"{path}.otel_concerns must not contain duplicates")
     telemetry = []
     for index, item in enumerate(object_list(row.get("expected_telemetry", []), f"{path}.expected_telemetry")):
         item_path = f"{path}.expected_telemetry[{index}]"
         signal_type = text(item.get("type"), f"{item_path}.type")
         if signal_type not in SIGNAL_TYPES:
             fail(f"{item_path}.type must be one of {sorted(SIGNAL_TYPES)}")
-        configuration_scope = None
-        if signal_type == "configuration":
-            if "configuration_scope" in item:
-                configuration_scope = text(
-                    item.get("configuration_scope"),
-                    f"{item_path}.configuration_scope",
-                )
-                if configuration_scope not in CONFIGURATION_SCOPES:
-                    fail(
-                        f"{item_path}.configuration_scope must be one of "
-                        f"{sorted(CONFIGURATION_SCOPES)}"
-                    )
-            else:
-                fail(
-                    f"{item_path}.configuration_scope is required for "
-                    "OpenTelemetry configuration"
-                )
-        elif "configuration_scope" in item:
-            fail(
-                f"{item_path}.configuration_scope is only valid when type is "
-                "configuration"
-            )
+        configuration_scope = optional_text(
+            item.get("configuration_scope"), f"{item_path}.configuration_scope"
+        )
         telemetry_item = {
             "type": signal_type,
             "name": text(item.get("name"), f"{item_path}.name"),
@@ -1206,76 +452,6 @@ def normalize_finding(
         telemetry.append(telemetry_item)
     if not telemetry:
         fail(f"{path}.expected_telemetry must contain at least one item")
-    if not any(
-        item["type"] in {"span", "metric", "log", "resource"} for item in telemetry
-    ):
-        fail(
-            f"{path}.expected_telemetry must include a span, metric, log, or "
-            "resource outcome; scoped configuration alone is insufficient for "
-            "an OpenTelemetry finding"
-        )
-    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-        for index, item in enumerate(telemetry):
-            item_path = f"{path}.expected_telemetry[{index}]"
-            validate_otel_closure_text(
-                item["name"], f"{item_path}.name", telemetry_output=True
-            )
-            validate_otel_closure_text(
-                item["product_view"],
-                f"{item_path}.product_view",
-                telemetry_output=True,
-            )
-            for attribute_index, attribute in enumerate(item["attributes"]):
-                validate_otel_closure_text(
-                    attribute,
-                    f"{item_path}.attributes[{attribute_index}]",
-                    telemetry_output=True,
-                )
-    signal_types = {item["type"] for item in telemetry}
-    has_configuration = "configuration" in signal_types
-    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-        otel_concerns = [
-            concern for concern in OTEL_CONCERN_ORDER if concern in set(otel_concerns)
-        ]
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and has_configuration
-        and "otel-configuration" not in otel_concerns
-    ):
-        fail(
-            f"{path}.otel_concerns must include otel-configuration when "
-            "expected_telemetry contains configuration"
-        )
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and "otel-configuration" in otel_concerns
-        and not has_configuration
-    ):
-        fail(
-            f"{path}.otel_concerns includes otel-configuration but "
-            "expected_telemetry has no configuration item"
-        )
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and "context-propagation" in otel_concerns
-        and "span" not in signal_types
-    ):
-        fail(f"{path}.context-propagation closure requires a span outcome")
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and "trace-log-correlation" in otel_concerns
-        and "log" not in signal_types
-    ):
-        fail(f"{path}.trace-log-correlation closure requires a log outcome")
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and {"semantic-attributes", "cardinality-safety"} & set(otel_concerns)
-        and not any(item["attributes"] for item in telemetry)
-    ):
-        fail(
-            f"{path}.semantic/cardinality closure requires at least one "
-            "expected telemetry attribute"
-        )
     decision_owner = optional_text(row.get("decision_owner"), f"{path}.decision_owner")
     decision_question = optional_text(
         row.get("decision_question"), f"{path}.decision_question"
@@ -1331,11 +507,6 @@ def normalize_finding(
                     f"{path}.decision_question must be an exact telemetry choice "
                     "using which/whether/should/choose/select and a question mark"
                 )
-            require_expected_telemetry_reference(
-                decision_question,
-                f"{path}.decision_question",
-                telemetry,
-            )
         elif decision_owner is not None or decision_question is not None:
             fail(
                 f"{path}.decision_owner and decision_question are valid only for "
@@ -1354,11 +525,6 @@ def normalize_finding(
                     f"{path}.external_requirement must say what the external owner "
                     "will emit, export, configure, provide, supply, expose, prove, or verify"
                 )
-            require_expected_telemetry_reference(
-                external_requirement,
-                f"{path}.external_requirement",
-                telemetry,
-            )
         elif external_owner is not None or external_requirement is not None:
             fail(
                 f"{path}.external_owner and external_requirement are valid only for "
@@ -1400,15 +566,6 @@ def normalize_finding(
         "resolution": optional_text(row.get("resolution"), f"{path}.resolution"),
         "resolved_commit": optional_text(row.get("resolved_commit"), f"{path}.resolved_commit"),
     }
-    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and mode == "default":
-        duplicate_contract = " ".join(
-            (report["area"], report["gap"], report["required_fix"])
-        ).lower()
-        if any(term in duplicate_contract for term in ("duplicate", "overlap")) and not names_canonical_telemetry_owner(report["required_fix"]):
-            fail(
-                f"{path}.required_fix must name the canonical telemetry owner "
-                "for default duplicate remediation or use manual decision"
-            )
     if explicit_otel_concerns:
         report["otel_concerns"] = otel_concerns
     if decision_owner is not None:
@@ -1430,44 +587,11 @@ def normalize_finding(
                 f"{path}.required_fix must contain the exact external_requirement "
                 "and no hidden service implementation handoff"
             )
-    closure_values: list[tuple[str, str]] = [
-        ("title", report["title"]),
-        ("area", report["area"]),
-        ("gap", report["gap"]),
-        ("product_outcome", report["product_outcome"]),
-        ("required_fix", report["required_fix"]),
-    ]
-    closure_values.extend(
-        (f"acceptance_criteria[{index}]", value)
-        for index, value in enumerate(report["acceptance_criteria"])
-    )
-    closure_values.extend(
-        (f"follow_up_actions[{index}]", value)
-        for index, value in enumerate(report["follow_up_actions"])
-    )
-    if decision_question is not None:
-        closure_values.append(("decision_question", decision_question))
-    for option_index, option in enumerate(decision_options):
-        closure_values.append(
-            (f"decision_options[{option_index}].outcome", option["outcome"])
-        )
-    if external_requirement is not None:
-        closure_values.append(("external_requirement", external_requirement))
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-        for field, value in closure_values:
-            validate_otel_closure_text(
-                value,
-                f"{path}.{field}",
-                audit_section=True,
+        for index, value in enumerate(report["follow_up_actions"]):
+            validate_audit_review_next_step(
+                value, f"{path}.follow_up_actions[{index}]"
             )
-            if field.startswith("follow_up_actions["):
-                validate_audit_review_next_step(value, f"{path}.{field}")
-    if (
-        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
-        and "telemetry-proof" in otel_concerns
-        and not report["verification_scenarios"]
-    ):
-        fail(f"{path}.telemetry-proof closure requires a verification scenario")
     return report
 
 
@@ -1543,29 +667,6 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
         unknown_dependencies = sorted(set(finding["dependencies"]) - finding_ids)
         if unknown_dependencies:
             fail(f"finding {finding['id']} references undefined dependencies: {unknown_dependencies}")
-        for scenario_id in finding["verification_scenarios"]:
-            scenario = scenarios_by_id[scenario_id]
-            if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-                validate_otel_closure_text(
-                    scenario["trigger"],
-                    f"verification.scenarios[{scenario_id}].trigger",
-                    audit_section=True,
-                )
-                validate_otel_closure_text(
-                    scenario["expected_signals"],
-                    f"verification.scenarios[{scenario_id}].expected_signals",
-                    audit_section=True,
-                )
-                validate_otel_closure_text(
-                    scenario["acceptance_criteria"],
-                    f"verification.scenarios[{scenario_id}].acceptance_criteria",
-                    audit_section=True,
-                )
-                require_expected_telemetry_reference(
-                    f"{scenario['expected_signals']} {scenario['acceptance_criteria']}",
-                    f"verification.scenarios[{scenario_id}]",
-                    finding["expected_telemetry"],
-                )
 
     findings_by_id = {finding["id"]: finding for finding in findings}
     for decision in findings:
@@ -1642,12 +743,6 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
                     f"genai_readiness[{index}].owner must name an exact external, "
                     "provider, or platform owner for owner-mapped status"
                 )
-            for field in ("surface", "required_signals", "acceptance_criteria"):
-                validate_otel_closure_text(
-                    row[field],
-                    f"genai_readiness[{index}].{field}",
-                    audit_section=True,
-                )
         if status == "Pass" and any(
             row["status"] not in {"covered", "owner-mapped"}
             for row in genai_readiness
@@ -1673,12 +768,6 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
             if row["area"] in readiness_areas:
                 fail(f"duplicate incident readiness area: {row['area']}")
             readiness_areas.add(row["area"])
-            for field in ("area", "required_signals"):
-                validate_otel_closure_text(
-                    row[field],
-                    f"current_instrumentation.incident_readiness[{index}].{field}",
-                    audit_section=True,
-                )
 
     report = {
         "schema_version": audit_schema_version,
@@ -1726,18 +815,11 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     }
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
         report["scan_blockers"] = scan_blockers
-        for section_name in ("summary", "recommendation", "anti_patterns"):
-            for index, value in enumerate(report[section_name]):
-                validate_otel_closure_text(
-                    value,
-                    f"{section_name}[{index}]",
-                    audit_section=True,
-                )
-                if section_name == "recommendation":
-                    validate_audit_review_next_step(
-                        value,
-                        f"{section_name}[{index}]",
-                    )
+        for index, value in enumerate(report["recommendation"]):
+            validate_audit_review_next_step(
+                value,
+                f"recommendation[{index}]",
+            )
     evidence_checks = {row["check"] for row in report["evidence"]}
     required_evidence_checks = {
         "Manifest",
@@ -2349,7 +1431,6 @@ def normalize_telemetry_change(
     path: str,
     finding_id: str,
     expected_scenarios: list[str],
-    expected_telemetry: list[dict[str, Any]],
 ) -> dict[str, Any]:
     item_id = stable_id(row.get("id"), f"{path}.id")
     if not item_id.startswith(f"{finding_id}."):
@@ -2362,35 +1443,6 @@ def normalize_telemetry_change(
         fail(f"{path}.type must be one of {sorted(SIGNAL_TYPES)}")
     signal_name = text(row.get("name"), f"{path}.name")
     added_attributes = string_list(row.get("added_attributes", []), f"{path}.added_attributes")
-    if change_kind in {"added", "modified"}:
-        matching_expected = [
-            item
-            for item in expected_telemetry
-            if item["type"] == signal_type and item["name"] == signal_name
-        ]
-        if not matching_expected:
-            expected = [
-                f"{item['type']} {item['name']}" for item in expected_telemetry
-            ]
-            fail(
-                f"{path} must change an exact expected telemetry item from the "
-                f"audit finding; expected one of {expected}"
-            )
-        expected_attributes = {
-            attribute.strip()
-            for item in matching_expected
-            for attribute in item["attributes"]
-        }
-        actual_attributes = {
-            attribute.strip()
-            for attribute in added_attributes
-        }
-        unexpected_attributes = sorted(actual_attributes - expected_attributes)
-        if unexpected_attributes:
-            fail(
-                f"{path}.added_attributes contains attributes not promised by "
-                f"the audit finding: {unexpected_attributes}"
-            )
     follow_up_actions = non_empty_string_list(row.get("follow_up_actions", []), f"{path}.follow_up_actions")
     scenarios = [
         stable_id(item, f"{path}.verification_scenarios[{index}]")
@@ -2403,19 +1455,8 @@ def normalize_telemetry_change(
         fail(f"{path}.verification_scenarios contains unknown scenarios: {unknown_scenarios}")
     if expected_scenarios and not scenarios:
         fail(f"{path}.verification_scenarios must map the telemetry item to audit scenarios")
-    if signal_type == "metric" and not any(METRIC_PRODUCT_ACTION.search(action) for action in follow_up_actions):
-        fail(f"{path}.follow_up_actions must name a chart, dashboard, detector, alert, or monitor")
-    if added_attributes and not any(
-        DIMENSION_PRODUCT_ACTION.search(action) for action in follow_up_actions
-    ):
-        fail(f"{path}.follow_up_actions must name the filter, slice, group-by, or breakdown enabled by added attributes")
     source = durable_artifact_text(text(row.get("source"), f"{path}.source"), f"{path}.source")
     change = text(row.get("change"), f"{path}.change")
-    if GENERIC_TELEMETRY_CHANGE.search(change):
-        fail(
-            f"{path}.change must describe the concrete code/config behavior and "
-            "telemetry correction; generic selected-contract wording is not allowed"
-        )
     return {
         "id": item_id,
         "change_kind": change_kind,
@@ -2428,92 +1469,6 @@ def normalize_telemetry_change(
         "follow_up_actions": follow_up_actions,
         "verification_scenarios": scenarios,
     }
-
-
-def normalize_genai_closure(
-    value: Any,
-    report: dict[str, Any],
-) -> list[dict[str, Any]]:
-    rows = object_list(value, "instrumentation.genai_closure")
-    expected_rows = report["genai_readiness"]
-    if not expected_rows:
-        if rows:
-            fail(
-                "instrumentation.genai_closure is valid only when the audit "
-                "declares GenAI ownership"
-            )
-        return []
-    if len(rows) != len(expected_rows):
-        fail(
-            "instrumentation.genai_closure must contain exactly one row for every "
-            "audit GenAI readiness surface"
-        )
-
-    normalized: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for index, (row, expected) in enumerate(zip(rows, expected_rows, strict=True)):
-        path = f"instrumentation.genai_closure[{index}]"
-        surface = text(row.get("surface"), f"{path}.surface")
-        if surface in seen:
-            fail(f"duplicate instrumentation GenAI closure surface: {surface}")
-        seen.add(surface)
-        if surface != expected["surface"]:
-            fail(
-                "instrumentation.genai_closure surfaces must match the audit in "
-                f"source order; expected {expected['surface']}, got {surface}"
-            )
-        required_signals = text(
-            row.get("required_signals"), f"{path}.required_signals"
-        )
-        if required_signals != expected["required_signals"]:
-            fail(f"{path}.required_signals must exactly match the audit surface")
-        owner = text(row.get("owner"), f"{path}.owner")
-        if owner != expected["owner"]:
-            fail(f"{path}.owner must exactly match the audit surface owner")
-        status = text(row.get("status"), f"{path}.status")
-        if status not in GENAI_CLOSURE_STATUSES:
-            fail(
-                f"{path}.status must be one of "
-                f"{sorted(GENAI_CLOSURE_STATUSES)}"
-            )
-        implemented_proven = string_list(
-            row.get("implemented_proven", []), f"{path}.implemented_proven"
-        )
-        tests = string_list(row.get("tests", []), f"{path}.tests")
-        evidence = durable_artifact_list(
-            row.get("evidence", []), f"{path}.evidence"
-        )
-        remaining_signals = string_list(
-            row.get("remaining_signals", []), f"{path}.remaining_signals"
-        )
-        if status == "working" and (
-            not implemented_proven
-            or not tests
-            or not evidence
-            or remaining_signals
-        ):
-            fail(
-                f"working GenAI closure surface {surface} requires implemented/proven "
-                "signals, executed tests, durable evidence, and no remaining signals"
-            )
-        if status != "working" and not remaining_signals:
-            fail(
-                f"non-working GenAI closure surface {surface} must name remaining "
-                "signals or its exact owner/prerequisite"
-            )
-        normalized.append(
-            {
-                "surface": surface,
-                "required_signals": required_signals,
-                "owner": owner,
-                "implemented_proven": implemented_proven,
-                "tests": tests,
-                "evidence": evidence,
-                "remaining_signals": remaining_signals,
-                "status": status,
-            }
-        )
-    return normalized
 
 
 def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any]:
@@ -2567,7 +1522,6 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
                 f"{row_path}.telemetry_changes[{item_index}]",
                 finding_id,
                 audit_findings.get(finding_id, {}).get("verification_scenarios", []),
-                audit_findings.get(finding_id, {}).get("expected_telemetry", []),
             )
             for item_index, item in enumerate(
                 object_list(row.get("telemetry_changes", []), f"{row_path}.telemetry_changes")
@@ -2601,38 +1555,27 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
     approved = selection["approved_ids"]
     if [row["id"] for row in rows] != approved:
         fail(f"instrumentation finding IDs must exactly match dependency-closed selected audit order {approved}")
-    genai_closure = normalize_genai_closure(
-        data.get("genai_closure", []), report
-    )
     failed_rows = [row for row in rows if row["status"] == "not_working"]
-    failed_genai = [
-        row for row in genai_closure if row["status"] == "not_working"
-    ]
-    if (failed_rows or failed_genai) and result != "Fail":
+    if failed_rows and result != "Fail":
         fail(
             "instrumentation.meta.result must be Fail when any selected finding "
-            "or GenAI closure surface is not_working"
+            "is not_working"
         )
-    if result == "Fail" and not (failed_rows or failed_genai):
+    if result == "Fail" and not failed_rows:
         fail(
             "instrumentation.meta.result Fail requires at least one not_working "
-            "finding or GenAI closure surface"
+            "finding"
         )
     selected_complete = all(row["status"] == "working" for row in rows)
-    genai_complete = all(
-        row["status"] in GENAI_PASS_STATUSES for row in genai_closure
-    )
-    has_scope = bool(rows or genai_closure)
-    if result == "Pass" and not (selected_complete and genai_complete):
+    if result == "Pass" and not selected_complete:
         fail(
             "instrumentation.meta.result Pass requires every selected finding to "
-            "be working and every GenAI closure surface to be working, deferred, "
-            "or owner_mapped"
+            "be working"
         )
-    if has_scope and selected_complete and genai_complete and result != "Pass":
+    if rows and selected_complete and result != "Pass":
         fail(
             "instrumentation.meta.result must be Pass when every selected finding "
-            "and GenAI closure surface is complete"
+            "is working"
         )
     normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
@@ -2648,8 +1591,6 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
         "findings": rows,
         "next_steps": string_list(data.get("next_steps", []), "instrumentation.next_steps"),
     }
-    if report["meta"]["genai_ownership_detected"]:
-        normalized["genai_closure"] = genai_closure
     return normalized
 
 
@@ -2665,36 +1606,6 @@ def normalize_verify(
     result = text(meta.get("result"), "verify.meta.result")
     if result not in RESULT_STATUSES:
         fail(f"verify.meta.result must be one of {sorted(RESULT_STATUSES)}")
-    workflow_mode = text(
-        meta.get("workflow_mode", "standalone"), "verify.meta.workflow_mode"
-    )
-    if workflow_mode not in VERIFY_WORKFLOW_MODES:
-        fail(
-            f"verify.meta.workflow_mode must be one of "
-            f"{sorted(VERIFY_WORKFLOW_MODES)}"
-        )
-    lifecycle = text(meta.get("lifecycle", "final"), "verify.meta.lifecycle")
-    if lifecycle not in VERIFY_LIFECYCLES:
-        fail(
-            f"verify.meta.lifecycle must be one of {sorted(VERIFY_LIFECYCLES)}"
-        )
-    raw_stop_boundaries = object_list(
-        data.get("stop_boundaries", []), "verify.stop_boundaries"
-    )
-    if raw_stop_boundaries and not (
-        workflow_mode == "instrumentation_child"
-        and result == "Fail"
-        and lifecycle == "intermediate"
-    ):
-        fail(
-            "verify.stop_boundaries is allowed only for an instrumentation_child "
-            "overlay with result Fail and lifecycle intermediate"
-        )
-    if raw_stop_boundaries and instrumentation["meta"]["result"] != "Fail":
-        fail(
-            "verify.stop_boundaries requires the bound instrumentation "
-            "meta.result to be Fail"
-        )
     if stable_id(data.get("audit_id"), "verify.audit_id") != report["meta"]["audit_id"]:
         fail("verify.audit_id does not match audit")
     if text(data.get("audit_sha256"), "verify.audit_sha256") != audit_digest(report):
@@ -2796,28 +1707,6 @@ def normalize_verify(
                         f"blocked scenario {scenario_id} must use proof_mode not_run and "
                         "visibility not_proven"
                     )
-                if re.match(
-                    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|"
-                    r"configure|obtain|use|record|execute|exercise|capture|inspect|"
-                    r"verify|prove)\b",
-                    blocking_reason,
-                    re.IGNORECASE,
-                ):
-                    fail(
-                        f"{scenario_path}.blocking_reason must state the cause, not an "
-                        "imperative action"
-                    )
-                if re.match(
-                    r"^(?:run|rerun|provide|supply|install|restore|refresh|start|"
-                    r"configure|obtain|use|record|execute|exercise|capture|inspect|"
-                    r"verify|prove)\b",
-                    unobserved_outcome,
-                    re.IGNORECASE,
-                ):
-                    fail(
-                        f"{scenario_path}.unobserved_outcome must state missing proof, "
-                        "not an imperative action"
-                    )
             elif blocking_reason is not None or unobserved_outcome is not None:
                 fail(
                     f"{scenario_path}.blocking_reason and unobserved_outcome are valid "
@@ -2833,13 +1722,6 @@ def normalize_verify(
                 fail(
                     f"working scenario {scenario_id} requires evidence, observed telemetry, "
                     "product validation, an executed proof mode, and a known visibility state"
-                )
-            if scenario_status in {"working", "not_working"}:
-                require_exact_expected_telemetry_reference(
-                    "\n".join(observed_telemetry),
-                    f"{scenario_path}.observed_telemetry",
-                    audit_findings_by_id[finding_id]["expected_telemetry"],
-                    "positive" if scenario_status == "working" else "negative",
                 )
             if scenario_status == "not_working" and (
                 not evidence
@@ -2993,43 +1875,6 @@ def normalize_verify(
                         "that the removed signal is absent and its intended "
                         "replacement owner is present"
                     )
-            if item_status in {"working", "not_working"}:
-                if source_item["change_kind"] == "removed":
-                    reference_outcome = (
-                        "negative" if item_status == "working" else "positive"
-                    )
-                else:
-                    reference_outcome = (
-                        "positive" if item_status == "working" else "negative"
-                    )
-                observed_text = "\n".join(item_observed)
-                proof_item = source_item
-                if source_item["change_kind"] == "removed":
-                    proof_item = {
-                        "type": source_item["type"],
-                        "name": source_item["name"],
-                        "added_attributes": [],
-                    }
-                require_exact_telemetry_item_reference(
-                    observed_text,
-                    f"{item_path}.observed_telemetry",
-                    proof_item,
-                    "added_attributes",
-                    reference_outcome,
-                )
-                if source_item["change_kind"] == "removed" and item_status == "working":
-                    assert removal_proof is not None
-                    replacement_item = {
-                        "type": source_item["type"],
-                        "name": removal_proof["replacement_signal"],
-                        "attributes": [],
-                    }
-                    require_exact_telemetry_item_reference(
-                        observed_text,
-                        f"{item_path}.observed_telemetry replacement proof",
-                        replacement_item,
-                        reference_outcome="positive",
-                    )
             if item_status == "working" and (
                 not item_scenarios
                 or not item_evidence
@@ -3066,15 +1911,6 @@ def normalize_verify(
                     f"{item_path}.visibility {visibility} requires mapped scenarios, "
                     "executed proof, direct evidence, observed telemetry, and product validation"
                 )
-            if (
-                visibility in {"otlp_accepted", "explorer_visible"}
-                and DENIES_OTLP_DELIVERY.search(source_item["product_view"])
-            ):
-                fail(
-                    f"{item_path}.visibility {visibility} contradicts "
-                    f"instrumentation product_view for {item_id}, which denies an "
-                    "OTLP delivery path"
-                )
             normalized_item = {
                 "id": item_id,
                 "status": item_status,
@@ -3104,47 +1940,6 @@ def normalize_verify(
                 fail(f"working verify row {finding_id} must not have remaining work")
             if any(item["status"] != "working" for item in item_results):
                 fail(f"working verify row {finding_id} requires every telemetry item to be working")
-            working_item_observations = {
-                item["id"]: "\n".join(item["observed_telemetry"])
-                for item in item_results
-                if item["status"] == "working"
-            }
-            working_scenario_observations = "\n".join(
-                observed
-                for scenario in scenarios
-                if scenario["status"] == "working"
-                for observed in scenario["observed_telemetry"]
-            )
-            missing_expected_items = []
-            for expected_item in audit_findings_by_id[finding_id]["expected_telemetry"]:
-                matching_item_ids = {
-                    item_id
-                    for item_id, source in instrumentation_items_by_id.items()
-                    if item_id in expected_items_by_finding[finding_id]
-                    and source["change_kind"] in {"added", "modified"}
-                    and source["type"] == expected_item["type"]
-                    and source["name"] == expected_item["name"]
-                }
-                if any(
-                    item_id in working_item_observations
-                    and exact_telemetry_item_is_referenced(
-                        working_item_observations[item_id], expected_item
-                    )
-                    for item_id in matching_item_ids
-                ):
-                    continue
-                if exact_telemetry_item_is_referenced(
-                    working_scenario_observations, expected_item
-                ):
-                    continue
-                missing_expected_items.append(
-                    f"{expected_item['type']} {expected_item['name']}"
-                )
-            if missing_expected_items:
-                fail(
-                    f"working verify row {finding_id} lacks direct proof for audit "
-                    f"expected telemetry items: {missing_expected_items}"
-                )
         nested_failure = any(
             scenario["status"] == "not_working" for scenario in scenarios
         ) or any(item["status"] == "not_working" for item in item_results)
@@ -3226,206 +2021,6 @@ def normalize_verify(
             f"verify.meta.result must be {expected_result} for the recorded "
             "scenario and telemetry-item proof"
         )
-    if lifecycle == "intermediate" and result != "Fail":
-        fail("verify.meta.lifecycle intermediate is reserved for a failed child repair packet")
-    if workflow_mode == "instrumentation_child" and result == "Fail" and lifecycle != "intermediate":
-        fail(
-            "failed instrumentation-child verification must be intermediate; "
-            "the parent repair loop cannot finalize it"
-        )
-    failed_id_order = {row["id"]: index for index, row in enumerate(failed_rows)}
-    stop_boundaries: list[dict[str, Any]] = []
-    for boundary_index, boundary in enumerate(raw_stop_boundaries):
-        boundary_path = f"verify.stop_boundaries[{boundary_index}]"
-        finding_ids = [
-            stable_id(
-                value,
-                f"{boundary_path}.finding_ids[{finding_index}]",
-            )
-            for finding_index, value in enumerate(
-                as_list(
-                    boundary.get("finding_ids"),
-                    f"{boundary_path}.finding_ids",
-                )
-            )
-        ]
-        if not finding_ids:
-            fail(f"{boundary_path}.finding_ids must not be empty")
-        if len(finding_ids) != len(set(finding_ids)):
-            fail(f"{boundary_path}.finding_ids must not contain duplicates")
-        unknown_failed_ids = [
-            finding_id
-            for finding_id in finding_ids
-            if finding_id not in failed_id_order
-        ]
-        if unknown_failed_ids:
-            fail(
-                f"{boundary_path}.finding_ids must reference only failed "
-                f"verify findings: {unknown_failed_ids}"
-            )
-        kind = text(boundary.get("kind"), f"{boundary_path}.kind")
-        if kind not in STOP_BOUNDARY_KINDS:
-            fail(
-                f"{boundary_path}.kind must be one of "
-                f"{sorted(STOP_BOUNDARY_KINDS)}"
-            )
-        reason = text(boundary.get("reason"), f"{boundary_path}.reason").strip()
-        if IMPERATIVE_STOP_BOUNDARY_REASON.match(reason):
-            fail(
-                f"{boundary_path}.reason must state the observed boundary "
-                "declaratively, not as an action"
-            )
-        required_action = text(
-            boundary.get("required_action"), f"{boundary_path}.required_action"
-        ).strip()
-        evidence = durable_artifact_list(
-            boundary.get("evidence", []), f"{boundary_path}.evidence"
-        )
-        if not evidence:
-            fail(f"{boundary_path}.evidence must contain durable evidence")
-        stop_boundaries.append(
-            {
-                "finding_ids": sorted(
-                    finding_ids, key=failed_id_order.__getitem__
-                ),
-                "kind": kind,
-                "reason": reason,
-                "required_action": required_action,
-                "evidence": evidence,
-            }
-        )
-    if stop_boundaries:
-        instrumentation_findings_by_id = {
-            row["id"]: row for row in instrumentation["findings"]
-        }
-        non_failed_instrumentation_ids = sorted(
-            {
-                finding_id
-                for boundary in stop_boundaries
-                for finding_id in boundary["finding_ids"]
-                if instrumentation_findings_by_id[finding_id]["status"]
-                != "not_working"
-            },
-            key=failed_id_order.__getitem__,
-        )
-        if non_failed_instrumentation_ids:
-            fail(
-                "verify.stop_boundaries finding_ids require matching bound "
-                "instrumentation findings with status not_working: "
-                f"{non_failed_instrumentation_ids}"
-            )
-        covered_failed_ids = {
-            finding_id
-            for boundary in stop_boundaries
-            for finding_id in boundary["finding_ids"]
-        }
-        missing_failed_ids = [
-            row["id"] for row in failed_rows if row["id"] not in covered_failed_ids
-        ]
-        if missing_failed_ids:
-            fail(
-                "verify.stop_boundaries must identify every failed finding when a "
-                f"stopped child boundary is recorded: {missing_failed_ids}"
-            )
-        rows_by_id = {row["id"]: row for row in rows}
-        for boundary_index, boundary in enumerate(stop_boundaries):
-            normalized_required_action = normalized_action_words(
-                boundary["required_action"]
-            )
-            duplicated_locations: list[str] = []
-            for finding_id in boundary["finding_ids"]:
-                for remaining_index, action in enumerate(
-                    rows_by_id[finding_id]["remaining"]
-                ):
-                    normalized_action = normalized_action_words(action)
-                    if (
-                        f" {normalized_required_action} "
-                        in f" {normalized_action} "
-                        or f" {normalized_action} "
-                        in f" {normalized_required_action} "
-                    ):
-                        duplicated_locations.append(
-                            f"verify.findings[{finding_id}].remaining"
-                            f"[{remaining_index}]"
-                        )
-            for next_step_index, action in enumerate(next_steps):
-                normalized_action = normalized_action_words(action)
-                if (
-                    f" {normalized_required_action} "
-                    in f" {normalized_action} "
-                    or f" {normalized_action} "
-                    in f" {normalized_required_action} "
-                ):
-                    duplicated_locations.append(
-                        f"verify.next_steps[{next_step_index}]"
-                    )
-            if duplicated_locations:
-                fail(
-                    f"verify.stop_boundaries[{boundary_index}].required_action "
-                    "must remain only in stop_boundaries and cannot be duplicated "
-                    "as an application code/config repair in "
-                    f"{duplicated_locations}"
-                )
-        stop_boundaries.sort(
-            key=lambda boundary: (
-                min(
-                    failed_id_order[finding_id]
-                    for finding_id in boundary["finding_ids"]
-                ),
-                boundary["kind"],
-                boundary["reason"],
-            )
-        )
-    normalized_for_runtime_checks = {"findings": rows}
-    if verification_attached_java_agent(normalized_for_runtime_checks):
-        stale_requests = [
-            value
-            for value in (
-                *next_steps,
-                *(item for row in rows for item in row["remaining"]),
-            )
-            if AGENT_PROVISIONING_REQUEST.search(value)
-        ]
-        if stale_requests:
-            fail(
-                "verify remaining/next_steps asks to provision a Java agent after "
-                "a current full-runtime -javaagent attachment; reuse the resolved "
-                "verification pin instead"
-            )
-    for row in failed_rows:
-        if not row["remaining"]:
-            fail(f"not_working verify row {row['id']} requires a concrete repair action")
-        invalid_actions = [
-            action
-            for action in row["remaining"]
-            if failed_verification_repair_action(action) is None
-            or CONFIRMATION_TAIL.search(action)
-            or "$otel-verify" in action
-        ]
-        if invalid_actions:
-            fail(
-                f"not_working verify row {row['id']}.remaining must contain only "
-                f"application code/config repairs, not confirmation steps: {invalid_actions}"
-            )
-    if result == "Fail":
-        invalid_next_steps = [
-            action
-            for action in next_steps
-            if failed_verification_repair_action(action) is None
-            or CONFIRMATION_TAIL.search(action)
-            or "$otel-verify" in action
-        ]
-        if invalid_next_steps:
-            fail(
-                "verify.next_steps for Fail must contain only application code/config "
-                f"repairs, not confirmation steps: {invalid_next_steps}"
-            )
-    unresolved_rows = [row for row in rows if row["status"] != "working"]
-    if unresolved_rows and any(NO_FURTHER_ACTION.search(action) for action in next_steps):
-        fail(
-            "verify.next_steps cannot claim no further action while selected findings "
-            "remain unresolved"
-        )
     normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
         "kind": "otel-verify",
@@ -3436,21 +2031,17 @@ def normalize_verify(
             "service_name": text(meta.get("service_name"), "verify.meta.service_name"),
             "date": text(meta.get("date"), "verify.meta.date"),
             "result": result,
-            "workflow_mode": workflow_mode,
-            "lifecycle": lifecycle,
         },
         "findings": rows,
         "next_steps": next_steps,
     }
-    if stop_boundaries:
-        normalized["stop_boundaries"] = stop_boundaries
     return normalized
 
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
         return as_object(json.loads(path.read_text(encoding="utf-8")), str(path))
-    except json.JSONDecodeError as exc:
+    except (UnicodeError, json.JSONDecodeError) as exc:
         fail(f"{path} is not valid JSON: {exc}")
 
 
@@ -3490,29 +2081,31 @@ def selection_candidate_paths(
     output: Path,
     explicit_candidates: list[Path],
     search_directories: list[Path],
-) -> list[Path]:
-    seen: set[str] = set()
-    paths: list[Path] = []
+) -> list[tuple[int, Path]]:
+    candidates: dict[str, tuple[int, Path]] = {}
 
-    def add(path: Path) -> None:
+    def add(path: Path, trust_tier: int) -> None:
         key = os.path.abspath(path)
-        if key in seen:
-            return
-        seen.add(key)
-        paths.append(path)
+        existing = candidates.get(key)
+        if existing is None or trust_tier < existing[0]:
+            candidates[key] = (trust_tier, path)
 
     for candidate in explicit_candidates:
-        add(candidate)
+        add(candidate, 0)
 
-    directories = [audit_json.parent, output.parent, Path.home() / "Downloads"]
-    directories.extend(search_directories)
-    for directory in directories:
+    directory_tiers = [
+        (audit_json.parent, 1),
+        (output.parent, 1),
+        *((directory, 2) for directory in search_directories),
+        (Path.home() / "Downloads", 3),
+    ]
+    for directory, trust_tier in directory_tiers:
         if not directory.is_dir():
             continue
         for pattern in ("otel-selection*.json", "otel-audit*.json"):
             for candidate in sorted(directory.glob(pattern)):
-                add(candidate)
-    return paths
+                add(candidate, trust_tier)
+    return list(candidates.values())
 
 
 def try_load_bound_selection(path: Path, report: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -3839,15 +2432,8 @@ def render_markdown(report: dict[str, Any]) -> str:
     ordered_findings = [
         findings_by_id[finding_id] for finding_id in display_finding_ids(report)
     ]
-    closure_rows = []
+    handoff_rows = []
     for finding in ordered_findings:
-        scopes = sorted(
-            {
-                item["configuration_scope"]
-                for item in finding["expected_telemetry"]
-                if "configuration_scope" in item
-            }
-        )
         if finding["instrument_mode"] == "manual decision":
             options = "; ".join(
                 f"{option['id']} = {option['label']} ({option['outcome']}; "
@@ -3865,19 +2451,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"required telemetry: {finding.get('external_requirement', 'Not recorded in schema v1')}"
             )
         else:
-            handoff = "Executable in service"
-        closure_rows.append(
-            [
-                finding["area"],
-                (
-                    finding.get("otel_concerns") or []
-                    if report["schema_version"] == CURRENT_AUDIT_SCHEMA_VERSION
-                    else ["Legacy v1 — unclassified"]
-                ),
-                scopes or ["N/A"],
-                handoff,
-            ]
-        )
+            continue
+        handoff_rows.append([finding["area"], handoff])
     lines = [
         f"# Observability Report: {meta['service_name']}",
         "",
@@ -4024,20 +2599,15 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     if not report["findings"]:
         lines.extend(["", "No gaps found."])
-    else:
+    elif handoff_rows:
         lines.extend(
             [
                 "",
-                "### OTel Closure Details",
+                "### Decision and external handoff",
                 "",
                 md_table(
-                    [
-                        "Area",
-                        "OTel concerns",
-                        "Configuration scopes",
-                        "Decision / external handoff",
-                    ],
-                    closure_rows,
+                    ["Area", "Decision / external handoff"],
+                    handoff_rows,
                 ),
             ]
         )
@@ -4256,226 +2826,6 @@ def html_table(
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def component_flow_lanes(value: str) -> list[dict[str, Any]]:
-    """Parse the compact flow-map text into deterministic display lanes."""
-    lanes: list[dict[str, Any]] = []
-    blocks = re.split(r"\n\s*\n", value.strip())
-    for index, block in enumerate(blocks, start=1):
-        lines = [line.strip() for line in block.splitlines() if line.strip()]
-        if not lines:
-            continue
-        if len(lines) > 1 and "->" not in lines[0]:
-            title = lines.pop(0)
-        else:
-            title = "Component flow" if len(blocks) == 1 else f"Component flow {index}"
-
-        chains: list[list[dict[str, Any]]] = []
-        for line in lines:
-            nodes: list[dict[str, Any]] = []
-            for raw_node in re.split(r"\s*->\s*", line):
-                matches = list(FLOW_MARKER.finditer(raw_node))
-                label = FLOW_MARKER.sub("", raw_node).strip()
-                if not label:
-                    continue
-                nodes.append(
-                    {
-                        "label": label,
-                        "source_covered": any(match.group(1) == "SOURCE-COVERED" for match in matches),
-                        "gaps": [match.group(2).strip() for match in matches if match.group(2)],
-                    }
-                )
-            if nodes:
-                chains.append(nodes)
-        if chains:
-            lanes.append({"title": title, "chains": chains})
-    return lanes
-
-
-def component_flow_model(value: str) -> dict[str, list[dict[str, Any]]]:
-    """Consolidate authored components and edges without inventing topology."""
-    components: list[dict[str, Any]] = []
-    component_by_label: dict[str, dict[str, Any]] = {}
-    rendered_lanes: list[dict[str, Any]] = []
-
-    for lane in component_flow_lanes(value):
-        edges: list[dict[str, str]] = []
-        seen_edges: set[tuple[str, str]] = set()
-        for chain in lane["chains"]:
-            for node in chain:
-                component = component_by_label.get(node["label"])
-                if component is None:
-                    component = {
-                        "label": node["label"],
-                        "lanes": [],
-                        "source_covered": False,
-                        "areas": [],
-                    }
-                    component_by_label[node["label"]] = component
-                    components.append(component)
-                if lane["title"] not in component["lanes"]:
-                    component["lanes"].append(lane["title"])
-                component["source_covered"] = component["source_covered"] or node["source_covered"]
-                for area in node["gaps"]:
-                    if area not in component["areas"]:
-                        component["areas"].append(area)
-            for source, target in zip(chain, chain[1:]):
-                edge_key = (source["label"], target["label"])
-                if edge_key not in seen_edges:
-                    seen_edges.add(edge_key)
-                    edges.append({"source": source["label"], "target": target["label"]})
-        rendered_lanes.append({"title": lane["title"], "edges": edges})
-
-    return {"components": components, "lanes": rendered_lanes}
-
-
-def component_coverage_groups(report: dict[str, Any]) -> list[dict[str, Any]]:
-    """Group authored gap associations by component without inventing topology."""
-    finding_by_area = {finding["area"]: finding for finding in report["findings"]}
-    groups: list[dict[str, Any]] = []
-    mapped_areas: set[str] = set()
-
-    model = component_flow_model(report["signal_flow"]["component_flow_map"])
-    for component in model["components"]:
-        areas = list(component["areas"])
-        mapped_areas.update(areas)
-        groups.append(
-            {
-                "id": f"component-{len(groups) + 1}",
-                "label": component["label"],
-                "lanes": list(component["lanes"]),
-                "source_covered": component["source_covered"],
-                "areas": areas,
-            }
-        )
-
-    unmapped = [
-        finding["area"] for finding in report["findings"] if finding["area"] not in mapped_areas
-    ]
-    if unmapped:
-        groups.append(
-            {
-                "id": f"component-{len(groups) + 1}",
-                "label": "Other audit findings",
-                "lanes": ["Not associated with the component map"],
-                "source_covered": False,
-                "areas": unmapped,
-            }
-        )
-
-    for group in groups:
-        findings = [finding_by_area[area] for area in group["areas"]]
-        priority_counts = {priority: 0 for priority in ("required", "recommended", "deferred")}
-        signals: list[str] = []
-        for finding in findings:
-            priority_counts[finding["priority"]] += 1
-            for item in finding["expected_telemetry"]:
-                if item["type"] not in signals:
-                    signals.append(item["type"])
-        group["findings"] = findings
-        group["priority_counts"] = priority_counts
-        group["signals"] = signals
-    return groups
-
-
-def render_component_flow_map(report: dict[str, Any]) -> str:
-    model = component_flow_model(report["signal_flow"]["component_flow_map"])
-    coverage_groups = component_coverage_groups(report)
-    group_by_label = {group["label"]: group for group in coverage_groups}
-    rendered_components: list[str] = []
-    for component in model["components"]:
-        group = group_by_label[component["label"]]
-        gap_count = len(group["findings"])
-        source_label = "source mapped" if component["source_covered"] else "external / unconfirmed"
-        gap_label = (
-            f'{gap_count} linked coverage area{"s" if gap_count != 1 else ""}'
-            if gap_count
-            else "no mapped audit gaps"
-        )
-        node_body = (
-            f'<div class="flow-node-title">{esc(component["label"])}</div>'
-            '<div class="flow-node-meta">'
-            f'<span>{esc(" · ".join(component["lanes"]))}</span>'
-            f'<span>{esc(source_label)} · {esc(gap_label)}</span>'
-            '</div>'
-        )
-        if gap_count:
-            rendered_components.append(
-                f'<a class="flow-node flow-node-link" href="#{esc(group["id"])}" '
-                f'title="Open grouped coverage for {esc(component["label"])}">{node_body}</a>'
-            )
-        else:
-            rendered_components.append(f'<div class="flow-node">{node_body}</div>')
-
-    rendered_lanes: list[str] = []
-    for lane in model["lanes"]:
-        edge_rows = "".join(
-            '<li class="flow-edge">'
-            f'<span>{esc(edge["source"])}</span>'
-            '<span class="flow-arrow" aria-hidden="true">→</span>'
-            f'<span>{esc(edge["target"])}</span>'
-            '</li>'
-            for edge in lane["edges"]
-        )
-        if edge_rows:
-            rendered_lanes.append(
-                f'<section class="flow-lane"><h4>{esc(lane["title"])}</h4>'
-                f'<ul class="flow-edge-list">{edge_rows}</ul></section>'
-            )
-
-    return (
-        '<div class="flow-legend" aria-label="Service map legend">'
-        '<strong>Source mapped</strong><span>component or configuration found; not runtime proof</span>'
-        '<strong>Coverage count</strong><span>opens the component-level gap summary below</span>'
-        '</div>'
-        '<section class="flow-components" aria-labelledby="flow-components-heading">'
-        '<h3 id="flow-components-heading">Components</h3>'
-        f'<div class="flow-component-grid">{"".join(rendered_components)}</div>'
-        '</section>'
-        '<section class="flow-connections" aria-labelledby="flow-connections-heading">'
-        '<h3 id="flow-connections-heading">Connections by path</h3>'
-        f'{"".join(rendered_lanes)}'
-        '</section>'
-    )
-
-
-def render_component_gap_summary(report: dict[str, Any]) -> str:
-    groups = [group for group in component_coverage_groups(report) if group["findings"]]
-    if not groups:
-        return '<p class="muted">No component-level coverage gaps were mapped.</p>'
-    rendered: list[str] = []
-    for group in groups:
-        counts = group["priority_counts"]
-        priorities = " · ".join(
-            f'{counts[priority]} {priority}'
-            for priority in ("required", "recommended", "deferred")
-            if counts[priority]
-        )
-        signals = ", ".join(group["signals"]) or "no telemetry type recorded"
-        finding_rows = "".join(
-            (
-                '<li>'
-                f'<a class="finding-jump" data-finding-jump href="#{esc(finding["id"])}">{esc(finding["id"])}</a>'
-                f'<strong>{esc(finding["area"])}</strong> — {esc(finding["impact"])}'
-                '</li>'
-            )
-            for finding in group["findings"]
-        )
-        rendered.append(
-            f'<details class="component-gap-group" id="{esc(group["id"])}">'
-            '<summary>'
-            f'<span><strong>{esc(group["label"])}</strong><small>{esc(" · ".join(group["lanes"]))}</small></span>'
-            f'<span class="component-gap-count">{len(group["findings"])} linked area'
-            f'{"s" if len(group["findings"]) != 1 else ""}</span>'
-            f'<span class="component-gap-priority">{esc(priorities)}</span>'
-            '</summary>'
-            '<div class="component-gap-body">'
-            f'<p><strong>Signals affected:</strong> {esc(signals)}. Individual audit findings remain below for scope review and evidence.</p>'
-            f'<ul>{finding_rows}</ul>'
-            '</div></details>'
-        )
-    return '<div class="component-gap-list">' + "".join(rendered) + '</div>'
-
-
 def render_decision_overview(
     report: dict[str, Any],
     selection: dict[str, Any] | None = None,
@@ -4523,11 +2873,6 @@ def instrumentation_proof_counts(
         "items_working": sum(item["status"] == "working" for item in item_results),
         "items_product_visible": sum(
             item["visibility"] == "explorer_visible" for item in item_results
-        ),
-        "items_cloud_visible": sum(
-            item["visibility"] == "explorer_visible"
-            and any(CLOUD_PRODUCT_EVIDENCE.search(value) for value in item["product_validation"])
-            for item in item_results
         ),
         "items_otlp_accepted": sum(
             item["visibility"] == "otlp_accepted" for item in item_results
@@ -5069,8 +3414,7 @@ def render_named_finding_proof(
             '<h4>Internal verification has not completed</h4>'
             '<p class="muted">The instrumentation run has not produced item-level '
             'proof for this selected issue yet. Resolve the recorded prerequisite '
-            'or repair; verification runs automatically inside the instrumentation '
-            'workflow after that.</p>'
+            'or repair.</p>'
             '</section>'
         )
 
@@ -5092,21 +3436,6 @@ def render_named_finding_proof(
     )
 
 
-OTEL_INSTRUMENT_ACTION_PREFIX = re.compile(
-    r"^(?:use|run)\s+\$otel-instrument\s+to\s+", re.IGNORECASE
-)
-REPAIR_ACTION_PREFIX = re.compile(
-    r"^(?:repair|bind|preserve|correct|fix|add|change|remove|configure|implement|harden|wire|resolve|satisfy)\b",
-    re.IGNORECASE,
-)
-OTEL_INSTRUMENT_OWNER_PREFIX = re.compile(
-    r"^\$otel-instrument\s*:\s*", re.IGNORECASE
-)
-CONFIRMATION_TAIL = re.compile(
-    r"(?:,\s*|\s+)(?:and\s+)?(?:then\s+)?"
-    r"(?:re-?run|run|prove|save|inspect|validate|query|exercise)\b.*$",
-    re.IGNORECASE,
-)
 EXPLICIT_CHILD_VERIFY_ACTION = re.compile(
     r"\b(?:\$?otel[- ]verify|child\s+verification(?:\s+workflow)?)\b",
     re.IGNORECASE,
@@ -5151,36 +3480,6 @@ def is_stale_parent_verification_action(action: str) -> bool:
     )
 
 
-def failed_verification_repair_action(action: str) -> str | None:
-    """Return only the code/config repair portion of a failed-run action."""
-    value = action.strip()
-    explicit_repair = OTEL_INSTRUMENT_ACTION_PREFIX.search(value)
-    owner_prefix = OTEL_INSTRUMENT_OWNER_PREFIX.search(value)
-    if explicit_repair:
-        repair = OTEL_INSTRUMENT_ACTION_PREFIX.sub("", value).strip()
-    elif owner_prefix:
-        repair = OTEL_INSTRUMENT_OWNER_PREFIX.sub("", value).strip()
-    elif REPAIR_ACTION_PREFIX.search(value):
-        repair = value
-    else:
-        return None
-    repair = CONFIRMATION_TAIL.sub("", repair).strip().rstrip(",;")
-    if not repair:
-        return None
-    repair = repair[0].upper() + repair[1:]
-    return f"$otel-instrument: {repair}"
-
-
-def failed_verification_repair_actions(actions: list[str]) -> list[str]:
-    return list(
-        dict.fromkeys(
-            repair
-            for action in actions
-            if (repair := failed_verification_repair_action(action)) is not None
-        )
-    )
-
-
 def verification_failure_observations(proof: dict[str, Any]) -> list[str]:
     observations: list[str] = []
     for scenario in proof["scenarios"]:
@@ -5205,10 +3504,9 @@ def render_finding_verification_follow_up(
             if observations
             else '<p class="muted">The executed check failed; see Technical proof for direct evidence.</p>'
         )
-        actions = failed_verification_repair_actions(remaining)
         action_list = (
-            render_list(actions)
-            if actions
+            render_list(remaining)
+            if remaining
             else '<p class="muted">No concrete code or configuration repair was recorded.</p>'
         )
         return (
@@ -5218,12 +3516,7 @@ def render_finding_verification_follow_up(
             '<h4>Code repair required</h4>'
             '<p class="muted"><code>$otel-instrument</code> changes the application. '
             '<code>$otel-verify</code> never repairs application code.</p>'
-            f'{action_list}'
-            '<h4>How the repair is confirmed</h4>'
-            '<p class="muted">After applying the repair, the instrumentation '
-            'workflow automatically runs the affected verification checks. '
-            'Verification only reports whether the repair worked; it does not '
-            'modify the application.</p></section>'
+            f'{action_list}</section>'
         )
     heading = {
         "not_configured": "Implementation still needed",
@@ -5234,142 +3527,6 @@ def render_finding_verification_follow_up(
         f'<h4>{esc(heading)}</h4>{render_list(remaining)}</section>'
         if remaining
         else ""
-    )
-
-
-AGENT_PROVISIONING_REQUEST = re.compile(
-    r"(?:\b(?:provide|supply|install|download|locate)\b.{0,120}\bagent\b|"
-    r"\bagent\b.{0,120}\b(?:provide|supply|install|download|locate)\b)",
-    re.IGNORECASE,
-)
-
-
-def verification_attached_java_agent(verify: dict[str, Any] | None) -> bool:
-    if verify is None:
-        return False
-    return any(
-        scenario["proof_mode"] == "full_runtime"
-        and scenario["status"] in {"working", "not_working"}
-        and any("-javaagent:" in command.lower() for command in scenario["commands"])
-        for finding in verify["findings"]
-        for scenario in finding["scenarios"]
-    )
-
-
-def verification_environment_blockers(
-    verify: dict[str, Any] | None,
-) -> list[tuple[str, list[str]]]:
-    if verify is None:
-        return []
-    agent_attached = verification_attached_java_agent(verify)
-    groups: dict[str, set[str]] = {}
-    for finding in verify["findings"]:
-        if finding["status"] == "working":
-            continue
-        for scenario in finding["scenarios"]:
-            if scenario["status"] != "blocked" or scenario["proof_mode"] != "not_run":
-                continue
-            for evidence in scenario["evidence"]:
-                lowered = evidence.lower()
-                if "opentelemetry-javaagent.jar is absent" in lowered:
-                    if agent_attached:
-                        continue
-                    label = "A pinned OpenTelemetry Java agent was unavailable"
-                elif "docker daemon is unavailable" in lowered:
-                    label = (
-                        "The Docker-backed service, database, and collector runtime "
-                        "was unavailable"
-                    )
-                elif re.search(r"\b(?:is|was) (?:absent|unavailable)\b", lowered):
-                    label = evidence
-                else:
-                    continue
-                groups.setdefault(label, set()).add(finding["id"])
-    return [(label, sorted(ids)) for label, ids in groups.items()]
-
-
-def render_verification_limits(
-    instrumentation: dict[str, Any],
-    verify: dict[str, Any] | None,
-    counts: dict[str, int],
-) -> str:
-    if verify is None:
-        return (
-            '<section class="verification-limits" aria-labelledby="verification-limits-heading">'
-            '<h3 id="verification-limits-heading">Internal verification has not completed</h3>'
-            '<p>The instrumentation run has not produced an item-level proof overlay yet. '
-            'Resolve the recorded prerequisite or repair; verification runs automatically '
-            'inside the instrumentation workflow after that.</p>'
-            '</section>'
-        )
-    unresolved = counts["findings"] - counts["findings_working"]
-    if unresolved == 0:
-        return ""
-    result = verify["meta"]["result"]
-    heading = {
-        "Fail": "Verification failures",
-        "Partial": "Verification incomplete — no observed failures",
-        "Blocked": "What blocked verification",
-        "Not run": "Verification has not run",
-    }.get(result, "Verification details")
-    blockers = verification_environment_blockers(verify)
-    blocker_rows = "".join(
-        '<li>'
-        f'{esc(label)} — affected {len(ids)} finding{"" if len(ids) == 1 else "s"} '
-        f'(<code>{"</code>, <code>".join(esc(value) for value in ids)}</code>).</li>'
-        for label, ids in blockers
-    )
-    if not blocker_rows:
-        if result == "Fail":
-            awaiting = unresolved - counts["findings_failed"]
-            blocker_rows = (
-                f'<li>{counts["findings_failed"]} finding'
-                f'{"" if counts["findings_failed"] == 1 else "s"} failed an executed check; '
-                f'{awaiting} still await required proof. Failed cards show the observed behavior '
-                'and repair plan.</li>'
-            )
-        else:
-            blocker_rows = (
-                '<li>Unexercised or blocked coverage is listed on the affected finding cards.</li>'
-            )
-    total = counts["telemetry_items"]
-    if counts["items_product_visible"]:
-        product_visibility = (
-            f'<strong>Delivery and product visibility:</strong> '
-            f'{counts["items_product_visible"]} of {total} telemetry changes are confirmed '
-            f'in the target product; {counts["items_otlp_accepted"]} additional changes '
-            'have saved local OTLP receipt.'
-        )
-    elif counts["items_otlp_accepted"]:
-        product_visibility = (
-            f'<strong>Delivery and product visibility:</strong> Saved local OTLP receipt '
-            f'exists for {counts["items_otlp_accepted"]} of {total} telemetry changes. '
-            'None has a saved target-product query. Local receipt is delivery proof, '
-            'not a failed product query.'
-        )
-    else:
-        product_visibility = (
-            f'<strong>Product visibility:</strong> None of the {total} telemetry changes '
-            'has saved local OTLP receipt or target-product query evidence. This is not '
-            'evidence that the telemetry is absent.'
-        )
-    return (
-        '<section class="verification-limits" aria-labelledby="verification-limits-heading">'
-        f'<h3 id="verification-limits-heading">{esc(heading)}</h3>'
-        f'<p>Of {total} telemetry changes, {counts["items_working"]} are proven by a '
-        'direct successful observation. Broader route and lifecycle coverage is tracked '
-        'separately.</p>'
-        f'<p><strong>Across {counts["scenarios"]} audit-mapped checks:</strong> '
-        f'{counts["scenarios_working"]} passed at the recorded proof mode · '
-        f'{counts["scenarios_not_proven"]} executed with unresolved evidence · '
-        f'{counts["scenarios_not_run"]} not exercised · '
-        f'{counts["scenarios_blocked"]} blocked by prerequisites · '
-        f'{counts["scenarios_not_configured"]} not configured · '
-        f'{counts["scenarios_failed"]} failed. Finding cards keep the named coverage in '
-        'expandable details.</p>'
-        f'<ul>{blocker_rows}</ul>'
-        f'<p>{product_visibility}</p>'
-        '</section>'
     )
 
 
@@ -5472,52 +3629,27 @@ def instrumentation_report_next_steps(
     instrumentation: dict[str, Any],
     verify: dict[str, Any] | None,
 ) -> list[str]:
-    automatic_verification_step = (
-        "Resolve the concrete prerequisite or repair named on the affected "
-        "finding cards; verification runs automatically inside the "
-        "instrumentation workflow after that."
-    )
     if verify is not None:
         if verify.get("next_steps"):
             steps = list(verify["next_steps"])
-            if verify["meta"]["result"] == "Fail":
-                repair_steps = failed_verification_repair_actions(steps)
-                if repair_steps:
-                    if verify["meta"].get("workflow_mode") == "instrumentation_child":
-                        return [
-                            "Repair loop active — "
-                            + OTEL_INSTRUMENT_OWNER_PREFIX.sub("", step).rstrip(".")
-                            + "; the affected checks run automatically after the repair."
-                            for step in repair_steps
-                        ]
-                    return repair_steps
-                return [
-                    "$otel-instrument: Record and apply the concrete in-scope repair; "
-                    "verification will confirm it automatically."
-                ]
             durable_steps = [
                 step for step in steps if not is_stale_parent_verification_action(step)
             ]
-            return durable_steps or [automatic_verification_step]
+            if durable_steps:
+                return durable_steps
         return {
             "Pass": ["No further verification action is required."],
             "Fail": [
-                "$otel-instrument: Repair the failed in-scope instrumentation. "
-                "Confirmation runs automatically afterward."
+                "$otel-instrument: Repair the failed in-scope instrumentation."
             ],
             "Partial": [
-                "Complete the concrete proof prerequisites listed on the affected "
-                "findings; verification runs automatically inside the "
-                "instrumentation workflow."
+                "Complete the concrete proof prerequisites listed on the affected findings."
             ],
             "Blocked": [
-                "Satisfy the prerequisite recorded in the verification evidence; "
-                "verification runs automatically inside the instrumentation workflow."
+                "Satisfy the prerequisite recorded in the verification evidence."
             ],
             "Not run": [
-                "Resolve the prerequisite that prevented internal verification; "
-                "the instrumentation workflow invokes verification automatically "
-                "once it is available."
+                "Resolve the prerequisite that prevented verification."
             ],
         }.get(verify["meta"]["result"], ["Review the item-level proof."])
     if instrumentation.get("next_steps"):
@@ -5528,151 +3660,42 @@ def instrumentation_report_next_steps(
         ]
         if durable_steps:
             return durable_steps
-    return [automatic_verification_step]
+    return [
+        "Resolve any recorded prerequisite named on the selected finding cards."
+    ]
 
 
-def has_meaningful_instrumentation_proof(
+def has_completed_instrumentation_scope(
     instrumentation: dict[str, Any],
 ) -> bool:
-    """Return whether implementation-owned scope records completed proof."""
+    """Use authored structured closure statuses without interpreting prose."""
 
-    def affirmative_entries(value: object, pattern: re.Pattern[str]) -> bool:
-        return (
-            isinstance(value, list)
-            and bool(value)
-            and all(
-                isinstance(item, str)
-                and bool(item.strip())
-                and not NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF.search(
-                    re.sub(r"[._/-]+", " ", item)
-                )
-                and pattern.search(re.sub(r"[._/-]+", " ", item))
-                for item in value
-            )
-        )
-
-    def positive_evidence(value: object) -> bool:
-        def positive_item(item: object) -> bool:
-            if not isinstance(item, str) or not item.strip():
-                return False
-            artifact_refs = list(
-                DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE.finditer(item)
-            )
-            if any(
-                NON_PROOF_INSTRUMENTATION_ARTIFACT_LABEL.search(
-                    re.sub(r"[._/\\-]+", " ", match.group(0))
-                )
-                for match in artifact_refs
-            ):
-                return False
-            outcome_prose = DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE.sub(" ", item)
-            return bool(
-                not NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF.search(
-                    re.sub(r"[._/\\-]+", " ", outcome_prose)
-                )
-                and POSITIVE_INSTRUMENTATION_EVIDENCE.search(item)
-            )
-
-        return (
-            isinstance(value, list)
-            and bool(value)
-            and all(positive_item(item) for item in value)
-        )
-
-    for finding in instrumentation.get("findings", []):
-        if (
-            finding.get("status") == "working"
-            and affirmative_entries(
-                finding.get("tests"), AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF
-            )
-            and positive_evidence(finding.get("evidence"))
-        ):
-            return True
-    for row in instrumentation.get("genai_closure", []):
-        if (
-            row.get("status") in {"working", "partial"}
-            and affirmative_entries(
-                row.get("implemented_proven"), AFFIRMATIVE_IMPLEMENTATION_PROOF
-            )
-            and affirmative_entries(
-                row.get("tests"), AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF
-            )
-            and positive_evidence(row.get("evidence"))
-        ):
-            return True
-    return False
+    return any(
+        finding.get("status") == "working"
+        for finding in instrumentation.get("findings", [])
+    )
 
 
 def aggregate_instrumentation_result(
     instrumentation: dict[str, Any],
     verify: dict[str, Any] | None,
 ) -> str:
-    """Combine verification state with instrumentation-owned GenAI closure."""
+    """Combine the verification state with completed implementation scope."""
 
     if verify is None:
         return instrumentation["meta"]["result"]
     verification_result = verify["meta"]["result"]
     if verification_result not in RESULT_STATUSES:
         fail(f"unsupported verification result: {verification_result}")
-    genai_statuses = [
-        row["status"] for row in instrumentation.get("genai_closure", [])
-    ]
-    if verification_result == "Fail" or "not_working" in genai_statuses:
+    if verification_result == "Fail":
         return "Fail"
     if verification_result == "Blocked":
         return (
             "Partial"
-            if has_meaningful_instrumentation_proof(instrumentation)
+            if has_completed_instrumentation_scope(instrumentation)
             else "Blocked"
         )
-    if verification_result in {"Partial", "Not run"}:
-        return "Partial"
-    if all(status in GENAI_PASS_STATUSES for status in genai_statuses):
-        return "Pass"
-    return "Partial"
-
-
-def render_genai_closure_summary(instrumentation: dict[str, Any]) -> str:
-    """Render the complete GenAI closure inventory as one concise projection."""
-
-    rows = instrumentation.get("genai_closure", [])
-    if not rows:
-        return ""
-    closed = sum(row["status"] in GENAI_PASS_STATUSES for row in rows)
-    status_labels = {
-        "working": "working",
-        "partial": "partial",
-        "not_working": "not working",
-        "not_proven": "not proven",
-        "not_configured": "not configured",
-        "deferred": "deferred",
-        "owner_mapped": "owner mapped",
-    }
-    rendered_rows = []
-    for row in rows:
-        ready = "; ".join(row["implemented_proven"]) or "None recorded"
-        remaining = "; ".join(row["remaining_signals"]) or "None"
-        rendered_rows.append(
-            "<tr>"
-            f'<td><strong>{esc(row["surface"])}</strong></td>'
-            f'<td>{esc(status_labels[row["status"]])}</td>'
-            f'<td>{esc(reader_prose(ready))}</td>'
-            f'<td>{esc(reader_prose(remaining))}<br>'
-            f'<span class="muted">Owner: {esc(row["owner"])}</span></td>'
-            "</tr>"
-        )
-    surface_word = "surface is" if len(rows) == 1 else "surfaces are"
-    return (
-        '<section class="panel" aria-labelledby="genai-closure-heading">'
-        '<h2 id="genai-closure-heading">GenAI telemetry closure</h2>'
-        f'<p><strong>{closed} of {len(rows)} {surface_word} closed.</strong> '
-        "Closed means working, deferred, or assigned to the named external owner.</p>"
-        '<div class="table-wrap"><table><thead><tr>'
-        '<th>Surface</th><th>Status</th><th>What is ready</th>'
-        '<th>What remains / owner</th>'
-        f'</tr></thead><tbody>{"".join(rendered_rows)}</tbody></table></div>'
-        "</section>"
-    )
+    return "Partial" if verification_result == "Not run" else verification_result
 
 
 def render_instrumentation_summary(
@@ -5699,9 +3722,9 @@ def render_instrumentation_summary(
         failure_word = "failure" if failed_findings == 1 else "failures"
         heading = f"Verification failed — {failed_findings} observed {failure_word}"
     elif aggregate_result == "Fail":
-        heading = "Instrumentation failed — GenAI closure has a failed surface"
+        heading = "Instrumentation failed"
     elif aggregate_result == "Partial" and verification_result == "Pass":
-        heading = "Verification complete — GenAI closure remains"
+        heading = "Instrumentation incomplete — verification complete"
     elif verification_result == "Partial" and failed_findings == 0:
         heading = "Verification incomplete — no observed failures"
     elif aggregate_result == "Partial" and verification_result == "Blocked":
@@ -5722,15 +3745,10 @@ def render_instrumentation_summary(
             f'{counts["items_working"]} of {total} telemetry changes are proven.'
         )
 
-    if counts["items_cloud_visible"]:
+    if counts["items_product_visible"]:
         delivery_sentence = (
-            "Local OTLP delivery was checked; "
-            f'{counts["items_cloud_visible"]} of {total} telemetry changes were '
-            "confirmed in Splunk Observability Cloud."
-        )
-    elif counts["items_product_visible"]:
-        delivery_sentence = (
-            "Local OTLP delivery and the configured telemetry explorer were checked."
+            f'{counts["items_product_visible"]} of {total} telemetry changes were '
+            "confirmed in the configured telemetry explorer."
         )
     elif counts["items_otlp_accepted"]:
         delivery_sentence = (
@@ -5795,12 +3813,13 @@ def render_selected_issue_changes(
         )
         entries.append(
             '<li><article class="selected-issue" '
-            f'id="selected-{esc(implementation["id"])}">'
+            f'id="selected-{esc(implementation["id"])}" '
+            f'data-priority="{esc(finding["priority"])}" '
+            f'data-area="{esc(finding["area"])}">'
             '<div class="selected-issue-header"><div>'
             f'<span class="selection-reason">{esc(selection_reason)}</span>'
             f'<h3>{esc(finding["title"])}</h3>'
-            f'<p class="muted"><code>{esc(finding["id"])}</code> · {esc(finding["area"])} · '
-            f'{esc(finding["priority"])}</p></div>'
+            f'<p class="muted"><code>{esc(finding["id"])}</code></p></div>'
             '<span class="issue-status-group">'
             f'<span class="issue-status">Implementation: {esc(implementation_state)}</span>'
             f'<span class="issue-status">Proof: {esc(status)}</span></span></div>'
@@ -5861,8 +3880,6 @@ def render_gap_closure(
             if proof is not None
             else implementation["follow_up_actions"]
         )
-        if proof is not None and proof["status"] == "not_working":
-            remaining = failed_verification_repair_actions(remaining)
         rows.append(
             f'<tr class="closure-row" id="closure-{esc(finding["id"])}">'
             f'<td><code>{esc(finding["id"])}</code><br><strong>{esc(finding["title"])}</strong><br>'
@@ -5969,45 +3986,6 @@ def render_unselected_findings(report: dict[str, Any], selection: dict[str, Any]
     )
 
 
-def render_stop_boundaries(verify: dict[str, Any] | None) -> str:
-    if verify is None or not verify.get("stop_boundaries"):
-        return ""
-    kind_labels = {
-        "unselected_work": "Unselected work",
-        "material_decision": "Material decision",
-        "new_authority": "New authority",
-        "external_prerequisite": "External prerequisite",
-    }
-    rows = []
-    for boundary in verify["stop_boundaries"]:
-        affected = ", ".join(
-            f'<a class="finding-jump" href="#selected-{esc(finding_id)}">'
-            f'<code>{esc(finding_id)}</code></a>'
-            for finding_id in boundary["finding_ids"]
-        )
-        rows.append(
-            '<article class="stop-boundary">'
-            f'<h3>{esc(kind_labels[boundary["kind"]])}</h3>'
-            f'<p><strong>Affected failed findings:</strong> {affected}</p>'
-            f'<p><strong>Why instrumentation stopped:</strong> '
-            f'{esc(reader_prose(boundary["reason"]))}</p>'
-            '<p><strong>Required action outside the instrumentation repair scope:</strong> '
-            f'{esc(reader_prose(boundary["required_action"]))}</p>'
-            '<div><strong>Durable evidence:</strong>'
-            f'{render_list(boundary["evidence"])}</div>'
-            '</article>'
-        )
-    return (
-        '<section class="panel stop-boundaries" aria-labelledby="stop-boundaries-heading">'
-        '<h2 id="stop-boundaries-heading">Why the repair loop stopped</h2>'
-        '<p class="review-note">The executed verification failures remain recorded. '
-        'Instrumentation cannot safely continue until the boundary action below is '
-        'completed; it is not another application code/config repair.</p>'
-        f'<div class="stop-boundary-list">{"".join(rows)}</div>'
-        '</section>'
-    )
-
-
 def render_instrumentation_html(
     report: dict[str, Any],
     selection: dict[str, Any],
@@ -6018,10 +3996,6 @@ def render_instrumentation_html(
 ) -> str:
     title = esc(report["meta"]["service_name"])
     summary = render_instrumentation_summary(selection, instrumentation, verify)
-    genai_closure = render_genai_closure_summary(instrumentation)
-    genai_closure_section = f"  {genai_closure}\n" if genai_closure else ""
-    stop_boundaries = render_stop_boundaries(verify)
-    stop_boundaries_section = f"  {stop_boundaries}\n" if stop_boundaries else ""
     selected_issues = render_selected_issue_changes(report, selection, instrumentation, verify)
     instrumentation_sha = instrumentation_digest(instrumentation)
     selection_sha = selection_digest(selection)
@@ -6073,14 +4047,6 @@ main {{ padding-top:18px !important; padding-bottom:34px !important; }}
 .impact-stats strong {{ display:block; font-size:18px; margin-top:2px; }}
 .review-note {{ border-left:3px solid var(--accent); background:#f4f7ff; margin:13px 0; padding:8px 10px; }}
 .current-next {{ border-left:3px solid var(--accent); margin:12px 0 0; padding:6px 10px; }}
-.verification-limits {{ background:#fff8e8; border:1px solid #ead7a2; border-radius:7px; margin:12px 0; padding:11px 12px; }}
-.verification-limits h3 {{ font-size:14px; margin:0 0 6px; }}
-.verification-limits p:last-child {{ margin-bottom:0; }}
-.stop-boundary-list {{ display:grid; gap:10px; }}
-.stop-boundary {{ background:#fff8e8; border:1px solid #ead7a2; border-left:4px solid #b7791f; border-radius:7px; padding:11px 12px; }}
-.stop-boundary h3 {{ font-size:15px; margin:0 0 7px; }}
-.stop-boundary p:last-of-type {{ margin-bottom:8px; }}
-.stop-boundary ul {{ margin-top:4px; }}
 .selected-issues {{ display:grid; gap:12px; list-style:none; margin:12px 0 0; padding:0; }}
 .selected-issue {{ background:#fbfcfe; border:1px solid var(--line); border-radius:8px; padding:14px; }}
 .selected-issue-header {{ align-items:flex-start; display:flex; gap:16px; justify-content:space-between; }}
@@ -6154,7 +4120,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
-{stop_boundaries_section}{genai_closure_section}  <section class="panel" aria-labelledby="selected-issues-heading">
+  <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>
     <p class="review-note">Each issue shows what changed, how observability improves, telemetry-item proof, scenario coverage, and any remaining uncertainty.</p>
@@ -6359,7 +4325,8 @@ h1 {{ margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }}
 .findings-section > h2 {{ color: var(--ink); font-size: 18px; margin: 0 0 12px; }}
 .findings-total {{ color: var(--muted); font-size: 13px; font-weight: 600; }}
 .card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }}
-.card.done {{ opacity: .62; }}
+.card.done {{ border-color: #9bd5b7; }}
+.card.done .spine {{ background: var(--ok); }}
 .card.working {{ border-color: #9bd5b7; }}
 .card-head {{ display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; }}
 .row {{ display: grid; grid-template-columns: 5px minmax(72px, auto) minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 13px 14px 13px 0; cursor: pointer; font: inherit; }}
@@ -6481,7 +4448,7 @@ th {{ color: var(--muted); font-size: 12px; }}
   <div class="wrap tray-bar">
     <div class="tray-summary">
       <strong id="planSummary"></strong>
-      <span class="tray-hint" id="saveSelectionHint">Save this audit state over <code>.observe/otel-audit.json</code> before running <code>$otel-instrument</code>. If your browser downloads a saved audit file instead, <code>$otel-instrument</code> can adopt it after validation.</span>
+      <span class="tray-hint" id="saveSelectionHint">Save a selected audit copy as <code>.observe/otel-audit.selected.json</code> before running <code>$otel-instrument</code>. The canonical audit remains unchanged. If your browser downloads the copy instead, <code>$otel-instrument</code> can adopt it after validation when no repository selection already exists.</span>
     </div>
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
       <span class="tray-hint" id="instrumentCommandLabel">Copy/paste terminal fallback when saving is unreliable:</span>
@@ -7030,13 +4997,35 @@ async function saveSelectionOverlay() {{
   if (window.showSaveFilePicker) {{
     try {{
       const handle = await window.showSaveFilePicker({{
-        suggestedName: "otel-audit.json",
+        suggestedName: "otel-audit.selected.json",
         types: [{{description: "OpenTelemetry audit JSON with saved selection", accept: {{"application/json": [".json"]}}}}],
       }});
+      if (handle.name === "otel-audit.json") {{
+        announceSelection("The canonical otel-audit.json is immutable. Choose otel-audit.selected.json or another new selected-audit filename.");
+        return;
+      }}
+      const existingFile = await handle.getFile();
+      if (existingFile.size) {{
+        let existingDocument;
+        try {{
+          existingDocument = JSON.parse(await existingFile.text());
+        }} catch (error) {{
+          announceSelection("The chosen file already exists and is not a valid selected audit. Choose a new otel-audit.selected.json file.");
+          return;
+        }}
+        const existingSelection = existingDocument?.review_selection;
+        const sameAudit = existingDocument?.kind === "otel-audit"
+          && existingDocument?.meta?.audit_id === REPORT.meta.audit_id
+          && existingSelection?.audit_sha256 === DATA.selection.audit_sha256;
+        if (!sameAudit) {{
+          announceSelection("The chosen file belongs to a different or newer audit. Choose a new otel-audit.selected.json file.");
+          return;
+        }}
+      }}
       const writable = await handle.createWritable();
       await writable.write(contents);
       await writable.close();
-      announceSelection("Audit selection saved into the audit report." + dependencyMessage + " Keep it at .observe/otel-audit.json before running $otel-instrument.");
+      announceSelection("Selected audit copy saved." + dependencyMessage + " Keep it in .observe before running $otel-instrument.");
       return;
     }} catch (error) {{
       if (error && error.name === "AbortError") {{
@@ -7055,7 +5044,7 @@ async function saveSelectionOverlay() {{
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 0);
-  announceSelection("Saved audit download fallback started." + dependencyMessage + " $otel-instrument can adopt the newest matching otel-audit*.json after validation.");
+  announceSelection("Selected audit download fallback started." + dependencyMessage + " $otel-instrument can adopt it after validation when no repository selection already exists.");
 }}
 
 document.getElementById("saveSelection").addEventListener("click", () => {{
@@ -7374,45 +5363,6 @@ def load_flow(
     return selection, instrumentation, verify
 
 
-def scoped_report(report: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any]:
-    approved = set(selection["approved_ids"])
-    findings = [finding for finding in report["findings"] if finding["id"] in approved]
-    scenario_ids = {scenario for finding in findings for scenario in finding["verification_scenarios"]}
-    scenarios = [scenario for scenario in report["verification"]["scenarios"] if scenario["id"] in scenario_ids]
-    environment_ids = {environment for scenario in scenarios for environment in scenario["environments"]}
-    environments = [environment for environment in report["verification"]["environments"] if environment["id"] in environment_ids]
-    answers_by_id = decision_answer_map(selection.get("decision_answers", []))
-    decision_answers = []
-    for finding in report["findings"]:
-        option = selected_decision_option(finding, answers_by_id.get(finding["id"]))
-        if option is None:
-            continue
-        decision_answers.append(
-            {
-                "finding_id": finding["id"],
-                "option_id": option["id"],
-                "label": option["label"],
-                "outcome": option["outcome"],
-            }
-        )
-    scoped = {
-        "schema_version": OVERLAY_SCHEMA_VERSION,
-        "kind": "otel-audit-scope",
-        "audit_id": report["meta"]["audit_id"],
-        "audit_sha256": audit_digest(report),
-        "meta": report["meta"],
-        "summary": report["summary"],
-        "current_instrumentation": report["current_instrumentation"],
-        "genai_readiness": report["genai_readiness"],
-        "approved_ids": selection["approved_ids"],
-        "findings": findings,
-        "verification": {"environments": environments, "scenarios": scenarios},
-    }
-    if decision_answers:
-        scoped["decision_answers"] = decision_answers
-    return scoped
-
-
 def cmd_validate(args: argparse.Namespace) -> int:
     report = normalize_audit_report(load_json(args.audit_json))
     print(
@@ -7474,8 +5424,6 @@ def cmd_select(args: argparse.Namespace) -> int:
     )
     approved_ids = selection["approved_ids"]
     write_json(args.output, selection)
-    if args.scoped_out:
-        write_json(args.scoped_out, scoped_report(report, selection))
     added = [finding_id for finding_id in approved_ids if finding_id not in raw_ids]
     print(
         f"wrote {args.output} ({len(approved_ids)} findings in scope"
@@ -7491,9 +5439,9 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
     if not args.output.parent.is_dir():
         fail(f"selection output parent is not a directory: {args.output.parent}")
 
-    matches: list[tuple[int, str, Path, dict[str, Any]]] = []
+    matches: list[tuple[int, int, str, Path, dict[str, Any]]] = []
     rejected: list[str] = []
-    for candidate in selection_candidate_paths(
+    for trust_tier, candidate in selection_candidate_paths(
         args.audit_json,
         args.output,
         args.candidate,
@@ -7510,19 +5458,21 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
             modified = candidate.stat().st_mtime_ns
         except OSError:
             modified = 0
-        matches.append((modified, os.path.abspath(candidate), candidate, selection))
+        matches.append(
+            (trust_tier, modified, os.path.abspath(candidate), candidate, selection)
+        )
 
     if not matches:
         details = ("\nRejected candidates:\n- " + "\n- ".join(rejected[:10])) if rejected else ""
         fail(
             "no saved audit selection matching the canonical audit was found. "
-            "Save the audit state from .observe/otel.html so it updates "
-            ".observe/otel-audit.json, or run select with explicit IDs."
+            "Save a selected audit copy from .observe/otel.html or run select "
+            "with explicit IDs."
             + details
         )
 
-    matches.sort(key=lambda item: (-item[0], item[1]))
-    _modified, _path_key, source, selection = matches[0]
+    matches.sort(key=lambda item: (item[0], -item[1], item[2]))
+    _trust_tier, _modified, _path_key, source, selection = matches[0]
     selected_all_from_empty = False
     if args.all_if_empty and not selection["approved_ids"]:
         selection = select_all_selection(
@@ -7533,8 +5483,6 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
         )
         selected_all_from_empty = True
     write_json(args.output, selection)
-    if args.scoped_out:
-        write_json(args.scoped_out, scoped_report(report, selection))
     auto_added = [
         finding_id
         for finding_id in selection["approved_ids"]
@@ -7637,25 +5585,6 @@ def audit_finalization_preflight_errors(data: Any) -> list[str]:
                 except ReportError:
                     errors.append(f"{path}[{index}].{field} must be a string")
 
-    findings = data.get("findings")
-    if isinstance(findings, list):
-        for index, row in enumerate(findings):
-            if not isinstance(row, dict) or row.get("instrument_mode") != "default":
-                continue
-            area = row.get("area")
-            gap = row.get("gap")
-            required_fix = row.get("required_fix")
-            if not all(isinstance(value, str) for value in (area, gap, required_fix)):
-                continue
-            duplicate_contract = f"{area} {gap} {required_fix}".lower()
-            if any(
-                term in duplicate_contract for term in ("duplicate", "overlap")
-            ) and not names_canonical_telemetry_owner(required_fix):
-                errors.append(
-                    f"findings[{index}].required_fix must name the canonical "
-                    "telemetry owner for default duplicate remediation or use "
-                    "manual decision"
-                )
     return errors[:50]
 
 
@@ -7799,310 +5728,6 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
     return 0
 
 
-def instrumentation_final_gate_result(
-    report: dict[str, Any],
-    selection: dict[str, Any],
-    instrumentation: dict[str, Any],
-    verify: dict[str, Any],
-) -> tuple[dict[str, Any], list[str]]:
-    """Evaluate the shared final gate against an already-normalized flow."""
-    if verify["meta"]["workflow_mode"] != "instrumentation_child":
-        fail(
-            "instrumentation-final-gate requires verify.meta.workflow_mode "
-            "instrumentation_child"
-        )
-    failed_findings = [
-        finding["id"]
-        for finding in verify["findings"]
-        if finding["status"] == "not_working"
-    ]
-    failed_scenarios = [
-        scenario["id"]
-        for finding in verify["findings"]
-        for scenario in finding["scenarios"]
-        if scenario["status"] == "not_working"
-    ]
-    failed_items = [
-        item["id"]
-        for finding in verify["findings"]
-        for item in finding["item_results"]
-        if item["status"] == "not_working"
-    ]
-    passed = (
-        verify["meta"]["lifecycle"] == "final"
-        and not failed_findings
-        and instrumentation["meta"]["result"] != "Fail"
-    )
-    pending = [
-        finding["id"]
-        for finding in verify["findings"]
-        if finding["status"] not in {"working", "not_working"}
-    ]
-    return (
-        {
-            "schema_version": OVERLAY_SCHEMA_VERSION,
-            "kind": "otel-instrumentation-final-gate",
-            "audit_id": report["meta"]["audit_id"],
-            "audit_sha256": audit_digest(report),
-            "selection_sha256": selection_digest(selection),
-            "instrumentation_sha256": instrumentation_digest(instrumentation),
-            "passed": passed,
-            "verification_result": verify["meta"]["result"],
-            "verification_lifecycle": verify["meta"]["lifecycle"],
-            "failed_findings": failed_findings,
-            "failed_scenarios": failed_scenarios,
-            "failed_items": failed_items,
-            "proof_pending_findings": pending,
-        },
-        pending,
-    )
-
-
-def print_instrumentation_final_gate(
-    result: dict[str, Any],
-    verify: dict[str, Any],
-    pending: list[str],
-) -> int:
-    if not result["passed"]:
-        failed_findings = result["failed_findings"]
-        print(
-            "REPAIR REQUIRED: instrumentation cannot finalize with an intermediate "
-            "or failed child verification result"
-            + (f"; findings={','.join(failed_findings)}" if failed_findings else "")
-        )
-        return 2
-    print(
-        "PASS: instrumentation final gate "
-        f"({len(verify['findings']) - len(pending)}/{len(verify['findings'])} "
-        "findings at required proof; no executed verification failures)"
-    )
-    return 0
-
-
-def cmd_instrumentation_final_gate(args: argparse.Namespace) -> int:
-    """Prevent an active instrumentation workflow from handing off stale failures."""
-    report = normalize_audit_report(load_json(args.audit_json))
-    raw_verify = load_json(args.verify_json)
-    if not raw_verify.get("instrumentation_sha256"):
-        fail(
-            "final instrumentation verification must include instrumentation_sha256 "
-            "bound to the exact normalized instrumentation overlay"
-        )
-    selection, instrumentation, verify = load_flow(
-        report, args.selection_json, args.instrumentation_json, args.verify_json
-    )
-    if instrumentation is None or verify is None:
-        fail("instrumentation-final-gate requires instrumentation and verification JSON")
-    result, pending = instrumentation_final_gate_result(
-        report, selection, instrumentation, verify
-    )
-    if args.output:
-        write_json(args.output, result)
-    return print_instrumentation_final_gate(result, verify, pending)
-
-
-def run_projection_validator(label: str, command: list[str]) -> str:
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
-    if completed.returncode == 0:
-        return completed.stdout.strip()
-    detail = (completed.stderr or completed.stdout).strip()
-    fail(
-        f"{label} failed"
-        + (f": {detail}" if detail else f" with exit code {completed.returncode}")
-    )
-
-
-def stale_parent_verification_actions(
-    instrumentation: dict[str, Any],
-) -> list[str]:
-    """Locate parent CTAs that still ask for the already-present child run."""
-    locations: list[str] = []
-    candidates = [
-        (f"instrumentation.next_steps[{index}]", action)
-        for index, action in enumerate(instrumentation["next_steps"])
-    ]
-    for finding_index, finding in enumerate(instrumentation["findings"]):
-        candidates.extend(
-            (
-                f"instrumentation.findings[{finding_index}].follow_up_actions[{index}]",
-                action,
-            )
-            for index, action in enumerate(finding["follow_up_actions"])
-        )
-        for item_index, item in enumerate(finding["telemetry_changes"]):
-            candidates.extend(
-                (
-                    "instrumentation.findings"
-                    f"[{finding_index}].telemetry_changes[{item_index}]"
-                    f".follow_up_actions[{index}]",
-                    action,
-                )
-                for index, action in enumerate(item["follow_up_actions"])
-            )
-    for location, action in candidates:
-        if is_stale_parent_verification_action(action):
-            locations.append(location)
-    return locations
-
-
-def cmd_finalize_instrumentation(args: argparse.Namespace) -> int:
-    """Validate, atomically render, and gate one bound instrumentation flow."""
-    report = normalize_audit_report(load_json(args.audit_json))
-
-    # This is intentionally first: a stale proof overlay must not invoke other
-    # tools or replace any reader/gate artifacts.
-    selection, instrumentation, verify = load_flow(
-        report, args.selection_json, args.instrumentation_json, args.verify_json
-    )
-    if instrumentation is None or verify is None:
-        fail("finalize-instrumentation requires instrumentation and verification JSON")
-    if verify["meta"]["workflow_mode"] != "instrumentation_child":
-        fail(
-            "finalize-instrumentation requires verify.meta.workflow_mode "
-            "instrumentation_child"
-        )
-    stale_actions = stale_parent_verification_actions(instrumentation)
-    if stale_actions:
-        fail(
-            "finalize-instrumentation found stale parent actions that ask to run "
-            "the already-present child verification: "
-            + ", ".join(stale_actions)
-            + "; replace them with durable implementation/product actions and "
-            "rerun the child so its digest binds the corrected instrumentation overlay"
-        )
-
-    skills_root = Path(__file__).resolve().parents[2]
-    reader_validator = (
-        skills_root / "otel-verify" / "scripts" / "validate_reader_report.py"
-    )
-    gap_validator = (
-        skills_root / "otel-instrument" / "scripts" / "validate_gap_closure.py"
-    )
-    for label, validator in (
-        ("verify reader validator", reader_validator),
-        ("instrumentation gap-closure validator", gap_validator),
-    ):
-        if not validator.is_file():
-            fail(f"{label} is missing from the active skill bundle: {validator}")
-
-    source_root = (args.repo_root or infer_source_root(args.audit_json)).resolve()
-    if not source_root.is_dir():
-        fail(f"source repository root is not a directory: {source_root}")
-
-    audit_markdown = args.audit_markdown or args.audit_json.with_name("otel.md")
-    instrumentation_markdown = (
-        args.instrumentation_markdown
-        or args.instrumentation_json.with_suffix(".md")
-    )
-    verify_markdown = args.verify_markdown or args.verify_json.with_suffix(".md")
-
-    run_projection_validator(
-        "verify reader projection",
-        [
-            sys.executable,
-            "-I",
-            str(reader_validator),
-            str(verify_markdown),
-            "--instrumentation-json",
-            str(args.instrumentation_json),
-            "--verify-json",
-            str(args.verify_json),
-            "--audit-json",
-            str(args.audit_json),
-            "--selection-json",
-            str(args.selection_json),
-        ],
-    )
-    run_projection_validator(
-        "instrumentation gap closure",
-        [
-            sys.executable,
-            "-I",
-            str(gap_validator),
-            str(audit_markdown),
-            str(instrumentation_markdown),
-            "--audit-json",
-            str(args.audit_json),
-            "--selection-json",
-            str(args.selection_json),
-            "--instrumentation-json",
-            str(args.instrumentation_json),
-            "--verify-json",
-            str(args.verify_json),
-        ],
-    )
-
-    html_text = render_instrumentation_html(
-        report,
-        selection,
-        instrumentation,
-        verify,
-        source_root,
-        args.output.resolve().parent,
-    )
-    write_text(args.output, html_text)
-    result, pending = instrumentation_final_gate_result(
-        report, selection, instrumentation, verify
-    )
-    if args.gate_output:
-        write_json(args.gate_output, result)
-    return print_instrumentation_final_gate(result, verify, pending)
-
-
-def cmd_gate(args: argparse.Namespace) -> int:
-    report = normalize_audit_report(load_json(args.audit_json))
-    included_priorities = {
-        "none": set(),
-        "required": {"required"},
-        "recommended": {"required", "recommended"},
-        "any": PRIORITIES,
-    }[args.fail_on]
-    unresolved = [
-        finding
-        for finding in report["findings"]
-        if finding["priority"] in included_priorities
-        and finding["status"] in {"proposed", "approved", "in_progress"}
-    ]
-    audit_incomplete = (
-        report["schema_version"] == CURRENT_AUDIT_SCHEMA_VERSION
-        and report["meta"]["status"] == "Blocked"
-    )
-    result = {
-        "schema_version": OVERLAY_SCHEMA_VERSION,
-        "kind": "otel-audit-gate",
-        "audit_id": report["meta"]["audit_id"],
-        "audit_sha256": audit_digest(report),
-        "fail_on": args.fail_on,
-        "audit_status": report["meta"]["status"],
-        "policy_evaluated": not audit_incomplete,
-        "passed": not unresolved and not audit_incomplete,
-        "blocking_ids": [finding["id"] for finding in unresolved],
-    }
-    if audit_incomplete:
-        result["scan_blockers"] = [
-            blocker["id"] for blocker in report["scan_blockers"]
-        ]
-    if args.output:
-        write_json(args.output, result)
-    if audit_incomplete:
-        print(
-            "BLOCKED: audit scan is incomplete: "
-            + "; ".join(
-                f"{blocker['id']} {blocker['prerequisite']}"
-                for blocker in report["scan_blockers"]
-            )
-        )
-        return 0 if args.fail_on == "none" else 2
-    if unresolved:
-        print(
-            "GAP: unresolved findings matched the CI policy: "
-            + ",".join(finding["id"] for finding in unresolved)
-        )
-        return 2
-    print(f"PASS: audit gate ({args.fail_on})")
-    return 0
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -8127,7 +5752,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     select.add_argument("-o", "--output", type=Path, required=True)
-    select.add_argument("--scoped-out", type=Path)
     select.add_argument("--approved-by")
     select.add_argument("--approved-at")
     select.add_argument(
@@ -8142,14 +5766,13 @@ def build_parser() -> argparse.ArgumentParser:
     adopt = subparsers.add_parser(
         "adopt-selection",
         help=(
-            "copy the newest saved otel-selection*.json or otel-audit*.json "
-            "review_selection bound to the audit into "
+            "copy the highest-trust saved otel-selection*.json or "
+            "otel-audit*.json review_selection bound to the audit into "
             ".observe/otel-selection.json"
         ),
     )
     adopt.add_argument("audit_json", type=Path)
     adopt.add_argument("-o", "--output", type=Path, required=True)
-    adopt.add_argument("--scoped-out", type=Path)
     adopt.add_argument(
         "--candidate",
         action="append",
@@ -8246,54 +5869,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     instrumentation_digest_command.set_defaults(func=cmd_instrumentation_digest)
 
-    instrumentation_gate = subparsers.add_parser(
-        "instrumentation-final-gate",
-        help="block final instrumentation handoff while child verification needs repair",
-    )
-    instrumentation_gate.add_argument("audit_json", type=Path)
-    instrumentation_gate.add_argument("--selection-json", type=Path, required=True)
-    instrumentation_gate.add_argument("--instrumentation-json", type=Path, required=True)
-    instrumentation_gate.add_argument("--verify-json", type=Path, required=True)
-    instrumentation_gate.add_argument("--output", type=Path)
-    instrumentation_gate.set_defaults(func=cmd_instrumentation_final_gate)
-
-    finalize_instrumentation = subparsers.add_parser(
-        "finalize-instrumentation",
-        help=(
-            "validate reader projections, atomically render instrumentation HTML, "
-            "and apply the final child-verification gate"
-        ),
-    )
-    finalize_instrumentation.add_argument("audit_json", type=Path)
-    finalize_instrumentation.add_argument(
-        "--selection-json", type=Path, required=True
-    )
-    finalize_instrumentation.add_argument(
-        "--instrumentation-json", type=Path, required=True
-    )
-    finalize_instrumentation.add_argument("--verify-json", type=Path, required=True)
-    finalize_instrumentation.add_argument("--audit-markdown", type=Path)
-    finalize_instrumentation.add_argument("--instrumentation-markdown", type=Path)
-    finalize_instrumentation.add_argument("--verify-markdown", type=Path)
-    finalize_instrumentation.add_argument(
-        "-o", "--output", "--html-output", type=Path, required=True
-    )
-    finalize_instrumentation.add_argument(
-        "--repo-root",
-        type=Path,
-        help=(
-            "source repository root for portable local-file links "
-            "(inferred from .observe by default)"
-        ),
-    )
-    finalize_instrumentation.add_argument("--gate-output", type=Path)
-    finalize_instrumentation.set_defaults(func=cmd_finalize_instrumentation)
-
-    gate = subparsers.add_parser("gate", help="apply a deterministic CI finding policy")
-    gate.add_argument("audit_json", type=Path)
-    gate.add_argument("--fail-on", choices=("none", "required", "recommended", "any"), default="required")
-    gate.add_argument("--output", type=Path)
-    gate.set_defaults(func=cmd_gate)
     return parser
 
 

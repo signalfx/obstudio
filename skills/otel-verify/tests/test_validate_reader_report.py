@@ -10,9 +10,6 @@ from pathlib import Path
 
 VALIDATOR = Path(__file__).parents[1] / "scripts" / "validate_reader_report.py"
 SKILL = Path(__file__).parents[1] / "SKILL.md"
-REPORT_CONTRACT = (
-    Path(__file__).parents[1] / "references" / "verification-report.md"
-)
 
 
 REPORT = """# OTel Verification Report: sample
@@ -97,25 +94,6 @@ class ValidateReaderReportTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("2 individual OTel items", result.stdout)
 
-    def test_legacy_expected_items_reject_omitted_runtime_closure_rows(self) -> None:
-        result = self.validate(
-            REPORT,
-            "\n".join(
-                (
-                    "http.server.request.duration",
-                    "stdout traceId/spanId correlation",
-                    "service.name resource identity",
-                    "TracerProvider ForceFlush/Shutdown lifecycle",
-                    "",
-                )
-            ),
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing expected OTel items", result.stderr)
-        self.assertIn("service.name resource identity", result.stderr)
-        self.assertIn("TracerProvider ForceFlush/Shutdown lifecycle", result.stderr)
-
     def test_skill_and_validator_reject_stale_six_column_item_contract(self) -> None:
         expected_header = (
             "| Item ID | OTel item | Type | Added or modified | Working status | "
@@ -126,10 +104,8 @@ class ValidateReaderReportTest(unittest.TestCase):
             "How it was tested | Evidence |"
         )
         skill = SKILL.read_text(encoding="utf-8")
-        self.assertIn("references/verification-report.md", skill)
-        report_contract = REPORT_CONTRACT.read_text(encoding="utf-8")
-        self.assertGreaterEqual(report_contract.count(expected_header), 2)
-        self.assertNotIn(stale_header, report_contract)
+        self.assertGreaterEqual(skill.count(expected_header), 2)
+        self.assertNotIn(stale_header, skill)
 
         stale_report = """# OTel Verification Report: stale
 
@@ -303,8 +279,6 @@ The local fixture capture contains the generated route trace.
                 "service_name": "go-chi-basic",
                 "date": "2026-07-21",
                 "result": "Pass",
-                "workflow_mode": "standalone",
-                "lifecycle": "final",
             }
             verify_path.write_text(json.dumps(verification), encoding="utf-8")
 

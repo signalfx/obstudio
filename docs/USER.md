@@ -136,10 +136,12 @@ When an audit and validated selection are present, the normal review loop is
 JSON-backed and HTML-first:
 
 1. Run `$otel-audit` and open `.observe/otel.html`.
-2. Select and expand findings, press **Save selection**, then save over
-   `.observe/otel-audit.json`. If the browser downloads a new audit file instead,
-   leave it in the download location; `$otel-instrument` validates and adopts
-   the newest matching saved audit automatically.
+2. Select and expand findings, then press **Save selection**. When the browser
+   offers a file picker, save the selected audit copy as
+   `.observe/otel-audit.selected.json`; do not overwrite the canonical audit.
+   If the browser downloads the selected copy instead, leave it there and
+   `$otel-instrument` can adopt it after digest validation when no trusted
+   repository selection already exists.
 3. Run `$otel-instrument`. Alternatively, invoke
    `$otel-instrument --ids OTEL-001,OTEL-004` directly; it writes the same
    validated selection handoff before editing.
