@@ -462,6 +462,9 @@ class InspectOtelProjectTest(unittest.TestCase):
 
     def test_sensitive_route_text_and_package_script_definition_are_redacted(self) -> None:
         secret = "sentinel-hard-coded-secret"
+        compound_secret = "opaque-route-value"
+        aws_secret = "opaque-aws-route-value"
+        route_signature = "opaque-route-signature"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "app.py").write_text(
@@ -469,7 +472,16 @@ class InspectOtelProjectTest(unittest.TestCase):
                 + secret
                 + '", headers="Authorization: '
                 + secret
-                + '")\n',
+                + '")\n'
+                + 'app.get("/compound?SPLUNK_ACCESS_TOKEN='
+                + compound_secret
+                + '", handler)\n'
+                + 'app.get("/aws?AWS_SECRET_ACCESS_KEY='
+                + aws_secret
+                + '", handler)\n'
+                + 'app.get("/signed?X-Amz-Signature='
+                + route_signature
+                + '", handler)\n',
                 encoding="utf-8",
             )
             (root / "package.json").write_text(
@@ -487,16 +499,249 @@ class InspectOtelProjectTest(unittest.TestCase):
 
         serialized = json.dumps(result)
         self.assertNotIn(secret, serialized)
-        self.assertEqual(
-            result["routes"][0]["text"], "<redacted sensitive configuration>"
+        self.assertNotIn(compound_secret, serialized)
+        self.assertNotIn(aws_secret, serialized)
+        self.assertNotIn(route_signature, serialized)
+        self.assertTrue(
+            all(
+                "redacted" in route["text"]
+                for route in result["routes"]
+            )
         )
         self.assertEqual(
-            result["routes"][0]["route"], "<redacted sensitive route>"
+            {route["route"] for route in result["routes"]},
+            {
+                "/health?token=<redacted>",
+                "/compound?SPLUNK_ACCESS_TOKEN=<redacted>",
+                "/aws?AWS_SECRET_ACCESS_KEY=<redacted>",
+                "/signed?X-Amz-Signature=<redacted>",
+            },
         )
         self.assertEqual(
             result["project_commands"][0]["definition"],
             "<redacted sensitive configuration>",
         )
+
+    def test_url_bearer_and_opaque_credentials_are_redacted_from_inventory_text(
+        self,
+    ) -> None:
+        url_credential = "ci-user:s3cr3t"
+        bearer_credential = "bearer-s3cr3t"
+        opaque_credential = "ghp_0123456789abcdefghijklmnop"
+        signed_url_credential = "signed-s3cr3t-value"
+        aws_signature = "opaqueawssignature123"
+        gcs_signature = "opaquegcssignature123"
+        quoted_key_credential = "plain-opaque-value"
+        python_key_credential = "python-opaque-value"
+        cli_credential = "cli-opaque-value"
+        quoted_cli_credential = "quoted opaque value"
+        compound_credential = "opaquecompoundvalue123"
+        aws_credential = "opaqueawsvalue123"
+        auth_token_credential = "opaqueauthvalue123"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text(
+                "with tracer.start_as_current_span('work'):  "
+                f"# https://{url_credential}@registry.example.com/path\n"
+                f"meter.create_counter('requests')  # {opaque_credential}\n"
+                'meter.create_histogram("http.server.request.duration")\n'
+                'meter.create_histogram("gen_ai.usage.input_tokens")\n'
+                'meter.create_histogram("gen_ai.usage.output_tokens")\n'
+                'meter.create_histogram("gen_ai.client.token.usage").record('
+                '1, {"gen_ai.token.type": "input"})\n'
+                f'meter.create_counter("quoted-key", {{"token": "{quoted_key_credential}"}})\n'
+                f"meter.create_counter('python-key', {{'api_key': '{python_key_credential}'}})\n"
+                f"SPLUNK_ACCESS_TOKEN={compound_credential} opentelemetry-instrument python app.py\n"
+                f'AWS_SECRET_ACCESS_KEY={aws_credential} meter.create_counter("aws")\n'
+                f'meter.create_counter("auth", {{"authToken": "{auth_token_credential}"}})\n'
+                'module = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"\n',
+                encoding="utf-8",
+            )
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "scripts": {
+                            "registry": (
+                                "curl "
+                                f"https://{url_credential}@registry.example.com/health"
+                            ),
+                            "auth": (
+                                "curl -H 'X-Auth: Bearer "
+                                f"{bearer_credential}' /health"
+                            ),
+                            "signed": (
+                                "curl 'https://storage.example/blob?sv=1&sig="
+                                f"{signed_url_credential}'"
+                            ),
+                            "aws-signed": (
+                                "curl 'https://storage.example/blob?"
+                                f"X-Amz-Signature={aws_signature}'"
+                            ),
+                            "gcs-signed": (
+                                "curl 'https://storage.example/blob?"
+                                f"X-Goog-Signature={gcs_signature}'"
+                            ),
+                            "test": "go test ./internal/observability",
+                            "database": (
+                                "psql postgresql://ci-user:s3cr3t@"
+                                "db.example/app"
+                            ),
+                            "basic": (
+                                "curl -u ci-user:s3cr3t "
+                                "https://registry.example/health"
+                            ),
+                            "basic-attached": (
+                                "curl -uci-user:s3cr3t "
+                                "https://registry.example/health"
+                            ),
+                            "basic-equals": (
+                                "curl --user=ci-user:s3cr3t "
+                                "https://registry.example/health"
+                            ),
+                            "token-flag": (
+                                f"tool --token {cli_credential} run"
+                            ),
+                            "password-flag": (
+                                "tool --password '"
+                                f"{quoted_cli_credential}' run"
+                            ),
+                            "compound-env": (
+                                f"SPLUNK_ACCESS_TOKEN={compound_credential} "
+                                "opentelemetry-instrument python app.py"
+                            ),
+                            "aws-env": (
+                                f"AWS_SECRET_ACCESS_KEY={aws_credential} "
+                                "opentelemetry-instrument python app.py"
+                            ),
+                            "auth-token-flag": (
+                                f"tool --auth-token {auth_token_credential} run"
+                            ),
+                            "prefixed-token-flag": (
+                                "tool --splunk-access-token "
+                                f"{compound_credential} run"
+                            ),
+                            "boolean-before-token": (
+                                "tool --verbose --splunk-access-token "
+                                f"{compound_credential} run"
+                            ),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.inspect(root)
+
+        serialized = json.dumps(result)
+        for credential in (
+            url_credential,
+            bearer_credential,
+            opaque_credential,
+            signed_url_credential,
+            aws_signature,
+            gcs_signature,
+            quoted_key_credential,
+            python_key_credential,
+            cli_credential,
+            quoted_cli_credential,
+            compound_credential,
+            aws_credential,
+            auth_token_credential,
+        ):
+            self.assertNotIn(credential, serialized)
+        definitions = {
+            item["name"]: item["definition"]
+            for item in result["project_commands"]
+        }
+        self.assertIn("https://<redacted>@registry.example.com/health", definitions["registry"])
+        self.assertIn("Bearer <redacted>", definitions["auth"])
+        self.assertEqual(
+            definitions["signed"],
+            "curl 'https://storage.example/blob?sv=1&sig=<redacted>'",
+        )
+        self.assertEqual(
+            definitions["aws-signed"],
+            "curl 'https://storage.example/blob?X-Amz-Signature=<redacted>'",
+        )
+        self.assertEqual(
+            definitions["gcs-signed"],
+            "curl 'https://storage.example/blob?X-Goog-Signature=<redacted>'",
+        )
+        self.assertEqual(definitions["test"], "go test ./internal/observability")
+        self.assertEqual(
+            definitions["database"],
+            "psql postgresql://<redacted>@db.example/app",
+        )
+        self.assertEqual(
+            definitions["basic"],
+            "curl -u <redacted> https://registry.example/health",
+        )
+        self.assertEqual(
+            definitions["basic-attached"],
+            "curl -u<redacted> https://registry.example/health",
+        )
+        self.assertEqual(
+            definitions["basic-equals"],
+            "curl --user=<redacted> https://registry.example/health",
+        )
+        self.assertEqual(
+            definitions["token-flag"],
+            "tool --token <redacted> run",
+        )
+        self.assertEqual(
+            definitions["password-flag"],
+            "tool --password <redacted> run",
+        )
+        self.assertEqual(
+            definitions["compound-env"],
+            "<redacted sensitive configuration>",
+        )
+        self.assertEqual(
+            definitions["aws-env"],
+            "<redacted sensitive configuration>",
+        )
+        self.assertEqual(
+            definitions["auth-token-flag"],
+            "tool --auth-token <redacted> run",
+        )
+        self.assertEqual(
+            definitions["prefixed-token-flag"],
+            "tool --splunk-access-token <redacted> run",
+        )
+        self.assertEqual(
+            definitions["boolean-before-token"],
+            "tool --verbose --splunk-access-token <redacted> run",
+        )
+        finding_text = " ".join(
+            item["text"]
+            for values in result["otel_findings"].values()
+            for item in values
+        )
+        self.assertIn("https://<redacted>@registry.example.com/path", finding_text)
+        self.assertIn("<redacted>", finding_text)
+        self.assertIn("http.server.request.duration", finding_text)
+        self.assertIn("gen_ai.usage.input_tokens", finding_text)
+        self.assertIn("gen_ai.usage.output_tokens", finding_text)
+        self.assertIn("gen_ai.client.token.usage", finding_text)
+        self.assertIn("gen_ai.token.type", finding_text)
+        self.assertIn(
+            "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+            finding_text,
+        )
+        for ordinary in (
+            "http.server.request.duration",
+            "gen_ai.usage.input_tokens",
+            "gen_ai.usage.output_tokens",
+            "gen_ai.client.token.usage",
+            "gen_ai.token.type",
+            "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+            "/srv/checkout/config/runtime.yaml",
+            "--config=./config/runtime.yaml",
+        ):
+            self.assertEqual(
+                SCANNER_MODULE.redact_line(Path("app.py"), ordinary),
+                ordinary,
+            )
 
     def test_malformed_package_json_does_not_abort_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

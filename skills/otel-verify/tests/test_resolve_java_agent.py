@@ -1300,6 +1300,53 @@ class ResolveJavaAgentTest(unittest.TestCase):
                 second["claims"]["verification_pin_match"], "mismatch"
             )
 
+    def test_generated_pre_attach_recheck_ignores_unrelated_cache_limits(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            project.mkdir()
+            repository = root / "m2"
+            candidate = (
+                repository
+                / "io/opentelemetry/javaagent/opentelemetry-javaagent/1.2.3"
+                / "opentelemetry-javaagent-1.2.3.jar"
+            )
+            write_agent(candidate, version="1.2.3")
+            first = self.run_resolver(project, maven_repo=repository)
+            recheck = first["selected"]["pre_attach_recheck_argv"]
+
+            hostile_home = root / "hostile-home"
+            hostile_cache = hostile_home / ".m2" / "repository"
+            for index in range(RESOLVER_MODULE.MAX_CANDIDATE_VISITS + 1):
+                (hostile_cache / f"irrelevant-{index:04d}").mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+            environment = os.environ.copy()
+            environment["HOME"] = str(hostile_home)
+            completed = subprocess.run(
+                recheck,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            second = json.loads(completed.stdout)
+
+        self.assertIn("--exact-candidate-only", recheck)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(second["status"], "resolved")
+        self.assertTrue(second["complete"])
+        self.assertEqual(second["bounded_discovery"]["omissions"], [])
+        self.assertEqual(second["searched"]["maven_roots"], [])
+        self.assertEqual(second["searched"]["gradle_roots"], [])
+        self.assertEqual(
+            second["selected"]["verification_pin"],
+            first["selected"]["verification_pin"],
+        )
+
     def test_symlinked_dockerfile_cannot_disclose_outside_agent_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

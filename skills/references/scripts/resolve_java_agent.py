@@ -2281,12 +2281,28 @@ def expected_contract(
 def resolve(args: argparse.Namespace) -> dict[str, Any]:
     project_boundary = authenticate_directory(args.project)
     project = project_boundary.path
+    exact_candidate_only = bool(
+        getattr(args, "exact_candidate_only", False)
+    )
+    if exact_candidate_only and (
+        len(args.candidate) != 1
+        or args.expected_family is None
+        or args.expected_sha256 is None
+    ):
+        raise ValueError(
+            "exact-candidate-only resolution requires one --candidate, "
+            "--expected-family, and --expected-sha256"
+        )
     bounded_omissions: list[BoundedOmission] = []
-    config_snapshots = collect_config_snapshots(
-        project,
-        root_descriptor=project_boundary.descriptor,
-        root_identity=project_boundary.identity,
-        bounded_omissions=bounded_omissions,
+    config_snapshots = (
+        []
+        if exact_candidate_only
+        else collect_config_snapshots(
+            project,
+            root_descriptor=project_boundary.descriptor,
+            root_identity=project_boundary.identity,
+            bounded_omissions=bounded_omissions,
+        )
     )
     raw_candidates: list[CandidateReference] = []
     raw_candidates.extend(
@@ -2297,39 +2313,44 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         )
         for value in args.candidate
     )
-    raw_candidates.extend(
-        configured_candidates(
-            project,
-            config_snapshots,
-            bounded_omissions,
+    if exact_candidate_only:
+        maven: list[Path] = []
+        gradle: list[Path] = []
+    else:
+        raw_candidates.extend(
+            configured_candidates(
+                project,
+                config_snapshots,
+                bounded_omissions,
+            )
         )
-    )
-    raw_candidates.extend(project_local_candidates(project, bounded_omissions))
-
-    maven = maven_roots(args.maven_repo)
-    raw_candidates.extend(
-        cache_candidates(
-            maven,
-            (
-                "com/splunk/splunk-otel-javaagent/*/splunk-otel-javaagent-*.jar",
-                "io/opentelemetry/javaagent/opentelemetry-javaagent/*/opentelemetry-javaagent-*.jar",
-            ),
-            "maven_cache",
-            bounded_omissions,
+        raw_candidates.extend(
+            project_local_candidates(project, bounded_omissions)
         )
-    )
-    gradle = gradle_roots(args.gradle_cache)
-    raw_candidates.extend(
-        cache_candidates(
-            gradle,
-            (
-                "com.splunk/splunk-otel-javaagent/*/*/splunk-otel-javaagent-*.jar",
-                "io.opentelemetry.javaagent/opentelemetry-javaagent/*/*/opentelemetry-javaagent-*.jar",
-            ),
-            "gradle_cache",
-            bounded_omissions,
+        maven = maven_roots(args.maven_repo)
+        raw_candidates.extend(
+            cache_candidates(
+                maven,
+                (
+                    "com/splunk/splunk-otel-javaagent/*/splunk-otel-javaagent-*.jar",
+                    "io/opentelemetry/javaagent/opentelemetry-javaagent/*/opentelemetry-javaagent-*.jar",
+                ),
+                "maven_cache",
+                bounded_omissions,
+            )
         )
-    )
+        gradle = gradle_roots(args.gradle_cache)
+        raw_candidates.extend(
+            cache_candidates(
+                gradle,
+                (
+                    "com.splunk/splunk-otel-javaagent/*/*/splunk-otel-javaagent-*.jar",
+                    "io.opentelemetry.javaagent/opentelemetry-javaagent/*/*/opentelemetry-javaagent-*.jar",
+                ),
+                "gradle_cache",
+                bounded_omissions,
+            )
+        )
     candidate_inputs = coalesce_candidates(raw_candidates)
     if len(candidate_inputs) > MAX_CANDIDATES:
         record_bounded_omission(
@@ -2580,6 +2601,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
         str(project),
         "--candidate",
         selected["path"],
+        "--exact-candidate-only",
         "--expected-family",
         selected["family"],
         "--expected-sha256",
@@ -2624,6 +2646,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--project", required=True, type=Path)
     parser.add_argument("--candidate", action="append", default=[])
+    parser.add_argument(
+        "--exact-candidate-only",
+        action="store_true",
+        help=(
+            "Revalidate one previously selected path and exact pin without "
+            "rescanning project configuration or local dependency caches."
+        ),
+    )
     parser.add_argument("--maven-repo", action="append", type=Path, default=[])
     parser.add_argument("--gradle-cache", action="append", type=Path, default=[])
     parser.add_argument(
@@ -2651,6 +2681,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.exact_candidate_only and (
+        len(args.candidate) != 1
+        or args.expected_family is None
+        or args.expected_sha256 is None
+    ):
+        print(
+            "--exact-candidate-only requires one --candidate, "
+            "--expected-family, and --expected-sha256",
+            file=sys.stderr,
+        )
+        return 2
     try:
         project = authenticate_directory(args.project)
     except SecureOutputError as error:

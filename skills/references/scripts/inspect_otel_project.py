@@ -304,12 +304,67 @@ METHOD_ROUTE = re.compile(
 )
 
 SENSITIVE_ASSIGNMENT = re.compile(
-    r"(?i)(?P<prefix>\b(?:authorization|headers?|password|passwd|secret|token|"
-    r"api[_-]?key|client[_-]?secret)\b\s*[:=]\s*)(?P<value>[^,\s}\]]+)"
+    r"(?i)(?P<prefix>\b(?:authorization|credentials?|headers?|password|passwd|"
+    r"secret|token|api[_-]?(?:key|token)|auth[_-]?token|access[_-]?token|"
+    r"refresh[_-]?token|client[_-]?secret)\b\s*[:=]\s*)"
+    r"(?P<value>[^,\s}\]]+)"
 )
-SENSITIVE_NAME = re.compile(
-    r"(?i)(?:authorization|credential|headers?|password|passwd|secret|token|"
-    r"api[_-]?key|client[_-]?secret)"
+ASSIGNMENT_KEY = re.compile(
+    r"(?P<quote>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)(?P=quote)\s*[:=]"
+)
+SENSITIVE_KEY_SUFFIXES = (
+    "authorization",
+    "authorization_code",
+    "auth_code",
+    "auth_token",
+    "credential",
+    "credentials",
+    "header",
+    "headers",
+    "password",
+    "passwd",
+    "secret",
+    "secret_key",
+    "private_key",
+    "secret_access_key",
+    "token",
+    "api_key",
+    "api_token",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+)
+URL_USERINFO = re.compile(
+    r"(?i)(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)[^/@\s]+@"
+)
+CURL_USERINFO = re.compile(
+    r"(?i)(?P<prefix>(?:^|\s)(?:-u\s*|--user(?:\s+|=)))"
+    r"(?P<quote>['\"]?)[^:\s'\"]+:[^\s'\"]+(?P=quote)"
+)
+CLI_OPTION_EQUALS_VALUE = re.compile(
+    r"(?P<prefix>(?:^|\s)--?(?P<key>[A-Za-z][A-Za-z0-9_-]*)=)"
+    r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,}\]]+)"
+)
+CLI_OPTION_SPACE_VALUE = re.compile(
+    r"(?P<prefix>(?:^|\s)--?(?P<key>[A-Za-z][A-Za-z0-9_-]*)\s+)"
+    r"(?P<value>'[^']*'|\"[^\"]*\"|(?!-)[^\s,}\]]+)"
+)
+BEARER_VALUE = re.compile(
+    r"(?i)(?P<prefix>\bbearer\s+)[^,\s}\]'\"<>]+"
+)
+URL_QUERY_VALUE = re.compile(
+    r"(?P<prefix>[?&])(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)"
+    r"(?P<equals>=)(?P<value>[^&#\s'\"<>]+)"
+)
+KNOWN_CREDENTIAL_VALUE = re.compile(
+    r"\b(?:"
+    r"gh[pousr]_[A-Za-z0-9]{20,}|"
+    r"github_pat_[A-Za-z0-9_]{20,}|"
+    r"sk-[A-Za-z0-9_-]{20,}|"
+    r"AKIA[0-9A-Z]{16}|"
+    r"xox[baprs]-[A-Za-z0-9-]{10,}|"
+    r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"
+    r")\b"
 )
 ENV_ASSIGNMENT = re.compile(r"^\s*(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=")
 DECORATOR_ROUTE = re.compile(
@@ -899,20 +954,77 @@ def file_role(root: Path, path: Path) -> str:
     return "config"
 
 
+def normalize_key_name(key: str) -> str:
+    separated = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    return re.sub(r"[-.]+", "_", separated).lower()
+
+
+def is_sensitive_key_name(key: str) -> bool:
+    normalized = normalize_key_name(key)
+    return any(
+        normalized == suffix or normalized.endswith(f"_{suffix}")
+        for suffix in SENSITIVE_KEY_SUFFIXES
+    )
+
+
+def has_sensitive_assignment_key(text: str) -> bool:
+    return any(
+        is_sensitive_key_name(match.group("key"))
+        for match in ASSIGNMENT_KEY.finditer(text)
+    )
+
+
+def redact_sensitive_cli_values(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        if not is_sensitive_key_name(match.group("key")):
+            return match.group(0)
+        return f"{match.group('prefix')}<redacted>"
+
+    redacted = CLI_OPTION_EQUALS_VALUE.sub(replace, text)
+    return CLI_OPTION_SPACE_VALUE.sub(replace, redacted)
+
+
+def redact_sensitive_query_values(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        normalized = normalize_key_name(match.group("key"))
+        if not (
+            is_sensitive_key_name(match.group("key"))
+            or normalized in {"auth", "code", "key", "sig", "signature"}
+            or normalized.endswith(("_sig", "_signature"))
+        ):
+            return match.group(0)
+        return (
+            f"{match.group('prefix')}{match.group('key')}"
+            f"{match.group('equals')}<redacted>"
+        )
+
+    return URL_QUERY_VALUE.sub(replace, text)
+
+
 def redact_line(path: Path, text: str) -> str:
     stripped = text.strip()
     if path.name == ".env" or path.name.startswith(".env."):
         match = ENV_ASSIGNMENT.match(stripped)
         return f"{match.group('key')}=<redacted>" if match else "<redacted env line>"
-    if SENSITIVE_NAME.search(stripped):
+    if has_sensitive_assignment_key(stripped):
         return "<redacted sensitive configuration>"
-    return SENSITIVE_ASSIGNMENT.sub(r"\g<prefix><redacted>", stripped)[:240]
+    redacted = URL_USERINFO.sub(r"\g<scheme><redacted>@", stripped)
+    redacted = CURL_USERINFO.sub(
+        r"\g<prefix>\g<quote><redacted>\g<quote>",
+        redacted,
+    )
+    redacted = redact_sensitive_cli_values(redacted)
+    redacted = redact_sensitive_query_values(redacted)
+    redacted = BEARER_VALUE.sub(r"\g<prefix><redacted>", redacted)
+    redacted = SENSITIVE_ASSIGNMENT.sub(r"\g<prefix><redacted>", redacted)
+    return KNOWN_CREDENTIAL_VALUE.sub("<redacted>", redacted)[:240]
 
 
 def redact_route(route: str) -> str:
-    if SENSITIVE_NAME.search(route):
-        return "<redacted sensitive route>"
-    return route[:240]
+    redacted = redact_sensitive_query_values(route)
+    redacted = SENSITIVE_ASSIGNMENT.sub(r"\g<prefix><redacted>", redacted)
+    redacted = KNOWN_CREDENTIAL_VALUE.sub("<redacted>", redacted)
+    return redacted[:240]
 
 
 def finding(root: Path, path: Path, line: int, text: str) -> dict[str, object]:
