@@ -538,6 +538,13 @@ class InspectOtelProjectTest(unittest.TestCase):
         compound_credential = "opaquecompoundvalue123"
         aws_credential = "opaqueawsvalue123"
         auth_token_credential = "opaqueauthvalue123"
+        cookie_header_credential = "opaquecookieheader123"
+        set_cookie_header_credential = "opaquesetcookieheader123"
+        curl_cookie_credential = "opaquecurlcookie123"
+        curl_cookie_equals_credential = "opaquecurlcookieequals123"
+        curl_cookie_short_credential = "opaquecurlcookieshort123"
+        curl_cookie_attached_credential = "opaquecurlcookieattached123"
+        curl_cookie_short_equals_credential = "opaquecurlcookieshortequals123"
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "app.py").write_text(
@@ -554,6 +561,8 @@ class InspectOtelProjectTest(unittest.TestCase):
                 f"SPLUNK_ACCESS_TOKEN={compound_credential} opentelemetry-instrument python app.py\n"
                 f'AWS_SECRET_ACCESS_KEY={aws_credential} meter.create_counter("aws")\n'
                 f'meter.create_counter("auth", {{"authToken": "{auth_token_credential}"}})\n'
+                'cookie_attribute = "http.request.header.cookie"\n'
+                'set_cookie_attribute = "http.response.header.set_cookie"\n'
                 'module = "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"\n',
                 encoding="utf-8",
             )
@@ -624,6 +633,40 @@ class InspectOtelProjectTest(unittest.TestCase):
                                 "tool --verbose --splunk-access-token "
                                 f"{compound_credential} run"
                             ),
+                            "cookie-header": (
+                                "curl -H 'Cookie: session="
+                                f"{cookie_header_credential}; theme=dark' "
+                                "https://service.example/health"
+                            ),
+                            "set-cookie-header": (
+                                "printf 'Set-Cookie: session="
+                                f"{set_cookie_header_credential}; HttpOnly'"
+                            ),
+                            "cookie-long": (
+                                "curl --cookie session="
+                                f"{curl_cookie_credential} "
+                                "https://service.example/health"
+                            ),
+                            "cookie-long-equals": (
+                                "curl --cookie=session="
+                                f"{curl_cookie_equals_credential} "
+                                "https://service.example/health"
+                            ),
+                            "cookie-short": (
+                                "curl -b session="
+                                f"{curl_cookie_short_credential} "
+                                "https://service.example/health"
+                            ),
+                            "cookie-short-attached": (
+                                "curl -bsession="
+                                f"{curl_cookie_attached_credential} "
+                                "https://service.example/health"
+                            ),
+                            "cookie-short-equals": (
+                                "curl -b=session="
+                                f"{curl_cookie_short_equals_credential} "
+                                "https://service.example/health"
+                            ),
                         }
                     }
                 ),
@@ -647,6 +690,13 @@ class InspectOtelProjectTest(unittest.TestCase):
             compound_credential,
             aws_credential,
             auth_token_credential,
+            cookie_header_credential,
+            set_cookie_header_credential,
+            curl_cookie_credential,
+            curl_cookie_equals_credential,
+            curl_cookie_short_credential,
+            curl_cookie_attached_credential,
+            curl_cookie_short_equals_credential,
         ):
             self.assertNotIn(credential, serialized)
         definitions = {
@@ -712,6 +762,34 @@ class InspectOtelProjectTest(unittest.TestCase):
             definitions["boolean-before-token"],
             "tool --verbose --splunk-access-token <redacted> run",
         )
+        self.assertEqual(
+            definitions["cookie-header"],
+            "curl -H 'Cookie: <redacted>' https://service.example/health",
+        )
+        self.assertEqual(
+            definitions["set-cookie-header"],
+            "printf 'Set-Cookie: <redacted>'",
+        )
+        self.assertEqual(
+            definitions["cookie-long"],
+            "curl --cookie <redacted> https://service.example/health",
+        )
+        self.assertEqual(
+            definitions["cookie-long-equals"],
+            "curl --cookie=<redacted> https://service.example/health",
+        )
+        self.assertEqual(
+            definitions["cookie-short"],
+            "curl -b <redacted> https://service.example/health",
+        )
+        self.assertEqual(
+            definitions["cookie-short-attached"],
+            "curl -b<redacted> https://service.example/health",
+        )
+        self.assertEqual(
+            definitions["cookie-short-equals"],
+            "curl -b=<redacted> https://service.example/health",
+        )
         finding_text = " ".join(
             item["text"]
             for values in result["otel_findings"].values()
@@ -734,6 +812,8 @@ class InspectOtelProjectTest(unittest.TestCase):
             "gen_ai.usage.output_tokens",
             "gen_ai.client.token.usage",
             "gen_ai.token.type",
+            "http.request.header.cookie",
+            "http.response.header.set_cookie",
             "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
             "/srv/checkout/config/runtime.yaml",
             "--config=./config/runtime.yaml",
@@ -742,6 +822,54 @@ class InspectOtelProjectTest(unittest.TestCase):
                 SCANNER_MODULE.redact_line(Path("app.py"), ordinary),
                 ordinary,
             )
+
+    def test_cookie_redaction_is_scoped_to_headers_and_curl_cookie_values(
+        self,
+    ) -> None:
+        cases = {
+            "Cookie: session=raw-cookie-secret; theme=dark": "Cookie: <redacted>",
+            (
+                'Set-Cookie: session="raw-set-cookie-secret"; HttpOnly'
+            ): "Set-Cookie: <redacted>",
+            (
+                "curl --cookie 'session=quoted-cookie-secret; theme=dark' "
+                "https://service.example/health"
+            ): "curl --cookie <redacted> https://service.example/health",
+            (
+                "curl --cookie=session=equals-cookie-secret "
+                "https://service.example/health"
+            ): "curl --cookie=<redacted> https://service.example/health",
+            (
+                "curl -b session=short-cookie-secret "
+                "https://service.example/health"
+            ): "curl -b <redacted> https://service.example/health",
+            (
+                "curl -bsession=attached-cookie-secret "
+                "https://service.example/health"
+            ): "curl -b<redacted> https://service.example/health",
+            (
+                "curl -b=session=short-equals-cookie-secret "
+                "https://service.example/health"
+            ): "curl -b=<redacted> https://service.example/health",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(
+                    SCANNER_MODULE.redact_line(Path("app.py"), source),
+                    expected,
+                )
+
+        for ordinary in (
+            "http.request.header.cookie",
+            "http.response.header.set_cookie",
+            "curl --cookie-jar cookies.txt https://service.example/health",
+            "tool -bordinary",
+        ):
+            with self.subTest(ordinary=ordinary):
+                self.assertEqual(
+                    SCANNER_MODULE.redact_line(Path("app.py"), ordinary),
+                    ordinary,
+                )
 
     def test_malformed_package_json_does_not_abort_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

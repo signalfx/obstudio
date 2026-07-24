@@ -341,6 +341,27 @@ CURL_USERINFO = re.compile(
     r"(?i)(?P<prefix>(?:^|\s)(?:-u\s*|--user(?:\s+|=)))"
     r"(?P<quote>['\"]?)[^:\s'\"]+:[^\s'\"]+(?P=quote)"
 )
+CURL_COMMAND = re.compile(r"(?i)\bcurl(?:\.exe)?\b")
+CURL_COOKIE_VALUE = re.compile(
+    r"(?i)(?P<prefix>(?:^|\s)(?:--cookie(?:\s+|=)|-b(?:\s+|=)?))"
+    r"(?P<value>'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|[^\s,}\]]+)"
+)
+CURL_COOKIE_HEADER = re.compile(
+    r"(?i)(?P<prefix>(?:^|\s)(?:-H|--header)(?:\s+|=)"
+    r"(?:set-cookie|cookie)\s*:\s*)"
+    r"(?P<value>[^\s,}\]]+)"
+)
+QUOTED_COOKIE_HEADER = re.compile(
+    r"(?i)(?P<prefix>(?P<quote>['\"])(?:set-cookie|cookie)\s*:\s*)"
+    r"(?P<value>(?:\\.|(?!(?P=quote)).)*?)(?P=quote)"
+)
+QUOTED_COOKIE_HEADER_VALUE = re.compile(
+    r"(?i)(?P<prefix>\b(?:set-cookie|cookie)['\"]?\s*:\s*)"
+    r"(?P<quote>['\"])(?P<value>(?:\\.|(?!(?P=quote)).)*?)(?P=quote)"
+)
+COOKIE_HEADER_LINE = re.compile(
+    r"(?i)(?P<prefix>^\s*(?:set-cookie|cookie)\s*:\s*)(?P<value>.*)$"
+)
 CLI_OPTION_EQUALS_VALUE = re.compile(
     r"(?P<prefix>(?:^|\s)--?(?P<key>[A-Za-z][A-Za-z0-9_-]*)=)"
     r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,}\]]+)"
@@ -1001,6 +1022,22 @@ def redact_sensitive_query_values(text: str) -> str:
     return URL_QUERY_VALUE.sub(replace, text)
 
 
+def redact_cookie_values(text: str) -> str:
+    redacted = QUOTED_COOKIE_HEADER.sub(
+        r"\g<prefix><redacted>\g<quote>",
+        text,
+    )
+    redacted = QUOTED_COOKIE_HEADER_VALUE.sub(
+        r"\g<prefix>\g<quote><redacted>\g<quote>",
+        redacted,
+    )
+    redacted = COOKIE_HEADER_LINE.sub(r"\g<prefix><redacted>", redacted)
+    if CURL_COMMAND.search(redacted):
+        redacted = CURL_COOKIE_HEADER.sub(r"\g<prefix><redacted>", redacted)
+        redacted = CURL_COOKIE_VALUE.sub(r"\g<prefix><redacted>", redacted)
+    return redacted
+
+
 def redact_line(path: Path, text: str) -> str:
     stripped = text.strip()
     if path.name == ".env" or path.name.startswith(".env."):
@@ -1013,6 +1050,7 @@ def redact_line(path: Path, text: str) -> str:
         r"\g<prefix>\g<quote><redacted>\g<quote>",
         redacted,
     )
+    redacted = redact_cookie_values(redacted)
     redacted = redact_sensitive_cli_values(redacted)
     redacted = redact_sensitive_query_values(redacted)
     redacted = BEARER_VALUE.sub(r"\g<prefix><redacted>", redacted)

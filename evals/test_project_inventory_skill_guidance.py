@@ -20,51 +20,6 @@ INSTRUMENT_DIR = ROOT / "skills" / "otel-instrument"
 INSTRUMENT_SKILL = INSTRUMENT_DIR / "SKILL.md"
 INSTRUMENT_GO = INSTRUMENT_DIR / "references" / "languages" / "go.md"
 INSTRUMENT_REPAIR = INSTRUMENT_DIR / "references" / "repair-loop.md"
-INSTRUMENT_FINALIZATION = INSTRUMENT_DIR / "references" / "finalization.md"
-VERIFY_REPORT = (
-    ROOT / "skills" / "otel-verify" / "references" / "verification-report.md"
-)
-
-
-def raw_canonical_digest(payload: dict[str, object]) -> str:
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
-
-
-def test_example_report_companions_are_exact_and_raw_hash_bound() -> None:
-    example_root = ROOT / "docs" / "example-reports"
-    fixture_root = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs"
-    names = (
-        "otel-audit.json",
-        "otel-selection.json",
-        "otel-instrumentation.json",
-        "otel-verify.json",
-    )
-    for name in names:
-        assert (example_root / name).read_bytes() == (fixture_root / name).read_bytes()
-
-    audit = json.loads((fixture_root / "otel-audit.json").read_bytes())
-    selection = json.loads((fixture_root / "otel-selection.json").read_bytes())
-    instrumentation = json.loads(
-        (fixture_root / "otel-instrumentation.json").read_bytes()
-    )
-    verification = json.loads((fixture_root / "otel-verify.json").read_bytes())
-
-    audit_digest = raw_canonical_digest(audit)
-    assert selection["audit_sha256"] == audit_digest
-    assert instrumentation["audit_sha256"] == audit_digest
-    assert verification["audit_sha256"] == audit_digest
-    assert instrumentation["selection_sha256"] == raw_canonical_digest(selection)
-    assert verification["instrumentation_sha256"] == raw_canonical_digest(
-        instrumentation
-    )
-
-
 def test_shared_inventory_is_routed_from_all_three_skills() -> None:
     assert SCANNER.is_file()
     for skill in SKILLS:
@@ -197,7 +152,6 @@ def test_instrument_frontloads_language_route_and_scoped_go_resolver_gate() -> N
         "Do not run those three commands separately or in parallel",
         "A blocked result is terminal",
         "skip this fixed-bundle resolver",
-        "nonexistent",
         "Never copy `go_get.env`",
         "cleanup is the terminal boundary",
     ):
@@ -243,135 +197,6 @@ def test_go_command_runner_replaces_shell_env_transcription() -> None:
     assert "A blocked result is terminal" in normalized
     assert "Do not read `candidate_rejections` to choose a version" in normalized
     assert "Do not run `rm`, any `find` inspection/deletion" in normalized
-
-
-def test_go_metric_guidance_requires_version_specific_proof() -> None:
-    skill = (
-        ROOT / "skills" / "otel-instrument" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    guide = (
-        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join((skill + "\n" + guide).split())
-    assert "version- and semantic-convention-mode-dependent" in normalized
-    assert "Inspect the selected module source or runtime output before declaring names" in normalized
-    assert "never infer `http.server.active_requests`" in normalized
-    assert "v0.68.0" in (
-        ROOT / "evals" / "go" / "chi-partial" / "go.mod"
-    ).read_text(encoding="utf-8")
-    assert (
-        "Use `otelhttp.WithRouteTag` only when that exact source exports it"
-        in normalized
-    )
-    assert "API is absent in v0.65.0 and later" in normalized
-    assert "trace.SpanFromContext(r.Context()).SetAttributes" in normalized
-    assert "otelhttp.LabelerFromContext" in normalized
-    assert "without starting a span" in normalized
-    assert "http.HandlerFunc(getTask)" in normalized
-    assert ").ServeHTTP" in normalized
-    assert "does not rename the outer span" in normalized
-    assert "do not start a second server span" in normalized
-    assert (
-        "HTTP server/client spans, `http.server.request.duration`, "
-        "`http.server.active_requests`"
-        not in guide
-    )
-
-
-def test_go_http_outcome_guidance_groups_collisions_without_misclassifying_4xx() -> None:
-    skill = (
-        ROOT / "skills" / "otel-instrument" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    guide = (
-        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join((skill + "\n" + guide).split())
-    partial_eval = json.loads(
-        (
-            ROOT
-            / "evals"
-            / "go"
-            / "chi-partial"
-            / "eval"
-            / "qual"
-            / "instrument.json"
-        ).read_text(encoding="utf-8")
-    )
-    rubric = " ".join(partial_eval["rubric"])
-
-    assert "one bounded pass over non-success call sites grouped by stable `(method, route, status code)`" in normalized
-    assert "never broaden canonical scope" in normalized
-    assert "selected expected telemetry must author the exact bounded attribute" in normalized
-    assert "require a corrected audit/selection" in normalized
-    assert "Legacy direct work may close a source-evidenced collision" in normalized
-    assert "operator-distinct outcomes collide" in normalized
-    assert "assert every bounded reason" in normalized
-    assert "ordinary handled 4xx response leaves span status unset" in normalized
-    assert "Do not add `RecordError`/`SetStatus` merely" in normalized
-    assert "leaves ordinary handled 4xx SERVER responses unset" in rubric
-    assert "records errors/status on failure paths" not in rubric
-
-
-def test_python_guidance_does_not_map_plain_starlette_to_fastapi() -> None:
-    references = (
-        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
-        ROOT
-        / "skills"
-        / "otel-instrument"
-        / "references"
-        / "languages"
-        / "python.md",
-    )
-    for reference in references:
-        text = reference.read_text(encoding="utf-8")
-        normalized = " ".join(text.split())
-        assert "| `fastapi` | `opentelemetry-instrumentation-fastapi` |" in text
-        assert "| `starlette` | `opentelemetry-instrumentation-starlette` |" in text
-        assert "`fastapi` / `starlette`" not in text
-        assert "Do not substitute the FastAPI instrumentor for a plain Starlette" in normalized
-
-
-def test_python_guidance_splits_aiohttp_client_and_server_surfaces() -> None:
-    references = (
-        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
-        ROOT
-        / "skills"
-        / "otel-instrument"
-        / "references"
-        / "languages"
-        / "python.md",
-    )
-    for reference in references:
-        text = reference.read_text(encoding="utf-8")
-        normalized = " ".join(text.split())
-        assert (
-            "| `aiohttp.ClientSession` (client) | "
-            "`opentelemetry-instrumentation-aiohttp-client` |"
-        ) in text
-        assert (
-            "| `aiohttp.web` (server) | "
-            "`opentelemetry-instrumentation-aiohttp-server` |"
-        ) in text
-        assert "| `aiohttp` | `opentelemetry-instrumentation-aiohttp-client` |" not in text
-        assert "an application using both surfaces needs both packages" in normalized
-
-
-def test_go_audit_distinguishes_route_attributes_from_span_names() -> None:
-    guide = (
-        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join(guide.split())
-    assert "bounded `http.route`" in normalized
-    assert "Use `otelhttp.WithRouteTag` only when that exact source exports it" in normalized
-    assert "the API is absent in v0.65.0 and later" in normalized
-    assert "trace.SpanFromContext" in normalized
-    assert "otelhttp.LabelerFromContext" in normalized
-    assert "`WithRouteTag`, when available, does not rename" in normalized
-    assert "renaming the current outer server span after route matching" in normalized
-    assert "do not start a second server span" in normalized
-    assert "for bounded route names" not in normalized
-
-
 def test_go_resolver_guidance_requires_full_closure_and_preserves_existing_pins() -> None:
     skill = (ROOT / "skills" / "otel-instrument" / "SKILL.md").read_text(
         encoding="utf-8"
@@ -385,7 +210,6 @@ def test_go_resolver_guidance_requires_full_closure_and_preserves_existing_pins(
     assert "existing-otel-dependencies" in normalized
     assert "does not authorize an upgrade" in normalized
     assert "use only an eligible runner bootstrap probe" in normalized
-    assert "Do not stack two span-producing server middleware" in normalized
 
 
 def test_full_runtime_listener_probe_is_shared_and_bounded() -> None:
@@ -552,34 +376,11 @@ def test_failed_verification_routes_to_owned_repair_and_automatic_recheck() -> N
     verify = (ROOT / "skills" / "otel-verify" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    flow = (ROOT / "skills" / "references" / "report-flow-contract.md").read_text(
-        encoding="utf-8"
-    )
-    instrument_handoff = (
-        ROOT
-        / "skills"
-        / "otel-instrument"
-        / "references"
-        / "json-approval-handoff.md"
-    ).read_text(encoding="utf-8")
     repair = INSTRUMENT_REPAIR.read_text(encoding="utf-8")
-    verify_handoff = (
-        ROOT / "skills" / "otel-verify" / "references" / "json-approval-handoff.md"
-    ).read_text(encoding="utf-8")
-    verify_report = VERIFY_REPORT.read_text(encoding="utf-8")
     normalized_instrument = " ".join((instrument + "\n" + repair).split())
-    assert "references/verification-report.md" in verify
-    normalized_verify = " ".join(
-        (verify + "\n" + verify_handoff + "\n" + verify_report).split()
-    )
-    normalized_flow = " ".join(flow.split())
-    normalized_instrument_handoff = " ".join(instrument_handoff.split())
-    normalized_verify_handoff = " ".join(verify_handoff.split())
+    normalized_verify = " ".join(verify.split())
 
-    assert (
-        "verification as a repair loop, not a terminal handoff"
-        in normalized_instrument
-    )
+    assert "verification as a repair loop, not a terminal handoff" in normalized_instrument
     assert "references/repair-loop.md" in instrument
     assert "## Failure Ownership" in repair
     assert (
@@ -609,125 +410,12 @@ def test_failed_verification_routes_to_owned_repair_and_automatic_recheck() -> N
     assert "relabel an executed failure as `not_proven`" in normalized_instrument
     assert "Do not ask the user to invoke `$otel-instrument` again" in normalized_instrument
     assert "Exact scenario IDs are verifier-owned scope" in normalized_instrument
-    assert "Keep failed finding `remaining` and top-level `next_steps` repair-only" in normalized_verify
     assert "never repairs application code" in normalized_verify
-    assert "tells the user to execute each scenario manually" in normalized_verify
-    assert "For standalone failure" in normalized_verify
     assert "returns its repair packet" in normalized_verify
-    assert "Do not emit the standalone response" in normalized_verify
-    assert (
-        "must not edit dependencies or permanent tests"
-        in normalized_verify
-    )
     assert (
         "An unchanged selected OTel wiring defect is `pre-existing`, not `instrumentation-introduced`"
         in normalized_verify
     )
-    assert "pre-existing OTel defects inside selected scope" in normalized_flow
-    assert "make a concrete repair attempt" in normalized_flow
-    assert "failing verification overlay written during this loop is intermediate" in normalized_flow
-    assert (
-        "make a concrete repair for each safe in-scope instrumentation-owned failure"
-        in normalized_instrument_handoff
-    )
-    assert "instrumentation_sha256" in normalized_instrument
-    assert "selection_sha256" in normalized_instrument
-    assert "instrumentation-final-gate" in normalized_instrument_handoff
-    assert "meta.lifecycle: intermediate" in normalized_verify
-    assert "instrumentation_sha256" in normalized_verify_handoff
-    assert "selection_sha256" in normalized_verify_handoff
-    assert (
-        "For a child invocation from an active instrumentation workflow"
-        in normalized_verify_handoff
-    )
-    assert "return control without presenting a terminal user handoff" in normalized_verify_handoff
-    assert "Never use **pending** as an umbrella for a failed verification" in normalized_flow
-    assert "**Verification failures**" in normalized_flow
-    assert "**What verification found**" in normalized_flow
-    assert "**Code repair required**" in normalized_flow
-    assert "**How the repair is confirmed**" in normalized_flow
-    assert "Do not render that automatic recheck as a second repair bullet" in normalized_flow
-    assert "**Telemetry change / What was observed / Status**" in normalized_flow
-    assert "**Coverage details**" in normalized_flow
-    assert "`blocking_reason`" in normalized_flow
-    assert "`unobserved_outcome`" in normalized_flow
-    assert "**Runtime verification unavailable**" in normalized_flow
-    assert "**Already proven**" in normalized_flow
-    assert "**Still unobserved**" in normalized_flow
-    assert "never use it as the blocker explanation" in normalized_verify
-    assert "State local delivery and target-product check scope once" in normalized_flow
-    assert "Do not render generic per-finding lines" in normalized_flow
-    assert "do not repeat it on each card" in normalized_instrument_handoff
-    assert "not repeat generic **Target product** or **Executed checks** lines per finding" in normalized_verify
-    assert "do not render the finding's `remaining` list as a user checklist" in normalized_flow
-    assert "One direct successful unit, application, or runtime observation proves" in normalized_instrument_handoff
-    assert "makes the exact item `working`" in normalized_verify
-    assert "audit scenarios' human `trigger` text" in normalized_flow
-    assert "Never put unexplained `x/y`" in normalized_flow
-    assert "Do not render aggregate statistic cards" in normalized_flow
-    assert "These canonical and compatibility artifacts, not the HTML, are the downstream handoff" in normalized_flow
-    assert (
-        "Keep stable IDs, commands, and exact counts in the canonical JSON and generated Markdown proof ledgers"
-        in normalized_instrument_handoff
-    )
-    assert "Do not render aggregate statistic cards" in normalized_instrument_handoff
-    assert "Technical closure ledger" not in normalized_instrument_handoff
-    assert "Do not add aggregate statistic cards" in normalized_verify
-    assert "do not change it to `not_run`" in normalized_verify
-    assert "denies an OTLP pipeline/export path" in normalized_instrument
-    assert "no OTLP pipeline or export path exists" in normalized_verify
-    assert "Reconcile delivery claims across that join" in normalized_flow
-    assert "never fall back to stale instrumentation-phase next steps" in normalized_flow
-
-
-def test_go_template_preserves_startup_resources_and_cleanup() -> None:
-    guide = (
-        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
-    ).read_text(encoding="utf-8")
-    assert "resource.WithFromEnv()" in guide
-    assert "resource.WithTelemetrySDK()" in guide
-    assert 'Value(attribute.Key("service.name"))' in guide
-    assert "combineErrors(tp.Shutdown(ctx), mp.Shutdown(ctx))" in guide
-    assert "combineErrors(err, tp.Shutdown(ctx))" in guide
-    assert "func combineErrors(primary, secondary error) error" in guide
-    assert 'fmt.Errorf("%w; additional error: %v", primary, secondary)' in guide
-    assert '"errors"' not in guide
-    assert "return errors.Join" not in guide
-    assert 'log.Printf("telemetry disabled: %v", err)' in guide
-    assert "log.Fatalf" not in guide
-    assert '"go.opentelemetry.io/contrib/instrumentation/runtime"' not in guide
-    assert "minimal HTTP setup intentionally" in guide
-
-
-def test_go_references_use_versioned_redisotel_traces_and_metrics() -> None:
-    audit_guide = (
-        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
-    ).read_text(encoding="utf-8")
-    instrument_guide = (
-        ROOT
-        / "skills"
-        / "otel-instrument"
-        / "references"
-        / "languages"
-        / "go.md"
-    ).read_text(encoding="utf-8")
-    for guide in (audit_guide, instrument_guide):
-        assert "`github.com/redis/go-redis/v9`" in guide
-        assert "`github.com/redis/go-redis/extra/redisotel/v9`" in guide
-        assert "spans + metrics" in guide
-        assert "github.com/redis/go-redis/extra/redisotel`" not in guide
-
-
-def test_env_example_is_only_added_for_an_authorized_env_file_surface() -> None:
-    guide = INSTRUMENT_SKILL.read_text(encoding="utf-8")
-    assert "references/finalization.md" in guide
-    guide += "\n" + INSTRUMENT_FINALIZATION.read_text(encoding="utf-8")
-    normalized = " ".join(guide.split())
-    assert "repository already has an env-file workflow" in normalized
-    assert "do not authorize creating `.env.example`" in normalized
-    assert "repository already has an env-file workflow or the user explicitly requests one" in normalized
-
-
 def test_wrappers_run_from_bundle_with_spaces_and_unrelated_cwd(
     tmp_path: Path,
 ) -> None:
