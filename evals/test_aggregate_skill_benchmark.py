@@ -250,7 +250,7 @@ raise SystemExit(0)
             ),
             "verify": "Write ./service/.observe/otel-verify.json.",
         }[skill]
-        task = canonical_task if canonical else "Write the compatibility Markdown report."
+        task = canonical_task if canonical else "Write the technical Markdown report."
         definition.write_text(
             json.dumps(
                 {

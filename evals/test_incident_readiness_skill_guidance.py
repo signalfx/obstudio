@@ -10,8 +10,8 @@ REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
 AUDIT_SKILL = SKILLS_DIR / "otel-audit" / "SKILL.md"
 INSTRUMENT_DIR = SKILLS_DIR / "otel-instrument"
 INSTRUMENT_SKILL = INSTRUMENT_DIR / "SKILL.md"
-INSTRUMENT_LEGACY_REPORT = (
-    INSTRUMENT_DIR / "references" / "legacy-instrumentation-report.md"
+INSTRUMENT_REPORT = (
+    INSTRUMENT_DIR / "references" / "instrumentation-report.md"
 )
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
@@ -211,7 +211,7 @@ def test_instrument_allows_recommended_semconv_readiness_signals():
 
 def test_instrument_requires_signal_level_mttd_role_inventory():
     instrument = _read(INSTRUMENT_SKILL)
-    legacy_report = _squash(_read(INSTRUMENT_LEGACY_REPORT))
+    instrumentation_report = _squash(_read(INSTRUMENT_REPORT))
     report_contract = _squash(
         _read(SKILLS_DIR / "references" / "report-flow-contract.md")
     )
@@ -225,8 +225,8 @@ def test_instrument_requires_signal_level_mttd_role_inventory():
         "one row per exact",
         "not another gap ledger",
     ]
-    assert "references/legacy-instrumentation-report.md" in instrument
-    for text in (legacy_report, report_contract):
+    assert "references/instrumentation-report.md" in instrument
+    for text in (instrumentation_report, report_contract):
         missing = [term for term in required_terms if term not in text]
         assert not missing
 
@@ -292,8 +292,8 @@ def test_instrument_converts_incident_readiness_audit_to_patchable_work():
 
 def test_instrument_requires_gap_closure_matrix_for_incident_readiness():
     skill = _read(INSTRUMENT_SKILL)
-    text = _squash(skill + "\n" + _read(INSTRUMENT_LEGACY_REPORT))
-    assert "references/legacy-instrumentation-report.md" in skill
+    text = _squash(skill + "\n" + _read(INSTRUMENT_REPORT))
+    assert "references/instrumentation-report.md" in skill
     required_terms = [
         "Audit-Driven Gap Closure",
         "validated dependency-closed selected finding set as the implementation queue",
@@ -367,7 +367,7 @@ def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
     required_terms = [
         "Skip the prompt in canonical, readiness, GenAI, or explicit-signal scope",
         "validated canonical selection already defines the scope",
-        "direct request is scope authority only on the legacy no-canonical-audit path",
+        "direct request is scope authority only on the direct no-canonical-audit path",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
@@ -442,8 +442,8 @@ def test_audit_maps_incident_readiness_to_current_gap_contract():
 
 def test_instrument_reconciles_current_audit_gap_contract():
     skill = _read(INSTRUMENT_SKILL)
-    assert "references/legacy-instrumentation-report.md" in skill
-    instrument = _squash(skill + "\n" + _read(INSTRUMENT_LEGACY_REPORT))
+    assert "references/instrumentation-report.md" in skill
+    instrument = _squash(skill + "\n" + _read(INSTRUMENT_REPORT))
     required_terms = [
         "Audit-Driven Gap Closure",
         "validated dependency-closed selected finding set as the implementation queue",

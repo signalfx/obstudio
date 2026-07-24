@@ -10,11 +10,11 @@ AUDIT_GENAI_REF = SKILLS_DIR / "otel-audit" / "references" / "genai-audit.md"
 INSTRUMENT_GENAI_REF = (
     SKILLS_DIR / "otel-instrument" / "references" / "genai-instrumentation.md"
 )
-INSTRUMENT_LEGACY_REPORT = (
+INSTRUMENT_REPORT = (
     SKILLS_DIR
     / "otel-instrument"
     / "references"
-    / "legacy-instrumentation-report.md"
+    / "instrumentation-report.md"
 )
 INSTRUMENT_REPAIR = (
     SKILLS_DIR / "otel-instrument" / "references" / "repair-loop.md"
@@ -980,8 +980,8 @@ def test_audit_keeps_genai_readiness_surfaces_independently_actionable():
 
 def test_instrument_requires_signals_changed_and_gap_closure():
     skill = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
-    assert "references/legacy-instrumentation-report.md" in skill
-    instrument = skill + "\n" + _read(INSTRUMENT_LEGACY_REPORT)
+    assert "references/instrumentation-report.md" in skill
+    instrument = skill + "\n" + _read(INSTRUMENT_REPORT)
     required_terms = [
         "## Signals Changed",
         "## Audit Gap Closure",
