@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "generate",
-      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform, the variables, the tfvars example, the human report, and the Observer preview sidecar. Do not call any network and do not run terraform."
+      "task": "Treat ./service as the project root. Create ./service/.observe/ and copy the canonical ./service/otel-audit.json fixture to ./service/.observe/otel-audit.json. No downstream overlays exist. The user explicitly accepts source-only dashboard use of the exact current metrics http.server.request.duration, http.server.active_requests, http.server.request.size, http.server.response.size, checkout.orders.processed, and checkout.payment.errors for this run. Run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform, the variables, the tfvars example, the human report, and the Observer preview sidecar. Keep absent checkout.queue.depth out of charts. Do not create missing overlays, read or fall back to an audit Markdown report, call any network, or run terraform."
     }
   ],
   "checks": [

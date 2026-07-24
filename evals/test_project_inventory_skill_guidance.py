@@ -20,6 +20,7 @@ INSTRUMENT_DIR = ROOT / "skills" / "otel-instrument"
 INSTRUMENT_SKILL = INSTRUMENT_DIR / "SKILL.md"
 INSTRUMENT_GO = INSTRUMENT_DIR / "references" / "languages" / "go.md"
 INSTRUMENT_REPAIR = INSTRUMENT_DIR / "references" / "repair-loop.md"
+INSTRUMENT_FINALIZATION = INSTRUMENT_DIR / "references" / "finalization.md"
 def test_shared_inventory_is_routed_from_all_three_skills() -> None:
     assert SCANNER.is_file()
     for skill in SKILLS:
@@ -152,6 +153,7 @@ def test_instrument_frontloads_language_route_and_scoped_go_resolver_gate() -> N
         "Do not run those three commands separately or in parallel",
         "A blocked result is terminal",
         "skip this fixed-bundle resolver",
+        "nonexistent",
         "Never copy `go_get.env`",
         "cleanup is the terminal boundary",
     ):
@@ -211,6 +213,174 @@ def test_go_resolver_guidance_requires_full_closure_and_preserves_existing_pins(
     assert "does not authorize an upgrade" in normalized
     assert "use only an eligible runner bootstrap probe" in normalized
 
+
+def test_go_metric_guidance_requires_version_specific_proof() -> None:
+    skill = (
+        ROOT / "skills" / "otel-instrument" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    guide = (
+        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join((skill + "\n" + guide).split())
+    assert "version- and semantic-convention-mode-dependent" in normalized
+    assert "Inspect the selected module source or runtime output before declaring names" in normalized
+    assert "never infer `http.server.active_requests`" in normalized
+    assert "Do not stack two span-producing server middleware" in normalized
+    assert "v0.68.0" in (
+        ROOT / "evals" / "go" / "chi-partial" / "go.mod"
+    ).read_text(encoding="utf-8")
+    assert (
+        "Use `otelhttp.WithRouteTag` only when that exact source exports it"
+        in normalized
+    )
+    assert "API is absent in v0.65.0 and later" in normalized
+    assert "trace.SpanFromContext(r.Context()).SetAttributes" in normalized
+    assert "otelhttp.LabelerFromContext" in normalized
+    assert "without starting a span" in normalized
+    assert "http.HandlerFunc(getTask)" in normalized
+    assert ").ServeHTTP" in normalized
+    assert "does not rename the outer span" in normalized
+    assert "do not start a second server span" in normalized
+    assert (
+        "HTTP server/client spans, `http.server.request.duration`, "
+        "`http.server.active_requests`"
+        not in guide
+    )
+
+def test_go_http_outcome_guidance_groups_collisions_without_misclassifying_4xx() -> None:
+    skill = (
+        ROOT / "skills" / "otel-instrument" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    guide = (
+        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join((skill + "\n" + guide).split())
+    partial_eval = json.loads(
+        (
+            ROOT
+            / "evals"
+            / "go"
+            / "chi-partial"
+            / "eval"
+            / "qual"
+            / "instrument.json"
+        ).read_text(encoding="utf-8")
+    )
+    rubric = " ".join(partial_eval["rubric"])
+
+    assert "one bounded pass over non-success call sites grouped by stable `(method, route, status code)`" in normalized
+    assert "never broaden canonical scope" in normalized
+    assert "selected expected telemetry must author the exact bounded attribute" in normalized
+    assert "require a corrected audit/selection" in normalized
+    assert "Legacy direct work may close a source-evidenced collision" in normalized
+    assert "operator-distinct outcomes collide" in normalized
+    assert "assert every bounded reason" in normalized
+    assert "ordinary handled 4xx response leaves span status unset" in normalized
+    assert "Do not add `RecordError`/`SetStatus` merely" in normalized
+    assert "leaves ordinary handled 4xx SERVER responses unset" in rubric
+    assert "records errors/status on failure paths" not in rubric
+
+def test_python_guidance_does_not_map_plain_starlette_to_fastapi() -> None:
+    references = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "python.md",
+    )
+    for reference in references:
+        text = reference.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        assert "| `fastapi` | `opentelemetry-instrumentation-fastapi` |" in text
+        assert "| `starlette` | `opentelemetry-instrumentation-starlette` |" in text
+        assert "`fastapi` / `starlette`" not in text
+        assert "Do not substitute the FastAPI instrumentor for a plain Starlette" in normalized
+
+def test_python_guidance_splits_aiohttp_client_and_server_surfaces() -> None:
+    references = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "python.md",
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "python.md",
+    )
+    for reference in references:
+        text = reference.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        assert (
+            "| `aiohttp.ClientSession` (client) | "
+            "`opentelemetry-instrumentation-aiohttp-client` |"
+        ) in text
+        assert (
+            "| `aiohttp.web` (server) | "
+            "`opentelemetry-instrumentation-aiohttp-server` |"
+        ) in text
+        assert "| `aiohttp` | `opentelemetry-instrumentation-aiohttp-client` |" not in text
+        assert "an application using both surfaces needs both packages" in normalized
+
+def test_go_audit_distinguishes_route_attributes_from_span_names() -> None:
+    guide = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(guide.split())
+    assert "bounded `http.route`" in normalized
+    assert "Use `otelhttp.WithRouteTag` only when that exact source exports it" in normalized
+    assert "the API is absent in v0.65.0 and later" in normalized
+    assert "trace.SpanFromContext" in normalized
+    assert "otelhttp.LabelerFromContext" in normalized
+    assert "`WithRouteTag`, when available, does not rename" in normalized
+    assert "renaming the current outer server span after route matching" in normalized
+    assert "do not start a second server span" in normalized
+    assert "for bounded route names" not in normalized
+
+def test_go_template_preserves_startup_resources_and_cleanup() -> None:
+    guide = (
+        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    assert "resource.WithFromEnv()" in guide
+    assert "resource.WithTelemetrySDK()" in guide
+    assert 'Value(attribute.Key("service.name"))' in guide
+    assert "combineErrors(tp.Shutdown(ctx), mp.Shutdown(ctx))" in guide
+    assert "combineErrors(err, tp.Shutdown(ctx))" in guide
+    assert "func combineErrors(primary, secondary error) error" in guide
+    assert 'fmt.Errorf("%w; additional error: %v", primary, secondary)' in guide
+    assert '"errors"' not in guide
+    assert "return errors.Join" not in guide
+    assert 'log.Printf("telemetry disabled: %v", err)' in guide
+    assert "log.Fatalf" not in guide
+    assert '"go.opentelemetry.io/contrib/instrumentation/runtime"' not in guide
+    assert "minimal HTTP setup intentionally" in guide
+
+def test_go_references_use_versioned_redisotel_traces_and_metrics() -> None:
+    audit_guide = (
+        ROOT / "skills" / "otel-audit" / "references" / "languages" / "go.md"
+    ).read_text(encoding="utf-8")
+    instrument_guide = (
+        ROOT
+        / "skills"
+        / "otel-instrument"
+        / "references"
+        / "languages"
+        / "go.md"
+    ).read_text(encoding="utf-8")
+    for guide in (audit_guide, instrument_guide):
+        assert "`github.com/redis/go-redis/v9`" in guide
+        assert "`github.com/redis/go-redis/extra/redisotel/v9`" in guide
+        assert "spans + metrics" in guide
+        assert "github.com/redis/go-redis/extra/redisotel`" not in guide
+
+def test_env_example_is_only_added_for_an_authorized_env_file_surface() -> None:
+    guide = INSTRUMENT_SKILL.read_text(encoding="utf-8")
+    assert "references/finalization.md" in guide
+    guide += "\n" + INSTRUMENT_FINALIZATION.read_text(encoding="utf-8")
+    normalized = " ".join(guide.split())
+    assert "repository already has an env-file workflow" in normalized
+    assert "do not authorize creating `.env.example`" in normalized
+    assert "repository already has an env-file workflow or the user explicitly requests one" in normalized
 
 def test_full_runtime_listener_probe_is_shared_and_bounded() -> None:
     contract = (

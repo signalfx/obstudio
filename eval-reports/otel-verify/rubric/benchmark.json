@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "kind": "rubric",
+  "mode": "with_skill",
+  "skill": "otel-verify",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "rubric",
+    "skill": "otel-verify",
+    "run_id": "20260722T175436568932Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml",
+    "scope": {
+      "status": "full",
+      "selected_prompt_count": 3,
+      "expected_prompt_count": 3,
+      "selected_prompt_ids": [
+        "go/chi-basic/qual/verify/canonical-proof-packet",
+        "go/chi-partial/qual/benchmark-verify/benchmark",
+        "java/springboot-basic/qual/verify/local-java-agent-resolution"
+      ],
+      "missing_prompt_ids": [],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
+  },
+  "summary": {
+    "eval_count": 3,
+    "prompt_count": 3,
+    "failure_count": 4,
+    "with_skill": {
+      "prompt_count": 3,
+      "command_count": 280,
+      "duration_seconds": 1707.317,
+      "agent_duration_seconds": 1285.419,
+      "tokens": 5382764,
+      "agent_tokens": 4261863,
+      "error_count": 0,
+      "rubric": {
+        "passed": 12,
+        "total": 16,
+        "average_score": 80.33333333333333
+      },
+      "rubric_tokens": 1120901,
+      "rubric_duration_seconds": 421.823
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "go/chi-basic/qual/verify",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "canonical-proof-packet"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 100,
+        "duration_seconds": 490.437,
+        "agent_duration_seconds": 351.622,
+        "tokens": 1694297,
+        "agent_tokens": 1413439,
+        "error_count": 0,
+        "rubric": {
+          "passed": 6,
+          "total": 6,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 280858,
+        "rubric_duration_seconds": 138.795
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-basic/qual-verify/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-basic/qual-verify/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-basic/qual-verify/with_baseline.json"
+      }
+    },
+    {
+      "id": "go/chi-partial/qual/benchmark-verify",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 1,
+      "prompts": [
+        "benchmark"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 108,
+        "duration_seconds": 790.481,
+        "agent_duration_seconds": 642.983,
+        "tokens": 2288132,
+        "agent_tokens": 1907993,
+        "error_count": 0,
+        "rubric": {
+          "passed": 3,
+          "total": 4,
+          "average_score": 86.0
+        },
+        "rubric_tokens": 380139,
+        "rubric_duration_seconds": 147.483
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-partial/qual-benchmark-verify/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-partial/qual-benchmark-verify/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/go/chi-partial/qual-benchmark-verify/with_baseline.json"
+      }
+    },
+    {
+      "id": "java/springboot-basic/qual/verify",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "local-java-agent-resolution"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 72,
+        "duration_seconds": 426.399,
+        "agent_duration_seconds": 290.814,
+        "tokens": 1400335,
+        "agent_tokens": 940431,
+        "error_count": 0,
+        "rubric": {
+          "passed": 3,
+          "total": 6,
+          "average_score": 55.0
+        },
+        "rubric_tokens": 459904,
+        "rubric_duration_seconds": 135.545
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/java/springboot-basic/qual-verify/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/java/springboot-basic/qual-verify/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-verify/20260722T175436568932Z/results/java/springboot-basic/qual-verify/with_baseline.json"
+      }
+    }
+  ],
+  "failures": [
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "benchmark",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "otel-verify.md mentions collector.example.com:4318, metrics/logs not configured, and Resource identity not proven. Searches for cardinal/high-cardinality and shutdown/provider Shutdown in the report found no corresponding diagnosis.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "local-java-agent-resolution",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "trace item_46 ran .agents/skills/otel-verify/scripts/resolve_java_agent.py with all four --candidate JARs. service/.observe/java-agent-resolution.json selected splunk-otel-javaagent-8.0.0.jar instead of opentelemetry-javaagent-2.1.0+build.7.jar.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "local-java-agent-resolution",
+      "category": "rubric",
+      "result": "rubric:rubric-2 FAIL",
+      "evidence": "selected.artifact_version is 8.0.0 and selected.sha256 is 8f604eb4b37f1912fcf623c6163a93b09fb69132ce126528a8302a413f8c751c. The expected fixture manifest has Implementation-Version 2.1.0+build.7 and SHA-256 7848a920c8104008d499c1bd3879fb5e07aeef7af30823042a710e07d0e6d00c.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "java/springboot-basic",
+      "side": "with_skill",
+      "prompt": "local-java-agent-resolution",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "rejected contains opentelemetry-javaagent-9.0.0.jar with reason unrecognized-Premain-Class. selected.path is .../splunk-otel-javaagent-8.0.0.jar.",
+      "mode": "with_skill"
+    }
+  ]
+}

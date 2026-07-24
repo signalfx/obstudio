@@ -9,15 +9,20 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20260711T231609164685Z |
+| Run ID | 20260722T192459669711Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
+| Report scope | full |
+| Selected prompts | 39 |
+| Expected prompts | 39 |
 
 ## Eval Summary
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 6 | 0 |
+| go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/benchmark-instrument.json | 0 | 6 | 0 |
+| go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 7 | 0 |
+| go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/instrument-decision-gated.json | 0 | 6 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
@@ -32,7 +37,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 5 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 5 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
-| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 7 | 0 |
+| python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |

@@ -1,0 +1,146 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "checkout-source-only-fixture",
+    "service_name": "checkout",
+    "commit": "fixture",
+    "language": "go",
+    "framework": "chi",
+    "date": "2026-07-22",
+    "status": "Partial",
+    "genai_ownership_detected": false
+  },
+  "summary": [
+    "The source-defined HTTP server duration metric is available for explicitly accepted source-only detector and dashboard generation."
+  ],
+  "flow": "audit -> configure/dashboard -> publish",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "OpenTelemetry HTTP server instrumentation is recorded",
+      "source": "otel-report.md"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Checkout HTTP API",
+      "source": "otel-report.md"
+    },
+    {
+      "check": "Route source",
+      "finding": "POST /checkout and POST /payment",
+      "source": "otel-report.md"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Go service with OpenTelemetry HTTP instrumentation",
+      "source": "otel-report.md"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "No",
+      "source": "bounded fixture scan"
+    }
+  ],
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/checkout"
+    },
+    {
+      "method": "POST",
+      "path": "/payment"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "Request handling\nclient [SOURCE-COVERED] -> checkout service [SOURCE-COVERED] -> http.server.request.duration [SOURCE-COVERED]\n\nQueue processing\ncheckout service [SOURCE-COVERED] -> in-memory queue [GAP: Checkout queue depth]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [
+      {
+        "name": "http.server.request.duration",
+        "source": "otel-report.md",
+        "type": "auto"
+      }
+    ],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Checkout queue depth is not observable",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "small",
+      "status": "proposed",
+      "area": "Checkout queue depth",
+      "gap": "The source does not emit an OpenTelemetry metric for checkout queue depth.",
+      "impact": "Operators cannot distinguish an idle checkout worker from growing queued work.",
+      "product_outcome": "A bounded checkout.queue.depth metric supports queue saturation charts and detectors.",
+      "required_fix": "Add one OpenTelemetry gauge named checkout.queue.depth at the bounded queue owner.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "queue.depth"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "otel-report.md"
+      ],
+      "acceptance_criteria": [
+        "A focused queue operation records the checkout.queue.depth metric with no unbounded dimensions."
+      ],
+      "constraints": [
+        "Do not attach cart, customer, request, or trace identifiers to the metric."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "checkout.queue.depth",
+          "attributes": [],
+          "product_view": "Checkout queue saturation chart and detector"
+        }
+      ],
+      "follow_up_actions": [
+        "Run $otel-instrument before configuring a checkout.queue.depth detector."
+      ],
+      "resolution": null,
+      "resolved_commit": null,
+      "otel_concerns": [
+        "signal-emission"
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "go.local",
+        "surface": "checkout service",
+        "config_evidence": "otel-report.md",
+        "runner": "go test ./...",
+        "scope": "module",
+        "prerequisites": "none"
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "queue.depth",
+        "trigger": "Record one bounded checkout queue depth sample",
+        "entrypoint": "otel-report.md",
+        "expected_signals": "metric checkout.queue.depth",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "The checkout.queue.depth metric records one bounded queue-depth sample without unbounded dimensions.",
+        "environments": [
+          "go.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Generate detector or dashboard Terraform for http.server.request.duration only after the user explicitly accepts source-only use; run $otel-instrument before configuring checkout.queue.depth."
+  ],
+  "scan_blockers": []
+}

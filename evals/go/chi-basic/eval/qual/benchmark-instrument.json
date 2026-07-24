@@ -15,6 +15,6 @@
   "rubric": [
     "Honors approved finding ID OTEL-001 and leaves unselected OTEL-002 unchanged.",
     "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json with selected finding status, changed signals, validation evidence, scenario mappings, and next steps; the separately bound .observe/otel-verify.json carries verification results and remaining proof work, and .observe/otel-instrumentation.md remains a compatibility artifact.",
-    "Renders separate self-contained .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage; keeps the complete technical mapping in canonical JSON and compatibility Markdown and leaves .observe/otel.html audit-only."
+    "Renders separate self-contained .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage; keeps the complete technical mapping in canonical JSON and technical Markdown and leaves .observe/otel.html audit-only."
   ]
 }

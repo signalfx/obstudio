@@ -6,10 +6,41 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 GENAI_REF = SKILLS_DIR / "references" / "genai-readiness.md"
+AUDIT_GENAI_REF = SKILLS_DIR / "otel-audit" / "references" / "genai-audit.md"
+INSTRUMENT_GENAI_REF = (
+    SKILLS_DIR / "otel-instrument" / "references" / "genai-instrumentation.md"
+)
+INSTRUMENT_REPORT = (
+    SKILLS_DIR
+    / "otel-instrument"
+    / "references"
+    / "instrumentation-report.md"
+)
+INSTRUMENT_REPAIR = (
+    SKILLS_DIR / "otel-instrument" / "references" / "repair-loop.md"
+)
+INSTRUMENT_GO = (
+    SKILLS_DIR / "otel-instrument" / "references" / "languages" / "go.md"
+)
 REPORT_FLOW = SKILLS_DIR / "references" / "report-flow-contract.md"
 OTEL_VERIFY = SKILLS_DIR / "otel-verify" / "SKILL.md"
+VERIFY_REPORT = (
+    SKILLS_DIR / "otel-verify" / "references" / "verification-report.md"
+)
 SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
+CONFIGURE_PROGRESSIVE_REFS = (
+    SPLUNK_CONFIGURE_REFS / "canonical-input-contract.md",
+    SPLUNK_CONFIGURE_REFS / "dashboard-output-contract.md",
+    SPLUNK_CONFIGURE_REFS / "configure-report-contract.md",
+    SPLUNK_CONFIGURE_REFS / "detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "incident-detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "terraform-templates.md",
+    SPLUNK_CONFIGURE_REFS / "readiness-detector-templates.md",
+    SPLUNK_CONFIGURE_REFS / "dashboard-terraform-contract.md",
+    SPLUNK_CONFIGURE_REFS / "readiness-report-contract.md",
+)
 SPLUNK_SYNC = SKILLS_DIR / "splunk-sync" / "SKILL.md"
 SPLUNK_SYNC_REFS = SKILLS_DIR / "splunk-sync" / "references"
 # splunk-sync was renamed to splunk-detector-publish; the full detector contract
@@ -20,7 +51,67 @@ SPLUNK_DETECTOR_PUBLISH_REFS = SKILLS_DIR / "splunk-detector-publish" / "referen
 
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    text = path.read_text()
+    if path == SKILLS_DIR / "otel-audit" / "SKILL.md":
+        text += "\n" + AUDIT_GENAI_REF.read_text()
+    if path == SKILLS_DIR / "otel-instrument" / "SKILL.md":
+        text += "\n" + INSTRUMENT_GENAI_REF.read_text()
+    if path == SPLUNK_CONFIGURE:
+        text += "\n" + "\n".join(reference.read_text() for reference in CONFIGURE_PROGRESSIVE_REFS)
+    return text
+
+
+def test_audit_genai_progressive_disclosure_route_resolves():
+    skill = (SKILLS_DIR / "otel-audit" / "SKILL.md").read_text()
+    relative = "references/genai-audit.md"
+    assert relative in skill
+    assert (SKILLS_DIR / "otel-audit" / relative).resolve() == AUDIT_GENAI_REF.resolve()
+    assert "Do not load the audit-specific reference for non-GenAI services" in skill
+
+
+def test_instrument_genai_progressive_disclosure_route_resolves():
+    skill_path = SKILLS_DIR / "otel-instrument" / "SKILL.md"
+    skill = skill_path.read_text()
+    relative = "references/genai-instrumentation.md"
+    assert relative in skill
+    assert (skill_path.parent / relative).resolve() == INSTRUMENT_GENAI_REF.resolve()
+    assert "Do not load the instrument-specific GenAI reference for non-GenAI services" in skill
+    assert "### GenAI Span Ownership And Context" not in skill
+    assert "### GenAI Span Ownership And Context" in INSTRUMENT_GENAI_REF.read_text()
+
+
+def test_genai_owner_mapped_guidance_requires_validator_accepted_detail():
+    reference = AUDIT_GENAI_REF.read_text()
+    normalized = " ".join(reference.split())
+    assert "`Provider/platform-owned: billing API`" in reference
+    assert "`Provider/platform-owned` by itself" in normalized
+    assert "a generic team label is not an exact owner" in normalized
+    assert "fails audit validation" in normalized
+
+
+def test_broad_genai_request_cannot_bypass_canonical_selection_gate():
+    reference = INSTRUMENT_GENAI_REF.read_text()
+    normalized = " ".join(reference.split())
+    skill = (SKILLS_DIR / "otel-instrument" / "SKILL.md").read_text()
+    skill_normalized = " ".join(skill.split())
+
+    assert "broad request is not selection authority for a canonical audit" in normalized
+    assert "Inventory the matching selectable finding IDs" in normalized
+    assert "pause for the user to supply exact `--ids`" in normalized
+    assert "do not create or bind a selection from broad prose" in normalized
+    assert "Only on the direct no-audit path" in normalized
+    assert (
+        "resolve that broad scope to exact IDs and create the bound selection before editing"
+        not in normalized
+    )
+    assert (
+        "When no canonical audit exists, a direct, concrete user request is the "
+        "authorized scope and the direct no-audit workflow remains available"
+    ) in skill_normalized
+    assert (
+        "Do not proceed without a validated, nonempty executable selection"
+        in skill_normalized
+    )
 
 
 def test_genai_reference_covers_otel_semconv_signals():
@@ -215,6 +306,20 @@ def test_genai_skills_preserve_stable_workflow_identity():
         text = " ".join(raw_text.split())
         missing = [term for term in shared_terms if term not in text]
         assert not missing
+
+
+def test_audit_requires_http_root_workflow_card_boundary_on_ownership_finding():
+    reference = " ".join(AUDIT_GENAI_REF.read_text().split())
+    required_terms = [
+        "existing single-source/workflow ownership finding",
+        "`constraints` or `acceptance_criteria`",
+        "HTTP server span may remain the trace root",
+        "must not set `gen_ai.operation.name=invoke_workflow`",
+        "must not become the GenAI workflow card",
+        "stable `invoke_workflow <workflow-name>` span remains the workflow card",
+        "Do not create a second finding",
+    ]
+    assert not [term for term in required_terms if term not in reference]
 
 
 def test_genai_skills_preserve_stable_agent_identity():
@@ -568,7 +673,7 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     ]
     required_instrument_terms = [
         "GenAI Readiness Contract",
-        "Parse each row by human-readable `surface`",
+        "For each surface row, produce and maintain a closure matrix",
         "Use the surface name as the human-facing identifier",
         "surface -> required_signals -> implemented_signals -> tests",
     ]
@@ -576,18 +681,20 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     assert not [
         term for term in required_instrument_terms if term not in instrument_normalized
     ]
-    assert "every independently actionable surface row" in configure
+    assert (
+        "Consume every independently actionable `genai_readiness` surface" in configure
+    )
     assert "| Surface | Audit Status | Missing Signal |" in configure
 
 
-def test_audit_requires_single_deterministic_gap_section():
+def test_audit_requires_single_deterministic_findings_contract():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     normalized = " ".join(audit.split())
     required_terms = [
-        "Deterministic gap section contract",
-        "exactly one top-level gap section, named `## Gaps`",
-        "Record GenAI detail in `## GenAI Readiness` table rows",
-        "point back to the human-readable readiness surface name",
+        "Deterministic findings contract",
+        "record GenAI detail in `genai_readiness`",
+        "matching human-readable finding areas",
+        "Populate canonical `findings` directly",
     ]
     assert not [term for term in required_terms if term not in normalized]
 
@@ -785,7 +892,7 @@ def test_audit_distinguishes_demo_env_from_complete_genai_telemetry_setup():
 
 
 def test_instrument_requires_mcp_safe_dimensions_send_failure_and_tests():
-    text = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    text = " ".join(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split())
     required_terms = [
         "Never record JSON-RPC request IDs",
         "known route/tool registration",
@@ -795,63 +902,68 @@ def test_instrument_requires_mcp_safe_dimensions_send_failure_and_tests():
         "tool-specific duration histogram",
         "tool error/timeout counter",
         "owner-map the missing source explicitly",
-        "focused repo-native test",
-        "Do not finalize with a compile",
+        "practical repo-native in-memory test",
+        "A modified syntax/type/import failure cannot be finalized",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
 
 
-def test_audit_places_genai_readiness_before_gaps_when_owned():
-    audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
-    assert "## Current Instrumentation" in report_template
-    assert "## GenAI Readiness" in report_template
-    assert "## Gaps" in report_template
-    current_index = report_template.index("## Current Instrumentation")
-    genai_index = report_template.index("## GenAI Readiness")
-    gaps_index = report_template.index("## Gaps")
-    assert current_index < genai_index < gaps_index
+def test_audit_json_drives_conditional_genai_rendering():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    required_terms = [
+        '"genai_ownership_detected": false',
+        '"current_instrumentation": {',
+        '"genai_readiness": []',
+        "`meta.genai_ownership_detected` is the explicit ownership switch",
+        "Populate `genai_readiness` only when it is true",
+        "Human HTML must visibly render authored GenAI readiness",
+        "Write two audit artifacts",
+    ]
+    assert not [term for term in required_terms if term not in audit]
 
 
-def test_audit_requires_reader_first_current_state_baseline():
+def test_audit_json_and_renderer_own_json_html_handoff():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     audit_normalized = " ".join(audit.split())
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
-
-    evidence_index = report_template.index("## Audit Evidence")
-    current_index = report_template.index("## Current Instrumentation")
-    gaps_index = report_template.index("## Gaps")
-    verification_index = report_template.index("## Verification Plan")
-    assert evidence_index < current_index < gaps_index < verification_index
-
     required_terms = [
-        "**GenAI ownership detected:** Yes | No",
-        "| GenAI ownership |",
-        "Always emit `**GenAI ownership detected:** Yes` or `No`",
-        "Use only the top-level sections shown in the report template",
-        "validator rejects additional top-level sections",
-        "python3 scripts/validate_audit_report.py .observe/otel.md",
+        "Use this shape for `.observe/otel-audit.json`",
+        '"evidence": [',
+        '"current_instrumentation": {',
+        '"findings": [',
+        '"verification": {',
+        "Write two audit artifacts",
+        "finalize-audit",
+        "--html .observe/otel.html",
     ]
     missing = [term for term in required_terms if term not in audit_normalized]
     assert not missing
+    forbidden_terms = [
+        ".observe/otel.md",
+        "render-markdown",
+        "--markdown",
+        "--compat-validator",
+        '"flow":',
+        '"signal_flow":',
+    ]
+    assert not [term for term in forbidden_terms if term in audit]
+    assert "````markdown" not in audit
+    assert "--normalized-out" not in audit
+    assert "otel-audit.normalized.json" not in audit
 
 
 def test_audit_read_only_scope_still_writes_the_report_artifact():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
+    normalized = " ".join(audit.split())
     required_terms = [
         "Read-only for application code",
-        "writes `.observe/otel.md`",
         "does not modify service code",
-        "Write the report to `.observe/otel.md`",
+        ".observe/otel-audit.json",
+        ".observe/otel.html",
+        "Write two audit artifacts",
+        "Omit `flow` and `signal_flow` from new audits",
     ]
-    missing = [term for term in required_terms if term not in audit]
+    missing = [term for term in required_terms if term not in normalized]
     assert not missing
 
 
@@ -867,30 +979,34 @@ def test_audit_keeps_genai_readiness_surfaces_independently_actionable():
 
 
 def test_instrument_requires_signals_changed_and_gap_closure():
-    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    skill = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    assert "references/instrumentation-report.md" in skill
+    instrument = skill + "\n" + _read(INSTRUMENT_REPORT)
     required_terms = [
         "## Signals Changed",
         "## Audit Gap Closure",
         "## GenAI Readiness Closure",
         "`Signals Changed` is the implementation-change inventory",
-        "| Signal type | Added | Modified | Removed | Evidence | Verification status |",
-        "Do not claim a removal unless the previous report or git diff proves",
+        "| Signal type | Added | Modified | Removed | Product result / next product action | Evidence | Verification status |",
+        "Do not claim a removal unless the previous report or Git diff proves",
         "Use one row per prioritized audit gap",
-        "Derive the report-level `**Result:**` from both closure tables",
-        "python3 scripts/validate_gap_closure.py",
+        "Derive `**Result:**` from all applicable closure tables",
+        "scripts/validate_gap_closure.py",
     ]
     missing = [term for term in required_terms if term not in instrument]
     assert not missing
 
 
 def test_instrument_requires_route_aware_http_proof_and_source_owned_closure():
-    instrument = " ".join(
-        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
-    )
+    skill = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    assert "references/languages/{python,node,java,go}.md" in skill
+    assert "references/genai-instrumentation.md" in skill
+    instrument = " ".join((skill + "\n" + _read(INSTRUMENT_GO)).split())
     required_terms = [
-        "route-aware server spans are required",
-        "low-cardinality route pattern",
-        "do not emit duplicate server spans",
+        "low-cardinality chi route patterns",
+        "it does not rename the outer span",
+        "do not start a second server span",
+        "sole outer server-span producer",
         "When no source audit exists, do not create `## GenAI Readiness Closure`",
         "do not create a `GenAI Readiness Closure` table without source-audit rows",
     ]
@@ -899,12 +1015,12 @@ def test_instrument_requires_route_aware_http_proof_and_source_owned_closure():
 
 
 def test_instrument_requires_attempt_or_exact_full_runtime_blocker():
-    instrument = " ".join(
-        _read(SKILLS_DIR / "otel-instrument" / "SKILL.md").split()
-    )
+    skill = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    assert "references/repair-loop.md" in skill
+    instrument = " ".join((skill + "\n" + _read(INSTRUMENT_REPAIR)).split())
     required_terms = [
-        "`Not run` or `no collector was run` alone is not an acceptable blocker",
-        "record either the executed command and direct result or the concrete unavailable runtime",
+        "`Not run` or “no collector was run” alone is not a blocker",
+        "record the exact unavailable runtime, listener, dependency, credential, or fixture",
         "Do not finalize while a safe local profile exists",
     ]
     missing = [term for term in required_terms if term not in instrument]
@@ -912,7 +1028,9 @@ def test_instrument_requires_attempt_or_exact_full_runtime_blocker():
 
 
 def test_verify_requires_reader_first_individual_results():
-    verify = _read(OTEL_VERIFY)
+    skill = _read(OTEL_VERIFY)
+    assert "references/verification-report.md" in skill
+    verify = skill + "\n" + _read(VERIFY_REPORT)
     report_flow = _read(REPORT_FLOW)
     required_terms = [
         "## What Changed",
@@ -929,8 +1047,10 @@ def test_verify_requires_reader_first_individual_results():
 
 def test_splunk_configure_generates_genai_readiness_categories():
     skill = _read(SPLUNK_CONFIGURE)
-    classification = _read(SPLUNK_CONFIGURE_REFS / "detector-classification.md")
-    templates = _read(SPLUNK_CONFIGURE_REFS / "terraform-templates.md")
+    classification = _read(
+        SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md"
+    )
+    templates = _read(SPLUNK_CONFIGURE_REFS / "readiness-detector-templates.md")
     required_terms = [
         "genai-latency",
         "genai-token-pressure",
@@ -965,14 +1085,14 @@ def test_splunk_configure_summary_lists_all_genai_display_categories():
         "GenAI Cost",
     ]
     for term in required_display_terms:
-        assert skill.count(term) >= 2
+        assert term in skill
 
 
 def test_splunk_configure_consumes_all_genai_readiness_rows():
     skill = _read(SPLUNK_CONFIGURE)
     required_terms = [
         "GenAI Readiness",
-        "every independently actionable surface row",
+        "Consume every independently actionable `genai_readiness` surface",
         "provider/model",
         "workflow/agent",
         "tool/function",
@@ -992,14 +1112,19 @@ def test_splunk_configure_consumes_all_genai_readiness_rows():
 
 
 def test_splunk_configure_prioritizes_genai_before_generic_categories():
-    classification = _read(SPLUNK_CONFIGURE_REFS / "detector-classification.md")
-    assert "Classify GenAI metrics before generic latency" in classification
-    assert "metric name starts with \"gen_ai.\"" in classification
-    assert "gen_ai.client.operation.duration" in classification
+    classification = _read(
+        SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md"
+    )
+    normalized = " ".join(classification.split())
+    assert "Classify GenAI metrics before generic latency" in normalized
+    assert "explicit metric/dimension evidence" in normalized
+    assert "gen_ai.client.operation.duration" in normalized
 
 
 def test_genai_classification_does_not_treat_generic_model_terms_as_genai():
-    classification = _read(SPLUNK_CONFIGURE_REFS / "detector-classification.md")
+    classification = _read(
+        SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md"
+    )
     configure = _read(SPLUNK_CONFIGURE)
     assert "Do not classify generic" in classification
     for term in [
@@ -1021,9 +1146,9 @@ def test_genai_classification_does_not_treat_generic_model_terms_as_genai():
     ]:
         assert term in classification
         assert term in configure
-    assert "require explicit GenAI context" in classification
-    assert "The metric has GenAI context and the metric name contains one of:" in classification
-    assert "Those generic words require audit evidence" in classification
+    normalized = " ".join(classification.split())
+    assert "GenAI context requires" in normalized
+    assert "Those generic words require audit evidence" in normalized
 
 
 def test_genai_audit_and_instrument_require_new_gap_closure_surfaces():
@@ -1066,7 +1191,9 @@ def test_genai_guidance_stays_generic():
         SKILLS_DIR / "otel-instrument" / "SKILL.md",
         SPLUNK_CONFIGURE,
         SPLUNK_CONFIGURE_REFS / "detector-classification.md",
+        SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md",
         SPLUNK_CONFIGURE_REFS / "terraform-templates.md",
+        SPLUNK_CONFIGURE_REFS / "readiness-detector-templates.md",
     ]
     # Keep skill guidance provider-neutral. Concrete provider names belong in
     # app-specific audits or examples, not reusable skill instructions.

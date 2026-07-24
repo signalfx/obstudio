@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260711T231609164685Z",
-    "repo_root": "/Users/btiwana/code/signalfx/obstudio",
+    "run_id": "20260722T172408181528Z",
+    "repo_root": ".",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -16,7 +16,49 @@
     "judge_timeout": "900",
     "rubric_enabled": false,
     "runtime_enabled": false,
-    "workers": "1"
+    "workers": "1",
+    "scope": {
+      "status": "full",
+      "selected_prompt_count": 31,
+      "expected_prompt_count": 31,
+      "selected_prompt_ids": [
+        "go/chi-basic/qual/audit/direct",
+        "go/chi-basic/qual/audit/readiness-review",
+        "go/chi-basic/qual/benchmark-audit/benchmark",
+        "go/chi-partial/qual/audit/direct",
+        "go/chi-partial/qual/audit/readiness-review",
+        "go/kvstore/qual/audit/direct",
+        "go/kvstore/qual/audit/readiness-review",
+        "java/kafka-batch-consumer/qual/audit/direct",
+        "java/kafka-batch-consumer/qual/audit/readiness-review",
+        "java/kafka-listener-container/qual/audit/direct",
+        "java/kafka-listener-container/qual/audit/readiness-review",
+        "java/kafka-producer-consumer/qual/audit/direct",
+        "java/kafka-producer-consumer/qual/audit/readiness-review",
+        "java/kafka-streams/qual/audit/direct",
+        "java/kafka-streams/qual/audit/readiness-review",
+        "java/springboot-basic/qual/audit/direct",
+        "java/springboot-basic/qual/audit/readiness-review",
+        "node/express-basic/qual/audit/direct",
+        "node/express-basic/qual/audit/readiness-review",
+        "python/ai-assistant-demo/qual/audit/direct",
+        "python/ai-assistant-demo/qual/audit/genai-readiness",
+        "python/assistant-v3-framework-bridge-demo/qual/audit/framework-bridge",
+        "python/checkout-red-demo/qual/audit/direct",
+        "python/fastapi-celery/qual/audit/direct",
+        "python/fastapi-celery/qual/audit/readiness-review",
+        "python/flask-basic/qual/audit/direct",
+        "python/flask-basic/qual/audit/readiness-review",
+        "python/mcp-ai-tool-demo/qual/audit/direct",
+        "python/mcp-ai-tool-demo/qual/audit/mcp-readiness",
+        "sanity/skill-smoke/sanity/audit/direct",
+        "sanity/skill-smoke/sanity/audit/readiness-review"
+      ],
+      "missing_prompt_ids": [],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
   },
   "evals": [
     {
@@ -33,7 +75,23 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 8,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/qual/benchmark-audit",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "benchmark"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/benchmark-audit.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
       "runtime_check_count": 0
     },
     {
@@ -50,7 +108,7 @@
       "eval_dir": "evals/go/chi-partial",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 7,
       "runtime_check_count": 0
     },
     {
@@ -291,11 +349,11 @@
     }
   ],
   "summary": {
-    "eval_count": 16,
-    "case_count": 30,
-    "prompt_count": 30,
+    "eval_count": 17,
+    "case_count": 31,
+    "prompt_count": 31,
     "sanity_check_count": 0,
-    "rubric_check_count": 159,
+    "rubric_check_count": 170,
     "runtime_check_count": 0
   }
 }

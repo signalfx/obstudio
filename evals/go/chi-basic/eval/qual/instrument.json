@@ -4,12 +4,12 @@
     {
       "id": "direct",
       "eval_inputs": ["eval/inputs/otel-audit.json"],
-      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to write ./service/.observe/otel-selection.json with requested ID OTEL-001 and its exact dependency closure, then add OpenTelemetry instrumentation for that selected scope as if invoked with $otel-instrument --ids OTEL-001. Leave unselected OTEL-002 unchanged. Write canonical ./service/.observe/otel-instrumentation.json, retain ./service/.observe/otel-instrumentation.md as the compatibility report, and render separate ./service/.observe/otel-instrumentation.html without adding implementation state to ./service/.observe/otel.html."
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to write ./service/.observe/otel-selection.json with requested ID OTEL-001 and its exact dependency closure, then add OpenTelemetry instrumentation for that selected scope as if invoked with $otel-instrument --ids OTEL-001. Leave unselected OTEL-002 unchanged. Write canonical ./service/.observe/otel-instrumentation.json, retain ./service/.observe/otel-instrumentation.md as the technical report, and render separate ./service/.observe/otel-instrumentation.html without adding implementation state to ./service/.observe/otel.html."
     },
     {
       "id": "runtime-preserving",
       "eval_inputs": ["eval/inputs/otel-audit.json"],
-      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to write ./service/.observe/otel-selection.json with requested ID OTEL-001 and its exact dependency closure, then instrument that scope while preserving the existing runtime and startup command, as if invoked with $otel-instrument --ids OTEL-001. Add auto-instrumentation only; do not implement unselected OTEL-002 or add custom business signals. Write canonical ./service/.observe/otel-instrumentation.json, retain ./service/.observe/otel-instrumentation.md as the compatibility report, and render separate ./service/.observe/otel-instrumentation.html without adding implementation state to ./service/.observe/otel.html."
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to write ./service/.observe/otel-selection.json with requested ID OTEL-001 and its exact dependency closure, then instrument that scope while preserving the existing runtime and startup command, as if invoked with $otel-instrument --ids OTEL-001. Add auto-instrumentation only; do not implement unselected OTEL-002 or add custom business signals. Write canonical ./service/.observe/otel-instrumentation.json, retain ./service/.observe/otel-instrumentation.md as the technical report, and render separate ./service/.observe/otel-instrumentation.html without adding implementation state to ./service/.observe/otel.html."
     }
   ],
   "judge_inputs": [
@@ -24,6 +24,6 @@
     "Keeps OTLP endpoint and service name configurable through environment variables.",
     "Scopes implementation to approved OTEL-001 and does not add the unselected OTEL-002 task.created business metric or other drive-by signals.",
     "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json that records selected finding ID OTEL-001, implementation status, changed signals, validation evidence, and verification handoff without rewriting the audit baseline.",
-    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker."
+    "Retains .observe/otel-instrumentation.md as the complete technical report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker."
   ]
 }

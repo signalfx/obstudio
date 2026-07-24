@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "kind": "rubric",
+  "mode": "with_skill",
+  "skill": "otel-instrument",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "rubric",
+    "skill": "otel-instrument",
+    "run_id": "20260722T192657125215Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml",
+    "scope": {
+      "status": "scoped",
+      "selected_prompt_count": 1,
+      "expected_prompt_count": 31,
+      "selected_prompt_ids": [
+        "go/chi-basic/qual/benchmark-instrument/benchmark"
+      ],
+      "missing_prompt_ids": [
+        "go/chi-basic/qual/instrument-decision-gated/decision-gated",
+        "go/chi-basic/qual/instrument/direct",
+        "go/chi-basic/qual/instrument/runtime-preserving",
+        "go/chi-partial/qual/instrument/direct",
+        "go/chi-partial/qual/instrument/runtime-preserving",
+        "go/kvstore/qual/incident-readiness/mttd",
+        "go/kvstore/qual/instrument/direct",
+        "go/kvstore/qual/instrument/runtime-preserving",
+        "java/kafka-batch-consumer/qual/instrument/direct",
+        "java/kafka-batch-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-listener-container/qual/instrument/direct",
+        "java/kafka-listener-container/qual/instrument/runtime-preserving",
+        "java/kafka-producer-consumer/qual/instrument/direct",
+        "java/kafka-producer-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-streams/qual/incident-readiness/mttd",
+        "java/kafka-streams/qual/instrument/direct",
+        "java/kafka-streams/qual/instrument/runtime-preserving",
+        "java/springboot-basic/qual/instrument/direct",
+        "java/springboot-basic/qual/instrument/runtime-preserving",
+        "node/express-basic/qual/instrument/direct",
+        "node/express-basic/qual/instrument/runtime-preserving",
+        "python/ai-assistant-demo/qual/instrument/direct",
+        "python/assistant-v3-framework-bridge-demo/qual/instrument/framework-bridge",
+        "python/checkout-red-demo/qual/instrument/direct",
+        "python/fastapi-celery/qual/incident-readiness/mttd",
+        "python/fastapi-celery/qual/instrument/direct",
+        "python/fastapi-celery/qual/instrument/runtime-preserving",
+        "python/flask-basic/qual/instrument/direct",
+        "python/flask-basic/qual/instrument/runtime-preserving",
+        "python/mcp-ai-tool-demo/qual/instrument/direct"
+      ],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
+  },
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 1,
+    "with_skill": {
+      "prompt_count": 1,
+      "command_count": 192,
+      "duration_seconds": 1312.242,
+      "agent_duration_seconds": 1144.551,
+      "tokens": 8376731,
+      "agent_tokens": 8110314,
+      "error_count": 0,
+      "rubric": {
+        "passed": 5,
+        "total": 6,
+        "average_score": 88.0
+      },
+      "rubric_tokens": 266417,
+      "rubric_duration_seconds": 167.645
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "go/chi-basic/qual/benchmark-instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "benchmark"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 192,
+        "duration_seconds": 1312.242,
+        "agent_duration_seconds": 1144.551,
+        "tokens": 8376731,
+        "agent_tokens": 8110314,
+        "error_count": 0,
+        "rubric": {
+          "passed": 5,
+          "total": 6,
+          "average_score": 88.0
+        },
+        "rubric_tokens": 266417,
+        "rubric_duration_seconds": 167.645
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260722T192657125215Z/results/go/chi-basic/qual-benchmark-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260722T192657125215Z/results/go/chi-basic/qual-benchmark-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260722T192657125215Z/results/go/chi-basic/qual-benchmark-instrument/with_baseline.json"
+      }
+    }
+  ],
+  "failures": [
+    {
+      "service": "go/chi-basic",
+      "side": "with_skill",
+      "prompt": "benchmark",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "service/.observe/otel-selection.json preserves requested_ids separately from approved_ids. service/.observe/otel-instrumentation.json includes finding status, telemetry_changes, tests, evidence, and next_steps, but no remaining_gaps or verification_handoff structure; service/.observe/otel-verify.json exists with Partial verification.",
+      "mode": "with_skill"
+    }
+  ]
+}

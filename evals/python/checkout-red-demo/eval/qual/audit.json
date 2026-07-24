@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the checkout/payment API in ./service for OpenTelemetry readiness gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
+      "task": "Scan the checkout/payment API in ./service for OpenTelemetry readiness gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     }
   ],
   "judge_inputs": [
@@ -16,6 +16,6 @@
     "Reports that the baseline service has no OpenTelemetry SDK setup, no FastAPI/ASGI instrumentation, and no exporter/resource configuration.",
     "Recommends FastAPIInstrumentor/ASGI auto-instrumentation (or an equivalent low-cardinality route-aware HTTP middleware) as the primary instrumentation path rather than proposing a standalone counter for the payment-failure outcome, since that outcome is inside an HTTP request the FastAPI/ASGI instrumentation would already measure.",
     "Keeps privacy and cardinality safe by not recommending order_id, card_token, or other high-cardinality request fields as metric dimensions.",
-    "Writes .observe/otel.md with a metrics/readiness table and a Gaps section that does not fabricate coverage the app does not have."
+    "Writes canonical .observe/otel-audit.json with metrics/readiness inventory and findings that do not fabricate coverage the app does not have."
   ]
 }

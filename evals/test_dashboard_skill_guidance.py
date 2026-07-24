@@ -25,12 +25,15 @@ TERRAFORM_NORMALIZATION_REF = SHARED_REFS / "terraform-normalization.md"
 SIGNALFLOW_PATTERNS_REF = SHARED_REFS / "signalflow-patterns.md"
 LEDGER_TEMPLATE_REF = SHARED_REFS / "ledger-template.md"
 COVERAGE_DECISION_TREE_REF = SHARED_REFS / "coverage-decision-tree.md"
+REPORT_FLOW_CONTRACT = SHARED_REFS / "report-flow-contract.md"
 
 # Dashboard generate skill.
 SPLUNK_DASHBOARD = SKILLS_DIR / "splunk-dashboard" / "SKILL.md"
 SPLUNK_DASHBOARD_REFS = SKILLS_DIR / "splunk-dashboard" / "references"
 DASHBOARD_CLASSIFICATION = SPLUNK_DASHBOARD_REFS / "dashboard-classification.md"
 DASHBOARD_TEMPLATES = SPLUNK_DASHBOARD_REFS / "dashboard-templates.md"
+DASHBOARD_CANONICAL_INPUTS = SPLUNK_DASHBOARD_REFS / "canonical-input-contract.md"
+DASHBOARD_VALIDATOR = SPLUNK_DASHBOARD.parent / "scripts" / "validate_dashboard_output.py"
 
 # Dashboard publish skill (canonical; splunk-dashboard-sync is the deprecated stub).
 SPLUNK_DASHBOARD_PUBLISH = SKILLS_DIR / "splunk-dashboard-publish" / "SKILL.md"
@@ -39,17 +42,78 @@ DASHBOARD_COVERAGE_MODEL = SPLUNK_DASHBOARD_PUBLISH_REFS / "dashboard-coverage-m
 
 # Detector publish skill (canonical; splunk-sync is the deprecated stub).
 SPLUNK_DETECTOR_PUBLISH = SKILLS_DIR / "splunk-detector-publish" / "SKILL.md"
+SPLUNK_CONFIGURE = SKILLS_DIR / "splunk-configure" / "SKILL.md"
 SPLUNK_CONFIGURE_REFS = SKILLS_DIR / "splunk-configure" / "references"
+CONFIGURE_PROGRESSIVE_REFS = (
+    SPLUNK_CONFIGURE_REFS / "canonical-input-contract.md",
+    SPLUNK_CONFIGURE_REFS / "detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "incident-detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "genai-detector-classification.md",
+    SPLUNK_CONFIGURE_REFS / "terraform-templates.md",
+    SPLUNK_CONFIGURE_REFS / "readiness-detector-templates.md",
+    SPLUNK_CONFIGURE_REFS / "dashboard-terraform-contract.md",
+    SPLUNK_CONFIGURE_REFS / "dashboard-output-contract.md",
+    SPLUNK_CONFIGURE_REFS / "configure-report-contract.md",
+    SPLUNK_CONFIGURE_REFS / "readiness-report-contract.md",
+)
 
 
 def _read(path: Path) -> str:
     assert path.exists(), f"Expected file not found: {path}"
-    return path.read_text()
+    text = path.read_text()
+    if path == SPLUNK_CONFIGURE:
+        text += "\n" + "\n".join(reference.read_text() for reference in CONFIGURE_PROGRESSIVE_REFS)
+    return text
 
 
 def _normalized(path: Path) -> str:
     """Collapse all runs of whitespace so multi-line phrases match regardless of wrapping."""
     return " ".join(_read(path).split())
+
+
+def test_configure_guidance_is_progressively_disclosed_and_bounded():
+    skill = SPLUNK_CONFIGURE.read_text()
+    normalized = " ".join(skill.split())
+    assert len(skill.splitlines()) <= 300
+    assert len(skill.split()) <= 1600
+
+    for reference in CONFIGURE_PROGRESSIVE_REFS:
+        assert reference.exists(), f"missing configure reference: {reference}"
+        text = reference.read_text()
+        assert len(text.splitlines()) <= 250
+        assert len(text.split()) <= 1200
+        assert f"references/{reference.name}" in skill
+
+    strict_detector_path = (
+        SPLUNK_CONFIGURE,
+        SPLUNK_CONFIGURE_REFS / "canonical-input-contract.md",
+        SPLUNK_CONFIGURE_REFS / "detector-classification.md",
+        SPLUNK_CONFIGURE_REFS / "terraform-templates.md",
+        SPLUNK_CONFIGURE_REFS / "configure-report-contract.md",
+    )
+    assert sum(len(path.read_text().split()) for path in strict_detector_path) <= 5500
+
+    preflight = skill.index("--input-preflight")
+    assert preflight < skill.index("references/canonical-input-contract.md")
+    assert "references/legacy-input-contract.md" not in skill
+    assert "Do not load the shared `../references/report-flow-contract.md`" in normalized
+    assert "Treat bundled validators as opaque deterministic tools" in normalized
+    for forbidden_workaround in (
+        "Do not inspect validator source or tests",
+        "do not search installed skill caches",
+        "create validator symlinks",
+        "monkeypatch/import validator internals",
+    ):
+        assert forbidden_workaround in normalized
+    for avoidable_command in (
+        "do not run `wc`",
+        "broad `find`",
+        "`rg --files`",
+        "`git status`",
+        "Run the documented validator once",
+        "If it passes, stop validation",
+    ):
+        assert avoidable_command in normalized
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +126,8 @@ def test_dashboard_skills_exist_with_references():
     assert SPLUNK_DASHBOARD_PUBLISH.exists(), "skills/splunk-dashboard-publish/SKILL.md not found"
     assert DASHBOARD_CLASSIFICATION.exists(), "dashboard-classification.md not found"
     assert DASHBOARD_TEMPLATES.exists(), "dashboard-templates.md not found"
+    assert DASHBOARD_CANONICAL_INPUTS.exists(), "canonical dashboard input contract not found"
+    assert DASHBOARD_VALIDATOR.exists(), "dashboard output validator not found"
     assert DASHBOARD_COVERAGE_MODEL.exists(), "dashboard-coverage-model.md not found"
 
 
@@ -78,6 +144,43 @@ def test_dashboard_skill_frontmatter():
         "visualize my metrics",
     ):
         assert trigger in text, f"description missing routing trigger: {trigger}"
+
+
+def test_dashboard_generation_guidance_is_progressively_disclosed_and_bounded():
+    skill = _read(SPLUNK_DASHBOARD)
+    normalized = " ".join(skill.split())
+
+    assert len(skill.splitlines()) <= 200
+    assert len(skill.split()) <= 1200
+    assert "references/dashboard-classification.md" in skill
+    assert "references/dashboard-templates.md" in skill
+    assert "Do not load the longer `../references/signalflow-patterns.md` unless" in normalized
+    assert "Do not load `../references/terraform-normalization.md` unless" in normalized
+    assert "Treat the validator as an opaque executable" in normalized
+    assert "the first four checks pass" in normalized
+    assert "`Publish/apply` is a handoff status" in normalized
+
+
+def test_dashboard_templates_pin_preview_and_report_shapes_before_validation():
+    templates = _read(DASHBOARD_TEMPLATES)
+    normalized = " ".join(templates.split())
+
+    for term in (
+        '"layout": {"column": 0, "row": 0, "width": 6, "height": 3}',
+        '"label": "p99_latency"',
+        '"telemetryItemId": "SOURCE-METRIC.http.server.request.duration"',
+        "**Preview:** `.observe/dashboards.preview.json`",
+        "| Check | Result | What it proves | Evidence / next step |",
+        "| Verified metric item mapping | Pass |",
+        "| Terraform ↔ preview parity | Pass |",
+        "| Observer render | Not run |",
+        "| Live value sanity | Not run |",
+        "| Publish/apply | Not run |",
+    ):
+        assert term in templates
+
+    assert "Do not encode layout as an array" in normalized
+    assert "copy preview values literally" in normalized
 
 
 def test_dashboard_publish_skill_frontmatter():
@@ -124,14 +227,30 @@ def test_detector_publish_skill_reaches_shared_references():
         assert (SPLUNK_DETECTOR_PUBLISH.parent / relpath).resolve() == target.resolve()
 
 
-def test_detector_templates_still_reach_shared_signalflow_reference():
-    """Light refactor: splunk-configure's terraform-templates.md points the program_text
-    fragment at the shared signalflow-patterns.md instead of restating it."""
+def test_detector_templates_keep_generic_signalflow_self_contained():
+    """A generic detector run must not replay the longer chart-oriented reference."""
     template = SPLUNK_CONFIGURE_REFS / "terraform-templates.md"
     text = _read(template)
     relpath = "../../references/signalflow-patterns.md"
-    assert relpath in text, f"terraform-templates.md must include {relpath}"
+    assert f"do not load `{relpath}`" in text
     assert (template.parent / relpath).resolve() == SIGNALFLOW_PATTERNS_REF.resolve()
+    for required_fragment in (
+        ".percentile(pct=99).publish",
+        "against_recent.detector_mean_std",
+        "rollup='count'",
+        ".mean().publish",
+    ):
+        assert required_fragment in text
+
+
+def test_configure_generic_core_preserves_request_red_coverage_floor():
+    classification = SPLUNK_CONFIGURE_REFS / "detector-classification.md"
+    text = _read(classification)
+
+    assert "Generic RED coverage floor" in text
+    assert "prefer its observation" in text
+    assert "http.server.active_requests" in text
+    assert "never as" in text and "substitute" in text
 
 
 def test_dashboard_skills_reach_shared_references():
@@ -221,7 +340,10 @@ def test_shared_signalflow_reference_omits_detector_tail_for_charts():
 
 def test_dashboard_skill_reads_audit_and_emits_three_level_terraform():
     text = _read(SPLUNK_DASHBOARD)
-    assert ".observe/otel.md" in text, "must read the audit report"
+    normalized = " ".join(text.split())
+    assert ".observe/otel-audit.json" in text, "must require the canonical audit"
+    assert ".observe/otel.md" not in text, "must not accept audit Markdown"
+    assert "Never open or read an audit Markdown report" in normalized
     assert "$otel-audit" in text, "must point a missing-audit user at $otel-audit"
     # Three-level Terraform: group -> dashboard -> per-panel chart resources.
     assert "signalfx_dashboard_group" in text
@@ -229,6 +351,60 @@ def test_dashboard_skill_reads_audit_and_emits_three_level_terraform():
     assert "signalfx_" in text and "_chart" in text
     assert "dashboards.tf" in text
     assert "$splunk-dashboard-publish" in text, "must hand off to the publish skill"
+
+
+def test_report_flow_contract_defines_canonical_audit_and_reader_outputs():
+    text = _read(REPORT_FLOW_CONTRACT)
+    normalized = _normalized(REPORT_FLOW_CONTRACT)
+
+    for artifact in (
+        ".observe/otel-audit.json",
+        ".observe/otel.html",
+        ".observe/otel-selection.json",
+        ".observe/otel-instrumentation.json",
+        ".observe/otel-instrumentation.html",
+        ".observe/otel-verify.json",
+        ".observe/otel-instrumentation.md",
+        ".observe/otel-verify.md",
+    ):
+        assert artifact in text, f"report flow contract missing {artifact}"
+
+    assert "audit_id" in text and "audit_sha256" in text
+    assert "authoritative overlays" in text
+    assert "there is no audit-Markdown input or fallback" in normalized
+    assert ".observe/otel.md" not in text
+    assert "$splunk-detector-publish" in text
+    assert "$splunk-dashboard-publish" in text
+
+
+def test_configure_and_dashboard_require_matching_json_overlays():
+    for path, supplemental in (
+        (SPLUNK_CONFIGURE, ""),
+        (SPLUNK_DASHBOARD, _read(DASHBOARD_CANONICAL_INPUTS)),
+    ):
+        text = _read(path)
+        contract = f"{text}\n{supplemental}"
+        normalized = " ".join(contract.split())
+        for artifact in (
+            ".observe/otel-audit.json",
+            ".observe/otel-selection.json",
+            ".observe/otel-instrumentation.json",
+            ".observe/otel-verify.json",
+        ):
+            assert artifact in contract, f"{path} missing canonical input {artifact}"
+        assert "audit_id" in contract and "audit_sha256" in contract
+        assert "audit Markdown" in contract
+        assert "never open or read" in normalized.lower()
+        assert ".observe/otel.md" not in contract
+
+    configure = _read(SPLUNK_CONFIGURE)
+    assert "$splunk-detector-publish" in configure
+    assert "$splunk-dashboard-publish" in configure
+    assert "$splunk-sync" not in configure
+    assert "validate_dashboard_output.py" in configure
+    assert "# telemetry-item:" in configure and "OTEL-###.<item>" in configure
+    assert "SOURCE-METRIC.<exact-metric-name>" in configure
+    assert "telemetryItemId" in configure and "productAction" in configure
 
 
 def test_dashboard_skill_marks_api_token_sensitive():
@@ -251,12 +427,30 @@ DASHBOARD_PANEL_TSX = REPO_ROOT / "observer" / "client" / "src" / "dashboards" /
 CHECKOUT_RED_QUAL_RUBRIC = (
     REPO_ROOT / "evals" / "dashboards" / "checkout-red" / "eval" / "qual" / "dashboard.json"
 )
+CHECKOUT_RED_SANITY = (
+    REPO_ROOT
+    / "evals"
+    / "dashboards"
+    / "checkout-red"
+    / "eval"
+    / "sanity"
+    / "dashboard.json"
+)
+CHECKOUT_RED_AUDIT = (
+    REPO_ROOT / "evals" / "dashboards" / "checkout-red" / "otel-audit.json"
+)
 
 
 def test_dashboard_skill_emits_preview_sidecar_contract():
     text = _read(SPLUNK_DASHBOARD)
     assert ".observe/dashboards.preview.json" in text, "must write the Observer preview sidecar"
     assert "schemaVersion" in text, "preview sidecar must declare schemaVersion"
+    assert "telemetryItemId" in text, "every preview chart must preserve stable item provenance"
+    assert "productAction" in text, "every preview chart must preserve its product follow-up"
+    assert "# telemetry-item:" in text and "OTEL-###.<item>" in text, (
+        "every HCL chart must carry machine-readable stable item provenance"
+    )
+    assert "SOURCE-METRIC.<exact-metric-name>" in text
     # The chart types the generator emits and the Observer renderer understands.
     for chart_type in PREVIEW_CHART_TYPES:
         assert chart_type in text, f"preview sidecar chartType vocabulary missing: {chart_type}"
@@ -265,6 +459,67 @@ def test_dashboard_skill_emits_preview_sidecar_contract():
     assert "| text | event" not in text and "text | event" not in text, (
         "SKILL.md preview vocabulary must not list the never-emitted 'event' chartType"
     )
+
+
+def test_dashboard_skill_runs_dependency_free_parity_validator():
+    skill = _read(SPLUNK_DASHBOARD)
+    canonical = _read(DASHBOARD_CANONICAL_INPUTS)
+    validator_contract = f"{skill}\n{canonical}"
+    validator = _read(DASHBOARD_VALIDATOR)
+    normalized = " ".join(validator_contract.split())
+
+    assert "python3 scripts/validate_dashboard_output.py" in normalized
+    for argument in (
+        "--terraform",
+        "--preview",
+        "--report",
+        "--audit",
+        "--verification",
+        "--allow-source-only-item",
+    ):
+        assert argument in validator_contract, f"validator command missing {argument}"
+    assert "Treat the validator as an opaque executable" in skill
+    assert "do not inspect its source or tests" in skill
+    for invariant in (
+        "resolved query differs",
+        "chart type differs",
+        "grid layout differs",
+        "unresolved Terraform variable",
+        "missing service.name or sf_service filter",
+        "telemetry item provenance differs",
+        "not a Working verification item",
+        "working item needs non-empty",
+        "Pass row lacks direct evidence",
+        "overlap",
+        "Result Pass requires Observer render and Live value sanity to be Pass",
+    ):
+        assert invariant in validator, f"dashboard validator missing invariant: {invariant}"
+    assert "import hcl" not in validator and "import yaml" not in validator, (
+        "dashboard validator must remain standard-library-only"
+    )
+
+
+def test_dashboard_loads_only_the_canonical_input_contract():
+    skill = _read(SPLUNK_DASHBOARD)
+    normalized = " ".join(skill.split())
+
+    assert "Validate Canonical Input Before Loading References" in skill
+    assert "references/canonical-input-contract.md" in skill
+    assert "references/legacy-input-contract.md" not in skill
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in normalized
+    assert "Never open or read an audit Markdown report" in normalized
+    assert "If canonical audit JSON is absent" in normalized
+    assert len(_read(DASHBOARD_CANONICAL_INPUTS).split()) < 800
+
+
+def test_dashboard_report_parity_fields_are_literal():
+    skill = _read(SPLUNK_DASHBOARD)
+    normalized = " ".join(skill.split())
+
+    assert "copy each panel label without paraphrasing" in skill
+    assert "exactly equal the preview chart's" in skill
+    assert "SOURCE-METRIC.<exact-metric-name>" in skill
+    assert "These are parity fields, not prose summaries" in normalized
 
 
 def test_preview_chart_vocabulary_is_internally_consistent():
@@ -325,6 +580,34 @@ def test_checkout_red_qual_rubric_matches_preview_chart_vocabulary():
     assert "|event" not in joined and "event vocabulary" not in joined, (
         "qual rubric must not list the never-emitted 'event' chartType"
     )
+
+
+def test_checkout_red_eval_uses_canonical_audit_json() -> None:
+    audit = json.loads(_read(CHECKOUT_RED_AUDIT))
+    definitions = [
+        json.loads(_read(CHECKOUT_RED_QUAL_RUBRIC)),
+        json.loads(_read(CHECKOUT_RED_SANITY)),
+    ]
+    text = " ".join(
+        prompt["task"]
+        for definition in definitions
+        for prompt in definition["prompts"]
+    )
+    rubric = " ".join(definitions[0]["rubric"])
+
+    assert audit["schema_version"] == 2
+    assert audit["kind"] == "otel-audit"
+    assert {
+        row["name"] for row in audit["current_instrumentation"]["metrics"]
+    } >= {
+        "http.server.request.duration",
+        "http.server.active_requests",
+        "checkout.payment.errors",
+    }
+    assert "otel-audit.json" in text
+    assert "otel-audit.json" in rubric
+    assert "otel-report.md" not in text
+    assert ".observe/otel.md" not in rubric
 
 
 def test_dashboard_classification_defines_grid_and_chart_vocabulary():
@@ -458,6 +741,31 @@ def test_dashboard_publish_documents_orphan_chart_recovery():
         "must document orphan-chart recovery when the dashboard POST fails after charts exist"
     )
     assert "DELETE /v2/chart" in text, "orphan recovery must clean up created charts"
+
+
+def test_detector_publish_offline_eval_preserves_uncertainty() -> None:
+    definition = json.loads(
+        _read(
+            REPO_ROOT
+            / "evals"
+            / "dashboards"
+            / "checkout-detectors"
+            / "eval"
+            / "qual"
+            / "detector-publish.json"
+        )
+    )
+    task = " ".join(definition["prompts"][0]["task"].split())
+    rubric = " ".join(definition["rubric"])
+
+    assert "keep all three rows UNCERTAIN" in task
+    assert "current create set empty" in task
+    assert "later online rerun confirms one or more rows as GAP" in task
+    assert "all three detectors as UNCERTAIN" in rubric
+    assert "proves neither presence nor absence" in rubric
+    assert "does not emit concrete current POST payloads" in rubric
+    assert "required only when an API create payload is actually in scope" in rubric
+    assert "may keep the normalized HCL field name" in rubric
 
 
 def test_dashboard_publish_classifies_three_levels():

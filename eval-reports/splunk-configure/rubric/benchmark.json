@@ -7,33 +7,47 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-configure",
-    "run_id": "20260701T171952987919Z",
+    "run_id": "20260722T175512164773Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": true,
     "runtime_enabled": false,
     "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.toml",
+    "scope": {
+      "status": "full",
+      "selected_prompt_count": 3,
+      "expected_prompt_count": 3,
+      "selected_prompt_ids": [
+        "dashboards/checkout-configure/qual/configure-audit-only-source/accepted-source-metric",
+        "dashboards/checkout-configure/qual/configure-partial-overlay/partial-overlay-fails-closed",
+        "dashboards/checkout-configure/qual/configure/generate"
+      ],
+      "missing_prompt_ids": [],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
   },
   "summary": {
-    "eval_count": 1,
-    "prompt_count": 1,
-    "failure_count": 0,
+    "eval_count": 3,
+    "prompt_count": 3,
+    "failure_count": 1,
     "with_skill": {
-      "prompt_count": 1,
-      "command_count": 36,
-      "duration_seconds": 336.199,
-      "agent_duration_seconds": 230.753,
-      "tokens": 457956,
-      "agent_tokens": 383020,
+      "prompt_count": 3,
+      "command_count": 228,
+      "duration_seconds": 1485.435,
+      "agent_duration_seconds": 1145.39,
+      "tokens": 5448088,
+      "agent_tokens": 4816907,
       "error_count": 0,
       "rubric": {
-        "passed": 6,
-        "total": 6,
-        "average_score": 94.0
+        "passed": 15,
+        "total": 16,
+        "average_score": 95.33333333333333
       },
-      "rubric_tokens": 74936,
-      "rubric_duration_seconds": 105.436
+      "rubric_tokens": 631181,
+      "rubric_duration_seconds": 339.914
     },
     "with_baseline": null
   },
@@ -49,28 +63,104 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 36,
-        "duration_seconds": 336.199,
-        "agent_duration_seconds": 230.753,
-        "tokens": 457956,
-        "agent_tokens": 383020,
+        "command_count": 116,
+        "duration_seconds": 738.02,
+        "agent_duration_seconds": 619.772,
+        "tokens": 3082406,
+        "agent_tokens": 2898649,
         "error_count": 0,
         "rubric": {
           "passed": 6,
-          "total": 6,
-          "average_score": 94.0
+          "total": 7,
+          "average_score": 86.0
         },
-        "rubric_tokens": 74936,
-        "rubric_duration_seconds": 105.436
+        "rubric_tokens": 183757,
+        "rubric_duration_seconds": 118.214
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20260701T171952987919Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+      }
+    },
+    {
+      "id": "dashboards/checkout-configure/qual/configure-audit-only-source",
+      "case": "dashboards/checkout-configure",
+      "language": "dashboards",
+      "service": "checkout-configure",
+      "prompt_count": 1,
+      "prompts": [
+        "accepted-source-metric"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 70,
+        "duration_seconds": 474.167,
+        "agent_duration_seconds": 348.494,
+        "tokens": 1674652,
+        "agent_tokens": 1331047,
+        "error_count": 0,
+        "rubric": {
+          "passed": 5,
+          "total": 5,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 343605,
+        "rubric_duration_seconds": 125.603
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-audit-only-source/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-audit-only-source/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-audit-only-source/with_baseline.json"
+      }
+    },
+    {
+      "id": "dashboards/checkout-configure/qual/configure-partial-overlay",
+      "case": "dashboards/checkout-configure",
+      "language": "dashboards",
+      "service": "checkout-configure",
+      "prompt_count": 1,
+      "prompts": [
+        "partial-overlay-fails-closed"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 42,
+        "duration_seconds": 273.248,
+        "agent_duration_seconds": 177.124,
+        "tokens": 691030,
+        "agent_tokens": 587211,
+        "error_count": 0,
+        "rubric": {
+          "passed": 4,
+          "total": 4,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 103819,
+        "rubric_duration_seconds": 96.097
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-partial-overlay/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-partial-overlay/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20260722T175512164773Z/results/dashboards/checkout-configure/qual-configure-partial-overlay/with_baseline.json"
       }
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "`service/.observe/otel.md` matches `service/otel-report.md`; `detectors.tf` has `latency_http_server_request_duration` using `http.server.request.duration`. `service/.observe/detectors.md` summary lists `Throughput | 0` and `Saturation | 0`.",
+      "mode": "with_skill"
+    }
+  ]
 }

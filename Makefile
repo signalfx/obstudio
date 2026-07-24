@@ -15,7 +15,7 @@ PYTEST_PLUGIN_DIR := pytest-codex-evals
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-skills test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -67,17 +67,16 @@ test-extension: ## Run extension unit + integration tests
 test-client: ## Run client unit tests
 	cd $(GO_DIR)/client && npm ci && npx vitest run
 
-test-interactive-otel-scripts: ## Run interactive OTel report and selection unit tests
-	$(PYTHON) -m unittest discover -s skills/references/tests -p 'test_*.py'
-	$(PYTHON) -m unittest discover -s skills/otel-audit/tests -p 'test_*.py'
-	$(PYTHON) -m unittest discover -s skills/otel-instrument/tests -p 'test_*.py'
-	$(PYTHON) -m unittest discover -s skills/otel-verify/tests -p 'test_*.py'
+test-skills: ## Run dependency-free tests for bundled skill scripts
+	@set -e; for dir in $(wildcard skills/*/tests); do \
+		$(PYTHON) -m unittest discover -s "$$dir" -p 'test_*.py'; \
+	done
 
-test-all: ## Run all tests (Go + client + extension + interactive OTel scripts)
+test-all: ## Run all tests (Go + client + extension + skills)
 	$(MAKE) test
 	$(MAKE) test-client
 	$(MAKE) test-extension
-	$(MAKE) test-interactive-otel-scripts
+	$(MAKE) test-skills
 
 tidy: ## Tidy Go modules
 	cd $(GO_DIR) && $(GO) mod tidy

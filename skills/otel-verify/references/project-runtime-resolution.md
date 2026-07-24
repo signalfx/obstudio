@@ -20,11 +20,13 @@ project-configured runtime. If a default shell runtime fails but project config
 points elsewhere, record the default runtime as rejected and retry with the
 project runtime.
 
-When `.observe/otel.md` contains `Verification Plan / Test Environments`, or
-`.observe/otel-instrumentation.md` contains `Verification Handoff / Results`,
-treat their runtime rows and commands as candidates. Revalidate all candidates
-against current wrappers, toolchain files, manifests, and local availability
-before execution; a handoff can become stale.
+When canonical JSON exists, use the selected findings' referenced verification
+environments and the matching `.observe/otel-instrumentation.json` tests as
+runtime candidates. Otherwise derive candidates from explicit user scope,
+current project configuration, and any prior instrumentation handoff evidence.
+Revalidate all candidates against current wrappers,
+toolchain files, manifests, and local availability before execution; a handoff
+can become stale.
 
 ## Discovery Order
 

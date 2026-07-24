@@ -16,11 +16,11 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Preserves the existing chi routes and otelhttp wrapping behavior.",
+    "Preserves the existing chi routes and otelhttp wrapping behavior, including the request-context edge from the single otelhttp SERVER span to the task-service custom span for GET /tasks/{id}; tests must prove both spans share one trace and the custom span names the SERVER span as its direct parent, not merely prove that both spans exist.",
     "Adds or fixes MeterProvider setup so HTTP server metrics can export.",
     "Replaces hardcoded collector.example.com configuration with environment-driven OTLP settings.",
     "Moves request hot-path tracer creation to a stable package-level or setup-time pattern.",
-    "Fixes high-cardinality span naming and records errors/status on failure paths.",
+    "Fixes high-cardinality span naming and follows HTTP server span status semantics: relies on the outer otelhttp handler for HTTP status/error ownership, leaves ordinary handled 4xx SERVER responses unset, and explicitly records only source-evidenced application/transport exceptions or custom-span failures.",
     "For the POST /tasks/{id}/reserve route, both the 'already done' and 'already reserved' outcomes return the same 409 status, so http.response.status_code alone cannot distinguish them. Recognizes this as the Evidenced Non-Standard Outcome Attribute case and pulls the Labeler otelhttp.NewHandler already injects into the request context (otelhttp.LabelerFromContext(r.Context())) to add a distinguishing attribute (e.g. outcome.reason) on http.server.request.duration, rather than introducing a standalone custom counter for the reservation-conflict outcome."
   ]
 }

@@ -2,8 +2,14 @@
 
 Use this reference when `.observe/otel-audit.json` exists or the user supplies
 finding IDs. It binds verification to the approved instrumentation scope.
-For canonical JSON flow, this file owns the approved scope, verification
-schema, digest binding, status rollup, and instrumentation HTML refresh.
+For that canonical JSON flow, this file is the scoped verification and
+reader-report authority. Do not also load `../../references/report-flow-contract.md`
+unless a conditional downstream workflow explicitly requires an additional
+field or rollup rule from it.
+Never open or read an audit Markdown report. Ignore `signal_flow`; selected
+findings and their referenced scenarios define verification scope. After
+selection validation, use the compact `--scoped-out` JSON instead of reopening
+the full canonical audit for scenario planning.
 
 ## Scope Gate
 
@@ -20,7 +26,8 @@ schema, digest binding, status rollup, and instrumentation HTML refresh.
    python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" select \
      .observe/otel-audit.json \
      --ids OTEL-001,OTEL-002 \
-     -o .observe/otel-selection.json
+     -o .observe/otel-selection.json \
+     --scoped-out .observe/tmp/otel-selected-findings.json
    ```
 
    Do not hand-edit or merge selections. If neither IDs nor a selection exists,
@@ -43,8 +50,13 @@ schema, digest binding, status rollup, and instrumentation HTML refresh.
    normalized selection. A changed `decision_answers` entry is stale even when
    `approved_ids` is unchanged.
 4. Verify exactly the approved findings in audit order, their expected
-   telemetry, and referenced scenarios. Unselected findings are outside this
-   result and must not make it partial.
+   telemetry, acceptance criteria, telemetry-affecting constraints, and
+   referenced scenarios. Unselected findings are outside this result and must
+   not make it partial. When instrumentation changed a context producer,
+   carrier, or key, inspect every source consumer and execute the handoff at a
+   downstream consumer. Route success, server-span presence, child-span
+   presence under a synthetic parent, or OTLP acceptance alone does not prove
+   propagation.
 
 ## Verification JSON
 
@@ -77,6 +89,13 @@ Write `.observe/otel-verify.json` with this shape:
           "observed_telemetry": ["span GET /health with http.route=/health"],
           "trace_ids": ["4bf92f3577b34da6a3ce929d0e0e4736"],
           "product_validation": ["Trace waterfall shows route latency."],
+          "context_propagation_proof": [
+            {
+              "handoff_id": "OTEL-001.http-to-health-handler",
+              "same_trace_assertion_passed": true,
+              "relationship_assertion_passed": true
+            }
+          ],
           "proof_mode": "full_runtime",
           "visibility": "explorer_visible"
         }
@@ -85,6 +104,7 @@ Write `.observe/otel-verify.json` with this shape:
         {
           "id": "OTEL-001.http-server-span",
           "status": "working",
+          "direct_assertion_passed": true,
           "scenarios": ["http.health.success"],
           "proof_mode": "full_runtime",
           "visibility": "explorer_visible",
@@ -96,6 +116,7 @@ Write `.observe/otel-verify.json` with this shape:
       "remaining": []
     }
   ],
+  "stop_boundaries": [],
   "next_steps": []
 }
 ```
@@ -135,10 +156,20 @@ python3 -I "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" in
   --instrumentation-json .observe/otel-instrumentation.json
 ```
 
-Copy that command's digest into the verification overlay. Any material
-instrumentation change, including change text, source, tests, or evidence,
-invalidates prior verification even when item IDs are unchanged. The digest
-also binds the exact normalized selection through `selection_sha256`.
+Copy only that command's digest into the verification overlay. Never import
+report-helper internals, search for another helper installation, or calculate
+or repair the digest manually. The command normalizes the exact instrumentation
+overlay used to derive expected items and proof. Any material instrumentation change,
+including change text, source, tests, or evidence, invalidates prior
+verification even when item IDs are unchanged. The instrumentation digest also
+contains `selection_sha256`, so `instrumentation_sha256` binds the exact
+normalized selection transitively without a redundant second selection hash.
+
+Use `meta.workflow_mode: standalone` for a user-invoked verification and
+`instrumentation_child` when an active `$otel-instrument` workflow invoked it.
+Use `meta.lifecycle: intermediate` only for a failed child repair packet; all
+standalone artifacts and the post-repair child artifact use `final`. A failed
+child artifact cannot be final.
 
 Use only `Pass`,
 `Partial`, `Fail`, `Blocked`, or `Not run` for `meta.result`; `working`,
@@ -165,6 +196,17 @@ requires direct evidence, observed telemetry, product validation, an executed
 `proof_mode`, and an explicit visibility state. Preserve empty `trace_ids` when
 unavailable; never invent values.
 
+For each instrumentation `context_handoffs` row mapped to a scenario, that
+scenario is `working` only when `context_propagation_proof` references the
+handoff ID exactly once, in instrumentation order, and both
+`same_trace_assertion_passed` and `relationship_assertion_passed` are `true`.
+Scenarios with no mapped handoff need no context proof. Cite the saved
+consumer-side assertion in scenario evidence and use only `app_test`, `unit`,
+`unit+otlp`, or `full_runtime` proof. Separate observations that a server span
+exists, a child span accepts a synthetic parent, or telemetry reached OTLP do
+not prove the handoff. Missing mapped proof is `not_proven`; any executed false
+same-trace or relationship assertion makes the scenario `not_working`.
+
 `otlp_accepted` and `explorer_visible` are evidence claims even when the row is
 not yet working: require an executed proof mode, durable evidence, observed
 telemetry, and product validation before using either. Do not use a visibility
@@ -183,12 +225,23 @@ Use only `app_test`, `unit`, `unit+otlp`, `full_runtime`, `contract_only`,
 inflate it into an explorer claim. An `explorer_visible` result must cite saved
 query or Observer evidence.
 
+For every scenario with `status: blocked`, require nonempty
+`blocking_reason` and `unobserved_outcome` strings. `blocking_reason` is the
+exact prerequisite failure, written in past or present tense and supported by
+the scenario's command/evidence. `unobserved_outcome` is the exact runtime,
+OTLP-delivery, or product observation that could not be captured. Omit both
+fields for non-blocked scenarios. Keep remediation in finding `remaining` or
+top-level `next_steps`; do not make the renderer infer a cause from an action.
+
 Preserve proof provenance. When a focused test or other lower-level check ran,
 retain its executed `proof_mode`, evidence, and `observed_telemetry`; do not
-change it to `not_run`. Direct item proof may coexist with incomplete scenario
-coverage. Source/config presence or ambiguous absence is not runtime proof. The
-instrumentation HTML presents scenario triggers as neutral coverage context,
-not as a stronger-proof ladder or completion checklist.
+change it to `not_run`. A direct successful unit, application, or runtime
+observation makes the matching telemetry `item_results` row `working`, even
+when the finding remains `not_proven` because other scenarios were not
+exercised. Source/config presence and an unbounded or ambiguous absence do not
+qualify. A bounded expected-absence assertion for a removed item is governed by
+the direct-assertion rule below. The instrumentation HTML presents scenario triggers as neutral
+coverage context rather than a stronger-proof ladder or completion checklist.
 
 Write one `item_results` row for every instrumentation
 `telemetry_changes[].id`, in instrumentation order. The validator derives this
@@ -197,6 +250,42 @@ duplicate, unknown, or reordered item IDs. A working item must cite its audit
 scenario(s), direct evidence, observed telemetry, product validation, proof
 mode, and visibility. This per-item join is the authoritative scalable mapping
 from code/config change to telemetry to product result to proof.
+
+Set the required boolean `direct_assertion_passed` before rolling up scenario
+or finding coverage. It is `true` only when a saved unit, application, or
+runtime assertion directly exercises the exact telemetry item or call site and
+passes. For a `change_kind: removed` item, a bounded capture can set it `true`
+only when it explicitly proves both the removed signal's absence and the
+intended replacement owner's presence. Aggregate receiver counts, a different
+signal, source/config presence, or a helper that never invokes the exact item
+must set it `false`. The validator requires `direct_assertion_passed: true`
+exactly when item `status` is `working`; incomplete finding or scenario coverage
+cannot change either value. An executed direct failure remains `not_working`
+with `direct_assertion_passed: false`.
+
+A working removed item also requires this structured field so the two halves
+of the assertion cannot collapse into a generic evidence sentence:
+
+```json
+"removal_proof": {
+  "removed_signal": "HttpRequest",
+  "replacement_signal": "GET /health",
+  "absence_assertion_passed": true,
+  "replacement_assertion_passed": true
+}
+```
+
+`removed_signal` must exactly match the instrumentation item's `name`;
+`replacement_signal` must name a distinct intended owner of the removed item's
+signal type; its proof must use that type explicitly. Keep the saved
+capture in `evidence` and the reader-friendly observation in
+`observed_telemetry`.
+
+This required field intentionally fails closed. Regenerate any older
+`otel-verify` overlay that does not contain it; do not infer the value from the
+old item status. The overlay remains schema version 1 because this is a
+validation tightening of the still-evolving canonical flow, not a second
+accepted wire format.
 
 ## Validate And Render
 
@@ -233,6 +322,11 @@ scenario-proof tables, or item-proof tables. Preserve their complete data in
 `.observe/otel-instrumentation.json`, `.observe/otel-instrumentation.md`,
 `.observe/otel-verify.json`, and `.observe/otel-verify.md`. Leave
 `.observe/otel.html` as the audit and approval report.
+
+Before **Coverage details**, replace a generic blocked count with **Runtime
+verification unavailable**. Show the structured `blocking_reason` under **Why
+runtime verification is unavailable**, mapped working item observations under
+**Already proven**, and `unobserved_outcome` under **Still unobserved**.
 
 Never print raw trace IDs or span IDs in that human HTML, including identifiers
 embedded in `observed_telemetry`. Render **the generated trace** and the named

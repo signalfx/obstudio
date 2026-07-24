@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the partially instrumented Go chi service in ./service for observability gaps and anti-patterns. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
+      "task": "Scan the partially instrumented Go chi service in ./service for observability gaps and anti-patterns. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the partially instrumented Go chi service in ./service. Identify existing telemetry, missing coverage, anti-patterns, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html and compatibility ./service/.observe/otel.md from that JSON."
+      "task": "Produce an observability readiness review for the partially instrumented Go chi service in ./service. Identify existing telemetry, missing coverage, anti-patterns, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     }
   ],
   "judge_inputs": [
@@ -21,6 +21,7 @@
     "Flags the hardcoded OTLP endpoint and absence of environment-driven configuration.",
     "Flags high-cardinality custom span naming and tracer creation inside a request handler.",
     "Calls out missing MeterProvider, TextMapPropagator, service.name resource, and graceful shutdown.",
-    "Notes that POST /tasks/{id}/reserve returns 409 for two distinct causes ('already done' and 'already reserved') with no attribute distinguishing them on http.server.request.duration once metrics are wired up."
+    "Notes that POST /tasks/{id}/reserve returns 409 for two distinct causes ('already done' and 'already reserved') with no attribute distinguishing them on http.server.request.duration once metrics are wired up.",
+    "Keeps source-proven safe reversible OTel fixes executable as default or fix all rather than manual decision work: reuse the existing provider topology, replace the hardcoded exporter endpoint with environment-driven configuration, and add the missing service.name resource, TextMapPropagator, MeterProvider, and graceful shutdown without manufacturing an approval choice."
   ]
 }

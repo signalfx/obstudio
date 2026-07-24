@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "kind": "rubric",
+  "mode": "with_skill",
+  "skill": "otel-instrument",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "rubric",
+    "skill": "otel-instrument",
+    "run_id": "20260722T154633721819Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": true,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "evals/codex-evals.toml",
+    "scope": {
+      "status": "scoped",
+      "selected_prompt_count": 1,
+      "expected_prompt_count": 31,
+      "selected_prompt_ids": [
+        "go/chi-partial/qual/instrument/direct"
+      ],
+      "missing_prompt_ids": [
+        "go/chi-basic/qual/benchmark-instrument/benchmark",
+        "go/chi-basic/qual/instrument-decision-gated/decision-gated",
+        "go/chi-basic/qual/instrument/direct",
+        "go/chi-basic/qual/instrument/runtime-preserving",
+        "go/chi-partial/qual/instrument/runtime-preserving",
+        "go/kvstore/qual/incident-readiness/mttd",
+        "go/kvstore/qual/instrument/direct",
+        "go/kvstore/qual/instrument/runtime-preserving",
+        "java/kafka-batch-consumer/qual/instrument/direct",
+        "java/kafka-batch-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-listener-container/qual/instrument/direct",
+        "java/kafka-listener-container/qual/instrument/runtime-preserving",
+        "java/kafka-producer-consumer/qual/instrument/direct",
+        "java/kafka-producer-consumer/qual/instrument/runtime-preserving",
+        "java/kafka-streams/qual/incident-readiness/mttd",
+        "java/kafka-streams/qual/instrument/direct",
+        "java/kafka-streams/qual/instrument/runtime-preserving",
+        "java/springboot-basic/qual/instrument/direct",
+        "java/springboot-basic/qual/instrument/runtime-preserving",
+        "node/express-basic/qual/instrument/direct",
+        "node/express-basic/qual/instrument/runtime-preserving",
+        "python/ai-assistant-demo/qual/instrument/direct",
+        "python/assistant-v3-framework-bridge-demo/qual/instrument/framework-bridge",
+        "python/checkout-red-demo/qual/instrument/direct",
+        "python/fastapi-celery/qual/incident-readiness/mttd",
+        "python/fastapi-celery/qual/instrument/direct",
+        "python/fastapi-celery/qual/instrument/runtime-preserving",
+        "python/flask-basic/qual/instrument/direct",
+        "python/flask-basic/qual/instrument/runtime-preserving",
+        "python/mcp-ai-tool-demo/qual/instrument/direct"
+      ],
+      "unexpected_prompt_ids": [],
+      "stale_prompt_ids": [],
+      "errors": []
+    }
+  },
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 2,
+    "with_skill": {
+      "prompt_count": 1,
+      "command_count": 146,
+      "duration_seconds": 1058.171,
+      "agent_duration_seconds": 968.747,
+      "tokens": 5924940,
+      "agent_tokens": 5824617,
+      "error_count": 0,
+      "rubric": {
+        "passed": 4,
+        "total": 6,
+        "average_score": 70.0
+      },
+      "rubric_tokens": 100323,
+      "rubric_duration_seconds": 89.386
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "go/chi-partial/qual/instrument",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 146,
+        "duration_seconds": 1058.171,
+        "agent_duration_seconds": 968.747,
+        "tokens": 5924940,
+        "agent_tokens": 5824617,
+        "error_count": 0,
+        "rubric": {
+          "passed": 4,
+          "total": 6,
+          "average_score": 70.0
+        },
+        "rubric_tokens": 100323,
+        "rubric_duration_seconds": 89.386
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-instrument/20260722T154633721819Z/results/go/chi-partial/qual-instrument/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20260722T154633721819Z/results/go/chi-partial/qual-instrument/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20260722T154633721819Z/results/go/chi-partial/qual-instrument/with_baseline.json"
+      }
+    }
+  ],
+  "failures": [
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "service/main.go:50 uses static server span naming and no GetTask-<id> span remains. However bad body/not found/conflict paths at service/main.go:84-85, 120, 129-135, and 142 only write responses; there are no RecordError or SetStatus calls.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "go/chi-partial",
+      "side": "with_skill",
+      "prompt": "direct",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "service/main.go:129-135 returns identical 409 statuses for already done and already reserved without adding a label. service/main.go:166-167 only adds http.route to the Labeler.",
+      "mode": "with_skill"
+    }
+  ]
+}
