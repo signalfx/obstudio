@@ -1,8 +1,8 @@
 # Acceptance Scenario Coverage
 
-Use this reference whenever `.observe/otel.md` exists or the verification scope
-includes workflows, routes, jobs, startup, streaming, tools, retrieval,
-redaction, or error paths.
+Use this reference whenever `.observe/otel-audit.json` or legacy
+`.observe/otel.md` exists, or the verification scope includes workflows,
+routes, jobs, startup, streaming, tools, retrieval, redaction, or error paths.
 
 ## Goal
 
@@ -19,7 +19,14 @@ scenario-specific execution and evidence.
 
 ## Derive Acceptance Scenarios From The Audit
 
-Read `.observe/otel.md` and extract scenarios from these places when present:
+For a canonical flow, read `.observe/otel-audit.json`, the bound
+`.observe/otel-selection.json`, and `.observe/otel-instrumentation.json`.
+Extract only the approved findings' referenced scenarios and environments, and
+preserve their stable IDs. Do not derive verification obligations from
+unselected findings.
+
+On the legacy fallback, read `.observe/otel.md`. Extract scenarios from these
+places when present:
 
 - `Verification Plan / Test Environments`: resolve each reusable runtime,
   fixture, and prerequisite profile by its stable environment ID.

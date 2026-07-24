@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTel Audit - go-chi-basic</title>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --ink: #17202a;
+  --muted: #5f6b7a;
+  --line: #dbe2ea;
+  --accent: #1f5eff;
+  --ok: #16794c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding-bottom: 88px; }
+header { background: #121821; color: #eef2f7; padding: 28px 0; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+.eyebrow { color: #9aa8ba; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 8px 0 4px; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; }
+.meta { color: #b8c2cf; display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; }
+.meta b { color: #fff; }
+.report-nav { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; }
+.report-nav a { color: #91b8ff; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin: 18px 0; padding: 16px 18px; }
+.summary h2, .panel h2 { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.decision-context { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+.decision-context section { border: 1px solid var(--line); border-radius: 7px; padding: 10px 11px; background: #fbfcfe; }
+.decision-context p { margin-bottom: 0; }
+.decision-table-link { color: var(--accent); text-decoration: none; }
+.decision-table-link code { color: var(--muted); font-size: 11px; }
+.decision-table-link:hover strong, .decision-table-link:focus strong { text-decoration: underline; }
+.finding-jump { display: inline-block; color: var(--accent); font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 5px 3px 0; text-decoration: none; }
+.finding-jump:hover, .finding-jump:focus { text-decoration: underline; }
+.review-note { border-left: 3px solid var(--accent); margin: 13px 0; padding: 8px 10px; background: #f4f7ff; }
+.decision-table { overflow-x: auto; }
+.summary details { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
+.summary details > summary { cursor: pointer; font-weight: 700; color: var(--muted); }
+.impact-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin: 18px 0; padding: 16px 18px; overflow-x: auto; }
+.impact-panel h2 { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.impact-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.impact-stats div { border: 1px solid var(--line); border-radius: 7px; background: #fbfcfe; padding: 9px 10px; }
+.impact-stats span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.impact-stats strong { display: block; margin-top: 2px; font-size: 18px; }
+.impact-panel details > summary { cursor: pointer; font-weight: 700; margin-top: 12px; }
+.findings-section { margin: 18px 0; }
+.findings-section > h2 { color: var(--ink); font-size: 18px; margin: 0 0 12px; }
+.findings-total { color: var(--muted); font-size: 13px; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.card.done { opacity: .62; }
+.card.working { border-color: #9bd5b7; }
+.card-head { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; }
+.row { display: grid; grid-template-columns: 5px minmax(72px, auto) minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 13px 14px 13px 0; cursor: pointer; font: inherit; }
+.spine { align-self: stretch; background: var(--accent); }
+.fid { font: 700 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.finding-copy { min-width: 0; }
+.ftitle { display: block; font-weight: 700; }
+.fimpact { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 2px; }
+.finding-meta { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; font-size: 11px; font-weight: 600; gap: 4px 12px; margin-top: 5px; }
+.finding-meta strong { color: var(--ink); }
+.finding-meta code { color: var(--ink); font-size: 10px; }
+.plan-select { display: flex; gap: 7px; align-items: center; border: 1px solid var(--line); border-radius: 6px; margin-right: 14px; padding: 5px 9px; color: var(--muted); background: #fff; }
+.plan-select.on { border-color: var(--ok); color: var(--ok); background: #eef8f2; }
+.plan-select.included { border-color: #b7791f; color: #7a4a00; background: #fff8e8; }
+.plan-unavailable { max-width: 220px; margin-right: 14px; color: var(--muted); font-size: 11px; font-weight: 700; line-height: 1.3; text-align: right; }
+.decision-select { grid-column: 1 / -1; min-width: 0; border: 0; border-top: 1px solid var(--line); margin: 0; padding: 12px 14px 14px; background: #fbfcfe; }
+.decision-select legend { width: 100%; color: var(--ink); font-weight: 700; padding: 0 0 8px; }
+.decision-options { display: grid; gap: 7px; }
+.decision-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; align-items: start; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 8px 10px; cursor: pointer; }
+.decision-option:has(input:checked) { border-color: var(--accent); background: #f4f7ff; }
+.decision-option input { margin-top: 3px; }
+.decision-option strong, .decision-option span { grid-column: 2; }
+.decision-option span { color: var(--muted); font-size: 12px; }
+.decision-clear { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 11px; margin-top: 8px; padding: 0; text-decoration: underline; }
+.caret { color: var(--muted); font-size: 20px; }
+.card.open .caret { transform: rotate(90deg); }
+.body { display: none; border-top: 1px solid var(--line); background: #fbfcfe; padding: 16px 18px; }
+.card.open .body { display: block; }
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.finding-technical-details { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 12px; }
+.finding-technical-details > summary { align-items: baseline; color: var(--accent); cursor: pointer; display: flex; flex-wrap: wrap; font-weight: 700; gap: 5px 10px; }
+.detail-counts { color: var(--muted); font-size: 12px; font-weight: 600; }
+.technical-details-body { margin-top: 14px; }
+.technical-details-body > section, .technical-details-body > .cols + section { margin-top: 14px; }
+@media (max-width: 760px) { .impact-stats, .decision-context { grid-template-columns: 1fr; } .card-head { grid-template-columns: 1fr; } .row { grid-template-columns: 5px auto 1fr auto; } .plan-select, .plan-unavailable { justify-self: end; margin: 0 14px 12px; width: max-content; } .decision-select { grid-column: 1; } .cols { grid-template-columns: 1fr; } }
+h3 { margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+p { margin: 0 0 12px; }
+ul { margin: 0; padding-left: 18px; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.source-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+.source-link:hover, .source-link:focus { text-decoration: underline; }
+.source-link code { color: inherit; }
+.source-open { display: inline-block; margin-left: 3px; font-size: 10px; vertical-align: top; }
+pre { background: #111827; color: #edf2f7; border-radius: 6px; padding: 10px; overflow-x: auto; white-space: pre-wrap; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-size: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin: 18px 0; overflow-x: auto; }
+.panel details > summary { cursor: pointer; font-weight: 700; }
+.technical-appendix h2:not(:first-child) { margin-top: 22px; }
+.context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.context-grid .panel { margin: 0; }
+.proof { border-left: 3px solid var(--ok); padding-left: 12px; }
+.muted { color: var(--muted); }
+.tray { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; background: #121821; color: #fff; box-shadow: 0 -8px 24px rgba(18, 24, 33, .18); }
+.tray[hidden] { display: none; }
+.tray-bar { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(280px, 1.2fr) max-content; gap: 18px; align-items: center; padding-top: 12px; padding-bottom: 12px; }
+.tray-summary { min-width: 0; }
+.tray-summary strong { display: block; font-size: 14px; line-height: 1.35; }
+.tray-hint { display: block; color: #d3d9e2; font-size: 11px; line-height: 1.4; margin-top: 3px; }
+.tray-hint code { color: #91f0b8; }
+.tray-command { min-width: 0; }
+.instrument-command { display: block; margin-top: 4px; max-width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; user-select: all; }
+.tray button { border-radius: 6px; padding: 9px 13px; font-weight: 700; cursor: pointer; }
+.tray button.primary { background: var(--ok); color: #fff; border: 1px solid var(--ok); }
+.tray button:hover { filter: brightness(1.08); }
+.tray button:disabled { cursor: not-allowed; filter: none; opacity: .5; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 760px) {
+  body { padding-bottom: 124px; }
+  .context-grid { grid-template-columns: 1fr; }
+  .tray-bar { grid-template-columns: 1fr; gap: 9px; }
+  .tray-summary { width: 100%; }
+  .tray-bar > button { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">OpenTelemetry audit report</div>
+    <h1>go-chi-basic</h1>
+    <div class="meta">
+      <span>audit <b>go-chi-basic-fixture</b></span>
+      <span>commit <b>fixture</b></span>
+      <span>language <b>go</b></span>
+      <span>framework <b>chi</b></span>
+      <span>date <b>2026-07-17</b></span>
+      <span><b>4</b> findings</span>
+    </div>
+    <nav class="report-nav" aria-label="Report formats">
+      <a href="otel.md">Technical audit (Markdown)</a>
+      <a href="otel-audit.json">Canonical audit data (JSON)</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <section class="summary">
+    <h2>Executive Summary</h2>
+    <div class="decision-context"><section><h3>Current baseline</h3><p>Source inventory: 6 routes · 0 span entries · 0 metric entries · 0 log integrations.</p></section></div><p class="review-note"><strong>Review order:</strong> findings are ordered by priority, highest first. Select executable work on its card; answer a telemetry choice only where the card asks for one.</p>
+  </section>
+
+  <section class="findings-section" aria-labelledby="findings-heading">
+    <h2 id="findings-heading" tabindex="-1">Findings <span class="findings-total">· 4</span></h2>
+    <div id="cards"></div>
+  </section>
+
+  <section class="panel technical-appendix"><details><summary>Technical appendix</summary>
+    <h2>Source-visible instrumentation evidence</h2><p class="muted">None recorded.</p>
+    <h2>Verification plan</h2>
+    <h3>Test environments</h3><table><thead><tr><th>ID</th><th>Surface</th><th>Config evidence</th><th>Runner</th><th>Scope</th><th>Prerequisites</th></tr></thead><tbody><tr><td>go.local</td><td>go-chi-basic service</td><td><a class="source-link" href="../../evals/go/chi-basic/go.mod" target="_blank" rel="noopener" title="Open local source file"><code>go.mod</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>go test ./...</td><td>module</td><td>none</td></tr></tbody></table>
+    <h3>Acceptance scenarios</h3><table><thead><tr><th>ID</th><th>Trigger</th><th>Source entrypoint</th><th>Expected signals</th><th>Proof</th><th>Acceptance</th></tr></thead><tbody><tr><td>http.health.success</td><td>GET /health</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L28" target="_blank" rel="noopener" title="Open local source file"><code>main.go:28</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one route-aware HTTP server span</td><td>full runtime</td><td>The request emits exactly one server span with http.route=/health.</td></tr><tr><td>business.task-created</td><td>POST /tasks with a valid bounded title</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L53" target="_blank" rel="noopener" title="Open local source file"><code>main.go:53</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one task.created metric increment</td><td>focused call-site</td><td>The successful persistence path records task.created exactly once with no metric attributes.</td></tr><tr><td>business.task-create-span</td><td>POST /tasks with a valid bounded title</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L53" target="_blank" rel="noopener" title="Open local source file"><code>main.go:53</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one task.create span</td><td>focused call-site</td><td>The successful persistence path emits task.create exactly once.</td></tr></tbody></table>
+    <h2>Audit notes</h2><ul><li>HTTP request telemetry is missing; a business event metric is optional and not approved.</li></ul>
+    <h2>Audit Evidence</h2><table><thead><tr><th>Check</th><th>Finding</th><th>Source</th></tr></thead><tbody><tr><td>Manifest</td><td>Go chi service without OpenTelemetry dependencies</td><td><a class="source-link" href="../../evals/go/chi-basic/go.mod" target="_blank" rel="noopener" title="Open local source file"><code>go.mod</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Entry point</td><td>HTTP router and handlers</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go" target="_blank" rel="noopener" title="Open local source file"><code>main.go</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Route source</td><td>Six chi routes</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go" target="_blank" rel="noopener" title="Open local source file"><code>main.go</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Runtime/startup</td><td>Go 1.23 module</td><td><a class="source-link" href="../../evals/go/chi-basic/go.mod" target="_blank" rel="noopener" title="Open local source file"><code>go.mod</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>GenAI ownership</td><td>No</td><td>go.mod and main.go</td></tr></tbody></table>
+    <h2>Recommendation</h2><ul><li>Review findings in order, save the audit state over .observe/otel-audit.json, then run $otel-instrument.</li></ul>
+  </details></section>
+</main>
+<div class="tray" id="tray" hidden inert aria-hidden="true" aria-label="Instrumentation selection">
+  <div class="wrap tray-bar">
+    <div class="tray-summary">
+      <strong id="planSummary"></strong>
+      <span class="tray-hint" id="saveSelectionHint">Save this audit state over <code>.observe/otel-audit.json</code> before running <code>$otel-instrument</code>. If your browser downloads a saved audit file instead, <code>$otel-instrument</code> can adopt it after validation.</span>
+    </div>
+    <div class="tray-command" aria-labelledby="instrumentCommandLabel">
+      <span class="tray-hint" id="instrumentCommandLabel">Copy/paste terminal fallback when saving is unreliable:</span>
+      <code class="instrument-command" id="instrumentCommand"></code>
+    </div>
+    <button id="saveSelection" class="primary" type="button" aria-describedby="saveSelectionHint">Save selection</button>
+  </div>
+</div>
+<div id="selectionStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+<script>
+const DATA = {"report":{"schema_version":2,"kind":"otel-audit","meta":{"audit_id":"go-chi-basic-fixture","service_name":"go-chi-basic","commit":"fixture","language":"go","framework":"chi","date":"2026-07-17","status":"Partial","genai_ownership_detected":false},"summary":["HTTP request telemetry is missing; a business event metric is optional and not approved."],"flow":"audit -> select -> instrument -> verify","evidence":[{"check":"Manifest","finding":"Go chi service without OpenTelemetry dependencies","source":"go.mod"},{"check":"Entry point","finding":"HTTP router and handlers","source":"main.go"},{"check":"Route source","finding":"Six chi routes","source":"main.go"},{"check":"Runtime/startup","finding":"Go 1.23 module","source":"go.mod"},{"check":"GenAI ownership","finding":"No","source":"go.mod and main.go"}],"routes":[{"method":"GET","path":"/health"},{"method":"GET","path":"/tasks"},{"method":"GET","path":"/tasks/{id}"},{"method":"POST","path":"/tasks"},{"method":"PATCH","path":"/tasks/{id}"},{"method":"DELETE","path":"/tasks/{id}"}],"signal_flow":{"component_flow_map":"Request handling\nmain.go [SOURCE-COVERED] -> chi router [GAP: HTTP request telemetry] -> POST /tasks handler [SOURCE-COVERED] [GAP: Task creation KPI] [GAP: Task telemetry ownership] [GAP: Task creation trace]"},"current_instrumentation":{"spans":[],"metrics":[],"logs":[],"incident_readiness":[]},"genai_readiness":[],"findings":[{"id":"OTEL-001","title":"HTTP requests lack route-aware telemetry","severity":"high","priority":"required","effort":"medium","status":"proposed","area":"HTTP request telemetry","gap":"The chi router has no OpenTelemetry server instrumentation.","impact":"Operators cannot attribute latency or errors to stable route patterns.","product_outcome":"Splunk APM route-level latency and errors","required_fix":"Add one OpenTelemetry SDK lifecycle and one route-aware otelhttp server wrapper.","instrument_mode":"default","verification_scenarios":["http.health.success"],"dependencies":[],"evidence":["main.go:28"],"acceptance_criteria":["GET /health emits exactly one HTTP server span with http.route=/health."],"constraints":["Preserve the existing chi routes and startup command."],"expected_telemetry":[{"type":"span","name":"GET /health","attributes":["http.route=/health"],"product_view":"Splunk APM route-level latency and errors"}],"follow_up_actions":["Verify the route span in the local runtime and APM trace view."],"resolution":null,"resolved_commit":null,"otel_concerns":["signal-emission","semantic-attributes"]},{"id":"OTEL-002","title":"Task creation has no business counter","severity":"low","priority":"recommended","effort":"small","status":"proposed","area":"Task creation KPI","gap":"Successful task creation is not counted as a business event.","impact":"Product activity cannot be charted independently of HTTP throughput.","product_outcome":"Splunk dashboard business KPI","required_fix":"Add a task.created counter after a task is persisted.","instrument_mode":"fix all","verification_scenarios":["business.task-created"],"dependencies":["OTEL-003"],"evidence":["main.go:60"],"acceptance_criteria":["A successful task creation increments task.created exactly once."],"constraints":["Keep the metric free of task, user, title, and other unbounded dimensions."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Splunk dashboard business KPI"}],"follow_up_actions":["Create a KPI chart only if the product owner approves this finding."],"resolution":null,"resolved_commit":null,"otel_concerns":["signal-emission"]},{"id":"OTEL-003","title":"Choose one task-creation telemetry owner","severity":"medium","priority":"recommended","effort":"decision","status":"proposed","area":"Task telemetry ownership","gap":"The service does not define whether task creation should emit the task.created metric or the task.create span.","impact":"Implementing both alternatives would duplicate the same task-creation outcome in two app-owned signals.","product_outcome":"Task creation has one explicitly chosen app-owned telemetry signal.","required_fix":"Choose either the task.created metric or the task.create span as the app-owned task-creation signal.","instrument_mode":"manual decision","verification_scenarios":["business.task-created","business.task-create-span"],"dependencies":[],"evidence":["main.go:53"],"acceptance_criteria":["Exactly one of task.created or task.create is implemented and proven."],"constraints":["Do not emit both app-owned alternatives for the same task creation."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Task creation KPI chart"},{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Record the chosen signal owner before selecting the compatible instrumentation branch."],"resolution":null,"resolved_commit":null,"otel_concerns":["signal-emission"],"decision_owner":"task service telemetry owner","decision_question":"Which app-owned OTel signal should represent task creation: task.created or task.create?","decision_options":[{"id":"metric-counter","label":"Task metric","outcome":"Emit task.created once after successful persistence.","unlocks":["OTEL-002"]},{"id":"trace-span","label":"Task span","outcome":"Emit task.create around successful persistence.","unlocks":["OTEL-004"]}]},{"id":"OTEL-004","title":"Trace successful task creation","severity":"medium","priority":"recommended","effort":"small","status":"proposed","area":"Task creation trace","gap":"Successful task creation has no app-owned task.create span.","impact":"When the span alternative is chosen, operators cannot isolate persistence latency in the trace waterfall.","product_outcome":"The trace waterfall shows one bounded task.create span for each successful creation.","required_fix":"Add one task.create span around successful task persistence.","instrument_mode":"fix all","verification_scenarios":["business.task-create-span"],"dependencies":["OTEL-003"],"evidence":["main.go:53"],"acceptance_criteria":["A successful task creation emits task.create exactly once."],"constraints":["Do not attach task IDs, titles, users, or other unbounded values."],"expected_telemetry":[{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Inspect the task.create trace waterfall only when the trace-span option is selected."],"resolution":null,"resolved_commit":null,"otel_concerns":["signal-emission"]}],"verification":{"environments":[{"id":"go.local","surface":"go-chi-basic service","config_evidence":"go.mod","runner":"go test ./...","scope":"module","prerequisites":"none"}],"scenarios":[{"id":"http.health.success","trigger":"GET /health","entrypoint":"main.go:28","expected_signals":"one route-aware HTTP server span","proof_level":"full runtime","acceptance_criteria":"The request emits exactly one server span with http.route=/health.","environments":["go.local"]},{"id":"business.task-created","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.created metric increment","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path records task.created exactly once with no metric attributes.","environments":["go.local"]},{"id":"business.task-create-span","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.create span","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path emits task.create exactly once.","environments":["go.local"]}]},"anti_patterns":[],"recommendation":["Review findings in order, save the audit state over .observe/otel-audit.json, then run $otel-instrument."],"scan_blockers":[]},"selection":{"schema_version":1,"kind":"otel-selection","audit_id":"go-chi-basic-fixture","audit_sha256":"sha256:fa5fb0d055c101b0523c1de10062d48db13748cfbb982a898166221390ca59c5","requested_ids":["OTEL-001"],"approved_ids":["OTEL-001"],"approved_by":null,"approved_at":null},"selection_eligibility":{"OTEL-001":{"selectable":true,"blockers":[],"reason":""},"OTEL-002":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"},"OTEL-003":{"selectable":false,"blockers":[],"reason":"Choose an answer"},"OTEL-004":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"}},"display_finding_ids":["OTEL-001","OTEL-002","OTEL-003","OTEL-004"],"source_references":{"go.mod":[{"text":"go.mod","href":"../../evals/go/chi-basic/go.mod"}],"main.go":[{"text":"main.go","href":"../../evals/go/chi-basic/main.go"}],"main.go:28":[{"text":"main.go:28","href":"../../evals/go/chi-basic/main.go#L28"}],"main.go:53":[{"text":"main.go:53","href":"../../evals/go/chi-basic/main.go#L53"}],"main.go:60":[{"text":"main.go:60","href":"../../evals/go/chi-basic/main.go#L60"}]}};
+const REPORT = DATA.report;
+const modeGuidance = {"default":{"selection":"Select","guidance":"Safe app-owned work. Select it for instrumentation."},"fix all":{"selection":"Select","guidance":"Broader safe work. Select it only when the broader scope is wanted."},"manual decision":{"selection":null,"guidance":"Choose one named OpenTelemetry outcome. The decision itself never enters instrumentation scope; compatible executable work becomes selectable."},"external follow-up":{"selection":null,"guidance":"Track this with the named external owner. This item cannot enter the instrumentation selection."}};
+const selectionEligibility = {};
+const requested = new Set(DATA.selection?.requested_ids || DATA.selection?.approved_ids || []);
+const selected = new Set(DATA.selection?.approved_ids || []);
+const decisionAnswers = new Map(
+  (DATA.selection?.decision_answers || []).map(answer => [answer.finding_id, answer.option_id])
+);
+const esc = (value) => String(value ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const byId = new Map(REPORT.findings.map(f => [f.id, f]));
+const DISPLAY_FINDINGS = (DATA.display_finding_ids || REPORT.findings.map(f => f.id))
+  .map(id => byId.get(id))
+  .filter(Boolean);
+const isSelectable = id => selectionEligibility[id]?.selectable === true;
+
+function selectedDecisionOption(finding) {
+  const optionId = decisionAnswers.get(finding.id);
+  return (finding.decision_options || []).find(option => option.id === optionId) || null;
+}
+
+function selectionBlockersFor(findingId) {
+  const blocked = new Set();
+  const visiting = new Set([findingId]);
+  function visit(dependencyId, dependentId) {
+    if (visiting.has(dependencyId)) return;
+    const dependency = byId.get(dependencyId);
+    if (!dependency) return;
+    if (dependency.instrument_mode === "manual decision") {
+      const option = selectedDecisionOption(dependency);
+      if (!option || !(option.unlocks || []).includes(dependentId)) {
+        blocked.add(dependencyId);
+        return;
+      }
+      visiting.add(dependencyId);
+      for (const nestedId of dependency.dependencies || []) visit(nestedId, dependencyId);
+      visiting.delete(dependencyId);
+      return;
+    }
+    if (["default", "fix all"].includes(dependency.instrument_mode) && dependency.status === "done") {
+      return;
+    }
+    if (["default", "fix all"].includes(dependency.instrument_mode) && ["rejected", "deferred"].includes(dependency.status)) {
+      blocked.add(dependencyId);
+      return;
+    }
+    if (!["default", "fix all"].includes(dependency.instrument_mode)) {
+      blocked.add(dependencyId);
+      return;
+    }
+    visiting.add(dependencyId);
+    for (const nestedId of dependency.dependencies || []) visit(nestedId, dependencyId);
+    visiting.delete(dependencyId);
+  }
+  for (const dependencyId of byId.get(findingId)?.dependencies || []) {
+    visit(dependencyId, findingId);
+  }
+  return REPORT.findings.map(finding => finding.id).filter(id => blocked.has(id));
+}
+
+function eligibilityFor(finding) {
+  if (finding.instrument_mode === "manual decision") {
+    return {
+      selectable: false,
+      blockers: [],
+      reason: selectedDecisionOption(finding)
+        ? "Decision recorded"
+        : (finding.decision_options || []).length
+          ? "Choose an answer"
+          : "Resolve decision first",
+    };
+  }
+  if (finding.instrument_mode === "external follow-up") {
+    return {selectable:false, blockers:[], reason:"Not selectable for instrumentation"};
+  }
+  if (["done", "rejected", "deferred"].includes(finding.status)) {
+    return {selectable:false, blockers:[], reason:"Finding is " + finding.status};
+  }
+  const blockers = selectionBlockersFor(finding.id);
+  return blockers.length
+    ? {selectable:false, blockers, reason:"Blocked by " + blockers.join(", ")}
+    : {selectable:true, blockers:[], reason:""};
+}
+
+function refreshSelectionEligibility() {
+  for (const finding of REPORT.findings) {
+    selectionEligibility[finding.id] = eligibilityFor(finding);
+  }
+}
+
+refreshSelectionEligibility();
+
+function sourceHtml(value) {
+  const parts = DATA.source_references?.[String(value)];
+  if (!parts) return `<code>${esc(value)}</code>`;
+  return parts.map(part => part.href
+    ? `<a class="source-link" href="${esc(part.href)}" target="_blank" rel="noopener" title="Open local source file"><code>${esc(part.text)}</code><span class="source-open" aria-hidden="true">↗</span></a>`
+    : esc(part.text)
+  ).join("");
+}
+
+function lifecycleStatus(f) {
+  if (requested.has(f.id)) return "selected";
+  if (selected.has(f.id)) return "included";
+  return f.status;
+}
+
+function decisionSelectionControl(finding) {
+  const options = finding.decision_options || [];
+  if (finding.instrument_mode !== "manual decision" || !options.length) return "";
+  const selectedOption = selectedDecisionOption(finding);
+  const optionRows = options.map(option => {
+    const inputId = `decision-${finding.id}-${option.id}`;
+    return `<label class="decision-option" for="${esc(inputId)}">
+      <input id="${esc(inputId)}" name="decision-${esc(finding.id)}" type="radio"
+        data-decision-id="${esc(finding.id)}" data-option-id="${esc(option.id)}"
+        ${selectedOption?.id === option.id ? "checked" : ""}>
+      <strong>${esc(option.label)}</strong><span>${esc(option.outcome)}</span>
+    </label>`;
+  }).join("");
+  const clear = selectedOption
+    ? `<button class="decision-clear" type="button" data-clear-decision="${esc(finding.id)}">Clear answer</button>`
+    : "";
+  return `<fieldset class="decision-select" data-decision-control="${esc(finding.id)}">
+    <legend>${esc(finding.decision_question || "Choose one telemetry outcome")}</legend>
+    <div class="decision-options">${optionRows}</div>${clear}
+  </fieldset>`;
+}
+
+function findingSelectionPresentation(finding) {
+  const explicitlySelected = requested.has(finding.id);
+  const autoIncluded = selected.has(finding.id) && !explicitlySelected;
+  return {
+    explicitlySelected,
+    autoIncluded,
+    label: autoIncluded
+      ? "Included as dependency"
+      : modeGuidance[finding.instrument_mode].selection,
+    ariaLabel: autoIncluded
+      ? `${finding.id} is included as a required dependency; select it explicitly to keep it if dependent work is removed`
+      : `Select ${finding.id} for instrumentation`,
+  };
+}
+
+function syncFindingSelectionControl(input, finding) {
+  const presentation = findingSelectionPresentation(finding);
+  input.checked = presentation.explicitlySelected;
+  input.indeterminate = presentation.autoIncluded;
+  input.dataset.selectionState = presentation.autoIncluded
+    ? "dependency"
+    : presentation.explicitlySelected
+      ? "selected"
+      : "available";
+  input.setAttribute("aria-label", presentation.ariaLabel);
+  const control = input.closest(".plan-select");
+  control?.classList.toggle("on", presentation.explicitlySelected);
+  control?.classList.toggle("included", presentation.autoIncluded);
+  const label = control?.querySelector("[data-selection-label]");
+  if (label) label.textContent = presentation.label;
+}
+
+function findingPrimaryActionLabel(finding) {
+  if (finding.instrument_mode === "manual decision") return "Decision needed";
+  if (finding.instrument_mode === "external follow-up") return "External requirement";
+  return "Instrumentation change";
+}
+
+function telemetryShapeFor(finding) {
+  const order = ["span", "metric", "log", "resource", "configuration"];
+  const counts = new Map(order.map(type => [type, 0]));
+  (finding.expected_telemetry || []).forEach(item => counts.set(item.type, (counts.get(item.type) || 0) + 1));
+  return order
+    .filter(type => counts.get(type))
+    .map(type => `${counts.get(type)} ${type}${counts.get(type) === 1 ? "" : "s"}`)
+    .join(" · ") || "not specified";
+}
+
+function findingNextStep(finding) {
+  const eligibility = selectionEligibility[finding.id] || {selectable:false, blockers:[], reason:"Not selectable for instrumentation"};
+  if (finding.instrument_mode === "manual decision") {
+    const option = selectedDecisionOption(finding);
+    if (!option) {
+      return `Choose one answer with ${finding.decision_owner || "the named owner"}, then select any unlocked executable work.`;
+    }
+    return (option.unlocks || []).length
+      ? "Review the executable work unlocked by this answer and select the work you want to save."
+      : "This answer unlocks no instrumentation work. Keep the decision in the audit; no selection is needed.";
+  }
+  if (finding.instrument_mode === "external follow-up") {
+    const requirement = finding.external_requirement ? ` Required telemetry: ${finding.external_requirement}` : "";
+    return `Track this with ${finding.external_owner || "the named external owner"}; it is not instrumentation scope for this service.${requirement}`;
+  }
+  if ((eligibility.blockers || []).length) {
+    return `Resolve ${eligibility.blockers.join(", ")} first, then return to select this work.`;
+  }
+  if (!eligibility.selectable) {
+    return `${eligibility.reason || "This finding cannot enter the current instrumentation selection"}.`;
+  }
+  if (requested.has(finding.id)) {
+    return "This finding is selected. Save the selection, then run $otel-instrument.";
+  }
+  if (selected.has(finding.id)) {
+    return "This finding is included because selected work depends on it. Save the selection, then run $otel-instrument.";
+  }
+  return "Select this finding, then save the selection before running $otel-instrument.";
+}
+
+function renderCards() {
+  document.getElementById("cards").innerHTML = DISPLAY_FINDINGS.map(f => {
+    const lifecycle = lifecycleStatus(f);
+    const mode = modeGuidance[f.instrument_mode];
+    const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${esc(item.type)} ${esc(item.name)}</b>${item.configuration_scope ? ` <code>scope: ${esc(item.configuration_scope)}</code>` : ""} — ${esc(item.product_view)}${item.attributes?.length ? ` <code>${esc(item.attributes.join(", "))}</code>` : ""}</li>`).join("");
+    const evidence = (f.evidence || []).map(item => `<li>${sourceHtml(item)}</li>`).join("");
+    const acceptance = (f.acceptance_criteria || []).map(item => `<li>${esc(item)}</li>`).join("");
+    const constraints = (f.constraints || []).map(item => `<li>${esc(item)}</li>`).join("");
+    const countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
+    const contractCounts = [
+      countLabel((f.acceptance_criteria || []).length, "acceptance check"),
+      countLabel((f.constraints || []).length, "implementation guardrail"),
+      countLabel((f.evidence || []).length, "source reference"),
+    ].join(" · ");
+    const telemetryShape = telemetryShapeFor(f);
+    const dependencyCue = (f.dependencies || []).length
+      ? `<span>Plan prerequisite${f.dependencies.length === 1 ? "" : "s"}: <code>${esc(f.dependencies.join(", "))}</code></span>`
+      : "";
+    const primaryActionLabel = findingPrimaryActionLabel(f);
+    const requiredAction = f.instrument_mode === "external follow-up"
+      ? [f.required_fix, f.external_requirement ? `Required telemetry: ${f.external_requirement}` : "", f.external_owner ? `Owner: ${f.external_owner}` : ""].filter(Boolean).join(" ")
+      : f.required_fix;
+    const eligibility = selectionEligibility[f.id] || {selectable:false, blockers:[], reason:"Not selectable for instrumentation"};
+    const decisionControl = decisionSelectionControl(f);
+    const selectionPresentation = findingSelectionPresentation(f);
+    const selectionControl = decisionControl || (eligibility.selectable
+      ? (() => {
+          const selectionClasses = [
+            selectionPresentation.explicitlySelected ? "on" : "",
+            selectionPresentation.autoIncluded ? "included" : "",
+          ].filter(Boolean).join(" ");
+          return `<label class="plan-select ${selectionClasses}" for="plan-${esc(f.id)}" title="${esc(mode.guidance)}">
+            <input id="plan-${esc(f.id)}" name="plan-${esc(f.id)}" type="checkbox" aria-label="${esc(selectionPresentation.ariaLabel)}" data-id="${esc(f.id)}" data-selection-state="${selectionPresentation.autoIncluded ? "dependency" : selectionPresentation.explicitlySelected ? "selected" : "available"}" ${selectionPresentation.explicitlySelected ? "checked" : ""}> <span data-selection-label>${esc(selectionPresentation.label)}</span>
+          </label>`;
+        })()
+      : `<div class="plan-unavailable" role="note">${esc(eligibility.reason)}</div>`);
+    return `<article class="card ${["done","working"].includes(lifecycle) ? lifecycle : ""}" id="${esc(f.id)}">
+      <div class="card-head">
+        <button class="row" id="finding-toggle-${esc(f.id)}" type="button" aria-expanded="false" aria-controls="finding-body-${esc(f.id)}">
+          <span class="spine" aria-hidden="true"></span>
+          <span class="fid">${esc(f.id)}</span>
+          <span class="finding-copy"><span class="ftitle">${esc(f.title)}</span><span class="fimpact">What you get: ${esc(f.product_outcome)}</span><span class="finding-meta"><span>Telemetry: <strong>${esc(telemetryShape)}</strong></span>${dependencyCue}</span></span>
+          <span class="caret" aria-hidden="true">›</span>
+        </button>
+        ${selectionControl}
+      </div>
+      <div class="body" id="finding-body-${esc(f.id)}" aria-labelledby="finding-toggle-${esc(f.id)}" hidden>
+        <div class="cols">
+          <section><h3>Gap</h3><p>${esc(f.gap)}</p></section>
+          <section><h3>Why it matters</h3><p>${esc(f.impact)}</p></section>
+          <section><h3>${esc(primaryActionLabel)}</h3><p>${esc(requiredAction)}</p></section>
+          <section><h3>Next step</h3><p data-finding-next-step="${esc(f.id)}">${esc(findingNextStep(f))}</p></section>
+        </div>
+        <details class="finding-technical-details">
+          <summary><span>Technical details</span> <span class="detail-counts">${esc(contractCounts)}</span></summary>
+          <div class="technical-details-body">
+            <section><h3>Expected telemetry</h3>${telemetry ? `<ul>${telemetry}</ul>` : `<p class="muted">None recorded.</p>`}</section>
+            <section><h3>Acceptance criteria</h3><ul>${acceptance}</ul></section>
+            ${constraints ? `<section><h3>Implementation guardrails</h3><ul>${constraints}</ul></section>` : ""}
+            <section><h3>Evidence</h3>${evidence ? `<ul>${evidence}</ul>` : `<p class="muted">None recorded.</p>`}</section>
+          </div>
+        </details>
+      </div>
+    </article>`;
+  }).join("");
+  syncFindingSelectionState();
+}
+
+function orderedSelection() {
+  return REPORT.findings.map(f => f.id).filter(id => selected.has(id) && isSelectable(id));
+}
+
+function orderedRequested() {
+  return REPORT.findings.map(f => f.id).filter(id => requested.has(id) && selected.has(id) && isSelectable(id));
+}
+
+function orderedDecisionAnswers() {
+  return REPORT.findings
+    .filter(finding => decisionAnswers.has(finding.id))
+    .map(finding => ({finding_id:finding.id, option_id:decisionAnswers.get(finding.id)}));
+}
+
+function plural(count, singular, pluralForm) {
+  return count === 1 ? singular : (pluralForm || singular + "s");
+}
+
+function announceSelection(message) {
+  document.getElementById("selectionStatus").textContent = message;
+}
+
+function shellQuote(value) {
+  return "'" + String(value).replaceAll("'", "'\"'\"'") + "'";
+}
+
+function commandPart(value) {
+  const text = String(value);
+  return /^--[A-Za-z0-9][A-Za-z0-9_-]*$/.test(text) || /^[A-Za-z0-9_,.=:-]+$/.test(text)
+    ? text
+    : shellQuote(text);
+}
+
+function serviceRootFromLocation() {
+  if (location.protocol === "file:") {
+    let path = decodeURIComponent(location.pathname || "");
+    if (location.hostname) {
+      path = `//${location.hostname}${path}`;
+    } else if (/^\/[A-Za-z]:\//.test(path)) {
+      path = path.slice(1);
+    }
+    const marker = "/.observe/";
+    const index = path.lastIndexOf(marker);
+    if (index > 0) return path.slice(0, index);
+  }
+  return "<service-root>";
+}
+
+function terminalInstrumentCommand() {
+  const ids = orderedRequested();
+  if (!ids.length) {
+    return "Select at least one executable finding to generate an instrumentation command.";
+  }
+  const parts = ["$otel-instrument", "--ids", ids.join(",")];
+  for (const answer of orderedDecisionAnswers()) {
+    parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);
+  }
+  parts.push(serviceRootFromLocation());
+  return parts.map((part, index) => index === 0 ? part : commandPart(part)).join(" ");
+}
+
+function renderInstrumentCommand() {
+  const node = document.getElementById("instrumentCommand");
+  if (node) node.textContent = terminalInstrumentCommand();
+}
+
+function renderTray() {
+  const requestedIds = orderedRequested();
+  const inPlanIds = orderedSelection();
+  const autoAddedIds = inPlanIds.filter(id => !requested.has(id));
+  const hasSelection = requestedIds.length > 0 || decisionAnswers.size > 0;
+  const tray = document.getElementById("tray");
+  tray.hidden = !hasSelection;
+  tray.toggleAttribute("inert", !hasSelection);
+  tray.setAttribute("aria-hidden", String(!hasSelection));
+  const summaryParts = [inPlanIds.length + " in selection"];
+  if (autoAddedIds.length) {
+    summaryParts.push(autoAddedIds.length + " auto-added " + plural(autoAddedIds.length, "dependency", "dependencies"));
+  }
+  if (decisionAnswers.size) {
+    summaryParts.push(decisionAnswers.size + " " + plural(decisionAnswers.size, "decision answer", "decision answers"));
+  }
+  document.getElementById("planSummary").textContent = hasSelection ? summaryParts.join(" · ") : "";
+  document.getElementById("saveSelection").disabled = !hasSelection;
+  renderInstrumentCommand();
+}
+
+function selectionDocument() {
+  const answers = orderedDecisionAnswers();
+  const document = {schema_version: answers.length ? 2 : 1, kind: "otel-selection", audit_id: REPORT.meta.audit_id, audit_sha256: DATA.selection.audit_sha256, requested_ids: orderedRequested(), approved_ids: orderedSelection(), approved_by: null, approved_at: null};
+  if (answers.length) document.decision_answers = answers;
+  return document;
+}
+
+function auditReviewDocument() {
+  const document = JSON.parse(JSON.stringify(REPORT));
+  document.review_selection = selectionDocument();
+  return document;
+}
+
+function syncDependencyClosure() {
+  const closed = new Set();
+  const visiting = new Set();
+  function include(id) {
+    const finding = byId.get(id);
+    if (!finding || closed.has(id) || visiting.has(id)) return;
+    if (["default", "fix all"].includes(finding.instrument_mode) && finding.status === "done") return;
+    const selectable = isSelectable(id);
+    if (!selectable && finding.instrument_mode !== "manual decision") return;
+    visiting.add(id);
+    for (const dependency of finding.dependencies || []) include(dependency);
+    visiting.delete(id);
+    if (selectable) closed.add(id);
+  }
+  for (const finding of REPORT.findings) {
+    if (requested.has(finding.id) && isSelectable(finding.id)) include(finding.id);
+  }
+  selected.clear();
+  for (const id of closed) selected.add(id);
+}
+
+function pruneIncompatibleSelections() {
+  const removed = [];
+  for (const finding of REPORT.findings) {
+    if (requested.has(finding.id) && !isSelectable(finding.id)) {
+      requested.delete(finding.id);
+      removed.push(finding.id);
+    }
+  }
+  return removed;
+}
+
+function applyDecisionAnswer(decisionId, optionId) {
+  const finding = byId.get(decisionId);
+  if (!finding || finding.instrument_mode !== "manual decision") return;
+  const previous = decisionAnswers.get(decisionId);
+  if (optionId) decisionAnswers.set(decisionId, optionId);
+  else decisionAnswers.delete(decisionId);
+  refreshSelectionEligibility();
+  const removed = pruneIncompatibleSelections();
+  syncDependencyClosure();
+  renderCards();
+  renderTray();
+  const focusId = optionId ? `decision-${decisionId}-${optionId}` : `finding-toggle-${decisionId}`;
+  document.getElementById(focusId)?.focus({preventScroll:true});
+  const option = selectedDecisionOption(finding);
+  let message = option
+    ? `${decisionId} answer recorded: ${option.label}. Matching executable work is now available but has not been selected.`
+    : `${decisionId} answer cleared. Dependent work is blocked again.`;
+  if (previous && previous !== optionId) message = `${decisionId} answer changed to ${option?.label || "unanswered"}.`;
+  if (removed.length) message += " Removed incompatible selected work: " + removed.join(", ") + ".";
+  announceSelection(message);
+}
+
+function syncFindingSelectionState() {
+  for (const finding of REPORT.findings) {
+    const card = document.getElementById(finding.id);
+    if (!card) continue;
+    const input = document.getElementById("plan-" + finding.id);
+    if (input) {
+      syncFindingSelectionControl(input, finding);
+    }
+    const nextStep = card.querySelector("[data-finding-next-step]");
+    if (nextStep) nextStep.textContent = findingNextStep(finding);
+  }
+}
+
+function applySelectionInput(input) {
+  const id = input.dataset.id;
+  if (!isSelectable(id)) return;
+  const before = new Set(selected);
+  if (input.checked) requested.add(id);
+  else requested.delete(id);
+  syncDependencyClosure();
+  syncFindingSelectionState();
+  renderTray();
+
+  const added = REPORT.findings.map(finding => finding.id)
+    .filter(findingId => selected.has(findingId) && !before.has(findingId));
+  const removed = REPORT.findings.map(finding => finding.id)
+    .filter(findingId => before.has(findingId) && !selected.has(findingId));
+  let message;
+  if (input.checked) {
+    const dependencies = added.filter(findingId => findingId !== id);
+    message = id + " selected.";
+    if (dependencies.length) message += " Auto-added dependencies: " + dependencies.join(", ") + ".";
+  } else if (selected.has(id)) {
+    message = id + " remains included because another selected item requires it.";
+  } else {
+    message = id + " deselected.";
+    const related = removed.filter(findingId => findingId !== id);
+    if (related.length) message += " Removed no-longer-needed dependencies: " + related.join(", ") + ".";
+  }
+  announceSelection(message);
+}
+
+function setFindingOpen(card, open) {
+  const disclosure = card.querySelector(".row");
+  const body = disclosure ? document.getElementById(disclosure.getAttribute("aria-controls")) : null;
+  card.classList.toggle("open", open);
+  disclosure?.setAttribute("aria-expanded", String(open));
+  if (body) body.hidden = !open;
+  return disclosure;
+}
+
+function openFindingTarget(target) {
+  const disclosure = setFindingOpen(target, true);
+  target.scrollIntoView({behavior: "smooth", block: "start"});
+  disclosure?.focus({preventScroll: true});
+}
+
+function targetFromHash(hash) {
+  if (!hash?.startsWith("#")) return null;
+  try { return document.getElementById(decodeURIComponent(hash.slice(1))); } catch (_) { return null; }
+}
+
+function revealCurrentHash() {
+  if (!location.hash) return;
+  const target = targetFromHash(location.hash);
+  if (target?.matches(".card")) openFindingTarget(target);
+}
+
+document.addEventListener("click", event => {
+  const clearDecision = event.target.closest("[data-clear-decision]");
+  if (clearDecision) {
+    applyDecisionAnswer(clearDecision.dataset.clearDecision, null);
+    return;
+  }
+  const findingJump = event.target.closest("[data-finding-jump][href]");
+  if (findingJump) {
+    event.preventDefault();
+    const target = targetFromHash(findingJump.getAttribute("href"));
+    if (!target) return;
+    openFindingTarget(target);
+    history.replaceState(null, "", findingJump.getAttribute("href"));
+    return;
+  }
+  const row = event.target.closest(".row");
+  if (!row) return;
+  const card = row.closest(".card");
+  setFindingOpen(card, !card.classList.contains("open"));
+});
+
+document.addEventListener("change", event => {
+  const decisionInput = event.target.closest("input[data-decision-id][data-option-id]");
+  if (decisionInput) {
+    applyDecisionAnswer(decisionInput.dataset.decisionId, decisionInput.dataset.optionId);
+    return;
+  }
+  const input = event.target.closest("input[data-id]");
+  if (!input) return;
+  applySelectionInput(input);
+});
+
+async function saveSelectionOverlay() {
+  const contents = JSON.stringify(auditReviewDocument(), null, 2) + "\n";
+  const dependencyCount = orderedSelection().filter(id => !requested.has(id)).length;
+  const dependencyMessage = dependencyCount
+    ? ` It includes ${dependencyCount} auto-added ${plural(dependencyCount, "dependency", "dependencies")}.`
+    : "";
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: "otel-audit.json",
+        types: [{description: "OpenTelemetry audit JSON with saved selection", accept: {"application/json": [".json"]}}],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(contents);
+      await writable.close();
+      announceSelection("Audit selection saved into the audit report." + dependencyMessage + " Keep it at .observe/otel-audit.json before running $otel-instrument.");
+      return;
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        announceSelection("Audit selection save cancelled.");
+        return;
+      }
+      console.warn("Direct audit-state save failed; falling back to browser download.", error);
+    }
+  }
+  const blob = new Blob([contents], {type:"application/json"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "otel-audit.selected.json";
+  link.hidden = true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+  announceSelection("Saved audit download fallback started." + dependencyMessage + " $otel-instrument can adopt the newest matching otel-audit*.json after validation.");
+}
+
+document.getElementById("saveSelection").addEventListener("click", () => {
+  saveSelectionOverlay();
+});
+
+syncDependencyClosure();
+renderCards();
+renderTray();
+revealCurrentHash();
+window.addEventListener("hashchange", revealCurrentHash);
+</script>
+</body>
+</html>

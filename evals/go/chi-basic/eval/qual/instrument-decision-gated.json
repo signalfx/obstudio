@@ -1,0 +1,23 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "decision-gated",
+      "eval_inputs": ["eval/inputs/otel-audit.json"],
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Record the manual decision OTEL-003=metric-counter, then use the bundled selection flow to write schema-v2 ./service/.observe/otel-selection.json requesting executable OTEL-002. Instrument only the unlocked task.created metric branch. The manual decision ID must remain outside requested_ids and approved_ids, and the unchosen OTEL-004 trace branch must remain untouched. Write and validate the bound canonical instrumentation JSON plus compatibility Markdown and HTML."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service for resulting files when present.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Confirms the target process, selected project runtime, service.name source, and environment dimension before editing.",
+    "Writes selection schema v2 with decision_answers exactly OTEL-003=metric-counter, requested_ids and approved_ids containing only executable OTEL-002, and keeps the manual OTEL-003 ID outside both executable ID lists.",
+    "Implements only the unlocked OTEL-002 task.created metric branch, keeps the unchosen OTEL-004 trace branch untouched, and does not add unrelated HTTP tracing or other drive-by signals.",
+    "Configures the selected metric path once with environment-driven OTLP endpoint and service identity, records task.created only at the intended task-creation call site, and uses bounded metric attributes.",
+    "Writes bound canonical .observe/otel-instrumentation.json for selected finding OTEL-002 with implementation status, changed metric, validation evidence, and verification handoff without rewriting the audit baseline.",
+    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders separate .observe/otel-instrumentation.html, leaves .observe/otel.html audit-only, and runs the final flow validators plus otel-verify or records the exact blocker."
+  ]
+}

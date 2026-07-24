@@ -45,19 +45,30 @@ without making application-code changes.
 
 When present, verification reads:
 
-- `.observe/otel.md` for the audit baseline and acceptance scenarios.
-- `.observe/otel-instrumentation.md` for added or modified signals and prior
-  validation results.
+- `.observe/otel-audit.json` for the canonical audit baseline and acceptance
+  scenarios. It falls back to `.observe/otel.md` only for older audits.
+- `.observe/otel-selection.json` for explicitly requested finding IDs and dependency-
+  complete verification scope.
+- `.observe/otel-instrumentation.json` for canonical added or modified signals,
+  finding closure, and prior validation results. It falls back to
+  `.observe/otel-instrumentation.md` for older runs.
 
-It writes `.observe/otel-verify.md`. The canonical ownership and schema for all
-`.observe` reports remain in the
+With a validated canonical audit and selection, it writes
+`.observe/otel-verify.json` and retains `.observe/otel-verify.md` as the
+human-readable compatibility report. A no-audit legacy run writes only the
+Markdown report and does not fabricate audit identity. The canonical ownership
+and schema for all `.observe` reports remain in the
 [report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract);
 this guide does not repeat that full contract.
 
-After an automatic verification run, `.observe/otel-instrumentation.md` records
-the verification result and report path. `$splunk-configure` can then use the
-`Working` metric rows in `.observe/otel-verify.md` as detector-generation
-evidence instead of treating source presence as runtime proof.
+After an automatic verification run, `.observe/otel-verify.json` owns the
+verification result and is cryptographically bound to the exact normalized
+instrumentation overlay. `$splunk-configure` can then
+use the `Working` metric records in `.observe/otel-verify.json` as
+detector-generation evidence instead of treating source presence as runtime
+proof. `.observe/otel.html` remains the audit and approval surface. The workflow
+refreshes `.observe/otel-instrumentation.html` with implementation impact and
+verification proof instead of mixing downstream state into the audit.
 
 ## What Verification Proves
 
@@ -81,7 +92,10 @@ code emits the signal.
 
 ## Read The Report
 
-Start with `Result` and `Bottom line`, then read these sections in order:
+Open `.observe/otel-instrumentation.html` for the combined change, impact, and
+proof view, `.observe/otel.html` for the original audit and approval context,
+or the compatibility `.observe/otel-verify.md` for verification detail. Start
+with `Result` and `Bottom line`, then read these sections in order:
 
 1. `What Changed` summarizes the telemetry or runtime behavior under test.
 2. `Tested And Working` contains one row per exact added or modified OTel item,

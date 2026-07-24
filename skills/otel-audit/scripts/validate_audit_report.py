@@ -45,8 +45,49 @@ ACCEPTANCE_SCENARIO_HEADER = [
     "Environment",
 ]
 PRIORITIES = {"required", "recommended", "deferred"}
-INSTRUMENT_MODES = {"default", "fix all", "manual decision"}
+INSTRUMENT_MODES = {"default", "fix all", "manual decision", "external follow-up"}
 PROOF_LEVELS = {"focused call-site", "full runtime", "either"}
+PROOF_LEVEL_ALIASES = {
+    "focused": "focused call-site",
+    "call-site": "focused call-site",
+    "call site": "focused call-site",
+    "callsite": "focused call-site",
+    "focused call site": "focused call-site",
+    "focused call-site": "focused call-site",
+    "unit": "focused call-site",
+    "unit test": "focused call-site",
+    "unit-tested": "focused call-site",
+    "runtime": "full runtime",
+    "full": "full runtime",
+    "full-runtime": "full runtime",
+    "full runtime": "full runtime",
+    "unit plus runtime": "full runtime",
+    "unit and runtime": "full runtime",
+    "focused plus runtime": "full runtime",
+    "focused and runtime": "full runtime",
+    "either": "either",
+}
+CANONICAL_OWNER_TERMS = (
+    "app-owned",
+    "service-owned",
+    "framework-owned",
+    "bridge-owned",
+    "agent-owned",
+    "runtime-owned",
+    "sdk-owned",
+    "callback",
+    "provider sdk",
+    "opentelemetry java agent",
+    "otel java agent",
+    "java agent",
+    "opentelemetry agent",
+    "otel agent",
+    "auto-instrumentation",
+    "auto instrumentation",
+    "framework instrumentation",
+    "micronaut",
+    "spring",
+)
 GENAI_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 INCIDENT_READINESS_HEADER = [
     "Area",
@@ -57,6 +98,20 @@ INCIDENT_READINESS_HEADER = [
 ]
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 STABLE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+EXTERNAL_OWNER_CATEGORY = re.compile(
+    r"(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
+    r"(?:\s*/\s*(?:external|provider|platform|vendor|third[- ]party|"
+    r"managed[- ]service))?(?:[- ]owned|\s+owner)?",
+    re.IGNORECASE,
+)
+OWNER_PLACEHOLDER = re.compile(
+    r"^(?:tbd|unknown|owner|someone|team|n/?a)$", re.IGNORECASE
+)
+GENERIC_EXTERNAL_OWNER_DETAIL = re.compile(
+    r"(?:(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
+    r"(?:[- ]owned)?(?:\s+(?:owner|team))?|owner|team)",
+    re.IGNORECASE,
+)
 REQUIRED_TOP_LEVEL_HEADINGS = [
     "## Executive Summary",
     "## Flow",
@@ -70,12 +125,41 @@ REQUIRED_TOP_LEVEL_HEADINGS = [
 ]
 ALLOWED_TOP_LEVEL_HEADINGS = set(REQUIRED_TOP_LEVEL_HEADINGS) | {
     "## Routes",
+    "## Scan Blockers",
     "## GenAI Readiness",
 }
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
+
+
+def normalize_proof_level(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", value.strip().lower().replace("_", " ").replace("-", " "))
+    return PROOF_LEVEL_ALIASES.get(normalized, value.strip("`"))
+
+
+def names_canonical_telemetry_owner(value: str) -> bool:
+    lowered = re.sub(r"\s+", " ", value.lower())
+    spaced = re.sub(r"[\s_-]+", " ", value.lower()).strip()
+    return any(
+        term in lowered or re.sub(r"[\s_-]+", " ", term).strip() in spaced
+        for term in CANONICAL_OWNER_TERMS
+    )
+
+
+def has_exact_external_owner(value: str) -> bool:
+    """Require a category-prefixed owner with a concrete named source."""
+
+    category, separator, detail = value.partition(":")
+    detail = detail.strip()
+    return bool(
+        separator
+        and EXTERNAL_OWNER_CATEGORY.fullmatch(category.strip())
+        and detail
+        and not OWNER_PLACEHOLDER.fullmatch(detail)
+        and not GENERIC_EXTERNAL_OWNER_DETAIL.fullmatch(detail)
+    )
 
 
 def heading_match(text: str, heading: str) -> re.Match[str]:
@@ -101,15 +185,30 @@ def subsection(text: str, heading: str) -> str:
     return text[start : start + next_heading.start()] if next_heading else text[start:]
 
 
+def split_row(line: str) -> list[str]:
+    value = line.strip()
+    if value.startswith("|"):
+        value = value[1:]
+    if value.endswith("|") and not value.endswith(r"\|"):
+        value = value[:-1]
+    return [
+        cell.replace(r"\|", "|").strip()
+        for cell in re.split(r"(?<!\\)\|", value)
+    ]
+
+
 def table(body: str, label: str) -> tuple[list[str], list[list[str]]]:
-    lines = [line.strip() for line in body.splitlines() if line.strip().startswith("|")]
+    lines = []
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("|"):
+            lines.append(line)
+        elif lines and line:
+            break
     if len(lines) < 2:
         fail(f"{label} table is missing")
-    header = [cell.strip() for cell in lines[0].strip("|").split("|")]
-    rows = [
-        [cell.strip() for cell in line.strip("|").split("|")]
-        for line in lines[2:]
-    ]
+    header = split_row(lines[0])
+    rows = [split_row(line) for line in lines[2:]]
     return header, rows
 
 
@@ -174,8 +273,14 @@ def validate(path: Path) -> None:
                 "and before Gaps"
             )
 
-    if not re.search(r"^\*\*Status:\*\* (Pass|Partial|Blocked)$", text, re.MULTILINE):
+    status_match = re.search(
+        r"^\*\*Status:\*\* (Pass|Partial|Blocked)$", text, re.MULTILINE
+    )
+    if not status_match:
         fail("Status must be Pass, Partial, or Blocked")
+    status = status_match.group(1)
+    if status == "Blocked" and "Scan blocked:" not in section(text, "## Executive Summary"):
+        fail("Status Blocked requires structured scan-blocker details in Executive Summary")
     evidence_header, evidence_rows = table(section(text, "## Audit Evidence"), "Audit Evidence")
     if evidence_header != EVIDENCE_HEADER:
         fail(f"Audit Evidence header must be {EVIDENCE_HEADER}")
@@ -196,6 +301,7 @@ def validate(path: Path) -> None:
     if not ownership_row[2]:
         fail("GenAI ownership evidence must cite source paths or scan evidence")
 
+    readiness_rows: list[list[str]] = []
     if genai_detected:
         readiness_header, readiness_rows = table(
             section(text, "## GenAI Readiness"), "GenAI Readiness"
@@ -210,6 +316,11 @@ def validate(path: Path) -> None:
                 fail(f"malformed GenAI Readiness row: {row}")
             if row[1] not in GENAI_STATUSES:
                 fail(f"invalid GenAI readiness status: {row[1]}")
+            if row[1] == "owner-mapped" and not has_exact_external_owner(row[4]):
+                fail(
+                    "owner-mapped GenAI readiness must name an exact external, "
+                    f"provider, or platform owner: {row[0]}"
+                )
             if row[0] in readiness_surfaces:
                 fail(f"duplicate GenAI readiness surface: {row[0]}")
             readiness_surfaces.add(row[0])
@@ -220,6 +331,43 @@ def validate(path: Path) -> None:
         fail(f"Gaps header must be {GAP_HEADER}")
     if not gap_rows and "No gaps found." not in gap_body:
         fail("an empty Gaps table must be followed by 'No gaps found.'")
+    if gap_rows and "No gaps found." in gap_body:
+        fail("a non-empty Gaps table must not say 'No gaps found.'")
+    if status == "Pass" and gap_rows:
+        fail("Status Pass requires zero source-visible gaps")
+    if status == "Partial" and not gap_rows:
+        fail("Status Partial requires at least one source-visible gap")
+
+    gap_areas = {row[1] for row in gap_rows if len(row) == len(GAP_HEADER)}
+    incomplete_genai_surfaces = {
+        row[0] for row in readiness_rows if row[1] in {"partial", "missing"}
+    }
+    unmapped_genai_surfaces = sorted(incomplete_genai_surfaces - gap_areas)
+    if unmapped_genai_surfaces:
+        fail(
+            "partial or missing GenAI readiness surfaces require identical "
+            f"prioritized Gaps Area values: {unmapped_genai_surfaces}"
+        )
+    complete_genai_with_gaps = sorted(
+        {
+            row[0]
+            for row in readiness_rows
+            if row[1] in {"covered", "owner-mapped"}
+        }
+        & gap_areas
+    )
+    if complete_genai_with_gaps:
+        fail(
+            "covered or owner-mapped GenAI readiness surfaces must not have "
+            f"prioritized gaps: {complete_genai_with_gaps}"
+        )
+    if status == "Pass" and any(
+        row[1] not in {"covered", "owner-mapped"} for row in readiness_rows
+    ):
+        fail(
+            "Status Pass requires every GenAI readiness surface to be covered "
+            "or owner-mapped"
+        )
 
     areas = set()
     gap_rows_by_area: dict[str, list[list[str]]] = {}
@@ -236,15 +384,7 @@ def validate(path: Path) -> None:
         if row[5] == "default" and any(
             term in duplicate_contract for term in ("duplicate", "overlap", "canonical")
         ):
-            ownership_terms = (
-                "app-owned",
-                "framework-owned",
-                "bridge-owned",
-                "agent-owned",
-                "callback",
-                "provider sdk",
-            )
-            if not any(term in row[4].lower() for term in ownership_terms):
+            if not names_canonical_telemetry_owner(row[4]):
                 fail(
                     "default duplicate-remediation row must name its canonical owner "
                     f"or use manual decision: {row[1]}"
@@ -279,11 +419,24 @@ def validate(path: Path) -> None:
             if row[0] in incident_areas:
                 fail(f"duplicate Incident Readiness area: {row[0]}")
             incident_areas.add(row[0])
-            if row[1] in {"partial", "missing"} and row[0] not in gap_rows_by_area:
+            if row[1] in {"partial", "missing", "owner-mapped"} and row[0] not in gap_rows_by_area:
                 fail(
-                    "partial or missing Incident Readiness area has no identical "
+                    "partial, missing, or owner-mapped Incident Readiness area has no identical "
                     f"prioritized Gaps Area: {row[0]}"
                 )
+        complete_incident_with_gaps = sorted(
+            {
+                row[0]
+                for row in incident_rows
+                if row[1] == "covered"
+            }
+            & areas
+        )
+        if complete_incident_with_gaps:
+            fail(
+                "covered Incident Readiness areas must not have "
+                f"prioritized gaps: {complete_incident_with_gaps}"
+            )
 
     flow = section(text, "## Signal Flow")
     if "### Component Flow Map" not in flow:
@@ -340,7 +493,7 @@ def validate(path: Path) -> None:
         if scenario_id in scenario_ids:
             fail(f"duplicate scenario ID: {scenario_id}")
         scenario_ids.add(scenario_id)
-        if row[4].strip("`") not in PROOF_LEVELS:
+        if normalize_proof_level(row[4]) not in PROOF_LEVELS:
             fail(f"invalid proof level for {scenario_id}: {row[4]}")
 
         references = [

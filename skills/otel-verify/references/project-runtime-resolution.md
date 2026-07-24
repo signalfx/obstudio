@@ -20,11 +20,13 @@ project-configured runtime. If a default shell runtime fails but project config
 points elsewhere, record the default runtime as rejected and retry with the
 project runtime.
 
-When `.observe/otel.md` contains `Verification Plan / Test Environments`, or
-`.observe/otel-instrumentation.md` contains `Verification Handoff / Results`,
-treat their runtime rows and commands as candidates. Revalidate all candidates
-against current wrappers, toolchain files, manifests, and local availability
-before execution; a handoff can become stale.
+When canonical JSON exists, use the selected findings' referenced verification
+environments and the matching `.observe/otel-instrumentation.json` tests as
+runtime candidates. Otherwise use legacy `.observe/otel.md` Verification Plan
+test environments and `.observe/otel-instrumentation.md` verification-handoff
+results. Revalidate all candidates against current wrappers,
+toolchain files, manifests, and local availability before execution; a handoff
+can become stale.
 
 ## Discovery Order
 
@@ -72,7 +74,6 @@ available. Do not install global tools or update dependency manifests.
 - For temporary Java harnesses, use the same JDK and project classpath. Prefer
   `test-compile` plus `dependency:build-classpath`, Gradle test runtime
   classpath tasks, or an existing test source set over ad hoc global jars.
-
 ### Node and TypeScript
 
 - Select the package manager from `packageManager` in `package.json` first,

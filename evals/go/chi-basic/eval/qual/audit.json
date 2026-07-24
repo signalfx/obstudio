@@ -3,16 +3,18 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "eval_inputs": [],
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json, render the self-contained human review report at ./service/.observe/otel.html, and retain ./service/.observe/otel.md as the compatibility report."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "eval_inputs": [],
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json, render ./service/.observe/otel.html for human review and finding selection, and retain ./service/.observe/otel.md as the compatibility report."
     }
   ],
   "judge_inputs": [
-    "Inspect ./service for resulting files when present.",
-    "Read ./last_message.md for the agent final response.",
+    "Inspect ./service/.observe/otel-audit.json, ./service/.observe/otel.md, and ./service/.observe/otel.html when present.",
+    "Read ./last_message.md and confirm the final response also omits unrelated operational debt.",
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
@@ -20,7 +22,10 @@
     "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
-    "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
-    "Writes .observe/otel.md with GenAI ownership detected as No, a matching Audit Evidence row, Current Instrumentation before Gaps, and GenAI Readiness omitted when ownership is No."
+    "Mentions otelhttp with explicit low-cardinality chi route tagging as the appropriate Go HTTP instrumentation path.",
+    "Does not promote the OpenAPI, contract-lint, runbook-link, ownership-link, page-limit, rejection-policy, retry/timeout/cache/fallback, liveness/readiness, deployment-policy, or behavior-only-test follow-ups in OPERATIONS.md into the final response or any audit summary, evidence row, readiness row, finding, expected telemetry, anti-pattern, recommendation, or verification scenario; these unrelated non-telemetry tasks are omitted from all generated audit artifacts.",
+    "Writes schema-v2 .observe/otel-audit.json with authored canonical otel_concerns, verification references, stable selectable finding IDs, and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with a compact signal-type shape, conditional prerequisite IDs, configuration scope beside exact telemetry, and collapsed acceptance checks, implementation guardrails, and evidence, without a component/service map, raw flow duplication, raw per-card scenario IDs, or OTel taxonomy; canonical flow and omitted machine detail remain available in JSON and compatibility Markdown.",
+    "Retains .observe/otel.md for compatibility with GenAI ownership detected as No, a matching Audit Evidence row, Current Instrumentation before Gaps, and GenAI Readiness omitted when ownership is No.",
+    "Ends the final response with clickable Markdown links whose targets are the absolute .observe/otel.html and .observe/otel-audit.json paths; bare relative report paths are not sufficient."
   ]
 }

@@ -3,21 +3,22 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Instrument the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness. Add safe app-owned signals and tests where practical."
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to select OTEL-001, then instrument the AI assistant FastAPI service for the bounded app-owned GenAI lifecycle. Write and validate bound canonical selection and instrumentation JSON, including the exact ordered genai_closure projection from the audit, then render compatibility Markdown and the self-contained instrumentation HTML. Add focused tests and run verification where practical."
     }
   ],
   "judge_inputs": [
-    "Inspect ./service for changed files, tests, and generated .observe output when present.",
+    "Inspect ./service for changed files, tests, canonical audit/selection/instrumentation JSON, and generated .observe reader output when present.",
     "Read ./last_message.md for the agent final response.",
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
     "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
     "Instruments FastAPI plus app-owned assistant turn, provider/model call, tool execution, streaming lifecycle, token/context pressure, and feedback export surfaces.",
-    "Uses OTel GenAI semantic-convention names where data is available, including gen_ai operation/model/provider attributes and token usage metrics.",
+    "Uses OTel GenAI semantic-convention names where data is available, including the chat demo-gpt-4o-mini inference span and registered execute_tool search_docs and execute_tool lookup_customer spans with exact operation/model/provider/tool attributes, plus token usage metrics.",
     "Handles partial token-pressure closure honestly by naming remaining truncation, token-limit, prompt/tool schema size, or fanout signals when not implemented.",
     "Adds or updates tests or compile checks and keeps raw prompts, completions, sessions, users, tenants, requests, and tool arguments out of metric dimensions.",
-    "Writes a separate .observe/otel-instrumentation.md with Signals Changed. When a source audit exists, it includes one-to-one Audit Gap Closure and GenAI Readiness Closure rows with unchanged Required signals; otherwise it records the missing source audit and does not fabricate closure rows.",
+    "Writes bound canonical .observe/otel-selection.json and .observe/otel-instrumentation.json; genai_closure has exactly one row per audit readiness surface in audit order and preserves surface, required_signals, and owner exactly while recording structured implementation, tests, durable evidence, remaining signals, and canonical status.",
+    "Renders compatibility Markdown whose GenAI Readiness Closure table is an exact projection of canonical genai_closure, and renders the separate self-contained instrumentation HTML without rewriting the audit HTML.",
     "Runs otel-verify and produces reader-first What Changed, Tested And Working, Not Working Or Not Proven, and Proof results, or records an exact blocker and keeps the instrumentation result Partial."
   ]
 }

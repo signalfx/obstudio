@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "kind": "otel-instrumentation",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:fa5fb0d055c101b0523c1de10062d48db13748cfbb982a898166221390ca59c5",
+  "selection_sha256": "sha256:54c3462765ed26ee2b265339997195b799467892d065f4307a7b9cdaac25daa8",
+  "meta": {
+    "service_name": "go-chi-basic",
+    "date": "2026-07-21",
+    "result": "Pass"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "working",
+      "changes": [
+        "Installed one route-aware GET /health server span owner."
+      ],
+      "telemetry_changes": [
+        {
+          "id": "OTEL-001.http-health-span",
+          "change_kind": "added",
+          "change": "Added the canonical route-aware GET /health server span.",
+          "type": "span",
+          "name": "GET /health",
+          "source": "main.go:28",
+          "added_attributes": [
+            "http.route=/health"
+          ],
+          "product_view": "Splunk APM route-level latency and errors",
+          "follow_up_actions": [
+            "Filter the trace waterfall by http.route."
+          ],
+          "verification_scenarios": [
+            "http.health.success"
+          ]
+        }
+      ],
+      "tests": [
+        "go test ./..."
+      ],
+      "evidence": [
+        "eval/inputs/canonical-verify-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Validate the bound route-span proof packet."
+      ],
+      "resolved_commit": "fixture"
+    }
+  ],
+  "next_steps": []
+}
