@@ -84,9 +84,10 @@ a `single_value` panel (current saturation) and optionally a `time_series` trend
 
 ### GenAI
 
-When the audit has a `## GenAI Readiness` section and GenAI metrics exist, group
-them into their **own** `signalfx_dashboard` inside a separate GenAI dashboard
-group. Mirror the GenAI categories from
+When the canonical audit has `genai_readiness[]` rows, GenAI findings, or
+source evidence that maps the metric to an LLM/GenAI workflow, and GenAI
+metrics exist, group them into their **own** `signalfx_dashboard` inside a
+separate GenAI dashboard group. Mirror the GenAI categories from
 `splunk-configure/references/detector-classification.md` (genai-latency,
 genai-token-pressure, genai-provider, genai-tool, etc.) but render each as a
 panel: latency/duration → `time_series` percentile; token usage → `time_series`
@@ -123,7 +124,7 @@ Place panels top-to-bottom, left-to-right; never overlap two panels on the same
 ## Decision flowchart
 
 ```
-metric has GenAI context (gen_ai.* or GenAI Readiness + explicit keyword)?
+metric has GenAI context (gen_ai.* or canonical genai_readiness/findings/evidence + explicit keyword)?
   -> YES -> GenAI panel in the GenAI dashboard group
   -> NO
 

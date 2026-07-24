@@ -3,15 +3,17 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "eval_inputs": [],
+      "task": "Scan the Go chi service in ./service for observability gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json and render the self-contained human review report at ./service/.observe/otel.html."
     },
     {
       "id": "readiness-review",
-      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "eval_inputs": [],
+      "task": "Produce an observability readiness review for the Go chi service in ./service. Identify existing telemetry, missing OpenTelemetry coverage, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write canonical ./service/.observe/otel-audit.json and render ./service/.observe/otel.html for human review and finding selection."
     }
   ],
   "judge_inputs": [
-    "Inspect ./service for resulting files when present.",
+    "Inspect ./service/.observe/otel-audit.json and ./service/.observe/otel.html when present.",
     "Read ./last_message.md for the agent final response.",
     "Read ./grade.json for run guard checks."
   ],
@@ -21,6 +23,8 @@
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
     "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
-    "Writes .observe/otel.md with GenAI ownership detected as No, a matching Audit Evidence row, Current Instrumentation before Gaps, and GenAI Readiness omitted when ownership is No."
+    "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, copyable instrumentation handoff, and collapsed technical details while retaining complete machine context in canonical JSON.",
+    "Renders .observe/otel.html as a decision-first findings view with GenAI ownership detected as No and a matching Audit Evidence row, while preserving machine context in canonical .observe/otel-audit.json and not rendering separate Incident or GenAI readiness ledger sections.",
+    "Ends the final response with clickable Markdown links whose targets are the absolute .observe/otel.html and .observe/otel-audit.json paths; bare relative report paths are not sufficient."
   ]
 }

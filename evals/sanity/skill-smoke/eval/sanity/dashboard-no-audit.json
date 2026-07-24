@@ -3,13 +3,13 @@
   "prompts": [
     {
       "id": "missing-audit",
-      "task": "Using the $splunk-dashboard skill, check ./service for a .observe/otel.md audit report. There is none in this fixture. Do not create or modify any files. State the prerequisite skill the user must run first to produce the audit report."
+      "task": "Using the $splunk-dashboard skill, check ./service for a .observe/otel-audit.json audit report. There is none in this fixture. Do not create or modify any files. State the prerequisite skill the user must run first to produce the audit report."
     }
   ],
   "checks": [
     {
       "id": "directs-to-otel-audit",
-      "description": "A missing .observe/otel.md must route the user to run $otel-audit first.",
+      "description": "A missing .observe/otel-audit.json must route the user to run $otel-audit first.",
       "kind": "final_contains_any",
       "values": ["otel-audit", "$otel-audit"],
       "applies_to": "with_skill"

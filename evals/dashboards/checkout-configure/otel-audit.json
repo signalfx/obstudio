@@ -1,0 +1,166 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "checkout-configure-fixture",
+    "service_name": "checkout",
+    "commit": "fixture",
+    "language": "go",
+    "framework": "chi",
+    "date": "2026-05-01",
+    "status": "Pass",
+    "genai_ownership_detected": false
+  },
+  "summary": [
+    "The checkout service already emits source-backed RED-style HTTP metrics and custom business metrics.",
+    "The custom checkout.payment.errors counter duplicates the POST /payment failure outcome that http.server.request.duration already exposes through route and error attributes."
+  ],
+  "flow": "audit -> configure",
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Go chi service using OpenTelemetry",
+      "source": "go.mod"
+    },
+    {
+      "check": "Entry point",
+      "finding": "checkout HTTP API",
+      "source": "main.go"
+    },
+    {
+      "check": "Route source",
+      "finding": "chi routes for health, cart, checkout, and payment",
+      "source": "main.go"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Go service starts with OTLP HTTP export to localhost:4318",
+      "source": "main.go"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "No",
+      "source": "go.mod and main.go"
+    },
+    {
+      "check": "HTTP instrumentation",
+      "finding": "otelhttp wraps the chi router with route-aware metrics",
+      "source": "main.go"
+    },
+    {
+      "check": "Route-level de-duplication",
+      "finding": "http.server.request.duration carries error.type for POST /payment, covering the same 502 outcome as checkout.payment.errors",
+      "source": "main.go"
+    },
+    {
+      "check": "Exporter",
+      "finding": "OTLP HTTP exporter targets localhost:4318",
+      "source": "main.go"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "Client [SOURCE-COVERED] -> chi router [SOURCE-COVERED] -> checkout handlers [SOURCE-COVERED] -> OTLP HTTP exporter [SOURCE-COVERED]"
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "healthHandler"
+    },
+    {
+      "method": "GET",
+      "path": "/cart",
+      "handler": "getCart"
+    },
+    {
+      "method": "POST",
+      "path": "/checkout",
+      "handler": "doCheckout"
+    },
+    {
+      "method": "POST",
+      "path": "/payment",
+      "handler": "doPayment"
+    }
+  ],
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "HTTP server route spans",
+        "source": "otelhttp",
+        "type": "auto"
+      }
+    ],
+    "metrics": [
+      {
+        "name": "http.server.request.duration",
+        "source": "otelhttp",
+        "type": "auto",
+        "attributes": [
+          "service.name",
+          "http.route",
+          "error.type"
+        ],
+        "notes": [
+          "POST /payment 502 failures are represented by http.route=/payment and error.type."
+        ]
+      },
+      {
+        "name": "http.server.active_requests",
+        "source": "otelhttp",
+        "type": "auto",
+        "attributes": [
+          "service.name",
+          "http.route"
+        ]
+      },
+      {
+        "name": "http.server.request.size",
+        "source": "otelhttp",
+        "type": "auto",
+        "attributes": [
+          "service.name",
+          "http.route"
+        ]
+      },
+      {
+        "name": "http.server.response.size",
+        "source": "otelhttp",
+        "type": "auto",
+        "attributes": [
+          "service.name",
+          "http.route"
+        ]
+      },
+      {
+        "name": "checkout.orders.processed",
+        "source": "manual",
+        "type": "custom",
+        "attributes": [
+          "service.name",
+          "endpoint"
+        ]
+      },
+      {
+        "name": "checkout.payment.errors",
+        "source": "manual",
+        "type": "custom",
+        "attributes": [
+          "service.name",
+          "endpoint"
+        ],
+        "notes": [
+          "Custom counter increments for the same POST /payment 502 outcome already covered by http.server.request.duration with error.type."
+        ]
+      }
+    ],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [],
+  "findings": [],
+  "verification": {
+    "environments": [],
+    "scenarios": []
+  }
+}

@@ -221,7 +221,7 @@ def test_shared_signalflow_reference_omits_detector_tail_for_charts():
 
 def test_dashboard_skill_reads_audit_and_emits_three_level_terraform():
     text = _read(SPLUNK_DASHBOARD)
-    assert ".observe/otel.md" in text, "must read the audit report"
+    assert ".observe/otel-audit.json" in text, "must read the canonical audit JSON"
     assert "$otel-audit" in text, "must point a missing-audit user at $otel-audit"
     # Three-level Terraform: group -> dashboard -> per-panel chart resources.
     assert "signalfx_dashboard_group" in text

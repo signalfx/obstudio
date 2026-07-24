@@ -22,6 +22,9 @@ observer/cmd/obstudio/_skills/
 observer/internal/web/static/assets/
 observer/client/public/assets/
 
+# Generated local OTel skill reports
+.observe/
+
 # Eval fixture apps -- track baselines, ignore generated artifacts
 evals/**/.observe/
 evals/**/.venv/

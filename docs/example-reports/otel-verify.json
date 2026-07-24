@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "kind": "otel-verify",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024",
+  "instrumentation_sha256": "sha256:30c53420c929cac9480d2d18733e37780da83b76683a5a262d375744c21240dc",
+  "meta": {
+    "service_name": "go-chi-basic",
+    "date": "2026-07-21",
+    "result": "Pass"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "working",
+      "scenarios": [
+        {
+          "id": "http.health.success",
+          "status": "working",
+          "commands": [
+            "validate bounded fixture capture"
+          ],
+          "evidence": [
+            "eval/inputs/canonical-verify-evidence.txt"
+          ],
+          "observed_telemetry": [
+            "The generated trace contains exactly one GET /health span with http.route=/health."
+          ],
+          "trace_ids": [],
+          "product_validation": [
+            "The local OTLP fixture capture contains the generated trace."
+          ],
+          "proof_mode": "full_runtime",
+          "visibility": "otlp_accepted"
+        }
+      ],
+      "item_results": [],
+      "remaining": []
+    }
+  ],
+  "next_steps": []
+}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="otel-audit-sha256" content="sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024">
+<meta name="otel-selection-sha256" content="sha256:5737597b3cf843480053caf7443e1bcb47b38c20d75cf12bbd99cf7da436d690">
+<meta name="otel-instrumentation-sha256" content="sha256:30c53420c929cac9480d2d18733e37780da83b76683a5a262d375744c21240dc">
+<meta name="otel-verify-instrumentation-sha256" content="sha256:30c53420c929cac9480d2d18733e37780da83b76683a5a262d375744c21240dc">
+<title>OTel Instrumentation - go-chi-basic</title>
+<style>
+:root { --bg:#f5f7fa; --surface:#fff; --ink:#17202a; --muted:#5f6b7a; --line:#dbe2ea; --accent:#1f5eff; --ok:#16794c; --critical:#b42318; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+header { background:#121821; color:#eef2f7; padding:28px 0; }
+.wrap { max-width:1180px; margin:0 auto; padding:0 20px; }
+.eyebrow { color:#9aa8ba; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+h1 { margin:8px 0 4px; font-size:clamp(26px,4vw,38px); line-height:1.1; }
+.meta { color:#b8c2cf; display:flex; flex-wrap:wrap; gap:14px; font-size:13px; }
+.meta b { color:#fff; }
+.report-nav { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:14px; }
+.report-nav a { color:#91b8ff; }
+main { padding-top:18px !important; padding-bottom:34px !important; }
+.summary,.panel { background:var(--surface); border:1px solid var(--line); border-radius:8px; margin:0 0 18px; padding:16px 18px; overflow-x:auto; }
+.summary h2,.panel h2 { color:var(--muted); font-size:14px; letter-spacing:.08em; margin:0 0 10px; text-transform:uppercase; }
+.summary h2.status-heading { color:var(--ink); font-size:20px; letter-spacing:0; text-transform:none; }
+.impact-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
+.instrumentation-stats { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.proof-stats { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.impact-stats div { border:1px solid var(--line); border-radius:7px; background:#fbfcfe; padding:9px 10px; }
+.impact-stats span { display:block; color:var(--muted); font-size:11px; letter-spacing:.06em; text-transform:uppercase; }
+.impact-stats strong { display:block; font-size:18px; margin-top:2px; }
+.review-note { border-left:3px solid var(--accent); background:#f4f7ff; margin:13px 0; padding:8px 10px; }
+.current-next { border-left:3px solid var(--accent); margin:12px 0 0; padding:6px 10px; }
+.selected-issues { display:grid; gap:12px; list-style:none; margin:12px 0 0; padding:0; }
+.selected-issue { background:#fbfcfe; border:1px solid var(--line); border-radius:8px; padding:14px; }
+.selected-issue-header { align-items:flex-start; display:flex; gap:16px; justify-content:space-between; }
+.selected-issue h3 { font-size:18px; line-height:1.25; margin:3px 0 4px; }
+.selection-reason { color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.issue-status-group { align-items:flex-end; display:flex; flex-direction:column; flex:none; gap:5px; }
+.issue-status { border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:11px; font-weight:700; padding:3px 8px; text-transform:uppercase; }
+.selected-issue-grid { display:grid; gap:14px; grid-template-columns:1fr 1fr; margin-top:12px; }
+.selected-issue-grid section { border-top:1px solid var(--line); padding-top:10px; }
+.selected-issue-grid h4 { color:var(--muted); font-size:12px; letter-spacing:.06em; margin:0 0 6px; text-transform:uppercase; }
+.issue-proof { background:#f4f7ff; border-radius:6px; margin:12px 0 0; padding:7px 9px; }
+.finding-proof { background:#fff; border:1px solid var(--line); border-radius:7px; display:grid; gap:8px; grid-template-columns:1fr 1fr; margin-top:10px; padding:10px; }
+.finding-proof > h4 { color:var(--muted); font-size:12px; grid-column:1/-1; letter-spacing:.06em; margin:0; text-transform:uppercase; }
+.proof-summary,.blocked-proof-summary,.telemetry-proof-summary,.coverage-details { grid-column:1/-1; }
+.proof-summary { margin:0; }
+.blocked-proof-summary { background:#fff9ec; border-left:3px solid #b7791f; border-radius:4px; display:grid; gap:6px; padding:9px 11px; }
+.blocked-proof-summary > strong,.blocked-proof-summary div > strong { display:block; margin-bottom:3px; }
+.blocked-proof-summary ul { margin:3px 0 0; }
+.telemetry-proof-summary { background:#f8faff; border-radius:4px; padding:8px 10px; }
+.telemetry-proof-summary ul { margin-top:5px; }
+.proof-status-working { color:var(--ok); }
+.proof-status-not_working,.proof-status-not_configured { color:var(--critical); }
+.coverage-detail-body { display:grid; gap:8px; grid-template-columns:1fr 1fr; padding-top:8px; }
+.proof-group { border-left:3px solid var(--accent); background:#f8faff; border-radius:4px; padding:7px 9px; }
+.proof-group > strong { display:block; margin-bottom:3px; }
+.proof-group ul { margin-top:3px; }
+.proof-runtime,.proof-focused,.proof-item-working,.proof-product { border-left-color:var(--ok); background:#f2fbf6; }
+.proof-partial,.proof-not-run,.proof-blocked,.proof-item-partial,.proof-delivery { border-left-color:#b7791f; background:#fff9ec; }
+.proof-failed,.proof-not-configured { border-left-color:var(--critical); background:#fff5f4; }
+.proof-visibility,.proof-result { grid-column:1/-1; margin:0; }
+.issue-follow-up { border-left:3px solid #b7791f; margin-top:10px; padding:6px 10px; }
+.issue-follow-up h4 { font-size:12px; margin:0 0 4px; text-transform:uppercase; }
+.issue-follow-up h4:not(:first-child) { margin-top:10px; }
+.table-wrap,.decision-table { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th,td { border-bottom:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
+th { color:var(--muted); font-size:12px; }
+code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.muted { color:var(--muted); }
+.source-link,.finding-jump { color:var(--accent); text-decoration:none; overflow-wrap:anywhere; }
+.source-link:hover,.source-link:focus,.finding-jump:hover,.finding-jump:focus { text-decoration:underline; }
+.source-open { display:inline-block; font-size:10px; margin-left:3px; vertical-align:top; }
+.finding-jump { font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace; margin-right:6px; }
+.closure-row { scroll-margin-top:16px; }
+details { border-top:1px solid var(--line); margin-top:12px; padding-top:10px; }
+details > summary { cursor:pointer; font-weight:700; color:var(--muted); }
+.technical-details { border:0; margin-top:8px; padding-top:0; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+ul { margin:0; padding-left:18px; }
+p { margin:0 0 12px; }
+@media (max-width:900px) { .instrumentation-stats,.proof-stats { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:760px) { .selected-issue-grid,.finding-proof,.coverage-detail-body { grid-template-columns:1fr; } .finding-proof > h4,.proof-summary,.telemetry-proof-summary,.coverage-details { grid-column:1; } }
+@media (max-width:620px) { .impact-stats,.instrumentation-stats { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="eyebrow">OpenTelemetry instrumentation report</div>
+  <h1>go-chi-basic</h1>
+  <div class="meta">
+    <span>audit <b>go-chi-basic-fixture</b></span>
+    <span>audit baseline commit <b>fixture</b></span>
+    <span>date <b>2026-07-21</b></span>
+  </div>
+  <nav class="report-nav" aria-label="Report artifacts">
+    <a href="otel.html">Audit and scope report</a>
+    <a href="otel-instrumentation.json">Instrumentation JSON</a>
+    <a href="otel-verify.json">Verification JSON</a>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section class="summary" aria-labelledby="instrumentation-status-heading"><h2 id="instrumentation-status-heading" class="status-heading">Instrumentation and verification complete</h2><p><strong>Overall result: Pass.</strong> No telemetry changes were recorded; this is proof-only scope. Scenario proof reached local OTLP; Splunk Observability Cloud was not checked.</p></section>
+  <section class="panel" aria-labelledby="selected-issues-heading">
+    <h2 id="selected-issues-heading">Selected issues and changes</h2>
+    <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>
+    <p class="review-note">Each issue shows what changed, how observability improves, telemetry-item proof, scenario coverage, and any remaining uncertainty.</p>
+    <ol class="selected-issues"><li><article class="selected-issue" id="selected-OTEL-001" data-priority="required" data-area="HTTP request telemetry"><div class="selected-issue-header"><div><span class="selection-reason">You selected</span><h3>HTTP requests lack route-aware telemetry</h3><p class="muted"><code>OTEL-001</code></p></div><span class="issue-status-group"><span class="issue-status">Implementation: proof-only scope</span><span class="issue-status">Proof: verified</span></span></div><p><strong>Selected issue:</strong> The chi router has no OpenTelemetry server instrumentation.</p><div class="selected-issue-grid"><section><h4>What changed / was corrected</h4><ul><li>Validated a bound proof packet for the selected route-aware GET /health server span requirement; this fixture does not claim an application source edit.</li></ul></section><section><h4>How it improves observability</h4><p>Splunk APM route-level latency and errors</p></section></div><p class="issue-proof"><strong>Telemetry changes:</strong> proof-only scope; no application telemetry item · <strong>Verification:</strong> verified; proof-only verification scope</p><section class="finding-proof"><h4>Verification complete</h4><p class="proof-summary">Confirmed in a running service: GET /health.</p><p class="muted">No application telemetry change was created for this selected issue.</p><details class="coverage-details"><summary>Coverage details</summary><div class="coverage-detail-body"><div class="proof-group proof-runtime"><strong>Confirmed in a running service</strong><ul><li>GET /health</li></ul></div></div></details></section></article></li></ol>
+  </section>
+  <section class="panel"><h2>Outside selected scope</h2><p>3 audit findings were outside this instrumentation run. Review them in <a href="otel.html">the audit and scope report</a>.</p></section>
+</main>
+</body>
+</html>

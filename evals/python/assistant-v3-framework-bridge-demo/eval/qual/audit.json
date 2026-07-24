@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "framework-bridge",
-      "task": "Scan the assistant v3 FastAPI service in ./service. It has app-owned GenAI spans and a startup command that preloads framework instrumentation. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "task": "Scan the assistant v3 FastAPI service in ./service. It has app-owned GenAI spans and a startup command that preloads framework instrumentation. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json, then render self-contained ./service/.observe/otel.html from that JSON."
     }
   ],
   "judge_inputs": [
@@ -17,6 +17,6 @@
     "Marks trace/semconv coverage partial unless there is proof of one canonical GenAI span source per logical workflow, chat/model call, and tool call.",
     "Requires duplicate-span remediation in the real startup surface before bootstrap, not only app module code that mutates environment variables after import.",
     "States that POST /v2/assistant/sessions can remain the HTTP root span but must not become the GenAI workflow card.",
-    "Writes .observe/otel.md with GenAI ownership detected as Yes, matching Audit Evidence, a GenAI Readiness table that covers framework bridge and duplicate-span risk, and a source-derived Verification Plan."
+    "Renders .observe/otel.html with GenAI ownership detected as Yes, matching Audit Evidence, a GenAI Readiness table that covers framework bridge and duplicate-span risk, and a source-derived Verification Plan."
   ]
 }

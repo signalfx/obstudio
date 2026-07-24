@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import json
 import subprocess
 import sys
 import tempfile
@@ -8,6 +10,8 @@ from pathlib import Path
 
 
 VALIDATOR = Path(__file__).parents[1] / "scripts" / "validate_reader_report.py"
+SKILL = Path(__file__).parents[1] / "SKILL.md"
+
 
 REPORT = """# OTel Verification Report: sample
 
@@ -20,16 +24,16 @@ One metric changed.
 
 **Individual result:** 1/2 working: metrics 1/2.
 
-| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
-|---|---|---|---|---|---|
-| `http.server.request.duration` | Metric | Canonical exporter | Working | Full runtime OTLP | collector.txt |
-| stdout `traceId`/`spanId` correlation | Log | Canonical context | Not proven | Runtime log capture | no matching record |
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| OTEL-001.http-duration | `http.server.request.duration` | Metric | Canonical exporter | Working | proof_mode=full_runtime; scenarios=http.duration.runtime | Route latency chart; explorer visible; visibility=explorer_visible | collector.txt |
+| OTEL-002.stdout-correlation | stdout `traceId`/`spanId` correlation | Log | Canonical context | Not proven | proof_mode=app_test; scenarios=http.correlation.runtime | Log correlation not proven; visibility=not_proven | no matching record |
 
 ## Not Working Or Not Proven
 
 | Item | State | Why | What is needed next |
 |---|---|---|---|
-| stdout `traceId`/`spanId` correlation | Not proven | No matching record | Exercise a request |
+| OTEL-002.stdout-correlation | Not proven | No matching record | Exercise a request |
 
 ## Proof
 Collector output and logs.
@@ -37,20 +41,49 @@ Collector output and logs.
 
 
 class ValidateReaderReportTest(unittest.TestCase):
-    def validate(self, report: str, expected: str) -> subprocess.CompletedProcess[str]:
+    @staticmethod
+    def instrumentation_overlay(instrumentation_ids: list[str]) -> dict[str, object]:
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for item_id in instrumentation_ids:
+            finding_id = item_id.split(".", 1)[0]
+            grouped.setdefault(finding_id, []).append({"id": item_id})
+        return {
+            "schema_version": 1,
+            "kind": "otel-instrumentation",
+            "selection_sha256": "sha256:" + "b" * 64,
+            "findings": [
+                {"id": finding_id, "telemetry_changes": changes}
+                for finding_id, changes in sorted(grouped.items())
+            ],
+        }
+
+    def validate(
+        self,
+        report: str,
+        expected: str,
+        instrumentation_ids: list[str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "otel-verify.md"
             expected_path = Path(directory) / "expected.txt"
+            instrumentation_path = Path(directory) / "otel-instrumentation.json"
             report_path.write_text(report, encoding="utf-8")
             expected_path.write_text(expected, encoding="utf-8")
+            command = [
+                sys.executable,
+                str(VALIDATOR),
+                str(report_path),
+                "--expected-items-file",
+                str(expected_path),
+            ]
+            if instrumentation_ids is not None:
+                instrumentation_path.write_text(
+                    json.dumps(self.instrumentation_overlay(instrumentation_ids)),
+                    encoding="utf-8",
+                )
+                command.extend(["--instrumentation-json", str(instrumentation_path)])
             return subprocess.run(
-                [
-                    sys.executable,
-                    str(VALIDATOR),
-                    str(report_path),
-                    "--expected-items-file",
-                    str(expected_path),
-                ],
+                command,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -64,15 +97,402 @@ class ValidateReaderReportTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("2 individual OTel items", result.stdout)
 
+    def test_test_overlay_groups_item_ids_by_finding_prefix(self) -> None:
+        overlay = self.instrumentation_overlay(
+            [
+                "OTEL-002.stdout-correlation",
+                "OTEL-001.http-duration",
+                "OTEL-002.log-link",
+            ]
+        )
+
+        self.assertEqual(
+            overlay["findings"],
+            [
+                {
+                    "id": "OTEL-001",
+                    "telemetry_changes": [{"id": "OTEL-001.http-duration"}],
+                },
+                {
+                    "id": "OTEL-002",
+                    "telemetry_changes": [
+                        {"id": "OTEL-002.stdout-correlation"},
+                        {"id": "OTEL-002.log-link"},
+                    ],
+                },
+            ],
+        )
+
+    def test_skill_and_validator_reject_stale_six_column_item_contract(self) -> None:
+        expected_header = (
+            "| Item ID | OTel item | Type | Added or modified | Working status | "
+            "How it was tested | Product result / visibility | Evidence |"
+        )
+        stale_header = (
+            "| OTel item | Type | Added or modified | Working status | "
+            "How it was tested | Evidence |"
+        )
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertGreaterEqual(skill.count(expected_header), 2)
+        self.assertNotIn(stale_header, skill)
+
+        stale_report = """# OTel Verification Report: stale
+
+**Result:** Pass
+
+## What Changed
+One metric changed.
+
+## Tested And Working
+
+**Individual result:** 1/1 working.
+
+| OTel item | Type | Added or modified | Working status | How it was tested | Evidence |
+|---|---|---|---|---|---|
+| http.server.request.duration | Metric | Exporter | Working | full runtime | collector.txt |
+
+## Not Working Or Not Proven
+None
+
+## Proof
+Collector output.
+"""
+        result = self.validate(stale_report, "http.server.request.duration\n")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing per-OTel table with header", result.stderr)
+
     def test_duplicate_items_are_compared_after_normalization(self) -> None:
         duplicate = REPORT.replace(
-            "| stdout `traceId`/`spanId` correlation |",
-            "| `http.server.request.duration` |",
+            "| stdout `traceId`/`spanId` correlation | Log |",
+            "| `http.server.request.duration` | Log |",
             1,
         )
         result = self.validate(duplicate, "http.server.request.duration\n")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("duplicate OTel item row", result.stderr)
+
+        canonical = self.validate(
+            duplicate,
+            "http.server.request.duration\n",
+            ["OTEL-001.http-duration", "OTEL-002.stdout-correlation"],
+        )
+        self.assertEqual(canonical.returncode, 0, canonical.stderr)
+
+    def test_escaped_pipe_inside_table_cell_is_not_a_column_separator(self) -> None:
+        escaped = REPORT.replace(
+            "proof_mode=full_runtime; scenarios=http.duration.runtime",
+            r"proof_mode=full_runtime; scenarios=http.duration.runtime with `rg 'trace\|metric'`",
+            1,
+        )
+        result = self.validate(
+            escaped,
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2 individual OTel items", result.stdout)
+
+    def test_instrumentation_json_is_the_expected_item_authority(self) -> None:
+        ids = ["OTEL-001.http-duration", "OTEL-002.stdout-correlation"]
+        passed = self.validate(
+            REPORT,
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+            ids,
+        )
+        self.assertEqual(passed.returncode, 0, passed.stderr)
+
+        missing = self.validate(
+            REPORT,
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+            ids + ["OTEL-003.cache-age"],
+        )
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("missing instrumentation item IDs: OTEL-003.cache-age", missing.stderr)
+
+    def test_verify_json_is_the_exact_reader_projection_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "otel-verify.md"
+            audit_path = root / "otel-audit.json"
+            selection_path = root / "otel-selection.json"
+            instrumentation_path = root / "otel-instrumentation.json"
+            verify_path = root / "otel-verify.json"
+            canonical_report = """# OTel Verification Report: go-chi-basic
+
+**Result:** Pass
+
+## What Changed
+One route span changed.
+
+## Tested And Working
+
+**Individual result:** 0/0 working.
+
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+
+No telemetry items. Selected findings are proof-first verification scope.
+
+## Not Working Or Not Proven
+None.
+
+## Proof
+The local fixture capture contains the generated route trace.
+"""
+            report_path.write_text(canonical_report, encoding="utf-8")
+            examples = Path(__file__).parents[3] / "docs" / "example-reports"
+            audit = json.loads((examples / "otel-audit.json").read_text())
+            selection = json.loads((examples / "otel-selection.json").read_text())
+            instrumentation = json.loads(
+                (examples / "otel-instrumentation.json").read_text()
+            )
+            verification = json.loads((examples / "otel-verify.json").read_text())
+            instrumentation["producer_context"] = {
+                "note": "not part of the normalized overlay"
+            }
+            audit_path.write_text(json.dumps(audit), encoding="utf-8")
+            selection_path.write_text(json.dumps(selection), encoding="utf-8")
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            command = [
+                sys.executable,
+                str(VALIDATOR),
+                str(report_path),
+                "--instrumentation-json",
+                str(instrumentation_path),
+                "--verify-json",
+                str(verify_path),
+                "--audit-json",
+                str(audit_path),
+                "--selection-json",
+                str(selection_path),
+            ]
+
+            passed = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertEqual(passed.returncode, 0, passed.stderr)
+
+            report_path.write_text(
+                canonical_report.replace(
+                    "**Individual result:** 0/0 working.",
+                    "**Individual result:** 1/1 working.",
+                ),
+                encoding="utf-8",
+            )
+            stale = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("Individual result count does not match", stale.stderr)
+
+            report_path.write_text(canonical_report, encoding="utf-8")
+            missing_visibility = verification["findings"][0]["scenarios"][0].pop(
+                "visibility"
+            )
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            invalid_visibility = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(invalid_visibility.returncode, 0)
+            self.assertIn(".visibility must be a string", invalid_visibility.stderr)
+            verification["findings"][0]["scenarios"][0][
+                "visibility"
+            ] = missing_visibility
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+
+            for invalid_meta in (None, "Pass", []):
+                verification["meta"] = invalid_meta
+                verify_path.write_text(json.dumps(verification), encoding="utf-8")
+                malformed_meta = subprocess.run(
+                    command, check=False, capture_output=True, text=True
+                )
+                self.assertNotEqual(malformed_meta.returncode, 0)
+                self.assertIn("verify.meta must be an object", malformed_meta.stderr)
+                self.assertNotIn("Traceback", malformed_meta.stderr)
+            verification["meta"] = {
+                "service_name": "go-chi-basic",
+                "date": "2026-07-21",
+                "result": "Pass",
+            }
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+
+            original_verify_findings = verification["findings"]
+            verification["findings"] = None
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            invalid_verify_findings = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(invalid_verify_findings.returncode, 0)
+            self.assertIn("verify.findings must be a list", invalid_verify_findings.stderr)
+            self.assertNotIn("Traceback", invalid_verify_findings.stderr)
+
+            verification["findings"] = copy.deepcopy(original_verify_findings)
+            verification["findings"][0]["item_results"] = None
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+            invalid_item_results = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(invalid_item_results.returncode, 0)
+            self.assertIn("item_results must be a list", invalid_item_results.stderr)
+            self.assertNotIn("Traceback", invalid_item_results.stderr)
+
+            verification["findings"] = original_verify_findings
+            verify_path.write_text(json.dumps(verification), encoding="utf-8")
+
+            original_instrumentation_findings = instrumentation["findings"]
+            instrumentation["findings"] = None
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            invalid_instrumentation_findings = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(invalid_instrumentation_findings.returncode, 0)
+            self.assertIn(
+                "instrumentation.findings must be a list",
+                invalid_instrumentation_findings.stderr,
+            )
+            self.assertNotIn("Traceback", invalid_instrumentation_findings.stderr)
+
+            instrumentation["findings"] = copy.deepcopy(
+                original_instrumentation_findings
+            )
+            instrumentation["findings"][0]["telemetry_changes"] = None
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            invalid_telemetry_changes = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(invalid_telemetry_changes.returncode, 0)
+            self.assertIn(
+                "telemetry_changes must be a list",
+                invalid_telemetry_changes.stderr,
+            )
+            self.assertNotIn("Traceback", invalid_telemetry_changes.stderr)
+
+            instrumentation["findings"] = original_instrumentation_findings
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+
+            instrumentation.pop("selection_sha256")
+            instrumentation_path.write_text(
+                json.dumps(instrumentation), encoding="utf-8"
+            )
+            unbound = subprocess.run(
+                command, check=False, capture_output=True, text=True
+            )
+            self.assertNotEqual(unbound.returncode, 0)
+            self.assertIn("selection_sha256 is required", unbound.stderr)
+
+    def test_explicit_zero_item_report_requires_bound_empty_inventory(self) -> None:
+        report = """# OTel Verification Report: proof-first
+
+**Result:** Partial
+
+## What Changed
+No telemetry inventory was selected.
+
+## Tested And Working
+
+**Individual result:** 0/0 working.
+
+| Item ID | OTel item | Type | Added or modified | Working status | How it was tested | Product result / visibility | Evidence |
+|---|---|---|---|---|---|---|---|
+
+No telemetry items. Selected findings are proof-first verification scope.
+
+## Not Working Or Not Proven
+None
+
+## Proof
+Finding-level scenarios remain authoritative.
+"""
+        bound = self.validate(report, "", [])
+        self.assertEqual(bound.returncode, 0, bound.stderr)
+        self.assertIn("0 individual OTel items", bound.stdout)
+
+        unbound = self.validate(report, "")
+        self.assertNotEqual(unbound.returncode, 0)
+        self.assertIn("per-OTel table has no item rows", unbound.stderr)
+
+        missing_marker = self.validate(
+            report.replace(
+                "No telemetry items. Selected findings are proof-first verification scope.\n",
+                "",
+            ),
+            "",
+            [],
+        )
+        self.assertNotEqual(missing_marker.returncode, 0)
+        self.assertIn("per-OTel table has no item rows", missing_marker.stderr)
+
+        nonempty = self.validate(report, "", ["OTEL-001.http-duration"])
+        self.assertNotEqual(nonempty.returncode, 0)
+        self.assertIn("per-OTel table has no item rows", nonempty.stderr)
+
+    def test_gap_mirror_uses_exact_item_id_cells(self) -> None:
+        prefixed = REPORT.replace(
+            "| OTEL-002.stdout-correlation | Not proven |",
+            "| OTEL-002.stdout-correlation-extra | Not proven |",
+        )
+
+        result = self.validate(
+            prefixed,
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "OTEL-002.stdout-correlation: non-working item ID is missing",
+            result.stderr,
+        )
+
+    def test_gap_mirror_rejects_duplicate_and_unexpected_item_ids(self) -> None:
+        gap_row = (
+            "| OTEL-002.stdout-correlation | Not proven | No matching record | "
+            "Exercise a request |"
+        )
+        duplicate = self.validate(
+            REPORT.replace(gap_row, f"{gap_row}\n{gap_row}"),
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+        self.assertNotEqual(duplicate.returncode, 0)
+        self.assertIn(
+            "duplicate item IDs in Not Working Or Not Proven: "
+            "OTEL-002.stdout-correlation",
+            duplicate.stderr,
+        )
+
+        unexpected = self.validate(
+            REPORT.replace(
+                gap_row,
+                f"{gap_row}\n| OTEL-999.unrelated | Not proven | Unrelated | "
+                "Exercise another request |",
+            ),
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+        self.assertNotEqual(unexpected.returncode, 0)
+        self.assertIn(
+            "unexpected item IDs in Not Working Or Not Proven: OTEL-999.unrelated",
+            unexpected.stderr,
+        )
+
+    def test_gap_mirror_rejects_a_contradictory_state(self) -> None:
+        contradictory = self.validate(
+            REPORT.replace(
+                "| OTEL-002.stdout-correlation | Not proven |",
+                "| OTEL-002.stdout-correlation | Not working |",
+            ),
+            "http.server.request.duration\nstdout traceId/spanId correlation\n",
+        )
+
+        self.assertNotEqual(contradictory.returncode, 0)
+        self.assertIn(
+            "OTEL-002.stdout-correlation: gap State 'Not working' does not match "
+            "Working status 'Not proven'",
+            contradictory.stderr,
+        )
 
 
 if __name__ == "__main__":

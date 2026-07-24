@@ -2,7 +2,7 @@
 
 ## Scope
 
-Read `.observe/otel.md` (produced by `$otel-audit`) and generate Splunk Observability Cloud detector definitions as Terraform files: `.observe/terraform/detectors.tf` and `.observe/terraform/variables.tf`.
+Read `.observe/otel-audit.json` (produced by `$otel-audit`) and generate Splunk Observability Cloud detector definitions as Terraform files: `.observe/terraform/detectors.tf` and `.observe/terraform/variables.tf`.
 
 ## Out of Scope
 
@@ -16,7 +16,7 @@ Read `.observe/otel.md` (produced by `$otel-audit`) and generate Splunk Observab
 
 ### One detector per classified metric
 
-Each metric from the audit report that matches a classification rule gets its own `signalfx_detector` resource. Users remove detectors they do not need rather than requesting them one by one.
+Each source-backed existing metric from `current_instrumentation.metrics` that matches a classification rule gets its own `signalfx_detector` resource. Users remove detectors they do not need rather than requesting them one by one.
 
 ### Classification by metric name pattern
 
@@ -52,7 +52,7 @@ All SignalFlow programs filter by service name using `filter('service.name', '${
 
 ### Prerequisite
 
-`$otel-audit` must have run and produced `.observe/otel.md`. If the file is missing, the skill instructs the user to run `$otel-audit` first.
+`$otel-audit` must have run and produced `.observe/otel-audit.json`. If the file is missing, the skill instructs the user to run `$otel-audit` first.
 
 ### Token budget
 

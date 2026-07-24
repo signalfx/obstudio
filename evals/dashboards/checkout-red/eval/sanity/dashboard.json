@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "generate",
-      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-report.md (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-report.md to ./service/.observe/otel.md. THEN run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform, the variables, the tfvars example, the human report, and the Observer preview sidecar. Do not call any network and do not run terraform."
+      "task": "Treat ./service as the project root. The otel-audit report for this fixture is provided at ./service/otel-audit.json (the harness strips committed .observe/ inputs, so it is shipped here instead). FIRST create ./service/.observe/ and copy ./service/otel-audit.json to ./service/.observe/otel-audit.json. THEN run the $splunk-dashboard skill against ./service so every output is written under ./service/.observe/ and ./service/.observe/terraform/. Generate the dashboard Terraform, the variables, the tfvars example, the human report, and the Observer preview sidecar. Do not call any network and do not run terraform."
     }
   ],
   "checks": [

@@ -10,6 +10,7 @@ from pathlib import Path
 from .ab import side_prompt
 from .backends import AgentBackend, CodexBackend
 from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
+from .definitions.base import validate_eval_input_paths
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
 
@@ -209,6 +210,11 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
         side_dir / "service",
         ignore=shutil.ignore_patterns("eval", "*_eval.json", ".observe", ".venv", "__pycache__", "*.pyc", "uv.lock", "*.db"),
     )
+    copy_eval_inputs(
+        case.fixture_dir,
+        side_dir / "service",
+        case.eval_inputs,
+    )
     if side == "with_skill":
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
@@ -220,6 +226,38 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
         references = repo_root / "skills" / "references"
         if references.exists():
             create_skill_link(references, skills_dir / "references")
+
+
+def copy_eval_inputs(
+    fixture_dir: Path,
+    service_dir: Path,
+    eval_inputs: list[str] | None,
+) -> None:
+    """Expose only prompt-approved eval seeds, never eval definitions."""
+
+    validate_eval_input_paths(eval_inputs)
+    if not eval_inputs:
+        return
+    input_root = fixture_dir / "eval" / "inputs"
+    if (fixture_dir / "eval").is_symlink() or input_root.is_symlink():
+        raise ValueError(f"eval input directory must not be a symlink: {input_root}")
+    resolved_input_root = input_root.resolve()
+    for value in eval_inputs:
+        relative = Path(value)
+        source = fixture_dir / relative
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(
+                f"eval_inputs entry must name a regular fixture file: {value}"
+            )
+        try:
+            source.resolve().relative_to(resolved_input_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"eval_inputs entry resolves outside eval/inputs: {value}"
+            ) from exc
+        destination = service_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination, follow_symlinks=False)
 
 
 def create_skill_link(target: Path, link: Path) -> None:

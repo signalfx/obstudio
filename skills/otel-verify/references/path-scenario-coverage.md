@@ -1,8 +1,8 @@
 # Acceptance Scenario Coverage
 
-Use this reference whenever `.observe/otel.md` exists or the verification scope
-includes workflows, routes, jobs, startup, streaming, tools, retrieval,
-redaction, or error paths.
+Use this reference whenever `.observe/otel-audit.json` exists or the
+verification scope includes workflows, routes, jobs, startup, streaming, tools,
+retrieval, redaction, or error paths.
 
 ## Goal
 
@@ -19,23 +19,25 @@ scenario-specific execution and evidence.
 
 ## Derive Acceptance Scenarios From The Audit
 
-Read `.observe/otel.md` and extract scenarios from these places when present:
+Read `.observe/otel-audit.json` and extract scenarios from these places when
+present:
 
-- `Verification Plan / Test Environments`: resolve each reusable runtime,
-  fixture, and prerequisite profile by its stable environment ID.
-- `Verification Plan / Acceptance Scenarios`: use these stable scenario IDs,
-  triggers, source entrypoints, expected signals, proof levels, acceptance
-  criteria, and environment references as the initial inventory, then
-  reconcile them with source.
+- `verification.environments`: resolve each reusable runtime, fixture, and
+  prerequisite profile by its stable environment ID.
+- `verification.scenarios`: use these stable scenario IDs, triggers,
+  source entrypoints, expected signals, proof levels, acceptance criteria, and
+  environment references as the initial inventory, then reconcile them with
+  source.
 - `.observe/otel-instrumentation.md` `Verification Handoff / Results` and
   `Signals Changed`: add every changed-signal scenario and preserve the
   implementation gate evidence.
-- `Current Instrumentation`: existing spans/metrics/logs that the changed
+- `current_instrumentation`: existing spans/metrics/logs that the changed
   instrumentation depends on.
-- `GenAI Readiness`: workflow, agent, LLM, tool, retrieval, memory, eval,
+- `genai_readiness`: workflow, agent, LLM, tool, retrieval, memory, eval,
   streaming, token usage, parentage, and duplicate-span requirements.
-- `Observability Gaps` or similar sections: missing or weak scenarios that
-  should remain `Not run`, `Source only`, or `Blocked` until verified.
+- `findings[].expected_telemetry` and `.observe/otel-instrumentation.json`
+  `findings[].telemetry_changes`: missing, weak, or removed-signal scenarios
+  that should remain `Not run`, `Source only`, or `Blocked` until verified.
 - Source files referenced by the audit: inspect branch points, decorators,
   route handlers, middleware, workflow outcomes, exception handlers, and
   startup wiring.

@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
 from pytest_codex_evals.definitions import (
@@ -11,7 +13,9 @@ from pytest_codex_evals.definitions import (
     EndpointExpectation,
     GradeCheckResult,
     GradeResult,
+    PromptVariant,
     RubricEvalCase,
+    RubricEvalDefinition,
     RuntimeCheck,
     RuntimeEvalCase,
     RuntimeExpectations,
@@ -36,7 +40,8 @@ from pytest_codex_evals.report import (
     render_reports_for_run_root,
     write_session_results,
 )
-from pytest_codex_evals.runner import run_case
+from pytest_codex_evals.plugin import case_from_definition
+from pytest_codex_evals.runner import prepare_side_workspace, run_case
 from pytest_codex_evals.trace import parse_trace
 
 
@@ -45,6 +50,129 @@ def test_side_prompt_generates_loaded_and_not_loaded_variants():
 
     assert side_prompt(case, "with_skill") == "Use the $sample-skill skill. Scan the service."
     assert side_prompt(case, "baseline") == "Scan the service."
+
+
+def test_prompt_eval_inputs_require_safe_fixture_relative_paths():
+    prompt = PromptVariant(
+        id="direct",
+        task="Run.",
+        eval_inputs=["eval/inputs/otel-audit.json"],
+    )
+
+    assert prompt.eval_inputs == ["eval/inputs/otel-audit.json"]
+    for unsafe in (
+        "/tmp/otel-audit.json",
+        "../otel-audit.json",
+        "eval/inputs/../otel-audit.json",
+        "eval/inputs/./otel-audit.json",
+        "otel-audit.json",
+        "eval\\inputs\\otel-audit.json",
+    ):
+        with pytest.raises(ValueError, match="safe relative file paths"):
+            PromptVariant(id="direct", task="Run.", eval_inputs=[unsafe])
+
+
+def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
+    prompt = PromptVariant(
+        id="direct",
+        task="Run.",
+        eval_inputs=["eval/inputs/otel-audit.json"],
+    )
+    definition = RubricEvalDefinition(
+        id="go/sample/instrument",
+        skill="otel-instrument",
+        language="go",
+        service="sample",
+        prompts=[prompt],
+        rubric=["Grade quality."],
+        fixture_dir=tmp_path,
+    )
+
+    case = case_from_definition(
+        definition,
+        prompt,
+        tmp_path / "eval" / "qual" / "instrument.json",
+    )
+
+    assert case.eval_inputs == ["eval/inputs/otel-audit.json"]
+
+
+def test_prepare_side_workspace_stages_only_explicit_eval_inputs(
+    tmp_path: Path,
+):
+    fixture_dir = tmp_path / "fixture"
+    inputs = fixture_dir / "eval" / "inputs"
+    inputs.mkdir(parents=True)
+    (fixture_dir / "eval" / "qual").mkdir()
+    (fixture_dir / "main.go").write_text("package main\n", encoding="utf-8")
+    (inputs / "otel-audit.json").write_text("{}\n", encoding="utf-8")
+    (inputs / "otel-verify.json").write_text("{}\n", encoding="utf-8")
+    (fixture_dir / "eval" / "qual" / "audit.json").write_text(
+        "{}\n", encoding="utf-8"
+    )
+
+    scoped = sanity_case(
+        fixture_dir=fixture_dir,
+        eval_inputs=["eval/inputs/otel-audit.json"],
+    )
+    prepare_side_workspace(
+        tmp_path,
+        scoped,
+        "baseline",
+        tmp_path / "scoped",
+    )
+    service = tmp_path / "scoped" / "service"
+    assert (service / "main.go").is_file()
+    assert (service / "eval" / "inputs" / "otel-audit.json").is_file()
+    assert not (service / "eval" / "inputs" / "otel-verify.json").exists()
+    assert not (service / "eval" / "qual").exists()
+
+    unscoped = sanity_case(fixture_dir=fixture_dir)
+    prepare_side_workspace(
+        tmp_path,
+        unscoped,
+        "baseline",
+        tmp_path / "unscoped",
+    )
+    assert not (tmp_path / "unscoped" / "service" / "eval").exists()
+
+
+def test_prepare_side_workspace_rejects_missing_eval_input(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    case = sanity_case(
+        fixture_dir=fixture_dir,
+        eval_inputs=["eval/inputs/missing.json"],
+    )
+
+    with pytest.raises(ValueError, match="regular fixture file"):
+        prepare_side_workspace(
+            tmp_path,
+            case,
+            "baseline",
+            tmp_path / "run",
+        )
+
+
+def test_prepare_side_workspace_rejects_symlinked_eval_input(tmp_path: Path):
+    fixture_dir = tmp_path / "fixture"
+    inputs = fixture_dir / "eval" / "inputs"
+    inputs.mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    (inputs / "otel-audit.json").symlink_to(outside)
+    case = sanity_case(
+        fixture_dir=fixture_dir,
+        eval_inputs=["eval/inputs/otel-audit.json"],
+    )
+
+    with pytest.raises(ValueError, match="regular fixture file"):
+        prepare_side_workspace(
+            tmp_path,
+            case,
+            "baseline",
+            tmp_path / "run",
+        )
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(

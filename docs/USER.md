@@ -109,9 +109,9 @@ Once installed, open any project in your agent and use:
 
 | Command | What it does |
 |---------|-------------|
-| `/otel-audit` | Analyze codebase for observability gaps |
-| `/otel-instrument` | Add OpenTelemetry instrumentation |
-| `/otel-verify` | Prove existing instrumentation and write `.observe/otel-verify.md` |
+| `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
+| `/otel-instrument` | Implement canonical audit selections and write instrumentation JSON plus interactive `.observe/otel-instrumentation.html` |
+| `/otel-verify` | Write bound verification JSON and refresh instrumentation proof in the instrumentation HTML |
 
 Or use natural language:
 
@@ -131,6 +131,31 @@ blocks it. See the
 for how to run verification directly and read the generated report. The
 complete report schema remains in the canonical
 [report flow contract](https://github.com/signalfx/obstudio/blob/main/skills/references/report-flow-contract.md#verification-report-contract).
+
+When an audit and validated selection are present, the normal review loop is
+JSON-backed and HTML-first:
+
+1. Run `$otel-audit` and open `.observe/otel.html`.
+2. Select and expand findings, then press **Save selection**. When the browser
+   offers a file picker, save the selected audit copy as
+   `.observe/otel-audit.selected.json`; do not overwrite the canonical audit.
+   If the browser downloads the selected copy instead, leave it there and
+   `$otel-instrument` can adopt it after digest validation when no trusted
+   repository selection already exists.
+3. Run `$otel-instrument`. Alternatively, invoke
+   `$otel-instrument --ids OTEL-001,OTEL-004` directly; it writes the same
+   validated selection handoff before editing.
+4. Open `.observe/otel-instrumentation.html` for the code-to-telemetry-to-product
+   change report. The audit HTML remains unchanged.
+5. No separate verification rerun is needed after instrumentation because
+   `$otel-instrument` runs the verification workflow. Run `$otel-verify`
+   directly only later when runtime evidence has changed and proof needs to be
+   refreshed. Instrumentation and verification JSON sidecars keep that view
+   deterministic.
+
+Instrumentation and verification Markdown reports remain readable technical
+projections. JSON is the canonical audit, selection, instrumentation, and
+verification contract for the skill workflow.
 
 ## Running the Full Observer
 
@@ -255,7 +280,7 @@ Observability Cloud **dashboards**:
 $splunk-dashboard
 ```
 
-This reads `.observe/otel.md`, groups the service's metrics into RED-style
+This reads `.observe/otel-audit.json`, groups the service's metrics into RED-style
 panels (latency/duration, error rate, throughput, plus saturation and KPI
 single-value tiles), and writes dashboard Terraform to
 `.observe/terraform/dashboards.tf` — a `signalfx_dashboard_group`, one or more

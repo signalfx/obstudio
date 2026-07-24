@@ -193,7 +193,7 @@ Use these defaults for APM readiness categories from
 | auth-edge | P99 login/edge latency, error/timeout/expiry above baseline, certificate/TLS expiry static threshold | 1.0s, 3 stddev, or 14 days for cert expiry | Critical | Auth Edge Degraded |
 | capacity-saturation | Static threshold on utilization/quota, sudden-change for throttles/restarts | 85%, 3 stddev, or 1 restart/crash-loop event | Major | Capacity Saturation Too High |
 
-When a readiness area is missing in `.observe/otel.md`, do not generate a
+When a readiness area is missing in `.observe/otel-audit.json`, do not generate a
 detector placeholder. Add it to `.observe/detectors.md` as an instrumentation
 prerequisite and recommend `$otel-instrument`.
 
@@ -223,7 +223,7 @@ Use these defaults for GenAI categories from
 | genai-content-governance | Content capture mode, redaction/truncation outcome, unsafe capture, policy rejection, access/retention owner evidence | 1 unsafe capture or policy failure | Critical | GenAI Content Governance Risk |
 | genai-cost | App-computed cost, budget/quota consumption, billing export freshness, or cost calculation failure | 3 stddev cost spike or budget threshold | Major | GenAI Cost Spike |
 
-When a GenAI readiness area is missing in `.observe/otel.md`, do not generate a
+When a GenAI readiness area is missing in `.observe/otel-audit.json`, do not generate a
 detector placeholder. Add it to `.observe/detectors.md` as a GenAI
 instrumentation prerequisite and recommend `$otel-instrument`.
 
@@ -332,7 +332,7 @@ When `splunk-configure` runs in alert-coverage-audit mode, produce a coverage
 matrix even if no Terraform can be generated. Use existing local Terraform,
 dashboard specs, or approved Splunk API results as evidence when available.
 If existing alert inventory is unavailable, label the matrix as desired-state
-coverage derived from `.observe/otel.md`.
+coverage derived from `.observe/otel-audit.json`.
 
 Required rows:
 

@@ -19,7 +19,7 @@ front matter and workflow without errors.
 
 ### 2. Missing report handling
 
-A new agent reads the skill, then runs it against a repo with no `.observe/otel.md`
+A new agent reads the skill, then runs it against a repo with no `.observe/otel-audit.json`
 (e.g., `evals/go/chi-basic`).
 
 The agent's response must mention `$otel-audit` as the prerequisite and must not generate any Terraform files.
@@ -29,7 +29,7 @@ The agent's response must mention `$otel-audit` as the prerequisite and must not
 ### 3. Terraform generation
 
 A new agent reads the skill, then runs it against `../go-agent-management`
-(which has a valid `.observe/otel.md`).
+(which has a valid `.observe/otel-audit.json`).
 
 Confirm the following files are created:
 

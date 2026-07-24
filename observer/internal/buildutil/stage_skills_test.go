@@ -49,7 +49,7 @@ func TestStageEmbeddedSkills(t *testing.T) {
 	}
 }
 
-func TestStageEmbeddedSkills_ExcludesEvals(t *testing.T) {
+func TestStageEmbeddedSkills_ExcludesDevelopmentFiles(t *testing.T) {
 	repoRoot := t.TempDir()
 	observerRoot := filepath.Join(repoRoot, "observer")
 
@@ -70,6 +70,34 @@ func TestStageEmbeddedSkills_ExcludesEvals(t *testing.T) {
 		t.Fatalf("write evals: %v", err)
 	}
 
+	developmentFiles := []string{
+		filepath.Join(repoRoot, "skills", "audit", "tests", "test_audit.py"),
+		filepath.Join(repoRoot, "skills", "audit", "scripts", "__pycache__", "tool.cpython-312.pyc"),
+		filepath.Join(repoRoot, "skills", "audit", "scripts", "loose.pyc"),
+	}
+	for _, path := range developmentFiles {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir development fixture: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("development only"), 0o644); err != nil {
+			t.Fatalf("write development fixture: %v", err)
+		}
+	}
+
+	runtimeFiles := []string{
+		filepath.Join(repoRoot, "skills", "references", "scripts", "secure_output.py"),
+		filepath.Join(repoRoot, "skills", "audit", "references", "contract.md"),
+		filepath.Join(repoRoot, "skills", "audit", "assets", "report.html"),
+	}
+	for _, path := range runtimeFiles {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir runtime fixture: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("runtime"), 0o644); err != nil {
+			t.Fatalf("write runtime fixture: %v", err)
+		}
+	}
+
 	if err := StageEmbeddedSkills(repoRoot, observerRoot); err != nil {
 		t.Fatalf("StageEmbeddedSkills failed: %v", err)
 	}
@@ -85,5 +113,23 @@ func TestStageEmbeddedSkills_ExcludesEvals(t *testing.T) {
 	evalsStaged := filepath.Join(staged, "audit", "evals")
 	if _, err := os.Stat(evalsStaged); !os.IsNotExist(err) {
 		t.Fatalf("evals directory should not be staged, got err=%v", err)
+	}
+	for _, source := range developmentFiles {
+		rel, err := filepath.Rel(filepath.Join(repoRoot, "skills"), source)
+		if err != nil {
+			t.Fatalf("relative development path: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(staged, rel)); !os.IsNotExist(err) {
+			t.Fatalf("development file %s should not be staged, got err=%v", rel, err)
+		}
+	}
+	for _, source := range runtimeFiles {
+		rel, err := filepath.Rel(filepath.Join(repoRoot, "skills"), source)
+		if err != nil {
+			t.Fatalf("relative runtime path: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(staged, rel)); err != nil {
+			t.Fatalf("runtime file %s should be staged: %v", rel, err)
+		}
 	}
 }

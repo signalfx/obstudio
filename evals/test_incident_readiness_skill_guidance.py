@@ -132,7 +132,8 @@ def test_instrument_requires_signal_level_mttd_role_inventory():
         "not another gap ledger",
     ]
     for text in (instrument, report_contract):
-        missing = [term for term in required_terms if term not in text]
+        squashed = _squash(text)
+        missing = [term for term in required_terms if term not in squashed]
         assert not missing
 
 
@@ -186,11 +187,11 @@ def test_instrument_converts_incident_readiness_audit_to_patchable_work():
     text = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     required_terms = [
         "Audit-Driven Incident Readiness",
-        "partial or missing readiness row",
-        "matching prioritized `## Gaps` row",
+        "partial or missing `current_instrumentation.incident_readiness` rows",
+        "selected finding with the same `area`",
+        "implementation contract",
         "every safe app-owned incident gap",
-        "`required` / `default`",
-        "`recommended` / `fix all`",
+        "create the selection before editing",
         "Do not choose one representative gap",
         "add or prove the applicable surfaces",
         "no placeholder instrument",
@@ -201,13 +202,17 @@ def test_instrument_converts_incident_readiness_audit_to_patchable_work():
 
 
 def test_instrument_requires_gap_closure_matrix_for_incident_readiness():
-    text = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    text = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     required_terms = [
         "Audit-Driven Gap Closure",
-        "prioritized `## Gaps` table as the implementation queue",
-        "one row per prioritized audit gap",
-        "Working / Not working / Not proven / Not configured / Deferred",
-        "all untouched rows",
+        "validated dependency-closed selected finding set as the implementation queue",
+        "Build an internal closure matrix before editing",
+        "finding ID -> area -> priority -> required fix -> instrument mode -> planned action",
+        "Use one row per selected audit finding",
+        "keep unselected findings out of this implementation report",
+        "Working / Not working / Not proven / Not configured",
+        "Deferred",
+        "Do not report unselected findings as implemented work",
         "manual decision",
         "owner-map the exact prerequisite",
         "required signals",
@@ -281,7 +286,7 @@ def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
         "Skip this prompt",
         "incident-readiness or GenAI/LLM",
         "Audit-Driven Readiness path",
-        "implement the safe",
+        "safe app-owned incident gap",
         "scoped",
         "signals",
     ]
@@ -311,10 +316,11 @@ def test_incident_readiness_guidance_is_present_across_all_skills():
 
 
 def test_splunk_configure_consumes_current_main_gaps_section():
-    skill = _read(SPLUNK_CONFIGURE)
+    skill = _squash(_read(SPLUNK_CONFIGURE))
     required_terms = [
-        "prioritized `## Gaps` table",
-        "instrumentation prerequisite",
+        "**Findings** from `findings`",
+        "instrumentation prerequisite candidate",
+        "Preserve its priority",
         "Instrumentation Prerequisites",
         "Do not generate a detector for a missing or unverified signal",
     ]
@@ -339,23 +345,25 @@ def test_audit_maps_incident_readiness_to_current_gap_contract():
     assert "## Gap Ledger" not in audit
     required_contract_terms = [
         "one `### Incident Readiness` subsection",
-        "Every `partial` or `missing` row",
+        "Every telemetry-scoped `partial` or `missing` row",
+        "product contracts, cost ownership, safety policy, content-governance policy",
+        "remain readiness context",
         "`Area` cell is identical",
         "not a second top-level gap ledger",
-        "reconcile those rows through the matching prioritized gaps",
+        "telemetry-scoped Incident Readiness rows",
     ]
     assert not [term for term in required_contract_terms if term not in report_contract]
 
 
 def test_instrument_reconciles_current_audit_gap_contract():
-    instrument = _read(SKILLS_DIR / "otel-instrument" / "SKILL.md")
+    instrument = _squash(_read(SKILLS_DIR / "otel-instrument" / "SKILL.md"))
     required_terms = [
         "Audit-Driven Gap Closure",
-        "prioritized `## Gaps` table as the implementation queue",
+        "validated dependency-closed selected finding set as the implementation queue",
         "Build an internal closure matrix before editing",
         "area -> priority -> required fix -> instrument mode -> planned action",
-        "one row per prioritized audit gap",
-        "exact audit `Area` value",
+        "Use one row per selected audit finding",
+        "Canonical instrumentation JSON contains selected rows only",
         "Not working",
         "Not proven",
         "Not configured",
@@ -366,12 +374,12 @@ def test_instrument_reconciles_current_audit_gap_contract():
 
 
 def test_splunk_configure_demotes_partial_gap_coverage():
-    skill = _read(SPLUNK_CONFIGURE)
+    skill = _squash(_read(SPLUNK_CONFIGURE))
     required_terms = [
         "partial closure",
         "generate detectors only for implemented or proven signals",
         "Do not imply complete coverage",
-        "remaining_signals",
+        "`remaining` or equivalent remaining signal fields",
         "Instrumentation Prerequisites",
     ]
     missing = [term for term in required_terms if term not in skill]
@@ -393,15 +401,14 @@ def test_splunk_configure_no_metrics_still_reports_prerequisites():
 
 
 def test_splunk_configure_consumes_incident_readiness_section():
-    skill = _read(SPLUNK_CONFIGURE)
+    skill = _squash(_read(SPLUNK_CONFIGURE))
     required_terms = [
-        "Parse `### Incident Readiness` inside `## Current Instrumentation`",
-        "Join every partial or missing row to the prioritized `## Gaps` row",
-        "legacy top-level `## Incident Readiness`",
+        "**Incident readiness** from `current_instrumentation.incident_readiness`",
+        "Join partial or missing rows to findings with the same area when possible",
         "For every incident-readiness area",
         "unless equivalent metrics are source-backed and proven",
         "Do not generate a detector for a missing or unverified signal",
-        "audit's prioritized `## Gaps` table",
+        "findings",
     ]
     missing = [term for term in required_terms if term not in skill]
     assert not missing
@@ -547,16 +554,21 @@ def test_dashboard_group_template_includes_provider_required_description():
 def test_audit_keeps_current_main_report_contract():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     current_report_terms = [
-        "## Signal Flow",
-        "### Component Flow Map",
-        "## Audit Evidence",
-        "## Current Instrumentation",
-        "| Priority | Area | Gap | Why it matters | Required fix | Instrument mode | Verification scenarios |",
-        "### Test Environments",
-        "### Acceptance Scenarios",
+        "`signal_flow.component_flow_map`",
+        "`current_instrumentation`",
+        "`findings`",
+        "machine-readable priority",
+        "`area`",
+        "`required_fix`",
+        '"priority":',
+        '"instrument_mode":',
+        '"verification_scenarios":',
+        "`verification.environments`",
+        "Human HTML must not render full",
     ]
     assert not [term for term in current_report_terms if term not in audit]
     assert "| Priority | Area | Gap | User Impact | Fix | Instrument Mode |" not in audit
+    assert "## Gap Ledger" not in audit
 
 
 def test_incident_readiness_guidance_stays_generic_and_non_genai():
