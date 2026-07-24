@@ -5361,7 +5361,7 @@ p {{ margin:0 0 12px; }}
 </div></header>
 <main class="wrap">
   <section class="summary" aria-labelledby="instrumentation-status-heading">{summary}</section>
-  {stop_boundaries}
+{stop_boundaries}
   <section class="panel" aria-labelledby="selected-issues-heading">
     <h2 id="selected-issues-heading">Selected issues and changes</h2>
     <p class="muted">Every issue in the dependency-closed instrumentation scope is listed once.</p>

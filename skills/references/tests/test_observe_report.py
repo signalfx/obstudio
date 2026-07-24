@@ -67,6 +67,7 @@ def sample_report() -> dict[str, object]:
                 "title": "Checkout latency is not measured",
                 "priority": "required",
                 "effort": "small",
+                "otel_concerns": ["signal-emission", "semantic-attributes"],
                 "area": "Checkout latency",
                 "gap": "No route-level latency metric or span timing exists.",
                 "impact": "Operators cannot isolate slow checkout requests.",
@@ -93,6 +94,7 @@ def sample_report() -> dict[str, object]:
                 "severity": "medium",
                 "priority": "recommended",
                 "effort": "medium",
+                "otel_concerns": ["signal-emission", "semantic-attributes"],
                 "area": "Payment dependency",
                 "gap": "Provider calls are not distinguishable.",
                 "impact": "Operators cannot compare provider-specific latency.",
@@ -1939,7 +1941,7 @@ class ObserveReportTest(unittest.TestCase):
         self.assertEqual(report["findings"][1]["dependencies"], ["OTEL-001"])
         self.assertEqual(
             MODULE.audit_digest(report),
-            "sha256:32ba9d96f7a301277b2ae3e2c9eb23066361d1b3fa17b66f196d0146dc784a91",
+            "sha256:632beff003108a9aa5c199e8059612c6cfba9a7fdbbdebb0a3a79646b1ec34f9",
         )
         legacy = sample_report()
         legacy["findings"][0].pop("product_outcome")  # type: ignore[index]
@@ -2033,10 +2035,13 @@ class ObserveReportTest(unittest.TestCase):
     def test_schema_v1_audit_digest_remains_backward_compatible(self) -> None:
         legacy = sample_report()
         legacy["schema_version"] = 1
+        for finding in legacy["findings"]:  # type: ignore[index]
+            finding.pop("otel_concerns")
 
         report = MODULE.normalize_audit_report(legacy)
 
         self.assertEqual(report["schema_version"], 1)
+        self.assertNotIn("otel_concerns", report["findings"][0])
         self.assertEqual(
             MODULE.audit_digest(report),
             "sha256:40119f93a31537edfa0ac816b0efeaa8ec18f0aee4de839e37ef6de74a9d5440",
