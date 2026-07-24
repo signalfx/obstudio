@@ -437,9 +437,8 @@ When no canonical audit exists, no incident/GenAI readiness path applies, and
 the user did not already request a specific signal, ask once after baseline
 auto-instrumentation whether they want business spans or metrics, then wait.
 Skip the prompt in canonical, readiness, GenAI, or explicit-signal scope.
-A direct request is scope authority only when no canonical audit exists; that
-is the direct no-canonical-audit path. A validated canonical selection already
-defines the scope.
+A direct request is scope authority only on the direct no-canonical-audit path.
+A validated canonical selection already defines the scope.
 
 For approved custom work, prefer attributes on covered standard RED metrics
 when the loaded language supports them. Otherwise instrument only evidenced

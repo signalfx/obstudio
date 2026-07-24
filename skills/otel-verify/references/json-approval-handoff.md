@@ -162,8 +162,8 @@ or repair the digest manually. The command normalizes the exact instrumentation
 overlay used to derive expected items and proof. Any material instrumentation change,
 including change text, source, tests, or evidence, invalidates prior
 verification even when item IDs are unchanged. The instrumentation digest also
-contains `selection_sha256`, so verification is transitively bound to the exact
-normalized selection without a redundant second selection hash.
+contains `selection_sha256`, so `instrumentation_sha256` binds the exact
+normalized selection transitively without a redundant second selection hash.
 
 Use `meta.workflow_mode: standalone` for a user-invoked verification and
 `instrumentation_child` when an active `$otel-instrument` workflow invoked it.
