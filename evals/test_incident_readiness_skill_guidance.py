@@ -367,7 +367,7 @@ def test_instrument_skips_custom_prompt_for_incident_readiness_requests():
     required_terms = [
         "Skip the prompt in canonical, readiness, GenAI, or explicit-signal scope",
         "validated canonical selection already defines the scope",
-        "direct request is scope authority only on the direct no-canonical-audit path",
+        "direct request is scope authority only when no canonical audit exists",
     ]
     missing = [term for term in required_terms if term not in text]
     assert not missing
