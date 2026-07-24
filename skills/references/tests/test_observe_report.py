@@ -2288,7 +2288,6 @@ class ObserveReportTest(unittest.TestCase):
                 report = MODULE.normalize_audit_report(legacy)
 
                 self.assertEqual(report["findings"][1]["instrument_mode"], mode)
-        self.assertNotIn("OTel concerns", MODULE.render_markdown(report))
 
     def test_external_requirement_must_equal_required_fix(self) -> None:
         data = sample_report()
@@ -3394,6 +3393,7 @@ for (const [input, expected] of cases) {
             root = Path(directory)
             audit = root / "otel-audit.json"
             selection = root / "otel-selection.json"
+            scope = root / "selected-findings.json"
             audit.write_text(json.dumps(sample_report()), encoding="utf-8")
 
             completed = subprocess.run(
@@ -3406,6 +3406,8 @@ for (const [input, expected] of cases) {
                     "OTEL-002",
                     "-o",
                     str(selection),
+                    "--scoped-out",
+                    str(scope),
                 ],
                 check=False,
                 capture_output=True,
@@ -3418,8 +3420,14 @@ for (const [input, expected] of cases) {
             scoped = json.loads(scope_text)
             self.assertEqual(len(scope_text.splitlines()), 1)
             self.assertEqual(selected["schema_version"], 1)
+            self.assertEqual(scoped["schema_version"], 1)
             self.assertEqual(selected["requested_ids"], ["OTEL-002"])
             self.assertEqual(selected["approved_ids"], ["OTEL-001", "OTEL-002"])
+            self.assertEqual(scoped["kind"], "otel-audit-scope")
+            self.assertEqual(
+                [row["id"] for row in scoped["findings"]],
+                ["OTEL-001", "OTEL-002"],
+            )
 
     def test_scoped_report_omits_summary_and_retains_readiness_context(self) -> None:
         data = sample_report()

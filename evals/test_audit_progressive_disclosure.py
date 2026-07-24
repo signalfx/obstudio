@@ -1,13 +1,33 @@
+import json
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
+LANGUAGES = ROOT / "skills" / "otel-audit" / "references" / "languages"
 REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
+BOUNDARY_FIXTURE = ROOT / "evals" / "go" / "chi-basic" / "OPERATIONS.md"
+BOUNDARY_EVAL = (
+    ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "audit.json"
+)
+SOURCE_BACKED_DEFAULT_EVAL = (
+    ROOT / "evals" / "go" / "chi-partial" / "eval" / "qual" / "audit.json"
+)
+FASTAPI_CELERY_EVAL = (
+    ROOT / "evals" / "python" / "fastapi-celery" / "eval" / "qual" / "audit.json"
+)
+SPRING_BOOT_EVAL = (
+    ROOT / "evals" / "java" / "springboot-basic" / "eval" / "qual" / "audit.json"
+)
 
 
-def normalized(path: Path) -> str:
-    return " ".join(path.read_text(encoding="utf-8").split())
+def test_qualitative_audit_prompts_write_only_observe_artifacts() -> None:
+    audit_definitions = []
+    for eval_path in sorted(ROOT.glob("evals/**/eval/qual/*.json")):
+        definition = json.loads(eval_path.read_text(encoding="utf-8"))
+        if definition.get("skill") != "otel-audit":
+            continue
+        audit_definitions.append((eval_path, definition))
 
     assert audit_definitions
     for eval_path, definition in audit_definitions:
@@ -239,61 +259,125 @@ def test_audit_finding_cards_hide_proof_detail_until_requested() -> None:
         "`.observe/otel-instrumentation.html`",
         "canonical JSON is its only alternate audit format",
     ):
-        assert term.replace("`", "") in skill.replace("`", "")
+        assert term in flow
 
 
-def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
-    skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
-
-    for text in (skill, flow):
-        for term in (
-            "exactly one findings list ordered by",
-            "Priority controls order only",
-            "Do not render priority sections, headings, labels, tags, colors, legends, counts, action queues",
-            "Do not render Priority, Effort, or Status filter facets",
-            "Findings · N",
-            "Do not render tag chips on finding cards",
-            "Do not render Required, Recommended, Deferred, Fix now, Consider next, Decide now, or Decide first as human categories",
-            "N in selection",
-            "Save selection",
-            "plain selectable terminal fallback",
-            "$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id",
-        ):
-            assert term.replace("`", "") in text.replace("`", "")
-
-
-def test_audit_finding_cards_keep_technical_detail_collapsed() -> None:
-    skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
+def test_source_backed_safe_defaults_do_not_become_manual_decisions() -> None:
+    skill = " ".join(SKILL.read_text(encoding="utf-8").split())
+    flow = " ".join(REPORT_FLOW.read_text(encoding="utf-8").split())
 
     for text in (skill, flow):
         for term in (
-            "expanded narrative decision-sized",
-            "Gap, Why it matters, a mode-aware required action, and Next step",
-            "Instrumentation change for executable work",
-            "Decision needed for a manual prerequisite",
-            "External requirement for an external prerequisite",
-            "one collapsed Technical details disclosure",
-            "Do not render raw verification-scenario IDs",
-            "Those fields remain in canonical JSON",
+            "one safe, reversible, app-owned OTel implementation",
+            "must not become a `manual decision`",
+            "two or three",
+            "explicit selectable `decision_options`",
+            "`outcome`",
+            "`unlocks`",
         ):
-            assert term.replace("`", "") in text.replace("`", "")
+            assert term in text
+
+    evaluation = json.loads(SOURCE_BACKED_DEFAULT_EVAL.read_text(encoding="utf-8"))
+    rubric = " ".join(evaluation["rubric"])
+    for term in (
+        "source-proven safe reversible OTel fixes executable",
+        "rather than manual decision",
+        "reuse the existing provider topology",
+        "hardcoded exporter endpoint",
+        "service.name resource",
+        "TextMapPropagator",
+        "MeterProvider",
+        "graceful shutdown",
+    ):
+        assert term in rubric
 
 
-def test_audit_selection_handoff_preserves_explicit_user_intent() -> None:
-    skill = normalized(SKILL)
-    flow = normalized(REPORT_FLOW)
+def test_audit_eval_keeps_non_telemetry_debt_out_of_every_artifact_section() -> None:
+    fixture = BOUNDARY_FIXTURE.read_text(encoding="utf-8")
+    evaluation = json.loads(BOUNDARY_EVAL.read_text(encoding="utf-8"))
+    rubric = " ".join(evaluation["rubric"])
 
-    for text in (skill, flow):
-        for term in (
-            "neutral Select checkbox",
-            "requested_ids",
-            "approved_ids",
-            "decision_answers",
-            "Use explicit requested IDs",
-            "dependency-closed executable selection",
-            "review_selection",
-            ".observe/otel-selection.json",
-        ):
-            assert term.replace("`", "") in text.replace("`", "")
+    for planted_debt in (
+        "OpenAPI definitions",
+        "contract linting",
+        "runbook and ownership links",
+        "maximum task-list page size",
+        "rejection response",
+        "retry, timeout, cache, and fallback behavior",
+        "liveness/readiness traffic-routing",
+        "deployment rollout policy",
+        "behavior-only test",
+    ):
+        assert planted_debt in fixture
+
+    boundary = next(item for item in evaluation["rubric"] if "OPERATIONS.md" in item)
+    for planted_concept in (
+        "OpenAPI",
+        "contract-lint",
+        "runbook-link",
+        "ownership-link",
+        "page-limit",
+        "rejection-policy",
+        "retry/timeout/cache/fallback",
+        "liveness/readiness",
+        "deployment-policy",
+        "behavior-only-test",
+    ):
+        assert planted_concept in boundary
+
+    for excluded_section in (
+        "final response",
+        "audit summary",
+        "evidence row",
+        "readiness row",
+        "finding",
+        "expected telemetry",
+        "anti-pattern",
+        "recommendation",
+        "verification scenario",
+        "all generated audit artifacts",
+    ):
+        assert excluded_section in boundary
+
+    assert "component map followed by" not in rubric
+    assert "decision-first .observe/otel.html" in rubric
+
+
+def test_audit_reconciles_source_inventory_before_writing_reports() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+
+    assert "### Source-to-Report Reconciliation Gate" in text
+    assert text.index("### Source-to-Report Reconciliation Gate") < text.index(
+        "### Step 3 -- Report"
+    )
+    assert "terminal pre-report gate" in normalized
+    for source_surface in (
+        "process entrypoint and runtime configuration",
+        "messaging direction, topic, group, and commit-or-ack behavior",
+        "silent branches and bounded source-defined outcomes",
+        "dependency instrumentation coverage",
+    ):
+        assert source_surface in normalized
+
+
+def test_audit_preserves_operator_distinct_bounded_outcome_reasons() -> None:
+    normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
+
+    for term in (
+        "multiple bounded source-defined reasons share one status or outcome",
+        "operator-distinct",
+        "bounded reason attribute",
+    ):
+        assert term in normalized
+
+
+def test_audit_business_aggregates_are_recommended_signal_candidates() -> None:
+    normalized = " ".join(SKILL.read_text(encoding="utf-8").split())
+
+    assert "source-computed bounded business aggregates" in normalized
+    assert "recommended custom-signal candidates" in normalized
+    assert (
+        "must not become required solely because the source computes them"
+        in normalized
+    )

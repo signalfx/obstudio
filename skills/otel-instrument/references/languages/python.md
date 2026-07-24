@@ -13,11 +13,13 @@ detected in the codebase. Only install what the project actually uses.
 |------------|------------------------------|----------------|
 | `flask` | `opentelemetry-instrumentation-flask` | HTTP server spans with route, method, status |
 | `django` | `opentelemetry-instrumentation-django` | HTTP spans, middleware, DB spans |
-| `fastapi` / `starlette` | `opentelemetry-instrumentation-fastapi` | HTTP server spans with route, method, status |
+| `fastapi` | `opentelemetry-instrumentation-fastapi` | HTTP server spans with route, method, status |
+| `starlette` | `opentelemetry-instrumentation-starlette` | HTTP server spans with route, method, status |
 | `requests` | `opentelemetry-instrumentation-requests` | Outbound HTTP client spans |
 | `httpx` | `opentelemetry-instrumentation-httpx` | Outbound HTTP client spans (sync and async) |
 | `urllib3` | `opentelemetry-instrumentation-urllib3` | Outbound HTTP client spans |
-| `aiohttp` | `opentelemetry-instrumentation-aiohttp-client` | Async outbound HTTP spans |
+| `aiohttp.ClientSession` (client) | `opentelemetry-instrumentation-aiohttp-client` | Async outbound HTTP spans |
+| `aiohttp.web` (server) | `opentelemetry-instrumentation-aiohttp-server` | Async inbound HTTP server spans |
 | `psycopg2` | `opentelemetry-instrumentation-psycopg2` | SQL query spans |
 | `sqlalchemy` | `opentelemetry-instrumentation-sqlalchemy` | ORM query spans |
 | `pymongo` | `opentelemetry-instrumentation-pymongo` | MongoDB command spans |
@@ -27,6 +29,11 @@ detected in the codebase. Only install what the project actually uses.
 | `kafka-python` / `confluent-kafka` | `opentelemetry-instrumentation-kafka-python` / `opentelemetry-instrumentation-confluent-kafka` | Producer/consumer spans |
 | `boto3` / `botocore` | `opentelemetry-instrumentation-botocore` | AWS service call spans |
 | `logging` (stdlib) | `opentelemetry-instrumentation-logging` | Inject trace context into log records |
+
+Do not substitute the FastAPI instrumentor for a plain Starlette application.
+For `aiohttp`, inspect source usage rather than inferring the surface from the
+dependency alone: `ClientSession` needs the client package, `aiohttp.web` needs
+the server package, and an application using both surfaces needs both packages.
 
 ---
 

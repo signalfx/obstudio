@@ -9,6 +9,13 @@ AUDIT_SKILL = ROOT / "skills" / "otel-audit" / "SKILL.md"
 INSTRUMENT_SKILL = ROOT / "skills" / "otel-instrument" / "SKILL.md"
 VERIFY_SKILL = ROOT / "skills" / "otel-verify" / "SKILL.md"
 INSTRUMENT_HANDOFF = ROOT / "skills" / "otel-instrument" / "references" / "json-approval-handoff.md"
+INSTRUMENT_REPORT = (
+    ROOT
+    / "skills"
+    / "otel-instrument"
+    / "references"
+    / "instrumentation-report.md"
+)
 INSTRUMENT_REPAIR = (
     ROOT / "skills" / "otel-instrument" / "references" / "repair-loop.md"
 )
@@ -24,9 +31,12 @@ JAVA_INSTRUMENT_REFERENCE = (
 AUDIT_INPUT = ROOT / "evals" / "go" / "chi-basic" / "eval" / "inputs" / "otel-audit.json"
 REPORT_TOOL = ROOT / "skills" / "references" / "scripts" / "observe_report.py"
 REPORT_FLOW = ROOT / "skills" / "references" / "report-flow-contract.md"
-AUDIT_EVAL = ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "audit.json"
+AUDIT_EVAL = ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "benchmark-audit.json"
 INSTRUMENT_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "benchmark-instrument.json"
+)
+VERIFY_EVAL = (
+    ROOT / "evals" / "go" / "chi-partial" / "eval" / "qual" / "benchmark-verify.json"
 )
 CHI_CANONICAL_VERIFY_EVAL = (
     ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual" / "verify.json"
@@ -56,29 +66,13 @@ def _eval_contract(path: Path) -> str:
     )
 
 
-def _resolved_contract(skill: Path, *reference_names: str) -> str:
-    parts = [_read(skill)]
-    for reference_name in reference_names:
-        reference = skill.parent / "references" / reference_name
-        if reference.is_file():
-            parts.append(_read(reference))
-    return "\n".join(parts)
-
-
-def test_reader_report_contracts_are_available() -> None:
-    instrument = _resolved_contract(
-        INSTRUMENT_SKILL,
-        "instrumentation-report.md",
-        "genai-instrumentation.md",
-    )
-    verify = _resolved_contract(
-        VERIFY_SKILL,
-        "direct-verification.md",
-        "verification-report.md",
-    )
-
-    assert "#### Reader Order" in instrument
-    assert "## Reader Report" in verify
+def test_active_report_references_do_not_use_legacy_paths() -> None:
+    assert INSTRUMENT_REPORT.is_file()
+    assert VERIFY_DIRECT.is_file()
+    assert not INSTRUMENT_REPORT.with_name(
+        "legacy-instrumentation-report.md"
+    ).exists()
+    assert not VERIFY_DIRECT.with_name("legacy-verification.md").exists()
 
 
 def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
@@ -105,8 +99,9 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
     assert "dependencies" in instrument_normalized
     assert "manual decision" in instrument_normalized
     assert "external follow-up" in instrument_normalized
-    assert "cannot enter the executable selection" in instrument_normalized
+    assert "cannot enter the selection" in instrument_normalized
     assert "audit and scope-planning surface" in instrument_normalized
+    assert "selected-scope closure" in instrument_normalized
 
     handoff_normalized = " ".join(_read(INSTRUMENT_HANDOFF).lower().split())
     assert "selection gate" in handoff_normalized
@@ -173,12 +168,8 @@ def test_context_handoffs_are_binding_and_fail_closed() -> None:
 
 def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> None:
     instrument = _read(INSTRUMENT_SKILL)
-    resolved = _resolved_contract(
-        INSTRUMENT_SKILL,
-        "instrumentation-report.md",
-        "genai-instrumentation.md",
-    )
     handoff = _read(INSTRUMENT_HANDOFF)
+    report = _read(INSTRUMENT_REPORT)
     opening = instrument.split("## Workflow", 1)[0]
     canonical_gate = instrument.split(
         "#### Canonical Audit And Selection Gate", 1
@@ -186,9 +177,14 @@ def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> N
 
     assert (
         "Before editing application code, read "
-        "`../references/report-flow-contract.md`" in opening
+        "`../references/report-flow-contract.md`" not in instrument
     )
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
+    assert "For a canonical JSON flow, read" in opening
     assert "`./references/json-approval-handoff.md`" in opening
+    assert "direct no-audit flow" in opening
+    assert "`./references/instrumentation-report.md`" in instrument
+    assert "only when producing" in instrument
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
     )
@@ -205,17 +201,14 @@ def test_instrument_progressively_loads_only_the_report_contract_it_needs() -> N
     assert len(instrument.split()) < 4500
 
 
-def test_instrument_interactive_references_are_resolvable() -> None:
+def test_instrument_routes_conditional_detail_to_resolvable_local_references() -> None:
     instrument = _read(INSTRUMENT_SKILL)
-    resolved = _resolved_contract(INSTRUMENT_SKILL, "instrumentation-report.md")
     go_reference = (
-        ROOT / "skills" / "otel-instrument" / "references" / "languages" / "go.md"
+        INSTRUMENT_SKILL.parent / "references" / "languages" / "go.md"
     )
 
-    assert "./references/json-approval-handoff.md" in instrument
-    assert INSTRUMENT_HANDOFF.is_file()
-    assert "#### Signals Changed" in resolved
     for route, reference in (
+        ("./references/instrumentation-report.md", INSTRUMENT_REPORT),
         ("./references/repair-loop.md", INSTRUMENT_REPAIR),
         ("./references/finalization.md", INSTRUMENT_FINALIZATION),
     ):
@@ -224,6 +217,8 @@ def test_instrument_interactive_references_are_resolvable() -> None:
 
     assert "./references/languages/{python,node,java,go}.md" in instrument
     assert go_reference.is_file()
+    assert "## Signals Changed" not in instrument
+    assert "## Signals Changed" in _read(INSTRUMENT_REPORT)
     assert "## Failure Ownership" not in instrument
     assert "## Failure Ownership" in _read(INSTRUMENT_REPAIR)
     assert "## Terminal Sequence" not in instrument
@@ -232,25 +227,23 @@ def test_instrument_interactive_references_are_resolvable() -> None:
     assert "scripts/resolve_go_otel_versions.py" in _read(go_reference)
 
 
-def test_verify_keeps_interactive_contract() -> None:
+def test_verify_progressively_loads_only_the_report_contract_it_needs() -> None:
     verify = _read(VERIFY_SKILL)
-    resolved = _resolved_contract(
-        VERIFY_SKILL,
-        "direct-verification.md",
-        "verification-report.md",
-    )
     handoff = _read(VERIFY_HANDOFF)
+    direct = _read(VERIFY_DIRECT)
+    report = _read(VERIFY_REPORT)
     opening = verify.split("## Contract", 1)[0]
+    opening_normalized = " ".join(opening.split())
     canonical_gate = verify.split("#### Canonical Scope Gate", 1)[1].split(
         "### 2.", 1
     )[0]
 
-    assert (
-        "Before writing verification artifacts, read "
-        "`../references/report-flow-contract.md`"
-        in " ".join(opening.split())
-    )
-    assert "`./references/json-approval-handoff.md`" in opening
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
+    assert "For canonical JSON flow, read" in opening_normalized
+    assert "`./references/json-approval-handoff.md`" in opening_normalized
+    assert "no canonical audit exists" in opening_normalized
+    assert "`./references/direct-verification.md`" in opening_normalized
+    assert "`./references/verification-report.md`" in opening_normalized
     assert "read and follow `./references/json-approval-handoff.md`" in " ".join(
         canonical_gate.split()
     )
@@ -270,17 +263,38 @@ def test_verify_keeps_interactive_contract() -> None:
     assert len(verify.split()) < 3500
 
 
-def test_verify_interactive_reference_is_resolvable() -> None:
+def test_verify_routes_conditional_detail_to_resolvable_local_references() -> None:
     verify = _read(VERIFY_SKILL)
-    resolved = _resolved_contract(VERIFY_SKILL, "verification-report.md")
-    assert "./references/json-approval-handoff.md" in verify
-    assert VERIFY_HANDOFF.is_file()
-    assert "## Reader Report" in resolved
+    routes = (
+        ("./references/json-approval-handoff.md", VERIFY_HANDOFF),
+        ("./references/direct-verification.md", VERIFY_DIRECT),
+        ("./references/verification-report.md", VERIFY_REPORT),
+    )
+    for route, reference in routes:
+        assert route in verify
+        assert reference.is_file()
+
+    assert "## Reader Report" not in verify
+    assert "## Reader Report" in _read(VERIFY_REPORT)
+    assert "## Conservative Closure" not in verify
+    assert "## Conservative Closure" in _read(VERIFY_DIRECT)
     assert "## Verification JSON" not in verify
     assert "## Verification JSON" in _read(VERIFY_HANDOFF)
 
 
-def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
+def test_instrument_resolves_one_bundle_local_verifier() -> None:
+    instrument = _read(INSTRUMENT_SKILL)
+    normalized = " ".join(instrument.split())
+
+    assert "../otel-verify/SKILL.md" in instrument
+    assert "only authoritative verifier" in normalized
+    assert "Never search `$CODEX_HOME`" in instrument
+    assert "never compare alternate installed copies" in normalized
+    assert "installed Obstudio skill bundle is incomplete" in normalized
+    assert "Load that sibling once and reuse it" in normalized
+
+
+def test_instrument_keeps_verification_results_in_bound_child_overlay() -> None:
     definition = json.loads(_read(INSTRUMENT_EVAL))
     rubric = " ".join(definition["rubric"])
     instrument = " ".join(_read(INSTRUMENT_SKILL).split())
@@ -290,8 +304,66 @@ def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
     assert "scenario mappings" in rubric
     assert "verification_handoff" not in rubric
     assert "remaining_gaps" not in rubric
-    assert "separately bound `.observe/otel-verify.json`" in handoff
+    assert "separately bound verify overlay owns verification results" in instrument
     assert "do not duplicate them as new instrumentation schema fields" in handoff
+    assert "rejects any stale pending-verification CTA" in handoff
+
+
+def test_chi_prompts_expose_only_the_inputs_the_workflow_owns() -> None:
+    fixture = ROOT / "evals" / "go" / "chi-basic" / "eval" / "qual"
+    audit_definitions = ("audit.json", "benchmark-audit.json")
+    instrument_definitions = (
+        "benchmark-instrument.json",
+        "instrument.json",
+        "instrument-decision-gated.json",
+    )
+
+    for name in audit_definitions:
+        definition = json.loads(_read(fixture / name))
+        assert all(prompt["eval_inputs"] == [] for prompt in definition["prompts"])
+
+    for name in instrument_definitions:
+        definition = json.loads(_read(fixture / name))
+        assert all(
+            prompt["eval_inputs"] == ["eval/inputs/otel-audit.json"]
+            for prompt in definition["prompts"]
+        )
+
+    verify = json.loads(_read(fixture / "verify.json"))
+    assert verify["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/canonical-verify-evidence.txt",
+        "eval/inputs/otel-audit.json",
+        "eval/inputs/otel-instrumentation.json",
+        "eval/inputs/otel-selection.json",
+        "eval/inputs/otel-verify.json",
+    ]
+
+    ai_instrument = json.loads(
+        _read(
+            ROOT
+            / "evals"
+            / "python"
+            / "ai-assistant-demo"
+            / "eval"
+            / "qual"
+            / "instrument.json"
+        )
+    )
+    assert ai_instrument["prompts"][0]["eval_inputs"] == [
+        "eval/inputs/otel-audit.json"
+    ]
+
+
+def test_audit_does_not_duplicate_the_shared_report_contract_up_front() -> None:
+    audit = _read(AUDIT_SKILL)
+    opening = audit.split("## Process", 1)[0]
+    normalized = " ".join(opening.split())
+
+    assert "Do not load `../references/report-flow-contract.md` as an up-front" in opening
+    assert "This `SKILL.md` contains the audit finding" in normalized
+    assert "reader-report, selection-handoff, and finalization contract" in normalized
+    assert "only when a conditional downstream workflow explicitly requires" in normalized
+    assert audit.count("`../references/report-flow-contract.md`") == 1
 
 
 def test_instrument_terminal_boundary_forbids_post_gate_inspection() -> None:
@@ -369,10 +441,14 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     handoff = " ".join(_read(INSTRUMENT_HANDOFF).split())
 
     for text in (audit, flow):
-        for term in ("two or three", "`decision_options`", "`outcome`", "`unlocks`"):
+        for term in (
+            "two or three",
+            "explicit selectable `decision_options`",
+            "`outcome`",
+            "`unlocks`",
+        ):
             assert term in text
         assert "pairwise disjoint" in text
-    assert "explicit selectable `decision_options`" in flow
 
     for text in (flow, instrument, handoff):
         for term in (
@@ -406,24 +482,35 @@ def test_manual_decision_answers_are_separate_and_gate_matching_work() -> None:
     assert "only stable manual answer IDs are carried separately" not in flow
 
 
-def test_current_audit_and_selection_versions_are_explicit() -> None:
+def test_audit_v2_and_legacy_overlay_versions_are_explicit() -> None:
     audit = _read(AUDIT_SKILL)
     report_tool = _read(REPORT_TOOL)
+    report_flow = _read(REPORT_FLOW)
     audit_normalized = " ".join(audit.split())
+    report_flow_normalized = " ".join(report_flow.split())
     audit_input = json.loads(_read(AUDIT_INPUT))
 
     assert audit_input["schema_version"] == 2
     assert "Write new audits as schema v2" in audit
+    assert "Schema v1 remains a frozen read-only legacy" in audit
+    assert "Preserve optional concerns and decision/external ownership" in audit_normalized
+    assert "Frozen schema-v1 inputs may retain legacy `Blocked` status" in audit
+    assert (
+        "Preserve optional concerns and decision/external ownership fields"
+        in report_flow_normalized
+    )
     assert "OVERLAY_SCHEMA_VERSION = 1" in report_tool
     assert "CURRENT_SELECTION_SCHEMA_VERSION = 2" in report_tool
     assert "CURRENT_AUDIT_SCHEMA_VERSION = 2" in report_tool
+    assert "A selection without answers remains schema v1" in audit
     assert "a selection carrying `decision_answers` is schema v2" in audit_normalized
+    assert "A selection without answers remains schema v1" in report_flow
 
 
 def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     audit = _eval_contract(AUDIT_EVAL)
     instrument = _eval_contract(INSTRUMENT_EVAL)
-    verify = _eval_contract(CHI_CANONICAL_VERIFY_EVAL)
+    verify = _eval_contract(VERIFY_EVAL)
 
     assert ".observe/otel-audit.json" in audit
     assert ".observe/otel.html" in audit
@@ -466,6 +553,33 @@ def test_decision_gated_instrumentation_has_a_scope_specific_rubric() -> None:
     assert "only the unlocked OTEL-002" in decision_contract
     assert "unchosen OTEL-004" in decision_contract
     assert "unrelated HTTP tracing" in decision_contract
+
+
+def test_canonical_verify_eval_requires_only_real_item_local_proof() -> None:
+    verify = _eval_contract(CHI_CANONICAL_VERIFY_EVAL)
+
+    assert "single OTEL-001.http-health-span item result" in verify
+    assert "GET /health with http.route=/health" in verify
+    assert "Does not fabricate a removed HttpRequest telemetry item" in verify
+    assert "both telemetry item results" not in verify
+    assert "structured removal_proof for HttpRequest" not in verify
+
+
+def test_ci_gate_is_headless_and_has_distinct_policy_exit_codes() -> None:
+    audit_skill = " ".join(_read(AUDIT_SKILL).replace("`", "").split())
+    audit_eval = " ".join(_eval_contract(AUDIT_EVAL).replace("`", "").split())
+
+    for text in (audit_skill, audit_eval):
+        assert "observe_report.py" in text and " gate " in f" {text} "
+        assert ".observe/otel-audit.json" in text
+        assert "--fail-on required" in text
+        assert "exit 1" in text
+        assert "exit 2" in text
+
+    assert "For CI/MR use, generate the audit first" in audit_skill
+    assert "headless" in audit_eval.lower()
+    assert "external CI" in audit_eval
+    assert "do not claim" in audit_eval.lower()
 
 
 def test_canonical_overlays_join_code_telemetry_product_action_and_item_proof() -> None:

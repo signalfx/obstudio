@@ -21,6 +21,7 @@
     "Flags the hardcoded OTLP endpoint and absence of environment-driven configuration.",
     "Flags high-cardinality custom span naming and tracer creation inside a request handler.",
     "Calls out missing MeterProvider, TextMapPropagator, service.name resource, and graceful shutdown.",
-    "Notes that POST /tasks/{id}/reserve returns 409 for two distinct causes ('already done' and 'already reserved') with no attribute distinguishing them on http.server.request.duration once metrics are wired up."
+    "Notes that POST /tasks/{id}/reserve returns 409 for two distinct causes ('already done' and 'already reserved') with no attribute distinguishing them on http.server.request.duration once metrics are wired up.",
+    "Keeps source-proven safe reversible OTel fixes executable as default or fix all rather than manual decision work: reuse the existing provider topology, replace the hardcoded exporter endpoint with environment-driven configuration, and add the missing service.name resource, TextMapPropagator, MeterProvider, and graceful shutdown without manufacturing an approval choice."
   ]
 }

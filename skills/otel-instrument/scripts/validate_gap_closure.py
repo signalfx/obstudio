@@ -81,6 +81,16 @@ NEGATIVE_OR_UNCERTAIN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
+AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
+    r"(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+test|"
+    r"(?:gradle|gradlew|mvn|mvnw)\b[^\r\n;|]*\b(?:test|check|verify)|"
+    r"dotnet\s+test|bundle\s+exec\s+(?:rspec|rake\s+test)|"
+    r"(?:composer\s+(?:exec\s+)?)?(?:vendor/bin/)?phpunit)\b",
+    re.IGNORECASE,
+)
 AFFIRMATIVE_EXECUTED_PROOF = re.compile(
     r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
     r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
@@ -124,6 +134,26 @@ JSON_STATUS_LABELS = {
     "not_configured": "Not configured",
     "deferred": "Deferred",
 }
+GENAI_JSON_STATUS_LABELS = {
+    "working": "Working",
+    "partial": "Partial",
+    "not_working": "Not working",
+    "not_proven": "Not proven",
+    "not_configured": "Not configured",
+    "deferred": "Deferred",
+    "owner_mapped": "Owner-mapped",
+}
+GENAI_JSON_FIELDS = {
+    "surface",
+    "required_signals",
+    "owner",
+    "implemented_proven",
+    "tests",
+    "evidence",
+    "remaining_signals",
+    "status",
+}
+GENAI_COMPLETE_STATUSES = {"working", "deferred", "owner_mapped"}
 
 
 def fail(message: str) -> None:
@@ -187,6 +217,18 @@ def has_meaningful_instrumentation_proof(instrumentation_json: dict) -> bool:
         ):
             return True
 
+    for row in instrumentation_json.get("genai_closure", []):
+        if not isinstance(row, dict):
+            continue
+        if (
+            row.get("status") in {"working", "partial"}
+            and affirmative_entries(
+                row.get("implemented_proven"), AFFIRMATIVE_IMPLEMENTATION_PROOF
+            )
+            and affirmative_entries(row.get("tests"), AFFIRMATIVE_EXECUTED_PROOF)
+            and positive_evidence(row.get("evidence"))
+        ):
+            return True
     return False
 
 
@@ -196,14 +238,19 @@ def expected_report_result(
     *,
     verification_overlay: bool,
 ) -> str:
-    """Aggregate the authoritative finding verification result."""
+    """Aggregate finding verification with implementation-owned GenAI closure."""
     if not verification_overlay:
         return str(instrumentation_json.get("meta", {}).get("result"))
 
     verification_result = overlay_json.get("meta", {}).get("result")
     if verification_result not in {"Pass", "Partial", "Fail", "Blocked", "Not run"}:
         fail(f"unsupported verification result: {verification_result}")
-    if verification_result == "Fail":
+    genai_statuses = [
+        row.get("status")
+        for row in instrumentation_json.get("genai_closure", [])
+        if isinstance(row, dict)
+    ]
+    if verification_result == "Fail" or "not_working" in genai_statuses:
         return "Fail"
     if verification_result == "Blocked":
         return (
@@ -211,7 +258,11 @@ def expected_report_result(
             if has_meaningful_instrumentation_proof(instrumentation_json)
             else "Blocked"
         )
-    return "Partial" if verification_result == "Not run" else verification_result
+    if verification_result in {"Partial", "Not run"}:
+        return "Partial"
+    if all(status in GENAI_COMPLETE_STATUSES for status in genai_statuses):
+        return "Pass"
+    return "Partial"
 
 
 def heading_match(text: str, heading: str) -> re.Match[str]:
@@ -332,8 +383,110 @@ def json_string_list(value: object, path: str) -> list[str]:
     return value
 
 
+def validate_genai_json_projection(
+    markdown_rows: list[list[str]],
+    audit_json: dict,
+    instrumentation_json: dict,
+) -> None:
+    audit_rows = audit_json.get("genai_readiness")
+    if not isinstance(audit_rows, list) or not audit_rows:
+        fail("canonical GenAI audit must contain non-empty genai_readiness rows")
+    canonical_rows = instrumentation_json.get("genai_closure")
+    if not isinstance(canonical_rows, list):
+        fail("authoritative instrumentation JSON must contain genai_closure rows")
+
+    audit_surfaces: list[str] = []
+    audit_required_by_surface: dict[str, str] = {}
+    audit_owner_by_surface: dict[str, str] = {}
+    for index, row in enumerate(audit_rows):
+        path = f"audit.genai_readiness[{index}]"
+        if not isinstance(row, dict):
+            fail(f"{path} must be an object")
+        surface = json_string(row.get("surface"), f"{path}.surface")
+        required = json_string(row.get("required_signals"), f"{path}.required_signals")
+        owner = json_string(row.get("owner"), f"{path}.owner")
+        if surface in audit_required_by_surface:
+            fail(f"duplicate canonical GenAI audit surface: {surface}")
+        audit_surfaces.append(surface)
+        audit_required_by_surface[surface] = required
+        audit_owner_by_surface[surface] = owner
+
+    projected_rows: list[list[str]] = []
+    canonical_surfaces: list[str] = []
+    for index, row in enumerate(canonical_rows):
+        path = f"instrumentation.genai_closure[{index}]"
+        if not isinstance(row, dict):
+            fail(f"{path} must be an object")
+        if set(row) != GENAI_JSON_FIELDS:
+            fail(
+                f"{path} fields must exactly equal {sorted(GENAI_JSON_FIELDS)}"
+            )
+        surface = json_string(row.get("surface"), f"{path}.surface")
+        required = json_string(
+            row.get("required_signals"), f"{path}.required_signals"
+        )
+        owner = json_string(row.get("owner"), f"{path}.owner")
+        implemented = json_string_list(
+            row.get("implemented_proven"), f"{path}.implemented_proven"
+        )
+        tests = json_string_list(row.get("tests"), f"{path}.tests")
+        evidence = json_string_list(row.get("evidence"), f"{path}.evidence")
+        remaining = json_string_list(
+            row.get("remaining_signals"), f"{path}.remaining_signals"
+        )
+        raw_status = row.get("status")
+        status = GENAI_JSON_STATUS_LABELS.get(raw_status)
+        if status is None:
+            fail(f"unsupported JSON GenAI closure status for {surface}: {raw_status}")
+        canonical_surfaces.append(surface)
+        if audit_required_by_surface.get(surface) != required:
+            fail(
+                "instrumentation JSON GenAI required signals disagree with the "
+                f"canonical audit for surface: {surface}"
+            )
+        if audit_owner_by_surface.get(surface) != owner:
+            fail(
+                "instrumentation JSON GenAI owner disagrees with the canonical "
+                f"audit for surface: {surface}"
+            )
+        if raw_status == "working" and (
+            not implemented or not tests or not evidence or remaining
+        ):
+            fail(
+                f"working JSON GenAI closure requires implementation, tests, evidence, "
+                f"and no remaining signals: {surface}"
+            )
+        if raw_status != "working" and not remaining:
+            fail(
+                f"non-working JSON GenAI closure must name remaining signals: {surface}"
+            )
+        projected_rows.append(
+            [
+                surface,
+                required,
+                "; ".join(implemented),
+                "; ".join(tests),
+                "; ".join(remaining) if remaining else "None",
+                status,
+            ]
+        )
+
+    if canonical_surfaces != audit_surfaces:
+        fail(
+            "instrumentation JSON genai_closure must follow canonical audit surface order: "
+            f"expected={audit_surfaces}, actual={canonical_surfaces}"
+        )
+    if markdown_rows != projected_rows:
+        fail(
+            "instrumentation Markdown GenAI closure disagrees with the current "
+            f"instrumentation JSON overlay: markdown={markdown_rows}, overlay={projected_rows}"
+        )
+
+
 def validate_json_projection(
     closure_rows: list[list[str]],
+    genai_closure_rows: list[list[str]],
+    genai_detected: bool,
     report_result: str,
     audit_json: dict,
     selection_json: dict,
@@ -428,6 +581,24 @@ def validate_json_projection(
                 f"current instrumentation JSON for {finding_id}: "
                 f"markdown={markdown_content}, overlay={expected_content}"
             )
+
+    audit_genai_rows = audit_json.get("genai_readiness", [])
+    if not isinstance(audit_genai_rows, list):
+        fail("canonical audit genai_readiness must be an array")
+    canonical_genai_detected = bool(audit_genai_rows)
+    if canonical_genai_detected != genai_detected:
+        fail(
+            "instrumentation Markdown GenAI ownership disagrees with canonical audit JSON"
+        )
+    if not genai_detected:
+        return
+
+    validate_genai_json_projection(
+        genai_closure_rows,
+        audit_json,
+        instrumentation_json,
+    )
+
 
 def validate(
     instrumentation_path: Path,
@@ -622,6 +793,8 @@ def validate(
 
     validate_json_projection(
         closure_rows,
+        genai_closure_rows,
+        genai_detected,
         report_result,
         audit_json,
         selection_json,
@@ -632,7 +805,8 @@ def validate(
 
     print(
         f"PASS: {instrumentation_path} closes {len(closure_rows)}/"
-        f"{len(audit_keys)} prioritized audit rows and {genai_surface_count} "
+        f"{len(selection_json['approved_ids'])} selected audit rows and "
+        f"{genai_surface_count} "
         "GenAI readiness surfaces"
     )
 

@@ -57,7 +57,47 @@ PROOF_LEVEL_ALIASES = {
     "focused and runtime": "full runtime",
     "either": "either",
 }
+CANONICAL_OWNER_TERMS = (
+    "app-owned",
+    "service-owned",
+    "framework-owned",
+    "bridge-owned",
+    "agent-owned",
+    "runtime-owned",
+    "sdk-owned",
+    "callback",
+    "provider sdk",
+    "opentelemetry java agent",
+    "otel java agent",
+    "java agent",
+    "opentelemetry agent",
+    "otel agent",
+    "auto-instrumentation",
+    "auto instrumentation",
+    "framework instrumentation",
+    "micronaut",
+    "spring",
+)
 SIGNAL_TYPES = {"span", "metric", "log", "resource", "configuration"}
+CONFIGURATION_SCOPES = {
+    "otel-sdk",
+    "otel-resource",
+    "otel-exporter",
+    "otel-sampling",
+    "otel-propagation",
+    "otel-instrumentation",
+    "otel-collector",
+}
+OTEL_CONCERN_ORDER = (
+    "signal-emission",
+    "context-propagation",
+    "trace-log-correlation",
+    "semantic-attributes",
+    "cardinality-safety",
+    "otel-configuration",
+    "telemetry-proof",
+)
+OTEL_CONCERNS = set(OTEL_CONCERN_ORDER)
 INCIDENT_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 GENAI_READINESS_STATUSES = {"covered", "partial", "missing", "owner-mapped"}
 SCAN_BLOCKER_CHECKS = {
@@ -69,6 +109,54 @@ SCAN_BLOCKER_CHECKS = {
     "genai-ownership",
     "source-scan",
 }
+PROHIBITED_CLOSURE_RULES = (
+    (
+        "API or OpenAPI contract work",
+        re.compile(r"\b(?:add|author|update|publish|generate|lint|validate|approve|sync|enforce|version)(?:s|ed|ing)?\b"),
+        re.compile(r"\b(?:openapi|swagger|api contract|client contract|contract schema|generated (?:sdk|client))\b"),
+    ),
+    (
+        "documentation or runbook work",
+        re.compile(r"\b(?:add|create|write|update|publish|fix|validate|link|maintain)(?:s|ed|ing)?\b"),
+        re.compile(r"\b(?:documentation|runbook|playbook|readme|wiki|confluence|owner(?:ship)? link|chat link|slack link)\b"),
+    ),
+    (
+        "behavior-only testing",
+        re.compile(r"\b(?:add|create|write|fix|enable|enforce|update)(?:s|ed|ing)?\b"),
+        re.compile(r"\b(?:behavior only (?:test|check)|contract lint|docs? lint|link lint|ci (?:job|workflow|check)|coverage threshold|(?:unit|integration|e2e) test)\b"),
+    ),
+    (
+        "product behavior or policy work",
+        re.compile(r"\b(?:implement|change|define|choose|decide|select|govern|apply|adopt|approve|enforce|tune|set|enable|disable|increase|decrease|fix)(?:s|d|ed|ing)?\b"),
+        re.compile(
+            r"\b(?:retry (?:policy|behavior)|backoff (?:policy|behavior)|circuit breaker (?:policy|behavior)|"
+            r"timeout (?:policy|value)|deadline (?:policy|value)|cache (?:policy|ttl|invalidation)|"
+            r"fallback (?:policy|target|behavior)|rate limit|quota|product limit|page (?:size|limit)|"
+            r"request limit|rejection (?:policy|response)|liveness semantics|readiness semantics|"
+            r"health semantics|deployment policy|release policy|rollout policy|auth(?:entication|orization)? policy|security policy)\b"
+            r"|\bapproval policy\b"
+        ),
+    ),
+    (
+        "ownership administration",
+        re.compile(r"\b(?:create|update|publish|maintain|assign|discover)(?:s|ed|ing)?\b"),
+        re.compile(r"\b(?:owner map|ownership map|ownership link|contact list|escalation policy|on call rotation)\b"),
+    ),
+    (
+        "general service configuration",
+        re.compile(r"\b(?:change|configure|set|update)(?:s|d|ed|ing)?\b"),
+        re.compile(r"\b(?:feature flag|application config|service config|helm values|kubernetes manifest|docker config|deployment manifest|environment variable)\b"),
+    ),
+)
+PROHIBITED_TELEMETRY_OUTPUT = re.compile(
+    r"\b(?:runbook|documentation|owner link|contract lint|contract drift|"
+    r"contract approval|ci status|lint result|test result|policy approval)\b"
+)
+PROHIBITED_AUDIT_SECTION_OUTPUT = re.compile(
+    r"\b(?:openapi|swagger|api contract|runbook|playbook|documentation|"
+    r"owner(?:ship)? link|owner discovery|behavior only test|contract lint|"
+    r"link validation)\b"
+)
 OWNER_PLACEHOLDER = re.compile(r"^(?:tbd|unknown|owner|someone|team|n/?a)$", re.IGNORECASE)
 EXTERNAL_OWNER_CATEGORY = re.compile(
     r"(?:external|provider|platform|vendor|third[- ]party|managed[- ]service)"
@@ -87,6 +175,47 @@ EXTERNAL_ACTION = re.compile(
     re.IGNORECASE,
 )
 CLOSURE_STATUSES = {"working", "not_working", "not_proven", "not_configured", "deferred"}
+GENAI_CLOSURE_STATUSES = CLOSURE_STATUSES | {"partial", "owner_mapped"}
+GENAI_PASS_STATUSES = {"working", "deferred", "owner_mapped"}
+NEGATIVE_OR_UNCERTAIN_INSTRUMENTATION_PROOF = re.compile(
+    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
+    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
+    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
+    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
+    r"\btests?\s+(?:are\s+)?blocked\b)",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_IMPLEMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"implemented|instrumented|configured|added|go\s+test|pytest|cargo\s+test|"
+    r"npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+AFFIRMATIVE_EXECUTED_INSTRUMENTATION_PROOF = re.compile(
+    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
+    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
+    r"go\s+test|pytest|cargo\s+test|npm(?:\s+run)?\s+test)\b",
+    re.IGNORECASE,
+)
+POSITIVE_INSTRUMENTATION_EVIDENCE = re.compile(
+    r"(?:^|/)\.observe/evidence/|"
+    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
+    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
+    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
+    r"exported|recorded|assertion)\b",
+    re.IGNORECASE,
+)
+DURABLE_INSTRUMENTATION_ARTIFACT_REFERENCE = re.compile(
+    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
+    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
+    re.IGNORECASE,
+)
+NON_PROOF_INSTRUMENTATION_ARTIFACT_LABEL = re.compile(
+    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
+    r"pending|skipped|unknown)\b",
+    re.IGNORECASE,
+)
 SCENARIO_STATUSES = {"working", "not_working", "not_proven", "not_configured", "blocked"}
 CHANGE_KINDS = {"added", "modified", "removed"}
 PROOF_MODES = {"app_test", "unit", "unit+otlp", "full_runtime", "contract_only", "static", "not_run"}
@@ -120,6 +249,24 @@ EPHEMERAL_ARTIFACT_PREFIXES = (
 )
 FLOW_MARKER = re.compile(r"\[(SOURCE-COVERED|GAP:\s*([^\]]+))\]")
 FLOW_BRACKET = re.compile(r"\[[^\]]+\]")
+METRIC_PRODUCT_ACTION = re.compile(r"\b(chart|dashboard|detector|alert|monitor)\b", re.IGNORECASE)
+DIMENSION_PRODUCT_ACTION = re.compile(r"\b(filter|slice|group(?:-?by)?|breakdown)\b", re.IGNORECASE)
+GENERIC_TELEMETRY_CHANGE = re.compile(
+    r"\b(?:for|to satisfy) the selected bounded telemetry contract\b",
+    re.IGNORECASE,
+)
+DENIES_OTLP_DELIVERY = re.compile(
+    r"\bno\b.{0,40}\botlp\b.{0,40}\b(?:pipeline|export(?:er| path)?)\b",
+    re.IGNORECASE,
+)
+CLOUD_PRODUCT_EVIDENCE = re.compile(
+    r"\b(?:Splunk Observability Cloud|Splunk O11y Cloud)\b", re.IGNORECASE
+)
+NO_FURTHER_ACTION = re.compile(
+    r"\b(?:no|nothing)\s+(?:further|remaining|else|more)?\s*"
+    r"(?:action|work|proof|verification|change)s?\s+(?:is|are)\s+required\b",
+    re.IGNORECASE,
+)
 AUDIT_VERIFY_NEXT_STEP = re.compile(
     r"(?:\b(?:run|rerun|re-run|use|invoke|execute|launch|start)\s+"
     r"(?:the\s+)?(?:\$?otel[- ]verify|verification(?:\s+workflow)?)\b|"
@@ -255,6 +402,64 @@ def normalized_action_words(value: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
 
 
+def validate_otel_closure_text(
+    value: str,
+    path: str,
+    *,
+    telemetry_output: bool = False,
+    audit_section: bool = False,
+) -> None:
+    clauses = [
+        normalized_words(clause)
+        for clause in re.split(r"[;\n]|(?<=[.!?])\s+", value)
+        if clause.strip()
+    ]
+    for clause in clauses:
+        audit_match = (
+            PROHIBITED_AUDIT_SECTION_OUTPUT.search(clause)
+            if audit_section
+            else None
+        )
+        allowed_openapi_route_signal = bool(
+            audit_match
+            and audit_match.group(0) in {"openapi", "swagger"}
+            and re.search(r"/(?:openapi|swagger)(?:\.json)?(?:\b|$)", clause)
+            and re.search(
+                r"\b(?:span|metric|trace|otel|opentelemetry|telemetry|attribute)\b",
+                clause,
+            )
+        )
+        if audit_match and not allowed_openapi_route_signal:
+            fail(
+                f"{path} contains prohibited non-OpenTelemetry audit content in "
+                f"clause {clause!r}; move this fact to evidence/constraints or remove it"
+            )
+        if telemetry_output and PROHIBITED_TELEMETRY_OUTPUT.search(clause):
+            fail(
+                f"{path} contains prohibited non-OpenTelemetry output in clause "
+                f"{clause!r}; move this fact to evidence/constraints or remove it"
+            )
+        for category, action_pattern, object_pattern in PROHIBITED_CLOSURE_RULES:
+            if not action_pattern.search(clause) or not object_pattern.search(clause):
+                continue
+            if category == "behavior-only testing" and re.search(
+                r"\b(?:span|metric|trace|otel|opentelemetry|exporter|collector|"
+                r"telemetry|parentage|attribute|context)\b",
+                clause,
+            ):
+                continue
+            if category == "general service configuration" and re.search(
+                r"\b(?:otel|opentelemetry|collector|exporter|provider)\b|otel_",
+                clause,
+            ):
+                continue
+            fail(
+                f"{path} contains prohibited non-OpenTelemetry closure work "
+                f"({category}) in clause {clause!r}; move this fact to "
+                "evidence/constraints or remove it"
+            )
+
+
 def validate_audit_review_next_step(value: str, path: str) -> None:
     if AUDIT_VERIFY_NEXT_STEP.search(value):
         fail(
@@ -262,6 +467,492 @@ def validate_audit_review_next_step(value: str, path: str) -> None:
             "the audit next step; direct reviewers to select/save audit scope "
             "and run $otel-instrument, or state standalone verification as a "
             "separate explicit request"
+        )
+
+
+def expected_telemetry_reference_terms(telemetry: list[dict[str, Any]]) -> set[str]:
+    generic = {
+        "attribute",
+        "configuration",
+        "error",
+        "metric",
+        "name",
+        "otel",
+        "opentelemetry",
+        "outcome",
+        "owner",
+        "resource",
+        "service",
+        "signal",
+        "span",
+        "status",
+        "telemetry",
+        "type",
+    }
+    terms: set[str] = set()
+    for item in telemetry:
+        values = [item["name"], *item["attributes"]]
+        scope = item.get("configuration_scope")
+        if scope:
+            values.append(scope)
+        for value in values:
+            normalized = normalized_words(value)
+            if len(normalized) >= 4:
+                terms.add(normalized)
+            segments = re.sub(r"[^a-z0-9]+", " ", value.casefold()).split()
+            terms.update(
+                word
+                for word in segments
+                if len(word) >= 5 and word not in generic
+            )
+    return terms
+
+
+def require_expected_telemetry_reference(
+    value: str,
+    path: str,
+    telemetry: list[dict[str, Any]],
+) -> None:
+    normalized = normalized_words(value)
+    terms = expected_telemetry_reference_terms(telemetry)
+    if not any(term in normalized for term in terms):
+        fail(
+            f"{path} must reference an expected OTel signal name, attribute, "
+            "or configuration scope"
+        )
+
+
+AFFIRMATIVE_TELEMETRY_PROOF = re.compile(
+    r"\b(?:observed|emitted|recorded|exported|received|accepted|captured)\b|"
+    r"\b(?:is|was|were|are)\s+(?:present|available|visible)\b|"
+    r"\b(?:trace|capture|receiver|collector|exporter|result|payload|response|"
+    r"batch|telemetry|span|metric|log|event|sample|recording)\b"
+    r"[^.!?;\n]{0,160}\b(?:has|had|contains?|contained|included)\b",
+    re.IGNORECASE,
+)
+ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF = re.compile(
+    r"\b(?:should|would|could|can|may|might|must|will|perhaps|possibly|"
+    r"maybe|pending|unknown|uncertain|apparently|expected|supposed)\b|"
+    r"\b(?:appears?|seems?)\s+to\b|"
+    r"\b(?:not|never)\s+(?:confirmed|verified|proven|validated|asserted)\b|"
+    r"\b(?:unconfirmed|unverified|unproven)\b|"
+    r"\b(?:planned|intended)\s+to\b|"
+    r"\b(?:contract|configuration|documentation|specification)\s+"
+    r"(?:says?|states?|describes?|expects?|requires?)\b",
+    re.IGNORECASE,
+)
+STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT = re.compile(
+    r"\b(?:source\s+(?:code|file|scan)|config(?:uration)?\s+file|"
+    r"configuration\s+(?:contains?|records?|asserts?|states?|declares?|"
+    r"shows?|lists?|includes?)|(?:unit\s+|integration\s+|focused\s+|"
+    r"application\s+|app\s+)?test\s+(?:source|code|case|definition|"
+    r"description|fixture|plan|assertion)|code\s+search|static\s+"
+    r"(?:scan|check|analysis)|comment|documentation|readme|contract|"
+    r"specification|schema|manifest|grep|(?:string|literal)\s+"
+    r"(?:contains?|records?|asserts?|shows?|includes?))\b",
+    re.IGNORECASE,
+)
+TELEMETRY_PROOF_CLAUSE_BOUNDARY = re.compile(
+    r"(?:[.!?](?:\s+|$)|;\s*|\n+)"
+)
+TELEMETRY_PROOF_ASSERTION_BOUNDARY = re.compile(
+    r"(?:"
+    r"[.!?](?:\s+|$)|;\s*|\n+|"
+    r"(?:,|\(|\[)\s*(?=(?:(?:but|and)\s+)?(?:not|no|never|without)\b|"
+    r"(?:whereas|while|rather\s+than|instead\s+of)\b)|"
+    r"\s+(?=(?:and\s+(?:not|no|never|without)|"
+    r"but|whereas|while|rather\s+than|instead\s+of)\b)|"
+    r"(?:,\s*|\s+)(?:and|while)\s+"
+    r"(?=(?:(?:an?|the|another)\s+)?(?:span|trace|metric|counter|"
+    r"histogram|gauge|measurement|time[ -]?series|log(?:\s+record)?)\b)"
+    r")",
+    re.IGNORECASE,
+)
+
+ZERO_OR_NO_TELEMETRY_PROOF = re.compile(
+    r"\b(?:zero|0)\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
+    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
+    r"telemetry\s+items?|data\s+points?|samples?|records?)\b|"
+    r"\bno\s+(?:matching\s+)?(?:spans?|traces?|metrics?|counters?|"
+    r"histograms?|gauges?|measurements?|time[ -]?series|logs?|log\s+records?|"
+    r"telemetry(?:\s+items?)?|data\s+points?|samples?|records?)\b|"
+    r"\brecorded\s+as\s+(?:missing|absent|unobserved)\b",
+    re.IGNORECASE,
+)
+
+SIGNAL_KIND_PROOF = {
+    "span": re.compile(r"\b(?:span|trace)\b", re.IGNORECASE),
+    "metric": re.compile(
+        r"\b(?:metric|counter|histogram|gauge|measurement|time[ -]?series)\b",
+        re.IGNORECASE,
+    ),
+    "log": re.compile(r"\b(?:log|log record)\b", re.IGNORECASE),
+    "resource": re.compile(r"\bresource\b", re.IGNORECASE),
+    "configuration": re.compile(
+        r"\b(?:configuration|config)\b", re.IGNORECASE
+    ),
+}
+
+
+def exact_telemetry_item_is_referenced(
+    value: str,
+    telemetry_item: dict[str, Any],
+    attribute_field: str = "attributes",
+    reference_outcome: str = "positive",
+) -> bool:
+    """Require exact signal tokens with proof polarity appropriate to the result."""
+    if reference_outcome not in {"positive", "negative", "any"}:
+        raise ValueError(f"unsupported telemetry reference outcome: {reference_outcome}")
+
+    def exact_token_matches(source: str, token: str) -> list[re.Match[str]]:
+        parts = token.strip().split()
+        if not parts:
+            return []
+        body = r"\s+".join(re.escape(part) for part in parts)
+        identifier = r"A-Za-z0-9_"
+        separators = r"._:/-"
+        pattern = re.compile(
+            rf"(?<![{identifier}])(?<![{identifier}][{separators}])"
+            rf"{body}(?![{identifier}])(?!(?:[{separators}][{identifier}]))",
+            re.IGNORECASE,
+        )
+        return list(pattern.finditer(source))
+
+    def exact_token_polarities(source: str, token: str) -> list[bool]:
+        return [
+            telemetry_mention_is_negated(source, match)
+            for match in exact_token_matches(source, token)
+        ]
+
+    def kind_matches_for_type(
+        source: str, signal_type: str | None
+    ) -> list[re.Match[str]]:
+        pattern = SIGNAL_KIND_PROOF.get(signal_type)
+        if pattern is None:
+            return []
+        protected_matches = [
+            match
+            for token in (
+                telemetry_item["name"],
+                *telemetry_item.get(attribute_field, []),
+            )
+            for match in exact_token_matches(source, token)
+        ]
+        return [
+            match
+            for match in pattern.finditer(source)
+            if not any(
+                match.start() < protected.end() and protected.start() < match.end()
+                for protected in protected_matches
+            )
+        ]
+
+    def signal_kind_matches(source: str) -> list[re.Match[str]]:
+        return kind_matches_for_type(source, telemetry_item.get("type"))
+
+    def signal_kind_polarities(source: str) -> list[bool]:
+        return [
+            telemetry_mention_is_negated(source, match)
+            for match in signal_kind_matches(source)
+        ]
+
+    def has_competing_signal_kind(source: str) -> bool:
+        signal_type = telemetry_item.get("type")
+        if signal_type not in {"span", "metric", "log"}:
+            return False
+        return any(
+            other_type != signal_type and kind_matches_for_type(source, other_type)
+            for other_type in SIGNAL_KIND_PROOF
+            if other_type in {"span", "metric", "log"}
+        )
+
+    def has_competing_signal_correction(source: str) -> bool:
+        signal_type = telemetry_item.get("type")
+        if signal_type not in {"span", "metric", "log"}:
+            return False
+        competing = {
+            "span": r"span|trace",
+            "metric": r"metric|counter|histogram|gauge|measurement|time[ -]?series",
+            "log": r"log|log\s+record",
+        }
+        other_kinds = "|".join(
+            pattern
+            for kind, pattern in competing.items()
+            if kind != signal_type
+        )
+        return bool(
+            re.search(
+                rf"\b(?:it|this|that|the\s+(?:signal|item))\s+"
+                rf"(?:is|was|were|are)\s+(?:actually\s+|instead\s+)?"
+                rf"(?:an?\s+)?(?:{other_kinds})\b",
+                source,
+                re.IGNORECASE,
+            )
+        )
+
+    def bound_signal_kind_matches(
+        source: str, *, require_positive: bool
+    ) -> list[re.Match[str]]:
+        """Return type words that describe the exact named signal."""
+        name_matches = exact_token_matches(source, telemetry_item["name"])
+        kind_matches = signal_kind_matches(source)
+        if not name_matches or not kind_matches or has_competing_signal_kind(source):
+            return []
+        filler = re.compile(
+            r"^[\s,:()\[\]-]*(?:(?:a|an|the|one|single|server|client|consumer|"
+            r"producer|internal|recording|named|signal)\s+){0,4}"
+            r"[\s,:()\[\]-]*$",
+            re.IGNORECASE,
+        )
+        container = re.compile(
+            r"^[^.!?;\n]{0,120}\b(?:contains?|contained|includes?|included|"
+            r"has|had)\s+(?:(?:a|an|the|one|single|no)\s+)?$",
+            re.IGNORECASE,
+        )
+        emitted_as = re.compile(
+            r"^[^.!?;\n]{0,80}\b(?:is|was|were|are)\s+"
+            r"(?:emitted|recorded|exported|received|captured)\s+as\s+"
+            r"(?:(?:a|an|the|one|single)\s+)?$",
+            re.IGNORECASE,
+        )
+        bound: list[re.Match[str]] = []
+        for kind_match in kind_matches:
+            for name_match in name_matches:
+                if kind_match.end() <= name_match.start():
+                    between = source[kind_match.end() : name_match.start()]
+                    is_bound = bool(
+                        filler.fullmatch(between) or container.fullmatch(between)
+                    )
+                elif name_match.end() <= kind_match.start():
+                    between = source[name_match.end() : kind_match.start()]
+                    is_bound = bool(
+                        filler.fullmatch(between) or emitted_as.fullmatch(between)
+                    )
+                else:
+                    is_bound = True
+                if not is_bound:
+                    continue
+                if require_positive and (
+                    telemetry_mention_is_negated(source, kind_match)
+                    or telemetry_mention_is_negated(source, name_match)
+                ):
+                    continue
+                bound.append(kind_match)
+                break
+        return bound
+
+    def attributes_are_bound_to_signal(
+        source: str,
+        attributes: set[str],
+        bound_kinds: list[re.Match[str]],
+    ) -> bool:
+        """Keep every required attribute on the same typed signal assertion."""
+        if not attributes:
+            return True
+        if not bound_kinds:
+            return False
+        all_kinds = signal_kind_matches(source)
+
+        def distance(first: re.Match[str], second: re.Match[str]) -> int:
+            if first.end() <= second.start():
+                return second.start() - first.end()
+            if second.end() <= first.start():
+                return first.start() - second.end()
+            return 0
+
+        for attribute in attributes:
+            attribute_matches = exact_token_matches(source, attribute)
+            if not attribute_matches:
+                return False
+            bound = False
+            for attribute_match in attribute_matches:
+                nearest = min(
+                    distance(kind_match, attribute_match)
+                    for kind_match in all_kinds
+                )
+                if any(
+                    distance(kind_match, attribute_match) == nearest
+                    for kind_match in bound_kinds
+                ):
+                    bound = True
+                    break
+            if not bound:
+                return False
+        return True
+
+    required_attributes = {
+        attribute.strip()
+        for attribute in telemetry_item.get(attribute_field, [])
+    }
+    tokens = [telemetry_item["name"], *sorted(required_attributes)]
+    requires_signal_kind = telemetry_item.get("type") in SIGNAL_KIND_PROOF
+    if reference_outcome == "negative" and not requires_signal_kind:
+        token_polarities = [exact_token_polarities(value, token) for token in tokens]
+        return bool(
+            all(token_polarities)
+            and any(
+                negated
+                for polarities in token_polarities
+                for negated in polarities
+            )
+        )
+    positive_match = False
+    negative_match = False
+    any_match = False
+    for assertion in TELEMETRY_PROOF_ASSERTION_BOUNDARY.split(value):
+        if not assertion.strip():
+            continue
+        token_polarities = [
+            exact_token_polarities(assertion, token) for token in tokens
+        ]
+        if any(not polarities for polarities in token_polarities):
+            continue
+        kind_polarities = signal_kind_polarities(assertion)
+        if requires_signal_kind and not kind_polarities:
+            continue
+        bound_kinds = (
+            bound_signal_kind_matches(assertion, require_positive=False)
+            if requires_signal_kind
+            else []
+        )
+        if requires_signal_kind and not bound_kinds:
+            continue
+        if requires_signal_kind and not attributes_are_bound_to_signal(
+            assertion, required_attributes, bound_kinds
+        ):
+            continue
+        any_match = True
+        if reference_outcome == "any":
+            continue
+        assertion_is_negative = bool(
+            ZERO_OR_NO_TELEMETRY_PROOF.search(assertion)
+            or any(
+                negated
+                for polarities in token_polarities
+                for negated in polarities
+            )
+            or (requires_signal_kind and any(kind_polarities))
+        )
+        if assertion_is_negative:
+            negative_match = True
+            continue
+        if (
+            AFFIRMATIVE_TELEMETRY_PROOF.search(assertion)
+            and not ASPIRATIONAL_OR_UNCERTAIN_TELEMETRY_PROOF.search(assertion)
+            and not STATIC_OR_DECLARATIVE_TELEMETRY_CONTEXT.search(assertion)
+            and (not requires_signal_kind or any(not value for value in kind_polarities))
+            and all(
+                any(not negated for negated in polarities)
+                for polarities in token_polarities
+            )
+        ):
+            positive_match = True
+    if reference_outcome == "any":
+        return any_match
+    if positive_match and has_competing_signal_correction(value):
+        return False
+    if positive_match and negative_match:
+        return False
+    return positive_match if reference_outcome == "positive" else negative_match
+
+
+TELEMETRY_NEGATION_BEFORE = re.compile(
+    r"(?:"
+    r"\b(?:no|not|never|without|rather\s+than|instead\s+of)\s+"
+    r"(?:(?:an?|the)\s+)?|"
+    r"\b(?:missing|absent|unobserved)\s+|"
+    r"\bno\s+(?:evidence|data|sign|record)\s+(?:of|for)\s+|"
+    r"\b(?:did|does|do|could|can)\s+(?:not|never)\s+"
+    r"(?:find|see|observe|record|capture|receive)\s+|"
+    r"\bnever\s+(?:found|saw|observed|recorded|captured|received)\s+|"
+    r"\bunable\s+to\s+(?:find|see|observe|record|capture|receive)\s+|"
+    r"\b(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|"
+    r"export(?:ed)?|captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))\s+|"
+    r"\b(?:did|does|do|could|can|was|were|is|are|has|have|had|would|should)\s+"
+    r"not\s+(?:(?:be\s+)?(?:found|seen)|emit|observe|record|export|capture|receive|contain|produce)\s+|"
+    r"\b(?:didn|doesn|couldn|wasn|weren|isn|aren|hasn|haven|hadn|wouldn|shouldn)"
+    r"['’]t\s+(?:(?:be\s+)?(?:found|seen)|emit|observe|record|export|capture|receive|contain|produce)\s+|"
+    r"\bfailed\s+to\s+(?:find|see|emit|observe|record|export|capture|receive|contain|produce)\s+"
+    r")$",
+    re.IGNORECASE,
+)
+TELEMETRY_NEGATION_AFTER = re.compile(
+    r"^[\s,:;()\[\]-]*(?:"
+    r"(?:is|was|were|are|remains?|remained)\s+"
+    r"(?:missing|absent|unobserved|unavailable)\b|"
+    r"(?:is|was|were|are|remains?|remained)\s+(?:not|never)\s+"
+    r"(?:present|available|found|seen|observed|recorded|captured|received)\b|"
+    r"(?:could|can|was|were|is|are|has|have|had|would|should)\s+"
+    r"(?:not|never)\s+(?:be\s+)?(?:found|seen|observed|recorded|captured|received)\b|"
+    r"(?:couldn|wasn|weren|isn|aren|hasn|haven|hadn|wouldn|shouldn)"
+    r"['’]t\s+(?:be\s+)?(?:found|seen|observed|recorded|captured|received)\b|"
+    r"(?:is|was|were|are|did|does|do|could|can|has|have|had|would|should)\s+"
+    r"(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|export(?:ed)?|"
+    r"captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))|"
+    r"(?:isn|wasn|weren|aren|didn|doesn|couldn|hasn|haven|hadn|wouldn|shouldn)"
+    r"['’]t\s+(?:emit|observe|record|export|capture|receive|contain|produce)|"
+    r"(?:not|never)\s+(?:emit(?:ted)?|observ(?:e|ed)|record(?:ed)?|export(?:ed)?|"
+    r"captur(?:e|ed)|receiv(?:e|ed)|contain(?:ed)?|produc(?:e|ed))|"
+    r"failed\s+to\s+(?:find|see|emit|observe|record|export|capture|receive|contain|produce)|"
+    r"(?:yielded|returned|produced|contained|had|has)\s+no\s+"
+    r"(?:data|evidence|samples?|points?|records?)\b|"
+    r"missing\b|absent\b|unobserved\b)",
+    re.IGNORECASE,
+)
+
+
+def telemetry_mention_is_negated(value: str, match: re.Match[str]) -> bool:
+    """Detect negation in the same prose clause as an exact telemetry mention."""
+    before = value[: match.start()]
+    after = value[match.end() :]
+    boundary_matches = list(re.finditer(r"(?:[.!?;]\s+|\n+)", before))
+    clause_start = boundary_matches[-1].end() if boundary_matches else 0
+    clause_prefix = before[clause_start:]
+    clause_end_match = re.search(r"(?:[.!?;]\s+|\n+)", after)
+    clause_suffix = after[: clause_end_match.start()] if clause_end_match else after
+    selector = re.match(r"^\s*\{[^{}\n]{0,256}\}", clause_suffix)
+    if selector is not None:
+        clause_suffix = clause_suffix[selector.end() :]
+    return bool(
+        TELEMETRY_NEGATION_BEFORE.search(clause_prefix)
+        or TELEMETRY_NEGATION_AFTER.search(clause_suffix)
+    )
+
+
+def require_exact_telemetry_item_reference(
+    value: str,
+    path: str,
+    telemetry_item: dict[str, Any],
+    attribute_field: str = "attributes",
+    reference_outcome: str = "positive",
+) -> None:
+    if not exact_telemetry_item_is_referenced(
+        value, telemetry_item, attribute_field, reference_outcome
+    ):
+        fail(
+            f"{path} must reference the exact telemetry item "
+            f"{telemetry_item.get('type', 'signal')} {telemetry_item['name']} and "
+            "all of its required attribute keys and authored values "
+            f"with {reference_outcome} proof semantics"
+        )
+
+
+def require_exact_expected_telemetry_reference(
+    value: str,
+    path: str,
+    telemetry: list[dict[str, Any]],
+    reference_outcome: str,
+) -> None:
+    if not any(
+        exact_telemetry_item_is_referenced(
+            value, item, reference_outcome=reference_outcome
+        )
+        for item in telemetry
+    ):
+        expected = [f"{item['type']} {item['name']}" for item in telemetry]
+        fail(
+            f"{path} must reference at least one exact expected telemetry item "
+            f"with {reference_outcome} proof semantics: {expected}"
         )
 
 
@@ -360,6 +1051,15 @@ def normalize_proof_level(value: Any, path: str, scenario_id: str) -> str:
     return proof_level
 
 
+def names_canonical_telemetry_owner(value: str) -> bool:
+    lowered = re.sub(r"\s+", " ", value.lower())
+    spaced = re.sub(r"[\s_-]+", " ", value.lower()).strip()
+    return any(
+        term in lowered or re.sub(r"[\s_-]+", " ", term).strip() in spaced
+        for term in CANONICAL_OWNER_TERMS
+    )
+
+
 def normalize_verification(value: Any) -> dict[str, Any]:
     verification = as_object(value, "verification")
     environments = []
@@ -445,21 +1145,137 @@ def normalize_finding(
     effort = text(row.get("effort"), f"{path}.effort")
     if effort not in EFFORTS:
         fail(f"{path}.effort must be one of {sorted(EFFORTS)}")
+    explicit_otel_concerns = "otel_concerns" in row
+    otel_concerns = (
+        string_list(row.get("otel_concerns", []), f"{path}.otel_concerns")
+        if explicit_otel_concerns
+        else []
+    )
+    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and not explicit_otel_concerns:
+        fail(
+            f"{path}.otel_concerns is required by audit schema "
+            f"v{CURRENT_AUDIT_SCHEMA_VERSION}"
+        )
+    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
+        if not otel_concerns:
+            fail(f"{path}.otel_concerns must contain at least one item when provided")
+        invalid_concerns = sorted(set(otel_concerns) - OTEL_CONCERNS)
+        if invalid_concerns:
+            fail(
+                f"{path}.otel_concerns contains unsupported OpenTelemetry concerns: "
+                f"{invalid_concerns}; expected only {sorted(OTEL_CONCERNS)}"
+            )
+        if len(otel_concerns) != len(set(otel_concerns)):
+            fail(f"{path}.otel_concerns must not contain duplicates")
     telemetry = []
     for index, item in enumerate(object_list(row.get("expected_telemetry", []), f"{path}.expected_telemetry")):
         item_path = f"{path}.expected_telemetry[{index}]"
         signal_type = text(item.get("type"), f"{item_path}.type")
         if signal_type not in SIGNAL_TYPES:
             fail(f"{item_path}.type must be one of {sorted(SIGNAL_TYPES)}")
+        configuration_scope = None
+        if signal_type == "configuration":
+            if "configuration_scope" in item:
+                configuration_scope = text(
+                    item.get("configuration_scope"),
+                    f"{item_path}.configuration_scope",
+                )
+                if configuration_scope not in CONFIGURATION_SCOPES:
+                    fail(
+                        f"{item_path}.configuration_scope must be one of "
+                        f"{sorted(CONFIGURATION_SCOPES)}"
+                    )
+            else:
+                fail(
+                    f"{item_path}.configuration_scope is required for "
+                    "OpenTelemetry configuration"
+                )
+        elif "configuration_scope" in item:
+            fail(
+                f"{item_path}.configuration_scope is only valid when type is "
+                "configuration"
+            )
         telemetry_item = {
             "type": signal_type,
             "name": text(item.get("name"), f"{item_path}.name"),
             "attributes": string_list(item.get("attributes", []), f"{item_path}.attributes"),
             "product_view": text(item.get("product_view"), f"{item_path}.product_view"),
         }
+        if configuration_scope is not None:
+            telemetry_item["configuration_scope"] = configuration_scope
         telemetry.append(telemetry_item)
     if not telemetry:
         fail(f"{path}.expected_telemetry must contain at least one item")
+    if not any(
+        item["type"] in {"span", "metric", "log", "resource"} for item in telemetry
+    ):
+        fail(
+            f"{path}.expected_telemetry must include a span, metric, log, or "
+            "resource outcome; scoped configuration alone is insufficient for "
+            "an OpenTelemetry finding"
+        )
+    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
+        for index, item in enumerate(telemetry):
+            item_path = f"{path}.expected_telemetry[{index}]"
+            validate_otel_closure_text(
+                item["name"], f"{item_path}.name", telemetry_output=True
+            )
+            validate_otel_closure_text(
+                item["product_view"],
+                f"{item_path}.product_view",
+                telemetry_output=True,
+            )
+            for attribute_index, attribute in enumerate(item["attributes"]):
+                validate_otel_closure_text(
+                    attribute,
+                    f"{item_path}.attributes[{attribute_index}]",
+                    telemetry_output=True,
+                )
+    signal_types = {item["type"] for item in telemetry}
+    has_configuration = "configuration" in signal_types
+    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
+        otel_concerns = [
+            concern for concern in OTEL_CONCERN_ORDER if concern in set(otel_concerns)
+        ]
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and has_configuration
+        and "otel-configuration" not in otel_concerns
+    ):
+        fail(
+            f"{path}.otel_concerns must include otel-configuration when "
+            "expected_telemetry contains configuration"
+        )
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and "otel-configuration" in otel_concerns
+        and not has_configuration
+    ):
+        fail(
+            f"{path}.otel_concerns includes otel-configuration but "
+            "expected_telemetry has no configuration item"
+        )
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and "context-propagation" in otel_concerns
+        and "span" not in signal_types
+    ):
+        fail(f"{path}.context-propagation closure requires a span outcome")
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and "trace-log-correlation" in otel_concerns
+        and "log" not in signal_types
+    ):
+        fail(f"{path}.trace-log-correlation closure requires a log outcome")
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and {"semantic-attributes", "cardinality-safety"} & set(otel_concerns)
+        and not any(item["attributes"] for item in telemetry)
+    ):
+        fail(
+            f"{path}.semantic/cardinality closure requires at least one "
+            "expected telemetry attribute"
+        )
     decision_owner = optional_text(row.get("decision_owner"), f"{path}.decision_owner")
     decision_question = optional_text(
         row.get("decision_question"), f"{path}.decision_question"
@@ -515,6 +1331,11 @@ def normalize_finding(
                     f"{path}.decision_question must be an exact telemetry choice "
                     "using which/whether/should/choose/select and a question mark"
                 )
+            require_expected_telemetry_reference(
+                decision_question,
+                f"{path}.decision_question",
+                telemetry,
+            )
         elif decision_owner is not None or decision_question is not None:
             fail(
                 f"{path}.decision_owner and decision_question are valid only for "
@@ -533,6 +1354,11 @@ def normalize_finding(
                     f"{path}.external_requirement must say what the external owner "
                     "will emit, export, configure, provide, supply, expose, prove, or verify"
                 )
+            require_expected_telemetry_reference(
+                external_requirement,
+                f"{path}.external_requirement",
+                telemetry,
+            )
         elif external_owner is not None or external_requirement is not None:
             fail(
                 f"{path}.external_owner and external_requirement are valid only for "
@@ -574,6 +1400,17 @@ def normalize_finding(
         "resolution": optional_text(row.get("resolution"), f"{path}.resolution"),
         "resolved_commit": optional_text(row.get("resolved_commit"), f"{path}.resolved_commit"),
     }
+    if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION and mode == "default":
+        duplicate_contract = " ".join(
+            (report["area"], report["gap"], report["required_fix"])
+        ).lower()
+        if any(term in duplicate_contract for term in ("duplicate", "overlap")) and not names_canonical_telemetry_owner(report["required_fix"]):
+            fail(
+                f"{path}.required_fix must name the canonical telemetry owner "
+                "for default duplicate remediation or use manual decision"
+            )
+    if explicit_otel_concerns:
+        report["otel_concerns"] = otel_concerns
     if decision_owner is not None:
         report["decision_owner"] = decision_owner
     if decision_question is not None:
@@ -593,11 +1430,44 @@ def normalize_finding(
                 f"{path}.required_fix must contain the exact external_requirement "
                 "and no hidden service implementation handoff"
             )
+    closure_values: list[tuple[str, str]] = [
+        ("title", report["title"]),
+        ("area", report["area"]),
+        ("gap", report["gap"]),
+        ("product_outcome", report["product_outcome"]),
+        ("required_fix", report["required_fix"]),
+    ]
+    closure_values.extend(
+        (f"acceptance_criteria[{index}]", value)
+        for index, value in enumerate(report["acceptance_criteria"])
+    )
+    closure_values.extend(
+        (f"follow_up_actions[{index}]", value)
+        for index, value in enumerate(report["follow_up_actions"])
+    )
+    if decision_question is not None:
+        closure_values.append(("decision_question", decision_question))
+    for option_index, option in enumerate(decision_options):
+        closure_values.append(
+            (f"decision_options[{option_index}].outcome", option["outcome"])
+        )
+    if external_requirement is not None:
+        closure_values.append(("external_requirement", external_requirement))
     if audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION:
-        for index, value in enumerate(report["follow_up_actions"]):
-            validate_audit_review_next_step(
-                value, f"{path}.follow_up_actions[{index}]"
+        for field, value in closure_values:
+            validate_otel_closure_text(
+                value,
+                f"{path}.{field}",
+                audit_section=True,
             )
+            if field.startswith("follow_up_actions["):
+                validate_audit_review_next_step(value, f"{path}.{field}")
+    if (
+        audit_schema_version == CURRENT_AUDIT_SCHEMA_VERSION
+        and "telemetry-proof" in otel_concerns
+        and not report["verification_scenarios"]
+    ):
+        fail(f"{path}.telemetry-proof closure requires a verification scenario")
     return report
 
 
@@ -1452,6 +2322,7 @@ def normalize_telemetry_change(
     path: str,
     finding_id: str,
     expected_scenarios: list[str],
+    expected_telemetry: list[dict[str, Any]],
 ) -> dict[str, Any]:
     item_id = stable_id(row.get("id"), f"{path}.id")
     if not item_id.startswith(f"{finding_id}."):
@@ -1464,6 +2335,35 @@ def normalize_telemetry_change(
         fail(f"{path}.type must be one of {sorted(SIGNAL_TYPES)}")
     signal_name = text(row.get("name"), f"{path}.name")
     added_attributes = string_list(row.get("added_attributes", []), f"{path}.added_attributes")
+    if change_kind in {"added", "modified"}:
+        matching_expected = [
+            item
+            for item in expected_telemetry
+            if item["type"] == signal_type and item["name"] == signal_name
+        ]
+        if not matching_expected:
+            expected = [
+                f"{item['type']} {item['name']}" for item in expected_telemetry
+            ]
+            fail(
+                f"{path} must change an exact expected telemetry item from the "
+                f"audit finding; expected one of {expected}"
+            )
+        expected_attributes = {
+            attribute.strip()
+            for item in matching_expected
+            for attribute in item["attributes"]
+        }
+        actual_attributes = {
+            attribute.strip()
+            for attribute in added_attributes
+        }
+        unexpected_attributes = sorted(actual_attributes - expected_attributes)
+        if unexpected_attributes:
+            fail(
+                f"{path}.added_attributes contains attributes not promised by "
+                f"the audit finding: {unexpected_attributes}"
+            )
     follow_up_actions = non_empty_string_list(row.get("follow_up_actions", []), f"{path}.follow_up_actions")
     scenarios = [
         stable_id(item, f"{path}.verification_scenarios[{index}]")
@@ -1476,8 +2376,19 @@ def normalize_telemetry_change(
         fail(f"{path}.verification_scenarios contains unknown scenarios: {unknown_scenarios}")
     if expected_scenarios and not scenarios:
         fail(f"{path}.verification_scenarios must map the telemetry item to audit scenarios")
+    if signal_type == "metric" and not any(METRIC_PRODUCT_ACTION.search(action) for action in follow_up_actions):
+        fail(f"{path}.follow_up_actions must name a chart, dashboard, detector, alert, or monitor")
+    if added_attributes and not any(
+        DIMENSION_PRODUCT_ACTION.search(action) for action in follow_up_actions
+    ):
+        fail(f"{path}.follow_up_actions must name the filter, slice, group-by, or breakdown enabled by added attributes")
     source = durable_artifact_text(text(row.get("source"), f"{path}.source"), f"{path}.source")
     change = text(row.get("change"), f"{path}.change")
+    if GENERIC_TELEMETRY_CHANGE.search(change):
+        fail(
+            f"{path}.change must describe the concrete code/config behavior and "
+            "telemetry correction; generic selected-contract wording is not allowed"
+        )
     return {
         "id": item_id,
         "change_kind": change_kind,
@@ -1740,27 +2651,38 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
     approved = selection["approved_ids"]
     if [row["id"] for row in rows] != approved:
         fail(f"instrumentation finding IDs must exactly match dependency-closed selected audit order {approved}")
+    genai_closure = normalize_genai_closure(
+        data.get("genai_closure", []), report
+    )
     failed_rows = [row for row in rows if row["status"] == "not_working"]
-    if failed_rows and result != "Fail":
+    failed_genai = [
+        row for row in genai_closure if row["status"] == "not_working"
+    ]
+    if (failed_rows or failed_genai) and result != "Fail":
         fail(
             "instrumentation.meta.result must be Fail when any selected finding "
-            "is not_working"
+            "or GenAI closure surface is not_working"
         )
-    if result == "Fail" and not failed_rows:
+    if result == "Fail" and not (failed_rows or failed_genai):
         fail(
             "instrumentation.meta.result Fail requires at least one not_working "
-            "finding"
+            "finding or GenAI closure surface"
         )
     selected_complete = all(row["status"] == "working" for row in rows)
-    if result == "Pass" and not selected_complete:
+    genai_complete = all(
+        row["status"] in GENAI_PASS_STATUSES for row in genai_closure
+    )
+    has_scope = bool(rows or genai_closure)
+    if result == "Pass" and not (selected_complete and genai_complete):
         fail(
             "instrumentation.meta.result Pass requires every selected finding to "
-            "be working"
+            "be working and every GenAI closure surface to be working, deferred, "
+            "or owner_mapped"
         )
-    if rows and selected_complete and result != "Pass":
+    if has_scope and selected_complete and genai_complete and result != "Pass":
         fail(
             "instrumentation.meta.result must be Pass when every selected finding "
-            "is working"
+            "and GenAI closure surface is complete"
         )
     normalized = {
         "schema_version": OVERLAY_SCHEMA_VERSION,
@@ -1776,6 +2698,8 @@ def normalize_instrumentation(data: dict[str, Any], report: dict[str, Any], sele
         "findings": rows,
         "next_steps": string_list(data.get("next_steps", []), "instrumentation.next_steps"),
     }
+    if report["meta"]["genai_ownership_detected"]:
+        normalized["genai_closure"] = genai_closure
     return normalized
 
 
@@ -6473,6 +7397,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     select.add_argument("-o", "--output", type=Path, required=True)
+    select.add_argument("--scoped-out", type=Path)
     select.add_argument("--approved-by")
     select.add_argument("--approved-at")
     select.add_argument(
@@ -6494,6 +7419,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     adopt.add_argument("audit_json", type=Path)
     adopt.add_argument("-o", "--output", type=Path, required=True)
+    adopt.add_argument("--scoped-out", type=Path)
     adopt.add_argument(
         "--candidate",
         action="append",
