@@ -198,17 +198,10 @@ example `OTEL-001.http-server-span`. Use `added`, `modified`, or `removed` for
 `change_kind`; describe the concrete code/config change; preserve the exact
 source/call site; list only newly added attributes or dimensions; and map the
 item to the audit scenarios that prove it. Every item requires at least one
-product follow-up. For a metric, name the chart/dashboard or detector action it
-enables. Preserve each audit-authored attribute exactly: a key-only promise
-stays key-only, while `key=value` keeps that exact bounded value. When
-`added_attributes` is nonempty, name the filter, slice, group-by,
-or breakdown it enables. These item IDs are the deterministic inventory that
-verification must cover exactly; a free-text `changes` list is not a substitute.
-Never use filler such as "Added/modified `<name>` for the selected bounded
-telemetry contract." State the actual behavior: ownership removed or retained,
-exception/status handling, lifecycle closure, bounded attributes, provider
-wiring, propagation, flush/shutdown behavior, or another source-backed
-correction. The validator rejects generic selected-contract wording.
+product follow-up. Preserve each audit-authored attribute exactly: a key-only
+promise stays key-only, while `key=value` keeps that exact bounded value. These
+stable item IDs are the inventory that verification must cover exactly; a
+free-text `changes` list is not a substitute.
 
 Write concise, reader-facing `changes`, `product_view`, and `next_steps`
 because each selected-finding HTML card uses them directly. Each selected finding should

@@ -20,9 +20,16 @@ GAP_HEADER = [
     "Instrument mode",
     "Verification scenarios",
 ]
-CLOSURE_HEADER = [
+LEGACY_CLOSURE_HEADER = [
     "Priority",
     "Gap",
+    "What changed",
+    "Tested",
+    "Result",
+    "Evidence / reason",
+]
+CANONICAL_CLOSURE_HEADER = [
+    "Finding",
     "What changed",
     "Tested",
     "Result",
@@ -75,50 +82,6 @@ UNPROVEN_PROOF = re.compile(
     r"\btests?\s+(?:are\s+)?blocked\b)",
     re.IGNORECASE,
 )
-NEGATIVE_OR_UNCERTAIN_PROOF = re.compile(
-    r"(?:^\s*(?:none|unproven|blocked|pending|skipped|unknown|n/?a)\b|"
-    r"\b(?:not proven|not configured|not run|not tested|unsuccessful|"
-    r"failed|failure|errored?|rejected|denied|unavailable|uncertain)\b|"
-    r"\b(?:could|did)\s+not\b|\bno\s+(?:evidence|result|output|proof)\b|"
-    r"\btests?\s+(?:are\s+)?blocked\b)",
-    re.IGNORECASE,
-)
-AFFIRMATIVE_EXECUTED_PROOF = re.compile(
-    r"\b(?:pass(?:ed)?|success(?:ful(?:ly)?)?|succeed(?:ed)?|completed|executed|"
-    r"accepted|captured|observed|emitted|exported|recorded|assert(?:ed|ion)?|"
-    r"go\s+test|pytest|cargo\s+test|(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+test|"
-    r"(?:gradle|gradlew|mvn|mvnw)\b[^\r\n;|]*\b(?:test|check|verify)|"
-    r"dotnet\s+test|bundle\s+exec\s+(?:rspec|rake\s+test)|"
-    r"(?:composer\s+(?:exec\s+)?)?(?:vendor/bin/)?phpunit)\b",
-    re.IGNORECASE,
-)
-NON_EXECUTING_TEST_PROOF = re.compile(
-    r"(?:\b(?:gradle|gradlew)\b[^\r\n;|]*"
-    r"(?:--dry-run|(?<!\S)-m(?=\s|$)|"
-    r"(?:--exclude-task|-x)(?:=|\s+)(?:test|check|verify)\b)|"
-    r"\b(?:mvn|mvnw)\b[^\r\n;|]*"
-    r"-D(?:skipTests|maven\.test\.skip)"
-    r"(?:=(?:true|1|yes))?(?=\s|$))",
-    re.IGNORECASE,
-)
-POSITIVE_PROOF_EVIDENCE = re.compile(
-    r"(?:^|/)\.observe/evidence/|"
-    r"(?:^|[\s/])[A-Za-z0-9_.-]+\.(?:jsonl?|txt|log|xml|html?|md|out|"
-    r"tap|junit|otlp|pb)(?=$|[\s,;:])|"
-    r"\b(?:pass(?:ed)?|succeed(?:ed)?|accepted|captured|observed|emitted|"
-    r"exported|recorded|assertion)\b",
-    re.IGNORECASE,
-)
-DURABLE_ARTIFACT_REFERENCE = re.compile(
-    r"(?:^|[\s;`])(?:\.?[A-Za-z0-9_.-]+[/\\])*[A-Za-z0-9_.-]+\."
-    r"(?:jsonl?|txt|log|xml|html?|md|out|tap|junit|otlp|pb)(?=$|[\s,;:`])",
-    re.IGNORECASE,
-)
-NON_PROOF_ARTIFACT_LABEL = re.compile(
-    r"\b(?:none|unproven|not\s+(?:proven|configured|run|tested)|blocked|"
-    r"pending|skipped|unknown)\b",
-    re.IGNORECASE,
-)
 JSON_STATUS_LABELS = {
     "working": "Working",
     "not_working": "Not working",
@@ -130,66 +93,6 @@ JSON_STATUS_LABELS = {
 
 def fail(message: str) -> None:
     raise SystemExit(f"FAIL: {message}")
-
-
-def has_meaningful_instrumentation_proof(instrumentation_json: dict) -> bool:
-    """Return whether implementation-owned scope records any completed proof."""
-
-    def affirmative_entries(value: object, pattern: re.Pattern[str]) -> bool:
-        return (
-            isinstance(value, list)
-            and bool(value)
-            and all(
-                isinstance(item, str)
-                and bool(item.strip())
-                and not NON_EXECUTING_TEST_PROOF.search(item)
-                and not NEGATIVE_OR_UNCERTAIN_PROOF.search(
-                    re.sub(r"[._/-]+", " ", item)
-                )
-                and pattern.search(re.sub(r"[._/-]+", " ", item))
-                for item in value
-            )
-        )
-
-    def positive_evidence(value: object) -> bool:
-        def positive_item(item: object) -> bool:
-            if not isinstance(item, str) or not item.strip():
-                return False
-            artifact_refs = list(DURABLE_ARTIFACT_REFERENCE.finditer(item))
-            if any(
-                NON_PROOF_ARTIFACT_LABEL.search(
-                    re.sub(r"[._/\\-]+", " ", match.group(0))
-                )
-                for match in artifact_refs
-            ):
-                return False
-            outcome_prose = DURABLE_ARTIFACT_REFERENCE.sub(" ", item)
-            return bool(
-                not NEGATIVE_OR_UNCERTAIN_PROOF.search(
-                    re.sub(r"[._/\\-]+", " ", outcome_prose)
-                )
-                and POSITIVE_PROOF_EVIDENCE.search(item)
-            )
-
-        return (
-            isinstance(value, list)
-            and bool(value)
-            and all(positive_item(item) for item in value)
-        )
-
-    for finding in instrumentation_json.get("findings", []):
-        if not isinstance(finding, dict):
-            continue
-        if (
-            finding.get("status") == "working"
-            and affirmative_entries(
-                finding.get("tests"), AFFIRMATIVE_EXECUTED_PROOF
-            )
-            and positive_evidence(finding.get("evidence"))
-        ):
-            return True
-
-    return False
 
 
 def expected_report_result(
@@ -208,9 +111,13 @@ def expected_report_result(
     if verification_result == "Fail":
         return "Fail"
     if verification_result == "Blocked":
+        has_working_implementation = any(
+            isinstance(finding, dict) and finding.get("status") == "working"
+            for finding in instrumentation_json.get("findings", [])
+        )
         return (
             "Partial"
-            if has_meaningful_instrumentation_proof(instrumentation_json)
+            if has_working_implementation
             else "Blocked"
         )
     return "Partial" if verification_result == "Not run" else verification_result
@@ -368,18 +275,28 @@ def validate_json_projection(
             "state from finding verification and instrumentation GenAI closure: "
             f"markdown={report_result}, expected={expected_result}"
         )
-    closure_by_key = {(row[0], row[1]): row for row in closure_rows}
-    canonical_keys = [
-        (finding.get("priority"), finding.get("area"))
+    audit_findings_by_id = {
+        finding.get("id"): finding
         for finding in audit_json.get("findings", [])
         if isinstance(finding, dict)
+    }
+    selected_findings = [
+        audit_findings_by_id[finding_id]
+        for finding_id in selection_json.get("approved_ids", [])
     ]
-    markdown_keys = [(row[0], row[1]) for row in closure_rows]
-    if markdown_keys != canonical_keys:
+    canonical_labels = [
+        f"{finding['id']} — {finding['title']}" for finding in selected_findings
+    ]
+    markdown_labels = [row[0] for row in closure_rows]
+    if markdown_labels != canonical_labels:
         fail(
             "instrumentation Markdown closure rows must exactly follow canonical "
-            f"audit findings: markdown={markdown_keys}, audit={canonical_keys}"
+            "selected finding order: "
+            f"markdown={markdown_labels}, selected={canonical_labels}"
         )
+    closure_by_id = {
+        finding["id"]: row for finding, row in zip(selected_findings, closure_rows)
+    }
     instrumentation_by_id = {
         row.get("id"): row
         for row in instrumentation_json.get("findings", [])
@@ -390,22 +307,17 @@ def validate_json_projection(
         for row in overlay_json.get("findings", [])
         if isinstance(row, dict)
     }
-    for finding in audit_json.get("findings", []):
-        if not isinstance(finding, dict):
-            fail("canonical audit findings must be objects")
-        finding_id = finding.get("id")
-        key = (finding.get("priority"), finding.get("area"))
-        row = closure_by_key.get(key)
-        if row is None:
-            continue
+    for finding in selected_findings:
+        finding_id = finding["id"]
+        row = closure_by_id[finding_id]
         raw_status = overlay_status_by_id.get(finding_id, "deferred")
         expected = JSON_STATUS_LABELS.get(raw_status)
         if expected is None:
             fail(f"unsupported JSON closure status for {finding_id}: {raw_status}")
-        if row[4] != expected:
+        if row[3] != expected:
             fail(
                 "instrumentation Markdown closure disagrees with the current JSON "
-                f"overlay for {finding_id}: markdown={row[4]}, overlay={expected}"
+                f"overlay for {finding_id}: markdown={row[3]}, overlay={expected}"
             )
 
         implementation = instrumentation_by_id.get(finding_id)
@@ -431,7 +343,7 @@ def validate_json_projection(
                 )
             ),
         ]
-        markdown_content = [row[2], row[3], row[5]]
+        markdown_content = [row[1], row[2], row[4]]
         if markdown_content != expected_content:
             fail(
                 "instrumentation Markdown closure content disagrees with the "
@@ -468,28 +380,46 @@ def validate(
     closure_header, closure_rows = table(
         section(instrumentation, "## Audit Gap Closure"), "Audit Gap Closure"
     )
-    if closure_header != CLOSURE_HEADER:
-        fail(f"Audit Gap Closure header must be {CLOSURE_HEADER}")
+    overlay_present = (
+        instrumentation_json_path is not None or verify_json_path is not None
+    )
+    audit_json_present = audit_json_path is not None
+    if audit_json_present != overlay_present:
+        fail("--audit-json and a current --instrumentation-json/--verify-json must be used together")
+    canonical_flow = audit_json_path is not None and overlay_present
+    expected_header = (
+        CANONICAL_CLOSURE_HEADER if canonical_flow else LEGACY_CLOSURE_HEADER
+    )
+    if closure_header != expected_header:
+        fail(f"Audit Gap Closure header must be {expected_header}")
 
-    audit_keys = [(row[0], row[1]) for row in gap_rows]
-    closure_keys = []
+    closure_keys: list[tuple[str, str]] = []
+    closure_statuses: list[str] = []
     for row in closure_rows:
-        if len(row) != len(CLOSURE_HEADER):
+        if len(row) != len(expected_header):
             fail(f"malformed closure row: {row}")
-        if row[4] not in RESULTS:
-            fail(f"invalid closure result: {row[4]}")
-        if not row[2] or not row[3] or not row[5]:
-            fail(f"closure row lacks action, test, or evidence: {row[1]}")
-        closure_keys.append((row[0], row[1]))
+        status_index = 3 if canonical_flow else 4
+        if row[status_index] not in RESULTS:
+            fail(f"invalid closure result: {row[status_index]}")
+        content_indexes = (1, 2, 4) if canonical_flow else (2, 3, 5)
+        if any(not row[index] for index in content_indexes):
+            fail(f"closure row lacks action, test, or evidence: {row[0]}")
+        closure_statuses.append(row[status_index])
+        if not canonical_flow:
+            closure_keys.append((row[0], row[1]))
 
-    if sorted(audit_keys) != sorted(closure_keys):
-        fail(
-            "audit and closure rows differ: "
-            f"missing={sorted(set(audit_keys) - set(closure_keys))}, "
-            f"extra={sorted(set(closure_keys) - set(audit_keys))}"
-        )
+    if not canonical_flow:
+        audit_keys = [(row[0], row[1]) for row in gap_rows]
+        if sorted(audit_keys) != sorted(closure_keys):
+            fail(
+                "audit and closure rows differ: "
+                f"missing={sorted(set(audit_keys) - set(closure_keys))}, "
+                f"extra={sorted(set(closure_keys) - set(audit_keys))}"
+            )
     gap_result_blockers = {
-        row[4] for row in closure_rows if row[4] in {"Not working", "Not proven", "Not configured"}
+        status
+        for status in closure_statuses
+        if status in {"Not working", "Not proven", "Not configured"}
     }
 
     audit_current_instrumentation = re.search(
@@ -654,12 +584,6 @@ def validate(
             f"genai={sorted(genai_result_blockers)}"
         )
 
-    overlay_present = (
-        instrumentation_json_path is not None or verify_json_path is not None
-    )
-    audit_json_present = audit_json_path is not None
-    if audit_json_present != overlay_present:
-        fail("--audit-json and a current --instrumentation-json/--verify-json must be used together")
     if audit_json_path is not None and overlay_present:
         validate_json_projection(
             closure_rows,

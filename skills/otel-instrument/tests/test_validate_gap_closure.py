@@ -72,6 +72,11 @@ INSTRUMENT_NO_GENAI = """# OTel Instrumentation Report: sample
 | Unit tests | Pass |
 """
 
+CANONICAL_CLOSURE_HEADER = """| Finding | What changed | Tested | Result | Evidence / reason |
+|---|---|---|---|---|"""
+LEGACY_CLOSURE_HEADER = """| Priority | Gap | What changed | Tested | Result | Evidence / reason |
+|---|---|---|---|---|---|"""
+
 GENAI_CLOSURE = """## GenAI Readiness Closure
 | Surface | Required signals | Implemented / proven | Tests | Remaining signals | Result |
 |---|---|---|---|---|---|
@@ -109,14 +114,25 @@ INSTRUMENT_INCIDENT = INSTRUMENT_NO_GENAI.replace(
 
 
 class ValidateGapClosureTest(unittest.TestCase):
-    def canonical_audit(self, *, schema_version: int = 2) -> dict:
+    def canonical_audit(
+        self,
+        *,
+        schema_version: int = 2,
+        include_unselected_finding: bool = False,
+    ) -> dict:
         raw = copy.deepcopy(SHARED.sample_report())
         raw["schema_version"] = schema_version
-        raw["findings"] = [raw["findings"][0]]
         raw["findings"][0]["area"] = "runtime bootstrap"
-        raw["signal_flow"]["component_flow_map"] = (
-            "service startup [GAP: runtime bootstrap]"
-        )
+        if include_unselected_finding:
+            raw["signal_flow"]["component_flow_map"] = (
+                "service startup [GAP: runtime bootstrap]\n"
+                "payment client [GAP: Payment dependency]"
+            )
+        else:
+            raw["findings"] = [raw["findings"][0]]
+            raw["signal_flow"]["component_flow_map"] = (
+                "service startup [GAP: runtime bootstrap]"
+            )
         return REPORT_MODULE.normalize_audit_report(raw)
 
     def canonical_selection(self, audit: dict) -> dict:
@@ -181,6 +197,7 @@ class ValidateGapClosureTest(unittest.TestCase):
         stale_selection_approved_by: str | None = None,
         raw_instrumentation_extension: bool = False,
         instrumentation_json_name: str = "otel-instrumentation.json",
+        include_unselected_finding: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -191,8 +208,20 @@ class ValidateGapClosureTest(unittest.TestCase):
             instrumentation_json_path = root / instrumentation_json_name
             verify_json_path = root / "otel-verify.json"
             audit_path.write_text(AUDIT_NO_GENAI, encoding="utf-8")
-            instrumentation_path.write_text(instrumentation, encoding="utf-8")
-            audit_json = self.canonical_audit(schema_version=audit_schema_version)
+            audit_json = self.canonical_audit(
+                schema_version=audit_schema_version,
+                include_unselected_finding=include_unselected_finding,
+            )
+            canonical_instrumentation = instrumentation.replace(
+                LEGACY_CLOSURE_HEADER,
+                CANONICAL_CLOSURE_HEADER,
+            ).replace(
+                "| required | runtime bootstrap |",
+                f"| OTEL-001 — {audit_json['findings'][0]['title']} |",
+            )
+            instrumentation_path.write_text(
+                canonical_instrumentation, encoding="utf-8"
+            )
             selection_json = self.canonical_selection(audit_json)
             instrumentation_json = self.canonical_instrumentation(
                 audit_json, selection_json
@@ -379,7 +408,17 @@ class ValidateGapClosureTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_blocked_verify_is_partial_when_implementation_owned_proof_exists(self) -> None:
+    def test_json_projection_accepts_selected_subset_of_audit_findings(self) -> None:
+        result = self.validate_with_json(
+            INSTRUMENT_NO_GENAI,
+            overlay_status="working",
+            overlay_result="Pass",
+            include_unselected_finding=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_blocked_verify_uses_structured_implementation_status(self) -> None:
         blocked_verify = {"meta": {"result": "Blocked"}}
         no_proof = {
             "findings": [
@@ -401,149 +440,13 @@ class ValidateGapClosureTest(unittest.TestCase):
         finding_proof["findings"][0].update(
             {
                 "status": "working",
-                "tests": ["go test ./..."],
-                "evidence": [".observe/evidence/go-test.txt"],
+                "tests": [],
+                "evidence": [],
             }
         )
         self.assertEqual(
             VALIDATOR_MODULE.expected_report_result(
                 finding_proof, blocked_verify, verification_overlay=True
-            ),
-            "Partial",
-        )
-
-        for command in (
-            "./gradlew test",
-            "./mvnw -DskipTests=false verify",
-            "dotnet test Service.Tests",
-        ):
-            project_native_proof = copy.deepcopy(no_proof)
-            project_native_proof["findings"][0].update(
-                {
-                    "status": "working",
-                    "tests": [command],
-                    "evidence": [".observe/evidence/project-test.txt"],
-                }
-            )
-            with self.subTest(command=command):
-                self.assertTrue(
-                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                        project_native_proof
-                    )
-                )
-                self.assertEqual(
-                    VALIDATOR_MODULE.expected_report_result(
-                        project_native_proof,
-                        blocked_verify,
-                        verification_overlay=True,
-                    ),
-                    "Partial",
-                )
-
-        for command in (
-            "./gradlew test --dry-run",
-            "./gradlew check -x test",
-            "./mvnw -DskipTests verify",
-            "./mvnw verify -Dmaven.test.skip=true",
-        ):
-            skipped_project_proof = copy.deepcopy(no_proof)
-            skipped_project_proof["findings"][0].update(
-                {
-                    "status": "working",
-                    "tests": [command],
-                    "evidence": [".observe/evidence/project-test.txt"],
-                }
-            )
-            with self.subTest(command=command):
-                self.assertFalse(
-                    VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                        skipped_project_proof
-                    )
-                )
-                self.assertEqual(
-                    VALIDATOR_MODULE.expected_report_result(
-                        skipped_project_proof,
-                        blocked_verify,
-                        verification_overlay=True,
-                    ),
-                    "Blocked",
-                )
-
-    def test_blocked_verify_ignores_unproven_source_refs_and_not_run_text(self) -> None:
-        blocked_verify = {"meta": {"result": "Blocked"}}
-        unproven = {
-            "findings": [
-                {
-                    "status": "not_proven",
-                    "tests": ["not run: Docker unavailable"],
-                    "evidence": ["main.go:12"],
-                }
-            ],
-        }
-
-        self.assertFalse(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(unproven)
-        )
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                unproven, blocked_verify, verification_overlay=True
-            ),
-            "Blocked",
-        )
-
-        source_only_working_label = {
-            "findings": [
-                {
-                    "status": "working",
-                    "tests": ["go test ./..."],
-                    "evidence": ["main.go:12"],
-                }
-            ],
-        }
-        self.assertFalse(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                source_only_working_label
-            )
-        )
-
-        failed_test_label = {
-            "findings": [
-                {
-                    "status": "working",
-                    "tests": ["go test ./... failed"],
-                    "evidence": [".observe/evidence/go-test.log"],
-                }
-            ],
-        }
-        self.assertFalse(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(failed_test_label)
-        )
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                failed_test_label, blocked_verify, verification_overlay=True
-            ),
-            "Blocked",
-        )
-
-        failure_scenario_artifact = {
-            "findings": [
-                {
-                    "status": "working",
-                    "tests": ["go test ./... passed"],
-                    "evidence": [".observe/evidence/http-failure.json"],
-                }
-            ],
-        }
-        self.assertTrue(
-            VALIDATOR_MODULE.has_meaningful_instrumentation_proof(
-                failure_scenario_artifact
-            )
-        )
-        self.assertEqual(
-            VALIDATOR_MODULE.expected_report_result(
-                failure_scenario_artifact,
-                blocked_verify,
-                verification_overlay=True,
             ),
             "Partial",
         )

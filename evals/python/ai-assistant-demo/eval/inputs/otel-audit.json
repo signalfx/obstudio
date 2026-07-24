@@ -77,11 +77,6 @@
       "severity": "high",
       "priority": "required",
       "effort": "medium",
-      "otel_concerns": [
-        "signal-emission",
-        "semantic-attributes",
-        "cardinality-safety"
-      ],
       "status": "proposed",
       "area": "Assistant GenAI lifecycle",
       "gap": "The app-owned assistant, provider, tool, token, and streaming lifecycle emits no OpenTelemetry GenAI telemetry.",

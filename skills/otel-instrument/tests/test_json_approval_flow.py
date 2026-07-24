@@ -75,8 +75,6 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
             '"change_kind": "added"',
             '"added_attributes": ["http.route=/health"]',
             '"verification_scenarios": ["http.health.success"]',
-            "chart/dashboard or detector",
-            "filter, slice, group-by",
         ):
             self.assertIn(value, text)
         self.assertIn("--instrumentation-json .observe/otel-instrumentation.json", text)

@@ -426,29 +426,18 @@ def normalize_finding(
     effort = text(row.get("effort"), f"{path}.effort")
     if effort not in EFFORTS:
         fail(f"{path}.effort must be one of {sorted(EFFORTS)}")
-    explicit_otel_concerns = "otel_concerns" in row
-    otel_concerns = (
-        string_list(row.get("otel_concerns", []), f"{path}.otel_concerns")
-        if explicit_otel_concerns
-        else []
-    )
     telemetry = []
     for index, item in enumerate(object_list(row.get("expected_telemetry", []), f"{path}.expected_telemetry")):
         item_path = f"{path}.expected_telemetry[{index}]"
         signal_type = text(item.get("type"), f"{item_path}.type")
         if signal_type not in SIGNAL_TYPES:
             fail(f"{item_path}.type must be one of {sorted(SIGNAL_TYPES)}")
-        configuration_scope = optional_text(
-            item.get("configuration_scope"), f"{item_path}.configuration_scope"
-        )
         telemetry_item = {
             "type": signal_type,
             "name": text(item.get("name"), f"{item_path}.name"),
             "attributes": string_list(item.get("attributes", []), f"{item_path}.attributes"),
             "product_view": text(item.get("product_view"), f"{item_path}.product_view"),
         }
-        if configuration_scope is not None:
-            telemetry_item["configuration_scope"] = configuration_scope
         telemetry.append(telemetry_item)
     if not telemetry:
         fail(f"{path}.expected_telemetry must contain at least one item")
@@ -566,8 +555,6 @@ def normalize_finding(
         "resolution": optional_text(row.get("resolution"), f"{path}.resolution"),
         "resolved_commit": optional_text(row.get("resolved_commit"), f"{path}.resolved_commit"),
     }
-    if explicit_otel_concerns:
-        report["otel_concerns"] = otel_concerns
     if decision_owner is not None:
         report["decision_owner"] = decision_owner
     if decision_question is not None:
@@ -4670,7 +4657,7 @@ function renderCards() {{
   document.getElementById("cards").innerHTML = DISPLAY_FINDINGS.map(f => {{
     const lifecycle = lifecycleStatus(f);
     const mode = modeGuidance[f.instrument_mode];
-    const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${{esc(item.type)}} ${{esc(item.name)}}</b>${{item.configuration_scope ? ` <code>scope: ${{esc(item.configuration_scope)}}</code>` : ""}} — ${{esc(item.product_view)}}${{item.attributes?.length ? ` <code>${{esc(item.attributes.join(", "))}}</code>` : ""}}</li>`).join("");
+    const telemetry = (f.expected_telemetry || []).map(item => `<li><b>${{esc(item.type)}} ${{esc(item.name)}}</b> — ${{esc(item.product_view)}}${{item.attributes?.length ? ` <code>${{esc(item.attributes.join(", "))}}</code>` : ""}}</li>`).join("");
     const evidence = (f.evidence || []).map(item => `<li>${{sourceHtml(item)}}</li>`).join("");
     const acceptance = (f.acceptance_criteria || []).map(item => `<li>${{esc(item)}}</li>`).join("");
     const constraints = (f.constraints || []).map(item => `<li>${{esc(item)}}</li>`).join("");

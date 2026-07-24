@@ -345,8 +345,8 @@ report background:
   remains decision state and never auto-selects work. Manual and external
   findings remain visible audit state; they are not implementation queue
   entries.
-- Keep unselected findings visible as out of scope in the Markdown reader
-  report, but never add them to `.observe/otel-instrumentation.json`.
+- Keep unselected findings visible in the immutable audit and audit HTML. Omit
+  them from instrumentation JSON, Markdown, and HTML.
 - A row may require only verification rather than code. Run the mapped
   scenarios and do not invent a source change.
 - Reconcile GenAI gap rows with `## GenAI Readiness`; the readiness row remains
@@ -429,9 +429,7 @@ Preserve its stable item ID, concrete code/config change, exact source or call
 site, signal kind, newly added attributes/dimensions, product view, audit
 scenarios, and item-specific follow-up actions. A free-text finding `changes`
 list is not item coverage. Preserve audit-authored keys and bounded values
-exactly. Every custom metric must name the chart/dashboard or detector action
-after proof; every new bounded attribute must name its filter, slice, group-by,
-or breakdown. Never auto-publish without the downstream review workflow.
+exactly. Never auto-publish without the downstream review workflow.
 
 ##### Incident Readiness Signal Roles
 

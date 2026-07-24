@@ -315,8 +315,6 @@ def test_canonical_overlays_join_code_telemetry_product_action_and_item_proof() 
         "stable item ID",
         "code/config change",
         "added_attributes",
-        "chart/dashboard or detector",
-        "filter, slice, group-by",
         "verification_scenarios",
         "render-instrumentation-html",
         ".observe/otel-instrumentation.html",

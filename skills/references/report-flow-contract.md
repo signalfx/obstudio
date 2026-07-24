@@ -182,11 +182,11 @@ closure. Do not infer a material-safety badge from free-text
 constraints, severity, or priority. The current schema does not classify that
 judgment, and a badge on every constrained finding would add noise.
 
-Put exact expected telemetry with configuration scope, evidence, acceptance
-criteria, and authored constraints behind one collapsed `Technical details`
+Put exact expected telemetry, evidence, acceptance criteria, and authored
+constraints behind one collapsed `Technical details`
 disclosure. Label the constraints `Implementation guardrails`. Its summary
 reports acceptance-check, guardrail, and source-reference counts. Do not render
-raw verification-scenario IDs, OTel concern taxonomy, repeated full scope
+raw verification-scenario IDs, repeated full scope
 classification, canonical `follow_up_actions`, resolution metadata, or a
 second dependency list in the finding HTML. Those fields remain in canonical
 JSON for downstream instrumentation and verification; Markdown remains the
@@ -532,8 +532,9 @@ reconcile every dependency-closed selected audit row under
 `## Audit Gap Closure`:
 
 ```markdown
-| Priority | Gap | What changed | Tested | Result | Evidence / reason |
-|---|---|---|---|---|---|
+| Finding | What changed | Tested | Result | Evidence / reason |
+|---|---|---|---|---|
+| OTEL-### — exact audit title | concrete code/config change or `No code change` | scenario IDs and test mode | Working / Not working / Not proven / Not configured | direct evidence or exact blocker |
 ```
 
 Use `Working`, `Not working`, `Not proven`, `Not configured`, or `Deferred` for

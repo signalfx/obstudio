@@ -77,14 +77,11 @@ main.go [SOURCE-COVERED] -> chi router [GAP: HTTP request telemetry] -> POST /ta
 | recommended | Task telemetry ownership | The service does not define whether task creation should emit the task.created metric or the task.create span. | Implementing both alternatives would duplicate the same task-creation outcome in two app-owned signals. | Choose either the task.created metric or the task.create span as the app-owned task-creation signal. | manual decision | business.task-created<br>business.task-create-span |
 | recommended | Task creation trace | Successful task creation has no app-owned task.create span. | When the span alternative is chosen, operators cannot isolate persistence latency in the trace waterfall. | Add one task.create span around successful task persistence. | fix all | business.task-create-span |
 
-### OTel Closure Details
+### Decision and external handoff
 
-| Area | OTel concerns | Configuration scopes | Decision / external handoff |
-|---|---|---|---|
-| HTTP request telemetry | signal-emission<br>semantic-attributes | N/A | Executable in service |
-| Task creation KPI | signal-emission | N/A | Executable in service |
-| Task telemetry ownership | signal-emission | N/A | Decision owner: task service telemetry owner; question: Which app-owned OTel signal should represent task creation: task.created or task.create?; options: metric-counter = Task metric (Emit task.created once after successful persistence.; unlocks OTEL-002); trace-span = Task span (Emit task.create around successful persistence.; unlocks OTEL-004) |
-| Task creation trace | signal-emission | N/A | Executable in service |
+| Area | Decision / external handoff |
+|---|---|
+| Task telemetry ownership | Decision owner: task service telemetry owner; question: Which app-owned OTel signal should represent task creation: task.created or task.create?; options: metric-counter = Task metric (Emit task.created once after successful persistence.; unlocks OTEL-002); trace-span = Task span (Emit task.create around successful persistence.; unlocks OTEL-004) |
 
 ## Verification Plan
 
