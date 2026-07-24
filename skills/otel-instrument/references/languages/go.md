@@ -12,13 +12,13 @@ matching the frameworks and clients detected in the codebase.
 
 | Dependency               | Auto-instrumentation Package                                                              | Signals         | What It Covers                                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
-| `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans, `http.server.request.duration`, `http.server.active_requests` |
+| `net/http` (stdlib)      | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp`                           | spans + metrics | HTTP server/client spans and version-dependent duration/body-size metrics                |
 | `gorilla/mux`            | `go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux`              | spans only      | Route-aware HTTP spans                                                                  |
-| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`               | spans only      | Route-aware HTTP spans                                                                  |
+| `go-chi/chi`             | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` + version-aware current-span/labeler annotation | spans + metrics | HTTP server spans/metrics with explicit low-cardinality chi route patterns              |
 | `gin-gonic/gin`          | `go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin`            | spans only      | Route-aware HTTP spans                                                                  |
 | `google.golang.org/grpc` | `go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc`             | spans + metrics | gRPC client/server spans and metrics                                                    |
 | `database/sql`           | `github.com/XSAM/otelsql`                                                                 | spans only      | SQL query spans with `db.statement`                                                     |
-| `go-redis/redis`         | `github.com/redis/go-redis/extra/redisotel`                                               | spans only      | Redis command spans                                                                     |
+| `github.com/redis/go-redis/v9` | `github.com/redis/go-redis/extra/redisotel/v9`                                    | spans + metrics | Redis command spans and client metrics                                                  |
 | `runtime`                | `go.opentelemetry.io/contrib/instrumentation/runtime`                                     | metrics only    | Goroutine count, memory, GC metrics                                                     |
 | `host`                   | `go.opentelemetry.io/contrib/instrumentation/host`                                        | metrics only    | CPU, memory, network host metrics                                                       |
 | `segmentio/kafka-go`     | `go.opentelemetry.io/contrib/instrumentation/github.com/segmentio/kafka-go/otelsegmentio` | spans only      | Kafka producer/consumer spans                                                           |
@@ -34,14 +34,21 @@ instead.
 
 ## Framework Selection Guide
 
-Framework-specific middleware packages (otelchi, otelgin, otelmux) only emit
-**spans** -- they do not register HTTP server metric instruments. To get full
-request count, error status, and request-duration coverage, wrap the outermost
-handler with
-`otelhttp.NewHandler`, which emits both spans and metrics.
+Framework-specific middleware packages such as `otelgin` and `otelmux` only
+emit **spans** -- they do not register HTTP server metric instruments.
+`otelhttp.NewHandler` adds HTTP spans and metrics. Do not stack two
+span-producing server middleware layers merely to get both behaviors: that
+emits duplicate server spans.
+The exact metric set and names are version- and semantic-convention-mode-dependent.
+Inspect the selected module source or runtime output before declaring names;
+never infer `http.server.active_requests`
+from the wrapper alone.
 
-**Default rule:** always use `otelhttp.NewHandler` as the outermost wrapper.
-Add framework middleware inside only when you need route-pattern span names.
+**Default rule:** use `otelhttp.NewHandler` as the sole outer server-span
+producer. Add a non-span-producing route annotator inside it when route
+patterns are needed. If you instead choose framework middleware for its span
+naming, do not also wrap it with another span-producing handler; record that
+the `otelhttp` server metrics are absent unless separately instrumented.
 
 ### chi
 
@@ -52,13 +59,48 @@ handler := otelhttp.NewHandler(r, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-If you also need chi route patterns in span names, add `otelchi` as inner
-middleware:
+There is no official OpenTelemetry Go contrib `otelchi` module. Do not probe
+for or add the nonexistent
+`go.opentelemetry.io/contrib/instrumentation/github.com/go-chi/chi/otelchi`
+package. Inspect the selected `otelhttp` module source once before writing the
+route wrapper. Use `otelhttp.WithRouteTag` only when that exact source exports
+it; the API is absent in v0.65.0 and later. Do not discover the mismatch by
+repeated compile-and-repair probes.
+
+For v0.65.0 and later, annotate the current outer server span and its existing
+metric labeler without starting a span:
 
 ```go
-r.Use(otelchi.Middleware("server"))
+func withRoute(pattern string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		route := attribute.String("http.route", pattern)
+		trace.SpanFromContext(r.Context()).SetAttributes(route)
+		if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+			labeler.Add(route)
+		}
+		next(w, r)
+	}
+}
+
+r.Get("/tasks/{id}", withRoute("/tasks/{id}", getTask))
 handler := otelhttp.NewHandler(r, "server")
 ```
+
+When the selected pre-v0.65.0 source does export `WithRouteTag`, it may replace
+the helper above, but adapt its returned `http.Handler` to chi's
+`http.HandlerFunc` registration:
+
+```go
+r.Get("/tasks/{id}", otelhttp.WithRouteTag(
+	"/tasks/{id}",
+	http.HandlerFunc(getTask),
+).ServeHTTP)
+```
+
+It sets `http.route` on the current span and the `otelhttp` metric labeler; it
+does not rename the outer span. If route-pattern span names are an explicit
+requirement, rename that current span after route matching and prove the name
+in a recorder test; do not start a second server span.
 
 ### gin
 
@@ -69,12 +111,11 @@ handler := otelhttp.NewHandler(ginEngine, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-Combined with route-aware span names:
-
-```go
-ginEngine.Use(otelgin.Middleware("server"))
-handler := otelhttp.NewHandler(ginEngine, "server")
-```
+For route attributes or names plus `otelhttp` metrics, add a gin middleware
+that reads the matched full path after `Next`, updates the current outer span,
+and adds the same `http.route` value to the `otelhttp` labeler without starting
+another span. Alternatively use `otelgin.Middleware` alone for route-aware
+spans and record the missing `otelhttp` server metrics.
 
 ### gorilla/mux
 
@@ -85,12 +126,11 @@ handler := otelhttp.NewHandler(router, "server")
 http.ListenAndServe(":8080", handler)
 ```
 
-Combined with route-aware span names:
-
-```go
-router.Use(otelmux.Middleware("server"))
-handler := otelhttp.NewHandler(router, "server")
-```
+For route attributes or names plus `otelhttp` metrics, add non-span-producing
+middleware that reads `mux.CurrentRoute(r).GetPathTemplate()`, updates the
+current outer span, and adds the same `http.route` value to the `otelhttp`
+labeler. Alternatively use `otelmux.Middleware` alone for route-aware spans and
+record the missing `otelhttp` server metrics.
 
 ### Adding a new framework
 
@@ -102,8 +142,11 @@ Follow this template:
 Preferred (spans + metrics):
   handler := otelhttp.NewHandler({router}, "server")
 
-Combined with route-aware span names:
+Route-aware spans without otelhttp metrics:
   {router}.Use({framework-package}.Middleware("server"))
+
+Spans + metrics with route data:
+  add non-span-producing middleware that annotates the outer otelhttp span and labeler
   handler := otelhttp.NewHandler({router}, "server")
 ```
 
@@ -359,6 +402,9 @@ exact compact blocker.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
 Call it early in `main()`.
+Honor the project's `go` directive when choosing standard-library APIs. This
+template deliberately avoids `errors.Join` so it remains usable before Go 1.20;
+do not replace the compatibility helper unless the project directive permits it.
 
 **File**: `otel.go`
 
@@ -367,11 +413,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -384,13 +430,19 @@ import (
 
 func initOTel(ctx context.Context) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			attribute.String("service.name",
-				envOr("OTEL_SERVICE_NAME", "my-service")),
-		),
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
 	)
 	if err != nil {
 		return nil, err
+	}
+	if _, present := res.Set().Value(attribute.Key("service.name")); !present {
+		res, err = resource.Merge(res, resource.NewSchemaless(
+			attribute.String("service.name", "my-service"),
+		))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	traceExporter, err := otlptracehttp.New(ctx)
@@ -402,15 +454,9 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
 	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
-
 	metricExporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {
-		return nil, err
+		return nil, combineErrors(err, tp.Shutdown(ctx))
 	}
 
 	mp := sdkmetric.NewMeterProvider(
@@ -421,26 +467,29 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		)),
 		sdkmetric.WithResource(res),
 	)
+	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-
-	if err := runtime.Start(); err != nil {
-		return nil, err
-	}
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	shutdown := func(ctx context.Context) error {
-		if err := tp.Shutdown(ctx); err != nil {
-			return err
-		}
-		return mp.Shutdown(ctx)
+		return combineErrors(tp.Shutdown(ctx), mp.Shutdown(ctx))
 	}
 	return shutdown, nil
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// combineErrors preserves the primary error and the secondary cleanup failure
+// without requiring errors.Join, which was added in Go 1.20.
+func combineErrors(primary, secondary error) error {
+	if primary == nil {
+		return secondary
 	}
-	return fallback
+	if secondary == nil {
+		return primary
+	}
+	return fmt.Errorf("%w; additional error: %v", primary, secondary)
 }
 
 func metricExportInterval() time.Duration {
@@ -474,15 +523,28 @@ the collector before the process stops.
 ```go
 func main() {
 	ctx := context.Background()
-	shutdown, err := initOTel(ctx)
-	if err != nil {
-		log.Fatalf("failed to initialize telemetry: %v", err)
+	shutdown := func(context.Context) error { return nil }
+	if otelShutdown, err := initOTel(ctx); err != nil {
+		log.Printf("telemetry disabled: %v", err)
+	} else {
+		shutdown = otelShutdown
 	}
-	defer shutdown(ctx)
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			log.Printf("telemetry shutdown: %v", err)
+		}
+	}()
 
 	// ... start HTTP server, gRPC server, etc.
 }
 ```
+
+Preserve the application's existing startup policy. The fail-open example
+keeps a previously runnable service available when telemetry initialization
+fails. Use fail-closed telemetry startup only when repository evidence or the
+user explicitly makes telemetry readiness-critical. Add runtime/host metrics
+only when requested or audit-required; the minimal HTTP setup intentionally
+does not add `go.opentelemetry.io/contrib/instrumentation/runtime`.
 
 ### Wrapping HTTP handlers
 
@@ -498,9 +560,14 @@ handler := otelhttp.NewHandler(mux, "server",
 http.ListenAndServe(":8080", handler)
 ```
 
-For router-specific middleware (`otelmux`, `otelchi`, `otelgin`), see the
-Framework Selection Guide above. These packages emit spans only -- always
-use `otelhttp.NewHandler` as the outermost wrapper for HTTP server metrics.
+For router-specific integration, see the Framework Selection Guide above. For
+chi, use `otelhttp.WithRouteTag` only when the selected module source exports
+it. With v0.65.0 and later, annotate the current span through
+`trace.SpanFromContext` and the current request metrics through
+`otelhttp.LabelerFromContext` without starting another span. `otelmux` and
+`otelgin` emit spans; do not stack either under another span-producing wrapper.
+Use a non-span-producing route annotator with the outer `otelhttp.NewHandler`
+when both one server span and HTTP server metrics are required.
 
 ### HTTP Client Instrumentation
 
@@ -577,9 +644,9 @@ go func(ctx context.Context) {
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `otelhttp.NewHandler` already wraps, check whether it
-belongs as an attribute on `http.server.request.duration` instead — see
-`../../SKILL.md` `#### Implementation Rules` and the `Go:` entry under
-`#### Language-Specific Musts` for the `otelhttp.LabelerFromContext` pattern.
+belongs as an attribute on `http.server.request.duration` instead. Follow the
+parent skill's `Implementation Rules` for the general decision and this
+reference's framework-selection patterns for `otelhttp.LabelerFromContext`.
 Only define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge, a background job outcome).
 
@@ -651,7 +718,11 @@ span.SetStatus(codes.Error, "payment gateway timeout")
 span.RecordError(err)
 ```
 
-The `otelhttp` handler auto-sets ERROR on 5xx responses.
+Use that pattern for actual application/transport errors and custom-span
+failures. For an `otelhttp` SERVER span, preserve HTTP semantic conventions:
+the handler auto-sets ERROR for 5xx responses, while an ordinary handled 4xx
+response leaves span status unset. Do not add `RecordError`/`SetStatus` merely
+because a handler intentionally returned 400, 404, or 409.
 
 ---
 
