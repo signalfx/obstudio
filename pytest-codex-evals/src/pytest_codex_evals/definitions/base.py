@@ -3,16 +3,48 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 EvalRole = Literal["sanity", "rubric", "runtime"]
 CheckCategory = Literal["sanity", "runtime"]
 
 
+def validate_eval_input_paths(values: list[str] | None) -> list[str] | None:
+    """Require fixture-root-relative file paths below eval/inputs."""
+
+    if values is None:
+        return None
+    seen: set[str] = set()
+    for value in values:
+        candidate = Path(value)
+        if (
+            not value
+            or "\\" in value
+            or candidate.is_absolute()
+            or candidate.parts[:2] != ("eval", "inputs")
+            or len(candidate.parts) < 3
+            or any(part in {"", ".", ".."} for part in candidate.parts)
+            or candidate.as_posix() != value
+        ):
+            raise ValueError(
+                "eval_inputs entries must be safe relative file paths under "
+                "eval/inputs"
+            )
+        if value in seen:
+            raise ValueError("eval_inputs entries must be unique")
+        seen.add(value)
+    return values
+
+
 class PromptVariant(BaseModel):
     id: str
     task: str
+    eval_inputs: list[str] | None = None
+
+    _validate_eval_inputs = field_validator("eval_inputs")(
+        validate_eval_input_paths
+    )
 
 
 class BaseEvalDefinition(BaseModel):
@@ -49,8 +81,13 @@ class BaseEvalCase(BaseModel):
     language: str
     service: str
     task: str
+    eval_inputs: list[str] | None = None
     definition_path: Path | None = None
     fixture_dir: Path | None = None
+
+    _validate_eval_inputs = field_validator("eval_inputs")(
+        validate_eval_input_paths
+    )
 
     @property
     def kind(self) -> EvalRole:

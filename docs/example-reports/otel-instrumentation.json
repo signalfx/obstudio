@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "otel-instrumentation",
+  "audit_id": "go-chi-basic-fixture",
+  "audit_sha256": "sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024",
+  "selection_sha256": "sha256:5737597b3cf843480053caf7443e1bcb47b38c20d75cf12bbd99cf7da436d690",
+  "meta": {
+    "service_name": "go-chi-basic",
+    "date": "2026-07-21",
+    "result": "Pass"
+  },
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "status": "working",
+      "changes": [
+        "Validated a bound proof packet for the selected route-aware GET /health server span requirement; this fixture does not claim an application source edit."
+      ],
+      "telemetry_changes": [],
+      "tests": [
+        "validate bound canonical verification fixture"
+      ],
+      "evidence": [
+        "eval/inputs/canonical-verify-evidence.txt"
+      ],
+      "follow_up_actions": [
+        "Use this fixture only to validate bound audit, selection, instrumentation, and verification report rendering."
+      ],
+      "resolved_commit": "fixture"
+    }
+  ],
+  "next_steps": []
+}

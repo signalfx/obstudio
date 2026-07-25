@@ -2,8 +2,8 @@
 name: splunk-dashboard
 description: >-
   Generate Splunk Observability Cloud dashboard Terraform from an existing
-  otel-audit report. Reads .observe/otel.md, groups metrics into dashboard
-  panels, and outputs ready-to-apply HCL (signalfx_dashboard_group +
+  otel-audit report. Reads .observe/otel-audit.json, groups metrics into
+  dashboard panels, and outputs ready-to-apply HCL (signalfx_dashboard_group +
   signalfx_dashboard + per-panel signalfx_*_chart resources) plus a sidecar
   preview model for the local Observer. Use when the user types
   $splunk-dashboard, asks to "generate a dashboard", "build a dashboard from
@@ -18,8 +18,8 @@ metadata:
 
 ## Overview
 
-Read an existing `.observe/otel.md` audit report, group detected metrics into
-dashboard panels (RED-style layout), and generate Terraform for Splunk
+Read an existing `.observe/otel-audit.json` audit report, group detected metrics
+into dashboard panels (RED-style layout), and generate Terraform for Splunk
 Observability Cloud `signalfx_dashboard_group`, `signalfx_dashboard`, and
 per-panel `signalfx_*_chart` resources with inline SignalFlow `program_text`.
 Also emit a sidecar `.observe/dashboards.preview.json` that the local Observer's
@@ -32,7 +32,7 @@ each chart is a separate resource placed on a 12-column grid.
 
 ## When to Use
 
-- After running `$otel-audit` to generate `.observe/otel.md`
+- After running `$otel-audit` to generate `.observe/otel-audit.json`
 - When the user wants a dashboard / charts / a visual overview for their service
 - When the user wants to preview a dashboard layout locally before pushing it to
   Splunk (the Observer Dashboards tab reads the preview sidecar this skill writes)
@@ -45,29 +45,32 @@ To push the generated dashboards to a live org, use `$splunk-dashboard-publish`.
 
 ### Step 1 -- Locate Audit Report
 
-Look for `.observe/otel.md` in the repository root.
+Look for `.observe/otel-audit.json` in the repository root.
 
 - If the file exists, proceed to Step 2.
 - If the file is missing, stop and respond:
 
-> No audit report found at `.observe/otel.md`. Please run `$otel-audit` first
+> No audit report found at `.observe/otel-audit.json`. Please run `$otel-audit` first
 > to generate the observability coverage report.
 
 ### Step 2 -- Parse Service Metadata, Metrics, and GenAI Coverage
 
-Extract from `.observe/otel.md`, using the same parsing rules `$splunk-configure`
-documents:
+Extract from `.observe/otel-audit.json`, using the same parsing rules
+`$splunk-configure` documents:
 
-1. **Service metadata** from the report header: service name (from the
-   `# Observability Report: {service-name}` heading), language, framework.
-2. **Metrics table** from the `### Metrics` section: each row gives metric name,
-   source, and type (auto/custom). Record all metrics for grouping in Step 3.
-3. **GenAI Readiness** from the `## GenAI Readiness` section when present. GenAI
-   metrics that exist become their own dashboard group; missing GenAI areas
-   become preview/instrumentation prerequisites, not invented panels.
+1. **Service metadata** from the JSON metadata and service fields: service
+   name, language, framework.
+2. **Existing metrics** from `current_instrumentation.metrics`. Each metric
+   provides its name, source/evidence, and auto/custom ownership when known.
+   Record only source-backed existing metrics for grouping in Step 3. Findings
+   and `expected_telemetry` describe desired instrumentation and become
+   prerequisites, not dashboard panels.
+3. **GenAI readiness** from the JSON readiness/finding fields when present.
+   GenAI metrics that exist become their own dashboard group; missing GenAI
+   areas become preview/instrumentation prerequisites, not invented panels.
 
-If the Metrics section says "No metrics detected." and there are no GenAI
-readiness sections, stop and respond:
+If `current_instrumentation.metrics` is empty and there are no explicitly
+proven downstream metrics, stop and respond:
 
 > The audit report contains no metrics. Dashboards require metric data.
 > Run `$otel-instrument` to add instrumentation, then re-run `$otel-audit`.
@@ -210,7 +213,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 # Dashboards Report: <service-name>
 
 **Language:** <lang> | **Framework:** <framework> | **Date:** <YYYY-MM-DD>
-**Source:** `.observe/otel.md` | **Output:** `.observe/terraform/`
+**Source:** `.observe/otel-audit.json` | **Output:** `.observe/terraform/`
 
 ## Summary
 
@@ -235,7 +238,7 @@ Create `.observe/dashboards.md` as a human-readable companion:
 
 ## GenAI Instrumentation Prerequisites
 
-<when GenAI Readiness exists and a required signal is missing>
+<when canonical genai_readiness, GenAI findings, or bound proof shows a required signal is missing>
 
 ## Next Steps
 

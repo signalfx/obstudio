@@ -276,6 +276,7 @@ def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path
         "language": definition.language,
         "service": definition.service,
         "task": prompt.task,
+        "eval_inputs": prompt.eval_inputs,
         "definition_path": path,
         "fixture_dir": eval_fixture_dir(path),
     }

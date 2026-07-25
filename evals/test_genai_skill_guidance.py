@@ -562,7 +562,8 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     instrument_normalized = " ".join(instrument.split())
     required_audit_terms = [
         "GenAI readiness contract",
-        "complete instrumentation contract",
+        "complete GenAI observability ledger",
+        "Only telemetry closure rows from that ledger become instrumentation findings",
         "surface`, `evidence`, `current_status`, `required_signals`",
         "the surface name as the human-facing identifier",
     ]
@@ -580,14 +581,30 @@ def test_genai_readiness_contract_does_not_require_opaque_ids():
     assert "| Surface | Audit Status | Missing Signal |" in configure
 
 
+def test_audit_keeps_genai_governance_and_cost_context_out_of_default_findings():
+    audit = " ".join(_read(SKILLS_DIR / "otel-audit" / "SKILL.md").split())
+    required_terms = [
+        "Telemetry closure rows may become findings",
+        "Governance/context rows stay in `## GenAI Readiness`",
+        "Content capture policy",
+        "safety/refusal policy",
+        "cost/billing ownership are not default service instrumentation findings",
+        "Evaluation telemetry can be a finding",
+        "Do not bundle that with safety or content-governance work",
+        "Cost telemetry can be a finding only when the repository owns an authoritative pricing source",
+    ]
+    assert not [term for term in required_terms if term not in audit]
+
+
 def test_audit_requires_single_deterministic_gap_section():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     normalized = " ".join(audit.split())
     required_terms = [
         "Deterministic gap section contract",
-        "exactly one top-level gap section, named `## Gaps`",
-        "Record GenAI detail in `## GenAI Readiness` table rows",
-        "point back to the human-readable readiness surface name",
+        "canonical audit has exactly one actionable gap source: `findings`",
+        "Record GenAI detail in canonical `genai_readiness` rows",
+        "promote only service-owned OTel telemetry closure rows into `findings`",
+        "keep the HTML decision view focused on those findings",
     ]
     assert not [term for term in required_terms if term not in normalized]
 
@@ -727,7 +744,7 @@ def test_instrument_requires_token_pressure_residuals_in_final_closure():
         "do not close prompt/tool schema size pressure",
         "remaining_signals",
         "For every GenAI instrumentation run, include a concise closure summary",
-        "For GenAI work without a source audit",
+        "If canonical audit JSON is absent",
         "Remaining signals: none",
         "Final summaries, PR descriptions, and audit updates must not omit",
         "LLM-call fanout",
@@ -802,44 +819,43 @@ def test_instrument_requires_mcp_safe_dimensions_send_failure_and_tests():
     assert not missing
 
 
-def test_audit_places_genai_readiness_before_gaps_when_owned():
+def test_audit_keeps_readiness_ledgers_out_of_human_html():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
-    assert "## Current Instrumentation" in report_template
-    assert "## GenAI Readiness" in report_template
-    assert "## Gaps" in report_template
-    current_index = report_template.index("## Current Instrumentation")
-    genai_index = report_template.index("## GenAI Readiness")
-    gaps_index = report_template.index("## Gaps")
-    assert current_index < genai_index < gaps_index
+    audit_normalized = " ".join(audit.split())
+    flow = _read(SKILLS_DIR / "references" / "report-flow-contract.md")
+    combined = " ".join((audit + "\n" + flow).split())
+    assert "preserve authored readiness rows in canonical JSON" in audit_normalized
+    assert "Human HTML must not render full Incident or GenAI readiness ledgers" in audit_normalized
+    assert "Do not render authored readiness tables as visible peer sections in audit HTML" in audit_normalized
+    assert "The human HTML decision view renders actionable findings only" in combined
+    assert "readiness ledgers reserved for downstream tooling" in combined
+    assert "Human HTML must visibly render authored GenAI readiness" not in combined
 
 
 def test_audit_requires_reader_first_current_state_baseline():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     audit_normalized = " ".join(audit.split())
-    assert "Use this template for `.observe/otel.md`:" in audit
-    report_template = audit.split("Use this template for `.observe/otel.md`:")[1]
-    assert "Report requirements:" in report_template
-    report_template = report_template.split("Report requirements:")[0]
+    flow = _read(SKILLS_DIR / "references" / "report-flow-contract.md")
+    combined = " ".join((audit + "\n" + flow).split())
+    reader_order = flow.split("Use this reader order", 1)[1].split(
+        "Do not put command inventories", 1
+    )[0]
 
-    evidence_index = report_template.index("## Audit Evidence")
-    current_index = report_template.index("## Current Instrumentation")
-    gaps_index = report_template.index("## Gaps")
-    verification_index = report_template.index("## Verification Plan")
+    evidence_index = reader_order.index("Audit Evidence")
+    current_index = reader_order.index("Current Instrumentation")
+    gaps_index = reader_order.index("Gaps")
+    verification_index = reader_order.index("Verification Plan")
     assert evidence_index < current_index < gaps_index < verification_index
 
     required_terms = [
-        "**GenAI ownership detected:** Yes | No",
-        "| GenAI ownership |",
-        "Always emit `**GenAI ownership detected:** Yes` or `No`",
-        "Use only the top-level sections shown in the report template",
-        "validator rejects additional top-level sections",
-        "python3 scripts/validate_audit_report.py .observe/otel.md",
+        "meta.genai_ownership_detected",
+        "GenAI ownership",
+        "Declare `**GenAI ownership detected:** Yes` or `No`",
+        "Use only the top-level sections in the reader order",
+        "finalize-audit",
+        "--html .observe/otel.html",
     ]
-    missing = [term for term in required_terms if term not in audit_normalized]
+    missing = [term for term in required_terms if term not in combined]
     assert not missing
 
 
@@ -847,9 +863,9 @@ def test_audit_read_only_scope_still_writes_the_report_artifact():
     audit = _read(SKILLS_DIR / "otel-audit" / "SKILL.md")
     required_terms = [
         "Read-only for application code",
-        "writes `.observe/otel.md`",
+        "writes `.observe/otel-audit.json` and `.observe/otel.html`",
         "does not modify service code",
-        "Write the report to `.observe/otel.md`",
+        "Write two audit artifacts",
     ]
     missing = [term for term in required_terms if term not in audit]
     assert not missing
@@ -873,11 +889,11 @@ def test_instrument_requires_signals_changed_and_gap_closure():
         "## Audit Gap Closure",
         "## GenAI Readiness Closure",
         "`Signals Changed` is the implementation-change inventory",
-        "| Signal type | Added | Modified | Removed | Evidence | Verification status |",
-        "Do not claim a removal unless the previous report or git diff proves",
-        "Use one row per prioritized audit gap",
-        "Derive the report-level `**Result:**` from both closure tables",
-        "python3 scripts/validate_gap_closure.py",
+        "| Signal type | Added | Modified | Removed | Product result / next product action | Evidence | Verification status |",
+        "Do not claim a removal unless the previous report or Git diff proves",
+        "Use one row per selected audit finding",
+        "Derive `**Result:**` from all applicable closure tables",
+        "render `.observe/otel-instrumentation.html` using",
     ]
     missing = [term for term in required_terms if term not in instrument]
     assert not missing
@@ -891,8 +907,8 @@ def test_instrument_requires_route_aware_http_proof_and_source_owned_closure():
         "route-aware server spans are required",
         "low-cardinality route pattern",
         "do not emit duplicate server spans",
-        "When no source audit exists, do not create `## GenAI Readiness Closure`",
-        "do not create a `GenAI Readiness Closure` table without source-audit rows",
+        "When no canonical source audit exists, do not create `## GenAI Readiness Closure`",
+        "do not collapse absent GenAI readiness into a generic implementation claim",
     ]
     missing = [term for term in required_terms if term not in instrument]
     assert not missing

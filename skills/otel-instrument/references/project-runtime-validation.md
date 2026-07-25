@@ -151,14 +151,15 @@ Maintain this top-level section in `.observe/otel-instrumentation.md`:
 
 ### Changed Signal Scenarios
 
-| Scenario ID | Trigger/path | Source entrypoint | Added/modified signals | Expected proof | Current evidence |
+| Scenario ID | Trigger/path | Source entrypoint | Changed signals | Expected proof | Current evidence |
 |---|---|---|---|---|---|
 ```
 
 Use stable scenario IDs and one row per telemetry-distinct outcome. Include
 success and failure rows when status, exception recording, metrics, events,
-logs, parentage, or runtime wiring differ. Map every added/modified signal in
-`Signals Changed` to at least one scenario.
+logs, parentage, or runtime wiring differ. Map every changed signal in
+`Signals Changed` to at least one scenario, including absence proof for removed
+signals.
 
 When a claim requires the real agent, preload, framework route resolver,
 automatic metric, duplicate suppression, startup wiring, or runtime-installed

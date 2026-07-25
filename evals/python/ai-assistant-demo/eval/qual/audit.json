@@ -3,15 +3,15 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "task": "Scan the AI assistant FastAPI service in ./service for OpenTelemetry and GenAI readiness gaps. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
     },
     {
       "id": "genai-readiness",
-      "task": "Produce an observability readiness review for the AI assistant service in ./service. Identify existing telemetry, GenAI pathway gaps, incident-detection impact, and the next instrumentation step. Do not modify application code; write the required audit artifact to ./service/.observe/otel.md."
+      "task": "Produce an observability readiness review for the AI assistant service in ./service. Identify existing telemetry, GenAI pathway gaps, incident-detection impact, and the next instrumentation step. Do not modify service code, dependencies, configuration, or tests. Only the required .observe audit artifacts may be written. Write and validate canonical ./service/.observe/otel-audit.json first, then render self-contained ./service/.observe/otel.html from that JSON."
     }
   ],
   "judge_inputs": [
-    "Inspect ./service for app.py, load_demo.py, pyproject.toml, and generated .observe output when present.",
+    "Inspect ./service for app.py, load_demo.py, pyproject.toml, canonical .observe/otel-audit.json, and generated HTML output when present.",
     "Read ./last_message.md for the agent final response.",
     "Read ./grade.json for run guard checks."
   ],
@@ -19,8 +19,8 @@
     "Identifies app.py, load_demo.py, pyproject.toml, and FastAPI routes for chat, streaming chat, stream inventory, feedback, and feedback export.",
     "Reports that the baseline service has no custom OpenTelemetry SDK setup, no GenAI semantic-convention spans or metrics, and no exporter/resource configuration beyond demo environment variables.",
     "Maps GenAI readiness gaps for provider/model calls, tool fanout, token/context pressure, streaming lifecycle, prompt/response outcome, and offline AI data export.",
-    "Writes .observe/otel.md with GenAI ownership detected as Yes, a matching Audit Evidence row, and a GenAI Readiness table before Gaps with one row per readiness surface and explicit required signals.",
+    "Writes schema-v2 .observe/otel-audit.json with GenAI ownership detected as Yes, a matching audit-evidence entry, and GenAI readiness data with one entry per readiness surface and explicit required signals; validates it before rendering HTML.",
     "Keeps privacy and cardinality safe by not recommending raw prompt, completion, session, user, request, or tool argument values as metric dimensions.",
-    "Uses only the reader-first baseline headings in this order: Current Instrumentation, GenAI Readiness, Gaps, and Verification Plan."
+    "Renders self-contained .observe/otel.html from the validated JSON without making the reader view authoritative."
   ]
 }

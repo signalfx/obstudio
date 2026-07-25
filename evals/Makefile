@@ -48,7 +48,7 @@ EVAL_LIST_FLAGS = $(EVAL_FLAGS)
 EVAL_REPORT_SKILL_FLAG = $(if $(SKILL),--skill "$(EVAL_SKILL_PATH)",)
 EVAL_REPORT_FLAGS = --repo-root "$(ROOT_DIR)" $(EVAL_REPORT_SKILL_FLAG)
 
-.PHONY: build test eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-all
+.PHONY: build test eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-interactive-guidance test-all
 
 build test:
 	@for dir in $(SUBDIRS); do \
@@ -118,6 +118,9 @@ skill-eval-ab-all: eval-ab ## Alias for eval-ab
 
 test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	@uv run pytest . --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
+
+test-interactive-guidance: ## Run interactive OTel workflow guidance tests
+	@uv run pytest test_json_report_workflow_guidance.py test_audit_progressive_disclosure.py test_genai_skill_guidance.py test_dashboard_skill_guidance.py --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 
 eval-all: eval-validation eval-sanity eval-rubric eval-runtime ## Run validation, sanity, rubric, and runtime evals
 

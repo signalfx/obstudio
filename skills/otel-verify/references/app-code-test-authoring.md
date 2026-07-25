@@ -12,8 +12,9 @@ verification.
 
 Each test must be traceable to the audit-derived inventories:
 
-- one or more `Added Telemetry Inventory` rows, naming the exact added span,
-  metric, log/event, or runtime/exporter signal it verifies
+- one or more `Changed Telemetry Inventory` rows, naming the exact added,
+  modified, or removed span, metric, log/event, or runtime/exporter signal it
+  verifies
 - one `Acceptance Scenario Inventory` row, naming the user/application path it
   executes
 - one `Application Code Path Verification` row, naming the source entrypoint,
@@ -99,11 +100,11 @@ For every test authored or reused, add a `Test Artifact Coverage` row:
 
 Then map the test to:
 
-- `Added Telemetry Inventory`
+- `Changed Telemetry Inventory`
 - `Application Code Path Verification`
 - `Path Coverage Matrix`
 - `Signal Inventory Coverage`
-- `Added Signal Verification Matrix`
+- `Changed Signal Verification Matrix`
 
 If a test asserts a span name but not parentage, status, required attributes,
 metric datapoints, or log redaction, mark the missing pieces as `Partial` or

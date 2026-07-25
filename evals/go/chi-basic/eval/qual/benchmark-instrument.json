@@ -1,0 +1,20 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "benchmark",
+      "eval_inputs": ["eval/inputs/otel-audit.json"],
+      "task": "Create ./service/.observe and copy ./service/eval/inputs/otel-audit.json to ./service/.observe/otel-audit.json. Use the bundled selection flow to write ./service/.observe/otel-selection.json with requested ID OTEL-001 and its exact dependency closure, then add OpenTelemetry auto-instrumentation for that scope while preserving current startup behavior, as if invoked with $otel-instrument --ids OTEL-001. Do not implement unselected OTEL-002 or add custom business signals. Write canonical ./service/.observe/otel-instrumentation.json, retain ./service/.observe/otel-instrumentation.md for compatibility, render the separate self-contained ./service/.observe/otel-instrumentation.html change report, leave ./service/.observe/otel.html audit-only, and run the narrowest project-native validation."
+    }
+  ],
+  "judge_inputs": [
+    "Inspect ./service, ./service/.observe/otel-instrumentation.json, ./service/.observe/otel-instrumentation.html, and ./service/.observe/otel-instrumentation.md.",
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "Honors approved finding ID OTEL-001 and leaves unselected OTEL-002 unchanged.",
+    "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json with selected finding status, changed signals, validation evidence, scenario mappings, and next steps; the separately bound .observe/otel-verify.json carries verification results and remaining proof work, and .observe/otel-instrumentation.md remains a compatibility artifact.",
+    "Renders separate self-contained .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage; keeps the complete technical mapping in canonical JSON and compatibility Markdown and leaves .observe/otel.html audit-only."
+  ]
+}

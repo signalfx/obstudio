@@ -260,11 +260,13 @@ detector-worthy category matches.
 
 Classify GenAI metrics before generic latency, error, throughput, or
 saturation categories, but require explicit GenAI context. A metric has GenAI
-context when the audit contains a `## GenAI Readiness` section for the owning
-workflow, or when the metric/dimensions contain explicit terms such as
-`gen_ai`, `llm`, `inference`, `embedding`, `model_provider`,
-`model.deployment`, `agent`, `function_call`, `execute_tool`, `retrieval`,
-`rag`, `hallucination`, `toxicity`, `factuality`, or provider names. Do not classify generic `model`, `workflow`, `tool`, `config`, `canary`, `token`,
+context when the canonical audit contains `genai_readiness[]` rows, GenAI
+findings, or source evidence for the owning workflow, or when the
+metric/dimensions contain explicit terms such as `gen_ai`, `llm`, `inference`,
+`embedding`, `model_provider`, `model.deployment`, `agent`, `function_call`,
+`execute_tool`, `retrieval`, `rag`, `hallucination`, `toxicity`,
+`factuality`, or provider names. Do not classify generic `model`, `workflow`,
+`tool`, `config`, `canary`, `token`,
 `session`, `chat`, `memory`, `context`, `evaluation`, `evaluator`, `quality`,
 `cost`, or `billing` metrics as GenAI by name alone; many non-GenAI services
 use those words. Those generic words require audit evidence that the owning
@@ -459,7 +461,7 @@ Apply Route-Level De-duplication first. The flowchart below then classifies
 each remaining (non-merged) metric.
 
 ```
-metric name starts with "gen_ai." or audit has GenAI Readiness plus explicit genai/llm/inference/embedding/model-provider/agent/tool-call/retrieval/memory/evaluation keyword?
+metric name starts with "gen_ai." or canonical audit genai_readiness/findings/evidence plus explicit genai/llm/inference/embedding/model-provider/agent/tool-call/retrieval/memory/evaluation keyword?
   -> YES -> genai-* detector using GenAI rules above
   -> NO
 

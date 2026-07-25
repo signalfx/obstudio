@@ -2,8 +2,8 @@
 name: splunk-configure
 description: >-
   Generate Splunk Observability Cloud detector and dashboard Terraform from
-  existing observability reports. Reads .observe/otel.md plus instrumentation
-  and verification reports when available, classifies proven or explicitly
+  existing observability reports. Reads .observe/otel-audit.json plus
+  instrumentation and verification reports when available, classifies proven or explicitly
   accepted metrics and readiness gaps, outputs HCL with SignalFlow program_text,
   and writes local configure verification. Use when the user types
   $splunk-configure, asks to generate detectors or dashboards, audit alert
@@ -41,13 +41,14 @@ to emit alert lifecycle metrics unless the app owns those events; audit the
 detector, dashboard, data quality, and alert coverage behavior in
 `alert-coverage-audit` output.
 
-When the audit report contains `## GenAI Readiness`, classify available GenAI
-metrics first and report missing or unverified GenAI signals as
-instrumentation prerequisites instead of inventing detectors from absent data.
+When the audit report contains `genai_readiness[]`, GenAI findings, or source
+evidence that maps signals to an LLM/GenAI workflow, classify available GenAI
+metrics first and report missing or unverified GenAI signals as instrumentation
+prerequisites instead of inventing detectors from absent data.
 
 ## When to Use
 
-- After running `$otel-audit` to generate `.observe/otel.md`
+- After running `$otel-audit` to generate `.observe/otel-audit.json`
 - After `$otel-instrument` and `$otel-verify` when the user wants detectors for
   newly implemented signals
 - When the user wants alerting/detection Terraform for their service
@@ -84,17 +85,17 @@ implemented as report sections or Terraform output, not as separate skills.
 
 If existing Splunk detectors or dashboards are not available in the repository
 or through an approved API/source, do not claim they were audited. Generate the
-desired-state coverage matrix and clearly label it as based on `.observe/otel.md`
-and local Terraform/config evidence only.
+desired-state coverage matrix and clearly label it as based on
+`.observe/otel-audit.json` and local Terraform/config evidence only.
 
 ### Step 1 -- Locate Source Reports
 
-Look for `.observe/otel.md` in the repository root.
+Look for `.observe/otel-audit.json` in the repository root.
 
 - If the file exists, proceed to Step 2.
 - If the file is missing, stop and respond:
 
-> No audit report found at `.observe/otel.md`. Please run `$otel-audit` first
+> No audit report found at `.observe/otel-audit.json`. Please run `$otel-audit` first
 > to generate the observability coverage report.
 
 Also look for optional downstream reports:
@@ -106,49 +107,35 @@ Also look for optional downstream reports:
 
 ### Step 2 -- Parse Metadata, Metrics, Verification, and Readiness Coverage
 
-Extract from `.observe/otel.md`:
+Extract from `.observe/otel-audit.json`:
 
-1. **Service metadata** from the report header:
-   - Service name (from the `# Observability Report: {service-name}` heading)
-   - Language (from the `**Language:**` field)
-   - Framework (from the `**Framework:**` field)
+1. **Service metadata** from `meta.service_name`, `meta.language`, and
+   `meta.framework`.
 
-2. **Metrics table** from the `### Metrics` section:
-   - Each row provides: metric name, source, and type (auto/custom)
-   - Record all metrics as detector candidates for Step 3
+2. **Existing metrics** from `current_instrumentation.metrics`.
+   - Each metric object provides the metric name, source, type, and attributes
+     when known.
+   - Record only source-backed existing metrics as detector candidates for Step
+     3.
 
-3. **Gaps** from the audit's prioritized `## Gaps` table:
-   - Treat each row as an instrumentation prerequisite candidate.
+3. **Findings** from `findings`.
+   - Treat each finding as an instrumentation prerequisite candidate unless it
+     is already resolved by source-backed or downstream-proven metrics.
    - Preserve its priority, required fix, owner or instrument mode, and
-     verification scenarios.
-   - Infer detection/localization impact from the gap, available metric
-     evidence, and readiness sections. Do not create detector placeholders for
-     absent data.
+     `verification_scenarios`.
+   - Use `expected_telemetry` only to describe missing desired signals; do not
+     generate detectors from desired telemetry that is not already present or
+     proven.
 
-4. **Incident Readiness** from the current audit contract:
-   - Parse `### Incident Readiness` inside `## Current Instrumentation`.
-   - Preserve each Area, Status, Evidence, Required Signals / Gap, and
-     Detection / Localization Impact cell.
-   - Join every partial or missing row to the prioritized `## Gaps` row with
-     the same `Area`; do not collapse covered rows or infer a different owner.
+4. **Incident readiness** from `current_instrumentation.incident_readiness`.
+   - Preserve each readiness area, status, evidence, required signal or gap,
+     and detection/localization impact.
+   - Join partial or missing rows to findings with the same area when possible.
    - Treat missing or partial rows as prerequisites unless matching metrics are
      source-backed and proven. Never imply complete coverage while required
      signals remain missing.
 
-5. **Legacy readiness handoffs** when present:
-   - From `## Gap Ledger`, parse `gap_id`, status, `required_signals`, owner,
-     `code_surface`, `acceptance_criteria`, and any `remaining_signals`.
-   - Use `## APM Readiness Coverage` only when `## Gaps` is absent; preserve
-     Area, Status, Evidence, Gap, and Detection/Localization Impact (or the
-     legacy MTTD Impact column).
-   - From a legacy top-level `## Incident Readiness`, preserve API/workflow
-     impact, dependencies, freshness/backpressure, auth/edge/capacity, and
-     release context.
-   - Treat missing or partial rows as prerequisites unless matching metrics are
-     source-backed and proven. Never imply complete coverage while required
-     signals remain missing.
-
-6. **Implemented signal changes** from `.observe/otel-instrumentation.md` when
+5. **Implemented signal changes** from `.observe/otel-instrumentation.md` when
    present:
    - `Signals Changed`
    - `Audit Gap Closure`
@@ -166,7 +153,8 @@ Extract from `.observe/otel.md`:
    Do not infer proof from an aggregate coverage count or from a similarly
    named metric.
 
-8. **GenAI Readiness** from the `## GenAI Readiness` section when present:
+8. **GenAI Readiness** from canonical `genai_readiness[]`, GenAI findings, and
+   source evidence when present:
    - Read every independently actionable surface row and its exact required
      signals, owner/source files, and acceptance criteria.
    - Keep provider/model, workflow/agent, tool/function, token/context,
@@ -177,11 +165,13 @@ Extract from `.observe/otel.md`:
    Missing or partial GenAI areas become instrumentation prerequisites unless
    matching metrics are source-backed and proven.
 
-9. **GenAI Readiness Closure** from the instrumentation report when present:
-   - Parse each `Surface`, `Required signals`, `Implemented / proven`, `Tests`,
-     `Remaining signals`, and `Result` cell.
-   - Treat any surface with remaining signals or a non-working result as an
-     instrumentation prerequisite unless matching metrics are proven.
+9. **GenAI Readiness Closure** from the bound instrumentation and verification
+   JSON overlays when present:
+   - Parse selected GenAI findings and their exact telemetry-change and
+     item-result rows.
+   - Treat any selected GenAI surface with remaining signals, non-working
+     status, or missing item proof as an instrumentation prerequisite unless
+     matching metrics are proven.
    - Generate detectors only for implemented or proven GenAI signals. Do not
      imply complete token/context, provider/model, tool, stream, retrieval, or
      model/config coverage while required signals remain missing.
@@ -234,8 +224,9 @@ detector inputs. Put unverified metrics in `Skipped Metrics` with the reason
 `unverified metric emission` and the next step `$otel-verify`.
 
 Assign each accepted metric to exactly one category. Apply GenAI-specific rules
-first when the audit has a `## GenAI Readiness` section or when metric names or
-dimensions explicitly indicate LLM/GenAI ownership: `gen_ai.*`, LLM, inference,
+first when canonical `genai_readiness[]`, GenAI findings, or source evidence
+maps the signal to an LLM/GenAI workflow, or when metric names or dimensions
+explicitly indicate LLM/GenAI ownership: `gen_ai.*`, LLM, inference,
 embedding, model provider/deployment, agent, tool/function calling, retrieval,
 prompt/completion/context token usage, fallback, or model/config readiness. Do
 not classify generic `model`, `workflow`, `tool`, `config`, `canary`, `token`,
@@ -297,7 +288,7 @@ into generic RED buckets.
 - **release-context** -- `service.version`, `deployment.environment.name`,
   `cloud.region`, `cloud.platform`, `container.image.name`,
   `container.image.tags`, artifact version, config/canary/rollout metadata, or
-  existing legacy/custom aliases used as dashboard filters and detector
+  source-backed custom aliases used as dashboard filters and detector
   dimensions, not as standalone alert metrics
 - **latency** -- duration histograms
 - **error** -- counters with failure/error/invalid keywords
@@ -307,21 +298,19 @@ into generic RED buckets.
 Skip metrics that match the exclusion rules (auto-instrumented library metrics
 that duplicate custom signals).
 
-For every `## Gap Ledger` row or `## Gaps` entry that is still missing a metric,
-add an entry to the generated report's "Instrumentation Prerequisites" section.
-Do not generate a detector for a missing or unverified signal. Recommend
-`$otel-instrument` with the specific coverage area when instrumentation is
-absent, `$otel-verify` when implementation exists without emission proof, or
-name the external owner when the signal belongs to platform/provider telemetry.
+For every `findings[]` entry that is still missing a metric, add an entry to the
+generated report's "Instrumentation Prerequisites" section. Do not generate a
+detector for a missing or unverified signal. Recommend `$otel-instrument` with
+the specific coverage area when instrumentation is absent, `$otel-verify` when
+implementation exists without emission proof, or name the external owner when
+the signal belongs to platform/provider telemetry.
 
 For partial closure, generate detectors only for implemented or proven signals.
-Do not imply complete coverage from a partially closed audit gap. If a ledger or
-instrumentation closure matrix includes `remaining_signals`, list those signals
-under `Instrumentation Prerequisites` and avoid detector names or dashboard
-headings that claim the whole readiness area is covered.
-
-For legacy APM readiness rows, add prerequisites for every area with status
-`missing` or `partial` when no `## Gaps` entry covers the same area.
+Do not imply complete coverage from a partially closed audit gap. If
+instrumentation or verification overlays include `remaining` or equivalent
+remaining signal fields, list those signals under `Instrumentation
+Prerequisites` and avoid detector names or dashboard headings that claim the
+whole readiness area is covered.
 
 For every incident-readiness area with status `missing` or `partial`, add a
 prerequisite unless equivalent metrics are source-backed and proven. Do not
@@ -329,13 +318,13 @@ generate detectors from desired impact, dependency, freshness, backpressure,
 auth/edge, capacity, or release/config rows unless accepted metric evidence
 contains the corresponding signal.
 
-For every `## GenAI Readiness` row or GenAI `## Gaps` entry that is still
-missing or has unverified metric, trace attribute, span event, or owner-mapped
-external signal evidence, add an entry to the generated report's
-"GenAI Instrumentation Prerequisites" section. Do not generate a detector for a
-missing or unverified signal. Recommend `$otel-instrument` with the specific
-human-readable GenAI surface when instrumentation is absent, and `$otel-verify`
-when instrumentation exists but emitted metric proof is missing.
+For every `genai_readiness[]` row or GenAI finding that is still missing or has
+unverified metric, trace attribute, span event, or owner-mapped external signal
+evidence, add an entry to the generated report's "GenAI Instrumentation
+Prerequisites" section. Do not generate a detector for a missing or unverified
+signal. Recommend `$otel-instrument` with the specific human-readable GenAI
+surface when instrumentation is absent, and `$otel-verify` when instrumentation
+exists but emitted metric proof is missing.
 
 ### Step 4 -- Generate Terraform
 
@@ -441,7 +430,7 @@ version, config version, and rollout/canary filters only when verification
 evidence or an explicitly accepted source proves those dimensions exist and
 are low-cardinality. Recognize existing `deployment.environment`,
 `deployment.region`, `deployment.platform`, and `container.image.tag`
-dimensions, but do not generate or require those legacy/custom aliases when a
+dimensions, but do not generate or require those custom aliases when a
 standard attribute is available. Always use the exact attribute name proven by
 the audit or metric metadata; do not create duplicate filters.
 Dashboard variables that apply globally across multiple charts must use
@@ -552,7 +541,7 @@ Use the following structure:
 
 **Result:** Pass | Partial | Fail | Blocked
 **Language:** <lang> | **Framework:** <framework> | **Date:** <YYYY-MM-DD>
-**Source audit:** `.observe/otel.md`
+**Source audit:** `.observe/otel-audit.json`
 **Source instrumentation:** `.observe/otel-instrumentation.md` | not found
 **Source verification:** `.observe/otel-verify.md` | not found
 **Output:** `.observe/terraform/`
@@ -661,9 +650,9 @@ report when readiness coverage is partial or missing.
 
 ## GenAI Instrumentation Prerequisites
 
-Include this section when `## GenAI Readiness` or
-`## GenAI Readiness Closure` exists and any required GenAI signal is missing or
-partial.
+Include this section when canonical `genai_readiness[]`, GenAI findings, or
+bound instrumentation/verification overlays show that any required GenAI signal
+is missing, partial, or not yet proven.
 
 | Surface | Audit Status | Missing Signal | Why No Detector Was Generated | Next Step |
 |---------|--------------|----------------|-------------------------------|-----------|
