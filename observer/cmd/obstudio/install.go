@@ -48,8 +48,9 @@ type mcpConfigTarget struct {
 }
 
 type agentTarget struct {
-	skillsDir func(string) string
-	mcpConfig mcpConfigTarget
+	skillsDir      func(string) string
+	mcpConfig      mcpConfigTarget
+	excludedSkills []string
 }
 
 type codexMCPServer struct {
@@ -95,6 +96,7 @@ var targets = map[string]agentTarget{
 			format: mcpConfigTOML,
 			path:   func() string { return filepath.Join(userHome(), ".codex", "config.toml") },
 		},
+		excludedSkills: []string{"obstudio-help"},
 	},
 	"kiro": {
 		skillsDir: func(home string) string { return filepath.Join(home, ".kiro", "skills", "obstudio") },
@@ -226,7 +228,7 @@ func runInstall(target, sharedURL string) error {
 		return fmt.Errorf("failed to read embedded skills: %w", err)
 	}
 
-	if err := extractFS(skillsFS, destDir); err != nil {
+	if err := extractFS(skillsFS, destDir, excludedSkillSet(t.excludedSkills)); err != nil {
 		return fmt.Errorf("failed to extract skills: %w", err)
 	}
 	fmt.Println("  Skills installed (includes references).")
@@ -843,10 +845,16 @@ func normalizeSharedURL(raw, source string) (string, error) {
 	return parsed.String(), nil
 }
 
-func extractFS(src fs.FS, destDir string) error {
+func extractFS(src fs.FS, destDir string, excluded map[string]struct{}) error {
 	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if shouldSkipSkillPath(path, d, excluded) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 
 		target := filepath.Join(destDir, path)
@@ -865,6 +873,33 @@ func extractFS(src fs.FS, destDir string) error {
 		}
 		return os.WriteFile(target, data, 0o644)
 	})
+}
+
+func excludedSkillSet(names []string) map[string]struct{} {
+	if len(names) == 0 {
+		return nil
+	}
+	excluded := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			excluded[trimmed] = struct{}{}
+		}
+	}
+	return excluded
+}
+
+func shouldSkipSkillPath(path string, d fs.DirEntry, excluded map[string]struct{}) bool {
+	if len(excluded) == 0 || path == "." {
+		return false
+	}
+	top := path
+	if idx := strings.IndexByte(path, '/'); idx >= 0 {
+		top = path[:idx]
+	}
+	if _, ok := excluded[top]; ok {
+		return true
+	}
+	return false
 }
 
 func copyFile(src, dst string) error {
