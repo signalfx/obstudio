@@ -3,7 +3,7 @@
 This repository contains:
 
 - `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `extension/` -- Code OSS extension for VS Code, Kiro, and Cursor that packages the Observer
+- `extension/` -- VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
 - `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing
 
@@ -12,7 +12,7 @@ This repository contains:
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.25+ | observer collector |
-| Node.js | 20+ | observer client dev/test and Code OSS editor extension |
+| Node.js | 20+ | observer client dev/test and VS Code-compatible editor extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |
@@ -27,7 +27,7 @@ make build    # compile the obstudio binary (skills embedded)
 make run      # build and start the collector
 ```
 
-### Editor Extension (Code OSS)
+### VS Code-Compatible Editor Extension
 
 ```sh
 cd extension
@@ -49,7 +49,7 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
-### Editor Extension (Code OSS)
+### VS Code-Compatible Editor Extension
 
 ```sh
 cd extension

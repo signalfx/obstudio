@@ -7,7 +7,7 @@ need the full development workflow.
 ## Project Map
 
 - `observer/` -- Go collector, OTLP receiver, REST API, MCP server, and React UI.
-- `extension/` -- Code OSS extension for VS Code, Kiro, and Cursor that packages the collector.
+- `extension/` -- VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor that packages the collector.
 - `skills/` -- canonical OpenTelemetry agent skill sources.
 - `.agents/skills/` -- repo-scoped Codex skill links for local use.
 - `skills/otel-instrument/references/` -- language and signal references loaded by otel-instrument.

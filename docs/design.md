@@ -29,7 +29,7 @@ real APM services in the org while the developer is still iterating locally.
                                   | +-------------+ |
                                   +-----------------+
 +-----------------+                        |         
-| Code OSS Editor |                        |
+|     Editor      |                        |
 |                 |                       OTLP       
 |                 |                        |         
 |                 |                        v         

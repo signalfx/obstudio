@@ -198,7 +198,7 @@ the bundled `weaver` runtime beside it or make `weaver` available on
 ```text
 obstudio/
 ├── observer/          # Go collector, REST API, MCP server, and embedded web UI
-├── extension/         # Code OSS editor extension for VS Code, Kiro, and Cursor
+├── extension/         # VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor
 ├── skills/            # Canonical agent skill sources
 │   ├── otel-audit/
 │   ├── otel-instrument/
@@ -224,7 +224,7 @@ obstudio/
 | Tool | Version | Purpose |
 |---|---|---|
 | Go | 1.25+ | Collector and CLI |
-| Node.js | 20+ | React client and Code OSS editor extension |
+| Node.js | 20+ | React client and VS Code-compatible editor extension |
 | npm | latest | JavaScript package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |
