@@ -3,7 +3,7 @@
 This repository contains:
 
 - `observer/` -- Go-based Observer built on the OTel Collector framework (REST API, MCP server, Web UI)
-- `extension/` -- Code OSS extension for VS Code and Kiro that packages the Observer
+- `extension/` -- VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor that packages the Observer
 - `skills/` -- AI agent skills (composable observability workflows)
 - `pytest-codex-evals/` -- reusable pytest plugin for Codex eval harnessing
 
@@ -12,7 +12,7 @@ This repository contains:
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Go | 1.25+ | observer collector |
-| Node.js | 20+ | observer client dev/test and VS Code/Kiro extension |
+| Node.js | 20+ | observer client dev/test and VS Code-compatible editor extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
 | Docker | latest | Optional runtime eval checks |
@@ -27,7 +27,7 @@ make build    # compile the obstudio binary (skills embedded)
 make run      # build and start the collector
 ```
 
-### Editor Extension (VS Code and Kiro)
+### VS Code-Compatible Editor Extension
 
 ```sh
 cd extension
@@ -49,7 +49,7 @@ make fmt            # go fmt
 make tidy           # go mod tidy
 ```
 
-### Editor Extension (VS Code and Kiro)
+### VS Code-Compatible Editor Extension
 
 ```sh
 cd extension
@@ -139,10 +139,10 @@ which cross-compiles for linux/darwin/windows, builds platform-specific VSIX
 packages, creates a GitHub Release, uploads both archive types, and publishes
 the VSIX packages to Open VSX.
 
-Kiro uses [Open VSX](https://open-vsx.org/) for extension discovery. The release
-workflow verifies the `OVSX_PAT` repository secret before it creates the GitHub
-Release. Open VSX publishing failures fail the workflow, and duplicate versions
-are skipped so a partial release can be retried safely.
+Kiro and Cursor use [Open VSX](https://open-vsx.org/) for extension discovery.
+The release workflow verifies the `OVSX_PAT` repository secret before it
+creates the GitHub Release. Open VSX publishing failures fail the workflow, and
+duplicate versions are skipped so a partial release can be retried safely.
 
 Visual Studio Marketplace publishing is manual. After the release workflow
 succeeds, download the four platform-specific VSIX files from the GitHub Release

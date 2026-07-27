@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues inside VS Code and Kiro.",
+  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues in Visual Studio Code, Kiro, and Cursor.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",

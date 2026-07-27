@@ -1,8 +1,17 @@
 # Splunk Observability Studio
 
-Splunk Observability Studio brings a local OpenTelemetry collector and Telemetry Explorer into VS Code and Kiro.
+Splunk Observability Studio brings a local OpenTelemetry collector and
+Telemetry Explorer into Visual Studio Code, Kiro, and Cursor.
 
 When the extension activates, it reuses or starts a bundled `obstudio` backend and exposes OTLP receivers on localhost. Open the embedded Observer UI with `Splunk Observability Studio: Open Observer` from the Command Palette. The `Observer` status bar item appears on activation and opens the Observer status menu for reopen, restart, and log actions.
+
+## Editor Compatibility
+
+| Editor | Status | Install from |
+|---|---|---|
+| Visual Studio Code | Supported | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
+| Kiro | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+| Cursor | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 
 ## Quick Start
 
@@ -144,12 +153,12 @@ If the managed endpoint or either OTLP port is already in use by an incompatible
 
 ## Requirements
 
-- VS Code `^1.82.0` or Kiro.
+- Visual Studio Code `^1.82.0`, Kiro, or Cursor.
 - Install the extension from the editor's Extensions view by searching for
   `Splunk Observability Studio`. VS Code installs it from Visual Studio
-  Marketplace; beginning with extension version `0.0.13`, Kiro installs it
-  from Open VSX. If registry installation is unavailable, download the
-  platform-specific `.vsix` from the
+  Marketplace; beginning with extension version `0.0.13`, Kiro and Cursor
+  install it from Open VSX. If registry installation is unavailable, download
+  the platform-specific `.vsix` from the
   [GitHub release](https://github.com/signalfx/obstudio/releases/latest) and
   run `Extensions: Install from VSIX...`.
 - No additional runtime setup is required for normal extension use.
