@@ -876,12 +876,18 @@ problem and rerun `finalize-audit`; never patch generated HTML.
 `finalize-audit` starts or reuses a detached report server bound only to
 `127.0.0.1` on an available port and returns the HTTP Markdown link in
 `links.review_report`. The server exposes only `otel.html`,
-`otel-audit.json`, and its private health check; it never serves the repository.
+`otel-instrumentation.html`, `otel-audit.json`, and its private health check; it
+never serves the repository.
 It requires an unguessable token in the URL path, rejects symlinked report
 files, disables caching and content sniffing, and stores versioned reuse state
-with user-only permissions where the platform supports them. Do not open the
-browser automatically. A loopback link works directly in desktop IDEs; remote
-workspaces may require their normal localhost port forwarding.
+with user-only permissions where the platform supports them. The launch token
+is transferred through that private state rather than process arguments,
+concurrent finalizers reuse one server, and the server exits after eight hours
+without a request. Under loopback HTTP, repository source citations are
+copyable path text rather than broken links; the server never exposes source
+files. Do not open the browser automatically. A loopback link works directly
+in desktop IDEs; remote workspaces may require their normal localhost port
+forwarding.
 
 The HTML is the human review and selection surface. Keep its empty fixed tray
 `hidden` and `inert`. After a reviewer selects work or records a decision

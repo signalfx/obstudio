@@ -103,7 +103,13 @@ verification.
 Version the reusable server state so a prior bundle without the required
 report allowlist cannot be reused. Do not open the links automatically. Keep
 Markdown and JSON artifacts as absolute local-file links; only generated HTML
-uses browser-safe loopback links.
+uses browser-safe loopback links. Keep the server allowlist limited to
+`otel.html`, `otel-instrumentation.html`, and `otel-audit.json`; do not expose
+instrumentation, verification, or repository source JSON/files. Transfer the
+unguessable token through user-private state rather than process arguments,
+serialize concurrent server launches, and expire an idle detached server.
+When HTTP cannot open repository-relative source citations safely, render them
+as copyable path text instead of dead browser links.
 
 ## Reader-First Report Order
 

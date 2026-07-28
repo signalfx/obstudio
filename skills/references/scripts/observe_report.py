@@ -29,7 +29,8 @@ CURRENT_SELECTION_SCHEMA_VERSION = 2
 SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, CURRENT_SELECTION_SCHEMA_VERSION}
 CURRENT_AUDIT_SCHEMA_VERSION = 2
 SUPPORTED_AUDIT_SCHEMA_VERSIONS = {1, CURRENT_AUDIT_SCHEMA_VERSION}
-REPORT_SERVER_SCHEMA_VERSION = 2
+REPORT_SERVER_SCHEMA_VERSION = 3
+REPORT_SERVER_IDLE_TIMEOUT_SECONDS = 8 * 60 * 60
 REPORT_SERVER_FILES = {
     "otel.html": "text/html; charset=utf-8",
     "otel-instrumentation.html": "text/html; charset=utf-8",
@@ -3989,7 +3990,11 @@ def render_instrumentation_html(
         if unselected_count
         else ""
     )
-    verify_link = '<a href="otel-verify.json">Verification JSON</a>' if verify else '<span>Verification not run</span>'
+    verify_status = (
+        '<span>Verification included</span>'
+        if verify
+        else '<span>Verification not run</span>'
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4072,6 +4077,7 @@ code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }}
 .muted {{ color:var(--muted); }}
 .source-link,.finding-jump {{ color:var(--accent); text-decoration:none; overflow-wrap:anywhere; }}
 .source-link:hover,.source-link:focus,.finding-jump:hover,.finding-jump:focus {{ text-decoration:underline; }}
+.source-reference {{ overflow-wrap:anywhere; cursor:text; user-select:all; }}
 .source-open {{ display:inline-block; font-size:10px; margin-left:3px; vertical-align:top; }}
 .finding-jump {{ font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace; margin-right:6px; }}
 .closure-row {{ scroll-margin-top:16px; }}
@@ -4097,8 +4103,7 @@ p {{ margin:0 0 12px; }}
   </div>
   <nav class="report-nav" aria-label="Report artifacts">
     <a href="otel.html">Audit and scope report</a>
-    <a href="otel-instrumentation.json">Instrumentation JSON</a>
-    {verify_link}
+    {verify_status}
   </nav>
 </div></header>
 <main class="wrap">
@@ -4315,6 +4320,7 @@ code, pre {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
 .source-link {{ color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }}
 .source-link:hover, .source-link:focus {{ text-decoration: underline; }}
 .source-link code {{ color: inherit; }}
+.source-reference {{ overflow-wrap: anywhere; cursor: text; user-select: all; }}
 .source-open {{ display: inline-block; margin-left: 3px; font-size: 10px; vertical-align: top; }}
 pre {{ background: #111827; color: #edf2f7; border-radius: 6px; padding: 10px; overflow-x: auto; white-space: pre-wrap; }}
 table {{ width: 100%; border-collapse: collapse; }}
@@ -4333,7 +4339,7 @@ th {{ color: var(--muted); font-size: 12px; }}
 .tray-hint {{ display: block; color: #d3d9e2; font-size: 11px; line-height: 1.4; margin-top: 3px; }}
 .tray-hint code {{ color: #91f0b8; }}
 .tray-command {{ min-width: 0; }}
-.instrument-command {{ display: block; margin-top: 4px; max-width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; user-select: all; }}
+.instrument-command {{ display: block; margin-top: 4px; width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
 .sr-only {{ position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }}
 @media (max-width: 760px) {{
   body {{ padding-bottom: 96px; }}
@@ -4383,7 +4389,7 @@ th {{ color: var(--muted); font-size: 12px; }}
   <div class="wrap tray-bar">
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
       <span class="tray-hint" id="instrumentCommandLabel">Copy this terminal command:</span>
-      <code class="instrument-command" id="instrumentCommand"></code>
+      <input class="instrument-command" id="instrumentCommand" type="text" readonly aria-labelledby="instrumentCommandLabel">
     </div>
   </div>
 </div>
@@ -4484,10 +4490,13 @@ refreshSelectionEligibility();
 function sourceHtml(value) {{
   const parts = DATA.source_references?.[String(value)];
   if (!parts) return `<code>${{esc(value)}}</code>`;
-  return parts.map(part => part.href
-    ? `<a class="source-link" href="${{esc(part.href)}}" target="_blank" rel="noopener" title="Open local source file"><code>${{esc(part.text)}}</code><span class="source-open" aria-hidden="true">↗</span></a>`
-    : esc(part.text)
-  ).join("");
+  return parts.map(part => {{
+    if (!part.href) return esc(part.text);
+    if (location.protocol === "http:" || location.protocol === "https:") {{
+      return `<span class="source-reference" title="Copy this repository-relative source path"><code>${{esc(part.text)}}</code></span>`;
+    }}
+    return `<a class="source-link" href="${{esc(part.href)}}" target="_blank" rel="noopener" title="Open local source file"><code>${{esc(part.text)}}</code><span class="source-open" aria-hidden="true">↗</span></a>`;
+  }}).join("");
 }}
 
 function lifecycleStatus(f) {{
@@ -4724,7 +4733,7 @@ function terminalInstrumentCommand() {{
 
 function renderInstrumentCommand() {{
   const node = document.getElementById("instrumentCommand");
-  if (node) node.textContent = terminalInstrumentCommand();
+  if (node) node.value = terminalInstrumentCommand();
 }}
 
 function renderTray() {{
@@ -5472,14 +5481,39 @@ def report_server_state_path(report_directory: Path) -> Path:
     return state_directory / f"{identity}.json"
 
 
+def read_report_server_state_file(state_path: Path) -> dict[str, Any] | None:
+    """Read private server state without treating an in-progress launch as live."""
+
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            state_path,
+            os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        status = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(status.st_mode)
+            or (os.name != "nt" and status.st_mode & 0o077)
+        ):
+            return None
+        with os.fdopen(descriptor, encoding="utf-8") as state_file:
+            descriptor = None
+            state = json.load(state_file)
+    except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    return state if isinstance(state, dict) else None
+
+
 def load_report_server_state(
     state_path: Path,
     report_directory: Path,
     expected_token: str | None = None,
 ) -> dict[str, Any] | None:
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
+    state = read_report_server_state_file(state_path)
+    if state is None:
         return None
     if (
         not isinstance(state, dict)
@@ -5516,15 +5550,43 @@ def load_report_server_state(
     return state if healthy else None
 
 
+def read_report_file(
+    directory_descriptor: int | None,
+    report_directory: Path,
+    filename: str,
+) -> bytes:
+    """Read one allowlisted regular file without following a final symlink."""
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        if directory_descriptor is not None:
+            descriptor = os.open(filename, flags, dir_fd=directory_descriptor)
+        else:
+            source = report_directory / filename
+            descriptor = os.open(source, flags)
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            raise OSError("report is not a regular file")
+        with os.fdopen(descriptor, "rb") as report_file:
+            descriptor = None
+            return report_file.read()
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def report_server_handler(
     report_directory: Path,
     token: str,
+    directory_descriptor: int | None,
 ) -> type[http.server.BaseHTTPRequestHandler]:
     class ReportHandler(http.server.BaseHTTPRequestHandler):
         def version_string(self) -> str:
             return "ObstudioReport"
 
         def do_GET(self) -> None:
+            self.server.last_report_access = time.monotonic()  # type: ignore[attr-defined]
             request_path = urlsplit(self.path).path
             parts = request_path.removeprefix("/").split("/")
             if len(parts) != 2 or not secrets.compare_digest(parts[0], token):
@@ -5537,14 +5599,17 @@ def report_server_handler(
             if filename not in REPORT_SERVER_FILES:
                 self.send_error(404)
                 return
-            source = report_directory / filename
-            if source.is_symlink() or not source.is_file():
+            try:
+                payload = read_report_file(
+                    directory_descriptor,
+                    report_directory,
+                    filename,
+                )
+            except FileNotFoundError:
                 self.send_error(404)
                 return
-            try:
-                payload = source.read_bytes()
             except OSError:
-                self.send_error(500)
+                self.send_error(404)
                 return
             self.send_payload(payload, REPORT_SERVER_FILES[filename])
 
@@ -5573,30 +5638,64 @@ def report_server_handler(
 def cmd_serve_report(args: argparse.Namespace) -> int:
     """Serve only generated human HTML and canonical audit JSON on loopback."""
 
+    if args.directory.is_symlink():
+        fail(f"report directory must not be a symlink: {args.directory}")
     report_directory = args.directory.resolve()
     if not report_directory.is_dir():
         fail(f"report directory is not a directory: {report_directory}")
-    handler = report_server_handler(report_directory, args.token)
-    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
-        server.daemon_threads = True
-        write_json(
-            args.state_file,
-            {
+    bootstrap = read_report_server_state_file(args.state_file)
+    if (
+        bootstrap is None
+        or bootstrap.get("schema_version") != REPORT_SERVER_SCHEMA_VERSION
+        or bootstrap.get("directory") != str(report_directory)
+        or not isinstance(bootstrap.get("token"), str)
+        or not bootstrap["token"]
+    ):
+        fail("report server launch state is missing or invalid")
+    token = bootstrap["token"]
+    directory_descriptor: int | None = None
+    if os.name != "nt":
+        directory_descriptor = os.open(
+            report_directory,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+    handler = report_server_handler(report_directory, token, directory_descriptor)
+    try:
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+            server.daemon_threads = True
+            server.timeout = 1
+            server.last_report_access = time.monotonic()  # type: ignore[attr-defined]
+            live_state = {
                 "schema_version": REPORT_SERVER_SCHEMA_VERSION,
                 "directory": str(report_directory),
                 "pid": os.getpid(),
                 "port": server.server_port,
-                "token": args.token,
-            },
-        )
-        try:
-            args.state_file.chmod(0o600)
-        except OSError:
-            pass
-        try:
-            server.serve_forever(poll_interval=0.5)
-        except KeyboardInterrupt:
-            pass
+                "token": token,
+            }
+            write_json(args.state_file, live_state)
+            try:
+                args.state_file.chmod(0o600)
+            except OSError:
+                pass
+            try:
+                while (
+                    time.monotonic() - server.last_report_access  # type: ignore[attr-defined]
+                    < REPORT_SERVER_IDLE_TIMEOUT_SECONDS
+                ):
+                    server.handle_request()
+            except KeyboardInterrupt:
+                pass
+    finally:
+        if directory_descriptor is not None:
+            os.close(directory_descriptor)
+        current_state = read_report_server_state_file(args.state_file)
+        if current_state is not None and current_state.get("token") == token:
+            try:
+                args.state_file.unlink()
+            except FileNotFoundError:
+                pass
     return 0
 
 
@@ -5620,6 +5719,8 @@ def start_or_reuse_report_server(
 ) -> dict[str, Any]:
     """Return a live loopback URL backed by a detached local report server."""
 
+    if report_directory.is_symlink():
+        fail(f"report directory must not be a symlink: {report_directory}")
     report_directory = report_directory.resolve()
     if report_filename not in REPORT_SERVER_FILES:
         fail(f"report server does not expose {report_filename}")
@@ -5633,7 +5734,65 @@ def start_or_reuse_report_server(
             "url": report_server_url(state, report_filename),
         }
 
+    lock_path = state_path.with_suffix(".lock")
+    lock_token = secrets.token_urlsafe(18)
+    lock_descriptor: int | None = None
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            lock_descriptor = os.open(
+                lock_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+            try:
+                os.write(lock_descriptor, lock_token.encode("ascii"))
+            finally:
+                os.close(lock_descriptor)
+                lock_descriptor = None
+            break
+        except FileExistsError:
+            state = load_report_server_state(state_path, report_directory)
+            if state is not None:
+                return {
+                    "pid": state["pid"],
+                    "port": state["port"],
+                    "reused": True,
+                    "url": report_server_url(state, report_filename),
+                }
+            try:
+                if time.time() - lock_path.stat().st_mtime > 10:
+                    lock_path.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            time.sleep(0.05)
+    else:
+        fail("timed out waiting for the loopback report server launch lock")
+
     token = secrets.token_urlsafe(24)
+    try:
+        write_json(
+            state_path,
+            {
+                "schema_version": REPORT_SERVER_SCHEMA_VERSION,
+                "directory": str(report_directory),
+                "pid": 0,
+                "port": 0,
+                "token": token,
+            },
+        )
+    except (OSError, ReportError):
+        try:
+            if lock_path.read_text(encoding="ascii") == lock_token:
+                lock_path.unlink()
+        except (FileNotFoundError, OSError, UnicodeError):
+            pass
+        raise
+    try:
+        state_path.chmod(0o600)
+    except OSError:
+        pass
     command = [
         sys.executable,
         "-I",
@@ -5643,8 +5802,6 @@ def start_or_reuse_report_server(
         str(report_directory),
         "--state-file",
         str(state_path),
-        "--token",
-        token,
     ]
     process_options: dict[str, Any] = {
         "stdin": subprocess.DEVNULL,
@@ -5658,32 +5815,42 @@ def start_or_reuse_report_server(
         )
     else:
         process_options["start_new_session"] = True
-    process = subprocess.Popen(command, **process_options)
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        state = load_report_server_state(
-            state_path,
-            report_directory,
-            expected_token=token,
-        )
-        if state is not None:
-            return {
-                "pid": state["pid"],
-                "port": state["port"],
-                "reused": False,
-                "url": report_server_url(state, report_filename),
-            }
-        if process.poll() is not None:
-            break
-        time.sleep(0.05)
-    if process.poll() is None:
-        process.terminate()
-    fail("could not start the loopback audit report server")
+    process: subprocess.Popen[Any] | None = None
+    try:
+        process = subprocess.Popen(command, **process_options)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            state = load_report_server_state(
+                state_path,
+                report_directory,
+                expected_token=token,
+            )
+            if state is not None:
+                return {
+                    "pid": state["pid"],
+                    "port": state["port"],
+                    "reused": False,
+                    "url": report_server_url(state, report_filename),
+                }
+            if process.poll() is not None:
+                break
+            time.sleep(0.05)
+        if process.poll() is None:
+            process.terminate()
+        fail("could not start the loopback audit report server")
+    finally:
+        try:
+            if lock_path.read_text(encoding="ascii") == lock_token:
+                lock_path.unlink()
+        except (FileNotFoundError, OSError, UnicodeError):
+            pass
 
 
 def cmd_finalize_audit(args: argparse.Namespace) -> int:
     """Validate, render, and serve the interactive audit HTML."""
 
+    if args.html.name != "otel.html":
+        fail("--html must use the canonical report name otel.html")
     raw_report = load_json(args.audit_json)
     preflight_errors = audit_finalization_preflight_errors(raw_report)
     if preflight_errors:
@@ -5734,6 +5901,8 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
 
 
 def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
+    if args.output.name != "otel-instrumentation.html":
+        fail("--output must use the canonical report name otel-instrumentation.html")
     report = normalize_audit_report(load_json(args.audit_json))
     selection, instrumentation, verify = load_flow(
         report, args.selection_json, args.instrumentation_json, args.verify_json
@@ -5917,7 +6086,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve_report.add_argument("--directory", type=Path, required=True)
     serve_report.add_argument("--state-file", type=Path, required=True)
-    serve_report.add_argument("--token", required=True)
     serve_report.set_defaults(func=cmd_serve_report)
 
     instrumentation_html = subparsers.add_parser(

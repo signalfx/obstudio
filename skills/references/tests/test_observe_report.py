@@ -2199,9 +2199,22 @@ class ObserveReportTest(unittest.TestCase):
             self.assertNotIn('id="planSummary"', html)
             self.assertNotIn('id="saveSelectionHint"', html)
             self.assertNotIn('id="saveSelection"', html)
-            self.assertIn('id="instrumentCommand"', html)
+            self.assertIn(
+                'id="instrumentCommand" type="text" readonly '
+                'aria-labelledby="instrumentCommandLabel"',
+                html,
+            )
+            self.assertIn("if (node) node.value = terminalInstrumentCommand()", html)
             self.assertIn("function serviceRootFromLocation()", html)
             self.assertIn("function terminalInstrumentCommand()", html)
+            self.assertIn(
+                'location.protocol === "http:" || location.protocol === "https:"',
+                html,
+            )
+            self.assertIn(
+                "Copy this repository-relative source path",
+                html,
+            )
             self.assertIn(
                 "parts.map((part, index) => index === 0 ? part : commandPart(part)).join",
                 html,
@@ -4028,6 +4041,8 @@ for (const [serviceRoot, input, expected] of cases) {
             )
             self.assertIn("You selected", html)
             self.assertIn("Audit and scope report", html)
+            self.assertNotIn("Instrumentation JSON", html)
+            self.assertNotIn("Verification JSON", html)
             self.assertNotIn("main.go:42", html)
             self.assertNotIn("0123456789abcdef0123456789abcdef", html)
             self.assertNotIn("0123456789abcdef", html)
@@ -5007,6 +5022,78 @@ for (const [serviceRoot, input, expected] of cases) {
                         except ProcessLookupError:
                             pass
                 state_path.unlink(missing_ok=True)
+
+    def test_report_commands_reject_noncanonical_html_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            observe = root / ".observe"
+            observe.mkdir()
+            audit = observe / "otel-audit.json"
+            audit.write_text(json.dumps(sample_report()), encoding="utf-8")
+
+            finalized = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(SCRIPT),
+                    "finalize-audit",
+                    str(audit),
+                    "--html",
+                    str(observe / "custom.html"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(finalized.returncode, 1)
+            self.assertIn("canonical report name otel.html", finalized.stderr)
+            self.assertFalse((observe / "custom.html").exists())
+
+            rendered = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(SCRIPT),
+                    "render-instrumentation-html",
+                    str(audit),
+                    "-o",
+                    str(observe / "custom.html"),
+                    "--selection-json",
+                    str(observe / "missing-selection.json"),
+                    "--instrumentation-json",
+                    str(observe / "missing-instrumentation.json"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(rendered.returncode, 1)
+            self.assertIn(
+                "canonical report name otel-instrumentation.html",
+                rendered.stderr,
+            )
+            self.assertFalse((observe / "custom.html").exists())
+
+    def test_report_server_launch_does_not_put_token_in_process_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            process = mock.Mock()
+            process.poll.return_value = 1
+            with mock.patch.object(MODULE.subprocess, "Popen", return_value=process) as popen:
+                with self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "could not start the loopback audit report server",
+                ):
+                    MODULE.start_or_reuse_report_server(report_directory)
+
+            command = popen.call_args.args[0]
+            self.assertNotIn("--token", command)
+            state = MODULE.read_report_server_state_file(
+                MODULE.report_server_state_path(report_directory)
+            )
+            self.assertIsNotNone(state)
+            self.assertNotIn(state["token"], command)
+            MODULE.report_server_state_path(report_directory).unlink(missing_ok=True)
 
     def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
