@@ -10,7 +10,7 @@ selection and an instrumentation report with finding-level changes and proof.
 |----------|--------|-------|
 | Identify observability gaps without making code changes | `$otel-audit` this service and show me the gaps | `$otel-audit` |
 | Assess a legacy service before planning instrumentation work | Run `$otel-audit` on this service -- I need a gap report before the sprint planning | `$otel-audit` |
-| Review and select gaps in the human report | Run `$otel-audit`, then open `.observe/otel.html` so I can select findings and save the selected audit copy as `.observe/otel-audit.selected.json` | `$otel-audit` |
+| Review and select gaps in the human report | Run `$otel-audit`, then open `.observe/otel.html` so I can select findings and copy the generated `$otel-instrument` command | `$otel-audit` |
 
 ## Verify -- Prove Existing Instrumentation
 

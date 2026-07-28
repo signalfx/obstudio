@@ -34,7 +34,7 @@ CURRENT_SELECTION_SCHEMA_VERSION = 2
 SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, CURRENT_SELECTION_SCHEMA_VERSION}
 CURRENT_AUDIT_SCHEMA_VERSION = 2
 SUPPORTED_AUDIT_SCHEMA_VERSIONS = {1, CURRENT_AUDIT_SCHEMA_VERSION}
-REPORT_SERVER_SCHEMA_VERSION = 4
+REPORT_SERVER_SCHEMA_VERSION = 5
 REPORT_SERVER_IDLE_TIMEOUT_SECONDS = 8 * 60 * 60
 REPORT_SERVER_FILES = {
     "otel.html": "text/html; charset=utf-8",
@@ -5545,10 +5545,16 @@ def load_report_server_state(
     state = read_report_server_state_file(state_path)
     if state is None:
         return None
+    try:
+        directory_status = report_directory.stat()
+    except OSError:
+        return None
     if (
         not isinstance(state, dict)
         or state.get("schema_version") != REPORT_SERVER_SCHEMA_VERSION
         or state.get("directory") != str(report_directory.resolve())
+        or state.get("directory_device") != directory_status.st_dev
+        or state.get("directory_inode") != directory_status.st_ino
         or not isinstance(state.get("pid"), int)
         or state["pid"] <= 0
         or not isinstance(state.get("port"), int)
@@ -5686,11 +5692,14 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
     report_directory = args.directory.resolve()
     if not report_directory.is_dir():
         fail(f"report directory is not a directory: {report_directory}")
+    bootstrap_directory_status = report_directory.stat()
     bootstrap = read_report_server_state_file(args.state_file)
     if (
         bootstrap is None
         or bootstrap.get("schema_version") != REPORT_SERVER_SCHEMA_VERSION
         or bootstrap.get("directory") != str(report_directory)
+        or bootstrap.get("directory_device") != bootstrap_directory_status.st_dev
+        or bootstrap.get("directory_inode") != bootstrap_directory_status.st_ino
         or not isinstance(bootstrap.get("token"), str)
         or not bootstrap["token"]
     ):
@@ -5704,6 +5713,18 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
             | getattr(os, "O_DIRECTORY", 0)
             | getattr(os, "O_NOFOLLOW", 0),
         )
+    directory_status = (
+        os.fstat(directory_descriptor)
+        if directory_descriptor is not None
+        else report_directory.stat()
+    )
+    if (
+        bootstrap["directory_device"] != directory_status.st_dev
+        or bootstrap["directory_inode"] != directory_status.st_ino
+    ):
+        if directory_descriptor is not None:
+            os.close(directory_descriptor)
+        fail("report directory changed during server launch")
     handler = report_server_handler(report_directory, token, directory_descriptor)
     try:
         with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
@@ -5713,6 +5734,8 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
             live_state = {
                 "schema_version": REPORT_SERVER_SCHEMA_VERSION,
                 "directory": str(report_directory),
+                "directory_device": directory_status.st_dev,
+                "directory_inode": directory_status.st_ino,
                 "pid": os.getpid(),
                 "port": server.server_port,
                 "token": token,
@@ -5733,12 +5756,7 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
     finally:
         if directory_descriptor is not None:
             os.close(directory_descriptor)
-        current_state = read_report_server_state_file(args.state_file)
-        if current_state is not None and current_state.get("token") == token:
-            try:
-                args.state_file.unlink()
-            except FileNotFoundError:
-                pass
+        cleanup_report_server_state(args.state_file, token)
     return 0
 
 
@@ -5783,6 +5801,31 @@ def release_report_server_lock(descriptor: int) -> None:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
     finally:
         os.close(descriptor)
+
+
+def cleanup_report_server_state(state_path: Path, token: str) -> None:
+    """Remove owned state only while holding the shared launch lock."""
+
+    lock_descriptor = os.open(
+        state_path.with_suffix(".lock"),
+        os.O_RDWR
+        | os.O_CREAT
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    if not try_acquire_report_server_lock(lock_descriptor):
+        os.close(lock_descriptor)
+        return
+    try:
+        current_state = read_report_server_state_file(state_path)
+        if current_state is not None and current_state.get("token") == token:
+            try:
+                state_path.unlink()
+            except FileNotFoundError:
+                pass
+    finally:
+        release_report_server_lock(lock_descriptor)
 
 
 def start_or_reuse_report_server(
@@ -5844,11 +5887,14 @@ def start_or_reuse_report_server(
             }
 
         token = secrets.token_urlsafe(24)
+        directory_status = report_directory.stat()
         write_json(
             state_path,
             {
                 "schema_version": REPORT_SERVER_SCHEMA_VERSION,
                 "directory": str(report_directory),
+                "directory_device": directory_status.st_dev,
+                "directory_inode": directory_status.st_ino,
                 "pid": 0,
                 "port": 0,
                 "token": token,

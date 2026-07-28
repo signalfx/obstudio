@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "otel-instrumentation",
   "audit_id": "go-chi-basic-fixture",
-  "audit_sha256": "sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024",
-  "selection_sha256": "sha256:5737597b3cf843480053caf7443e1bcb47b38c20d75cf12bbd99cf7da436d690",
+  "audit_sha256": "sha256:539e9f76793ac0bb264be190f93042e32d930ebda8769c0569ada5ea82c10b10",
+  "selection_sha256": "sha256:81c2b5fd16a7271d0e739716c28f15635cdee0b1bb37b623ad0815b489321a11",
   "meta": {
     "service_name": "go-chi-basic",
     "date": "2026-07-21",

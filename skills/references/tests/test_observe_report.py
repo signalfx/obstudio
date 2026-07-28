@@ -519,9 +519,9 @@ class ObserveReportTest(unittest.TestCase):
             [],
         )
         recommendation = " ".join(report["recommendation"])
-        self.assertIn(".observe/otel-audit.selected.json", recommendation)
+        self.assertNotIn(".observe/otel-audit.selected.json", recommendation)
         self.assertNotIn("save the audit state over", recommendation)
-        self.assertIn("$otel-instrument", recommendation)
+        self.assertIn("copy and run the generated $otel-instrument command", recommendation)
         self.assertNotIn("$otel-instrument --ids", recommendation)
         instrumentation_html = (
             example_root / "otel-instrumentation.html"
@@ -5192,6 +5192,67 @@ for (const [serviceRoot, input, expected] of cases) {
                     state_path.parent.name,
                     f"obstudio-report-servers-{os.getuid()}",
                 )
+
+    def test_report_server_rejects_replaced_directory_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_directory = root / "report"
+            report_directory.mkdir()
+            status = report_directory.stat()
+            state_path = MODULE.report_server_state_path(report_directory)
+            try:
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": MODULE.REPORT_SERVER_SCHEMA_VERSION,
+                            "directory": str(report_directory.resolve()),
+                            "directory_device": status.st_dev,
+                            "directory_inode": status.st_ino,
+                            "pid": 123,
+                            "port": 1,
+                            "token": "old-directory-token",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                state_path.chmod(0o600)
+                report_directory.rename(root / "old-report")
+                report_directory.mkdir()
+
+                self.assertIsNone(
+                    MODULE.load_report_server_state(state_path, report_directory)
+                )
+            finally:
+                state_path.unlink(missing_ok=True)
+
+    def test_report_server_cleanup_does_not_delete_replacement_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            state_path = MODULE.report_server_state_path(report_directory)
+            state_path.write_text(
+                json.dumps({"token": "replacement-token"}),
+                encoding="utf-8",
+            )
+            state_path.chmod(0o600)
+            lock_path = state_path.with_suffix(".lock")
+            lock_descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            self.assertTrue(
+                MODULE.try_acquire_report_server_lock(lock_descriptor)
+            )
+            try:
+                MODULE.cleanup_report_server_state(
+                    state_path,
+                    "old-token",
+                )
+                self.assertTrue(state_path.exists())
+            finally:
+                MODULE.release_report_server_lock(lock_descriptor)
+
+            MODULE.cleanup_report_server_state(
+                state_path,
+                "replacement-token",
+            )
+            self.assertFalse(state_path.exists())
 
     def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
