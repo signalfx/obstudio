@@ -890,6 +890,11 @@ a selection-count summary, save guidance, or a `Save selection` button. The
 command must be regenerated from the current explicit `requested_ids`
 and canonical `decision_answers` as
 `$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id <absolute-service-root>`.
+Embed the validated absolute service root supplied to `finalize-audit` in the
+HTML payload and use it in the generated command, including when the report is
+served over loopback HTTP. Keep `file://` path inference only as a compatibility
+fallback; a normally finalized report must never show the literal
+`<service-root>` placeholder.
 Use explicit requested IDs, not auto-added dependency closure, because
 `$otel-instrument` recomputes and validates dependencies. If the reviewer has
 recorded only decision answers and no executable selection, show that no

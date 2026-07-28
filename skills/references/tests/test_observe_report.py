@@ -2385,12 +2385,14 @@ assert(!classes.has("on") && !classes.has("included"), "available state must cle
             + function_body
             + """
 const cases = [
-  [{protocol: "file:", hostname: "", pathname: "/Users/a/repo/.observe/otel.html"}, "/Users/a/repo"],
-  [{protocol: "file:", hostname: "", pathname: "/C:/repo/.observe/otel.html"}, "C:/repo"],
-  [{protocol: "file:", hostname: "server", pathname: "/share/repo/.observe/otel.html"}, "//server/share/repo"],
-  [{protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, "<service-root>"],
+  [null, {protocol: "file:", hostname: "", pathname: "/Users/a/repo/.observe/otel.html"}, "/Users/a/repo"],
+  [null, {protocol: "file:", hostname: "", pathname: "/C:/repo/.observe/otel.html"}, "C:/repo"],
+  [null, {protocol: "file:", hostname: "server", pathname: "/share/repo/.observe/otel.html"}, "//server/share/repo"],
+  ["/Users/a/repo", {protocol: "http:", hostname: "127.0.0.1", pathname: "/otel.html"}, "/Users/a/repo"],
+  [null, {protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, "<service-root>"],
 ];
-for (const [input, expected] of cases) {
+for (const [serviceRoot, input, expected] of cases) {
+  globalThis.DATA = {service_root: serviceRoot};
   globalThis.location = input;
   const actual = serviceRootFromLocation();
   if (actual !== expected) {
@@ -2408,6 +2410,23 @@ for (const [input, expected] of cases) {
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_html_embeds_validated_service_root_for_loopback_report(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+
+        with tempfile.TemporaryDirectory() as directory:
+            source_root = Path(directory)
+            html = MODULE.render_html(
+                report,
+                MODULE.empty_selection(report),
+                source_root=source_root,
+                output_dir=source_root / ".observe",
+            )
+
+        self.assertIn(
+            f'"service_root":{json.dumps(MODULE.quote(str(source_root.resolve()), safe=""))}',
+            html,
+        )
 
     def test_html_progressively_discloses_verbose_finding_details(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())

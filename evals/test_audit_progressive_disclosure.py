@@ -41,6 +41,7 @@ def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
             "Do not render a selection-count summary",
             "do not expose browser save or download controls",
             "$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id",
+            "normally finalized report must never show the literal <service-root> placeholder",
         ):
             assert term.replace("`", "") in text.replace("`", "")
 

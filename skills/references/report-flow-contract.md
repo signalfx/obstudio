@@ -327,6 +327,11 @@ selection-count summary, save guidance, or a `Save selection` button. Generate t
 from current explicit `requested_ids` plus canonical `decision_answers`, for
 example
 `$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id <absolute-service-root>`.
+Embed the validated absolute service root supplied during audit finalization in
+the HTML payload and use it in this command when the report is served over
+loopback HTTP. Keep `file://` path inference only as a compatibility fallback;
+a normally finalized report must never show the literal `<service-root>`
+placeholder.
 Use explicit requested IDs rather than dependency-closed `approved_ids`,
 because `$otel-instrument` recomputes and validates the dependency closure. If
 only decision answers are recorded, state that an executable finding must be

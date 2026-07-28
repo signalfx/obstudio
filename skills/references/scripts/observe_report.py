@@ -4135,6 +4135,11 @@ def render_html(
             "selection_eligibility": selection_eligibility,
             "display_finding_ids": display_finding_ids(report),
             "source_references": source_references,
+            "service_root": (
+                quote(str(source_root.resolve()), safe="")
+                if source_root is not None
+                else None
+            ),
         }
     )
     mode_guidance_payload = script_json(MODE_GUIDANCE)
@@ -4682,6 +4687,7 @@ function commandPart(value) {{
 }}
 
 function serviceRootFromLocation() {{
+  if (DATA.service_root) return decodeURIComponent(DATA.service_root);
   if (location.protocol === "file:") {{
     let path = decodeURIComponent(location.pathname || "");
     if (location.hostname) {{
