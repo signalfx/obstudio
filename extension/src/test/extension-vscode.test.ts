@@ -658,6 +658,62 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('extension ignores mismatched shared state and continues with the managed observer', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const mismatchedObserver = await startConflictingHttpService(await getAvailablePort());
+		const managedObserver = await startDiscoverableSharedObserver(0);
+		const managedPort = Number(new URL(managedObserver.baseUrl).port);
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+		fs.mkdirSync(stateDir, { recursive: true });
+		fs.writeFileSync(
+			statePath,
+			JSON.stringify({
+				baseUrl: mismatchedObserver.baseUrl,
+				healthUrl: `${mismatchedObserver.baseUrl}/api/health`,
+				mcpUrl: `${mismatchedObserver.baseUrl}/mcp`,
+				updatedAt: new Date().toISOString(),
+			}),
+		);
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(
+					value
+					&& value.sharedMode
+					&& value.observerUrl === managedObserver.baseUrl,
+				),
+				20_000,
+			);
+			assert.equal(state.sharedMode, true);
+			assert.equal(state.observerUrl, managedObserver.baseUrl);
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+			cleanupTempDir(tempHome);
+			await mismatchedObserver.dispose();
+			await managedObserver.dispose();
+		}
+	});
+
 	test('changing shared observer URL re-prompts detected agents to update their MCP endpoint', async function () {
 		this.timeout(30_000);
 
