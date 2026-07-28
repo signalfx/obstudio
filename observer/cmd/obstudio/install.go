@@ -37,6 +37,7 @@ const (
 
 	sharedObserverStateDirName  = ".obstudio"
 	sharedObserverStateFileName = "shared-observer.json"
+	skillBackupDirName          = ".obstudio-skill-backups"
 )
 
 type mcpConfigTarget struct {
@@ -885,13 +886,25 @@ func copyFile(src, dst string) error {
 // directory (contains SKILL.md) found inside obstudioDir. This makes skills
 // discoverable by agents that expect each skill as a direct child of the
 // skills root. References are inlined per-skill at build time, so no
-// top-level references symlink is needed.
+// top-level references symlink is needed. Existing non-managed paths are
+// preserved in a stable, per-skill backup location before the link is created.
 func createSkillSymlinks(skillsRoot, obstudioDir string) error {
+	type symlinkPlan struct {
+		name   string
+		link   string
+		target string
+		backup string
+	}
+
 	obstudioName := filepath.Base(obstudioDir)
 	entries, err := os.ReadDir(obstudioDir)
 	if err != nil {
 		return fmt.Errorf("read obstudio dir: %w", err)
 	}
+
+	backupRoot := filepath.Join(skillsRoot, skillBackupDirName)
+	plans := make([]symlinkPlan, 0, len(entries))
+	needsBackupRoot := false
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -902,12 +915,88 @@ func createSkillSymlinks(skillsRoot, obstudioDir string) error {
 		}
 		link := filepath.Join(skillsRoot, name)
 		target := filepath.Join(obstudioName, name)
-		_ = os.Remove(link)
-		if err := os.Symlink(target, link); err != nil {
-			return fmt.Errorf("symlink %s -> %s: %w", link, target, err)
+
+		plan := symlinkPlan{name: name, link: link, target: target}
+		info, statErr := os.Lstat(link)
+		switch {
+		case statErr == nil:
+			if info.Mode()&os.ModeSymlink != 0 {
+				dest, readErr := os.Readlink(link)
+				if readErr != nil {
+					return fmt.Errorf("read existing skill symlink %s: %w", link, readErr)
+				}
+				if dest == target {
+					continue
+				}
+			}
+
+			plan.backup = filepath.Join(backupRoot, name)
+			if _, backupErr := os.Lstat(plan.backup); backupErr == nil {
+				return fmt.Errorf(
+					"cannot replace existing skill %s: one-time backup already exists at %s",
+					link,
+					plan.backup,
+				)
+			} else if !errors.Is(backupErr, os.ErrNotExist) {
+				return fmt.Errorf("inspect skill backup %s: %w", plan.backup, backupErr)
+			}
+			needsBackupRoot = true
+		case errors.Is(statErr, os.ErrNotExist):
+		default:
+			return fmt.Errorf("inspect existing skill path %s: %w", link, statErr)
+		}
+		plans = append(plans, plan)
+	}
+
+	if needsBackupRoot {
+		if err := ensureSkillBackupDir(backupRoot); err != nil {
+			return err
+		}
+	}
+
+	for _, plan := range plans {
+		if plan.backup != "" {
+			if err := os.Rename(plan.link, plan.backup); err != nil {
+				return fmt.Errorf("preserve existing skill %s in %s: %w", plan.link, plan.backup, err)
+			}
+			fmt.Printf("  Existing skill %s preserved in %s.\n", plan.name, plan.backup)
+		}
+
+		if err := os.Symlink(plan.target, plan.link); err != nil {
+			if plan.backup != "" {
+				if rollbackErr := os.Rename(plan.backup, plan.link); rollbackErr != nil {
+					return fmt.Errorf(
+						"symlink %s -> %s: %w (also failed to restore %s: %v)",
+						plan.link,
+						plan.target,
+						err,
+						plan.backup,
+						rollbackErr,
+					)
+				}
+			}
+			return fmt.Errorf("symlink %s -> %s: %w", plan.link, plan.target, err)
 		}
 	}
 	return nil
+}
+
+func ensureSkillBackupDir(path string) error {
+	info, err := os.Lstat(path)
+	switch {
+	case err == nil:
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("skill backup path is not a directory: %s", path)
+		}
+		return nil
+	case errors.Is(err, os.ErrNotExist):
+		if err := os.Mkdir(path, 0o700); err != nil {
+			return fmt.Errorf("create skill backup directory %s: %w", path, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("inspect skill backup directory %s: %w", path, err)
+	}
 }
 
 // removeSkillSymlinks removes symlinks in skillsRoot whose targets point into
