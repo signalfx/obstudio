@@ -1128,6 +1128,41 @@ func TestDetectSharedObserverURLFromStateFile(t *testing.T) {
 	}
 }
 
+func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "shared-observer.json")
+	if err := os.WriteFile(statePath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write malformed existing state: %v", err)
+	}
+
+	want := sharedObserverState{
+		BaseURL:   "http://127.0.0.1:41234",
+		HealthURL: "http://127.0.0.1:41234/api/health",
+		MCPURL:    "http://127.0.0.1:41234/mcp",
+		PID:       4242,
+	}
+	if err := writeSharedObserverState(statePath, want); err != nil {
+		t.Fatalf("writeSharedObserverState returned error: %v", err)
+	}
+
+	got, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("readSharedObserverState returned error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("readSharedObserverState = %#v, want %#v", got, want)
+	}
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		t.Fatalf("read state directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(statePath) {
+		t.Fatalf("state directory contains temporary files after publish: %#v", entries)
+	}
+}
+
 func TestClearSharedObserverStateIfOwned(t *testing.T) {
 	t.Parallel()
 
