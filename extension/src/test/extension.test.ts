@@ -8,6 +8,7 @@ import {
 	buildObserverValidatorSummaryUrl,
 	normalizeObserverBaseUrl,
 	observerPortFromUrl,
+	readSharedObserverDiscovery,
 	resolveBackend,
 } from '../backend';
 
@@ -215,6 +216,46 @@ test('observerPortFromUrl returns explicit and default ports', () => {
 	assert.equal(observerPortFromUrl('http://127.0.0.1:3000'), 3000);
 	assert.equal(observerPortFromUrl('https://example.com'), 443);
 	assert.equal(observerPortFromUrl('http://example.com/service/mcp'), 80);
+});
+
+test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({
+				baseUrl: 'http://127.0.0.1:3001/',
+				updatedAt: '2026-07-28T07:08:55.652888Z',
+			}),
+		);
+
+		assert.deepEqual(readSharedObserverDiscovery(homeDir), {
+			baseUrl: 'http://127.0.0.1:3001',
+			updatedAtMs: Date.parse('2026-07-28T07:08:55.652888Z'),
+		});
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('readSharedObserverDiscovery ignores missing, malformed, and incomplete state', () => {
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		fs.writeFileSync(statePath, '{');
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+
+		fs.writeFileSync(statePath, JSON.stringify({ healthUrl: 'http://127.0.0.1:3001/api/health' }));
+		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
 });
 
 test('normalizeObserverBaseUrl rejects unsupported schemes', () => {

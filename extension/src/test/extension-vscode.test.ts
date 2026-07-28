@@ -233,6 +233,53 @@ async function startSlowSharedObserver(delayMs: number): Promise<SharedObserverH
 	};
 }
 
+async function startDiscoverableSharedObserver(firstHealthDelayMs: number): Promise<SharedObserverHandle> {
+	const port = await getAvailablePort();
+	const baseUrl = `http://127.0.0.1:${port}`;
+	let healthRequestCount = 0;
+	const server = http.createServer(async (request, response) => {
+		if (request.url === '/api/health') {
+			healthRequestCount += 1;
+			if (healthRequestCount === 1) {
+				await new Promise((resolve) => setTimeout(resolve, firstHealthDelayMs));
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({
+				apiVersion: 'v1',
+				endpoints: {
+					otlpGrpc: '127.0.0.1:4317',
+					otlpHttp: 'http://127.0.0.1:4318',
+				},
+				kind: 'obstudio',
+			}));
+			return;
+		}
+
+		response.setHeader('Content-Type', 'text/html; charset=utf-8');
+		response.end('<!doctype html><title>Observer</title>');
+	});
+
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(port, '127.0.0.1', () => resolve());
+	});
+
+	return {
+		baseUrl,
+		dispose: async () => {
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => {
+					if (error) {
+						reject(error);
+						return;
+					}
+					resolve();
+				});
+			});
+		},
+	};
+}
+
 async function startConflictingHttpService(port: number): Promise<SharedObserverHandle> {
 	const server = http.createServer((_request, response) => {
 		response.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -547,6 +594,67 @@ suite('VS Code Host', () => {
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
+	test('extension reuses the healthy observer recorded in shared state', async function () {
+		this.timeout(30_000);
+
+		await getExtension();
+		const sharedObserver = await startDiscoverableSharedObserver(750);
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const config = vscode.workspace.getConfiguration('observability-studio');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+		fs.mkdirSync(stateDir, { recursive: true });
+		fs.writeFileSync(
+			statePath,
+			JSON.stringify({
+				baseUrl: sharedObserver.baseUrl,
+				healthUrl: `${sharedObserver.baseUrl}/api/health`,
+				mcpUrl: `${sharedObserver.baseUrl}/mcp`,
+				updatedAt: new Date().toISOString(),
+			}),
+		);
+
+		try {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.commands.executeCommand('observability-studio.startObserver');
+
+			const state = await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(
+					value
+					&& value.sharedMode
+					&& value.observerUrl === sharedObserver.baseUrl,
+				),
+				20_000,
+			);
+			assert.equal(state.sharedMode, true);
+			assert.equal(state.observerUrl, sharedObserver.baseUrl);
+
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			const health = await fetchJson(`${sharedObserver.baseUrl}/api/health`);
+			assert.equal(health.kind, 'obstudio', 'stopping the extension must not terminate a discovered observer');
+		} finally {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			cleanupTempDir(tempHome);
+			await sharedObserver.dispose();
 		}
 	});
 

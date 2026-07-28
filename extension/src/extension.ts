@@ -13,6 +13,7 @@ import {
 	type ObserverHealth,
 	normalizeObserverBaseUrl,
 	observerPortFromUrl,
+	readSharedObserverDiscovery,
 	resolveBackend,
 } from './backend';
 import {
@@ -67,6 +68,7 @@ const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
+const sharedObserverStartupWindowMs = 15_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
 
@@ -309,7 +311,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const stopDisposable = vscode.commands.registerCommand('observability-studio.stopObserver', async () => {
-		if (observerProcess === undefined && observerStartupPromise === undefined) {
+		if (
+			observerProcess === undefined
+			&& observerStartupPromise === undefined
+			&& observerBaseUrl === undefined
+		) {
 			void vscode.window.showInformationMessage('Observer is not running.');
 			return;
 		}
@@ -476,6 +482,55 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				syncObserverUi();
 			}
 			return;
+		}
+
+		const discoveredObserver = readSharedObserverDiscovery(
+			os.homedir(),
+			process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH,
+		);
+		if (discoveredObserver !== undefined) {
+			let discoveryProbe = await probeObserver(
+				discoveredObserver.baseUrl,
+				500,
+				{ requireStableOtlp: true },
+			);
+			assertObserverRunCurrent(observerLifecycleState, runId);
+			while (
+				discoveryProbe.status === 'unavailable'
+				&& discoveredObserver.updatedAtMs !== undefined
+				&& discoveredObserver.updatedAtMs <= Date.now()
+				&& Date.now() - discoveredObserver.updatedAtMs < sharedObserverStartupWindowMs
+			) {
+				await delay(100);
+				assertObserverRunCurrent(observerLifecycleState, runId);
+				discoveryProbe = await probeObserver(
+					discoveredObserver.baseUrl,
+					500,
+					{ requireStableOtlp: true },
+				);
+				assertObserverRunCurrent(observerLifecycleState, runId);
+			}
+			let discoveryDetail: string;
+			if (discoveryProbe.status === 'ready') {
+				const discoveredPort = observerPortFromUrl(discoveredObserver.baseUrl);
+				if (discoveredPort !== undefined) {
+					observerUsesSharedServer = true;
+					observerBaseUrl = discoveredObserver.baseUrl;
+					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
+					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
+						syncObserverUi();
+					}
+					return;
+				}
+				discoveryDetail = 'the discovered URL did not contain a usable port';
+			} else if (discoveryProbe.status === 'mismatch') {
+				discoveryDetail = discoveryProbe.reason;
+			} else {
+				discoveryDetail = getErrorMessage(discoveryProbe.error);
+			}
+			appendObserverOutputLine(
+				`Ignoring stale or incompatible shared observer state for ${discoveredObserver.baseUrl}: ${discoveryDetail}`,
+			);
 		}
 
 		const managedPort = getConfiguredManagedObserverPort();

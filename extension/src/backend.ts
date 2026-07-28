@@ -19,6 +19,16 @@ export type ObserverHealth = {
 	version?: string;
 };
 
+type SharedObserverState = {
+	baseUrl?: string;
+	updatedAt?: string;
+};
+
+export type SharedObserverDiscovery = {
+	baseUrl: string;
+	updatedAtMs?: number;
+};
+
 export function normalizeObserverBaseUrl(raw: string): string {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) {
@@ -59,6 +69,26 @@ export function observerPortFromUrl(baseUrl: string): number | undefined {
 		return 443;
 	}
 	return undefined;
+}
+
+export function readSharedObserverDiscovery(
+	homeDir: string,
+	statePathOverride?: string,
+): SharedObserverDiscovery | undefined {
+	const statePath = statePathOverride?.trim() || path.join(homeDir, '.obstudio', 'shared-observer.json');
+	try {
+		const state = JSON.parse(fs.readFileSync(statePath, 'utf8')) as SharedObserverState;
+		if (typeof state.baseUrl !== 'string' || state.baseUrl.trim().length === 0) {
+			return undefined;
+		}
+		const updatedAtMs = typeof state.updatedAt === 'string' ? Date.parse(state.updatedAt) : Number.NaN;
+		return {
+			baseUrl: normalizeObserverBaseUrl(state.baseUrl),
+			...(Number.isFinite(updatedAtMs) ? { updatedAtMs } : {}),
+		};
+	} catch {
+		return undefined;
+	}
 }
 
 export function resolveBackend(extensionPath: string): ObserverBackend {
