@@ -22,7 +22,7 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
         "finalize-audit",
         "--html .observe/otel.html",
         "turns exact existing repository-relative citations into local file links",
-        "Review report: [otel.html](/absolute/repo/.observe/otel.html)",
+        "Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html)",
     ):
         assert term.replace("`", "") in skill.replace("`", "")
 
@@ -37,10 +37,11 @@ def test_audit_human_report_is_one_priority_ordered_decision_view() -> None:
             "Priority defines ordering only",
             "Findings · N",
             "Each card has one title, one expected monitoring outcome",
-            "N in selection",
-            "Save selection",
-            "plain selectable terminal fallback",
+            "only the plain selectable terminal command section",
+            "Do not render a selection-count summary",
+            "do not expose browser save or download controls",
             "$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id",
+            "normally finalized report must never show the literal <service-root> placeholder",
         ):
             assert term.replace("`", "") in text.replace("`", "")
 

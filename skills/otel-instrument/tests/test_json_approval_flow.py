@@ -106,6 +106,21 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("render-html", completed.stdout)
         self.assertIn("render-instrumentation-html", completed.stdout)
 
+    def test_html_reports_use_returned_loopback_links(self) -> None:
+        text = " ".join(
+            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+        )
+
+        self.assertIn(
+            "returned loopback links for both otel-instrumentation.html and otel.html",
+            text.replace("`", ""),
+        )
+        self.assertIn(
+            "Keep Markdown and JSON report links as absolute local paths",
+            text,
+        )
+        self.assertIn("do not open either report automatically", text.lower())
+
     def test_wrapper_missing_helper_is_a_tool_error(self) -> None:
         missing = Path("/definitely/missing/observe_report.py")
         error = io.StringIO()

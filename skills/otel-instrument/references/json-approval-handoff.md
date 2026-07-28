@@ -314,6 +314,10 @@ After `$otel-verify` writes `.observe/otel-verify.json`, rerun validation and
 `--instrumentation-json .observe/otel-instrumentation.json` and
 `--verify-json .observe/otel-verify.json` paths. Do not infer the implementation
 overlay from the verification file's directory.
+The render command starts or reuses the restricted loopback report server and
+returns browser-safe links for both `otel-instrumentation.html` and
+`otel.html`. Use those HTTP links in the final response without opening them
+automatically. Keep Markdown and JSON artifacts as absolute local-file links.
 When a verify overlay is available, require its `instrumentation_sha256` to
 match the exact normalized instrumentation overlay, including the bound
 `selection_sha256`. Repair every binding, digest, ID-order, status, or evidence

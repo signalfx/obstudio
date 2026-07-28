@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
 from unittest import mock
+from urllib.error import HTTPError
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "observe_report.py"
@@ -354,6 +356,15 @@ def sample_verify(
 
 
 class ObserveReportTest(unittest.TestCase):
+    def test_markdown_web_link_targets_loopback_report(self) -> None:
+        self.assertEqual(
+            MODULE.markdown_web_link(
+                "otel.html",
+                "http://127.0.0.1:43123/otel.html",
+            ),
+            "[otel.html](http://127.0.0.1:43123/otel.html)",
+        )
+
     def test_markdown_local_file_link_is_platform_safe(self) -> None:
         self.assertEqual(
             MODULE.markdown_local_file_link(
@@ -508,9 +519,9 @@ class ObserveReportTest(unittest.TestCase):
             [],
         )
         recommendation = " ".join(report["recommendation"])
-        self.assertIn(".observe/otel-audit.selected.json", recommendation)
+        self.assertNotIn(".observe/otel-audit.selected.json", recommendation)
         self.assertNotIn("save the audit state over", recommendation)
-        self.assertIn("$otel-instrument", recommendation)
+        self.assertIn("copy and run the generated $otel-instrument command", recommendation)
         self.assertNotIn("$otel-instrument --ids", recommendation)
         instrumentation_html = (
             example_root / "otel-instrumentation.html"
@@ -532,6 +543,11 @@ class ObserveReportTest(unittest.TestCase):
         self.assertNotIn("Removed span: HttpRequest", instrumentation_html)
         self.assertIn("were outside this instrumentation run", instrumentation_html)
         self.assertNotIn("were not implemented in this run", instrumentation_html)
+        self.assertNotIn("Instrumentation JSON", instrumentation_html)
+        self.assertNotIn("Verification JSON", instrumentation_html)
+        audit_html = (example_root / "otel.html").read_text()
+        self.assertIn('"service_root":null', audit_html)
+        self.assertNotIn(str(repo_root), audit_html)
 
     def test_report_writes_reject_symlinked_output_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2042,7 +2058,7 @@ class ObserveReportTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("OTEL-001", html)
-            self.assertIn("Save selection", html)
+            self.assertNotIn("Save selection", html)
             self.assertIn("Copy this terminal command", html)
             self.assertNotIn("navigator.clipboard", html)
             self.assertIn("Technical appendix", html)
@@ -2082,7 +2098,10 @@ class ObserveReportTest(unittest.TestCase):
             self.assertIn("Next step", html)
             self.assertIn("function findingNextStep(finding)", html)
             self.assertIn('eligibility.blockers.join(", ")', html)
-            self.assertIn("This finding is selected. Save the selection", html)
+            self.assertIn(
+                "This finding is selected. Copy and run the generated $otel-instrument command.",
+                html,
+            )
             self.assertIn("included because selected work depends on it", html)
             self.assertIn('data-finding-next-step="${esc(f.id)}"', html)
             self.assertIn("nextStep.textContent = findingNextStep(finding)", html)
@@ -2148,7 +2167,12 @@ class ObserveReportTest(unittest.TestCase):
             )
             self.assertNotIn("input.checked = selected.has(finding.id)", html)
             self.assertIn("const requested = new Set", html)
-            self.assertIn("requested_ids: orderedRequested(), approved_ids: orderedSelection()", html)
+            self.assertIn("function orderedRequested()", html)
+            self.assertIn("function orderedSelection()", html)
+            self.assertNotIn(
+                "requested_ids: orderedRequested(), approved_ids: orderedSelection()",
+                html,
+            )
             self.assertIn("requested.delete(id)", html)
             self.assertIn(
                 '<h2 id="findings-heading" tabindex="-1">Findings '
@@ -2177,14 +2201,31 @@ class ObserveReportTest(unittest.TestCase):
                 'id="selectionStatus" class="sr-only" aria-live="polite" aria-atomic="true"',
                 html,
             )
+            self.assertNotIn('id="planSummary"', html)
+            self.assertNotIn('id="saveSelectionHint"', html)
+            self.assertNotIn('id="saveSelection"', html)
             self.assertIn(
-                'id="saveSelection" class="primary" type="button" '
-                'aria-describedby="saveSelectionHint">Save selection</button>',
+                'id="instrumentCommand" type="text" readonly '
+                'aria-labelledby="instrumentCommandLabel"',
                 html,
             )
-            self.assertIn('id="instrumentCommand"', html)
+            self.assertIn("if (node) node.value = terminalInstrumentCommand()", html)
             self.assertIn("function serviceRootFromLocation()", html)
             self.assertIn("function terminalInstrumentCommand()", html)
+            self.assertIn(
+                'location.protocol === "http:" || location.protocol === "https:"',
+                html,
+            )
+            self.assertIn(
+                "Copy this repository-relative source path",
+                html,
+            )
+            self.assertIn("function neutralizeHttpSourceLinks()", html)
+            self.assertIn(
+                'document.querySelectorAll("a.source-link")',
+                html,
+            )
+            self.assertIn("neutralizeHttpSourceLinks();", html)
             self.assertIn(
                 "parts.map((part, index) => index === 0 ? part : commandPart(part)).join",
                 html,
@@ -2194,27 +2235,11 @@ class ObserveReportTest(unittest.TestCase):
                 "Select at least one executable finding to generate an instrumentation command.",
                 html,
             )
-            self.assertIn(
-                "Save a selected audit copy as "
-                "<code>.observe/otel-audit.selected.json</code>",
-                html,
-            )
-            self.assertIn("function auditReviewDocument()", html)
-            self.assertIn("document.review_selection = selectionDocument()", html)
-            self.assertIn('suggestedName: "otel-audit.selected.json"', html)
-            self.assertIn('if (handle.name === "otel-audit.json")', html)
-            self.assertIn("const existingFile = await handle.getFile()", html)
-            self.assertIn(
-                "existingSelection?.audit_sha256 === DATA.selection.audit_sha256",
-                html,
-            )
-            self.assertIn(
-                "The chosen file belongs to a different or newer audit.",
-                html,
-            )
-            self.assertIn('link.download = "otel-audit.selected.json"', html)
-            self.assertIn('summaryParts.join(" · ")', html)
-            self.assertIn('"dependency", "dependencies"', html)
+            self.assertNotIn("function auditReviewDocument()", html)
+            self.assertNotIn("document.review_selection = selectionDocument()", html)
+            self.assertNotIn("window.showSaveFilePicker", html)
+            self.assertNotIn('link.download = "otel-audit.selected.json"', html)
+            self.assertNotIn('summaryParts.join(" · ")', html)
             self.assertIn('aria-controls="finding-body-${esc(f.id)}"', html)
             self.assertIn('name="plan-${esc(f.id)}"', html)
             self.assertIn(
@@ -2231,18 +2256,16 @@ class ObserveReportTest(unittest.TestCase):
             self.assertNotIn('data-remove-plan="', html)
             self.assertNotIn("setPlanOpen", html)
             self.assertNotIn('event.key === "Escape"', html)
-            self.assertEqual(html.count('id="saveSelection"'), 1)
+            self.assertEqual(html.count('id="saveSelection"'), 0)
             self.assertEqual(html.count('id="reviewPlan"'), 0)
             self.assertEqual(html.count('id="downloadJson"'), 0)
             self.assertEqual(html.count('id="copyCommand"'), 0)
-            self.assertIn(
+            self.assertNotIn(
                 'document.getElementById("saveSelection").addEventListener("click"',
                 html,
             )
-            self.assertIn("window.showSaveFilePicker", html)
-            self.assertIn("Selected audit copy saved.", html)
-            self.assertIn('link.download = "otel-audit.selected.json"', html)
-            self.assertIn("Selected audit download fallback started.", html)
+            self.assertNotIn("Selected audit copy saved.", html)
+            self.assertNotIn("Selected audit download fallback started.", html)
             self.assertNotIn("severityColor", html)
             self.assertNotIn("data-severity", html)
             self.assertNotIn("--required:", html)
@@ -2386,12 +2409,14 @@ assert(!classes.has("on") && !classes.has("included"), "available state must cle
             + function_body
             + """
 const cases = [
-  [{protocol: "file:", hostname: "", pathname: "/Users/a/repo/.observe/otel.html"}, "/Users/a/repo"],
-  [{protocol: "file:", hostname: "", pathname: "/C:/repo/.observe/otel.html"}, "C:/repo"],
-  [{protocol: "file:", hostname: "server", pathname: "/share/repo/.observe/otel.html"}, "//server/share/repo"],
-  [{protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, "<service-root>"],
+  [null, {protocol: "file:", hostname: "", pathname: "/Users/a/repo/.observe/otel.html"}, "/Users/a/repo"],
+  [null, {protocol: "file:", hostname: "", pathname: "/C:/repo/.observe/otel.html"}, "C:/repo"],
+  [null, {protocol: "file:", hostname: "server", pathname: "/share/repo/.observe/otel.html"}, "//server/share/repo"],
+  ["/Users/a/repo", {protocol: "http:", hostname: "127.0.0.1", pathname: "/otel.html"}, "/Users/a/repo"],
+  [null, {protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, ""],
 ];
-for (const [input, expected] of cases) {
+for (const [serviceRoot, input, expected] of cases) {
+  globalThis.DATA = {service_root: serviceRoot};
   globalThis.location = input;
   const actual = serviceRootFromLocation();
   if (actual !== expected) {
@@ -2409,6 +2434,23 @@ for (const [input, expected] of cases) {
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_html_embeds_validated_service_root_for_loopback_report(self) -> None:
+        report = MODULE.normalize_audit_report(sample_report())
+
+        with tempfile.TemporaryDirectory() as directory:
+            source_root = Path(directory)
+            html = MODULE.render_html(
+                report,
+                MODULE.empty_selection(report),
+                source_root=source_root,
+                output_dir=source_root / ".observe",
+            )
+
+        self.assertIn(
+            f'"service_root":{json.dumps(MODULE.quote(str(source_root.resolve()), safe=""))}',
+            html,
+        )
 
     def test_html_progressively_discloses_verbose_finding_details(self) -> None:
         report = MODULE.normalize_audit_report(sample_report())
@@ -2499,7 +2541,7 @@ for (const [input, expected] of cases) {
         )
         self.assertIn('</button>\n        ${selectionControl}', html)
 
-    def test_html_serializes_answers_and_prunes_stale_branch_work(self) -> None:
+    def test_html_commands_include_answers_and_prune_stale_branch_work(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         selection = MODULE.normalize_selection(
             {
@@ -2521,11 +2563,12 @@ for (const [input, expected] of cases) {
         self.assertNotIn("const findingActionLabels", html)
         self.assertNotIn("function findingActionLabelFor(finding)", html)
         self.assertIn("decisionAnswers.set(decisionId, optionId)", html)
-        self.assertIn("document.decision_answers = answers", html)
         self.assertIn(
-            "schema_version: answers.length ? 2 : 1",
+            'parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);',
             html,
         )
+        self.assertNotIn("document.decision_answers = answers", html)
+        self.assertNotIn("schema_version: answers.length ? 2 : 1", html)
         self.assertIn("requested.delete(finding.id)", html)
         self.assertIn("Removed incompatible selected work", html)
 
@@ -3487,7 +3530,12 @@ for (const [input, expected] of cases) {
             html,
         )
         self.assertIn('parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);', html)
-        self.assertIn("parts.push(serviceRootFromLocation());", html)
+        self.assertIn("const serviceRoot = serviceRootFromLocation();", html)
+        self.assertIn("parts.push(serviceRoot);", html)
+        self.assertIn(
+            "Regenerate this report with its validated service root before instrumenting.",
+            html,
+        )
         self.assertIn(
             "parts.map((part, index) => index === 0 ? part : commandPart(part)).join",
             html,
@@ -3912,6 +3960,7 @@ for (const [input, expected] of cases) {
             self.assertEqual(mixed_render.returncode, 1)
             self.assertIn("use render-instrumentation-html", mixed_render.stderr)
             self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
+            html_path.write_text("stale audit report", encoding="utf-8")
 
             instrumentation_rendered = subprocess.run(
                 [
@@ -3933,6 +3982,58 @@ for (const [input, expected] of cases) {
                 text=True,
             )
             self.assertEqual(instrumentation_rendered.returncode, 0, instrumentation_rendered.stderr)
+            instrumentation_result = json.loads(instrumentation_rendered.stdout)
+            server = instrumentation_result["server"]
+            self.assertTrue(server["requested"])
+            self.assertTrue(
+                server["url"].startswith("http://127.0.0.1:")
+            )
+            self.assertTrue(server["url"].endswith("/otel-instrumentation.html"))
+            self.assertEqual(
+                instrumentation_result["links"],
+                {
+                    "instrumentation_report": (
+                        f"[otel-instrumentation.html]({server['url']})"
+                    ),
+                    "audit_report": (
+                        f"[otel.html]({MODULE.report_server_url(server, 'otel.html')})"
+                    ),
+                },
+            )
+            state_path = MODULE.report_server_state_path(root)
+            try:
+                with MODULE.urlopen(server["url"], timeout=1) as response:
+                    served_instrumentation = response.read().decode("utf-8")
+                with MODULE.urlopen(
+                    MODULE.report_server_url(server, "otel.html"),
+                    timeout=1,
+                ) as response:
+                    served_audit = response.read().decode("utf-8")
+                self.assertIn(
+                    "OpenTelemetry instrumentation report",
+                    served_instrumentation,
+                )
+                self.assertIn("OpenTelemetry audit report", served_audit)
+                with self.assertRaises(HTTPError) as unauthorized:
+                    MODULE.urlopen(
+                        f"http://127.0.0.1:{server['port']}/otel.html",
+                        timeout=1,
+                    )
+                self.assertEqual(unauthorized.exception.code, 404)
+                unauthorized.exception.close()
+            finally:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(server["pid"]), "/T", "/F"],
+                        check=False,
+                        capture_output=True,
+                    )
+                else:
+                    try:
+                        os.kill(server["pid"], signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                state_path.unlink(missing_ok=True)
             html = instrumentation_html_path.read_text(encoding="utf-8")
             self.assertIn("OpenTelemetry instrumentation report", html)
             self.assertIn("What changed", html)
@@ -3957,6 +4058,8 @@ for (const [input, expected] of cases) {
             )
             self.assertIn("You selected", html)
             self.assertIn("Audit and scope report", html)
+            self.assertNotIn("Instrumentation JSON", html)
+            self.assertNotIn("Verification JSON", html)
             self.assertNotIn("main.go:42", html)
             self.assertNotIn("0123456789abcdef0123456789abcdef", html)
             self.assertNotIn("0123456789abcdef", html)
@@ -3970,7 +4073,10 @@ for (const [input, expected] of cases) {
             self.assertIn('href="otel.html"', html)
             self.assertNotIn("<script", html.lower())
             self.assertNotIn("<link ", html.lower())
-            self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
+            regenerated_audit_html = html_path.read_text(encoding="utf-8")
+            self.assertIn("OpenTelemetry audit report", regenerated_audit_html)
+            self.assertNotIn("stale audit report", regenerated_audit_html)
+            self.assertNotIn("OTEL-001.http-server-span", regenerated_audit_html)
             self.assertNotIn("OTEL-001.http-server-span", audit_html)
             self.assertNotIn("Route trace waterfall", audit_html)
 
@@ -4838,43 +4944,406 @@ for (const [input, expected] of cases) {
             html = observe / "otel.html"
             audit.write_text(json.dumps(sample_report()), encoding="utf-8")
 
+            command = [
+                sys.executable,
+                "-I",
+                str(SCRIPT),
+                "finalize-audit",
+                ".observe/otel-audit.json",
+                "--html",
+                ".observe/otel.html",
+                "--repo-root",
+                ".",
+            ]
+            server_pid: int | None = None
+            state_path = MODULE.report_server_state_path(observe)
+            try:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=root,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads(completed.stdout)
+                self.assertEqual(result["result"], "PASS")
+                self.assertEqual(result["findings"], 2)
+                self.assertEqual(result["scenarios"], 1)
+                self.assertEqual(result["audit"], str(audit.resolve()))
+                self.assertEqual(result["html"], str(html.resolve()))
+                server = result["server"]
+                server_pid = server["pid"]
+                self.assertTrue(server["requested"])
+                self.assertFalse(server["reused"])
+                self.assertTrue(server["url"].startswith("http://127.0.0.1:"))
+                if os.name == "posix":
+                    self.assertEqual(state_path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(
+                    result["links"],
+                    {
+                        "review_report": f"[otel.html]({server['url']})",
+                        "machine_report": (
+                            f"[otel-audit.json](<{audit.resolve()}>)"
+                        ),
+                    },
+                )
+                with MODULE.urlopen(server["url"], timeout=1) as response:
+                    rendered = response.read().decode("utf-8")
+                    self.assertEqual(
+                        response.headers["Content-Type"],
+                        "text/html; charset=utf-8",
+                    )
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
+                    self.assertEqual(
+                        response.headers["X-Content-Type-Options"],
+                        "nosniff",
+                    )
+                    self.assertEqual(
+                        response.headers["Referrer-Policy"],
+                        "no-referrer",
+                    )
+                    self.assertIn(
+                        "default-src 'none'",
+                        response.headers["Content-Security-Policy"],
+                    )
+                self.assertIn("OpenTelemetry audit report", rendered)
+                denied_url = server["url"].replace("/otel.html", "/not-allowed")
+                with self.assertRaises(HTTPError) as denied:
+                    MODULE.urlopen(denied_url, timeout=1)
+                self.assertEqual(denied.exception.code, 404)
+                denied.exception.close()
+
+                repeated = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=root,
+                )
+                self.assertEqual(repeated.returncode, 0, repeated.stderr)
+                repeated_result = json.loads(repeated.stdout)
+                self.assertTrue(repeated_result["server"]["reused"])
+                self.assertEqual(repeated_result["server"]["url"], server["url"])
+                self.assertTrue(html.is_file())
+                self.assertFalse((observe / "otel.md").exists())
+                self.assertIn("OpenTelemetry audit", html.read_text(encoding="utf-8"))
+            finally:
+                if server_pid is not None:
+                    if os.name == "nt":
+                        subprocess.run(
+                            ["taskkill", "/PID", str(server_pid), "/T", "/F"],
+                            check=False,
+                            capture_output=True,
+                        )
+                    else:
+                        try:
+                            os.kill(server_pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                state_path.unlink(missing_ok=True)
+
+    def test_report_commands_reject_noncanonical_html_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            observe = root / ".observe"
+            observe.mkdir()
+            audit = observe / "otel-audit.json"
+            audit.write_text(json.dumps(sample_report()), encoding="utf-8")
+
+            finalized = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(SCRIPT),
+                    "finalize-audit",
+                    str(audit),
+                    "--html",
+                    str(observe / "custom.html"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(finalized.returncode, 1)
+            self.assertIn("canonical report name otel.html", finalized.stderr)
+            self.assertFalse((observe / "custom.html").exists())
+
+            rendered = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(SCRIPT),
+                    "render-instrumentation-html",
+                    str(audit),
+                    "-o",
+                    str(observe / "custom.html"),
+                    "--selection-json",
+                    str(observe / "missing-selection.json"),
+                    "--instrumentation-json",
+                    str(observe / "missing-instrumentation.json"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(rendered.returncode, 1)
+            self.assertIn(
+                "canonical report name otel-instrumentation.html",
+                rendered.stderr,
+            )
+            self.assertFalse((observe / "custom.html").exists())
+
+    def test_report_commands_bind_audit_to_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            output = root / "output"
+            source.mkdir()
+            output.mkdir()
+            audit = source / "otel-audit.json"
+            audit.write_text(json.dumps(sample_report()), encoding="utf-8")
+
             completed = subprocess.run(
                 [
                     sys.executable,
                     "-I",
                     str(SCRIPT),
                     "finalize-audit",
-                    ".observe/otel-audit.json",
+                    str(audit),
                     "--html",
-                    ".observe/otel.html",
-                    "--repo-root",
-                    ".",
+                    str(output / "otel.html"),
                 ],
                 check=False,
                 capture_output=True,
                 text=True,
-                cwd=root,
             )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn(
+                "canonical otel-audit.json beside otel.html",
+                completed.stderr,
+            )
+            self.assertFalse((output / "otel.html").exists())
 
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            result = json.loads(completed.stdout)
-            self.assertEqual(result["result"], "PASS")
-            self.assertEqual(result["findings"], 2)
-            self.assertEqual(result["scenarios"], 1)
-            self.assertEqual(result["audit"], str(audit.resolve()))
-            self.assertEqual(result["html"], str(html.resolve()))
-            self.assertEqual(
-                result["links"],
-                {
-                    "review_report": f"[otel.html](<{html.resolve()}>)",
-                    "machine_report": (
-                        f"[otel-audit.json](<{audit.resolve()}>)"
-                    ),
-                },
+    def test_portable_report_read_rejects_symlink(self) -> None:
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlinks are unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            target = report_directory / "target.html"
+            target.write_text("private", encoding="utf-8")
+            link = report_directory / "otel.html"
+            try:
+                link.symlink_to(target.name)
+            except OSError as exc:
+                self.skipTest(f"symlink creation is unavailable: {exc}")
+
+            with self.assertRaises(OSError):
+                MODULE.read_report_file(None, report_directory, "otel.html")
+
+    def test_report_server_launch_does_not_put_token_in_process_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            process = mock.Mock()
+            process.poll.return_value = 1
+            with mock.patch.object(MODULE.subprocess, "Popen", return_value=process) as popen:
+                with self.assertRaisesRegex(
+                    MODULE.ReportError,
+                    "could not start the loopback audit report server",
+                ):
+                    MODULE.start_or_reuse_report_server(report_directory)
+
+            command = popen.call_args.args[0]
+            self.assertNotIn("--token", command)
+            state = MODULE.read_report_server_state_file(
+                MODULE.report_server_state_path(report_directory)
             )
-            self.assertTrue(html.is_file())
-            self.assertFalse((observe / "otel.md").exists())
-            self.assertIn("OpenTelemetry audit", html.read_text(encoding="utf-8"))
+            self.assertIsNotNone(state)
+            self.assertNotIn(state["token"], command)
+            MODULE.report_server_state_path(report_directory).unlink(missing_ok=True)
+
+    def test_report_server_launch_lock_is_kernel_owned_and_recoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "server.lock"
+            first = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            second = os.open(lock_path, os.O_RDWR, 0o600)
+            first_locked = False
+            second_locked = False
+            try:
+                first_locked = MODULE.try_acquire_report_server_lock(first)
+                self.assertTrue(first_locked)
+                self.assertFalse(MODULE.try_acquire_report_server_lock(second))
+                MODULE.release_report_server_lock(first)
+                first_locked = False
+                first = -1
+                second_locked = MODULE.try_acquire_report_server_lock(second)
+                self.assertTrue(second_locked)
+            finally:
+                if first_locked:
+                    MODULE.release_report_server_lock(first)
+                elif first >= 0:
+                    os.close(first)
+                if second_locked:
+                    MODULE.release_report_server_lock(second)
+                else:
+                    os.close(second)
+
+    def test_report_server_state_directory_is_per_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = MODULE.report_server_state_path(Path(directory))
+            if os.name != "nt" and hasattr(os, "getuid"):
+                self.assertEqual(
+                    state_path.parent.name,
+                    f"obstudio-report-servers-{os.getuid()}",
+                )
+
+    def test_report_server_state_directory_symlink_is_not_chmodded(self) -> None:
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlinks are unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = Path(directory)
+            victim = temporary_root / "victim"
+            victim.mkdir(mode=0o755)
+            suffix = (
+                f"-{os.getuid()}"
+                if os.name != "nt" and hasattr(os, "getuid")
+                else ""
+            )
+            state_directory = (
+                temporary_root / f"obstudio-report-servers{suffix}"
+            )
+            try:
+                state_directory.symlink_to(victim, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink creation is unavailable: {exc}")
+            original_mode = victim.stat().st_mode & 0o777
+
+            with mock.patch.object(
+                MODULE.tempfile,
+                "gettempdir",
+                return_value=str(temporary_root),
+            ):
+                with self.assertRaises((OSError, MODULE.ReportError)):
+                    MODULE.report_server_state_path(temporary_root)
+
+            self.assertEqual(victim.stat().st_mode & 0o777, original_mode)
+
+    def test_report_server_rejects_replaced_directory_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_directory = root / "report"
+            report_directory.mkdir()
+            status = report_directory.stat()
+            state_path = MODULE.report_server_state_path(report_directory)
+            try:
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": MODULE.REPORT_SERVER_SCHEMA_VERSION,
+                            "directory": str(report_directory.resolve()),
+                            "directory_device": status.st_dev,
+                            "directory_inode": status.st_ino,
+                            "pid": 123,
+                            "port": 1,
+                            "token": "old-directory-token",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                state_path.chmod(0o600)
+                report_directory.rename(root / "old-report")
+                report_directory.mkdir()
+
+                self.assertIsNone(
+                    MODULE.load_report_server_state(state_path, report_directory)
+                )
+            finally:
+                state_path.unlink(missing_ok=True)
+
+    def test_report_server_cleanup_does_not_delete_replacement_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            state_path = MODULE.report_server_state_path(report_directory)
+            state_path.write_text(
+                json.dumps({"token": "replacement-token"}),
+                encoding="utf-8",
+            )
+            state_path.chmod(0o600)
+            lock_path = state_path.with_suffix(".lock")
+            lock_descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            self.assertTrue(
+                MODULE.try_acquire_report_server_lock(lock_descriptor)
+            )
+            try:
+                MODULE.cleanup_report_server_state(
+                    state_path,
+                    "old-token",
+                )
+                self.assertTrue(state_path.exists())
+            finally:
+                MODULE.release_report_server_lock(lock_descriptor)
+
+            MODULE.cleanup_report_server_state(
+                state_path,
+                "replacement-token",
+            )
+            self.assertFalse(state_path.exists())
+
+    def test_report_server_idle_expiry_allows_owned_state_cleanup(self) -> None:
+        server = SimpleNamespace(
+            last_report_access=0.0,
+            handle_request=mock.Mock(),
+        )
+        with mock.patch.object(
+            MODULE.time,
+            "monotonic",
+            side_effect=[0.5, 1.1],
+        ):
+            MODULE.serve_report_until_idle(
+                server,
+                idle_timeout_seconds=1.0,
+            )
+        server.handle_request.assert_called_once_with()
+
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = MODULE.report_server_state_path(Path(directory))
+            state_path.write_text(
+                json.dumps({"token": "idle-server-token"}),
+                encoding="utf-8",
+            )
+            state_path.chmod(0o600)
+            MODULE.cleanup_report_server_state(
+                state_path,
+                "idle-server-token",
+            )
+            self.assertFalse(state_path.exists())
+
+    def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            state_path = MODULE.report_server_state_path(report_directory)
+            try:
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": MODULE.REPORT_SERVER_SCHEMA_VERSION - 1,
+                            "directory": str(report_directory.resolve()),
+                            "pid": 123,
+                            "port": 1,
+                            "token": "old-server-token",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                self.assertIsNone(
+                    MODULE.load_report_server_state(
+                        state_path,
+                        report_directory,
+                    )
+                )
+            finally:
+                state_path.unlink(missing_ok=True)
 
     def test_finalize_audit_reports_independent_shape_errors_together(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

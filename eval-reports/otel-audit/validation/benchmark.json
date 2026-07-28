@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260711T231609164685Z",
-    "repo_root": "/Users/btiwana/code/signalfx/obstudio",
+    "run_id": "20260728T070438150860Z",
+    "repo_root": "/Users/tithumma/code/splunk/obstudio/.workspace/origin-main-latest",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -33,7 +33,7 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 8,
       "runtime_check_count": 0
     },
     {
@@ -295,7 +295,7 @@
     "case_count": 30,
     "prompt_count": 30,
     "sanity_check_count": 0,
-    "rubric_check_count": 159,
+    "rubric_check_count": 163,
     "runtime_check_count": 0
   }
 }

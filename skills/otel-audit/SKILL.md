@@ -589,11 +589,11 @@ narrative decision-sized. Its four first-level fields are
 the action `Instrumentation change` for executable work, `Decision needed` for
 a manual prerequisite, and `External requirement` for an external
 prerequisite. For a currently selectable executable finding, `Next step` is to
-select the finding, save the selection, and then run `$otel-instrument`; do not
+select the finding, copy the generated command, and run `$otel-instrument`; do not
 present authored verification or dashboard work as
 the reviewer's immediate action.
 Keep that copy synchronized with selection state: selected work proceeds to
-saving, an auto-added dependency explains why it is included, and
+the generated command, an auto-added dependency explains why it is included, and
 blocked work names the blocking `OTEL-###` IDs and directs the reviewer to
 resolve them first. Show a compact telemetry shape on the card from exact
 `expected_telemetry[*].type` counts, including configuration and resource
@@ -618,11 +618,12 @@ Keep the HTML complete and usable on its own. It may link to the canonical JSON
 as an optional alternate format, but must not require the reviewer to open
 Markdown to understand or select a finding.
 
-Write the human summary as a decision brief, not a compressed defect list. In
-chat summaries, use 3-7 plain-language bullets and state
-the total finding count, what source or configuration currently shows, the
-highest-priority app-owned work, and any exact owner decision or external
-prerequisite that blocks executable work. Do not present canonical
+Write the HTML summary as a decision brief, not a compressed defect list. Use
+3-7 plain-language bullets and state the total finding count, what source or
+configuration currently shows, the highest-priority app-owned work, and any
+exact owner decision or external prerequisite that blocks executable work.
+Keep this detail in the HTML report; the chat handoff is intentionally limited
+to the single report link defined below. Do not present canonical
 `meta.status` as a human outcome in HTML: it classifies the machine report and
 does not claim runtime proof. Do not repeat a generic runtime-unproven warning
 in the decision summary. Put finding-specific missing proof in that finding's
@@ -872,37 +873,46 @@ Resolve both placeholders directly from the directory containing the loaded
 name. If finalization fails, repair the reported canonical input or renderer
 problem and rerun `finalize-audit`; never patch generated HTML.
 
+`finalize-audit` starts or reuses a detached report server bound only to
+`127.0.0.1` on an available port and returns the HTTP Markdown link in
+`links.review_report`. The server exposes only `otel.html`,
+`otel-instrumentation.html`, `otel-audit.json`, and its private health check; it
+never serves the repository.
+It requires an unguessable token in the URL path, rejects symlinked report
+files, disables caching and content sniffing, and stores versioned reuse state
+with user-only permissions where the platform supports them. The launch token
+is transferred through that private state rather than process arguments,
+concurrent finalizers reuse one server, and the server exits after eight hours
+without a request. Under loopback HTTP, repository source citations are
+copyable path text rather than broken links; the server never exposes source
+files. Do not open the browser automatically. A loopback link works directly
+in desktop IDEs; remote workspaces may require their normal localhost port
+forwarding.
+
 The HTML is the human review and selection surface. Keep its empty fixed tray
 `hidden` and `inert`. After a reviewer selects work or records a decision
-answer, show only a compact summary -- `N in selection`, plus an auto-added
-dependency count and decision-answer count only when nonzero -- and one primary
-`Save selection` action plus a plain selectable terminal fallback command. The
-fallback command must be regenerated from the current explicit `requested_ids`
+answer, show only the plain selectable terminal command section. Do not render
+a selection-count summary, save guidance, or a `Save selection` button. The
+command must be regenerated from the current explicit `requested_ids`
 and canonical `decision_answers` as
 `$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id <absolute-service-root>`.
+Embed the validated absolute service root supplied to `finalize-audit` in the
+HTML payload and use it in the generated command, including when the report is
+served over loopback HTTP. Keep `file://` path inference only as a compatibility
+fallback; a normally finalized report must never show the literal
+`<service-root>` placeholder.
 Use explicit requested IDs, not auto-added dependency closure, because
 `$otel-instrument` recomputes and validates dependencies. If the reviewer has
 recorded only decision answers and no executable selection, show that no
 instrumentation command can be generated until an executable finding is
-selected. The cards, summary, terminal fallback, and polite live region must
+selected. The cards, terminal command, and polite live region must
 distinguish explicit selections from auto-added dependencies.
 
-`Save selection` serializes the authoritative bound overlay with explicit
-`requested_ids`, dependency-closed `approved_ids`, and canonical
-`decision_answers` into the audit report's top-level `review_selection`, then
-opens the browser's save-file flow with the suggested name
-`otel-audit.selected.json`. Save this selected audit copy inside `.observe/`
-when the browser permits choosing that directory; never overwrite the canonical
-`.observe/otel-audit.json` from a browser tab. This prevents an older open tab
-from rolling back a newer audit. `$otel-instrument` validates the saved copy's
-audit ID and SHA-256 digest before extracting `review_selection`. If the browser
-falls back to a download, `$otel-instrument` may adopt a matching saved audit
-only when no trusted repository selection already exists; an explicit candidate
-is required to replace existing repository intent. Do not tell the reviewer to
-copy a downloaded selection into `.observe/`. The terminal fallback exists for
-users who want to paste a deterministic command instead of relying on browser
-save location; it must carry the same explicit IDs and decision answers that
-the saved audit state would carry.
+The terminal command is the only visible selection handoff. It must carry the
+explicit requested IDs and decision answers needed for `$otel-instrument` to
+recompute and validate dependency closure. Keep selected-audit and
+`.observe/otel-selection.json` compatibility in the machine workflow, but do
+not expose browser save or download controls in audit HTML.
 
 The expanded finding's collapsed `Technical details` must retain every expected
 telemetry item, acceptance criteria, authored constraint labelled
@@ -982,17 +992,18 @@ Keep these essential input semantics in the canonical JSON:
 renderer. Resolve the helper from the loaded skill directory, never the audited
 repository.
 
-**Chat summary:** After writing the audit artifacts, present a brief summary in
-chat that includes the total finding count, the most important findings first,
-any decision or external prerequisite that blocks executable work, and the
-recommendation line. Do not expose priority categories. Successful
-`finalize-audit` output includes `links.review_report` and
-`links.machine_report`; copy those Markdown link values verbatim into the final
-response. End with clickable local-file links using absolute paths, never a
-relative or bare path. `Review report: .observe/otel.html` is an invalid
-handoff. The rendered form is
-`Review report: [otel.html](/absolute/repo/.observe/otel.html)` and
-`Machine report: [otel-audit.json](/absolute/repo/.observe/otel-audit.json)`.
+**Chat handoff:** After writing and finalizing the audit artifacts, the final
+response must contain exactly this one line and nothing else:
+
+```text
+Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html)
+```
+
+Copy `links.review_report` from successful `finalize-audit` output verbatim
+after the `Review report: ` label. Do not include summary bullets, finding
+counts, recommendations, a machine-report link, artifact-write narration, or
+any other text in the final response. Keep the canonical JSON as an internal
+downstream artifact even though it is not linked in chat.
 
 ### Step 4 -- Downstream Handoff
 
@@ -1000,8 +1011,8 @@ Do not perform telemetry execution inside the audit workflow. The report's
 `Verification Plan` is a proof plan consumed downstream; it is not the
 reviewer's immediate command.
 
-- Recommend selecting executable findings, saving the audit state, and running
-  `$otel-instrument` for source gaps. `$otel-instrument` owns the internal
+- Recommend selecting executable findings, copying the generated command, and
+  running `$otel-instrument` for source gaps. `$otel-instrument` owns the internal
   verification child after implementation.
 - Do not present `$otel-verify` or generic `run verification` as the audit
   prompt's next step, recommendation line, or finding follow-up. If proof is

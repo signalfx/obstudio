@@ -314,7 +314,7 @@
   },
   "anti_patterns": [],
   "recommendation": [
-    "Review findings in order, save a selected audit copy as .observe/otel-audit.selected.json, then run $otel-instrument."
+    "Review findings in order, select work, then copy and run the generated $otel-instrument command."
   ],
   "scan_blockers": []
 }

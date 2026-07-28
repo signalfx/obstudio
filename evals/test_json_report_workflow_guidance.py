@@ -112,10 +112,14 @@ def test_json_first_artifact_and_selection_contract_is_explicit() -> None:
     audit_normalized = " ".join(audit.split())
     assert "run `finalize-audit`" in audit_normalized
     assert "--html .observe/otel.html" in audit_normalized
+    assert "bound only to `127.0.0.1`" in audit_normalized
+    assert "available port" in audit_normalized
+    assert "do not open the browser automatically" in audit_normalized.lower()
+    assert "remote workspaces may require" in audit_normalized.lower()
     assert "do not present `$otel-verify` or generic `run verification` as the audit prompt's next step" in audit_normalized.lower()
     assert 'python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py"' in audit
     assert ".observe/otel-audit.json" in audit
-    assert "Review report: [otel.html](/absolute/repo/.observe/otel.html)" in audit
+    assert "Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html)" in audit
 
 
 def test_human_html_usage_flow_is_documented() -> None:
@@ -127,7 +131,7 @@ def test_human_html_usage_flow_is_documented() -> None:
         "Human HTML Usage Flow",
         "Open `.observe/otel.html` after `$otel-audit`",
         "audit and scope-planning surface",
-        "Run `$otel-instrument` from the saved/selected audit scope",
+        "Run `$otel-instrument` with the copied command",
         "Open `.observe/otel-instrumentation.html` after `$otel-instrument`",
         "change-impact and verification-status surface",
         "If scope is wrong, return to `.observe/otel.html`",
@@ -207,6 +211,25 @@ def test_verify_interactive_reference_is_resolvable() -> None:
     assert "## Reader Report" in resolved
     assert "## Verification JSON" not in verify
     assert "## Verification JSON" in _read(VERIFY_HANDOFF)
+
+
+def test_downstream_html_reports_use_browser_safe_loopback_links() -> None:
+    instrument = " ".join(
+        (_read(INSTRUMENT_SKILL) + _read(INSTRUMENT_HANDOFF)).split()
+    )
+    verify = " ".join((_read(VERIFY_SKILL) + _read(VERIFY_HANDOFF)).split())
+    flow = " ".join(_read(REPORT_FLOW).split())
+
+    for text in (instrument, verify, flow):
+        assert "loopback" in text.lower()
+        assert "otel-instrumentation.html" in text
+        assert "otel.html" in text
+        assert "do not open" in text.lower()
+    assert (
+        "[otel-instrumentation.html](http://127.0.0.1:<port>/<token>/otel-instrumentation.html)"
+        in verify
+    )
+    assert "[otel.html](http://127.0.0.1:<port>/<token>/otel.html)" in verify
 
 
 def test_instrument_keeps_verification_results_in_bound_overlay() -> None:
@@ -303,14 +326,14 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-verify.json" in verify
 
 
-def test_audit_final_handoff_requires_clickable_report_links() -> None:
+def test_audit_final_handoff_requires_only_browser_link() -> None:
     audit = _read(AUDIT_SKILL)
     normalized = " ".join(audit.split())
 
-    assert "`links.review_report` and" in audit
-    assert "`links.machine_report`; copy those Markdown link values verbatim" in audit
-    assert "Review report: [otel.html](/absolute/repo/.observe/otel.html)" in audit
-    assert "Review report: .observe/otel.html` is an invalid handoff" in normalized
+    assert "the final response must contain exactly this one line and nothing else" in normalized
+    assert "Copy `links.review_report`" in audit
+    assert "Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html)" in audit
+    assert "Do not include summary bullets, finding counts, recommendations, a machine-report link" in normalized
 
 
 def test_decision_gated_instrumentation_has_a_scope_specific_rubric() -> None:

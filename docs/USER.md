@@ -135,23 +135,25 @@ complete report schema remains in the canonical
 When an audit and validated selection are present, the normal review loop is
 JSON-backed and HTML-first:
 
-1. Run `$otel-audit` and open `.observe/otel.html`.
-2. Select and expand findings, then press **Save selection**. When the browser
-   offers a file picker, save the selected audit copy as
-   `.observe/otel-audit.selected.json`; do not overwrite the canonical audit.
-   If the browser downloads the selected copy instead, leave it there and
-   `$otel-instrument` can adopt it after digest validation when no trusted
-   repository selection already exists.
+1. Run `$otel-audit` and open the returned loopback `otel.html` link.
+2. Select and expand findings, then copy the generated `$otel-instrument`
+   command. The command carries the explicit finding IDs, decision answers,
+   and validated service root.
 3. Run `$otel-instrument`. Alternatively, invoke
    `$otel-instrument --ids OTEL-001,OTEL-004` directly; it writes the same
    validated selection handoff before editing.
-4. Open `.observe/otel-instrumentation.html` for the code-to-telemetry-to-product
-   change report. The audit HTML remains unchanged.
+4. Open the returned loopback `otel-instrumentation.html` link for the
+   code-to-telemetry-to-product change report. The same local report server
+   keeps `otel.html` available for the unchanged audit view.
 5. No separate verification rerun is needed after instrumentation because
    `$otel-instrument` runs the verification workflow. Run `$otel-verify`
    directly only later when runtime evidence has changed and proof needs to be
    refreshed. Instrumentation and verification JSON sidecars keep that view
    deterministic.
+
+Generated HTML links use a restricted server bound to `127.0.0.1`; the skills
+do not open a browser automatically. Markdown and JSON artifacts remain local
+file links.
 
 Instrumentation and verification Markdown reports remain readable technical
 projections. JSON is the canonical audit, selection, instrumentation, and

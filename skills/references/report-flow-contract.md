@@ -34,9 +34,9 @@ Apply these precedence and identity rules throughout the chain:
   `instrumentation_sha256` covers the complete normalized instrumentation
   overlay, including `selection_sha256`.
 - `.observe/otel.html` is the self-contained human review and plan-building surface.
-  It renders the canonical audit and exports reviewer scope in a selected-audit
-  copy for later materialization as a selection overlay; it is not a second
-  source of source-derived audit truth. It must not render instrumentation or
+  It renders the canonical audit and generates the exact `$otel-instrument`
+  command for the reviewer-selected scope; it is not a second source of
+  source-derived audit truth. It must not render instrumentation or
   verification overlays.
 - `.observe/otel-instrumentation.html` is the generated human change, impact,
   and proof surface. `$otel-instrument` creates it from the bound audit,
@@ -79,11 +79,10 @@ Use the two HTML reports for different moments in the workflow:
 
 1. Open `.observe/otel.html` after `$otel-audit` to understand the source-derived
    findings, answer any manual decision controls, select executable findings,
-   and save or copy the exact `$otel-instrument` command. Treat this HTML as the
+   and copy the exact `$otel-instrument` command. Treat this HTML as the
    audit and scope-planning surface. It is not proof that code changed, telemetry
    emitted, or Splunk Observability Cloud saw data.
-2. Run `$otel-instrument` from the saved/selected audit scope, or use the copied
-   command when browser saving is unreliable. When the user asks for
+2. Run `$otel-instrument` with the copied command. When the user asks for
    instrumentation without a saved selection, `$otel-instrument` may select all
    executable findings only after validating the canonical audit and prompting
    for unresolved manual decisions.
@@ -96,6 +95,21 @@ Use the two HTML reports for different moments in the workflow:
    or copy a new command, and rerun `$otel-instrument`. If proof is incomplete,
    fix the named runtime/code/product prerequisite and rerun instrumentation or
    verification through the bound JSON overlays; do not edit generated HTML.
+
+Serve both generated HTML reports from the same restricted loopback report
+server through an unguessable tokenized URL path and return their
+`http://127.0.0.1:<port>/<token>/...` links after instrumentation and
+verification.
+Version the reusable server state so a prior bundle without the required
+report allowlist cannot be reused. Do not open the links automatically. Keep
+Markdown and JSON artifacts as absolute local-file links; only generated HTML
+uses browser-safe loopback links. Keep the server allowlist limited to
+`otel.html`, `otel-instrumentation.html`, and `otel-audit.json`; do not expose
+instrumentation, verification, or repository source JSON/files. Transfer the
+unguessable token through user-private state rather than process arguments,
+serialize concurrent server launches, and expire an idle detached server.
+When HTTP cannot open repository-relative source citations safely, render them
+as copyable path text instead of dead browser links.
 
 ## Reader-First Report Order
 
@@ -194,8 +208,8 @@ matters`, a mode-aware required action, and `Next step`: label the action
 `Instrumentation change` for executable work, `Decision needed` for a manual
 prerequisite, and `External requirement` for an external prerequisite. For a
 currently selectable, unselected executable finding, the next step is `Select`
--> `Save selection` -> `$otel-instrument`. Keep the copy synchronized with
-selection state: explicitly selected work proceeds to saving, an auto-added
+-> copy the generated command -> `$otel-instrument`. Keep the copy synchronized
+with selection state: explicitly selected work proceeds to the command, an auto-added
 dependency explains why it is included, and blocked executable work names its blocking `OTEL-###`
 IDs and directs the reviewer to resolve them first. Do not label verification,
 explorer, dashboard, or detector follow-up as the immediate next step.
@@ -323,38 +337,31 @@ reflects explicit intent; auto-added dependencies appear as `included` without
 looking explicitly checked.
 
 Keep the empty handoff tray both `hidden` and `inert`. When selection exists,
-show a compact `N in selection` summary, adding auto-added dependency and
-decision-answer counts only when nonzero, and one primary `Save selection`
-action plus a plain selectable terminal fallback command. Generate the fallback
+show only the plain selectable terminal command section. Do not render a
+selection-count summary, save guidance, or a `Save selection` button. Generate the command
 from current explicit `requested_ids` plus canonical `decision_answers`, for
 example
 `$otel-instrument --ids OTEL-001,OTEL-002 --decision OTEL-003=option-id <absolute-service-root>`.
+Embed the validated absolute service root supplied during audit finalization in
+the HTML payload and use it in this command when the report is served over
+loopback HTTP. Keep `file://` path inference only as a compatibility fallback;
+a normally finalized report must never show the literal `<service-root>`
+placeholder.
 Use explicit requested IDs rather than dependency-closed `approved_ids`,
 because `$otel-instrument` recomputes and validates the dependency closure. If
 only decision answers are recorded, state that an executable finding must be
 selected before an instrumentation command exists. The cards, terminal
-fallback, and live-region feedback must make each explicit selection,
-decision answer, and auto-added dependency understandable before saving.
-
-`Save selection` serializes `requested_ids`, dependency-closed `approved_ids`,
-and stable `decision_answers` into top-level `review_selection`, then opens the
-browser save-file flow with `otel-audit.selected.json` as the suggested name.
-When possible, save that selected audit copy inside `.observe/`; never overwrite
-the canonical `.observe/otel-audit.json` from a browser tab. This prevents a
-stale open report from rolling back a newer audit. `$otel-instrument` validates
-the saved copy's canonical audit ID and SHA-256 digest before materializing the
-selection overlay. A self-contained `file://` report cannot silently write a
-sibling repository file or confirm the browser's chosen destination. If the
-browser falls back to a download, ambient saved audits are eligible only when no
-trusted repository selection exists; an explicit candidate is required to
-replace existing repository intent. Do not require the user to copy a
-downloaded file into `.observe/`. State that
+command, and live-region feedback must make each explicit selection,
+decision answer, and auto-added dependency understandable before execution.
+The terminal command is the only visible selection handoff. Keep compatibility
+for trusted selected-audit copies and `.observe/otel-selection.json`, but do not
+expose browser save or download controls. State that
 manual/external finding IDs remain in the audit and are never exported through
 `requested_ids` or `approved_ids`; `decision_answers` separately carries stable
 `finding_id`/`option_id` pairs for answered manual findings. Announce answer,
-dependency, and save guidance through an `aria-live="polite"`,
-`aria-atomic="true"` status region. Keep the tray and action usable as a
-single-column layout on narrow screens.
+dependency, and command guidance through an `aria-live="polite"`,
+`aria-atomic="true"` status region. Keep the command tray usable on narrow
+screens.
 
 ## Status Rules
 

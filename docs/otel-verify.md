@@ -92,10 +92,13 @@ code emits the signal.
 
 ## Read The Report
 
-Open `.observe/otel-instrumentation.html` for the combined change, impact, and
-proof view, `.observe/otel.html` for the original audit and approval context,
-or the compatibility `.observe/otel-verify.md` for verification detail. Start
-with `Result` and `Bottom line`, then read these sections in order:
+Open the returned loopback `otel-instrumentation.html` link for the combined
+change, impact, and proof view, the returned loopback `otel.html` link for the
+original audit and approval context, or the local-file
+`.observe/otel-verify.md` link for verification detail. The workflow starts or
+reuses a restricted `127.0.0.1` report server but does not open either HTML
+page automatically. Start with `Result` and `Bottom line`, then read these
+sections in order:
 
 1. `What Changed` summarizes the telemetry or runtime behavior under test.
 2. `Tested And Working` contains one row per exact added, modified, or removed

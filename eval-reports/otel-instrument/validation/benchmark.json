@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260711T231609164685Z",
-    "repo_root": "/Users/btiwana/code/signalfx/obstudio",
+    "run_id": "20260728T075635621035Z",
+    "repo_root": "/Users/tithumma/code/splunk/obstudio/.workspace/origin-main-latest",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -19,6 +19,22 @@
     "workers": "1"
   },
   "evals": [
+    {
+      "id": "go/chi-basic/qual/benchmark-instrument",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "benchmark"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/benchmark-instrument.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 3,
+      "runtime_check_count": 0
+    },
     {
       "id": "go/chi-basic/qual/instrument",
       "case": "go/chi-basic",
@@ -33,7 +49,23 @@
       "eval_dir": "evals/go/chi-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/qual/instrument-decision-gated",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "decision-gated"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/instrument-decision-gated.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-instrument",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
       "runtime_check_count": 0
     },
     {
@@ -281,7 +313,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 7,
+      "rubric_check_count": 8,
       "runtime_check_count": 0
     },
     {
@@ -433,11 +465,11 @@
     }
   ],
   "summary": {
-    "eval_count": 25,
-    "case_count": 37,
-    "prompt_count": 37,
+    "eval_count": 27,
+    "case_count": 39,
+    "prompt_count": 39,
     "sanity_check_count": 0,
-    "rubric_check_count": 164,
+    "rubric_check_count": 174,
     "runtime_check_count": 6
   }
 }

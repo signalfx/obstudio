@@ -93,6 +93,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .source-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
 .source-link:hover, .source-link:focus { text-decoration: underline; }
 .source-link code { color: inherit; }
+.source-reference { overflow-wrap: anywhere; cursor: text; user-select: all; }
 .source-open { display: inline-block; margin-left: 3px; font-size: 10px; vertical-align: top; }
 pre { background: #111827; color: #edf2f7; border-radius: 6px; padding: 10px; overflow-x: auto; white-space: pre-wrap; }
 table { width: 100%; border-collapse: collapse; }
@@ -107,24 +108,15 @@ th { color: var(--muted); font-size: 12px; }
 .muted { color: var(--muted); }
 .tray { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; background: #121821; color: #fff; box-shadow: 0 -8px 24px rgba(18, 24, 33, .18); }
 .tray[hidden] { display: none; }
-.tray-bar { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(280px, 1.2fr) max-content; gap: 18px; align-items: center; padding-top: 12px; padding-bottom: 12px; }
-.tray-summary { min-width: 0; }
-.tray-summary strong { display: block; font-size: 14px; line-height: 1.35; }
+.tray-bar { padding-top: 12px; padding-bottom: 12px; }
 .tray-hint { display: block; color: #d3d9e2; font-size: 11px; line-height: 1.4; margin-top: 3px; }
 .tray-hint code { color: #91f0b8; }
 .tray-command { min-width: 0; }
-.instrument-command { display: block; margin-top: 4px; max-width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; user-select: all; }
-.tray button { border-radius: 6px; padding: 9px 13px; font-weight: 700; cursor: pointer; }
-.tray button.primary { background: var(--ok); color: #fff; border: 1px solid var(--ok); }
-.tray button:hover { filter: brightness(1.08); }
-.tray button:disabled { cursor: not-allowed; filter: none; opacity: .5; }
+.instrument-command { display: block; margin-top: 4px; width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 760px) {
-  body { padding-bottom: 124px; }
+  body { padding-bottom: 96px; }
   .context-grid { grid-template-columns: 1fr; }
-  .tray-bar { grid-template-columns: 1fr; gap: 9px; }
-  .tray-summary { width: 100%; }
-  .tray-bar > button { width: 100%; }
 }
 </style>
 </head>
@@ -156,7 +148,6 @@ th { color: var(--muted); font-size: 12px; }
     <h2 id="findings-heading" tabindex="-1">Findings <span class="findings-total">· 4</span></h2>
     <div id="cards"></div>
   </section>
-
   <section class="panel technical-appendix"><details><summary>Technical appendix</summary>
     <h2>Source-visible instrumentation evidence</h2><p class="muted">None recorded.</p>
     <h2>Verification plan</h2>
@@ -164,25 +155,20 @@ th { color: var(--muted); font-size: 12px; }
     <h3>Acceptance scenarios</h3><table><thead><tr><th>ID</th><th>Trigger</th><th>Source entrypoint</th><th>Expected signals</th><th>Proof</th><th>Acceptance</th></tr></thead><tbody><tr><td>http.health.success</td><td>GET /health</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L28" target="_blank" rel="noopener" title="Open local source file"><code>main.go:28</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one route-aware HTTP server span</td><td>full runtime</td><td>The request emits exactly one server span with http.route=/health.</td></tr><tr><td>business.task-created</td><td>POST /tasks with a valid bounded title</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L53" target="_blank" rel="noopener" title="Open local source file"><code>main.go:53</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one task.created metric increment</td><td>focused call-site</td><td>The successful persistence path records task.created exactly once with no metric attributes.</td></tr><tr><td>business.task-create-span</td><td>POST /tasks with a valid bounded title</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go#L53" target="_blank" rel="noopener" title="Open local source file"><code>main.go:53</code><span class="source-open" aria-hidden="true">↗</span></a></td><td>one task.create span</td><td>focused call-site</td><td>The successful persistence path emits task.create exactly once.</td></tr></tbody></table>
     <h2>Audit notes</h2><ul><li>HTTP request telemetry is missing; a business event metric is optional and not approved.</li></ul>
     <h2>Audit Evidence</h2><table><thead><tr><th>Check</th><th>Finding</th><th>Source</th></tr></thead><tbody><tr><td>Manifest</td><td>Go chi service without OpenTelemetry dependencies</td><td><a class="source-link" href="../../evals/go/chi-basic/go.mod" target="_blank" rel="noopener" title="Open local source file"><code>go.mod</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Entry point</td><td>HTTP router and handlers</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go" target="_blank" rel="noopener" title="Open local source file"><code>main.go</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Route source</td><td>Six chi routes</td><td><a class="source-link" href="../../evals/go/chi-basic/main.go" target="_blank" rel="noopener" title="Open local source file"><code>main.go</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>Runtime/startup</td><td>Go 1.23 module</td><td><a class="source-link" href="../../evals/go/chi-basic/go.mod" target="_blank" rel="noopener" title="Open local source file"><code>go.mod</code><span class="source-open" aria-hidden="true">↗</span></a></td></tr><tr><td>GenAI ownership</td><td>No</td><td>go.mod and main.go</td></tr></tbody></table>
-    <h2>Recommendation</h2><ul><li>Review findings in order, save a selected audit copy as .observe/otel-audit.selected.json, then run $otel-instrument.</li></ul>
+    <h2>Recommendation</h2><ul><li>Review findings in order, select work, then copy and run the generated $otel-instrument command.</li></ul>
   </details></section>
 </main>
 <div class="tray" id="tray" hidden inert aria-hidden="true" aria-label="Instrumentation selection">
   <div class="wrap tray-bar">
-    <div class="tray-summary">
-      <strong id="planSummary"></strong>
-      <span class="tray-hint" id="saveSelectionHint">Save a selected audit copy as <code>.observe/otel-audit.selected.json</code> before running <code>$otel-instrument</code>. The canonical audit remains unchanged. If your browser downloads the copy instead, <code>$otel-instrument</code> can adopt it after validation when no repository selection already exists.</span>
-    </div>
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
       <span class="tray-hint" id="instrumentCommandLabel">Copy this terminal command:</span>
-      <code class="instrument-command" id="instrumentCommand"></code>
+      <input class="instrument-command" id="instrumentCommand" type="text" readonly aria-labelledby="instrumentCommandLabel">
     </div>
-    <button id="saveSelection" class="primary" type="button" aria-describedby="saveSelectionHint">Save selection</button>
   </div>
 </div>
 <div id="selectionStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 <script>
-const DATA = {"report":{"schema_version":2,"kind":"otel-audit","meta":{"audit_id":"go-chi-basic-fixture","service_name":"go-chi-basic","commit":"fixture","language":"go","framework":"chi","date":"2026-07-17","status":"Partial","genai_ownership_detected":false},"summary":["HTTP request telemetry is missing; a business event metric is optional and not approved."],"flow":"audit -> select -> instrument -> verify","evidence":[{"check":"Manifest","finding":"Go chi service without OpenTelemetry dependencies","source":"go.mod"},{"check":"Entry point","finding":"HTTP router and handlers","source":"main.go"},{"check":"Route source","finding":"Six chi routes","source":"main.go"},{"check":"Runtime/startup","finding":"Go 1.23 module","source":"go.mod"},{"check":"GenAI ownership","finding":"No","source":"go.mod and main.go"}],"routes":[{"method":"GET","path":"/health"},{"method":"GET","path":"/tasks"},{"method":"GET","path":"/tasks/{id}"},{"method":"POST","path":"/tasks"},{"method":"PATCH","path":"/tasks/{id}"},{"method":"DELETE","path":"/tasks/{id}"}],"signal_flow":{"component_flow_map":"Request handling\nmain.go [SOURCE-COVERED] -> chi router [GAP: HTTP request telemetry] -> POST /tasks handler [SOURCE-COVERED] [GAP: Task creation KPI] [GAP: Task telemetry ownership] [GAP: Task creation trace]"},"current_instrumentation":{"spans":[],"metrics":[],"logs":[],"incident_readiness":[]},"genai_readiness":[],"findings":[{"id":"OTEL-001","title":"HTTP requests lack route-aware telemetry","severity":"high","priority":"required","effort":"medium","status":"proposed","area":"HTTP request telemetry","gap":"The chi router has no OpenTelemetry server instrumentation.","impact":"Operators cannot attribute latency or errors to stable route patterns.","product_outcome":"Splunk APM route-level latency and errors","required_fix":"Add one OpenTelemetry SDK lifecycle and one route-aware otelhttp server wrapper.","instrument_mode":"default","verification_scenarios":["http.health.success"],"dependencies":[],"evidence":["main.go:28"],"acceptance_criteria":["GET /health emits exactly one HTTP server span with http.route=/health."],"constraints":["Preserve the existing chi routes and startup command."],"expected_telemetry":[{"type":"span","name":"GET /health","attributes":["http.route=/health"],"product_view":"Splunk APM route-level latency and errors"}],"follow_up_actions":["Verify the route span in the local runtime and APM trace view."],"resolution":null,"resolved_commit":null},{"id":"OTEL-002","title":"Task creation has no business counter","severity":"low","priority":"recommended","effort":"small","status":"proposed","area":"Task creation KPI","gap":"Successful task creation is not counted as a business event.","impact":"Product activity cannot be charted independently of HTTP throughput.","product_outcome":"Splunk dashboard business KPI","required_fix":"Add a task.created counter after a task is persisted.","instrument_mode":"fix all","verification_scenarios":["business.task-created"],"dependencies":["OTEL-003"],"evidence":["main.go:60"],"acceptance_criteria":["A successful task creation increments task.created exactly once."],"constraints":["Keep the metric free of task, user, title, and other unbounded dimensions."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Splunk dashboard business KPI"}],"follow_up_actions":["Create a KPI chart only if the product owner approves this finding."],"resolution":null,"resolved_commit":null},{"id":"OTEL-003","title":"Choose one task-creation telemetry owner","severity":"medium","priority":"recommended","effort":"decision","status":"proposed","area":"Task telemetry ownership","gap":"The service does not define whether task creation should emit the task.created metric or the task.create span.","impact":"Implementing both alternatives would duplicate the same task-creation outcome in two app-owned signals.","product_outcome":"Task creation has one explicitly chosen app-owned telemetry signal.","required_fix":"Choose either the task.created metric or the task.create span as the app-owned task-creation signal.","instrument_mode":"manual decision","verification_scenarios":["business.task-created","business.task-create-span"],"dependencies":[],"evidence":["main.go:53"],"acceptance_criteria":["Exactly one of task.created or task.create is implemented and proven."],"constraints":["Do not emit both app-owned alternatives for the same task creation."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Task creation KPI chart"},{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Record the chosen signal owner before selecting the compatible instrumentation branch."],"resolution":null,"resolved_commit":null,"decision_owner":"task service telemetry owner","decision_question":"Which app-owned OTel signal should represent task creation: task.created or task.create?","decision_options":[{"id":"metric-counter","label":"Task metric","outcome":"Emit task.created once after successful persistence.","unlocks":["OTEL-002"]},{"id":"trace-span","label":"Task span","outcome":"Emit task.create around successful persistence.","unlocks":["OTEL-004"]}]},{"id":"OTEL-004","title":"Trace successful task creation","severity":"medium","priority":"recommended","effort":"small","status":"proposed","area":"Task creation trace","gap":"Successful task creation has no app-owned task.create span.","impact":"When the span alternative is chosen, operators cannot isolate persistence latency in the trace waterfall.","product_outcome":"The trace waterfall shows one bounded task.create span for each successful creation.","required_fix":"Add one task.create span around successful task persistence.","instrument_mode":"fix all","verification_scenarios":["business.task-create-span"],"dependencies":["OTEL-003"],"evidence":["main.go:53"],"acceptance_criteria":["A successful task creation emits task.create exactly once."],"constraints":["Do not attach task IDs, titles, users, or other unbounded values."],"expected_telemetry":[{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Inspect the task.create trace waterfall only when the trace-span option is selected."],"resolution":null,"resolved_commit":null}],"verification":{"environments":[{"id":"go.local","surface":"go-chi-basic service","config_evidence":"go.mod","runner":"go test ./...","scope":"module","prerequisites":"none"}],"scenarios":[{"id":"http.health.success","trigger":"GET /health","entrypoint":"main.go:28","expected_signals":"one route-aware HTTP server span","proof_level":"full runtime","acceptance_criteria":"The request emits exactly one server span with http.route=/health.","environments":["go.local"]},{"id":"business.task-created","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.created metric increment","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path records task.created exactly once with no metric attributes.","environments":["go.local"]},{"id":"business.task-create-span","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.create span","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path emits task.create exactly once.","environments":["go.local"]}]},"anti_patterns":[],"recommendation":["Review findings in order, save a selected audit copy as .observe/otel-audit.selected.json, then run $otel-instrument."],"scan_blockers":[]},"selection":{"schema_version":1,"kind":"otel-selection","audit_id":"go-chi-basic-fixture","audit_sha256":"sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024","requested_ids":["OTEL-001"],"approved_ids":["OTEL-001"],"approved_by":null,"approved_at":null},"selection_eligibility":{"OTEL-001":{"selectable":true,"blockers":[],"reason":""},"OTEL-002":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"},"OTEL-003":{"selectable":false,"blockers":[],"reason":"Choose an answer"},"OTEL-004":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"}},"display_finding_ids":["OTEL-001","OTEL-002","OTEL-003","OTEL-004"],"source_references":{"go.mod":[{"text":"go.mod","href":"../../evals/go/chi-basic/go.mod"}],"main.go":[{"text":"main.go","href":"../../evals/go/chi-basic/main.go"}],"main.go:28":[{"text":"main.go:28","href":"../../evals/go/chi-basic/main.go#L28"}],"main.go:53":[{"text":"main.go:53","href":"../../evals/go/chi-basic/main.go#L53"}],"main.go:60":[{"text":"main.go:60","href":"../../evals/go/chi-basic/main.go#L60"}]}};
+const DATA = {"report":{"schema_version":2,"kind":"otel-audit","meta":{"audit_id":"go-chi-basic-fixture","service_name":"go-chi-basic","commit":"fixture","language":"go","framework":"chi","date":"2026-07-17","status":"Partial","genai_ownership_detected":false},"summary":["HTTP request telemetry is missing; a business event metric is optional and not approved."],"flow":"audit -> select -> instrument -> verify","evidence":[{"check":"Manifest","finding":"Go chi service without OpenTelemetry dependencies","source":"go.mod"},{"check":"Entry point","finding":"HTTP router and handlers","source":"main.go"},{"check":"Route source","finding":"Six chi routes","source":"main.go"},{"check":"Runtime/startup","finding":"Go 1.23 module","source":"go.mod"},{"check":"GenAI ownership","finding":"No","source":"go.mod and main.go"}],"routes":[{"method":"GET","path":"/health"},{"method":"GET","path":"/tasks"},{"method":"GET","path":"/tasks/{id}"},{"method":"POST","path":"/tasks"},{"method":"PATCH","path":"/tasks/{id}"},{"method":"DELETE","path":"/tasks/{id}"}],"signal_flow":{"component_flow_map":"Request handling\nmain.go [SOURCE-COVERED] -> chi router [GAP: HTTP request telemetry] -> POST /tasks handler [SOURCE-COVERED] [GAP: Task creation KPI] [GAP: Task telemetry ownership] [GAP: Task creation trace]"},"current_instrumentation":{"spans":[],"metrics":[],"logs":[],"incident_readiness":[]},"genai_readiness":[],"findings":[{"id":"OTEL-001","title":"HTTP requests lack route-aware telemetry","severity":"high","priority":"required","effort":"medium","status":"proposed","area":"HTTP request telemetry","gap":"The chi router has no OpenTelemetry server instrumentation.","impact":"Operators cannot attribute latency or errors to stable route patterns.","product_outcome":"Splunk APM route-level latency and errors","required_fix":"Add one OpenTelemetry SDK lifecycle and one route-aware otelhttp server wrapper.","instrument_mode":"default","verification_scenarios":["http.health.success"],"dependencies":[],"evidence":["main.go:28"],"acceptance_criteria":["GET /health emits exactly one HTTP server span with http.route=/health."],"constraints":["Preserve the existing chi routes and startup command."],"expected_telemetry":[{"type":"span","name":"GET /health","attributes":["http.route=/health"],"product_view":"Splunk APM route-level latency and errors"}],"follow_up_actions":["Verify the route span in the local runtime and APM trace view."],"resolution":null,"resolved_commit":null},{"id":"OTEL-002","title":"Task creation has no business counter","severity":"low","priority":"recommended","effort":"small","status":"proposed","area":"Task creation KPI","gap":"Successful task creation is not counted as a business event.","impact":"Product activity cannot be charted independently of HTTP throughput.","product_outcome":"Splunk dashboard business KPI","required_fix":"Add a task.created counter after a task is persisted.","instrument_mode":"fix all","verification_scenarios":["business.task-created"],"dependencies":["OTEL-003"],"evidence":["main.go:60"],"acceptance_criteria":["A successful task creation increments task.created exactly once."],"constraints":["Keep the metric free of task, user, title, and other unbounded dimensions."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Splunk dashboard business KPI"}],"follow_up_actions":["Create a KPI chart only if the product owner approves this finding."],"resolution":null,"resolved_commit":null},{"id":"OTEL-003","title":"Choose one task-creation telemetry owner","severity":"medium","priority":"recommended","effort":"decision","status":"proposed","area":"Task telemetry ownership","gap":"The service does not define whether task creation should emit the task.created metric or the task.create span.","impact":"Implementing both alternatives would duplicate the same task-creation outcome in two app-owned signals.","product_outcome":"Task creation has one explicitly chosen app-owned telemetry signal.","required_fix":"Choose either the task.created metric or the task.create span as the app-owned task-creation signal.","instrument_mode":"manual decision","verification_scenarios":["business.task-created","business.task-create-span"],"dependencies":[],"evidence":["main.go:53"],"acceptance_criteria":["Exactly one of task.created or task.create is implemented and proven."],"constraints":["Do not emit both app-owned alternatives for the same task creation."],"expected_telemetry":[{"type":"metric","name":"task.created","attributes":[],"product_view":"Task creation KPI chart"},{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Record the chosen signal owner before selecting the compatible instrumentation branch."],"resolution":null,"resolved_commit":null,"decision_owner":"task service telemetry owner","decision_question":"Which app-owned OTel signal should represent task creation: task.created or task.create?","decision_options":[{"id":"metric-counter","label":"Task metric","outcome":"Emit task.created once after successful persistence.","unlocks":["OTEL-002"]},{"id":"trace-span","label":"Task span","outcome":"Emit task.create around successful persistence.","unlocks":["OTEL-004"]}]},{"id":"OTEL-004","title":"Trace successful task creation","severity":"medium","priority":"recommended","effort":"small","status":"proposed","area":"Task creation trace","gap":"Successful task creation has no app-owned task.create span.","impact":"When the span alternative is chosen, operators cannot isolate persistence latency in the trace waterfall.","product_outcome":"The trace waterfall shows one bounded task.create span for each successful creation.","required_fix":"Add one task.create span around successful task persistence.","instrument_mode":"fix all","verification_scenarios":["business.task-create-span"],"dependencies":["OTEL-003"],"evidence":["main.go:53"],"acceptance_criteria":["A successful task creation emits task.create exactly once."],"constraints":["Do not attach task IDs, titles, users, or other unbounded values."],"expected_telemetry":[{"type":"span","name":"task.create","attributes":[],"product_view":"Task creation trace waterfall"}],"follow_up_actions":["Inspect the task.create trace waterfall only when the trace-span option is selected."],"resolution":null,"resolved_commit":null}],"verification":{"environments":[{"id":"go.local","surface":"go-chi-basic service","config_evidence":"go.mod","runner":"go test ./...","scope":"module","prerequisites":"none"}],"scenarios":[{"id":"http.health.success","trigger":"GET /health","entrypoint":"main.go:28","expected_signals":"one route-aware HTTP server span","proof_level":"full runtime","acceptance_criteria":"The request emits exactly one server span with http.route=/health.","environments":["go.local"]},{"id":"business.task-created","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.created metric increment","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path records task.created exactly once with no metric attributes.","environments":["go.local"]},{"id":"business.task-create-span","trigger":"POST /tasks with a valid bounded title","entrypoint":"main.go:53","expected_signals":"one task.create span","proof_level":"focused call-site","acceptance_criteria":"The successful persistence path emits task.create exactly once.","environments":["go.local"]}]},"anti_patterns":[],"recommendation":["Review findings in order, select work, then copy and run the generated $otel-instrument command."],"scan_blockers":[]},"selection":{"schema_version":1,"kind":"otel-selection","audit_id":"go-chi-basic-fixture","audit_sha256":"sha256:539e9f76793ac0bb264be190f93042e32d930ebda8769c0569ada5ea82c10b10","requested_ids":["OTEL-001"],"approved_ids":["OTEL-001"],"approved_by":null,"approved_at":null},"selection_eligibility":{"OTEL-001":{"selectable":true,"blockers":[],"reason":""},"OTEL-002":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"},"OTEL-003":{"selectable":false,"blockers":[],"reason":"Choose an answer"},"OTEL-004":{"selectable":false,"blockers":["OTEL-003"],"reason":"Blocked by OTEL-003"}},"display_finding_ids":["OTEL-001","OTEL-002","OTEL-003","OTEL-004"],"source_references":{"go.mod":[{"text":"go.mod","href":"../../evals/go/chi-basic/go.mod"}],"main.go":[{"text":"main.go","href":"../../evals/go/chi-basic/main.go"}],"main.go:28":[{"text":"main.go:28","href":"../../evals/go/chi-basic/main.go#L28"}],"main.go:53":[{"text":"main.go:53","href":"../../evals/go/chi-basic/main.go#L53"}],"main.go:60":[{"text":"main.go:60","href":"../../evals/go/chi-basic/main.go#L60"}]},"service_root":null};
 const REPORT = DATA.report;
 const modeGuidance = {"default":{"selection":"Select","guidance":"Safe app-owned work. Select it for instrumentation."},"fix all":{"selection":"Select","guidance":"Broader safe work. Select it only when the broader scope is wanted."},"manual decision":{"selection":null,"guidance":"Choose one named OpenTelemetry outcome. The decision itself never enters instrumentation scope; compatible executable work becomes selectable."},"external follow-up":{"selection":null,"guidance":"Track this with the named external owner. This item cannot enter the instrumentation selection."}};
 const selectionEligibility = {};
@@ -277,10 +263,24 @@ refreshSelectionEligibility();
 function sourceHtml(value) {
   const parts = DATA.source_references?.[String(value)];
   if (!parts) return `<code>${esc(value)}</code>`;
-  return parts.map(part => part.href
-    ? `<a class="source-link" href="${esc(part.href)}" target="_blank" rel="noopener" title="Open local source file"><code>${esc(part.text)}</code><span class="source-open" aria-hidden="true">↗</span></a>`
-    : esc(part.text)
-  ).join("");
+  return parts.map(part => {
+    if (!part.href) return esc(part.text);
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      return `<span class="source-reference" title="Copy this repository-relative source path"><code>${esc(part.text)}</code></span>`;
+    }
+    return `<a class="source-link" href="${esc(part.href)}" target="_blank" rel="noopener" title="Open local source file"><code>${esc(part.text)}</code><span class="source-open" aria-hidden="true">↗</span></a>`;
+  }).join("");
+}
+
+function neutralizeHttpSourceLinks() {
+  if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  for (const link of document.querySelectorAll("a.source-link")) {
+    const replacement = document.createElement("span");
+    replacement.className = "source-reference";
+    replacement.title = "Copy this repository-relative source path";
+    replacement.innerHTML = link.querySelector("code")?.outerHTML || esc(link.textContent);
+    link.replaceWith(replacement);
+  }
 }
 
 function lifecycleStatus(f) {
@@ -367,7 +367,7 @@ function findingNextStep(finding) {
       return `Choose one answer with ${finding.decision_owner || "the named owner"}, then select any unlocked executable work.`;
     }
     return (option.unlocks || []).length
-      ? "Review the executable work unlocked by this answer and select the work you want to save."
+      ? "Review the executable work unlocked by this answer and select the work you want in the command."
       : "This answer unlocks no instrumentation work. Keep the decision in the audit; no selection is needed.";
   }
   if (finding.instrument_mode === "external follow-up") {
@@ -381,12 +381,12 @@ function findingNextStep(finding) {
     return `${eligibility.reason || "This finding cannot enter the current instrumentation selection"}.`;
   }
   if (requested.has(finding.id)) {
-    return "This finding is selected. Save the selection, then run $otel-instrument.";
+    return "This finding is selected. Copy and run the generated $otel-instrument command.";
   }
   if (selected.has(finding.id)) {
-    return "This finding is included because selected work depends on it. Save the selection, then run $otel-instrument.";
+    return "This finding is included because selected work depends on it. Copy and run the generated $otel-instrument command.";
   }
-  return "Select this finding, then save the selection before running $otel-instrument.";
+  return "Select this finding, then copy and run the generated $otel-instrument command.";
 }
 
 function renderCards() {
@@ -471,10 +471,6 @@ function orderedDecisionAnswers() {
     .map(finding => ({finding_id:finding.id, option_id:decisionAnswers.get(finding.id)}));
 }
 
-function plural(count, singular, pluralForm) {
-  return count === 1 ? singular : (pluralForm || singular + "s");
-}
-
 function announceSelection(message) {
   document.getElementById("selectionStatus").textContent = message;
 }
@@ -491,6 +487,7 @@ function commandPart(value) {
 }
 
 function serviceRootFromLocation() {
+  if (DATA.service_root) return decodeURIComponent(DATA.service_root);
   if (location.protocol === "file:") {
     let path = decodeURIComponent(location.pathname || "");
     if (location.hostname) {
@@ -502,7 +499,7 @@ function serviceRootFromLocation() {
     const index = path.lastIndexOf(marker);
     if (index > 0) return path.slice(0, index);
   }
-  return "<service-root>";
+  return "";
 }
 
 function terminalInstrumentCommand() {
@@ -510,51 +507,31 @@ function terminalInstrumentCommand() {
   if (!ids.length) {
     return "Select at least one executable finding to generate an instrumentation command.";
   }
+  const serviceRoot = serviceRootFromLocation();
+  if (!serviceRoot) {
+    return "Regenerate this report with its validated service root before instrumenting.";
+  }
   const parts = ["$otel-instrument", "--ids", ids.join(",")];
   for (const answer of orderedDecisionAnswers()) {
     parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);
   }
-  parts.push(serviceRootFromLocation());
+  parts.push(serviceRoot);
   return parts.map((part, index) => index === 0 ? part : commandPart(part)).join(" ");
 }
 
 function renderInstrumentCommand() {
   const node = document.getElementById("instrumentCommand");
-  if (node) node.textContent = terminalInstrumentCommand();
+  if (node) node.value = terminalInstrumentCommand();
 }
 
 function renderTray() {
   const requestedIds = orderedRequested();
-  const inPlanIds = orderedSelection();
-  const autoAddedIds = inPlanIds.filter(id => !requested.has(id));
   const hasSelection = requestedIds.length > 0 || decisionAnswers.size > 0;
   const tray = document.getElementById("tray");
   tray.hidden = !hasSelection;
   tray.toggleAttribute("inert", !hasSelection);
   tray.setAttribute("aria-hidden", String(!hasSelection));
-  const summaryParts = [inPlanIds.length + " in selection"];
-  if (autoAddedIds.length) {
-    summaryParts.push(autoAddedIds.length + " auto-added " + plural(autoAddedIds.length, "dependency", "dependencies"));
-  }
-  if (decisionAnswers.size) {
-    summaryParts.push(decisionAnswers.size + " " + plural(decisionAnswers.size, "decision answer", "decision answers"));
-  }
-  document.getElementById("planSummary").textContent = hasSelection ? summaryParts.join(" · ") : "";
-  document.getElementById("saveSelection").disabled = !hasSelection;
   renderInstrumentCommand();
-}
-
-function selectionDocument() {
-  const answers = orderedDecisionAnswers();
-  const document = {schema_version: answers.length ? 2 : 1, kind: "otel-selection", audit_id: REPORT.meta.audit_id, audit_sha256: DATA.selection.audit_sha256, requested_ids: orderedRequested(), approved_ids: orderedSelection(), approved_by: null, approved_at: null};
-  if (answers.length) document.decision_answers = answers;
-  return document;
-}
-
-function auditReviewDocument() {
-  const document = JSON.parse(JSON.stringify(REPORT));
-  document.review_selection = selectionDocument();
-  return document;
 }
 
 function syncDependencyClosure() {
@@ -711,71 +688,9 @@ document.addEventListener("change", event => {
   applySelectionInput(input);
 });
 
-async function saveSelectionOverlay() {
-  const contents = JSON.stringify(auditReviewDocument(), null, 2) + "\n";
-  const dependencyCount = orderedSelection().filter(id => !requested.has(id)).length;
-  const dependencyMessage = dependencyCount
-    ? ` It includes ${dependencyCount} auto-added ${plural(dependencyCount, "dependency", "dependencies")}.`
-    : "";
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: "otel-audit.selected.json",
-        types: [{description: "OpenTelemetry audit JSON with saved selection", accept: {"application/json": [".json"]}}],
-      });
-      if (handle.name === "otel-audit.json") {
-        announceSelection("The canonical otel-audit.json is immutable. Choose otel-audit.selected.json or another new selected-audit filename.");
-        return;
-      }
-      const existingFile = await handle.getFile();
-      if (existingFile.size) {
-        let existingDocument;
-        try {
-          existingDocument = JSON.parse(await existingFile.text());
-        } catch (error) {
-          announceSelection("The chosen file already exists and is not a valid selected audit. Choose a new otel-audit.selected.json file.");
-          return;
-        }
-        const existingSelection = existingDocument?.review_selection;
-        const sameAudit = existingDocument?.kind === "otel-audit"
-          && existingDocument?.meta?.audit_id === REPORT.meta.audit_id
-          && existingSelection?.audit_sha256 === DATA.selection.audit_sha256;
-        if (!sameAudit) {
-          announceSelection("The chosen file belongs to a different or newer audit. Choose a new otel-audit.selected.json file.");
-          return;
-        }
-      }
-      const writable = await handle.createWritable();
-      await writable.write(contents);
-      await writable.close();
-      announceSelection("Selected audit copy saved." + dependencyMessage + " Keep it in .observe before running $otel-instrument.");
-      return;
-    } catch (error) {
-      if (error && error.name === "AbortError") {
-        announceSelection("Audit selection save cancelled.");
-        return;
-      }
-      console.warn("Direct audit-state save failed; falling back to browser download.", error);
-    }
-  }
-  const blob = new Blob([contents], {type:"application/json"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "otel-audit.selected.json";
-  link.hidden = true;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 0);
-  announceSelection("Selected audit download fallback started." + dependencyMessage + " $otel-instrument can adopt it after validation when no repository selection already exists.");
-}
-
-document.getElementById("saveSelection").addEventListener("click", () => {
-  saveSelectionOverlay();
-});
-
 syncDependencyClosure();
 renderCards();
+neutralizeHttpSourceLinks();
 renderTray();
 revealCurrentHash();
 window.addEventListener("hashchange", revealCurrentHash);

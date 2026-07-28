@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="otel-audit-sha256" content="sha256:b5fbb4ca09f950701243bd1147a8f7c57e1b78ba18efe7cc6a2d83010a0bf024">
-<meta name="otel-selection-sha256" content="sha256:5737597b3cf843480053caf7443e1bcb47b38c20d75cf12bbd99cf7da436d690">
-<meta name="otel-instrumentation-sha256" content="sha256:30c53420c929cac9480d2d18733e37780da83b76683a5a262d375744c21240dc">
-<meta name="otel-verify-instrumentation-sha256" content="sha256:30c53420c929cac9480d2d18733e37780da83b76683a5a262d375744c21240dc">
+<meta name="otel-audit-sha256" content="sha256:539e9f76793ac0bb264be190f93042e32d930ebda8769c0569ada5ea82c10b10">
+<meta name="otel-selection-sha256" content="sha256:81c2b5fd16a7271d0e739716c28f15635cdee0b1bb37b623ad0815b489321a11">
+<meta name="otel-instrumentation-sha256" content="sha256:5126569d25e167c95accd6255f1f17660cceec7a45017ef6eec17be139a2ba2d">
+<meta name="otel-verify-instrumentation-sha256" content="sha256:5126569d25e167c95accd6255f1f17660cceec7a45017ef6eec17be139a2ba2d">
 <title>OTel Instrumentation - go-chi-basic</title>
 <style>
 :root { --bg:#f5f7fa; --surface:#fff; --ink:#17202a; --muted:#5f6b7a; --line:#dbe2ea; --accent:#1f5eff; --ok:#16794c; --critical:#b42318; }
@@ -43,6 +43,12 @@ main { padding-top:18px !important; padding-bottom:34px !important; }
 .selected-issue-grid section { border-top:1px solid var(--line); padding-top:10px; }
 .selected-issue-grid h4 { color:var(--muted); font-size:12px; letter-spacing:.06em; margin:0 0 6px; text-transform:uppercase; }
 .issue-proof { background:#f4f7ff; border-radius:6px; margin:12px 0 0; padding:7px 9px; }
+.consumer-compatibility { background:#fff9ec; border:1px solid #f0d8a8; border-radius:7px; margin-top:10px; padding:10px; }
+.consumer-compatibility h4 { color:#7c4a03; font-size:12px; letter-spacing:.06em; margin:0 0 6px; text-transform:uppercase; }
+.consumer-compat { font-weight:700; white-space:nowrap; }
+.consumer-compat-breaking { color:var(--critical); }
+.consumer-compat-requires_review { color:#7c4a03; }
+.consumer-compat-compatible { color:var(--ok); }
 .finding-proof { background:#fff; border:1px solid var(--line); border-radius:7px; display:grid; gap:8px; grid-template-columns:1fr 1fr; margin-top:10px; padding:10px; }
 .finding-proof > h4 { color:var(--muted); font-size:12px; grid-column:1/-1; letter-spacing:.06em; margin:0; text-transform:uppercase; }
 .proof-summary,.blocked-proof-summary,.telemetry-proof-summary,.coverage-details { grid-column:1/-1; }
@@ -51,7 +57,8 @@ main { padding-top:18px !important; padding-bottom:34px !important; }
 .blocked-proof-summary > strong,.blocked-proof-summary div > strong { display:block; margin-bottom:3px; }
 .blocked-proof-summary ul { margin:3px 0 0; }
 .telemetry-proof-summary { background:#f8faff; border-radius:4px; padding:8px 10px; }
-.telemetry-proof-summary ul { margin-top:5px; }
+.telemetry-proof-summary .table-wrap { margin-top:6px; }
+.telemetry-proof-table td:last-child { white-space:nowrap; }
 .proof-status-working { color:var(--ok); }
 .proof-status-not_working,.proof-status-not_configured { color:var(--critical); }
 .coverage-detail-body { display:grid; gap:8px; grid-template-columns:1fr 1fr; padding-top:8px; }
@@ -73,6 +80,7 @@ code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .muted { color:var(--muted); }
 .source-link,.finding-jump { color:var(--accent); text-decoration:none; overflow-wrap:anywhere; }
 .source-link:hover,.source-link:focus,.finding-jump:hover,.finding-jump:focus { text-decoration:underline; }
+.source-reference { overflow-wrap:anywhere; cursor:text; user-select:all; }
 .source-open { display:inline-block; font-size:10px; margin-left:3px; vertical-align:top; }
 .finding-jump { font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace; margin-right:6px; }
 .closure-row { scroll-margin-top:16px; }
@@ -98,8 +106,7 @@ p { margin:0 0 12px; }
   </div>
   <nav class="report-nav" aria-label="Report artifacts">
     <a href="otel.html">Audit and scope report</a>
-    <a href="otel-instrumentation.json">Instrumentation JSON</a>
-    <a href="otel-verify.json">Verification JSON</a>
+    <span>Verification included</span>
   </nav>
 </div></header>
 <main class="wrap">
