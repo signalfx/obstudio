@@ -85,18 +85,6 @@ func run(config runConfig) {
 	otlpHTTPPort := config.otlpHTTPPort
 	otlpGRPCPort := config.otlpGRPCPort
 
-	observerState := buildSharedObserverState(host, port)
-	observerStatePath := sharedObserverStatePath()
-	if err := writeSharedObserverState(observerStatePath, observerState); err != nil {
-		log.Printf("failed to write shared observer state: %v", err)
-	} else {
-		defer func() {
-			if err := clearSharedObserverStateIfOwned(observerStatePath, observerState); err != nil {
-				log.Printf("failed to clear shared observer state: %v", err)
-			}
-		}()
-	}
-
 	mainAddr := net.JoinHostPort(host, port)
 	otlpHTTPAddr := net.JoinHostPort(host, otlpHTTPPort)
 	otlpGRPCAddr := net.JoinHostPort(host, otlpGRPCPort)
@@ -175,8 +163,25 @@ func run(config runConfig) {
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
+	mainListener, err := net.Listen("tcp", mainAddr)
+	if err != nil {
+		log.Fatalf("failed to start HTTP server: %v", err)
+	}
+
+	observerState := buildSharedObserverState(host, port)
+	observerStatePath := sharedObserverStatePath()
+	if err := writeSharedObserverState(observerStatePath, observerState); err != nil {
+		log.Printf("failed to write shared observer state: %v", err)
+	} else {
+		defer func() {
+			if err := clearSharedObserverStateIfOwned(observerStatePath, observerState); err != nil {
+				log.Printf("failed to clear shared observer state: %v", err)
+			}
+		}()
+	}
+
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(mainListener); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("HTTP server failed: %v", err)
 		}
 	}()

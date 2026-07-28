@@ -72,7 +72,7 @@ Severity is intentionally simple:
 
 ## Features
 
-- Reuses a healthy shared observer at `http://127.0.0.1:3000` or starts a bundled local observer on activation.
+- Reuses a healthy local observer recorded in `~/.obstudio/shared-observer.json` or listening on the configured managed port, otherwise starts a bundled observer on activation.
 - Detects local Codex, Claude Code, Cursor, and Kiro installs and offers a one-time prompt to enable integration.
 - Exposes stable OTLP endpoints for local applications:
   - OTLP/HTTP on `127.0.0.1:4318`

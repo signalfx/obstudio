@@ -582,8 +582,28 @@ func writeSharedObserverState(statePath string, state sharedObserverState) error
 	if err != nil {
 		return fmt.Errorf("marshal shared observer state %q: %w", statePath, err)
 	}
-	if err := os.WriteFile(statePath, append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write shared observer state %q: %w", statePath, err)
+
+	stateDir := filepath.Dir(statePath)
+	tempFile, err := os.CreateTemp(stateDir, "."+filepath.Base(statePath)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temporary shared observer state for %q: %w", statePath, err)
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+
+	if err := tempFile.Chmod(0o644); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("set permissions on temporary shared observer state for %q: %w", statePath, err)
+	}
+	if _, err := tempFile.Write(append(data, '\n')); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("write temporary shared observer state for %q: %w", statePath, err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("close temporary shared observer state for %q: %w", statePath, err)
+	}
+	if err := os.Rename(tempPath, statePath); err != nil {
+		return fmt.Errorf("publish shared observer state %q: %w", statePath, err)
 	}
 	return nil
 }

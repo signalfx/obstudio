@@ -1128,6 +1128,41 @@ func TestDetectSharedObserverURLFromStateFile(t *testing.T) {
 	}
 }
 
+func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "shared-observer.json")
+	if err := os.WriteFile(statePath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write malformed existing state: %v", err)
+	}
+
+	want := sharedObserverState{
+		BaseURL:   "http://127.0.0.1:41234",
+		HealthURL: "http://127.0.0.1:41234/api/health",
+		MCPURL:    "http://127.0.0.1:41234/mcp",
+		PID:       4242,
+	}
+	if err := writeSharedObserverState(statePath, want); err != nil {
+		t.Fatalf("writeSharedObserverState returned error: %v", err)
+	}
+
+	got, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("readSharedObserverState returned error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("readSharedObserverState = %#v, want %#v", got, want)
+	}
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		t.Fatalf("read state directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(statePath) {
+		t.Fatalf("state directory contains temporary files after publish: %#v", entries)
+	}
+}
+
 func TestClearSharedObserverStateIfOwned(t *testing.T) {
 	t.Parallel()
 
@@ -1339,6 +1374,28 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 	}
 	if got := health.Endpoints["otlpGrpc"]; got != fmt.Sprintf("127.0.0.1:%d", otlpGRPCPort) {
 		t.Fatalf("health otlpGrpc = %q, want %q", got, fmt.Sprintf("127.0.0.1:%d", otlpGRPCPort))
+	}
+
+	statePath := filepath.Join(homeDir, sharedObserverStateDirName, sharedObserverStateFileName)
+	healthyState, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("read healthy shared observer state: %v", err)
+	}
+	contender := exec.Command(installedBinary)
+	contender.Env = runEnv
+	if output, err := contender.CombinedOutput(); err == nil {
+		t.Fatalf("expected a second observer using the same listeners to fail, output:\n%s", output)
+	}
+	stateAfterConflict, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("read shared observer state after listener conflict: %v", err)
+	}
+	if stateAfterConflict.PID != healthyState.PID {
+		t.Fatalf(
+			"failed contender replaced healthy shared observer state: PID = %d, want %d",
+			stateAfterConflict.PID,
+			healthyState.PID,
+		)
 	}
 
 	if status := doSmokeJSONRequest(t, client, http.MethodDelete, baseURL+"/api/data", "", nil, nil); status != http.StatusOK {
