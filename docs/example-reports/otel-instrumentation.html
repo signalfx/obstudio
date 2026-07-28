@@ -43,6 +43,12 @@ main { padding-top:18px !important; padding-bottom:34px !important; }
 .selected-issue-grid section { border-top:1px solid var(--line); padding-top:10px; }
 .selected-issue-grid h4 { color:var(--muted); font-size:12px; letter-spacing:.06em; margin:0 0 6px; text-transform:uppercase; }
 .issue-proof { background:#f4f7ff; border-radius:6px; margin:12px 0 0; padding:7px 9px; }
+.consumer-compatibility { background:#fff9ec; border:1px solid #f0d8a8; border-radius:7px; margin-top:10px; padding:10px; }
+.consumer-compatibility h4 { color:#7c4a03; font-size:12px; letter-spacing:.06em; margin:0 0 6px; text-transform:uppercase; }
+.consumer-compat { font-weight:700; white-space:nowrap; }
+.consumer-compat-breaking { color:var(--critical); }
+.consumer-compat-requires_review { color:#7c4a03; }
+.consumer-compat-compatible { color:var(--ok); }
 .finding-proof { background:#fff; border:1px solid var(--line); border-radius:7px; display:grid; gap:8px; grid-template-columns:1fr 1fr; margin-top:10px; padding:10px; }
 .finding-proof > h4 { color:var(--muted); font-size:12px; grid-column:1/-1; letter-spacing:.06em; margin:0; text-transform:uppercase; }
 .proof-summary,.blocked-proof-summary,.telemetry-proof-summary,.coverage-details { grid-column:1/-1; }
@@ -51,7 +57,8 @@ main { padding-top:18px !important; padding-bottom:34px !important; }
 .blocked-proof-summary > strong,.blocked-proof-summary div > strong { display:block; margin-bottom:3px; }
 .blocked-proof-summary ul { margin:3px 0 0; }
 .telemetry-proof-summary { background:#f8faff; border-radius:4px; padding:8px 10px; }
-.telemetry-proof-summary ul { margin-top:5px; }
+.telemetry-proof-summary .table-wrap { margin-top:6px; }
+.telemetry-proof-table td:last-child { white-space:nowrap; }
 .proof-status-working { color:var(--ok); }
 .proof-status-not_working,.proof-status-not_configured { color:var(--critical); }
 .coverage-detail-body { display:grid; gap:8px; grid-template-columns:1fr 1fr; padding-top:8px; }
@@ -73,6 +80,7 @@ code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .muted { color:var(--muted); }
 .source-link,.finding-jump { color:var(--accent); text-decoration:none; overflow-wrap:anywhere; }
 .source-link:hover,.source-link:focus,.finding-jump:hover,.finding-jump:focus { text-decoration:underline; }
+.source-reference { overflow-wrap:anywhere; cursor:text; user-select:all; }
 .source-open { display:inline-block; font-size:10px; margin-left:3px; vertical-align:top; }
 .finding-jump { font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace; margin-right:6px; }
 .closure-row { scroll-margin-top:16px; }
@@ -98,8 +106,7 @@ p { margin:0 0 12px; }
   </div>
   <nav class="report-nav" aria-label="Report artifacts">
     <a href="otel.html">Audit and scope report</a>
-    <a href="otel-instrumentation.json">Instrumentation JSON</a>
-    <a href="otel-verify.json">Verification JSON</a>
+    <span>Verification included</span>
   </nav>
 </div></header>
 <main class="wrap">

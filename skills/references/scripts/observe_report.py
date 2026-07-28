@@ -29,7 +29,7 @@ CURRENT_SELECTION_SCHEMA_VERSION = 2
 SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, CURRENT_SELECTION_SCHEMA_VERSION}
 CURRENT_AUDIT_SCHEMA_VERSION = 2
 SUPPORTED_AUDIT_SCHEMA_VERSIONS = {1, CURRENT_AUDIT_SCHEMA_VERSION}
-REPORT_SERVER_SCHEMA_VERSION = 3
+REPORT_SERVER_SCHEMA_VERSION = 4
 REPORT_SERVER_IDLE_TIMEOUT_SECONDS = 8 * 60 * 60
 REPORT_SERVER_FILES = {
     "otel.html": "text/html; charset=utf-8",
@@ -4715,7 +4715,7 @@ function serviceRootFromLocation() {{
     const index = path.lastIndexOf(marker);
     if (index > 0) return path.slice(0, index);
   }}
-  return "<service-root>";
+  return "";
 }}
 
 function terminalInstrumentCommand() {{
@@ -4723,11 +4723,15 @@ function terminalInstrumentCommand() {{
   if (!ids.length) {{
     return "Select at least one executable finding to generate an instrumentation command.";
   }}
+  const serviceRoot = serviceRootFromLocation();
+  if (!serviceRoot) {{
+    return "Regenerate this report with its validated service root before instrumenting.";
+  }}
   const parts = ["$otel-instrument", "--ids", ids.join(",")];
   for (const answer of orderedDecisionAnswers()) {{
     parts.push("--decision", `${{answer.finding_id}}=${{answer.option_id}}`);
   }}
-  parts.push(serviceRootFromLocation());
+  parts.push(serviceRoot);
   return parts.map((part, index) => index === 0 ? part : commandPart(part)).join(" ");
 }}
 
@@ -5559,15 +5563,28 @@ def read_report_file(
 
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor: int | None = None
+    source_identity: tuple[int, int] | None = None
     try:
         if directory_descriptor is not None:
             descriptor = os.open(filename, flags, dir_fd=directory_descriptor)
         else:
             source = report_directory / filename
+            source_status = os.lstat(source)
+            if (
+                path_is_link_or_reparse(source_status)
+                or not stat.S_ISREG(source_status.st_mode)
+            ):
+                raise OSError("report is not a regular non-link file")
+            source_identity = (source_status.st_dev, source_status.st_ino)
             descriptor = os.open(source, flags)
         status = os.fstat(descriptor)
         if not stat.S_ISREG(status.st_mode):
             raise OSError("report is not a regular file")
+        if source_identity is not None and (
+            status.st_dev,
+            status.st_ino,
+        ) != source_identity:
+            raise OSError("report changed while it was opened")
         with os.fdopen(descriptor, "rb") as report_file:
             descriptor = None
             return report_file.read()
@@ -5586,12 +5603,12 @@ def report_server_handler(
             return "ObstudioReport"
 
         def do_GET(self) -> None:
-            self.server.last_report_access = time.monotonic()  # type: ignore[attr-defined]
             request_path = urlsplit(self.path).path
             parts = request_path.removeprefix("/").split("/")
             if len(parts) != 2 or not secrets.compare_digest(parts[0], token):
                 self.send_error(404)
                 return
+            self.server.last_report_access = time.monotonic()  # type: ignore[attr-defined]
             filename = parts[1]
             if filename == "__obstudio_report_server__":
                 self.send_payload(b"ok", "text/plain; charset=utf-8")
@@ -5851,6 +5868,11 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
 
     if args.html.name != "otel.html":
         fail("--html must use the canonical report name otel.html")
+    expected_audit = args.html.resolve().parent / "otel-audit.json"
+    if args.audit_json.resolve() != expected_audit:
+        fail(
+            "audit input must be the canonical otel-audit.json beside otel.html"
+        )
     raw_report = load_json(args.audit_json)
     preflight_errors = audit_finalization_preflight_errors(raw_report)
     if preflight_errors:
@@ -5903,6 +5925,12 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
 def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
     if args.output.name != "otel-instrumentation.html":
         fail("--output must use the canonical report name otel-instrumentation.html")
+    expected_audit = args.output.resolve().parent / "otel-audit.json"
+    if args.audit_json.resolve() != expected_audit:
+        fail(
+            "audit input must be the canonical otel-audit.json beside "
+            "otel-instrumentation.html"
+        )
     report = normalize_audit_report(load_json(args.audit_json))
     selection, instrumentation, verify = load_flow(
         report, args.selection_json, args.instrumentation_json, args.verify_json

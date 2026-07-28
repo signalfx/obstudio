@@ -2402,7 +2402,7 @@ const cases = [
   [null, {protocol: "file:", hostname: "", pathname: "/C:/repo/.observe/otel.html"}, "C:/repo"],
   [null, {protocol: "file:", hostname: "server", pathname: "/share/repo/.observe/otel.html"}, "//server/share/repo"],
   ["/Users/a/repo", {protocol: "http:", hostname: "127.0.0.1", pathname: "/otel.html"}, "/Users/a/repo"],
-  [null, {protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, "<service-root>"],
+  [null, {protocol: "https:", hostname: "example.test", pathname: "/otel.html"}, ""],
 ];
 for (const [serviceRoot, input, expected] of cases) {
   globalThis.DATA = {service_root: serviceRoot};
@@ -3519,7 +3519,12 @@ for (const [serviceRoot, input, expected] of cases) {
             html,
         )
         self.assertIn('parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);', html)
-        self.assertIn("parts.push(serviceRootFromLocation());", html)
+        self.assertIn("const serviceRoot = serviceRootFromLocation();", html)
+        self.assertIn("parts.push(serviceRoot);", html)
+        self.assertIn(
+            "Regenerate this report with its validated service root before instrumenting.",
+            html,
+        )
         self.assertIn(
             "parts.map((part, index) => index === 0 ? part : commandPart(part)).join",
             html,
@@ -5073,6 +5078,53 @@ for (const [serviceRoot, input, expected] of cases) {
                 rendered.stderr,
             )
             self.assertFalse((observe / "custom.html").exists())
+
+    def test_report_commands_bind_audit_to_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            output = root / "output"
+            source.mkdir()
+            output.mkdir()
+            audit = source / "otel-audit.json"
+            audit.write_text(json.dumps(sample_report()), encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(SCRIPT),
+                    "finalize-audit",
+                    str(audit),
+                    "--html",
+                    str(output / "otel.html"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn(
+                "canonical otel-audit.json beside otel.html",
+                completed.stderr,
+            )
+            self.assertFalse((output / "otel.html").exists())
+
+    def test_portable_report_read_rejects_symlink(self) -> None:
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlinks are unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            target = report_directory / "target.html"
+            target.write_text("private", encoding="utf-8")
+            link = report_directory / "otel.html"
+            try:
+                link.symlink_to(target.name)
+            except OSError as exc:
+                self.skipTest(f"symlink creation is unavailable: {exc}")
+
+            with self.assertRaises(OSError):
+                MODULE.read_report_file(None, report_directory, "otel.html")
 
     def test_report_server_launch_does_not_put_token_in_process_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
