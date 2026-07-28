@@ -3960,7 +3960,7 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertEqual(mixed_render.returncode, 1)
             self.assertIn("use render-instrumentation-html", mixed_render.stderr)
             self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
-            html_path.unlink()
+            html_path.write_text("stale audit report", encoding="utf-8")
 
             instrumentation_rendered = subprocess.run(
                 [
@@ -4075,6 +4075,7 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertNotIn("<link ", html.lower())
             regenerated_audit_html = html_path.read_text(encoding="utf-8")
             self.assertIn("OpenTelemetry audit report", regenerated_audit_html)
+            self.assertNotIn("stale audit report", regenerated_audit_html)
             self.assertNotIn("OTEL-001.http-server-span", regenerated_audit_html)
             self.assertNotIn("OTEL-001.http-server-span", audit_html)
             self.assertNotIn("Route trace waterfall", audit_html)
