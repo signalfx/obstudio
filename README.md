@@ -152,22 +152,21 @@ Use `$otel-audit` to understand what is missing before editing. Use
 and targeted custom signals. It runs the `$otel-verify` workflow by default
 after its implementation gate. The audit writes canonical
 `.observe/otel-audit.json` plus a self-contained `.observe/otel.html`; review
-and select findings in the HTML, then press **Save selection**. When the browser
-offers a file picker, save the selected audit copy as
-`.observe/otel-audit.selected.json`; the canonical audit remains unchanged. If
-the browser downloads the selected copy instead, leave it there and
-`$otel-instrument` can adopt it after validating its audit digest, provided no
-trusted repository selection already exists. You can alternatively invoke
+and select findings through the returned localhost link, then copy and run the
+generated `$otel-instrument` command. The command carries the explicit finding
+IDs, decision answers, and validated service root. You can alternatively invoke
 `$otel-instrument --ids OTEL-001,OTEL-004` directly; the skill writes the same
 validated selection handoff before editing. Instrumentation writes a separate
 `.observe/otel-instrumentation.html` that maps selected gaps to code changes,
 exact telemetry, product impact, proof, and next actions; it does not turn the
-audit HTML into a change log. The bundled renderer uses only the Python standard
-library, and both HTML reports have no Bun, Node, YAML parser, package, font, or
-network dependency. Run `$otel-verify` after the canonical audit/selection and
-instrumentation handoff to recheck existing instrumentation and refresh proof
-in the instrumentation HTML. It produces `.observe/otel-verify.json` plus the
-readable `.observe/otel-verify.md`. See
+audit HTML into a change log. Both HTML reports are returned as user-clicked,
+tokenized `127.0.0.1` links and are never opened automatically. Markdown and
+JSON reports remain local-file links. The bundled renderer uses only the Python
+standard library, and both HTML reports have no Bun, Node, YAML parser, package,
+font, or external network dependency. Run `$otel-verify` after the canonical
+audit/selection and instrumentation handoff to recheck existing instrumentation
+and refresh proof in the instrumentation HTML. It produces
+`.observe/otel-verify.json` plus the readable `.observe/otel-verify.md`. See
 [OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
 Use `$splunk-configure` after auditing to generate Splunk Observability Cloud
 detector Terraform — it reads the audit report, classifies metrics, and outputs
