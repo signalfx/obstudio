@@ -965,11 +965,12 @@ func createSkillSymlinksWith(
 
 			plan.backup = filepath.Join(backupRoot, name)
 			if _, backupErr := os.Lstat(plan.backup); backupErr == nil {
-				return fmt.Errorf(
-					"cannot replace existing skill %s: one-time backup already exists at %s",
+				fmt.Printf(
+					"  Existing skill %s and backup %s preserved; managed discovery link skipped.\n",
 					link,
 					plan.backup,
 				)
+				continue
 			} else if !errors.Is(backupErr, os.ErrNotExist) {
 				return fmt.Errorf("inspect skill backup %s: %w", plan.backup, backupErr)
 			}

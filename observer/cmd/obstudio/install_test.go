@@ -892,9 +892,8 @@ func TestCreateSkillSymlinksMigratesConflictingDirectoryOnce(t *testing.T) {
 		t.Fatalf("write second conflicting skill file: %v", err)
 	}
 
-	err = createSkillSymlinks(skillsRoot, obstudioDir)
-	if err == nil || !strings.Contains(err.Error(), "one-time backup already exists") {
-		t.Fatalf("second conflict error = %v, want existing one-time backup error", err)
+	if err := createSkillSymlinks(skillsRoot, obstudioDir); err != nil {
+		t.Fatalf("createSkillSymlinks with second conflict: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(conflictingSkill, "second.txt")); err != nil {
 		t.Fatalf("second conflicting skill was modified: %v", err)

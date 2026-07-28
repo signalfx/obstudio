@@ -1505,6 +1505,73 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('automatic Kiro integration preserves repeated conflicts and isolates failures', async function () {
+		this.timeout(30_000);
+
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+		const originalHome = process.env.HOME;
+		const originalUserProfile = process.env.USERPROFILE;
+		const kiroConfigPath = path.join(tempHome, '.kiro', 'settings', 'mcp.json');
+		const originalKiroConfigPath = originalHome ? path.join(originalHome, '.kiro', 'settings', 'mcp.json') : '';
+		const originalSnapshot = snapshotFile(originalKiroConfigPath);
+		const extension = await getExtension();
+		const sharedObserver = await startSharedObserver(path.join(extension.extensionPath, 'dist', 'observer', 'obstudio'));
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const sharedMcpUrl = `${sharedObserver.baseUrl}/mcp`;
+		const skillsRoot = path.join(tempHome, '.kiro', 'skills');
+		const backupSkill = path.join(skillsRoot, '.obstudio-skill-backups', 'otel-audit');
+		const conflictingSkill = path.join(skillsRoot, 'otel-audit');
+
+		process.env.HOME = tempHome;
+		process.env.USERPROFILE = tempHome;
+
+		try {
+			fs.mkdirSync(backupSkill, { recursive: true });
+			fs.mkdirSync(conflictingSkill, { recursive: true });
+			fs.mkdirSync(path.dirname(kiroConfigPath), { recursive: true });
+			fs.writeFileSync(path.join(backupSkill, 'first.txt'), 'first', 'utf8');
+			fs.writeFileSync(path.join(conflictingSkill, 'second.txt'), 'second', 'utf8');
+
+			await config.update('sharedObserverUrl', sharedMcpUrl, vscode.ConfigurationTarget.Global);
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value && value.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			const configured = await vscode.commands.executeCommand<string[]>(
+				'observability-studio.internal.configureDetectedAgentIntegrations',
+			);
+			assert.deepEqual(configured, ['Kiro']);
+
+			assert.equal(fs.readFileSync(path.join(backupSkill, 'first.txt'), 'utf8'), 'first');
+			assert.equal(fs.readFileSync(path.join(conflictingSkill, 'second.txt'), 'utf8'), 'second');
+			assert.equal(
+				fs.existsSync(path.join(skillsRoot, 'obstudio', 'otel-audit', 'SKILL.md')),
+				true,
+			);
+			await assertJSONMCPConfigured([kiroConfigPath], 'obstudio', sharedMcpUrl, false);
+
+			fs.rmSync(kiroConfigPath);
+			fs.mkdirSync(kiroConfigPath);
+			const skipped = await vscode.commands.executeCommand<string[]>(
+				'observability-studio.internal.configureDetectedAgentIntegrations',
+			);
+			assert.deepEqual(skipped, []);
+			const runtimeState = await vscode.commands.executeCommand<RuntimeState>(
+				'observability-studio.internal.getRuntimeState',
+			);
+			assert.equal(runtimeState.observerUrl, sharedObserver.baseUrl);
+		} finally {
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await sharedObserver.dispose();
+			process.env.HOME = originalHome;
+			process.env.USERPROFILE = originalUserProfile;
+			restoreSnapshot(originalSnapshot);
+			cleanupTempDir(tempHome);
+		}
+	});
+
 	test('re-enabling integrations rewrites obstudio without duplicating MCP entries', async function () {
 		this.timeout(30_000);
 

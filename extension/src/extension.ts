@@ -1338,8 +1338,12 @@ async function configureDetectedAgentIntegrations(
 			continue;
 		}
 
-		await configureAgentMCP(context, spec.target, spec.label, false);
-		configured.push(spec.label);
+		try {
+			await configureAgentMCP(context, spec.target, spec.label, false);
+			configured.push(spec.label);
+		} catch {
+			continue;
+		}
 	}
 
 	if (showSuccessMessage && configured.length > 0) {
@@ -1437,7 +1441,17 @@ async function configureAgentMCP(
 		const mcpUrl = `${normalizeObserverBaseUrl(observerBaseUrl)}/mcp`;
 		const backend = resolveBackend(context.extensionPath);
 		observerOutputChannel.appendLine(`Enabling ${label} integration for ${mcpUrl}`);
-		await execFile(backend.command, ['install', '--target', target, '--shared-url', mcpUrl], backend.cwd);
+		const installOutput = await execFile(
+			backend.command,
+			['install', '--target', target, '--shared-url', mcpUrl],
+			backend.cwd,
+		);
+		if (installOutput.length > 0) {
+			observerOutputChannel.append(installOutput);
+			if (!installOutput.endsWith('\n')) {
+				observerOutputChannel.appendLine('');
+			}
+		}
 		await context.globalState.update(integrationPromptDismissalKey(target), undefined);
 		// Record the bundle version so that future version changes trigger a re-install.
 		await recordSkillsBundleVersion(context, target);
@@ -1450,19 +1464,21 @@ async function configureAgentMCP(
 	} catch (error) {
 		const message = `${label} integration failed: ${getErrorMessage(error)}`;
 		observerOutputChannel.appendLine(message);
-		void vscode.window.showErrorMessage(message);
+		if (showSuccessMessage) {
+			void vscode.window.showErrorMessage(message);
+		}
 		throw error;
 	}
 }
 
-function execFile(command: string, args: string[], cwd: string): Promise<void> {
+function execFile(command: string, args: string[], cwd: string): Promise<string> {
 	return new Promise((resolve, reject) => {
-		cp.execFile(command, args, { cwd, env: { ...process.env } }, (error) => {
+		cp.execFile(command, args, { cwd, encoding: 'utf8', env: { ...process.env } }, (error, stdout) => {
 			if (error) {
 				reject(error);
 				return;
 			}
-			resolve();
+			resolve(stdout);
 		});
 	});
 }
