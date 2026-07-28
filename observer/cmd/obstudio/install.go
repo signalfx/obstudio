@@ -898,10 +898,13 @@ func createSkillSymlinksWith(
 	symlink func(string, string) error,
 ) error {
 	type symlinkPlan struct {
-		name   string
-		link   string
-		target string
-		backup string
+		name               string
+		link               string
+		target             string
+		backup             string
+		existingLinkTarget string
+		backupLinkTarget   string
+		preserveAsSymlink  bool
 	}
 
 	obstudioName := filepath.Base(obstudioDir)
@@ -936,6 +939,8 @@ func createSkillSymlinksWith(
 				if dest == target {
 					continue
 				}
+				plan.existingLinkTarget = dest
+				plan.preserveAsSymlink = true
 			}
 
 			plan.backup = filepath.Join(backupRoot, name)
@@ -947,6 +952,17 @@ func createSkillSymlinksWith(
 				)
 			} else if !errors.Is(backupErr, os.ErrNotExist) {
 				return fmt.Errorf("inspect skill backup %s: %w", plan.backup, backupErr)
+			}
+			if plan.preserveAsSymlink {
+				plan.backupLinkTarget = plan.existingLinkTarget
+				if !filepath.IsAbs(plan.existingLinkTarget) {
+					resolvedTarget := filepath.Join(filepath.Dir(plan.link), plan.existingLinkTarget)
+					backupTarget, relErr := filepath.Rel(filepath.Dir(plan.backup), resolvedTarget)
+					if relErr != nil {
+						return fmt.Errorf("preserve relative skill symlink %s: %w", link, relErr)
+					}
+					plan.backupLinkTarget = backupTarget
+				}
 			}
 			needsBackupRoot = true
 		case errors.Is(statErr, os.ErrNotExist):
@@ -964,7 +980,23 @@ func createSkillSymlinksWith(
 
 	for _, plan := range plans {
 		if plan.backup != "" {
-			if err := os.Rename(plan.link, plan.backup); err != nil {
+			if plan.preserveAsSymlink {
+				if err := os.Symlink(plan.backupLinkTarget, plan.backup); err != nil {
+					return fmt.Errorf("preserve existing skill symlink %s in %s: %w", plan.link, plan.backup, err)
+				}
+				if err := os.Remove(plan.link); err != nil {
+					if cleanupErr := os.Remove(plan.backup); cleanupErr != nil {
+						return fmt.Errorf(
+							"remove existing skill symlink %s: %w (also failed to remove backup %s: %v)",
+							plan.link,
+							err,
+							plan.backup,
+							cleanupErr,
+						)
+					}
+					return fmt.Errorf("remove existing skill symlink %s: %w", plan.link, err)
+				}
+			} else if err := os.Rename(plan.link, plan.backup); err != nil {
 				return fmt.Errorf("preserve existing skill %s in %s: %w", plan.link, plan.backup, err)
 			}
 			fmt.Printf("  Existing skill %s preserved in %s.\n", plan.name, plan.backup)
@@ -972,13 +1004,22 @@ func createSkillSymlinksWith(
 
 		if err := symlink(plan.target, plan.link); err != nil {
 			if plan.backup != "" {
-				if rollbackErr := os.Rename(plan.backup, plan.link); rollbackErr != nil {
+				var rollbackErr error
+				if plan.preserveAsSymlink {
+					rollbackErr = os.Symlink(plan.existingLinkTarget, plan.link)
+					if rollbackErr == nil {
+						rollbackErr = os.Remove(plan.backup)
+					}
+				} else {
+					rollbackErr = os.Rename(plan.backup, plan.link)
+				}
+				if rollbackErr != nil {
 					return fmt.Errorf(
-						"symlink %s -> %s: %w (also failed to restore %s: %v)",
+						"symlink %s -> %s: %w (rollback failed for %s: %v)",
 						plan.link,
 						plan.target,
 						err,
-						plan.backup,
+						plan.link,
 						rollbackErr,
 					)
 				}

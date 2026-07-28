@@ -949,6 +949,58 @@ func TestCreateSkillSymlinksRestoresConflictWhenSymlinkFails(t *testing.T) {
 	}
 }
 
+func TestCreateSkillSymlinksPreservesRelativeSymlinkTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink tests are not reliable on Windows without elevated privileges")
+	}
+	t.Parallel()
+
+	skillsRoot := t.TempDir()
+	obstudioDir := filepath.Join(skillsRoot, "obstudio")
+	bundledSkill := filepath.Join(obstudioDir, "otel-audit")
+	if err := os.MkdirAll(bundledSkill, 0o755); err != nil {
+		t.Fatalf("mkdir bundled skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundledSkill, "SKILL.md"), []byte("bundled"), 0o644); err != nil {
+		t.Fatalf("write bundled SKILL.md: %v", err)
+	}
+
+	customSkill := filepath.Join(skillsRoot, "custom", "otel-audit")
+	if err := os.MkdirAll(customSkill, 0o755); err != nil {
+		t.Fatalf("mkdir custom skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(customSkill, "user-file.txt"), []byte("preserve me"), 0o644); err != nil {
+		t.Fatalf("write custom skill file: %v", err)
+	}
+
+	conflictingSkill := filepath.Join(skillsRoot, "otel-audit")
+	if err := os.Symlink(filepath.Join("custom", "otel-audit"), conflictingSkill); err != nil {
+		t.Fatalf("create conflicting relative symlink: %v", err)
+	}
+
+	if err := createSkillSymlinks(skillsRoot, obstudioDir); err != nil {
+		t.Fatalf("createSkillSymlinks with relative symlink conflict: %v", err)
+	}
+
+	backup := filepath.Join(skillsRoot, skillBackupDirName, "otel-audit")
+	target, err := filepath.EvalSymlinks(backup)
+	if err != nil {
+		t.Fatalf("resolve preserved relative symlink: %v", err)
+	}
+	wantTarget, err := filepath.EvalSymlinks(customSkill)
+	if err != nil {
+		t.Fatalf("resolve custom skill: %v", err)
+	}
+	if target != wantTarget {
+		t.Fatalf("preserved relative symlink target = %q, want %q", target, wantTarget)
+	}
+	if data, err := os.ReadFile(filepath.Join(backup, "user-file.txt")); err != nil {
+		t.Fatalf("read preserved relative symlink target: %v", err)
+	} else if string(data) != "preserve me" {
+		t.Fatalf("preserved relative symlink file = %q, want %q", data, "preserve me")
+	}
+}
+
 func TestRemoveSkillSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests are not reliable on Windows without elevated privileges")
