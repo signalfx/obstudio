@@ -1192,6 +1192,11 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include `$otel-verify` results and `.observe/otel-verify.md` path when run.
   If detectors/configuration were requested, include `$splunk-configure`
   outputs and `.observe/splunk-configure-verify.md` status when run.
+- Use the `render-instrumentation-html` command's returned loopback links for
+  both `otel-instrumentation.html` and `otel.html` in the final response. Do
+  not emit absolute local-file links for generated HTML and do not open either
+  report automatically. Keep Markdown and JSON report links as absolute local
+  paths.
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
 - Never say `complete`, `working`, or `verified` when the mandatory
   compile/type/import gate failed, was blocked, or was not run. Use

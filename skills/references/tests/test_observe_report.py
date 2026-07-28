@@ -3952,6 +3952,58 @@ for (const [serviceRoot, input, expected] of cases) {
                 text=True,
             )
             self.assertEqual(instrumentation_rendered.returncode, 0, instrumentation_rendered.stderr)
+            instrumentation_result = json.loads(instrumentation_rendered.stdout)
+            server = instrumentation_result["server"]
+            self.assertTrue(server["requested"])
+            self.assertTrue(
+                server["url"].startswith("http://127.0.0.1:")
+            )
+            self.assertTrue(server["url"].endswith("/otel-instrumentation.html"))
+            self.assertEqual(
+                instrumentation_result["links"],
+                {
+                    "instrumentation_report": (
+                        f"[otel-instrumentation.html]({server['url']})"
+                    ),
+                    "audit_report": (
+                        f"[otel.html]({MODULE.report_server_url(server, 'otel.html')})"
+                    ),
+                },
+            )
+            state_path = MODULE.report_server_state_path(root)
+            try:
+                with MODULE.urlopen(server["url"], timeout=1) as response:
+                    served_instrumentation = response.read().decode("utf-8")
+                with MODULE.urlopen(
+                    MODULE.report_server_url(server, "otel.html"),
+                    timeout=1,
+                ) as response:
+                    served_audit = response.read().decode("utf-8")
+                self.assertIn(
+                    "OpenTelemetry instrumentation report",
+                    served_instrumentation,
+                )
+                self.assertIn("OpenTelemetry audit report", served_audit)
+                with self.assertRaises(HTTPError) as unauthorized:
+                    MODULE.urlopen(
+                        f"http://127.0.0.1:{server['port']}/otel.html",
+                        timeout=1,
+                    )
+                self.assertEqual(unauthorized.exception.code, 404)
+                unauthorized.exception.close()
+            finally:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(server["pid"]), "/T", "/F"],
+                        check=False,
+                        capture_output=True,
+                    )
+                else:
+                    try:
+                        os.kill(server["pid"], signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                state_path.unlink(missing_ok=True)
             html = instrumentation_html_path.read_text(encoding="utf-8")
             self.assertIn("OpenTelemetry instrumentation report", html)
             self.assertIn("What changed", html)
@@ -4954,6 +5006,33 @@ for (const [serviceRoot, input, expected] of cases) {
                             os.kill(server_pid, signal.SIGTERM)
                         except ProcessLookupError:
                             pass
+                state_path.unlink(missing_ok=True)
+
+    def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_directory = Path(directory)
+            state_path = MODULE.report_server_state_path(report_directory)
+            try:
+                state_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": MODULE.REPORT_SERVER_SCHEMA_VERSION - 1,
+                            "directory": str(report_directory.resolve()),
+                            "pid": 123,
+                            "port": 1,
+                            "token": "old-server-token",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                self.assertIsNone(
+                    MODULE.load_report_server_state(
+                        state_path,
+                        report_directory,
+                    )
+                )
+            finally:
                 state_path.unlink(missing_ok=True)
 
     def test_finalize_audit_reports_independent_shape_errors_together(self) -> None:

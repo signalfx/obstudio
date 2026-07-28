@@ -213,6 +213,12 @@ The shared validator requires instrumentation JSON whenever verify JSON is
 present. Repair every binding, ID/order, scenario coverage, status, or evidence
 failure before finalizing.
 
+The render command starts or reuses the restricted loopback report server and
+returns browser-safe links for both `otel-instrumentation.html` and
+`otel.html`. Use those HTTP links in the final response without opening them
+automatically. Keep `.observe/otel-verify.md` and JSON artifacts as absolute
+local-file links.
+
 The refreshed instrumentation HTML is the concise human proof surface. Start
 with one verification-state heading and one proof-and-delivery sentence, then
 list every selected finding with what changed, how observability improves,

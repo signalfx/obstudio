@@ -85,6 +85,25 @@ class JsonApprovalFlowGuidanceTest(unittest.TestCase):
         self.assertIn("render-html", completed.stdout)
         self.assertIn("render-instrumentation-html", completed.stdout)
 
+    def test_final_response_uses_loopback_links_for_html_only(self) -> None:
+        text = " ".join(
+            (SKILL.read_text(encoding="utf-8") + FLOW.read_text(encoding="utf-8")).split()
+        )
+
+        self.assertIn(
+            "[otel-instrumentation.html](http://127.0.0.1:<port>/<token>/otel-instrumentation.html)",
+            text,
+        )
+        self.assertIn(
+            "[otel.html](http://127.0.0.1:<port>/<token>/otel.html)",
+            text,
+        )
+        self.assertIn(
+            "Keep the Markdown and JSON report links as absolute local-file paths",
+            text,
+        )
+        self.assertIn("do not open either report automatically", text.lower())
+
     def test_wrapper_missing_helper_is_a_tool_error(self) -> None:
         missing = Path("/definitely/missing/observe_report.py")
         error = io.StringIO()

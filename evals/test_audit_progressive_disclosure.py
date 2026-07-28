@@ -22,7 +22,7 @@ def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
         "finalize-audit",
         "--html .observe/otel.html",
         "turns exact existing repository-relative citations into local file links",
-        "Review report: [otel.html](http://127.0.0.1:<port>/otel.html)",
+        "Review report: [otel.html](http://127.0.0.1:<port>/<token>/otel.html)",
     ):
         assert term.replace("`", "") in skill.replace("`", "")
 

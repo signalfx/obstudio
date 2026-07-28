@@ -677,8 +677,8 @@ in this exact order; do not replace them with generic headings such as
 **Result:** Pass | Fail | Partial | Blocked | Not run
 **Report:** [otel-verify.md](<absolute path>)
 **Machine report:** [otel-verify.json](<absolute path>) when canonical
-**Instrumentation report:** [otel-instrumentation.html](<absolute path>) when canonical
-**Audit report:** [otel.html](<absolute path>) when canonical
+**Instrumentation report:** [otel-instrumentation.html](http://127.0.0.1:<port>/<token>/otel-instrumentation.html) when canonical
+**Audit report:** [otel.html](http://127.0.0.1:<port>/<token>/otel.html) when canonical
 
 ## What Changed
 ## Tested And Working
@@ -695,6 +695,10 @@ to the file. Always include `Tested And Working`, even when verification fails
 or is partial; the `Working status` column makes mixed results explicit.
 Always include `Not Working Or Not Proven`; write `None` only when every
 in-scope inventory row is proven.
+
+Use the loopback links returned by `render-instrumentation-html` for both HTML
+reports. Do not open either report automatically. Keep the Markdown and JSON
+report links as absolute local-file paths.
 
 Name `$otel-instrument` as the repair path for instrumentation-introduced
 source failures; do not imply that rerunning verification will repair

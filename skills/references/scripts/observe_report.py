@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import http.client
 import http.server
 import json
 import os
@@ -28,6 +29,12 @@ CURRENT_SELECTION_SCHEMA_VERSION = 2
 SUPPORTED_SELECTION_SCHEMA_VERSIONS = {1, CURRENT_SELECTION_SCHEMA_VERSION}
 CURRENT_AUDIT_SCHEMA_VERSION = 2
 SUPPORTED_AUDIT_SCHEMA_VERSIONS = {1, CURRENT_AUDIT_SCHEMA_VERSION}
+REPORT_SERVER_SCHEMA_VERSION = 2
+REPORT_SERVER_FILES = {
+    "otel.html": "text/html; charset=utf-8",
+    "otel-instrumentation.html": "text/html; charset=utf-8",
+    "otel-audit.json": "application/json; charset=utf-8",
+}
 STABLE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 STATUSES = {"Pass", "Partial", "Blocked"}
 RESULT_STATUSES = STATUSES | {"Fail", "Not run"}
@@ -5446,6 +5453,22 @@ def report_server_state_path(report_directory: Path) -> Path:
         state_directory.chmod(0o700)
     except OSError:
         pass
+    directory_status = state_directory.lstat()
+    if (
+        state_directory.is_symlink()
+        or not stat.S_ISDIR(directory_status.st_mode)
+        or (
+            os.name != "nt"
+            and (
+                directory_status.st_mode & 0o077
+                or (
+                    hasattr(os, "getuid")
+                    and directory_status.st_uid != os.getuid()
+                )
+            )
+        )
+    ):
+        fail(f"report server state directory is not private: {state_directory}")
     return state_directory / f"{identity}.json"
 
 
@@ -5460,6 +5483,7 @@ def load_report_server_state(
         return None
     if (
         not isinstance(state, dict)
+        or state.get("schema_version") != REPORT_SERVER_SCHEMA_VERSION
         or state.get("directory") != str(report_directory.resolve())
         or not isinstance(state.get("pid"), int)
         or state["pid"] <= 0
@@ -5470,15 +5494,25 @@ def load_report_server_state(
         or (expected_token is not None and state["token"] != expected_token)
     ):
         return None
-    health_url = f"http://127.0.0.1:{state['port']}/__obstudio_report_server__"
+    connection = http.client.HTTPConnection(
+        "127.0.0.1",
+        state["port"],
+        timeout=0.5,
+    )
     try:
-        with urlopen(health_url, timeout=0.5) as response:
-            healthy = (
-                response.status == 200
-                and response.read().decode("utf-8") == state["token"]
-            )
-    except (OSError, UnicodeError):
+        connection.request(
+            "GET",
+            f"/{state['token']}/__obstudio_report_server__",
+        )
+        response = connection.getresponse()
+        healthy = (
+            response.status == 200
+            and response.read().decode("utf-8") == "ok"
+        )
+    except (OSError, UnicodeError, http.client.HTTPException):
         return None
+    finally:
+        connection.close()
     return state if healthy else None
 
 
@@ -5486,22 +5520,21 @@ def report_server_handler(
     report_directory: Path,
     token: str,
 ) -> type[http.server.BaseHTTPRequestHandler]:
-    content_types = {
-        "otel.html": "text/html; charset=utf-8",
-        "otel-audit.json": "application/json; charset=utf-8",
-    }
-
     class ReportHandler(http.server.BaseHTTPRequestHandler):
         def version_string(self) -> str:
             return "ObstudioReport"
 
         def do_GET(self) -> None:
             request_path = urlsplit(self.path).path
-            if request_path == "/__obstudio_report_server__":
-                self.send_payload(token.encode("utf-8"), "text/plain; charset=utf-8")
+            parts = request_path.removeprefix("/").split("/")
+            if len(parts) != 2 or not secrets.compare_digest(parts[0], token):
+                self.send_error(404)
                 return
-            filename = request_path.removeprefix("/")
-            if filename not in content_types:
+            filename = parts[1]
+            if filename == "__obstudio_report_server__":
+                self.send_payload(b"ok", "text/plain; charset=utf-8")
+                return
+            if filename not in REPORT_SERVER_FILES:
                 self.send_error(404)
                 return
             source = report_directory / filename
@@ -5513,7 +5546,7 @@ def report_server_handler(
             except OSError:
                 self.send_error(500)
                 return
-            self.send_payload(payload, content_types[filename])
+            self.send_payload(payload, REPORT_SERVER_FILES[filename])
 
         def send_payload(self, payload: bytes, content_type: str) -> None:
             self.send_response(200)
@@ -5538,7 +5571,7 @@ def report_server_handler(
 
 
 def cmd_serve_report(args: argparse.Namespace) -> int:
-    """Serve only the audit HTML and canonical JSON on loopback."""
+    """Serve only generated human HTML and canonical audit JSON on loopback."""
 
     report_directory = args.directory.resolve()
     if not report_directory.is_dir():
@@ -5549,6 +5582,7 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
         write_json(
             args.state_file,
             {
+                "schema_version": REPORT_SERVER_SCHEMA_VERSION,
                 "directory": str(report_directory),
                 "pid": os.getpid(),
                 "port": server.server_port,
@@ -5566,17 +5600,37 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
     return 0
 
 
-def start_or_reuse_report_server(report_directory: Path) -> dict[str, Any]:
+def report_server_url(state: dict[str, Any], filename: str) -> str:
+    """Return one allowlisted report URL from validated server state."""
+
+    if filename not in REPORT_SERVER_FILES:
+        fail(f"report server does not expose {filename}")
+    token = state.get("token")
+    if isinstance(token, str) and token:
+        return f"http://127.0.0.1:{state['port']}/{token}/{filename}"
+    current_url = state.get("url")
+    if isinstance(current_url, str) and "/" in current_url:
+        return f"{current_url.rsplit('/', 1)[0]}/{filename}"
+    fail("report server state does not contain a usable URL")
+
+
+def start_or_reuse_report_server(
+    report_directory: Path,
+    report_filename: str = "otel.html",
+) -> dict[str, Any]:
     """Return a live loopback URL backed by a detached local report server."""
 
     report_directory = report_directory.resolve()
+    if report_filename not in REPORT_SERVER_FILES:
+        fail(f"report server does not expose {report_filename}")
     state_path = report_server_state_path(report_directory)
     state = load_report_server_state(state_path, report_directory)
     if state is not None:
         return {
             "pid": state["pid"],
+            "port": state["port"],
             "reused": True,
-            "url": f"http://127.0.0.1:{state['port']}/otel.html",
+            "url": report_server_url(state, report_filename),
         }
 
     token = secrets.token_urlsafe(24)
@@ -5615,8 +5669,9 @@ def start_or_reuse_report_server(report_directory: Path) -> dict[str, Any]:
         if state is not None:
             return {
                 "pid": state["pid"],
+                "port": state["port"],
                 "reused": False,
-                "url": f"http://127.0.0.1:{state['port']}/otel.html",
+                "url": report_server_url(state, report_filename),
             }
         if process.poll() is not None:
             break
@@ -5697,9 +5752,31 @@ def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
         args.output.resolve().parent,
     )
     write_text(args.output, html_text)
+    html_path = args.output.resolve()
+    report_server = start_or_reuse_report_server(
+        html_path.parent,
+        "otel-instrumentation.html",
+    )
+    audit_url = report_server_url(report_server, "otel.html")
     print(
-        f"wrote {args.output} ({len(instrumentation['findings'])} findings in scope, "
-        f"verification {verify['meta']['result'] if verify else 'Not run'})"
+        json.dumps(
+            {
+                "result": "PASS",
+                "findings": len(instrumentation["findings"]),
+                "verification": verify["meta"]["result"] if verify else "Not run",
+                "html": str(html_path),
+                "server": {"requested": True, **report_server},
+                "links": {
+                    "instrumentation_report": markdown_web_link(
+                        "otel-instrumentation.html",
+                        report_server["url"],
+                    ),
+                    "audit_report": markdown_web_link("otel.html", audit_url),
+                },
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     )
     return 0
 

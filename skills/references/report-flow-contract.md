@@ -96,6 +96,15 @@ Use the two HTML reports for different moments in the workflow:
    fix the named runtime/code/product prerequisite and rerun instrumentation or
    verification through the bound JSON overlays; do not edit generated HTML.
 
+Serve both generated HTML reports from the same restricted loopback report
+server through an unguessable tokenized URL path and return their
+`http://127.0.0.1:<port>/<token>/...` links after instrumentation and
+verification.
+Version the reusable server state so a prior bundle without the required
+report allowlist cannot be reused. Do not open the links automatically. Keep
+Markdown and JSON artifacts as absolute local-file links; only generated HTML
+uses browser-safe loopback links.
+
 ## Reader-First Report Order
 
 Users read these reports to understand status and next action quickly. Put the
