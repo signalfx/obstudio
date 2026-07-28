@@ -904,6 +904,51 @@ func TestCreateSkillSymlinksMigratesConflictingDirectoryOnce(t *testing.T) {
 	}
 }
 
+func TestCreateSkillSymlinksRestoresConflictWhenSymlinkFails(t *testing.T) {
+	t.Parallel()
+
+	skillsRoot := t.TempDir()
+	obstudioDir := filepath.Join(skillsRoot, "obstudio")
+	bundledSkill := filepath.Join(obstudioDir, "otel-audit")
+	if err := os.MkdirAll(bundledSkill, 0o755); err != nil {
+		t.Fatalf("mkdir bundled skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundledSkill, "SKILL.md"), []byte("bundled"), 0o644); err != nil {
+		t.Fatalf("write bundled SKILL.md: %v", err)
+	}
+
+	conflictingSkill := filepath.Join(skillsRoot, "otel-audit")
+	if err := os.Mkdir(conflictingSkill, 0o755); err != nil {
+		t.Fatalf("mkdir conflicting skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(conflictingSkill, "user-file.txt"), []byte("preserve me"), 0o644); err != nil {
+		t.Fatalf("write conflicting skill file: %v", err)
+	}
+
+	symlinkErr := errors.New("forced symlink failure")
+	err := createSkillSymlinksWith(
+		skillsRoot,
+		obstudioDir,
+		func(string, string) error { return symlinkErr },
+	)
+	if !errors.Is(err, symlinkErr) {
+		t.Fatalf("createSkillSymlinksWith error = %v, want %v", err, symlinkErr)
+	}
+
+	data, err := os.ReadFile(filepath.Join(conflictingSkill, "user-file.txt"))
+	if err != nil {
+		t.Fatalf("read restored conflicting skill: %v", err)
+	}
+	if string(data) != "preserve me" {
+		t.Fatalf("restored conflicting skill = %q, want %q", data, "preserve me")
+	}
+
+	backup := filepath.Join(skillsRoot, skillBackupDirName, "otel-audit")
+	if _, err := os.Lstat(backup); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("skill backup remains after rollback: %v", err)
+	}
+}
+
 func TestRemoveSkillSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests are not reliable on Windows without elevated privileges")

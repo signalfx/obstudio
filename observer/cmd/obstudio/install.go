@@ -889,6 +889,14 @@ func copyFile(src, dst string) error {
 // top-level references symlink is needed. Existing non-managed paths are
 // preserved in a stable, per-skill backup location before the link is created.
 func createSkillSymlinks(skillsRoot, obstudioDir string) error {
+	return createSkillSymlinksWith(skillsRoot, obstudioDir, os.Symlink)
+}
+
+func createSkillSymlinksWith(
+	skillsRoot,
+	obstudioDir string,
+	symlink func(string, string) error,
+) error {
 	type symlinkPlan struct {
 		name   string
 		link   string
@@ -962,7 +970,7 @@ func createSkillSymlinks(skillsRoot, obstudioDir string) error {
 			fmt.Printf("  Existing skill %s preserved in %s.\n", plan.name, plan.backup)
 		}
 
-		if err := os.Symlink(plan.target, plan.link); err != nil {
+		if err := symlink(plan.target, plan.link); err != nil {
 			if plan.backup != "" {
 				if rollbackErr := os.Rename(plan.backup, plan.link); rollbackErr != nil {
 					return fmt.Errorf(
