@@ -1376,6 +1376,28 @@ func TestInstallSmokeInstallsBinaryAndAcceptsOTLP(t *testing.T) {
 		t.Fatalf("health otlpGrpc = %q, want %q", got, fmt.Sprintf("127.0.0.1:%d", otlpGRPCPort))
 	}
 
+	statePath := filepath.Join(homeDir, sharedObserverStateDirName, sharedObserverStateFileName)
+	healthyState, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("read healthy shared observer state: %v", err)
+	}
+	contender := exec.Command(installedBinary)
+	contender.Env = runEnv
+	if output, err := contender.CombinedOutput(); err == nil {
+		t.Fatalf("expected a second observer using the same listeners to fail, output:\n%s", output)
+	}
+	stateAfterConflict, err := readSharedObserverState(statePath)
+	if err != nil {
+		t.Fatalf("read shared observer state after listener conflict: %v", err)
+	}
+	if stateAfterConflict.PID != healthyState.PID {
+		t.Fatalf(
+			"failed contender replaced healthy shared observer state: PID = %d, want %d",
+			stateAfterConflict.PID,
+			healthyState.PID,
+		)
+	}
+
 	if status := doSmokeJSONRequest(t, client, http.MethodDelete, baseURL+"/api/data", "", nil, nil); status != http.StatusOK {
 		t.Fatalf("clear data endpoint returned %d", status)
 	}
