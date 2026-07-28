@@ -25,6 +25,6 @@
     "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",
     "Writes schema-v2 .observe/otel-audit.json with stable selectable finding IDs and complete downstream instrumentation context; renders a self-contained, decision-first .observe/otel.html with finding selection, copyable instrumentation handoff, and collapsed technical details while retaining complete machine context in canonical JSON.",
     "Renders .observe/otel.html as a decision-first findings view with GenAI ownership detected as No and a matching Audit Evidence row, while preserving machine context in canonical .observe/otel-audit.json and not rendering separate Incident or GenAI readiness ledger sections.",
-    "Ends the final response with clickable Markdown links whose targets are the absolute .observe/otel.html and .observe/otel-audit.json paths; bare relative report paths are not sufficient."
+    "The final response contains exactly one line: Review report: [otel.html](http://127.0.0.1:<port>/otel.html), using the loopback-only URL returned by finalize-audit. It does not open the browser automatically and does not include a machine-report link, summary bullets, finding counts, recommendations, or artifact-write narration."
   ]
 }

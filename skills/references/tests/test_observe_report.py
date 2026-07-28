@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
 from unittest import mock
+from urllib.error import HTTPError
 
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "observe_report.py"
@@ -354,6 +356,15 @@ def sample_verify(
 
 
 class ObserveReportTest(unittest.TestCase):
+    def test_markdown_web_link_targets_loopback_report(self) -> None:
+        self.assertEqual(
+            MODULE.markdown_web_link(
+                "otel.html",
+                "http://127.0.0.1:43123/otel.html",
+            ),
+            "[otel.html](http://127.0.0.1:43123/otel.html)",
+        )
+
     def test_markdown_local_file_link_is_platform_safe(self) -> None:
         self.assertEqual(
             MODULE.markdown_local_file_link(
@@ -2042,7 +2053,7 @@ class ObserveReportTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             html = html_path.read_text(encoding="utf-8")
             self.assertIn("OTEL-001", html)
-            self.assertIn("Save selection", html)
+            self.assertNotIn("Save selection", html)
             self.assertIn("Copy this terminal command", html)
             self.assertNotIn("navigator.clipboard", html)
             self.assertIn("Technical appendix", html)
@@ -2082,7 +2093,10 @@ class ObserveReportTest(unittest.TestCase):
             self.assertIn("Next step", html)
             self.assertIn("function findingNextStep(finding)", html)
             self.assertIn('eligibility.blockers.join(", ")', html)
-            self.assertIn("This finding is selected. Save the selection", html)
+            self.assertIn(
+                "This finding is selected. Copy and run the generated $otel-instrument command.",
+                html,
+            )
             self.assertIn("included because selected work depends on it", html)
             self.assertIn('data-finding-next-step="${esc(f.id)}"', html)
             self.assertIn("nextStep.textContent = findingNextStep(finding)", html)
@@ -2148,7 +2162,12 @@ class ObserveReportTest(unittest.TestCase):
             )
             self.assertNotIn("input.checked = selected.has(finding.id)", html)
             self.assertIn("const requested = new Set", html)
-            self.assertIn("requested_ids: orderedRequested(), approved_ids: orderedSelection()", html)
+            self.assertIn("function orderedRequested()", html)
+            self.assertIn("function orderedSelection()", html)
+            self.assertNotIn(
+                "requested_ids: orderedRequested(), approved_ids: orderedSelection()",
+                html,
+            )
             self.assertIn("requested.delete(id)", html)
             self.assertIn(
                 '<h2 id="findings-heading" tabindex="-1">Findings '
@@ -2177,11 +2196,9 @@ class ObserveReportTest(unittest.TestCase):
                 'id="selectionStatus" class="sr-only" aria-live="polite" aria-atomic="true"',
                 html,
             )
-            self.assertIn(
-                'id="saveSelection" class="primary" type="button" '
-                'aria-describedby="saveSelectionHint">Save selection</button>',
-                html,
-            )
+            self.assertNotIn('id="planSummary"', html)
+            self.assertNotIn('id="saveSelectionHint"', html)
+            self.assertNotIn('id="saveSelection"', html)
             self.assertIn('id="instrumentCommand"', html)
             self.assertIn("function serviceRootFromLocation()", html)
             self.assertIn("function terminalInstrumentCommand()", html)
@@ -2194,27 +2211,11 @@ class ObserveReportTest(unittest.TestCase):
                 "Select at least one executable finding to generate an instrumentation command.",
                 html,
             )
-            self.assertIn(
-                "Save a selected audit copy as "
-                "<code>.observe/otel-audit.selected.json</code>",
-                html,
-            )
-            self.assertIn("function auditReviewDocument()", html)
-            self.assertIn("document.review_selection = selectionDocument()", html)
-            self.assertIn('suggestedName: "otel-audit.selected.json"', html)
-            self.assertIn('if (handle.name === "otel-audit.json")', html)
-            self.assertIn("const existingFile = await handle.getFile()", html)
-            self.assertIn(
-                "existingSelection?.audit_sha256 === DATA.selection.audit_sha256",
-                html,
-            )
-            self.assertIn(
-                "The chosen file belongs to a different or newer audit.",
-                html,
-            )
-            self.assertIn('link.download = "otel-audit.selected.json"', html)
-            self.assertIn('summaryParts.join(" · ")', html)
-            self.assertIn('"dependency", "dependencies"', html)
+            self.assertNotIn("function auditReviewDocument()", html)
+            self.assertNotIn("document.review_selection = selectionDocument()", html)
+            self.assertNotIn("window.showSaveFilePicker", html)
+            self.assertNotIn('link.download = "otel-audit.selected.json"', html)
+            self.assertNotIn('summaryParts.join(" · ")', html)
             self.assertIn('aria-controls="finding-body-${esc(f.id)}"', html)
             self.assertIn('name="plan-${esc(f.id)}"', html)
             self.assertIn(
@@ -2231,18 +2232,16 @@ class ObserveReportTest(unittest.TestCase):
             self.assertNotIn('data-remove-plan="', html)
             self.assertNotIn("setPlanOpen", html)
             self.assertNotIn('event.key === "Escape"', html)
-            self.assertEqual(html.count('id="saveSelection"'), 1)
+            self.assertEqual(html.count('id="saveSelection"'), 0)
             self.assertEqual(html.count('id="reviewPlan"'), 0)
             self.assertEqual(html.count('id="downloadJson"'), 0)
             self.assertEqual(html.count('id="copyCommand"'), 0)
-            self.assertIn(
+            self.assertNotIn(
                 'document.getElementById("saveSelection").addEventListener("click"',
                 html,
             )
-            self.assertIn("window.showSaveFilePicker", html)
-            self.assertIn("Selected audit copy saved.", html)
-            self.assertIn('link.download = "otel-audit.selected.json"', html)
-            self.assertIn("Selected audit download fallback started.", html)
+            self.assertNotIn("Selected audit copy saved.", html)
+            self.assertNotIn("Selected audit download fallback started.", html)
             self.assertNotIn("severityColor", html)
             self.assertNotIn("data-severity", html)
             self.assertNotIn("--required:", html)
@@ -2499,7 +2498,7 @@ for (const [input, expected] of cases) {
         )
         self.assertIn('</button>\n        ${selectionControl}', html)
 
-    def test_html_serializes_answers_and_prunes_stale_branch_work(self) -> None:
+    def test_html_commands_include_answers_and_prune_stale_branch_work(self) -> None:
         report = MODULE.normalize_audit_report(sample_decision_branch_report())
         selection = MODULE.normalize_selection(
             {
@@ -2521,11 +2520,12 @@ for (const [input, expected] of cases) {
         self.assertNotIn("const findingActionLabels", html)
         self.assertNotIn("function findingActionLabelFor(finding)", html)
         self.assertIn("decisionAnswers.set(decisionId, optionId)", html)
-        self.assertIn("document.decision_answers = answers", html)
         self.assertIn(
-            "schema_version: answers.length ? 2 : 1",
+            'parts.push("--decision", `${answer.finding_id}=${answer.option_id}`);',
             html,
         )
+        self.assertNotIn("document.decision_answers = answers", html)
+        self.assertNotIn("schema_version: answers.length ? 2 : 1", html)
         self.assertIn("requested.delete(finding.id)", html)
         self.assertIn("Removed incompatible selected work", html)
 
@@ -4838,43 +4838,104 @@ for (const [input, expected] of cases) {
             html = observe / "otel.html"
             audit.write_text(json.dumps(sample_report()), encoding="utf-8")
 
-            completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-I",
-                    str(SCRIPT),
-                    "finalize-audit",
-                    ".observe/otel-audit.json",
-                    "--html",
-                    ".observe/otel.html",
-                    "--repo-root",
-                    ".",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=root,
-            )
+            command = [
+                sys.executable,
+                "-I",
+                str(SCRIPT),
+                "finalize-audit",
+                ".observe/otel-audit.json",
+                "--html",
+                ".observe/otel.html",
+                "--repo-root",
+                ".",
+            ]
+            server_pid: int | None = None
+            state_path = MODULE.report_server_state_path(observe)
+            try:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=root,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads(completed.stdout)
+                self.assertEqual(result["result"], "PASS")
+                self.assertEqual(result["findings"], 2)
+                self.assertEqual(result["scenarios"], 1)
+                self.assertEqual(result["audit"], str(audit.resolve()))
+                self.assertEqual(result["html"], str(html.resolve()))
+                server = result["server"]
+                server_pid = server["pid"]
+                self.assertTrue(server["requested"])
+                self.assertFalse(server["reused"])
+                self.assertTrue(server["url"].startswith("http://127.0.0.1:"))
+                if os.name == "posix":
+                    self.assertEqual(state_path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(
+                    result["links"],
+                    {
+                        "review_report": f"[otel.html]({server['url']})",
+                        "machine_report": (
+                            f"[otel-audit.json](<{audit.resolve()}>)"
+                        ),
+                    },
+                )
+                with MODULE.urlopen(server["url"], timeout=1) as response:
+                    rendered = response.read().decode("utf-8")
+                    self.assertEqual(
+                        response.headers["Content-Type"],
+                        "text/html; charset=utf-8",
+                    )
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
+                    self.assertEqual(
+                        response.headers["X-Content-Type-Options"],
+                        "nosniff",
+                    )
+                    self.assertEqual(
+                        response.headers["Referrer-Policy"],
+                        "no-referrer",
+                    )
+                    self.assertIn(
+                        "default-src 'none'",
+                        response.headers["Content-Security-Policy"],
+                    )
+                self.assertIn("OpenTelemetry audit report", rendered)
+                denied_url = server["url"].replace("/otel.html", "/not-allowed")
+                with self.assertRaises(HTTPError) as denied:
+                    MODULE.urlopen(denied_url, timeout=1)
+                self.assertEqual(denied.exception.code, 404)
+                denied.exception.close()
 
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            result = json.loads(completed.stdout)
-            self.assertEqual(result["result"], "PASS")
-            self.assertEqual(result["findings"], 2)
-            self.assertEqual(result["scenarios"], 1)
-            self.assertEqual(result["audit"], str(audit.resolve()))
-            self.assertEqual(result["html"], str(html.resolve()))
-            self.assertEqual(
-                result["links"],
-                {
-                    "review_report": f"[otel.html](<{html.resolve()}>)",
-                    "machine_report": (
-                        f"[otel-audit.json](<{audit.resolve()}>)"
-                    ),
-                },
-            )
-            self.assertTrue(html.is_file())
-            self.assertFalse((observe / "otel.md").exists())
-            self.assertIn("OpenTelemetry audit", html.read_text(encoding="utf-8"))
+                repeated = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=root,
+                )
+                self.assertEqual(repeated.returncode, 0, repeated.stderr)
+                repeated_result = json.loads(repeated.stdout)
+                self.assertTrue(repeated_result["server"]["reused"])
+                self.assertEqual(repeated_result["server"]["url"], server["url"])
+                self.assertTrue(html.is_file())
+                self.assertFalse((observe / "otel.md").exists())
+                self.assertIn("OpenTelemetry audit", html.read_text(encoding="utf-8"))
+            finally:
+                if server_pid is not None:
+                    if os.name == "nt":
+                        subprocess.run(
+                            ["taskkill", "/PID", str(server_pid), "/T", "/F"],
+                            check=False,
+                            capture_output=True,
+                        )
+                    else:
+                        try:
+                            os.kill(server_pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                state_path.unlink(missing_ok=True)
 
     def test_finalize_audit_reports_independent_shape_errors_together(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

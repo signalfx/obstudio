@@ -6,16 +6,21 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import http.server
 import json
 import os
 import re
 import secrets
 import stat
+import subprocess
 import sys
+import tempfile
+import time
 import unicodedata
 from pathlib import Path, PurePath
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
+from urllib.request import urlopen
 
 
 OVERLAY_SCHEMA_VERSION = 1
@@ -4312,24 +4317,15 @@ th {{ color: var(--muted); font-size: 12px; }}
 .muted {{ color: var(--muted); }}
 .tray {{ position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; background: #121821; color: #fff; box-shadow: 0 -8px 24px rgba(18, 24, 33, .18); }}
 .tray[hidden] {{ display: none; }}
-.tray-bar {{ display: grid; grid-template-columns: minmax(230px, 1fr) minmax(280px, 1.2fr) max-content; gap: 18px; align-items: center; padding-top: 12px; padding-bottom: 12px; }}
-.tray-summary {{ min-width: 0; }}
-.tray-summary strong {{ display: block; font-size: 14px; line-height: 1.35; }}
+.tray-bar {{ padding-top: 12px; padding-bottom: 12px; }}
 .tray-hint {{ display: block; color: #d3d9e2; font-size: 11px; line-height: 1.4; margin-top: 3px; }}
 .tray-hint code {{ color: #91f0b8; }}
 .tray-command {{ min-width: 0; }}
 .instrument-command {{ display: block; margin-top: 4px; max-width: 100%; overflow-x: auto; white-space: nowrap; background: #0b111a; border: 1px solid #253143; border-radius: 6px; color: #91f0b8; padding: 7px 9px; user-select: all; }}
-.tray button {{ border-radius: 6px; padding: 9px 13px; font-weight: 700; cursor: pointer; }}
-.tray button.primary {{ background: var(--ok); color: #fff; border: 1px solid var(--ok); }}
-.tray button:hover {{ filter: brightness(1.08); }}
-.tray button:disabled {{ cursor: not-allowed; filter: none; opacity: .5; }}
 .sr-only {{ position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }}
 @media (max-width: 760px) {{
-  body {{ padding-bottom: 124px; }}
+  body {{ padding-bottom: 96px; }}
   .context-grid {{ grid-template-columns: 1fr; }}
-  .tray-bar {{ grid-template-columns: 1fr; gap: 9px; }}
-  .tray-summary {{ width: 100%; }}
-  .tray-bar > button {{ width: 100%; }}
 }}
 </style>
 </head>
@@ -4373,15 +4369,10 @@ th {{ color: var(--muted); font-size: 12px; }}
 </main>
 <div class="tray" id="tray" hidden inert aria-hidden="true" aria-label="Instrumentation selection">
   <div class="wrap tray-bar">
-    <div class="tray-summary">
-      <strong id="planSummary"></strong>
-      <span class="tray-hint" id="saveSelectionHint">Save a selected audit copy as <code>.observe/otel-audit.selected.json</code> before running <code>$otel-instrument</code>. The canonical audit remains unchanged. If your browser downloads the copy instead, <code>$otel-instrument</code> can adopt it after validation when no repository selection already exists.</span>
-    </div>
     <div class="tray-command" aria-labelledby="instrumentCommandLabel">
       <span class="tray-hint" id="instrumentCommandLabel">Copy this terminal command:</span>
       <code class="instrument-command" id="instrumentCommand"></code>
     </div>
-    <button id="saveSelection" class="primary" type="button" aria-describedby="saveSelectionHint">Save selection</button>
   </div>
 </div>
 <div id="selectionStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -4571,7 +4562,7 @@ function findingNextStep(finding) {{
       return `Choose one answer with ${{finding.decision_owner || "the named owner"}}, then select any unlocked executable work.`;
     }}
     return (option.unlocks || []).length
-      ? "Review the executable work unlocked by this answer and select the work you want to save."
+      ? "Review the executable work unlocked by this answer and select the work you want in the command."
       : "This answer unlocks no instrumentation work. Keep the decision in the audit; no selection is needed.";
   }}
   if (finding.instrument_mode === "external follow-up") {{
@@ -4585,12 +4576,12 @@ function findingNextStep(finding) {{
     return `${{eligibility.reason || "This finding cannot enter the current instrumentation selection"}}.`;
   }}
   if (requested.has(finding.id)) {{
-    return "This finding is selected. Save the selection, then run $otel-instrument.";
+    return "This finding is selected. Copy and run the generated $otel-instrument command.";
   }}
   if (selected.has(finding.id)) {{
-    return "This finding is included because selected work depends on it. Save the selection, then run $otel-instrument.";
+    return "This finding is included because selected work depends on it. Copy and run the generated $otel-instrument command.";
   }}
-  return "Select this finding, then save the selection before running $otel-instrument.";
+  return "Select this finding, then copy and run the generated $otel-instrument command.";
 }}
 
 function renderCards() {{
@@ -4675,10 +4666,6 @@ function orderedDecisionAnswers() {{
     .map(finding => ({{finding_id:finding.id, option_id:decisionAnswers.get(finding.id)}}));
 }}
 
-function plural(count, singular, pluralForm) {{
-  return count === 1 ? singular : (pluralForm || singular + "s");
-}}
-
 function announceSelection(message) {{
   document.getElementById("selectionStatus").textContent = message;
 }}
@@ -4729,36 +4716,12 @@ function renderInstrumentCommand() {{
 
 function renderTray() {{
   const requestedIds = orderedRequested();
-  const inPlanIds = orderedSelection();
-  const autoAddedIds = inPlanIds.filter(id => !requested.has(id));
   const hasSelection = requestedIds.length > 0 || decisionAnswers.size > 0;
   const tray = document.getElementById("tray");
   tray.hidden = !hasSelection;
   tray.toggleAttribute("inert", !hasSelection);
   tray.setAttribute("aria-hidden", String(!hasSelection));
-  const summaryParts = [inPlanIds.length + " in selection"];
-  if (autoAddedIds.length) {{
-    summaryParts.push(autoAddedIds.length + " auto-added " + plural(autoAddedIds.length, "dependency", "dependencies"));
-  }}
-  if (decisionAnswers.size) {{
-    summaryParts.push(decisionAnswers.size + " " + plural(decisionAnswers.size, "decision answer", "decision answers"));
-  }}
-  document.getElementById("planSummary").textContent = hasSelection ? summaryParts.join(" · ") : "";
-  document.getElementById("saveSelection").disabled = !hasSelection;
   renderInstrumentCommand();
-}}
-
-function selectionDocument() {{
-  const answers = orderedDecisionAnswers();
-  const document = {{schema_version: answers.length ? 2 : 1, kind: "otel-selection", audit_id: REPORT.meta.audit_id, audit_sha256: DATA.selection.audit_sha256, requested_ids: orderedRequested(), approved_ids: orderedSelection(), approved_by: null, approved_at: null}};
-  if (answers.length) document.decision_answers = answers;
-  return document;
-}}
-
-function auditReviewDocument() {{
-  const document = JSON.parse(JSON.stringify(REPORT));
-  document.review_selection = selectionDocument();
-  return document;
 }}
 
 function syncDependencyClosure() {{
@@ -4913,69 +4876,6 @@ document.addEventListener("change", event => {{
   const input = event.target.closest("input[data-id]");
   if (!input) return;
   applySelectionInput(input);
-}});
-
-async function saveSelectionOverlay() {{
-  const contents = JSON.stringify(auditReviewDocument(), null, 2) + "\\n";
-  const dependencyCount = orderedSelection().filter(id => !requested.has(id)).length;
-  const dependencyMessage = dependencyCount
-    ? ` It includes ${{dependencyCount}} auto-added ${{plural(dependencyCount, "dependency", "dependencies")}}.`
-    : "";
-  if (window.showSaveFilePicker) {{
-    try {{
-      const handle = await window.showSaveFilePicker({{
-        suggestedName: "otel-audit.selected.json",
-        types: [{{description: "OpenTelemetry audit JSON with saved selection", accept: {{"application/json": [".json"]}}}}],
-      }});
-      if (handle.name === "otel-audit.json") {{
-        announceSelection("The canonical otel-audit.json is immutable. Choose otel-audit.selected.json or another new selected-audit filename.");
-        return;
-      }}
-      const existingFile = await handle.getFile();
-      if (existingFile.size) {{
-        let existingDocument;
-        try {{
-          existingDocument = JSON.parse(await existingFile.text());
-        }} catch (error) {{
-          announceSelection("The chosen file already exists and is not a valid selected audit. Choose a new otel-audit.selected.json file.");
-          return;
-        }}
-        const existingSelection = existingDocument?.review_selection;
-        const sameAudit = existingDocument?.kind === "otel-audit"
-          && existingDocument?.meta?.audit_id === REPORT.meta.audit_id
-          && existingSelection?.audit_sha256 === DATA.selection.audit_sha256;
-        if (!sameAudit) {{
-          announceSelection("The chosen file belongs to a different or newer audit. Choose a new otel-audit.selected.json file.");
-          return;
-        }}
-      }}
-      const writable = await handle.createWritable();
-      await writable.write(contents);
-      await writable.close();
-      announceSelection("Selected audit copy saved." + dependencyMessage + " Keep it in .observe before running $otel-instrument.");
-      return;
-    }} catch (error) {{
-      if (error && error.name === "AbortError") {{
-        announceSelection("Audit selection save cancelled.");
-        return;
-      }}
-      console.warn("Direct audit-state save failed; falling back to browser download.", error);
-    }}
-  }}
-  const blob = new Blob([contents], {{type:"application/json"}});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "otel-audit.selected.json";
-  link.hidden = true;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 0);
-  announceSelection("Selected audit download fallback started." + dependencyMessage + " $otel-instrument can adopt it after validation when no repository selection already exists.");
-}}
-
-document.getElementById("saveSelection").addEventListener("click", () => {{
-  saveSelectionOverlay();
 }});
 
 syncDependencyClosure();
@@ -5393,8 +5293,8 @@ def cmd_adopt_selection(args: argparse.Namespace) -> int:
         details = ("\nRejected candidates:\n- " + "\n- ".join(rejected[:10])) if rejected else ""
         fail(
             "no saved audit selection matching the canonical audit was found. "
-            "Save a selected audit copy from .observe/otel.html or run select "
-            "with explicit IDs."
+            "Run select with explicit IDs or use the $otel-instrument command "
+            "generated by .observe/otel.html."
             + details
         )
 
@@ -5521,8 +5421,207 @@ def markdown_local_file_link(label: str, path: PurePath) -> str:
     return f"[{escaped_label}](<{destination}>)"
 
 
+def markdown_web_link(label: str, url: str) -> str:
+    """Return a CommonMark link to one loopback HTTP report URL."""
+
+    escaped_label = (
+        label.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+    )
+    return f"[{escaped_label}]({url})"
+
+
+def report_server_state_path(report_directory: Path) -> Path:
+    identity = hashlib.sha256(
+        str(report_directory.resolve()).encode("utf-8")
+    ).hexdigest()[:20]
+    state_directory = Path(tempfile.gettempdir()) / "obstudio-report-servers"
+    state_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        state_directory.chmod(0o700)
+    except OSError:
+        pass
+    return state_directory / f"{identity}.json"
+
+
+def load_report_server_state(
+    state_path: Path,
+    report_directory: Path,
+    expected_token: str | None = None,
+) -> dict[str, Any] | None:
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(state, dict)
+        or state.get("directory") != str(report_directory.resolve())
+        or not isinstance(state.get("pid"), int)
+        or state["pid"] <= 0
+        or not isinstance(state.get("port"), int)
+        or not 1 <= state["port"] <= 65535
+        or not isinstance(state.get("token"), str)
+        or not state["token"]
+        or (expected_token is not None and state["token"] != expected_token)
+    ):
+        return None
+    health_url = f"http://127.0.0.1:{state['port']}/__obstudio_report_server__"
+    try:
+        with urlopen(health_url, timeout=0.5) as response:
+            healthy = (
+                response.status == 200
+                and response.read().decode("utf-8") == state["token"]
+            )
+    except (OSError, UnicodeError):
+        return None
+    return state if healthy else None
+
+
+def report_server_handler(
+    report_directory: Path,
+    token: str,
+) -> type[http.server.BaseHTTPRequestHandler]:
+    content_types = {
+        "otel.html": "text/html; charset=utf-8",
+        "otel-audit.json": "application/json; charset=utf-8",
+    }
+
+    class ReportHandler(http.server.BaseHTTPRequestHandler):
+        def version_string(self) -> str:
+            return "ObstudioReport"
+
+        def do_GET(self) -> None:
+            request_path = urlsplit(self.path).path
+            if request_path == "/__obstudio_report_server__":
+                self.send_payload(token.encode("utf-8"), "text/plain; charset=utf-8")
+                return
+            filename = request_path.removeprefix("/")
+            if filename not in content_types:
+                self.send_error(404)
+                return
+            source = report_directory / filename
+            if source.is_symlink() or not source.is_file():
+                self.send_error(404)
+                return
+            try:
+                payload = source.read_bytes()
+            except OSError:
+                self.send_error(500)
+                return
+            self.send_payload(payload, content_types[filename])
+
+        def send_payload(self, payload: bytes, content_type: str) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "script-src 'unsafe-inline'; img-src data:; "
+                "base-uri 'none'; form-action 'none'",
+            )
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, _format: str, *_args: Any) -> None:
+            return
+
+    return ReportHandler
+
+
+def cmd_serve_report(args: argparse.Namespace) -> int:
+    """Serve only the audit HTML and canonical JSON on loopback."""
+
+    report_directory = args.directory.resolve()
+    if not report_directory.is_dir():
+        fail(f"report directory is not a directory: {report_directory}")
+    handler = report_server_handler(report_directory, args.token)
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+        server.daemon_threads = True
+        write_json(
+            args.state_file,
+            {
+                "directory": str(report_directory),
+                "pid": os.getpid(),
+                "port": server.server_port,
+                "token": args.token,
+            },
+        )
+        try:
+            args.state_file.chmod(0o600)
+        except OSError:
+            pass
+        try:
+            server.serve_forever(poll_interval=0.5)
+        except KeyboardInterrupt:
+            pass
+    return 0
+
+
+def start_or_reuse_report_server(report_directory: Path) -> dict[str, Any]:
+    """Return a live loopback URL backed by a detached local report server."""
+
+    report_directory = report_directory.resolve()
+    state_path = report_server_state_path(report_directory)
+    state = load_report_server_state(state_path, report_directory)
+    if state is not None:
+        return {
+            "pid": state["pid"],
+            "reused": True,
+            "url": f"http://127.0.0.1:{state['port']}/otel.html",
+        }
+
+    token = secrets.token_urlsafe(24)
+    command = [
+        sys.executable,
+        "-I",
+        str(Path(__file__).resolve()),
+        "serve-report",
+        "--directory",
+        str(report_directory),
+        "--state-file",
+        str(state_path),
+        "--token",
+        token,
+    ]
+    process_options: dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        process_options["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+    else:
+        process_options["start_new_session"] = True
+    process = subprocess.Popen(command, **process_options)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        state = load_report_server_state(
+            state_path,
+            report_directory,
+            expected_token=token,
+        )
+        if state is not None:
+            return {
+                "pid": state["pid"],
+                "reused": False,
+                "url": f"http://127.0.0.1:{state['port']}/otel.html",
+            }
+        if process.poll() is not None:
+            break
+        time.sleep(0.05)
+    if process.poll() is None:
+        process.terminate()
+    fail("could not start the loopback audit report server")
+
+
 def cmd_finalize_audit(args: argparse.Namespace) -> int:
-    """Validate once and render the interactive audit HTML."""
+    """Validate, render, and serve the interactive audit HTML."""
 
     raw_report = load_json(args.audit_json)
     preflight_errors = audit_finalization_preflight_errors(raw_report)
@@ -5545,6 +5644,8 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
             args.html.resolve().parent,
         ),
     )
+    html_path = args.html.resolve()
+    report_server = start_or_reuse_report_server(html_path.parent)
     print(
         json.dumps(
             {
@@ -5553,10 +5654,11 @@ def cmd_finalize_audit(args: argparse.Namespace) -> int:
                 "findings": len(report["findings"]),
                 "scenarios": len(report["verification"]["scenarios"]),
                 "audit": str(args.audit_json.resolve()),
-                "html": str(args.html.resolve()),
+                "html": str(html_path),
+                "server": {"requested": True, **report_server},
                 "links": {
-                    "review_report": markdown_local_file_link(
-                        "otel.html", args.html.resolve()
+                    "review_report": markdown_web_link(
+                        "otel.html", report_server["url"]
                     ),
                     "machine_report": markdown_local_file_link(
                         "otel-audit.json", args.audit_json.resolve()
@@ -5715,7 +5817,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     finalize_audit = subparsers.add_parser(
         "finalize-audit",
-        help="validate canonical audit and render interactive HTML",
+        help="validate canonical audit, render interactive HTML, and serve it on loopback",
     )
     finalize_audit.add_argument("audit_json", type=Path)
     finalize_audit.add_argument("--html", type=Path, required=True)
@@ -5725,6 +5827,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="source repository root for portable local-file links (inferred from .observe by default)",
     )
     finalize_audit.set_defaults(func=cmd_finalize_audit)
+
+    serve_report = subparsers.add_parser(
+        "serve-report",
+        help=argparse.SUPPRESS,
+    )
+    serve_report.add_argument("--directory", type=Path, required=True)
+    serve_report.add_argument("--state-file", type=Path, required=True)
+    serve_report.add_argument("--token", required=True)
+    serve_report.set_defaults(func=cmd_serve_report)
 
     instrumentation_html = subparsers.add_parser(
         "render-instrumentation-html",
