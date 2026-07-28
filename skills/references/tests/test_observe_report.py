@@ -5289,6 +5289,35 @@ for (const [serviceRoot, input, expected] of cases) {
             )
             self.assertFalse(state_path.exists())
 
+    def test_report_server_idle_expiry_allows_owned_state_cleanup(self) -> None:
+        server = SimpleNamespace(
+            last_report_access=0.0,
+            handle_request=mock.Mock(),
+        )
+        with mock.patch.object(
+            MODULE.time,
+            "monotonic",
+            side_effect=[0.5, 1.1],
+        ):
+            MODULE.serve_report_until_idle(
+                server,
+                idle_timeout_seconds=1.0,
+            )
+        server.handle_request.assert_called_once_with()
+
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = MODULE.report_server_state_path(Path(directory))
+            state_path.write_text(
+                json.dumps({"token": "idle-server-token"}),
+                encoding="utf-8",
+            )
+            state_path.chmod(0o600)
+            MODULE.cleanup_report_server_state(
+                state_path,
+                "idle-server-token",
+            )
+            self.assertFalse(state_path.exists())
+
     def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report_directory = Path(directory)

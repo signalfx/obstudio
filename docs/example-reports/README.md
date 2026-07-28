@@ -27,13 +27,6 @@ instrumentation digest.
 Regenerate both examples from the repository root:
 
 ```bash
-python3 skills/references/scripts/observe_report.py render-html \
-  docs/example-reports/otel-audit.json \
-  --selection-json docs/example-reports/otel-selection.json \
-  --repo-root evals/go/chi-basic \
-  --omit-service-root \
-  --output docs/example-reports/otel.html
-
 python3 skills/references/scripts/observe_report.py render-instrumentation-html \
   docs/example-reports/otel-audit.json \
   --selection-json docs/example-reports/otel-selection.json \
@@ -41,4 +34,11 @@ python3 skills/references/scripts/observe_report.py render-instrumentation-html 
   --verify-json docs/example-reports/otel-verify.json \
   --repo-root evals/go/chi-basic \
   --output docs/example-reports/otel-instrumentation.html
+
+python3 skills/references/scripts/observe_report.py render-html \
+  docs/example-reports/otel-audit.json \
+  --selection-json docs/example-reports/otel-selection.json \
+  --repo-root evals/go/chi-basic \
+  --omit-service-root \
+  --output docs/example-reports/otel.html
 ```

@@ -5707,6 +5707,19 @@ def report_server_handler(
     return ReportHandler
 
 
+def serve_report_until_idle(
+    server: http.server.ThreadingHTTPServer,
+    idle_timeout_seconds: float = REPORT_SERVER_IDLE_TIMEOUT_SECONDS,
+) -> None:
+    """Handle requests until the server has received no valid request for the limit."""
+
+    while (
+        time.monotonic() - server.last_report_access  # type: ignore[attr-defined]
+        < idle_timeout_seconds
+    ):
+        server.handle_request()
+
+
 def cmd_serve_report(args: argparse.Namespace) -> int:
     """Serve only generated human HTML and canonical audit JSON on loopback."""
 
@@ -5769,11 +5782,7 @@ def cmd_serve_report(args: argparse.Namespace) -> int:
             except OSError:
                 pass
             try:
-                while (
-                    time.monotonic() - server.last_report_access  # type: ignore[attr-defined]
-                    < REPORT_SERVER_IDLE_TIMEOUT_SECONDS
-                ):
-                    server.handle_request()
+                serve_report_until_idle(server)
             except KeyboardInterrupt:
                 pass
     finally:
