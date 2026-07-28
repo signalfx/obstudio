@@ -5488,26 +5488,49 @@ def report_server_state_path(report_directory: Path) -> Path:
         Path(tempfile.gettempdir()) / f"obstudio-report-servers{user_suffix}"
     )
     state_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
-        state_directory.chmod(0o700)
-    except OSError:
-        pass
-    directory_status = state_directory.lstat()
-    if (
-        state_directory.is_symlink()
-        or not stat.S_ISDIR(directory_status.st_mode)
-        or (
-            os.name != "nt"
-            and (
-                directory_status.st_mode & 0o077
+    if os.name != "nt":
+        directory_descriptor = os.open(
+            state_directory,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            directory_status = os.fstat(directory_descriptor)
+            if (
+                not stat.S_ISDIR(directory_status.st_mode)
                 or (
                     hasattr(os, "getuid")
                     and directory_status.st_uid != os.getuid()
                 )
+            ):
+                fail(
+                    f"report server state directory is not private: "
+                    f"{state_directory}"
+                )
+            os.fchmod(directory_descriptor, 0o700)
+            current_status = os.lstat(state_directory)
+            if (
+                path_is_link_or_reparse(current_status)
+                or (current_status.st_dev, current_status.st_ino)
+                != (directory_status.st_dev, directory_status.st_ino)
+            ):
+                fail(
+                    f"report server state directory changed during validation: "
+                    f"{state_directory}"
+                )
+        finally:
+            os.close(directory_descriptor)
+    else:
+        directory_status = os.lstat(state_directory)
+        if (
+            path_is_link_or_reparse(directory_status)
+            or not stat.S_ISDIR(directory_status.st_mode)
+        ):
+            fail(
+                f"report server state directory is not a private directory: "
+                f"{state_directory}"
             )
-        )
-    ):
-        fail(f"report server state directory is not private: {state_directory}")
     return state_directory / f"{identity}.json"
 
 
@@ -6038,6 +6061,27 @@ def cmd_render_instrumentation_html(args: argparse.Namespace) -> int:
     )
     write_text(args.output, html_text)
     html_path = args.output.resolve()
+    audit_html_path = html_path.parent / "otel.html"
+    if not os.path.lexists(audit_html_path):
+        write_text(
+            audit_html_path,
+            render_html(
+                report,
+                load_selection(None, report),
+                source_root,
+                html_path.parent,
+            ),
+        )
+    else:
+        audit_html_status = os.lstat(audit_html_path)
+        if (
+            path_is_link_or_reparse(audit_html_status)
+            or not stat.S_ISREG(audit_html_status.st_mode)
+        ):
+            fail(
+                "canonical audit HTML must be a regular non-link file: "
+                f"{audit_html_path}"
+            )
     report_server = start_or_reuse_report_server(
         html_path.parent,
         "otel-instrumentation.html",

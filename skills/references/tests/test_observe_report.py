@@ -3960,6 +3960,7 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertEqual(mixed_render.returncode, 1)
             self.assertIn("use render-instrumentation-html", mixed_render.stderr)
             self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
+            html_path.unlink()
 
             instrumentation_rendered = subprocess.run(
                 [
@@ -4072,7 +4073,9 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertIn('href="otel.html"', html)
             self.assertNotIn("<script", html.lower())
             self.assertNotIn("<link ", html.lower())
-            self.assertEqual(html_path.read_text(encoding="utf-8"), audit_html)
+            regenerated_audit_html = html_path.read_text(encoding="utf-8")
+            self.assertIn("OpenTelemetry audit report", regenerated_audit_html)
+            self.assertNotIn("OTEL-001.http-server-span", regenerated_audit_html)
             self.assertNotIn("OTEL-001.http-server-span", audit_html)
             self.assertNotIn("Route trace waterfall", audit_html)
 
@@ -5192,6 +5195,37 @@ for (const [serviceRoot, input, expected] of cases) {
                     state_path.parent.name,
                     f"obstudio-report-servers-{os.getuid()}",
                 )
+
+    def test_report_server_state_directory_symlink_is_not_chmodded(self) -> None:
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlinks are unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = Path(directory)
+            victim = temporary_root / "victim"
+            victim.mkdir(mode=0o755)
+            suffix = (
+                f"-{os.getuid()}"
+                if os.name != "nt" and hasattr(os, "getuid")
+                else ""
+            )
+            state_directory = (
+                temporary_root / f"obstudio-report-servers{suffix}"
+            )
+            try:
+                state_directory.symlink_to(victim, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink creation is unavailable: {exc}")
+            original_mode = victim.stat().st_mode & 0o777
+
+            with mock.patch.object(
+                MODULE.tempfile,
+                "gettempdir",
+                return_value=str(temporary_root),
+            ):
+                with self.assertRaises((OSError, MODULE.ReportError)):
+                    MODULE.report_server_state_path(temporary_root)
+
+            self.assertEqual(victim.stat().st_mode & 0o777, original_mode)
 
     def test_report_server_rejects_replaced_directory_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
