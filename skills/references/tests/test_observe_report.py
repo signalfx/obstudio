@@ -543,6 +543,11 @@ class ObserveReportTest(unittest.TestCase):
         self.assertNotIn("Removed span: HttpRequest", instrumentation_html)
         self.assertIn("were outside this instrumentation run", instrumentation_html)
         self.assertNotIn("were not implemented in this run", instrumentation_html)
+        self.assertNotIn("Instrumentation JSON", instrumentation_html)
+        self.assertNotIn("Verification JSON", instrumentation_html)
+        audit_html = (example_root / "otel.html").read_text()
+        self.assertIn('"service_root":null', audit_html)
+        self.assertNotIn(str(repo_root), audit_html)
 
     def test_report_writes_reject_symlinked_output_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2215,6 +2220,12 @@ class ObserveReportTest(unittest.TestCase):
                 "Copy this repository-relative source path",
                 html,
             )
+            self.assertIn("function neutralizeHttpSourceLinks()", html)
+            self.assertIn(
+                'document.querySelectorAll("a.source-link")',
+                html,
+            )
+            self.assertIn("neutralizeHttpSourceLinks();", html)
             self.assertIn(
                 "parts.map((part, index) => index === 0 ? part : commandPart(part)).join",
                 html,
@@ -5146,6 +5157,41 @@ for (const [serviceRoot, input, expected] of cases) {
             self.assertIsNotNone(state)
             self.assertNotIn(state["token"], command)
             MODULE.report_server_state_path(report_directory).unlink(missing_ok=True)
+
+    def test_report_server_launch_lock_is_kernel_owned_and_recoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "server.lock"
+            first = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            second = os.open(lock_path, os.O_RDWR, 0o600)
+            first_locked = False
+            second_locked = False
+            try:
+                first_locked = MODULE.try_acquire_report_server_lock(first)
+                self.assertTrue(first_locked)
+                self.assertFalse(MODULE.try_acquire_report_server_lock(second))
+                MODULE.release_report_server_lock(first)
+                first_locked = False
+                first = -1
+                second_locked = MODULE.try_acquire_report_server_lock(second)
+                self.assertTrue(second_locked)
+            finally:
+                if first_locked:
+                    MODULE.release_report_server_lock(first)
+                elif first >= 0:
+                    os.close(first)
+                if second_locked:
+                    MODULE.release_report_server_lock(second)
+                else:
+                    os.close(second)
+
+    def test_report_server_state_directory_is_per_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = MODULE.report_server_state_path(Path(directory))
+            if os.name != "nt" and hasattr(os, "getuid"):
+                self.assertEqual(
+                    state_path.parent.name,
+                    f"obstudio-report-servers-{os.getuid()}",
+                )
 
     def test_report_server_rejects_state_from_an_older_capability_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

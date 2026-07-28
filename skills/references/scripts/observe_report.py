@@ -23,6 +23,11 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 from urllib.request import urlopen
 
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
 
 OVERLAY_SCHEMA_VERSION = 1
 CURRENT_SELECTION_SCHEMA_VERSION = 2
@@ -4126,6 +4131,7 @@ def render_html(
     selection: dict[str, Any],
     source_root: Path | None = None,
     output_dir: Path | None = None,
+    include_service_root: bool = True,
 ) -> str:
     source_references = (
         build_source_references(
@@ -4149,7 +4155,7 @@ def render_html(
             "source_references": source_references,
             "service_root": (
                 quote(str(source_root.resolve()), safe="")
-                if source_root is not None
+                if include_service_root and source_root is not None
                 else None
             ),
         }
@@ -4497,6 +4503,17 @@ function sourceHtml(value) {{
     }}
     return `<a class="source-link" href="${{esc(part.href)}}" target="_blank" rel="noopener" title="Open local source file"><code>${{esc(part.text)}}</code><span class="source-open" aria-hidden="true">↗</span></a>`;
   }}).join("");
+}}
+
+function neutralizeHttpSourceLinks() {{
+  if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  for (const link of document.querySelectorAll("a.source-link")) {{
+    const replacement = document.createElement("span");
+    replacement.className = "source-reference";
+    replacement.title = "Copy this repository-relative source path";
+    replacement.innerHTML = link.querySelector("code")?.outerHTML || esc(link.textContent);
+    link.replaceWith(replacement);
+  }}
 }}
 
 function lifecycleStatus(f) {{
@@ -4906,6 +4923,7 @@ document.addEventListener("change", event => {{
 
 syncDependencyClosure();
 renderCards();
+neutralizeHttpSourceLinks();
 renderTray();
 revealCurrentHash();
 window.addEventListener("hashchange", revealCurrentHash);
@@ -5381,6 +5399,7 @@ def cmd_render_html(args: argparse.Namespace) -> int:
         selection,
         source_root,
         args.output.resolve().parent,
+        include_service_root=not args.omit_service_root,
     )
     write_text(args.output, html_text)
     print(f"wrote {args.output} ({len(report['findings'])} findings)")
@@ -5460,7 +5479,14 @@ def report_server_state_path(report_directory: Path) -> Path:
     identity = hashlib.sha256(
         str(report_directory.resolve()).encode("utf-8")
     ).hexdigest()[:20]
-    state_directory = Path(tempfile.gettempdir()) / "obstudio-report-servers"
+    user_suffix = (
+        f"-{os.getuid()}"
+        if os.name != "nt" and hasattr(os, "getuid")
+        else ""
+    )
+    state_directory = (
+        Path(tempfile.gettempdir()) / f"obstudio-report-servers{user_suffix}"
+    )
     state_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         state_directory.chmod(0o700)
@@ -5730,6 +5756,35 @@ def report_server_url(state: dict[str, Any], filename: str) -> str:
     fail("report server state does not contain a usable URL")
 
 
+def try_acquire_report_server_lock(descriptor: int) -> bool:
+    """Try to hold the per-directory launch lock until startup completes."""
+
+    try:
+        if os.name == "nt":
+            if os.fstat(descriptor).st_size == 0:
+                os.write(descriptor, b"\0")
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def release_report_server_lock(descriptor: int) -> None:
+    """Release a launch lock; kernel ownership makes crash recovery automatic."""
+
+    try:
+        if os.name == "nt":
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
+
+
 def start_or_reuse_report_server(
     report_directory: Path,
     report_filename: str = "otel.html",
@@ -5752,43 +5807,43 @@ def start_or_reuse_report_server(
         }
 
     lock_path = state_path.with_suffix(".lock")
-    lock_token = secrets.token_urlsafe(18)
-    lock_descriptor: int | None = None
+    lock_descriptor = os.open(
+        lock_path,
+        os.O_RDWR
+        | os.O_CREAT
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        try:
-            lock_descriptor = os.open(
-                lock_path,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o600,
-            )
-            try:
-                os.write(lock_descriptor, lock_token.encode("ascii"))
-            finally:
-                os.close(lock_descriptor)
-                lock_descriptor = None
+        if try_acquire_report_server_lock(lock_descriptor):
             break
-        except FileExistsError:
-            state = load_report_server_state(state_path, report_directory)
-            if state is not None:
-                return {
-                    "pid": state["pid"],
-                    "port": state["port"],
-                    "reused": True,
-                    "url": report_server_url(state, report_filename),
-                }
-            try:
-                if time.time() - lock_path.stat().st_mtime > 10:
-                    lock_path.unlink()
-                    continue
-            except FileNotFoundError:
-                continue
-            time.sleep(0.05)
+        state = load_report_server_state(state_path, report_directory)
+        if state is not None:
+            os.close(lock_descriptor)
+            return {
+                "pid": state["pid"],
+                "port": state["port"],
+                "reused": True,
+                "url": report_server_url(state, report_filename),
+            }
+        time.sleep(0.05)
     else:
+        os.close(lock_descriptor)
         fail("timed out waiting for the loopback report server launch lock")
 
-    token = secrets.token_urlsafe(24)
     try:
+        state = load_report_server_state(state_path, report_directory)
+        if state is not None:
+            return {
+                "pid": state["pid"],
+                "port": state["port"],
+                "reused": True,
+                "url": report_server_url(state, report_filename),
+            }
+
+        token = secrets.token_urlsafe(24)
         write_json(
             state_path,
             {
@@ -5799,41 +5854,32 @@ def start_or_reuse_report_server(
                 "token": token,
             },
         )
-    except (OSError, ReportError):
         try:
-            if lock_path.read_text(encoding="ascii") == lock_token:
-                lock_path.unlink()
-        except (FileNotFoundError, OSError, UnicodeError):
+            state_path.chmod(0o600)
+        except OSError:
             pass
-        raise
-    try:
-        state_path.chmod(0o600)
-    except OSError:
-        pass
-    command = [
-        sys.executable,
-        "-I",
-        str(Path(__file__).resolve()),
-        "serve-report",
-        "--directory",
-        str(report_directory),
-        "--state-file",
-        str(state_path),
-    ]
-    process_options: dict[str, Any] = {
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "close_fds": True,
-    }
-    if os.name == "nt":
-        process_options["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
-    else:
-        process_options["start_new_session"] = True
-    process: subprocess.Popen[Any] | None = None
-    try:
+        command = [
+            sys.executable,
+            "-I",
+            str(Path(__file__).resolve()),
+            "serve-report",
+            "--directory",
+            str(report_directory),
+            "--state-file",
+            str(state_path),
+        ]
+        process_options: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "close_fds": True,
+        }
+        if os.name == "nt":
+            process_options["creationflags"] = (
+                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            )
+        else:
+            process_options["start_new_session"] = True
         process = subprocess.Popen(command, **process_options)
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
@@ -5856,11 +5902,7 @@ def start_or_reuse_report_server(
             process.terminate()
         fail("could not start the loopback audit report server")
     finally:
-        try:
-            if lock_path.read_text(encoding="ascii") == lock_token:
-                lock_path.unlink()
-        except (FileNotFoundError, OSError, UnicodeError):
-            pass
+        release_report_server_lock(lock_descriptor)
 
 
 def cmd_finalize_audit(args: argparse.Namespace) -> int:
@@ -6092,6 +6134,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--repo-root",
         type=Path,
         help="source repository root for portable local-file links (inferred from .observe by default)",
+    )
+    render.add_argument(
+        "--omit-service-root",
+        action="store_true",
+        help="omit the runnable service root from a published static example",
     )
     render.set_defaults(func=cmd_render_html)
 

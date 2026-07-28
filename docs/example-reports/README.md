@@ -9,10 +9,11 @@ no server, JavaScript package, or external asset at viewing time.
 
 Download either file and open it in a browser to use its interactions. The
 audit HTML lists every finding once in highest-priority-first order, supports
-selection, and generates a keyboard-copyable `$otel-instrument` command without
-category groups or action tags. The instrumentation example explains each
-selected finding, what changed, how observability improves, and the proof
-obtained.
+selection, and demonstrates the keyboard-copyable `$otel-instrument` handoff
+without category groups or action tags. Its service root is intentionally
+omitted, so regenerate an audit inside a real service before running the
+command. The instrumentation example explains each selected finding, what
+changed, how observability improves, and the proof obtained.
 
 The sanitized canonical [audit](otel-audit.json),
 [selection](otel-selection.json), [instrumentation](otel-instrumentation.json),
@@ -30,6 +31,7 @@ python3 skills/references/scripts/observe_report.py render-html \
   docs/example-reports/otel-audit.json \
   --selection-json docs/example-reports/otel-selection.json \
   --repo-root evals/go/chi-basic \
+  --omit-service-root \
   --output docs/example-reports/otel.html
 
 python3 skills/references/scripts/observe_report.py render-instrumentation-html \
