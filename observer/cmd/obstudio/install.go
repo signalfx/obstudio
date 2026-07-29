@@ -51,8 +51,8 @@ type mcpConfigTarget struct {
 }
 
 type agentTarget struct {
-	skillsDir      func(string) string
-	mcpConfig      mcpConfigTarget
+	skillsDir func(string) string
+	mcpConfig mcpConfigTarget
 }
 
 type codexMCPServer struct {
