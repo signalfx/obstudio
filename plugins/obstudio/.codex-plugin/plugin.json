@@ -34,6 +34,8 @@
       "Verify the current OpenTelemetry instrumentation.",
       "Suggest GenAI telemetry improvements."
     ],
-    "brandColor": "#111827"
+    "brandColor": "#111827",
+    "composerIcon": "./assets/observer-icon.png",
+    "logo": "./assets/observer-icon.png"
   }
 }
