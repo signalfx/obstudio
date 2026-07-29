@@ -739,16 +739,10 @@ func normalizeSharedURL(raw, source string) (string, error) {
 	return parsed.String(), nil
 }
 
-func extractFS(src fs.FS, destDir string, excluded map[string]struct{}) error {
+func extractFS(src fs.FS, destDir string) error {
 	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
-		}
-		if shouldSkipSkillPath(path, d, excluded) {
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
 		}
 
 		target := filepath.Join(destDir, path)
@@ -767,20 +761,6 @@ func extractFS(src fs.FS, destDir string, excluded map[string]struct{}) error {
 		}
 		return os.WriteFile(target, data, 0o644)
 	})
-}
-
-func shouldSkipSkillPath(path string, d fs.DirEntry, excluded map[string]struct{}) bool {
-	if len(excluded) == 0 || path == "." {
-		return false
-	}
-	top := path
-	if idx := strings.IndexByte(path, '/'); idx >= 0 {
-		top = path[:idx]
-	}
-	if _, ok := excluded[top]; ok {
-		return true
-	}
-	return false
 }
 
 func copyFile(src, dst string) error {
