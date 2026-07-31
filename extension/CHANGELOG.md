@@ -2,6 +2,11 @@
 
 All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
+## 0.0.14
+
+### Added
+- Run the extension in Windsurf and configure its Agent Skills and MCP integration
+
 ## 0.0.13
 
 ### Added
