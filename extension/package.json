@@ -142,7 +142,6 @@
     "test": "vscode-test"
   },
   "overrides": {
-    "brace-expansion": "5.0.9",
     "serialize-javascript": "7.0.7"
   },
   "devDependencies": {
