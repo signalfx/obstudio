@@ -106,6 +106,14 @@ var targets = map[string]agentTarget{
 			preserveSameURLFields: []string{"headers", "env", "oauth", "oauthScopes"},
 		},
 	},
+	"windsurf": {
+		skillsDir: func(home string) string { return filepath.Join(home, ".codeium", "windsurf", "skills", "obstudio") },
+		mcpConfig: mcpConfigTarget{
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userHome(), ".codeium", "windsurf", "mcp_config.json") },
+			includeRemoteType: true,
+		},
+	},
 }
 
 func supportedTargets() string {

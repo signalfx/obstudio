@@ -65,6 +65,25 @@ func TestKiroTargetUsesSettingsMCPJSON(t *testing.T) {
 	}
 }
 
+func TestWindsurfTargetUsesCodiumMCPConfig(t *testing.T) {
+	t.Parallel()
+
+	target, ok := targets["windsurf"]
+	if !ok {
+		t.Fatal("expected windsurf target to exist")
+	}
+
+	if path := target.mcpConfig.path(); !strings.HasSuffix(path, filepath.Join(".codeium", "windsurf", "mcp_config.json")) {
+		t.Fatalf("expected Windsurf MCP config path to end with .codeium/windsurf/mcp_config.json, got %q", path)
+	}
+	if skillsDir := target.skillsDir("/home/test"); !strings.HasSuffix(skillsDir, filepath.Join(".codeium", "windsurf", "skills", "obstudio")) {
+		t.Fatalf("expected Windsurf skills path to end with .codeium/windsurf/skills/obstudio, got %q", skillsDir)
+	}
+	if !target.mcpConfig.includeRemoteType {
+		t.Fatal("expected Windsurf MCP config to have includeRemoteType=true")
+	}
+}
+
 func TestInstallTargetFlagAcceptsCommaSeparatedValues(t *testing.T) {
 	t.Parallel()
 
