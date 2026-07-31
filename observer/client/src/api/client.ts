@@ -1,4 +1,4 @@
-import type { LogRecord, MetricGroup, TraceDetail, TraceSummary } from "./types";
+import type { LogRecord, MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary } from "./types";
 import type { PreviewResponse } from "../dashboards/types";
 
 const BASE = "";
@@ -159,6 +159,11 @@ export async function fetchLogFilterValues(field: string, prefix: string, query:
  */
 export async function fetchDashboardPreview(signal?: AbortSignal): Promise<PreviewResponse> {
   return fetchJSON<PreviewResponse>("/api/dashboards/preview", { signal });
+}
+
+/** Fetch secret-free Splunk Observability Cloud export status. */
+export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<SplunkExportStatus> {
+  return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */

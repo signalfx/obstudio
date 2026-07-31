@@ -45,6 +45,17 @@ import {
 	getObserverStartupHint,
 	type ObserverPortRole,
 } from './startup-errors';
+import {
+	cloudStatusConnected,
+	cloudStatusEnabled,
+	isCloudBridgeReady,
+	isCloudBridgeRequest,
+	parseStoredSplunkCloudConnection,
+	restoreSplunkCloudConnectionFromStorage,
+	splunkCloudConnectionSecretKey,
+	type CloudBridgeRequest,
+	type StoredSplunkCloudConnection,
+} from './cloud-bridge';
 
 // Extension-global observer state. The extension hosts one local observer process
 // and optionally one WebView panel that embeds its UI.
@@ -56,6 +67,8 @@ let observerStartupPromise: Promise<void> | undefined;
 let observerStopPromise: Promise<void> | undefined;
 let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
+let observerSharedControlToken: string | undefined;
+let observerPanelBridgeToken: string | undefined;
 let agentIntegrationPromptPromise: Promise<void> | undefined;
 let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
@@ -68,9 +81,11 @@ const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
+const managedObserverControlToken = crypto.randomBytes(32).toString('base64url');
 const sharedObserverStartupWindowMs = 15_000;
 const agentIntegrationPromptDismissedPrefix = 'agentIntegrationPromptDismissed.';
 const agentSkillsBundleVersionPrefix = 'agentSkillsBundleVersion.';
+const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled.v1';
 
 // The extension exposes a stable OTLP endpoint so instrumented apps can target a
 // predictable localhost port.
@@ -78,6 +93,8 @@ const observerOtlpHttpPort = 4318;
 const observerOtlpGrpcPort = 4317;
 const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHttpPort}`;
 const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
+const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
+const splunkIngestTokenHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens';
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -470,6 +487,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		const sharedObserverUrl = getConfiguredSharedObserverUrl();
 		if (sharedObserverUrl !== undefined) {
 			observerUsesSharedServer = true;
+			observerSharedControlToken = sharedObserverControlTokenFromEnv();
 			observerBaseUrl = sharedObserverUrl;
 			appendObserverOutputLine(`Using configured shared observer at ${sharedObserverUrl}`);
 			syncObserverUi();
@@ -515,6 +533,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 				const discoveredPort = observerPortFromUrl(discoveredObserver.baseUrl);
 				if (discoveredPort !== undefined) {
 					observerUsesSharedServer = true;
+					observerSharedControlToken = discoveredObserver.controlToken ?? sharedObserverControlTokenFromEnv();
 					observerBaseUrl = discoveredObserver.baseUrl;
 					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
@@ -540,6 +559,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		if (existingObserver.status === 'ready') {
 			observerUsesSharedServer = true;
+			observerSharedControlToken = sharedObserverControlTokenFromEnv();
 			observerBaseUrl = managedObserverBaseUrl;
 			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
 			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
@@ -594,6 +614,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		assertObserverRunCurrent(observerLifecycleState, runId);
 		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
 		observerUsesSharedServer = false;
+		observerSharedControlToken = undefined;
 		observerBaseUrl = managedObserverBaseUrl;
 
 		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
@@ -612,6 +633,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					OTLP_HTTP_PORT: String(otlpHttpPort),
 					OTLP_GRPC_PORT: String(otlpGrpcPort),
 					PORT: String(observerPort),
+					OBSTUDIO_CONTROL_TOKEN: managedObserverControlToken,
 					// Pass the workspace root so the preview resolver locates
 					// .observe/dashboards.preview.json relative to the open
 					// workspace rather than the binary's install directory.
@@ -653,6 +675,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (finishObserverRun(observerLifecycleState, runId)) {
 				observerBaseUrl = undefined;
 				observerUsesSharedServer = false;
+				observerSharedControlToken = undefined;
 				syncObserverUi();
 			}
 		});
@@ -672,6 +695,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (failObserverStart(observerLifecycleState, runId, startupMessage, startupFailure.hint)) {
 				observerBaseUrl = undefined;
 				observerUsesSharedServer = false;
+				observerSharedControlToken = undefined;
 				syncObserverUi();
 				void vscode.window.showErrorMessage(`Splunk Observability Studio failed to start observer: ${startupMessage}`);
 			}
@@ -688,6 +712,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			return;
 		}
 
+		await restoreManagedObserverCloudConnection(context);
 		syncObserverUi();
 	})().catch((error) => {
 		if (isObserverLifecycleCancelled(error)) {
@@ -713,6 +738,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 		if (failObserverStart(observerLifecycleState, runId, startupMessage, startupHint)) {
 			observerBaseUrl = undefined;
 			observerUsesSharedServer = false;
+			observerSharedControlToken = undefined;
 			logObserverLifecycle(`Run ${runId}: startup failed: ${startupMessage}`);
 			syncObserverUi();
 		}
@@ -747,6 +773,7 @@ async function stopObserver(): Promise<void> {
 	observerStartupPromise = undefined;
 	observerBaseUrl = undefined;
 	observerUsesSharedServer = false;
+	observerSharedControlToken = undefined;
 	syncObserverUi();
 
 	if (proc === undefined) {
@@ -863,10 +890,14 @@ function configureObserverPanel(panel: vscode.WebviewPanel, context: vscode.Exte
 		enableScripts: true,
 	};
 	applyObserverPanelPresentation(panel, context);
+	panel.webview.onDidReceiveMessage((message: unknown) => {
+		void handleCloudBridgeRequest(panel, context, message);
+	}, undefined, context.subscriptions);
 	panel.onDidDispose(() => {
 		if (observerPanel === panel) {
 			logObserverLifecycle('Observer webview panel disposed.');
 			lastObserverPanelRenderKey = undefined;
+			observerPanelBridgeToken = undefined;
 			observerPanel = undefined;
 		}
 	}, undefined, context.subscriptions);
@@ -899,18 +930,389 @@ function refreshObserverPanel(): void {
 				: getObserverWebviewHtmlForUrl(observerBaseUrl);
 			return;
 		case 'error':
+			observerPanelBridgeToken = undefined;
 			observerPanel.webview.html = getObserverErrorWebviewHtml(
 				observerLifecycleState.startupError ?? 'Observer could not start.',
 				observerLifecycleState.startupHint ?? getObserverStartupHint('generic'),
 			);
 			return;
 		case 'starting':
+			observerPanelBridgeToken = undefined;
 			observerPanel.webview.html = getObserverLoadingWebviewHtml();
 			return;
 		case 'stopped':
+			observerPanelBridgeToken = undefined;
 			observerPanel.webview.html = getObserverStoppedWebviewHtml();
 			return;
 	}
+}
+
+type CloudBridgeResult = {
+	status?: unknown;
+};
+
+async function handleCloudBridgeRequest(
+	panel: vscode.WebviewPanel,
+	context: vscode.ExtensionContext,
+	message: unknown,
+): Promise<void> {
+	if (
+		panel !== observerPanel
+		|| observerPanelBridgeToken === undefined
+	) {
+		return;
+	}
+
+	if (isCloudBridgeReady(message)) {
+		if (message.bridgeToken !== observerPanelBridgeToken) {
+			return;
+		}
+		try {
+			await registerObserverPanelBridgeToken(message.bridgeToken);
+		} catch (error) {
+			appendObserverOutputLine(`[splunk-export] could not refresh cloud bridge: ${getErrorMessage(error)}`);
+		}
+		return;
+	}
+
+	if (!isCloudBridgeRequest(message) || message.bridgeToken !== observerPanelBridgeToken) {
+		return;
+	}
+
+	try {
+		const result = await performCloudBridgeAction(context, message);
+		if (panel !== observerPanel || message.bridgeToken !== observerPanelBridgeToken) {
+			return;
+		}
+		await panel.webview.postMessage({
+			bridgeToken: message.bridgeToken,
+			ok: true,
+			requestId: message.requestId,
+			type: 'obstudio.cloud.response',
+			...result,
+		});
+	} catch (error) {
+		if (panel !== observerPanel || message.bridgeToken !== observerPanelBridgeToken) {
+			return;
+		}
+		await panel.webview.postMessage({
+			bridgeToken: message.bridgeToken,
+			error: getErrorMessage(error),
+			ok: false,
+			requestId: message.requestId,
+			type: 'obstudio.cloud.response',
+		});
+	}
+}
+
+async function performCloudBridgeAction(
+	context: vscode.ExtensionContext,
+	request: CloudBridgeRequest,
+): Promise<CloudBridgeResult> {
+	switch (request.action) {
+		case 'initialize':
+			return { status: await refreshSplunkCloudConnection(context) };
+		case 'open-free-edition':
+			await openCloudExternalUrl(splunkFreeEditionUrl);
+			return {};
+		case 'open-ingest-token-help':
+			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
+			return {};
+		case 'connect': {
+			const connection = cloudConnectionFromRequest(request);
+			const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);
+			const storedExportEnabled = context.globalState.get<boolean>(splunkCloudExportEnabledStateKey);
+			const status = await postObserverCloudJSON('/api/splunk/export', connection);
+			try {
+				await context.secrets.store(splunkCloudConnectionSecretKey, JSON.stringify(connection));
+				await context.globalState.update(splunkCloudExportEnabledStateKey, false);
+			} catch (storeError) {
+				try {
+					await restoreStoredCloudConnectionState(context, storedValue, storedExportEnabled);
+					await restoreObserverCloudConnection(storedValue, storedExportEnabled);
+				} catch (rollbackError) {
+					throw new Error(
+						`Could not store the cloud key securely: ${getErrorMessage(storeError)}. ` +
+						`Cloud connection rollback also failed: ${getErrorMessage(rollbackError)}`,
+					);
+				}
+				throw new Error(`Could not store the cloud key securely: ${getErrorMessage(storeError)}`);
+			}
+			return { status };
+		}
+		case 'set-enabled':
+			if (typeof request.payload?.enabled !== 'boolean') {
+				throw new Error('Remote export state is missing.');
+			}
+			const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);
+			const storedExportEnabled = context.globalState.get<boolean>(splunkCloudExportEnabledStateKey);
+			try {
+				await context.globalState.update(
+					splunkCloudExportEnabledStateKey,
+					request.payload.enabled,
+				);
+			} catch (storeError) {
+				throw new Error(`Could not store the cloud export preference: ${getErrorMessage(storeError)}`);
+			}
+			let status: unknown;
+			try {
+				status = await postObserverCloudJSON('/api/splunk/export/enabled', {
+					enabled: request.payload.enabled,
+				});
+			} catch (serverError) {
+				let rollbackError: unknown;
+				try {
+					await context.globalState.update(
+						splunkCloudExportEnabledStateKey,
+						storedExportEnabled,
+					);
+				} catch (stateRollbackError) {
+					rollbackError = stateRollbackError;
+				}
+				try {
+					await restoreObserverCloudConnection(storedValue, storedExportEnabled);
+				} catch (observerRollbackError) {
+					rollbackError = rollbackError === undefined
+						? observerRollbackError
+						: new Error(
+							`${getErrorMessage(rollbackError)}; Observer rollback also failed: ` +
+							getErrorMessage(observerRollbackError),
+						);
+				}
+				if (rollbackError !== undefined) {
+					throw new Error(
+						`Could not update cloud export: ${getErrorMessage(serverError)}. ` +
+						`Cloud export preference rollback also failed: ${getErrorMessage(rollbackError)}`,
+					);
+				}
+				throw serverError;
+			}
+			return {
+				status,
+			};
+		case 'forget':
+			return { status: await forgetSplunkCloudConnection(context) };
+	}
+}
+
+async function openCloudExternalUrl(url: string): Promise<void> {
+	const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
+	if (!opened) {
+		throw new Error('VS Code could not open the external page.');
+	}
+}
+
+function cloudConnectionFromRequest(request: CloudBridgeRequest): StoredSplunkCloudConnection {
+	const accessToken = request.payload?.accessToken?.trim() ?? '';
+	const realm = request.payload?.realm?.trim().toLowerCase() ?? '';
+	const parsed = parseStoredSplunkCloudConnection(JSON.stringify({ accessToken, realm }));
+	if (parsed === undefined) {
+		throw new Error('Enter a valid Splunk Observability Cloud region and access token.');
+	}
+	return parsed;
+}
+
+async function refreshSplunkCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
+	return restoreSplunkCloudConnectionFromStorage({
+		configure: (connection) => postObserverCloudJSON('/api/splunk/export', connection),
+		readConnection: async () => parseStoredSplunkCloudConnection(
+			await context.secrets.get(splunkCloudConnectionSecretKey),
+		),
+		readExportEnabled: () => context.globalState.get<boolean>(splunkCloudExportEnabledStateKey),
+		refresh: () => postObserverCloudJSON('/api/splunk/export/refresh', {}),
+		setEnabled: (enabled) => postObserverCloudJSON('/api/splunk/export/enabled', { enabled }),
+	});
+}
+
+async function restoreManagedObserverCloudConnection(context: vscode.ExtensionContext): Promise<void> {
+	try {
+		const status = await refreshSplunkCloudConnection(context);
+		if (cloudStatusConnected(status)) {
+			appendObserverOutputLine('[splunk-export] restored cloud connection.');
+		}
+	} catch (error) {
+		appendObserverOutputLine(
+			`[splunk-export] could not restore cloud connection: ${getErrorMessage(error)}`,
+		);
+	}
+}
+
+async function forgetSplunkCloudConnection(context: vscode.ExtensionContext): Promise<unknown> {
+	const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);
+	const storedExportEnabled = context.globalState.get<boolean>(splunkCloudExportEnabledStateKey);
+	try {
+		await context.secrets.delete(splunkCloudConnectionSecretKey);
+		await context.globalState.update(splunkCloudExportEnabledStateKey, undefined);
+	} catch (localError) {
+		try {
+			await restoreStoredCloudConnectionState(context, storedValue, storedExportEnabled);
+		} catch (restoreError) {
+			throw new Error(
+				`Could not forget the cloud key: ${getErrorMessage(localError)}. ` +
+				`Secure-storage rollback also failed: ${getErrorMessage(restoreError)}`,
+			);
+		}
+		throw localError;
+	}
+	try {
+		return await postObserverCloudJSON('/api/splunk/export/forget', {});
+	} catch (forgetError) {
+		let rollbackError: unknown;
+		try {
+			await restoreStoredCloudConnectionState(context, storedValue, storedExportEnabled);
+		} catch (restoreError) {
+			rollbackError = restoreError;
+		}
+		try {
+			await restoreObserverCloudConnection(storedValue, storedExportEnabled, { clearWhenMissing: false });
+		} catch (restoreError) {
+			rollbackError = rollbackError === undefined
+				? restoreError
+				: new Error(
+					`${getErrorMessage(rollbackError)}; Observer rollback also failed: ` +
+					getErrorMessage(restoreError),
+				);
+		}
+		if (rollbackError !== undefined) {
+			throw new Error(
+				`Could not forget the cloud key: ${getErrorMessage(forgetError)}. ` +
+				`Cloud connection rollback also failed: ${getErrorMessage(rollbackError)}`,
+			);
+		}
+		throw forgetError;
+	}
+}
+
+async function restoreStoredCloudConnectionState(
+	context: vscode.ExtensionContext,
+	storedValue: string | undefined,
+	storedExportEnabled: boolean | undefined,
+): Promise<void> {
+	if (storedValue === undefined) {
+		await context.secrets.delete(splunkCloudConnectionSecretKey);
+	} else {
+		await context.secrets.store(splunkCloudConnectionSecretKey, storedValue);
+	}
+	await context.globalState.update(splunkCloudExportEnabledStateKey, storedExportEnabled);
+}
+
+async function restoreObserverCloudConnection(
+	storedValue: string | undefined,
+	storedExportEnabled: boolean | undefined,
+	options: { clearWhenMissing?: boolean } = {},
+): Promise<void> {
+	const stored = parseStoredSplunkCloudConnection(storedValue);
+	if (stored === undefined) {
+		if (options.clearWhenMissing ?? true) {
+			await postObserverCloudJSON('/api/splunk/export/forget', {});
+		}
+		await postObserverCloudJSON('/api/splunk/export/refresh', {});
+		return;
+	}
+	const status = await postObserverCloudJSON('/api/splunk/export', stored);
+	if (storedExportEnabled !== undefined && cloudStatusEnabled(status) !== storedExportEnabled) {
+		await postObserverCloudJSON('/api/splunk/export/enabled', { enabled: storedExportEnabled });
+	}
+}
+
+async function postObserverCloudJSON(pathname: string, body: Record<string, unknown>): Promise<unknown> {
+	if (observerBaseUrl === undefined || observerLifecycleState.status !== 'running') {
+		throw new Error('Observer is not running.');
+	}
+	const controlToken = activeObserverControlToken();
+	if (controlToken === '') {
+		throw new Error(
+			'Cloud connection changes require OBSTUDIO_CONTROL_TOKEN when using a shared Observer.',
+		);
+	}
+
+	const url = buildObserverApiUrl(pathname);
+	if (
+		url.protocol === 'http:'
+		&& !isLoopbackObserverHost(url.hostname)
+	) {
+		throw new Error('Cloud connection changes require HTTPS for a non-local Observer.');
+	}
+
+	const payload = Buffer.from(JSON.stringify(body), 'utf8');
+	const transport = url.protocol === 'https:' ? https : http;
+	return new Promise((resolve, reject) => {
+		const request = transport.request(url, {
+			headers: {
+				Accept: 'application/json',
+				Authorization: `Bearer ${controlToken}`,
+				'Content-Length': String(payload.length),
+				'Content-Type': 'application/json',
+			},
+			method: 'POST',
+		}, (response) => {
+			const chunks: Buffer[] = [];
+			let size = 0;
+			response.on('data', (chunk: Buffer | string) => {
+				const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+				size += buffer.length;
+				if (size > 1024 * 1024) {
+					request.destroy(new Error('Observer cloud response exceeded 1 MiB.'));
+					return;
+				}
+				chunks.push(buffer);
+			});
+			response.on('end', () => {
+				const responseBody = Buffer.concat(chunks).toString('utf8');
+				let parsed: unknown;
+				try {
+					parsed = responseBody === '' ? {} : JSON.parse(responseBody);
+				} catch {
+					reject(new Error(`Observer returned an invalid response (HTTP ${response.statusCode ?? 0}).`));
+					return;
+				}
+				const statusCode = response.statusCode ?? 0;
+				if (statusCode < 200 || statusCode >= 300) {
+					const message = typeof parsed === 'object'
+						&& parsed !== null
+						&& typeof (parsed as Record<string, unknown>).error === 'string'
+						? (parsed as Record<string, string>).error
+						: `Observer request failed with HTTP ${statusCode}.`;
+					reject(new Error(message));
+					return;
+				}
+				resolve(parsed);
+			});
+		});
+		request.setTimeout(15_000, () => {
+			request.destroy(new Error('Observer cloud request timed out.'));
+		});
+		request.on('error', reject);
+		request.end(payload);
+	});
+}
+
+function activeObserverControlToken(): string {
+	if (!observerUsesSharedServer) {
+		return managedObserverControlToken;
+	}
+	return observerSharedControlToken ?? sharedObserverControlTokenFromEnv() ?? '';
+}
+
+function sharedObserverControlTokenFromEnv(): string | undefined {
+	const token = process.env.OBSTUDIO_CONTROL_TOKEN?.trim();
+	return token === '' || token === undefined ? undefined : token;
+}
+
+function buildObserverApiUrl(pathname: string): URL {
+	if (observerBaseUrl === undefined) {
+		throw new Error('Observer is not running.');
+	}
+	const normalizedBase = `${normalizeObserverBaseUrl(observerBaseUrl)}/`;
+	const relativePath = pathname.replace(/^\/+/, '');
+	return new URL(relativePath, normalizedBase);
+}
+
+function isLoopbackObserverHost(hostname: string): boolean {
+	return hostname === '127.0.0.1'
+		|| hostname === 'localhost'
+		|| hostname === '::1'
+		|| hostname === '[::1]';
 }
 
 // ---------------------------------------------------------------------------
@@ -1131,7 +1533,19 @@ async function restartObserver(context: vscode.ExtensionContext): Promise<void> 
 
 function getObserverWebviewHtmlForUrl(observerUrl: string): string {
 	const normalizedObserverUrl = normalizeObserverBaseUrl(observerUrl);
-	return getObserverWebviewHtml(normalizedObserverUrl, crypto.randomBytes(16).toString('base64'));
+	observerPanelBridgeToken = crypto.randomBytes(32).toString('base64url');
+	void registerObserverPanelBridgeToken(observerPanelBridgeToken).catch((error) => {
+		appendObserverOutputLine(`[splunk-export] could not register cloud bridge: ${getErrorMessage(error)}`);
+	});
+	return getObserverWebviewHtml(
+		normalizedObserverUrl,
+		crypto.randomBytes(16).toString('base64'),
+		observerPanelBridgeToken,
+	);
+}
+
+async function registerObserverPanelBridgeToken(bridgeToken: string): Promise<unknown> {
+	return postObserverCloudJSON('/api/splunk/export/bridge', { bridgeToken });
 }
 
 function delay(ms: number): Promise<void> {

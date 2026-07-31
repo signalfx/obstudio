@@ -13,7 +13,7 @@ description: >-
   dashboard gaps to Splunk".
 metadata:
   author: otel-studio
-  version: 0.1.0
+  version: 0.1.2
   category: observability
 ---
 
@@ -45,14 +45,17 @@ charts[] — and each chart is a **separate** REST object that must be created
 ## Auth and API
 
 > Shared reference: `../references/splunk-api.md` is the single source of truth
-> for auth (`SPLUNK_ACCESS_TOKEN` → `X-SF-Token`, `SPLUNK_REALM`, base
-> `https://api.${SPLUNK_REALM}.signalfx.com`), the **skip-on-500 paginated GET**
-> loop, and HTTP-status handling (200 ok; 409 → COVERED; 403/401 → stop; 400 →
-> casing/SignalFlow check; only 500 skipped, never a bare `except Exception`).
+> for auth (`SPLUNK_ACCESS_TOKEN` → `X-SF-Token`), realm resolution
+> (`SPLUNK_REALM` first, then `observer_splunk_connection_realm`), the
+> **skip-on-500 paginated GET** loop, and HTTP-status handling (200 ok; 409 →
+> COVERED; 403/401 → stop; 400 → casing/SignalFlow check; only 500 skipped,
+> never a bare `except Exception`).
 
-All Splunk O11y calls use the **Splunk REST API** directly — no MCP tool
-required. If `SPLUNK_ACCESS_TOKEN` or `SPLUNK_REALM` is missing, stop and tell
-the user. Treat the token as a secret — never log it or write it to the ledger.
+All Splunk O11y data calls use the **Splunk REST API** directly. The optional
+read-only Observer status call is used only to discover a default realm. If
+`SPLUNK_ACCESS_TOKEN` is missing, or neither `SPLUNK_REALM` nor the connected
+Observer provides a realm, stop and tell the user. Treat the token as a secret —
+never log it or write it to the ledger.
 
 ## Process
 
@@ -322,7 +325,7 @@ partial failure, or zero-gap no-op):
 Every row's **Reason** must be non-empty and concrete (name the live object + the
 match basis for COVERED; what was searched and found absent for GAP; the specific
 divergence for UNCERTAIN). Deep links use
-`https://app.${SPLUNK_REALM}.signalfx.com/#/dashboard/{id}`.
+`https://app.${realm}.signalfx.com/#/dashboard/{id}` with the resolved realm.
 
 ### Step 8 -- Chat Summary
 
@@ -354,7 +357,9 @@ and `../references/coverage-decision-tree.md` for the shared rule.
 ## Red Flags
 
 - `.observe/terraform/dashboards.tf` missing — run `$splunk-dashboard` first.
-- `SPLUNK_ACCESS_TOKEN` / `SPLUNK_REALM` unset — stop and tell the user.
+- `SPLUNK_ACCESS_TOKEN` unset — stop and tell the user.
+- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the
+  user.
 - A chart `programText` still has a literal `${var.*}` or a leading-whitespace
   line — it will 400 on create; re-normalize per
   `../references/terraform-normalization.md`.

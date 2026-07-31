@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +29,30 @@ import (
 )
 
 var version = "dev"
+
+var splunkEnvFilePrecedenceKeys = []string{
+	"OBSTUDIO_SPLUNK_REALM",
+	"SPLUNK_REALM",
+	"SPLUNK_ACCESS_TOKEN",
+	"OBSTUDIO_SPLUNK_METRICS_EXPORT",
+	"SPLUNK_METRICS_EXPORT",
+	"OBSTUDIO_SPLUNK_TRACES_EXPORT",
+	"SPLUNK_TRACES_EXPORT",
+}
+
+var splunkEnvFileLegacyEndpointKeys = []string{
+	"OBSTUDIO_SPLUNK_METRICS_ENDPOINT",
+	"OBSTUDIO_SPLUNK_TRACES_ENDPOINT",
+	"OBSTUDIO_SPLUNK_METRICS_TIMEOUT",
+	"OBSTUDIO_SPLUNK_TRACES_TIMEOUT",
+}
+
+var envFileShellPrecedence = struct {
+	sync.Mutex
+	keys map[string]struct{}
+}{
+	keys: map[string]struct{}{},
+}
 
 type runConfig struct {
 	host             string
@@ -130,17 +156,9 @@ func run(config runConfig) {
 		)
 	}
 
-	var metricsExporter otlp.MetricsExporter
-	if splunkExportController.Status().Configured {
-		metricsExporter = splunkExportController
-	}
-	var tracesExporter otlp.TracesExporter
-	if splunkTracesController.Status().Configured {
-		tracesExporter = splunkTracesController
-	}
 	rcv, err := otlp.StartReceiver(ctx, s, otlpGRPCAddr, otlpHTTPAddr,
-		otlp.WithMetricsExporter(metricsExporter),
-		otlp.WithTracesExporter(tracesExporter),
+		otlp.WithMetricsExporter(splunkExportController),
+		otlp.WithTracesExporter(splunkTracesController),
 	)
 	if err != nil {
 		log.Fatalf("failed to start OTLP receiver: %v", err)
@@ -158,8 +176,9 @@ func run(config runConfig) {
 	}, dashboards.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		SpecPath:      envOr("OBSTUDIO_DASHBOARDS_PREVIEW", ""),
-	})
-	mcp.Register(mux, s, v, validatorManager, splunkExportController)
+	}, splunkExportController, splunkTracesController,
+		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController))
+	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
@@ -188,7 +207,7 @@ func run(config runConfig) {
 
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 
-	go mcp.RunStdio(s, os.Stdin, os.Stdout, v, validatorManager, splunkExportController)
+	go mcp.RunStdio(s, os.Stdin, os.Stdout, v, validatorManager, splunkExportController, splunkTracesController)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -240,6 +259,7 @@ func loadConfiguredEnvFile(flagValue string) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
+	rememberEnvFileShellPrecedence()
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) && !explicit {
 			return nil
@@ -260,6 +280,8 @@ func loadEnvFile(path string) error {
 	}
 	defer file.Close()
 
+	preExistingEnv := existingEnvKeys()
+	seenFileKeys := map[string]struct{}{}
 	scanner := bufio.NewScanner(file)
 	lineNo := 0
 	for scanner.Scan() {
@@ -271,7 +293,12 @@ func loadEnvFile(path string) error {
 		if !ok {
 			continue
 		}
-		if _, exists := os.LookupEnv(key); exists {
+		if _, seen := seenFileKeys[key]; seen {
+			continue
+		}
+		seenFileKeys[key] = struct{}{}
+		if _, preExisting := preExistingEnv[key]; preExisting {
+			markEnvFileShellPrecedence(key)
 			continue
 		}
 		if err := os.Setenv(key, value); err != nil {
@@ -282,6 +309,31 @@ func loadEnvFile(path string) error {
 		return fmt.Errorf("read env file %q: %w", path, err)
 	}
 	return nil
+}
+
+func existingEnvKeys() map[string]struct{} {
+	keys := map[string]struct{}{}
+	for _, entry := range os.Environ() {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok {
+			keys[key] = struct{}{}
+		}
+	}
+	return keys
+}
+
+func rememberEnvFileShellPrecedence() {
+	for _, key := range splunkEnvFilePrecedenceKeys {
+		if _, ok := os.LookupEnv(key); ok {
+			markEnvFileShellPrecedence(key)
+		}
+	}
+}
+
+func markEnvFileShellPrecedence(key string) {
+	envFileShellPrecedence.Lock()
+	defer envFileShellPrecedence.Unlock()
+	envFileShellPrecedence.keys[key] = struct{}{}
 }
 
 func parseEnvLine(line string) (string, string, bool, error) {
@@ -324,7 +376,163 @@ func resolveRunConfig(config runConfig) runConfig {
 		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", "3000"),
 		otlpHTTPPort:     valueOrEnv(config.otlpHTTPPort, "OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318")),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
+		envFile:          config.envFile,
 	}
+}
+
+func newSplunkExportConfigurationRefresher(
+	flagValue string,
+	metrics *otlp.SplunkMetricsExportController,
+	traces *otlp.SplunkTracesExportController,
+) api.SplunkExportConfigurationRefresher {
+	return func() (bool, error) {
+		path, explicit := configuredEnvFilePath(flagValue)
+		values, err := readEnvFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) && !explicit {
+				return false, nil
+			}
+			return false, err
+		}
+
+		if hasNonEmptyEnvKey(splunkEnvFileLegacyEndpointKeys...) {
+			return false, nil
+		}
+		if hasEnvMapKey(values, splunkEnvFileLegacyEndpointKeys...) {
+			return false, nil
+		}
+		values = applyEnvFileShellPrecedence(values)
+
+		realm := firstNonEmpty(values["OBSTUDIO_SPLUNK_REALM"], values["SPLUNK_REALM"])
+		accessToken := strings.TrimSpace(values["SPLUNK_ACCESS_TOKEN"])
+		hasExportFlag := hasEnvMapBool(values, "OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT") ||
+			hasEnvMapBool(values, "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT")
+		if realm == "" && accessToken == "" && !hasExportFlag {
+			return false, nil
+		}
+		if accessToken == "" {
+			return false, fmt.Errorf("env file must set SPLUNK_ACCESS_TOKEN")
+		}
+		if realm == "" {
+			return false, fmt.Errorf("env file must set SPLUNK_REALM")
+		}
+
+		metricsEnabled := envMapBool(values, "OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT")
+		tracesEnabled := envMapBool(values, "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT")
+		metricsConfig := otlp.SplunkMetricsExporterConfig{
+			Enabled:     metricsEnabled,
+			Realm:       realm,
+			AccessToken: accessToken,
+		}
+		tracesConfig := otlp.SplunkTracesExporterConfig{
+			Enabled:     tracesEnabled,
+			Realm:       realm,
+			AccessToken: accessToken,
+		}
+
+		previousMetrics := metrics.Config()
+		if err := metrics.Configure(metricsConfig); err != nil {
+			return false, err
+		}
+		if err := traces.Configure(tracesConfig); err != nil {
+			if rollbackErr := metrics.Configure(previousMetrics); rollbackErr != nil {
+				return false, fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+			}
+			return false, err
+		}
+		return true, nil
+	}
+}
+
+func applyEnvFileShellPrecedence(values map[string]string) map[string]string {
+	envFileShellPrecedence.Lock()
+	defer envFileShellPrecedence.Unlock()
+	if len(envFileShellPrecedence.keys) == 0 {
+		return values
+	}
+	effective := make(map[string]string, len(values)+len(envFileShellPrecedence.keys))
+	for key, value := range values {
+		effective[key] = value
+	}
+	for key := range envFileShellPrecedence.keys {
+		value, ok := os.LookupEnv(key)
+		if !ok || strings.TrimSpace(value) == "" {
+			delete(effective, key)
+		} else {
+			effective[key] = value
+		}
+	}
+	return effective
+}
+
+func readEnvFile(path string) (map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open env file %q: %w", path, err)
+	}
+	defer file.Close()
+
+	values := map[string]string{}
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		key, value, ok, err := parseEnvLine(scanner.Text())
+		if err != nil {
+			return nil, fmt.Errorf("parse env file %q line %d: %w", path, lineNo, err)
+		}
+		if ok {
+			if _, exists := values[key]; exists {
+				continue
+			}
+			values[key] = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read env file %q: %w", path, err)
+	}
+	return values, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func envMapBool(values map[string]string, keys ...string) bool {
+	for _, key := range keys {
+		switch strings.ToLower(strings.TrimSpace(values[key])) {
+		case "1", "true", "yes", "y", "on":
+			return true
+		}
+	}
+	return false
+}
+
+func hasEnvMapBool(values map[string]string, keys ...string) bool {
+	return envMapBool(values, keys...)
+}
+
+func hasEnvMapKey(values map[string]string, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := values[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hasNonEmptyEnvKey(keys ...string) bool {
+	for _, key := range keys {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func splunkMetricsExporterConfigFromEnv() (otlp.SplunkMetricsExporterConfig, error) {
@@ -447,11 +655,12 @@ func buildSharedObserverState(host, port string) sharedObserverState {
 
 	baseURL := fmt.Sprintf("http://%s", net.JoinHostPort(connectHost, port))
 	return sharedObserverState{
-		BaseURL:   baseURL,
-		HealthURL: baseURL + "/api/health",
-		MCPURL:    baseURL + "/mcp",
-		PID:       os.Getpid(),
-		UpdatedAt: time.Now().UTC(),
+		BaseURL:      baseURL,
+		ControlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		HealthURL:    baseURL + "/api/health",
+		MCPURL:       baseURL + "/mcp",
+		PID:          os.Getpid(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 }
 

@@ -587,6 +587,27 @@ def test_splunk_access_token_secrecy_prose_in_shared_api_ref():
     assert "X-SF-Token" in text, "secrecy prose must name the header X-SF-Token"
 
 
+def test_splunk_realm_uses_env_pair_before_connected_observer_without_exposing_token():
+    """The environment realm stays paired with the environment token. A connected
+    SOS destination may supply only the fallback realm, and its stored token must
+    remain outside skill context."""
+    text = _read(SPLUNK_API_REF)
+    assert "observer_splunk_connection_realm" in text, (
+        "splunk-api.md must use the Observer's realm-only tool for discovery"
+    )
+    environment_realm = text.index("Use a non-empty `SPLUNK_REALM` when it is set")
+    connected_realm = text.index("observer_splunk_connection_realm")
+    assert environment_realm < connected_realm, (
+        "SPLUNK_REALM must stay paired with SPLUNK_ACCESS_TOKEN before using the connected SOS realm"
+    )
+    assert "returns only the non-secret region" in text, (
+        "the realm tool must be limited to non-secret realm discovery"
+    )
+    assert "Direct REST calls always use `SPLUNK_ACCESS_TOKEN`" in text, (
+        "the connected Observer must not become a token source for publish skills"
+    )
+
+
 def test_splunk_dashboard_publish_skill_references_token_secrecy():
     """The publish skill itself must repeat the token-secrecy instruction so it is
     present in the model's loaded skill context, not only in the shared ref."""

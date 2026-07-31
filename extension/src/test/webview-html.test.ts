@@ -10,36 +10,43 @@ import {
 } from '../webview-html';
 import { getObserverStartupHint } from '../startup-errors';
 
+const cloudBridgeToken = 'cloud-bridge-token-1234567890';
+
 // --- getObserverWebviewHtml ---
 
 describe('getObserverWebviewHtml', () => {
 	it('embeds the correct localhost URL with given port', () => {
-		const html = getObserverWebviewHtml('http://127.0.0.1:56652', 'test-nonce');
+		const html = getObserverWebviewHtml('http://127.0.0.1:56652', 'test-nonce', cloudBridgeToken);
 		assert.ok(html.includes('http://127.0.0.1:56652'));
 	});
 
 	it('contains an iframe pointing to the observer URL', () => {
-		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce');
-		assert.ok(html.includes('src="http://127.0.0.1:3000"'));
+		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce', cloudBridgeToken);
+		assert.ok(html.includes('src="http://127.0.0.1:3000/"'));
+		assert.ok(!html.includes('vscodeBridgeToken'));
 	});
 
 	it('sets Content-Security-Policy with frame-src', () => {
-		const html = getObserverWebviewHtml('http://127.0.0.1:8080', 'test-nonce');
+		const html = getObserverWebviewHtml('http://127.0.0.1:8080', 'test-nonce', cloudBridgeToken);
 		assert.ok(html.includes('frame-src http://127.0.0.1:8080'));
 	});
 
 	it('includes sandbox attributes on the iframe', () => {
-		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce');
+		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce', cloudBridgeToken);
 		assert.ok(html.includes('sandbox="allow-scripts allow-same-origin allow-forms allow-popups"'));
 	});
 
 	it('bridges keyboard events from the Observer iframe to VS Code', () => {
-		const html = getObserverWebviewHtml('https://observer.example.test/path', 'test-nonce');
+		const html = getObserverWebviewHtml(
+			'https://observer.example.test/path',
+			'test-nonce',
+			cloudBridgeToken,
+		);
 		assert.ok(html.includes("script-src 'nonce-test-nonce'"));
 		assert.ok(html.includes('<script nonce="test-nonce">'));
-		assert.ok(html.includes("message.type !== 'obstudio:host-keyboard-event'"));
-		assert.ok(html.includes("messageEvent.origin !== observerOrigin"));
-		assert.ok(html.includes("messageEvent.source !== observerFrame.contentWindow"));
+		assert.ok(html.includes("message.type === 'obstudio:host-keyboard-event'"));
+		assert.ok(html.includes("messageEvent.source === observerFrame.contentWindow"));
+		assert.ok(html.includes("messageEvent.origin === observerOrigin"));
 		assert.ok(html.includes("const observerOrigin = \"https://observer.example.test\""));
 		assert.ok(html.includes('new KeyboardEvent(eventData.type'));
 		assert.ok(html.includes('keyCode: { get: () => eventData.keyCode }'));
@@ -53,7 +60,11 @@ describe('getObserverWebviewHtml', () => {
 	});
 
 	it('executes the keyboard bridge and rejects untrusted message sources', () => {
-		const html = getObserverWebviewHtml('https://observer.example.test/path', 'test-nonce');
+		const html = getObserverWebviewHtml(
+			'https://observer.example.test/path',
+			'test-nonce',
+			cloudBridgeToken,
+		);
 		const script = html.match(/<script nonce="test-nonce">([\s\S]*?)<\/script>/)?.[1];
 		assert.ok(script, 'expected generated bridge script');
 
@@ -72,7 +83,9 @@ describe('getObserverWebviewHtml', () => {
 			}
 		}
 
-		const observerContentWindow = {};
+		const observerContentWindow = {
+			postMessage: () => undefined,
+		};
 		const dispatchedEvents: FakeKeyboardEvent[] = [];
 		let messageListener: MessageListener | undefined;
 		const windowStub = {
@@ -87,8 +100,12 @@ describe('getObserverWebviewHtml', () => {
 			},
 		};
 		vm.runInNewContext(script, {
+			acquireVsCodeApi: () => ({ postMessage: () => undefined }),
 			document: {
-				getElementById: () => ({ contentWindow: observerContentWindow }),
+				getElementById: () => ({
+					addEventListener: () => undefined,
+					contentWindow: observerContentWindow,
+				}),
 			},
 			KeyboardEvent: FakeKeyboardEvent,
 			window: windowStub,
@@ -133,10 +150,152 @@ describe('getObserverWebviewHtml', () => {
 		assert.equal(dispatchedEvents.length, 1);
 	});
 
+	it('relays cloud requests and responses only through the bound bridge', () => {
+		const html = getObserverWebviewHtml(
+			'https://observer.example.test/path',
+			'test-nonce',
+			cloudBridgeToken,
+		);
+		const script = html.match(/<script nonce="test-nonce">([\s\S]*?)<\/script>/)?.[1];
+		assert.ok(script, 'expected generated bridge script');
+
+		type MessageListener = (event: {
+			data: unknown;
+			origin: string;
+			source: unknown;
+		}) => void;
+		const extensionMessages: unknown[] = [];
+		const observerMessages: Array<{ message: unknown; targetOrigin: string }> = [];
+		const observerContentWindow = {
+			postMessage(message: unknown, targetOrigin: string) {
+				observerMessages.push({ message, targetOrigin });
+			},
+		};
+		let messageListener: MessageListener | undefined;
+		const windowStub = {
+			addEventListener(type: string, listener: MessageListener) {
+				if (type === 'message') {
+					messageListener = listener;
+				}
+			},
+			dispatchEvent: () => true,
+		};
+		vm.runInNewContext(script, {
+			acquireVsCodeApi: () => ({
+				postMessage(message: unknown) {
+					extensionMessages.push(message);
+				},
+			}),
+			document: {
+				getElementById: () => ({
+					addEventListener: () => undefined,
+					contentWindow: observerContentWindow,
+				}),
+			},
+			KeyboardEvent: class {},
+			window: windowStub,
+		});
+		assert.ok(messageListener, 'expected message listener to be registered');
+		assert.equal(JSON.stringify(observerMessages), JSON.stringify([{
+			message: {
+				bridgeToken: cloudBridgeToken,
+				type: 'obstudio.cloud.bridge',
+			},
+			targetOrigin: 'https://observer.example.test',
+		}]));
+		observerMessages.length = 0;
+
+		messageListener({
+			data: { type: 'obstudio.cloud.ready' },
+			origin: 'https://observer.example.test',
+			source: observerContentWindow,
+		});
+		assert.equal(extensionMessages.length, 1);
+		assert.equal((extensionMessages[0] as { bridgeToken?: unknown }).bridgeToken, cloudBridgeToken);
+		assert.equal((extensionMessages[0] as { type?: unknown }).type, 'obstudio.cloud.ready');
+		assert.equal(JSON.stringify(observerMessages), JSON.stringify([{
+			message: {
+				bridgeToken: cloudBridgeToken,
+				type: 'obstudio.cloud.bridge',
+			},
+			targetOrigin: 'https://observer.example.test',
+		}]));
+		extensionMessages.length = 0;
+		observerMessages.length = 0;
+
+		messageListener({
+			data: { type: 'obstudio.cloud.ready' },
+			origin: 'https://attacker.example.test',
+			source: observerContentWindow,
+		});
+		messageListener({
+			data: { type: 'obstudio.cloud.ready' },
+			origin: 'https://observer.example.test',
+			source: {},
+		});
+		assert.equal(extensionMessages.length, 0);
+		assert.equal(observerMessages.length, 0);
+
+		const request = {
+			action: 'initialize',
+			bridgeToken: cloudBridgeToken,
+			requestId: 'cloud-request-123',
+			type: 'obstudio.cloud.request',
+		};
+		messageListener({
+			data: request,
+			origin: 'https://observer.example.test',
+			source: observerContentWindow,
+		});
+		assert.deepEqual(extensionMessages, [request]);
+
+		messageListener({
+			data: request,
+			origin: 'https://attacker.example.test',
+			source: observerContentWindow,
+		});
+		messageListener({
+			data: { ...request, bridgeToken: 'other-cloud-bridge-token-1234' },
+			origin: 'https://observer.example.test',
+			source: observerContentWindow,
+		});
+		assert.equal(extensionMessages.length, 1);
+
+		const response = {
+			bridgeToken: cloudBridgeToken,
+			ok: true,
+			requestId: 'cloud-request-123',
+			type: 'obstudio.cloud.response',
+		};
+		messageListener({
+			data: response,
+			origin: 'vscode-webview://extension',
+			source: windowStub,
+		});
+		assert.deepEqual(observerMessages, [{
+			message: response,
+			targetOrigin: 'https://observer.example.test',
+		}]);
+
+		messageListener({
+			data: { ...response, bridgeToken: 'other-cloud-bridge-token-1234' },
+			origin: 'vscode-webview://extension',
+			source: windowStub,
+		});
+		assert.equal(observerMessages.length, 1);
+	});
+
 	it('rejects an unsafe script nonce', () => {
 		assert.throws(
-			() => getObserverWebviewHtml('http://127.0.0.1:3000', "bad' nonce"),
+			() => getObserverWebviewHtml('http://127.0.0.1:3000', "bad' nonce", cloudBridgeToken),
 			/Webview nonce contains invalid characters/,
+		);
+	});
+
+	it('rejects an unsafe cloud bridge token', () => {
+		assert.throws(
+			() => getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce', '<unsafe>'),
+			/Cloud bridge token contains invalid characters/,
 		);
 	});
 });

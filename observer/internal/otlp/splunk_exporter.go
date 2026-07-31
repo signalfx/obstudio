@@ -31,6 +31,10 @@ type MetricsExporter interface {
 	ExportMetrics(ctx context.Context, md pmetric.Metrics) error
 }
 
+type metricsExportState interface {
+	ExportEnabled() bool
+}
+
 // SplunkMetricsExporterConfig configures optional Splunk Observability Cloud
 // metric forwarding.
 type SplunkMetricsExporterConfig struct {
@@ -51,6 +55,9 @@ type SplunkMetricsExportStatus struct {
 	AccessTokenConfigured bool                        `json:"accessTokenConfigured"`
 	AccessToken           string                      `json:"accessToken,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty"`
+	ExportedBatches       uint64                      `json:"exportedBatches"`
+	ExportedDataPoints    uint64                      `json:"exportedDataPoints"`
+	FailedBatches         uint64                      `json:"failedBatches"`
 	LastExport            *SplunkMetricsExportAttempt `json:"lastExport,omitempty"`
 }
 
@@ -66,11 +73,15 @@ type SplunkMetricsExportAttempt struct {
 // MCP control plane to inspect or replace it while the OTLP receivers keep
 // using the same MetricsExporter reference.
 type SplunkMetricsExportController struct {
-	mu            sync.RWMutex
-	config        SplunkMetricsExporterConfig
-	exporter      splunkMetricsExporterRuntime
-	lastExport    SplunkMetricsExportAttempt
-	hasLastExport bool
+	exportMu           sync.RWMutex
+	mu                 sync.RWMutex
+	config             SplunkMetricsExporterConfig
+	exporter           splunkMetricsExporterRuntime
+	lastExport         SplunkMetricsExportAttempt
+	hasLastExport      bool
+	exportedBatches    uint64
+	exportedDataPoints uint64
+	failedBatches      uint64
 }
 
 type splunkMetricsExporterRuntime interface {
@@ -95,13 +106,18 @@ func (c *SplunkMetricsExportController) Configure(config SplunkMetricsExporterCo
 	if err != nil {
 		return err
 	}
+	c.exportMu.Lock()
 	c.mu.Lock()
 	old := c.exporter
 	c.config = normalizeSplunkMetricsExporterConfig(config)
 	c.exporter = exporter
 	c.lastExport = SplunkMetricsExportAttempt{}
 	c.hasLastExport = false
+	c.exportedBatches = 0
+	c.exportedDataPoints = 0
+	c.failedBatches = 0
 	c.mu.Unlock()
+	c.exportMu.Unlock()
 	if old != nil {
 		old.Shutdown(context.Background())
 	}
@@ -113,10 +129,15 @@ func (c *SplunkMetricsExportController) Shutdown(ctx context.Context) {
 	if c == nil {
 		return
 	}
+	unlock, ok := lockRWMutexForShutdown(ctx, &c.exportMu)
+	if !ok {
+		return
+	}
 	c.mu.Lock()
 	exp := c.exporter
 	c.exporter = nil
 	c.mu.Unlock()
+	unlock()
 	if exp != nil {
 		exp.Shutdown(ctx)
 	}
@@ -131,6 +152,17 @@ func (c *SplunkMetricsExportController) Config() SplunkMetricsExporterConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.config
+}
+
+// ExportEnabled reports whether exports can currently be forwarded without
+// forcing receivers to clone batches when the controller is disabled.
+func (c *SplunkMetricsExportController) ExportEnabled() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.config.Enabled && c.exporter != nil
 }
 
 // Status returns a redacted snapshot of the controller state.
@@ -148,8 +180,13 @@ func (c *SplunkMetricsExportController) Status() SplunkMetricsExportStatus {
 		AccessTokenConfigured: c.config.AccessToken != "",
 		AccessToken:           redactConfiguredToken(c.config.AccessToken),
 		Timeout:               effectiveSplunkMetricsTimeout(c.config.Timeout).String(),
+		ExportedBatches:       c.exportedBatches,
+		ExportedDataPoints:    c.exportedDataPoints,
+		FailedBatches:         c.failedBatches,
 	}
-	if c.exporter != nil {
+	if c.config.Endpoint != "" {
+		status.Endpoints = []string{c.config.Endpoint}
+	} else if c.exporter != nil {
 		status.Endpoints = c.exporter.Endpoints()
 	}
 	if c.hasLastExport {
@@ -164,6 +201,8 @@ func (c *SplunkMetricsExportController) ExportMetrics(ctx context.Context, md pm
 	if c == nil {
 		return nil
 	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
 	c.mu.RLock()
 	exporter := c.exporter
 	c.mu.RUnlock()
@@ -171,7 +210,7 @@ func (c *SplunkMetricsExportController) ExportMetrics(ctx context.Context, md pm
 		return nil
 	}
 	err := exporter.ExportMetrics(ctx, md)
-	c.recordExport(err)
+	c.recordExport(err, md.DataPointCount())
 	return err
 }
 
@@ -194,7 +233,7 @@ func (c *SplunkMetricsExportController) TestConnection(ctx context.Context, metr
 	return c.Status(), err
 }
 
-func (c *SplunkMetricsExportController) recordExport(err error) {
+func (c *SplunkMetricsExportController) recordExport(err error, dataPoints int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.hasLastExport = true
@@ -203,7 +242,13 @@ func (c *SplunkMetricsExportController) recordExport(err error) {
 		Success: err == nil,
 	}
 	if err != nil {
+		c.failedBatches++
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		return
+	}
+	c.exportedBatches++
+	if dataPoints > 0 {
+		c.exportedDataPoints += uint64(dataPoints)
 	}
 }
 
@@ -384,6 +429,9 @@ func splunkExporterCanaryMetric(metricName string) pmetric.Metrics {
 // a dev-tool workload where batches are infrequent and ingest latency is low.
 func exportMetricsAsync(exporter MetricsExporter, md pmetric.Metrics) {
 	if exporter == nil {
+		return
+	}
+	if statefulExporter, ok := exporter.(metricsExportState); ok && !statefulExporter.ExportEnabled() {
 		return
 	}
 	cloned := pmetric.NewMetrics()

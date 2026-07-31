@@ -11,20 +11,29 @@ export function escapeHtml(text: string): string {
 		.replace(/"/g, '&quot;');
 }
 
-export function getObserverWebviewHtml(observerUrl: string, nonce: string): string {
+export function getObserverWebviewHtml(
+	observerUrl: string,
+	nonce: string,
+	cloudBridgeToken: string,
+): string {
 	if (!/^[A-Za-z0-9+/_=-]+$/.test(nonce)) {
 		throw new Error('Webview nonce contains invalid characters.');
 	}
-	const iframeSrc = escapeHtml(observerUrl);
-	const observerOrigin = JSON.stringify(new URL(observerUrl).origin).replace(/</g, '\\u003c');
+	if (!/^[A-Za-z0-9_-]{24,128}$/.test(cloudBridgeToken)) {
+		throw new Error('Cloud bridge token contains invalid characters.');
+	}
+	const observerURL = new URL(observerUrl);
+	const iframeSrc = escapeHtml(observerURL.toString());
+	const observerOrigin = JSON.stringify(observerURL.origin).replace(/</g, '\\u003c');
+	const serializedCloudBridgeToken = JSON.stringify(cloudBridgeToken).replace(/</g, '\\u003c');
 
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta
+		<meta
 		http-equiv="Content-Security-Policy"
-		content="default-src 'none'; frame-src ${iframeSrc}; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; worker-src 'none';"
+		content="default-src 'none'; frame-src ${escapeHtml(observerURL.origin)}; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; worker-src 'none';"
 	>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Observer</title>
@@ -48,34 +57,71 @@ export function getObserverWebviewHtml(observerUrl: string, nonce: string): stri
 <body>
 	<iframe id="observer-frame" src="${iframeSrc}" title="Observer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
 	<script nonce="${nonce}">
+		const vscode = acquireVsCodeApi();
 		const observerFrame = document.getElementById('observer-frame');
 		const observerOrigin = ${observerOrigin};
+		const cloudBridgeToken = ${serializedCloudBridgeToken};
+		function sendCloudBridgeConfig() {
+			observerFrame.contentWindow?.postMessage({
+				bridgeToken: cloudBridgeToken,
+				type: 'obstudio.cloud.bridge',
+			}, observerOrigin);
+		}
+		observerFrame.addEventListener('load', sendCloudBridgeConfig);
+		sendCloudBridgeConfig();
 		window.addEventListener('message', (messageEvent) => {
-			if (messageEvent.source !== observerFrame.contentWindow || messageEvent.origin !== observerOrigin) return;
 			const message = messageEvent.data;
-			if (!message || message.type !== 'obstudio:host-keyboard-event' || !message.event) return;
-			const eventData = message.event;
-			if ((eventData.type !== 'keydown' && eventData.type !== 'keyup')
-				|| typeof eventData.key !== 'string'
-				|| typeof eventData.code !== 'string'
-				|| typeof eventData.keyCode !== 'number') return;
-			const forwardedEvent = new KeyboardEvent(eventData.type, {
-				key: eventData.key,
-				code: eventData.code,
-				location: eventData.location,
-				altKey: eventData.altKey,
-				ctrlKey: eventData.ctrlKey,
-				metaKey: eventData.metaKey,
-				shiftKey: eventData.shiftKey,
-				repeat: eventData.repeat,
-				bubbles: true,
-				cancelable: true,
-			});
-			Object.defineProperties(forwardedEvent, {
-				keyCode: { get: () => eventData.keyCode },
-				which: { get: () => eventData.keyCode },
-			});
-			window.dispatchEvent(forwardedEvent);
+			if (!message || typeof message !== 'object') return;
+
+			if (messageEvent.source === observerFrame.contentWindow && messageEvent.origin === observerOrigin) {
+				if (message.type === 'obstudio.cloud.ready') {
+					vscode.postMessage({
+						bridgeToken: cloudBridgeToken,
+						type: 'obstudio.cloud.ready',
+					});
+					sendCloudBridgeConfig();
+					return;
+				}
+				if (message.type === 'obstudio:host-keyboard-event' && message.event) {
+					const eventData = message.event;
+					if ((eventData.type !== 'keydown' && eventData.type !== 'keyup')
+						|| typeof eventData.key !== 'string'
+						|| typeof eventData.code !== 'string'
+						|| typeof eventData.keyCode !== 'number') return;
+					const forwardedEvent = new KeyboardEvent(eventData.type, {
+						key: eventData.key,
+						code: eventData.code,
+						location: eventData.location,
+						altKey: eventData.altKey,
+						ctrlKey: eventData.ctrlKey,
+						metaKey: eventData.metaKey,
+						shiftKey: eventData.shiftKey,
+						repeat: eventData.repeat,
+						bubbles: true,
+						cancelable: true,
+					});
+					Object.defineProperties(forwardedEvent, {
+						keyCode: { get: () => eventData.keyCode },
+						which: { get: () => eventData.keyCode },
+					});
+					window.dispatchEvent(forwardedEvent);
+					return;
+				}
+				if (
+					message.type === 'obstudio.cloud.request'
+					&& message.bridgeToken === cloudBridgeToken
+				) {
+					vscode.postMessage(message);
+				}
+				return;
+			}
+
+			if (
+				message.type === 'obstudio.cloud.response'
+				&& message.bridgeToken === cloudBridgeToken
+			) {
+				observerFrame.contentWindow?.postMessage(message, observerOrigin);
+			}
 		});
 	</script>
 </body>

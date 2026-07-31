@@ -1,26 +1,41 @@
 # Splunk Observability Cloud REST API — auth, paginated fetch, status handling
 
 Shared reference for every skill that talks to the Splunk Observability Cloud
-REST API directly (no MCP tool required): `splunk-detector-publish`,
-`splunk-dashboard-publish`, and any future publish skill. The auth, pagination, and HTTP-status rules are
-identical regardless of which object type (detector, dashboard, chart, group) is
-being synced — this file is the single source of truth for them.
+REST API directly: `splunk-detector-publish`, `splunk-dashboard-publish`, and any
+future publish skill. An optional read-only Observer MCP call may supply the
+default realm. The auth, pagination, and HTTP-status rules are identical
+regardless of which object type (detector, dashboard, chart, group) is being
+synced — this file is the single source of truth for them.
 
-## Auth
+## Auth and realm resolution
 
-Read credentials from the environment — never hard-code them, never log them:
+Read the access token from the environment — never hard-code it, never log it:
 
 | Variable | Purpose |
 |---|---|
 | `SPLUNK_ACCESS_TOKEN` | Org access token; sent as the `X-SF-Token` request header |
-| `SPLUNK_REALM` | Realm (e.g. `lab0`, `us0`, `us1`, `eu0`); builds the base URL |
+| `SPLUNK_REALM` | Optional fallback realm (e.g. `lab0`, `us0`, `us1`, `eu0`) |
 
-Base API URL: `https://api.${SPLUNK_REALM}.signalfx.com`
-App (browser) URL for deep links: `https://app.${SPLUNK_REALM}.signalfx.com`
+If `SPLUNK_ACCESS_TOKEN` is missing, **stop** and tell the user to set it.
+Then resolve the realm in this order:
 
-If either variable is missing, **stop** and tell the user to set them. These same
-two variables drive obstudio's metrics/traces forwarding, so they are usually
-already present in the environment.
+1. Use a non-empty `SPLUNK_REALM` when it is set. This keeps the environment
+   token and environment realm paired.
+2. Otherwise, if the Observer MCP tools are available, call
+   `observer_splunk_connection_realm` and use its non-empty `realm`. This is the
+   region stored with the active Splunk Observability Cloud connection.
+3. If neither source provides a realm, **stop** and ask the user to set
+   `SPLUNK_REALM` or connect Splunk Observability Cloud in SOS.
+
+The realm tool returns only the non-secret region. It is not a token source.
+Direct REST calls always use `SPLUNK_ACCESS_TOKEN` from the environment.
+
+Before any create, update, or delete, include the resolved realm in the
+confirmation and state whether it came from the connected SOS destination or
+`SPLUNK_REALM`.
+
+Base API URL: `https://api.${realm}.signalfx.com`
+App (browser) URL for deep links: `https://app.${realm}.signalfx.com`
 
 Treat `SPLUNK_ACCESS_TOKEN` as a secret: never echo it, never write it into a
 report/ledger, never place it in prompt context or a Terraform `*.tfvars` example
@@ -39,7 +54,7 @@ empty/again-500 pages, deduping by object `id`:
 import urllib.request, urllib.error, json
 
 token = "<SPLUNK_ACCESS_TOKEN>"   # from env; never logged
-realm = "<SPLUNK_REALM>"
+realm = "<resolved realm>"
 base  = f"https://api.{realm}.signalfx.com/v2/<object>"   # detector|dashboard|dashboardgroup|chart
 
 limit = 50          # keep small; large limits hit the 500 bug more often
@@ -153,7 +168,9 @@ field-casing / normalization check as POST.
 
 ## Red flags
 
-- `SPLUNK_ACCESS_TOKEN` or `SPLUNK_REALM` unset — stop and tell the user.
+- `SPLUNK_ACCESS_TOKEN` unset — stop and tell the user.
+- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the
+  user.
 - **All** offsets returning HTTP 500 continuously (not intermittent) — likely an
   auth failure masquerading as 500; verify the token is valid.
 - A live object has `programText` missing or empty — treat as not-a-match (cannot

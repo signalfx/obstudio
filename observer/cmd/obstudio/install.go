@@ -66,11 +66,12 @@ type sharedObserverHealth struct {
 }
 
 type sharedObserverState struct {
-	BaseURL   string    `json:"baseUrl,omitempty"`
-	HealthURL string    `json:"healthUrl,omitempty"`
-	MCPURL    string    `json:"mcpUrl,omitempty"`
-	PID       int       `json:"pid,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt,omitempty"`
+	BaseURL      string    `json:"baseUrl,omitempty"`
+	ControlToken string    `json:"controlToken,omitempty"`
+	HealthURL    string    `json:"healthUrl,omitempty"`
+	MCPURL       string    `json:"mcpUrl,omitempty"`
+	PID          int       `json:"pid,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt,omitempty"`
 }
 
 var targets = map[string]agentTarget{
@@ -574,7 +575,7 @@ func readSharedObserverState(statePath string) (sharedObserverState, error) {
 }
 
 func writeSharedObserverState(statePath string, state sharedObserverState) error {
-	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o700); err != nil {
 		return fmt.Errorf("create parent directory for %q: %w", statePath, err)
 	}
 
@@ -591,7 +592,7 @@ func writeSharedObserverState(statePath string, state sharedObserverState) error
 	tempPath := tempFile.Name()
 	defer os.Remove(tempPath)
 
-	if err := tempFile.Chmod(0o644); err != nil {
+	if err := tempFile.Chmod(0o600); err != nil {
 		tempFile.Close()
 		return fmt.Errorf("set permissions on temporary shared observer state for %q: %w", statePath, err)
 	}

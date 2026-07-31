@@ -15,6 +15,7 @@ const shortcuts = [
   { key: "4", description: "Switch to Services tab" },
   { key: "5", description: "Switch to Validation tab" },
   { key: "6", description: "Switch to Dashboards tab" },
+  { key: "7", description: "Switch to Cloud tab" },
 ];
 
 /** Modal overlay listing available keyboard shortcuts. */

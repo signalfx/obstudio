@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { CloudTab } from "./cloud/CloudTab";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
@@ -14,7 +15,7 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards";
+type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud";
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -46,6 +47,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "4": () => switchTab("services"),
     "5": () => switchTab("validation"),
     "6": () => switchTab("dashboards"),
+    "7": () => switchTab("cloud"),
   }), [toggle, switchTab]);
 
   useHostKeyboardForwarding();
@@ -121,20 +123,32 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Dashboards
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "cloud"}
+            aria-label="Cloud"
+            className={activeTab === "cloud" ? "tab-button is-active" : "tab-button"}
+            onClick={() => switchTab("cloud")}
+          >
+            Cloud
+          </button>
           </div>
 
           <div className="tab-bar__actions">
-            <button
-              className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
-              onClick={toggle}
-              title={paused ? "Resume live updates (P)" : "Pause live updates (P)"}
-            >
-              <span className="stream-toggle__icon" aria-hidden="true">
-                {paused ? "▶" : "❚❚"}
-              </span>
-              {paused ? "Paused" : "Live"}
-            </button>
-            {paused && hasNewUpdates ? (
+            {activeTab !== "cloud" ? (
+              <button
+                className={`stream-toggle ${paused ? "stream-toggle--paused" : "stream-toggle--live"}`}
+                onClick={toggle}
+                title={paused ? "Resume live updates (P)" : "Pause live updates (P)"}
+              >
+                <span className="stream-toggle__icon" aria-hidden="true">
+                  {paused ? "▶" : "❚❚"}
+                </span>
+                {paused ? "Paused" : "Live"}
+              </button>
+            ) : null}
+            {activeTab !== "cloud" && paused && hasNewUpdates ? (
               <button
                 className="pending-badge"
                 onClick={resume}
@@ -143,7 +157,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 updates available — resume
               </button>
             ) : null}
-            {state.error !== null ? (
+            {activeTab !== "cloud" && state.error !== null ? (
               <span className="pill pill--error">{state.error}</span>
             ) : null}
             <button
@@ -191,6 +205,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         {activeTab === "dashboards" ? (
           <DashboardsTab telemetryError={state.error} paused={paused} />
         ) : null}
+        {activeTab === "cloud" ? <CloudTab /> : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}
@@ -209,6 +224,7 @@ function initialTabFromLocation(): AppTab {
     case "logs":
     case "validation":
     case "dashboards":
+    case "cloud":
       return tab;
     default:
       return "metrics";

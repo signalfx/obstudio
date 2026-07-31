@@ -30,6 +30,10 @@ type TracesExporter interface {
 	ExportTraces(ctx context.Context, td ptrace.Traces) error
 }
 
+type tracesExportState interface {
+	ExportEnabled() bool
+}
+
 // SplunkTracesExporterConfig configures optional Splunk Observability Cloud
 // trace forwarding.
 type SplunkTracesExporterConfig struct {
@@ -50,6 +54,9 @@ type SplunkTracesExportStatus struct {
 	AccessTokenConfigured bool                       `json:"accessTokenConfigured"`
 	AccessToken           string                     `json:"accessToken,omitempty"`
 	Timeout               string                     `json:"timeout,omitempty"`
+	ExportedBatches       uint64                     `json:"exportedBatches"`
+	ExportedSpans         uint64                     `json:"exportedSpans"`
+	FailedBatches         uint64                     `json:"failedBatches"`
 	LastExport            *SplunkTracesExportAttempt `json:"lastExport,omitempty"`
 }
 
@@ -71,11 +78,15 @@ type splunkTracesExporterRuntime interface {
 // the control plane to inspect or replace it while the OTLP receivers keep
 // using the same TracesExporter reference.
 type SplunkTracesExportController struct {
-	mu            sync.RWMutex
-	config        SplunkTracesExporterConfig
-	exporter      splunkTracesExporterRuntime
-	lastExport    SplunkTracesExportAttempt
-	hasLastExport bool
+	exportMu        sync.RWMutex
+	mu              sync.RWMutex
+	config          SplunkTracesExporterConfig
+	exporter        splunkTracesExporterRuntime
+	lastExport      SplunkTracesExportAttempt
+	hasLastExport   bool
+	exportedBatches uint64
+	exportedSpans   uint64
+	failedBatches   uint64
 }
 
 // NewSplunkTracesExportController creates a runtime controller. Disabled
@@ -94,13 +105,18 @@ func (c *SplunkTracesExportController) Configure(config SplunkTracesExporterConf
 	if err != nil {
 		return err
 	}
+	c.exportMu.Lock()
 	c.mu.Lock()
 	old := c.exporter
 	c.config = normalizeSplunkTracesExporterConfig(config)
 	c.exporter = exporter
 	c.lastExport = SplunkTracesExportAttempt{}
 	c.hasLastExport = false
+	c.exportedBatches = 0
+	c.exportedSpans = 0
+	c.failedBatches = 0
 	c.mu.Unlock()
+	c.exportMu.Unlock()
 	if old != nil {
 		old.Shutdown(context.Background())
 	}
@@ -112,10 +128,15 @@ func (c *SplunkTracesExportController) Shutdown(ctx context.Context) {
 	if c == nil {
 		return
 	}
+	unlock, ok := lockRWMutexForShutdown(ctx, &c.exportMu)
+	if !ok {
+		return
+	}
 	c.mu.Lock()
 	exp := c.exporter
 	c.exporter = nil
 	c.mu.Unlock()
+	unlock()
 	if exp != nil {
 		exp.Shutdown(ctx)
 	}
@@ -130,6 +151,17 @@ func (c *SplunkTracesExportController) Config() SplunkTracesExporterConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.config
+}
+
+// ExportEnabled reports whether exports can currently be forwarded without
+// forcing receivers to clone batches when the controller is disabled.
+func (c *SplunkTracesExportController) ExportEnabled() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.config.Enabled && c.exporter != nil
 }
 
 // Status returns a redacted snapshot of the controller state.
@@ -147,8 +179,13 @@ func (c *SplunkTracesExportController) Status() SplunkTracesExportStatus {
 		AccessTokenConfigured: c.config.AccessToken != "",
 		AccessToken:           redactConfiguredToken(c.config.AccessToken),
 		Timeout:               effectiveSplunkTracesTimeout(c.config.Timeout).String(),
+		ExportedBatches:       c.exportedBatches,
+		ExportedSpans:         c.exportedSpans,
+		FailedBatches:         c.failedBatches,
 	}
-	if c.exporter != nil {
+	if c.config.Endpoint != "" {
+		status.Endpoints = []string{c.config.Endpoint}
+	} else if c.exporter != nil {
 		status.Endpoints = c.exporter.Endpoints()
 	}
 	if c.hasLastExport {
@@ -163,6 +200,8 @@ func (c *SplunkTracesExportController) ExportTraces(ctx context.Context, td ptra
 	if c == nil {
 		return nil
 	}
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
 	c.mu.RLock()
 	exporter := c.exporter
 	c.mu.RUnlock()
@@ -170,7 +209,7 @@ func (c *SplunkTracesExportController) ExportTraces(ctx context.Context, td ptra
 		return nil
 	}
 	err := exporter.ExportTraces(ctx, td)
-	c.recordExport(err)
+	c.recordExport(err, td.SpanCount())
 	return err
 }
 
@@ -190,7 +229,7 @@ func (c *SplunkTracesExportController) TestConnection(ctx context.Context) (Splu
 	return c.Status(), err
 }
 
-func (c *SplunkTracesExportController) recordExport(err error) {
+func (c *SplunkTracesExportController) recordExport(err error, spans int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.hasLastExport = true
@@ -199,7 +238,13 @@ func (c *SplunkTracesExportController) recordExport(err error) {
 		Success: err == nil,
 	}
 	if err != nil {
+		c.failedBatches++
 		c.lastExport.Error = sanitizeExportError(err, c.config.AccessToken)
+		return
+	}
+	c.exportedBatches++
+	if spans > 0 {
+		c.exportedSpans += uint64(spans)
 	}
 }
 
@@ -324,6 +369,9 @@ func (e *SplunkTracesExporter) Shutdown(ctx context.Context) {
 // a dev-tool workload where batches are infrequent and ingest latency is low.
 func exportTracesAsync(exporter TracesExporter, td ptrace.Traces) {
 	if exporter == nil {
+		return
+	}
+	if statefulExporter, ok := exporter.(tracesExportState); ok && !statefulExporter.ExportEnabled() {
 		return
 	}
 	cloned := ptrace.NewTraces()

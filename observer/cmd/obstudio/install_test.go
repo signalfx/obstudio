@@ -1137,10 +1137,11 @@ func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
 	}
 
 	want := sharedObserverState{
-		BaseURL:   "http://127.0.0.1:41234",
-		HealthURL: "http://127.0.0.1:41234/api/health",
-		MCPURL:    "http://127.0.0.1:41234/mcp",
-		PID:       4242,
+		BaseURL:      "http://127.0.0.1:41234",
+		ControlToken: "shared-control-token",
+		HealthURL:    "http://127.0.0.1:41234/api/health",
+		MCPURL:       "http://127.0.0.1:41234/mcp",
+		PID:          4242,
 	}
 	if err := writeSharedObserverState(statePath, want); err != nil {
 		t.Fatalf("writeSharedObserverState returned error: %v", err)
@@ -1152,6 +1153,15 @@ func TestWriteSharedObserverStateAtomicallyReplacesExistingState(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("readSharedObserverState = %#v, want %#v", got, want)
+	}
+	info, err := os.Stat(statePath)
+	if err != nil {
+		t.Fatalf("stat shared observer state: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Fatalf("shared observer state mode = %#o, want 0600", mode)
+		}
 	}
 	entries, err := os.ReadDir(stateDir)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -41,6 +42,9 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	validationStore := validator.NewStore()
 	var runner validator.Runner
 	var dashboardsConfig dashboards.Config
+	var metricsController *otlp.SplunkMetricsExportController
+	var tracesController *otlp.SplunkTracesExportController
+	var splunkExportRefresher SplunkExportConfigurationRefresher
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -67,6 +71,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				dashboardsConfig = *value
 			}
+		case *otlp.SplunkMetricsExportController:
+			metricsController = value
+		case *otlp.SplunkTracesExportController:
+			tracesController = value
+		case SplunkExportConfigurationRefresher:
+			splunkExportRefresher = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
@@ -91,6 +101,9 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("POST /api/validation/analyze", analyzeValidation(validationService))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
 	mux.HandleFunc("DELETE /api/data", clearData(s, validationStore))
+	if metricsController != nil && tracesController != nil {
+		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
+	}
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {
