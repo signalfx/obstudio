@@ -213,8 +213,9 @@ def download_obstudio(
 
     archive_path = release_dir / resolved_artifact
     if archive_is_valid(archive_path, expected_checksum) and binary_path.is_file():
-        ensure_executable(binary_path)
-        return binary_path
+        if extracted_binary_matches_archive(archive_path, binary_path, binary_name):
+            ensure_executable(binary_path)
+            return binary_path
 
     if archive_path.exists() or extracted_dir.exists():
         if archive_path.exists() and not archive_is_valid(archive_path, expected_checksum):
@@ -305,6 +306,17 @@ def archive_is_valid(archive_path: Path, expected_checksum: str) -> bool:
     try:
         return sha256_file(archive_path) == expected_checksum
     except OSError:
+        return False
+
+
+def extracted_binary_matches_archive(archive_path: Path, binary_path: Path, binary_name: str) -> bool:
+    try:
+        with zipfile.ZipFile(archive_path) as zf:
+            member_name = find_zip_member(zf, binary_name)
+            if member_name is None:
+                return False
+            return sha256_file(binary_path) == sha256_zip_member(zf, member_name)
+    except (OSError, zipfile.BadZipFile):
         return False
 
 
@@ -421,6 +433,21 @@ def ensure_executable(path: Path) -> None:
         return
     mode = path.stat().st_mode
     path.chmod(mode | 0o111)
+
+
+def find_zip_member(zf: zipfile.ZipFile, binary_name: str) -> str | None:
+    for name in zf.namelist():
+        if Path(name).name == binary_name:
+            return name
+    return None
+
+
+def sha256_zip_member(zf: zipfile.ZipFile, member_name: str) -> str:
+    digest = hashlib.sha256()
+    with zf.open(member_name) as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run_install(obstudio_binary: Path) -> None:
