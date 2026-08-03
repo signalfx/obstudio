@@ -43,8 +43,6 @@ def main() -> int:
     plugin_root = resolve_plugin_root()
     plugin_data = resolve_plugin_data()
     plugin_version = read_plugin_version(plugin_root)
-    artifact_suffix = resolve_release_artifact()
-    release_version = resolve_release_version(artifact_suffix)
     state_path = plugin_data / BOOTSTRAP_STATE_FILE
     codex_config_path = Path.home() / ".codex" / "config.toml"
     codex_skills_path = Path.home() / ".codex" / "skills" / "obstudio"
@@ -57,10 +55,16 @@ def main() -> int:
         return 0
 
     try:
+        artifact_suffix = resolve_release_artifact()
+        release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
+        checksums_path = release_dir / "checksums.txt"
+        resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
+        release_version = resolve_release_version(resolved_artifact, artifact_suffix)
+
         obstudio_binary = locate_existing_obstudio(release_version)
         install_source = "existing"
         if obstudio_binary is None:
-            obstudio_binary = download_obstudio(plugin_data)
+            obstudio_binary = download_obstudio(plugin_data, artifact_suffix, resolved_artifact, expected_checksum)
             install_source = "downloaded"
 
         run_install(obstudio_binary)
@@ -70,6 +74,7 @@ def main() -> int:
             process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
             try:
                 verify_local_obstudio_health()
+                ensure_process_running(process)
             except Exception:
                 terminate_process(process)
                 raise
@@ -194,16 +199,18 @@ def locate_existing_obstudio(expected_version: str) -> Path | None:
     return None
 
 
-def download_obstudio(plugin_data: Path) -> Path:
-    artifact_suffix = resolve_release_artifact()
+def download_obstudio(
+    plugin_data: Path,
+    artifact_suffix: str,
+    resolved_artifact: str,
+    expected_checksum: str,
+) -> Path:
     release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
     release_dir.mkdir(parents=True, exist_ok=True)
     extracted_dir = release_dir / "extracted"
     binary_name = "obstudio.exe" if is_windows() else "obstudio"
     binary_path = extracted_dir / binary_name
-    checksums_path = release_dir / "checksums.txt"
 
-    resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
     archive_path = release_dir / resolved_artifact
     if archive_is_valid(archive_path, expected_checksum) and binary_path.is_file():
         ensure_executable(binary_path)
@@ -346,12 +353,24 @@ def resolve_release_artifact() -> str:
     raise RuntimeError(f"unsupported platform: {system}/{machine}")
 
 
-def resolve_release_version(artifact_suffix: str) -> str:
-    artifact = artifact_suffix.removesuffix(".zip")
-    parts = artifact.split("_", 2)
-    if len(parts) != 3 or not parts[1]:
-        raise RuntimeError(f"could not parse release version from {artifact_suffix}")
-    return parts[1]
+def resolve_release_version(resolved_artifact: str, artifact_suffix: str) -> str:
+    expected_suffix = f"_{artifact_suffix}"
+    if not resolved_artifact.endswith(expected_suffix):
+        raise RuntimeError(
+            f"could not parse release version from {resolved_artifact}: expected suffix {expected_suffix}"
+        )
+    prefix = resolved_artifact.removesuffix(expected_suffix)
+    if not prefix.startswith("obstudio_"):
+        raise RuntimeError(f"could not parse release version from {resolved_artifact}")
+    release_version = prefix.removeprefix("obstudio_")
+    if not release_version:
+        raise RuntimeError(f"could not parse release version from {resolved_artifact}")
+    return release_version
+
+
+def ensure_process_running(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        raise RuntimeError("Observer process exited before becoming healthy")
 
 
 def existing_binary_matches_release(obstudio_binary: Path, expected_version: str) -> bool:
