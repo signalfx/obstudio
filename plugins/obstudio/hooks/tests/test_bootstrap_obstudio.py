@@ -1,6 +1,8 @@
 import importlib.util
 import unittest
 from pathlib import Path
+import tempfile
+import zipfile
 
 
 def load_bootstrap_module():
@@ -41,6 +43,34 @@ class EnsureProcessRunningTest(unittest.TestCase):
     def test_rejects_exited_child(self):
         with self.assertRaisesRegex(RuntimeError, "exited before becoming healthy"):
             BOOTSTRAP.ensure_process_running(DummyProcess(1))
+
+
+class ExtractedBinaryMatchesArchiveTest(unittest.TestCase):
+    def test_accepts_matching_extracted_binary(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            archive_path = tempdir_path / "obstudio_0.0.14_linux_amd64.zip"
+            binary_name = "obstudio"
+            extracted_binary = tempdir_path / binary_name
+            extracted_binary.write_bytes(b"hello-obstudio")
+
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr(f"obstudio_0.0.14_linux_amd64/{binary_name}", b"hello-obstudio")
+
+            self.assertTrue(BOOTSTRAP.extracted_binary_matches_archive(archive_path, extracted_binary, binary_name))
+
+    def test_rejects_mismatched_extracted_binary(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            archive_path = tempdir_path / "obstudio_0.0.14_linux_amd64.zip"
+            binary_name = "obstudio"
+            extracted_binary = tempdir_path / binary_name
+            extracted_binary.write_bytes(b"hello-obstudio")
+
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr(f"obstudio_0.0.14_linux_amd64/{binary_name}", b"different-bytes")
+
+            self.assertFalse(BOOTSTRAP.extracted_binary_matches_archive(archive_path, extracted_binary, binary_name))
 
 
 if __name__ == "__main__":
