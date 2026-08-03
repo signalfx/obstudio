@@ -257,32 +257,45 @@ def download_obstudio(
     return binary_path
 
 
-def fetch_expected_checksum(artifact_suffix: str, checksums_path: Path) -> tuple[str, str]:
-    download_url = f"{RELEASE_BASE_URL}/checksums.txt"
+def fetch_expected_checksum(
+    artifact_suffix: str,
+    checksums_path: Path,
+) -> tuple[str, str]:
     cached_text = None
     if checksums_path.is_file():
         try:
             cached_text = checksums_path.read_text(encoding="utf-8")
         except OSError:
             cached_text = None
-    try:
-        with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-            text = response.read().decode("utf-8")
+    last_error: Exception | None = None
+    for download_url in (f"{RELEASE_BASE_URL}/checksums.txt",):
         try:
+            with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+                text = response.read().decode("utf-8")
             result = parse_checksum(text, artifact_suffix)
-        except Exception:
-            if cached_text is not None:
-                return parse_checksum(cached_text, artifact_suffix)
-            raise
+            try:
+                checksums_path.write_text(text, encoding="utf-8")
+            except OSError:
+                pass
+            return result
+        except Exception as exc:  # pragma: no cover - network boundary
+            last_error = exc
+    release_version = resolve_latest_release_version()
+    versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
+    try:
+        with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            text = response.read().decode("utf-8")
+        result = parse_checksum(text, artifact_suffix)
         try:
             checksums_path.write_text(text, encoding="utf-8")
         except OSError:
             pass
         return result
     except Exception as exc:  # pragma: no cover - network boundary
-        if cached_text is not None:
-            return parse_checksum(cached_text, artifact_suffix)
-        raise RuntimeError("failed to download release checksum manifest") from exc
+        last_error = exc
+    if cached_text is not None:
+        return parse_checksum(cached_text, artifact_suffix)
+    raise RuntimeError("failed to download release checksum manifest") from last_error
 
 
 def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:
@@ -363,6 +376,22 @@ def resolve_release_artifact() -> str:
         if machine in {"x86_64", "amd64"}:
             return "windows_amd64.zip"
     raise RuntimeError(f"unsupported platform: {system}/{machine}")
+
+
+def resolve_latest_release_version() -> str:
+    download_url = "https://api.github.com/repos/signalfx/obstudio/releases/latest"
+    try:
+        with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            payload = json.load(response)
+    except Exception as exc:  # pragma: no cover - network boundary
+        raise RuntimeError("failed to determine latest Obstudio release version") from exc
+    tag_name = str(payload.get("tag_name", "")).strip()
+    if not tag_name:
+        raise RuntimeError("latest Obstudio release is missing a tag name")
+    release_version = tag_name.removeprefix("v").strip()
+    if not release_version:
+        raise RuntimeError(f"could not parse release version from tag {tag_name}")
+    return release_version
 
 
 def resolve_release_version(resolved_artifact: str, artifact_suffix: str) -> str:
