@@ -8,11 +8,13 @@ import json
 import os
 import platform
 import re
+import socket
 import shutil
 import subprocess
 import sys
 import time
 import urllib.request
+import urllib.parse
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +38,7 @@ CHECKSUM_LINE_PATTERNS = (
     re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<name>.+)$"),
     re.compile(r"^SHA256 \((?P<name>.+)\) = (?P<hash>[0-9a-fA-F]{64})$"),
 )
+VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b")
 HELP_SKILL_HINT = "Use $obstudio-help to list available commands."
 
 
@@ -71,14 +74,22 @@ def main() -> int:
         pid = None
         log_path = None
         if codex_config_requests_local_obstudio(codex_config_path):
-            process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
-            try:
-                verify_local_obstudio_health()
-                ensure_process_running(process)
-            except Exception:
-                terminate_process(process)
-                raise
-            pid = process.pid
+            if probe_obstudio_health(OBSTUDIO_HEALTH_URL):
+                pid = read_bootstrap_state_pid(state_path) or ""
+            else:
+                if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
+                    raise RuntimeError(
+                        f"local Observer port is already occupied at {OBSTUDIO_HEALTH_URL} "
+                        "but the health endpoint is not reporting Obstudio; stop the existing process or clear the stale shared-observer state"
+                    )
+                process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
+                try:
+                    verify_local_obstudio_health()
+                    ensure_process_running(process)
+                except Exception:
+                    terminate_process(process)
+                    raise
+                pid = str(process.pid)
         write_state(
             state_path,
             {
@@ -86,7 +97,11 @@ def main() -> int:
                 "installSource": install_source,
                 "obstudioBinary": str(obstudio_binary),
                 "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
-                "pid": str(pid) if pid is not None else "",
+                "owner": "codex-plugin" if codex_config_requests_local_obstudio(codex_config_path) else "shared-observer",
+                "mode": "managed" if codex_config_requests_local_obstudio(codex_config_path) else "shared",
+                "healthUrl": OBSTUDIO_HEALTH_URL if codex_config_requests_local_obstudio(codex_config_path) else "",
+                "mcpUrl": derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL) if codex_config_requests_local_obstudio(codex_config_path) else "",
+                "pid": pid if pid is not None else "",
                 "logPath": str(log_path) if log_path is not None else "",
             },
         )
@@ -181,7 +196,13 @@ def is_bootstrapped(
     except json.JSONDecodeError:
         return False
 
-    return state.get("pluginVersion") == plugin_version
+    if state.get("pluginVersion") != plugin_version:
+        return False
+
+    health_url = codex_obstudio_health_url(codex_config_path)
+    if health_url is None:
+        return False
+    return probe_obstudio_health(health_url)
 
 
 def locate_existing_obstudio(expected_version: str) -> Path | None:
@@ -226,9 +247,8 @@ def download_obstudio(
     download_url = f"{RELEASE_BASE_URL}/{resolved_artifact}"
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
-            if not archive_path.is_file():
-                with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, archive_path.open("wb") as output:
-                    shutil.copyfileobj(response, output)
+            with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, archive_path.open("wb") as output:
+                shutil.copyfileobj(response, output)
             break
         except Exception as exc:  # pragma: no cover - network boundary
             archive_path.unlink(missing_ok=True)
@@ -246,8 +266,10 @@ def download_obstudio(
         verify_checksum(archive_path, expected_checksum)
         with zipfile.ZipFile(archive_path) as zf:
             zf.extractall(extracted_dir)
-    except zipfile.BadZipFile as exc:
+    except (zipfile.BadZipFile, RuntimeError) as exc:
         archive_path.unlink(missing_ok=True)
+        if extracted_dir.exists():
+            shutil.rmtree(extracted_dir)
         raise RuntimeError(f"downloaded archive {resolved_artifact} is corrupt") from exc
     binary_path = find_binary(extracted_dir, binary_name)
     if binary_path is None:
@@ -261,12 +283,6 @@ def fetch_expected_checksum(
     artifact_suffix: str,
     checksums_path: Path,
 ) -> tuple[str, str]:
-    cached_text = None
-    if checksums_path.is_file():
-        try:
-            cached_text = checksums_path.read_text(encoding="utf-8")
-        except OSError:
-            cached_text = None
     last_error: Exception | None = None
     for download_url in (f"{RELEASE_BASE_URL}/checksums.txt",):
         try:
@@ -275,12 +291,30 @@ def fetch_expected_checksum(
             result = parse_checksum(text, artifact_suffix)
             try:
                 checksums_path.write_text(text, encoding="utf-8")
+                cache_versioned_checksums(
+                    checksums_path,
+                    resolve_release_version(result[0], artifact_suffix),
+                    text,
+                )
             except OSError:
                 pass
             return result
         except Exception as exc:  # pragma: no cover - network boundary
             last_error = exc
+
+    for cached_path in sorted(checksums_path.parent.glob("checksums-*.txt")):
+        try:
+            return parse_checksum(cached_path.read_text(encoding="utf-8"), artifact_suffix)
+        except (OSError, RuntimeError):
+            continue
+
     release_version = resolve_latest_release_version()
+    versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
+    if versioned_checksums_path.is_file():
+        try:
+            return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
+        except OSError:
+            pass
     versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
     try:
         with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
@@ -288,18 +322,24 @@ def fetch_expected_checksum(
         result = parse_checksum(text, artifact_suffix)
         try:
             checksums_path.write_text(text, encoding="utf-8")
+            cache_versioned_checksums(checksums_path, release_version, text)
         except OSError:
             pass
         return result
     except Exception as exc:  # pragma: no cover - network boundary
         last_error = exc
-    if cached_text is not None:
-        return parse_checksum(cached_text, artifact_suffix)
+    if versioned_checksums_path.is_file():
+        try:
+            return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
+        except OSError:
+            pass
     raise RuntimeError("failed to download release checksum manifest") from last_error
 
 
 def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:
-    target_name = artifact_suffix
+    target_name = re.compile(
+        rf"^obstudio_\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?_{re.escape(artifact_suffix)}$"
+    )
     for raw_line in checksums_text.splitlines():
         line = raw_line.strip()
         if not line:
@@ -308,8 +348,8 @@ def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]
             match = pattern.fullmatch(line)
             if match:
                 name = match.group("name")
-                if name == target_name or name.endswith(target_name):
-                    return name, match.group("hash").lower()
+                if target_name.fullmatch(Path(name).name):
+                    return Path(name).name, match.group("hash").lower()
     raise RuntimeError(f"checksum for {artifact_suffix} not found in checksums.txt")
 
 
@@ -375,7 +415,11 @@ def resolve_release_artifact() -> str:
     elif system == "Windows":
         if machine in {"x86_64", "amd64"}:
             return "windows_amd64.zip"
-    raise RuntimeError(f"unsupported platform: {system}/{machine}")
+    raise RuntimeError(
+        f"unsupported platform: {system}/{machine}. "
+        "Obstudio releases currently ship Linux amd64, macOS arm64/amd64, and Windows amd64 assets; "
+        "install Obstudio manually from https://github.com/signalfx/obstudio/releases if your platform is not listed."
+    )
 
 
 def resolve_latest_release_version() -> str:
@@ -433,14 +477,10 @@ def existing_binary_matches_release(obstudio_binary: Path, expected_version: str
 
 def parse_obstudio_version(stdout: str, stderr: str) -> str | None:
     text = "\n".join(part for part in (stdout, stderr) if part)
-    for line in reversed([line.strip() for line in text.splitlines() if line.strip()]):
-        tokens = line.split()
-        for token in reversed(tokens):
-            if token == "version":
-                continue
-            if token:
-                return token
-    return None
+    matches = VERSION_PATTERN.findall(text)
+    if not matches:
+        return None
+    return matches[-1]
 
 
 def is_windows() -> bool:
@@ -462,6 +502,18 @@ def ensure_executable(path: Path) -> None:
         return
     mode = path.stat().st_mode
     path.chmod(mode | 0o111)
+
+
+def versioned_checksum_cache_path(checksums_path: Path, release_version: str) -> Path:
+    return checksums_path.with_name(f"checksums-{release_version}.txt")
+
+
+def cache_versioned_checksums(checksums_path: Path, release_version: str, text: str) -> None:
+    versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
+    try:
+        versioned_checksums_path.write_text(text, encoding="utf-8")
+    except OSError:
+        pass
 
 
 def find_zip_member(zf: zipfile.ZipFile, binary_name: str) -> str | None:
@@ -538,6 +590,92 @@ def verify_local_obstudio_health() -> None:
     ) from last_error
 
 
+def probe_obstudio_health(health_url: str) -> bool:
+    try:
+        with urllib.request.urlopen(health_url, timeout=2) as response:
+            if response.status != 200:
+                return False
+            payload = json.load(response)
+            return (
+                isinstance(payload, dict)
+                and payload.get("kind") == "obstudio"
+                and payload.get("apiVersion") == "v1"
+            )
+    except Exception:
+        return False
+
+
+def codex_obstudio_health_url(config_path: Path) -> str | None:
+    try:
+        config = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    start = config.find(CODEX_MANAGED_BLOCK)
+    if start == -1:
+        return None
+    end = config.find("# END OBSTUDIO MCP CONFIG", start)
+    if end == -1:
+        return None
+    block = config[start:end]
+    url_match = re.search(r'(?m)^\s*url\s*=\s*"([^"]+)"\s*$', block)
+    if url_match:
+        return derive_health_url(url_match.group(1))
+    if re.search(r'(?m)^\s*command\s*=\s*"([^"]+)"\s*$', block):
+        return OBSTUDIO_HEALTH_URL
+    return None
+
+
+def derive_health_url(mcp_url: str) -> str:
+    parsed = urllib.parse.urlparse(mcp_url)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/mcp"):
+        path = path[: -len("/mcp")] + "/api/health"
+    elif path:
+        path = path.rstrip("/") + "/api/health"
+    else:
+        path = "/api/health"
+    return parsed._replace(path=path).geturl()
+
+
+def derive_obstudio_mcp_url(health_url: str) -> str:
+    parsed = urllib.parse.urlparse(health_url)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/api/health"):
+        path = path[: -len("/api/health")] + "/mcp"
+    elif path:
+        path = path.rstrip("/") + "/mcp"
+    else:
+        path = "/mcp"
+    return parsed._replace(path=path).geturl()
+
+
+def is_tcp_port_open(url_text: str) -> bool:
+    parsed = urllib.parse.urlparse(url_text)
+    host = parsed.hostname
+    port = parsed.port
+    if not host or port is None:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def read_bootstrap_state_pid(state_path: Path) -> str:
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    pid = state.get("pid")
+    if isinstance(pid, str):
+        return pid.strip()
+    if isinstance(pid, int):
+        return str(pid)
+    return ""
+
+
 def write_state(path: Path, payload: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
@@ -564,6 +702,7 @@ def emit_error(message: str) -> None:
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
                 "additionalContext": message,
+                "isError": True,
             }
         },
         sys.stdout,
