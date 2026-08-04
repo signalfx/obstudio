@@ -22,6 +22,8 @@ import (
 
 type mcpConfigFormat string
 
+type mcpServersKey string
+
 const (
 	mcpConfigJSON mcpConfigFormat = "json"
 	mcpConfigTOML mcpConfigFormat = "toml"
@@ -43,6 +45,8 @@ const (
 type mcpConfigTarget struct {
 	format                mcpConfigFormat
 	path                  func() string
+	serversKey            mcpServersKey
+	includeLocalType      bool
 	includeRemoteType     bool
 	preserveFields        []string
 	preserveSameURLFields []string
@@ -79,6 +83,7 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format:            mcpConfigJSON,
 			path:              func() string { return filepath.Join(userHome(), ".cursor", "mcp.json") },
+			serversKey:        "mcpServers",
 			includeRemoteType: true,
 		},
 	},
@@ -87,6 +92,7 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format:            mcpConfigJSON,
 			path:              func() string { return filepath.Join(userHome(), ".claude.json") },
+			serversKey:        "mcpServers",
 			includeRemoteType: true,
 		},
 	},
@@ -102,6 +108,7 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format:                mcpConfigJSON,
 			path:                  func() string { return filepath.Join(userHome(), ".kiro", "settings", "mcp.json") },
+			serversKey:            "mcpServers",
 			preserveFields:        []string{"autoApprove", "disabled", "disabledTools", "timeout"},
 			preserveSameURLFields: []string{"headers", "env", "oauth", "oauthScopes"},
 		},
@@ -111,6 +118,16 @@ var targets = map[string]agentTarget{
 		mcpConfig: mcpConfigTarget{
 			format:            mcpConfigJSON,
 			path:              func() string { return filepath.Join(userHome(), ".codeium", "windsurf", "mcp_config.json") },
+			serversKey:        "mcpServers",
+			includeRemoteType: true,
+		},
+	},
+	"copilot": {
+		mcpConfig: mcpConfigTarget{
+			format:            mcpConfigJSON,
+			path:              func() string { return filepath.Join(userConfigDir(), "Code", "User", "mcp.json") },
+			serversKey:        "servers",
+			includeLocalType:  true,
 			includeRemoteType: true,
 		},
 	},
@@ -219,31 +236,38 @@ func runInstall(target, sharedURL string) error {
 	}
 
 	home := userHome()
-	destDir := t.skillsDir(home)
-	skillsRoot := filepath.Dir(destDir)
+	destDir := filepath.Join(home, sharedObserverStateDirName, "bin")
 
-	fmt.Printf("Installing obstudio to %s\n", destDir)
+	if t.skillsDir != nil {
+		destDir = t.skillsDir(home)
+		skillsRoot := filepath.Dir(destDir)
 
-	removeSkillSymlinks(skillsRoot, destDir)
+		fmt.Printf("Installing obstudio to %s\n", destDir)
 
-	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("failed to clean destination: %w", err)
+		removeSkillSymlinks(skillsRoot, destDir)
+
+		if err := os.RemoveAll(destDir); err != nil {
+			return fmt.Errorf("failed to clean destination: %w", err)
+		}
+
+		skillsFS, err := fs.Sub(embeddedSkills, "_skills")
+		if err != nil {
+			return fmt.Errorf("failed to read embedded skills: %w", err)
+		}
+
+		if err := extractFS(skillsFS, destDir); err != nil {
+			return fmt.Errorf("failed to extract skills: %w", err)
+		}
+		fmt.Println("  Skills installed (includes references).")
+
+		if err := createSkillSymlinks(skillsRoot, destDir); err != nil {
+			return fmt.Errorf("failed to create skill symlinks: %w", err)
+		}
+		fmt.Println("  Skill symlinks created for agent discovery.")
+	} else {
+		fmt.Printf("Installing obstudio to %s\n", destDir)
+		fmt.Println("  Skills installation not supported for this target; skipping.")
 	}
-
-	skillsFS, err := fs.Sub(embeddedSkills, "_skills")
-	if err != nil {
-		return fmt.Errorf("failed to read embedded skills: %w", err)
-	}
-
-	if err := extractFS(skillsFS, destDir); err != nil {
-		return fmt.Errorf("failed to extract skills: %w", err)
-	}
-	fmt.Println("  Skills installed (includes references).")
-
-	if err := createSkillSymlinks(skillsRoot, destDir); err != nil {
-		return fmt.Errorf("failed to create skill symlinks: %w", err)
-	}
-	fmt.Println("  Skill symlinks created for agent discovery.")
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -293,12 +317,14 @@ func runInstall(target, sharedURL string) error {
 }
 
 // connectorIDEByTarget maps an obstudio install target to the --ide name the
-// splunk-o11y-mcp-connect CLI expects. kiro has no entry: the connector only
-// covers vscode/cursor/codex/claude-code.
+// splunk-o11y-mcp-connect CLI expects. kiro and windsurf have no entry: the
+// connector does not support them. copilot maps to "vscode" because both write
+// into VS Code's user mcp.json.
 var connectorIDEByTarget = map[string]string{
 	"cursor":      "cursor",
 	"claude-code": "claude-code",
 	"codex":       "codex",
+	"copilot":     "vscode",
 }
 
 // mapTargetsToConnectorIDEs returns the connector --ide names for the given
@@ -639,6 +665,9 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	case mcpConfigJSON:
 		server := map[string]any{}
 		if sharedURL == "" {
+			if target.includeLocalType {
+				server["type"] = "stdio"
+			}
 			server["command"] = binaryPath
 			server["args"] = []string{}
 		} else {
@@ -647,7 +676,7 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 			}
 			server["url"] = sharedURL
 		}
-		return upsertJSONMCPServer(target.path(), server, target.preserveFields, target.preserveSameURLFields)
+		return upsertJSONMCPServer(target.path(), target.serversKey, server, target.preserveFields, target.preserveSameURLFields)
 	case mcpConfigTOML:
 		server := codexMCPServer{}
 		if sharedURL == "" {
@@ -662,7 +691,11 @@ func configureMCP(target mcpConfigTarget, binaryPath, sharedURL string) error {
 	}
 }
 
-func upsertJSONMCPServer(path string, server map[string]any, preserveFields, preserveSameURLFields []string) error {
+func upsertJSONMCPServer(path string, serversKey mcpServersKey, server map[string]any, preserveFields, preserveSameURLFields []string) error {
+	if serversKey == "" {
+		return fmt.Errorf("serversKey is not configured for this target — open an issue at https://github.com/signalfx/obstudio/issues to request support")
+	}
+
 	config := map[string]any{}
 
 	data, err := os.ReadFile(path)
@@ -674,7 +707,7 @@ func upsertJSONMCPServer(path string, server map[string]any, preserveFields, pre
 		return fmt.Errorf("read JSON MCP config %q: %w", path, err)
 	}
 
-	servers, ok := config["mcpServers"].(map[string]any)
+	servers, ok := config[string(serversKey)].(map[string]any)
 	if !ok {
 		servers = map[string]any{}
 	}
@@ -695,7 +728,7 @@ func upsertJSONMCPServer(path string, server map[string]any, preserveFields, pre
 		}
 	}
 	servers["obstudio"] = server
-	config["mcpServers"] = servers
+	config[string(serversKey)] = servers
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create parent directory for %q: %w", path, err)
@@ -1107,5 +1140,15 @@ func userHome() string {
 	if err != nil {
 		log.Fatalf("Failed to find home directory: %v", err)
 	}
+
 	return home
+}
+
+func userConfigDir() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("Failed to find config directory: %v", err)
+	}
+
+	return dir
 }

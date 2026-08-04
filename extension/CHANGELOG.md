@@ -2,6 +2,11 @@
 
 All notable changes to the "Splunk Observability Studio" extension will be documented in this file.
 
+## 0.0.15
+
+### Added
+- Run the extension in GitHub Copilot (VS Code) and configure its MCP integration
+
 ## 0.0.14
 
 ### Added
