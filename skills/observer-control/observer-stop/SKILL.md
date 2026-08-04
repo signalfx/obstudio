@@ -33,7 +33,8 @@ just because the cached state is stale.
    fails with a connection or permission error, retry the same localhost-only
    health check outside the sandbox before treating the Observer as down.
 3. If health is good and the bundled Observer is already listening, update the
-   saved PID to match the live process and stop; do not stop it.
+   saved PID to match the live process, then continue applying the ownership
+   rules below.
 4. If it is `shared` or `external`, do not stop it unless the current plugin
    explicitly owns it.
 5. If it is `managed`, stop only the process that the current plugin started.
