@@ -75,7 +75,7 @@ def main() -> int:
         log_path = None
         if codex_config_requests_local_obstudio(codex_config_path):
             if probe_obstudio_health(OBSTUDIO_HEALTH_URL):
-                pid = read_bootstrap_state_pid(state_path) or ""
+                pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL) or read_bootstrap_state_pid(state_path) or ""
             else:
                 if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
                     raise RuntimeError(
@@ -673,6 +673,30 @@ def read_bootstrap_state_pid(state_path: Path) -> str:
         return pid.strip()
     if isinstance(pid, int):
         return str(pid)
+    return ""
+
+
+def find_pid_listening_on_url(health_url: str) -> str:
+    parsed = urllib.parse.urlparse(health_url)
+    port = parsed.port
+    if port is None:
+        return ""
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return ""
+    if result.returncode != 0:
+        return ""
+    for line in result.stdout.splitlines():
+        pid = line.strip()
+        if pid.isdigit():
+            return pid
     return ""
 
 

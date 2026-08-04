@@ -248,6 +248,17 @@ class BootstrapHealthCheckTest(unittest.TestCase):
                     )
                 )
 
+    def test_find_pid_listening_on_url_prefers_live_listening_process(self):
+        class FakeResult:
+            returncode = 0
+            stdout = "4321\n"
+
+        with mock.patch.object(BOOTSTRAP.subprocess, "run", return_value=FakeResult()):
+            self.assertEqual(
+                BOOTSTRAP.find_pid_listening_on_url("http://127.0.0.1:3000/api/health"),
+                "4321",
+            )
+
     def test_codex_configured_health_url_derives_shared_mcp_health_endpoint(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config_path = Path(tempdir) / "config.toml"
