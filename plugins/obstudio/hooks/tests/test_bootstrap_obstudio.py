@@ -56,6 +56,21 @@ class ResolveReleaseVersionTest(unittest.TestCase):
         self.assertEqual(got, "0.0.14")
 
 
+class ParseChecksumTest(unittest.TestCase):
+    def test_matches_exact_release_artifact_name(self):
+        checksums_text = (
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *evil/linux_amd64.zip\n"
+            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface *obstudio_0.0.14_linux_amd64.zip\n"
+        )
+
+        name, checksum = BOOTSTRAP.parse_checksum(checksums_text, "linux_amd64.zip")
+        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
+        self.assertEqual(
+            checksum,
+            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
+        )
+
+
 class EnsureProcessRunningTest(unittest.TestCase):
     def test_accepts_running_child(self):
         BOOTSTRAP.ensure_process_running(DummyProcess(None))
@@ -120,6 +135,150 @@ class FetchExpectedChecksumTest(unittest.TestCase):
 
         self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
         self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+    def test_uses_versioned_checksum_cache_when_stable_alias_is_missing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            versioned_cache = BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14")
+            checksums_path.write_text(
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff *obstudio_0.0.13_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+            versioned_cache.write_text(
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *obstudio_0.0.14_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+
+            def fake_urlopen(url, timeout=0):
+                raise RuntimeError(f"network unavailable: {url}")
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
+        self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+
+class BootstrapStateHealthTest(unittest.TestCase):
+    def test_bootstrap_state_requires_live_health_for_shared_url(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            state_path = tempdir_path / "bootstrap-state.json"
+            skills_path = tempdir_path / ".codex" / "skills" / "obstudio"
+            config_path = tempdir_path / ".codex" / "config.toml"
+            skills_path.mkdir(parents=True, exist_ok=True)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:3000/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(json.dumps({"pluginVersion": "0.1.0"}), encoding="utf-8")
+
+            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=False):
+                self.assertFalse(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True):
+                self.assertTrue(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+
+class BootstrapHealthCheckTest(unittest.TestCase):
+    def test_bootstrap_state_requires_live_health_for_local_config(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            state_path = tempdir_path / "bootstrap-state.json"
+            skills_path = tempdir_path / ".codex" / "skills" / "obstudio"
+            config_path = tempdir_path / ".codex" / "config.toml"
+            skills_path.mkdir(parents=True, exist_ok=True)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'command = "/tmp/obstudio"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(json.dumps({"pluginVersion": "0.1.0"}), encoding="utf-8")
+
+            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=False):
+                self.assertFalse(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True):
+                self.assertTrue(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+    def test_codex_configured_health_url_derives_shared_mcp_health_endpoint(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_path = Path(tempdir) / "config.toml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:3000/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            got = BOOTSTRAP.codex_obstudio_health_url(config_path)
+            self.assertEqual(got, "http://127.0.0.1:3000/api/health")
+
+
+class ParseObstudioVersionTest(unittest.TestCase):
+    def test_extracts_version_from_parenthesized_output(self):
+        stdout = "obstudio version 1.2.3 (build abc)\n"
+        stderr = ""
+        self.assertEqual(BOOTSTRAP.parse_obstudio_version(stdout, stderr), "1.2.3")
+
+    def test_extracts_version_from_forked_semver(self):
+        stdout = "obstudio version 0.0.11-fork3\n"
+        stderr = ""
+        self.assertEqual(BOOTSTRAP.parse_obstudio_version(stdout, stderr), "0.0.11-fork3")
 
 
 if __name__ == "__main__":
