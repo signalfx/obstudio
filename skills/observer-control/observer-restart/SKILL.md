@@ -22,7 +22,8 @@ recommend manual recovery instead.
 
 Prefer the live health endpoint and listener over stale log output or an old
 saved PID. If health is good and the bundled Observer binary is already
-listening, update the saved PID and stop; do not start a second copy.
+listening, update the saved PID before applying the ownership rules; do not
+start a second copy.
 
 ## Steps
 
@@ -31,12 +32,14 @@ listening, update the saved PID and stop; do not start a second copy.
    fails with a connection or permission error, retry the same localhost-only
    health check outside the sandbox before treating the Observer as down.
 3. If health is good and the bundled Observer is already listening, update the
-   saved PID to match the live process and stop; do not restart it.
-4. If health is down and the state identifies the bundled binary, restart that
-   binary only. If the saved PID is stale or missing, reconcile it with the
-   live listener before restarting.
-5. If startup fails because one of the expected ports is already in use,
+   saved PID to match the live process, then continue applying the ownership
+   rules below.
+4. If it is `shared` or `external`, do not restart it unless the current plugin
+   explicitly owns it.
+5. If it is `managed`, restart only the process that the current plugin
+   started, even when the health endpoint is currently good.
+6. If startup fails because one of the expected ports is already in use,
    inspect only ports `3000`, `4317`, and `4318`.
-6. If the ports belong to another binary, or ownership cannot be determined,
+7. If the ports belong to another binary, or ownership cannot be determined,
    treat it as `shared` or `external`; do not kill or restart it. Report the
    conflicting PID/port and recommend manual recovery.

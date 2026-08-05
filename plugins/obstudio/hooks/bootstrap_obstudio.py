@@ -60,6 +60,7 @@ def main() -> int:
     try:
         artifact_suffix = resolve_release_artifact()
         release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
+        release_dir.mkdir(parents=True, exist_ok=True)
         checksums_path = release_dir / "checksums.txt"
         resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
         release_version = resolve_release_version(resolved_artifact, artifact_suffix)
@@ -71,11 +72,15 @@ def main() -> int:
             install_source = "downloaded"
 
         run_install(obstudio_binary)
-        pid = None
+        local_obstudio_requested = codex_config_requests_local_obstudio(codex_config_path)
+        pid = ""
+        live_pid = ""
         log_path = None
-        if codex_config_requests_local_obstudio(codex_config_path):
+        process_started = False
+        if local_obstudio_requested:
             if probe_obstudio_health(OBSTUDIO_HEALTH_URL):
-                pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL) or read_bootstrap_state_pid(state_path) or ""
+                live_pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL)
+                pid = live_pid
             else:
                 if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
                     raise RuntimeError(
@@ -90,6 +95,15 @@ def main() -> int:
                     terminate_process(process)
                     raise
                 pid = str(process.pid)
+                process_started = True
+        observer_state = observer_state_fields(
+            state_path,
+            local_requested=local_obstudio_requested,
+            process_started=process_started,
+            live_pid=live_pid,
+            pid=pid,
+            log_path=log_path,
+        )
         write_state(
             state_path,
             {
@@ -97,19 +111,21 @@ def main() -> int:
                 "installSource": install_source,
                 "obstudioBinary": str(obstudio_binary),
                 "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
-                "owner": "codex-plugin" if codex_config_requests_local_obstudio(codex_config_path) else "shared-observer",
-                "mode": "managed" if codex_config_requests_local_obstudio(codex_config_path) else "shared",
-                "healthUrl": OBSTUDIO_HEALTH_URL if codex_config_requests_local_obstudio(codex_config_path) else "",
-                "mcpUrl": derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL) if codex_config_requests_local_obstudio(codex_config_path) else "",
-                "pid": pid if pid is not None else "",
-                "logPath": str(log_path) if log_path is not None else "",
+                **observer_state,
             },
         )
-        if pid is not None:
+        if process_started:
             emit_context(
                 "Obstudio bootstrap complete. Codex now has the bundled skills, "
                 "the local Observer MCP config, and a background Observer process "
                 "was started for the bundled HTTP MCP endpoint. "
+                f"{HELP_SKILL_HINT}"
+            )
+        elif observer_state["mode"] == "managed":
+            emit_context(
+                "Obstudio bootstrap complete. Codex now has the bundled skills, "
+                "the local Observer MCP config, and the managed background Observer "
+                "is healthy. "
                 f"{HELP_SKILL_HINT}"
             )
         else:
@@ -283,6 +299,7 @@ def fetch_expected_checksum(
     artifact_suffix: str,
     checksums_path: Path,
 ) -> tuple[str, str]:
+    checksums_path.parent.mkdir(parents=True, exist_ok=True)
     last_error: Exception | None = None
     for download_url in (f"{RELEASE_BASE_URL}/checksums.txt",):
         try:
@@ -302,37 +319,35 @@ def fetch_expected_checksum(
         except Exception as exc:  # pragma: no cover - network boundary
             last_error = exc
 
-    for cached_path in sorted(checksums_path.parent.glob("checksums-*.txt")):
-        try:
-            return parse_checksum(cached_path.read_text(encoding="utf-8"), artifact_suffix)
-        except (OSError, RuntimeError):
-            continue
-
-    release_version = resolve_latest_release_version()
-    versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
-    if versioned_checksums_path.is_file():
-        try:
-            return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
-        except OSError:
-            pass
-    versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
+    release_version = None
     try:
-        with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-            text = response.read().decode("utf-8")
-        result = parse_checksum(text, artifact_suffix)
-        try:
-            checksums_path.write_text(text, encoding="utf-8")
-            cache_versioned_checksums(checksums_path, release_version, text)
-        except OSError:
-            pass
-        return result
+        release_version = resolve_latest_release_version()
     except Exception as exc:  # pragma: no cover - network boundary
         last_error = exc
-    if versioned_checksums_path.is_file():
+    if release_version:
+        versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
+        if versioned_checksums_path.is_file():
+            try:
+                return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
+            except OSError:
+                pass
+        versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
         try:
-            return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
-        except OSError:
-            pass
+            with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+                text = response.read().decode("utf-8")
+            result = parse_checksum(text, artifact_suffix)
+            try:
+                checksums_path.write_text(text, encoding="utf-8")
+                cache_versioned_checksums(checksums_path, release_version, text)
+            except OSError:
+                pass
+            return result
+        except Exception as exc:  # pragma: no cover - network boundary
+            last_error = exc
+
+    cached_result = newest_cached_checksum(checksums_path, artifact_suffix)
+    if cached_result is not None:
+        return cached_result
     raise RuntimeError("failed to download release checksum manifest") from last_error
 
 
@@ -351,6 +366,39 @@ def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]
                 if target_name.fullmatch(Path(name).name):
                     return Path(name).name, match.group("hash").lower()
     raise RuntimeError(f"checksum for {artifact_suffix} not found in checksums.txt")
+
+
+def newest_cached_checksum(checksums_path: Path, artifact_suffix: str) -> tuple[str, str] | None:
+    cached_paths = []
+    for cached_path in checksums_path.parent.glob("checksums-*.txt"):
+        release_version = cached_checksum_version(cached_path)
+        if release_version is not None:
+            cached_paths.append((release_version, cached_path))
+    cached_paths.sort(key=lambda item: semver_sort_key(item[0]), reverse=True)
+    for _, cached_path in cached_paths:
+        try:
+            return parse_checksum(cached_path.read_text(encoding="utf-8"), artifact_suffix)
+        except (OSError, RuntimeError):
+            continue
+    return None
+
+
+def cached_checksum_version(path: Path) -> str | None:
+    match = re.fullmatch(rf"checksums-({VERSION_PATTERN.pattern}).txt", path.name)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def semver_sort_key(version: str) -> tuple[int, int, int, int, str]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:([-+])([0-9A-Za-z.-]+))?", version)
+    if not match:
+        return (0, 0, 0, 0, version)
+    major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
+    suffix_kind = match.group(4) or ""
+    suffix = match.group(5) or ""
+    stable_rank = 1 if suffix_kind != "-" else 0
+    return (major, minor, patch, stable_rank, suffix)
 
 
 def archive_is_valid(archive_path: Path, expected_checksum: str) -> bool:
@@ -664,16 +712,68 @@ def is_tcp_port_open(url_text: str) -> bool:
 
 
 def read_bootstrap_state_pid(state_path: Path) -> str:
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return ""
+    state = read_bootstrap_state(state_path)
     pid = state.get("pid")
     if isinstance(pid, str):
         return pid.strip()
     if isinstance(pid, int):
         return str(pid)
     return ""
+
+
+def read_bootstrap_state(state_path: Path) -> dict[str, object]:
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if isinstance(state, dict):
+        return state
+    return {}
+
+
+def bootstrap_state_proves_managed_owner(state_path: Path, live_pid: str) -> bool:
+    if not live_pid:
+        return False
+    state = read_bootstrap_state(state_path)
+    return (
+        state.get("owner") == "codex-plugin"
+        and state.get("mode") == "managed"
+        and read_bootstrap_state_pid(state_path) == live_pid
+    )
+
+
+def observer_state_fields(
+    state_path: Path,
+    *,
+    local_requested: bool,
+    process_started: bool,
+    live_pid: str,
+    pid: str,
+    log_path: Path | None,
+) -> dict[str, str]:
+    if not local_requested:
+        return {
+            "owner": "shared-observer",
+            "mode": "shared",
+            "healthUrl": "",
+            "mcpUrl": "",
+            "pid": "",
+            "logPath": "",
+        }
+    if process_started or bootstrap_state_proves_managed_owner(state_path, live_pid):
+        owner = "codex-plugin"
+        mode = "managed"
+    else:
+        owner = "external-observer"
+        mode = "external"
+    return {
+        "owner": owner,
+        "mode": mode,
+        "healthUrl": OBSTUDIO_HEALTH_URL,
+        "mcpUrl": derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL),
+        "pid": pid,
+        "logPath": str(log_path) if log_path is not None else "",
+    }
 
 
 def find_pid_listening_on_url(health_url: str) -> str:
