@@ -15,7 +15,7 @@ This skill is read-only. It should not start, stop, or restart anything.
 
 ## Available Skills
 
-- `open-observer` - open `http://localhost:3000/` and confirm the UI is
+- `open-observer` - open `http://127.0.0.1:3000/` and confirm the UI is
   reachable.
 - `observer-status` - report whether the local Observer is installed,
   bootstrapped, and reachable.
