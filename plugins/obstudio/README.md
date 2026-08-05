@@ -6,6 +6,19 @@ It packages the canonical skill sources from `../../skills/`, points Codex
 at the local Observer MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
 a plugin-root SessionStart hook manifest for first-run bootstrap.
 
+## How to get started
+
+1. Install the Obstudio plugin.
+2. Trust the `SessionStart` hook when Codex prompts you to review it. You can
+   also review the Obstudio plugin hooks from Codex plugin settings and trust
+   the hook there.
+3. Try one of these actions:
+   - Open the local Observer with `$open-observer`.
+   - Check Observer health with `$observer-status`.
+   - Audit this repo for observability gaps with `$otel-audit`.
+   - Add instrumentation for selected findings with `$otel-instrument`.
+   - Verify emitted telemetry with `$otel-verify`.
+
 Current scope:
 
 - bundled skills for audit, instrumentation, verification, and Splunk publish workflows
