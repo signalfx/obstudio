@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -29,6 +30,8 @@ OBSTUDIO_HEALTH_URL = os.environ.get(
     "http://127.0.0.1:3000/api/health",
 )
 BOOTSTRAP_STATE_FILE = "bootstrap-state.json"
+BOOTSTRAP_LOCK_FILE = "bootstrap.lock"
+BOOTSTRAP_STATUS_STOPPED = "stopped"
 CODEX_MANAGED_BLOCK = "# BEGIN OBSTUDIO MCP CONFIG"
 DOWNLOAD_TIMEOUT_SECONDS = 30
 DOWNLOAD_ATTEMPTS = 3
@@ -42,6 +45,32 @@ VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-
 HELP_SKILL_HINT = "Use $obstudio-help to list available commands."
 
 
+@contextlib.contextmanager
+def bootstrap_lock(lock_path: Path):
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        if is_windows():
+            import msvcrt
+
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if is_windows():
+                import msvcrt
+
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def main() -> int:
     plugin_root = resolve_plugin_root()
     plugin_data = resolve_plugin_data()
@@ -49,6 +78,30 @@ def main() -> int:
     state_path = plugin_data / BOOTSTRAP_STATE_FILE
     codex_config_path = Path.home() / ".codex" / "config.toml"
     codex_skills_path = Path.home() / ".codex" / "skills" / "obstudio"
+
+    with bootstrap_lock(plugin_data / BOOTSTRAP_LOCK_FILE):
+        return bootstrap_locked(
+            plugin_data,
+            plugin_version,
+            state_path,
+            codex_config_path,
+            codex_skills_path,
+        )
+
+
+def bootstrap_locked(
+    plugin_data: Path,
+    plugin_version: str,
+    state_path: Path,
+    codex_config_path: Path,
+    codex_skills_path: Path,
+) -> int:
+    if bootstrap_state_requests_stop(state_path):
+        emit_context(
+            "Obstudio Observer is intentionally stopped for this plugin. "
+            f"{HELP_SKILL_HINT} Use $observer-restart to start the managed Observer again."
+        )
+        return 0
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path):
         emit_context(
@@ -81,13 +134,15 @@ def main() -> int:
         )
         pid = ""
         live_pid = ""
+        live_health = None
         log_path = None
         process_started = False
         if local_obstudio_requested:
-            if probe_obstudio_health(OBSTUDIO_HEALTH_URL):
+            live_health = fetch_obstudio_health(OBSTUDIO_HEALTH_URL)
+            if live_health is not None:
                 live_pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL)
                 pid = live_pid
-                if prior_managed_pid and prior_managed_pid == live_pid:
+                if prior_managed_pid and bootstrap_state_proves_managed_owner(state_path, live_pid, live_health):
                     configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
             else:
                 if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
@@ -97,7 +152,7 @@ def main() -> int:
                     )
                 process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
                 try:
-                    verify_local_obstudio_health()
+                    live_health = verify_local_obstudio_health()
                     ensure_process_running(process)
                     configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
                 except Exception:
@@ -111,6 +166,7 @@ def main() -> int:
             process_started=process_started,
             live_pid=live_pid,
             pid=pid,
+            health_payload=live_health,
             log_path=log_path,
         )
         write_state(
@@ -227,11 +283,12 @@ def is_bootstrapped(
     health_url = codex_obstudio_health_url(codex_config_path)
     if health_url is None:
         return False
-    if not probe_obstudio_health(health_url):
+    health_payload = fetch_obstudio_health(health_url)
+    if health_payload is None:
         return False
     if state.get("owner") == "codex-plugin" and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
-        return read_bootstrap_state_pid(state_path) == live_pid
+        return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload)
     return True
 
 
@@ -652,20 +709,13 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
             pass
 
 
-def verify_local_obstudio_health() -> None:
+def verify_local_obstudio_health() -> dict[str, object]:
     last_error: Exception | None = None
     for _ in range(HEALTH_CHECK_ATTEMPTS):
         try:
-            with urllib.request.urlopen(OBSTUDIO_HEALTH_URL, timeout=2) as response:
-                if response.status != 200:
-                    raise RuntimeError(f"unexpected health status: {response.status}")
-                payload = json.load(response)
-                if (
-                    isinstance(payload, dict)
-                    and payload.get("kind") == "obstudio"
-                    and payload.get("apiVersion") == "v1"
-                ):
-                    return
+            payload = fetch_obstudio_health(OBSTUDIO_HEALTH_URL)
+            if payload is not None:
+                return payload
         except Exception as exc:  # pragma: no cover - health boundary
             last_error = exc
         time.sleep(HEALTH_CHECK_SLEEP_SECONDS)
@@ -674,19 +724,25 @@ def verify_local_obstudio_health() -> None:
     ) from last_error
 
 
-def probe_obstudio_health(health_url: str) -> bool:
+def fetch_obstudio_health(health_url: str) -> dict[str, object] | None:
     try:
         with urllib.request.urlopen(health_url, timeout=2) as response:
             if response.status != 200:
-                return False
+                return None
             payload = json.load(response)
-            return (
+            if (
                 isinstance(payload, dict)
                 and payload.get("kind") == "obstudio"
                 and payload.get("apiVersion") == "v1"
-            )
+            ):
+                return payload
     except Exception:
-        return False
+        return None
+    return None
+
+
+def probe_obstudio_health(health_url: str) -> bool:
+    return fetch_obstudio_health(health_url) is not None
 
 
 def codex_obstudio_health_url(config_path: Path) -> str | None:
@@ -808,14 +864,38 @@ def read_bootstrap_state(state_path: Path) -> dict[str, object]:
     return {}
 
 
-def bootstrap_state_proves_managed_owner(state_path: Path, live_pid: str) -> bool:
-    if not live_pid:
+def bootstrap_state_requests_stop(state_path: Path) -> bool:
+    state = read_bootstrap_state(state_path)
+    return state.get("status") == BOOTSTRAP_STATUS_STOPPED or state.get("disabled") is True
+
+
+def bootstrap_state_proves_managed_owner(
+    state_path: Path,
+    live_pid: str,
+    health_payload: dict[str, object] | None,
+) -> bool:
+    if not health_payload_reports_managed(health_payload):
         return False
     state = read_bootstrap_state(state_path)
+    if state.get("owner") != "codex-plugin" or state.get("mode") != "managed":
+        return False
+
+    saved_pid = read_bootstrap_state_pid(state_path)
+    if live_pid and saved_pid and saved_pid != live_pid:
+        return False
+
+    saved_started_at = state.get("observerStartedAt")
+    live_started_at = health_payload.get("startedAt")
+    if saved_started_at and live_started_at and str(saved_started_at) != str(live_started_at):
+        return False
+    return True
+
+
+def health_payload_reports_managed(health_payload: dict[str, object] | None) -> bool:
     return (
-        state.get("owner") == "codex-plugin"
-        and state.get("mode") == "managed"
-        and read_bootstrap_state_pid(state_path) == live_pid
+        health_payload is not None
+        and health_payload.get("owner") == "codex-plugin"
+        and health_payload.get("mode") == "managed"
     )
 
 
@@ -826,6 +906,7 @@ def observer_state_fields(
     process_started: bool,
     live_pid: str,
     pid: str,
+    health_payload: dict[str, object] | None,
     log_path: Path | None,
 ) -> dict[str, str]:
     if not local_requested:
@@ -835,20 +916,29 @@ def observer_state_fields(
             "healthUrl": "",
             "mcpUrl": "",
             "pid": "",
+            "observerStartedAt": "",
             "logPath": "",
         }
-    if process_started or bootstrap_state_proves_managed_owner(state_path, live_pid):
+    if (process_started and health_payload_reports_managed(health_payload)) or bootstrap_state_proves_managed_owner(
+        state_path,
+        live_pid,
+        health_payload,
+    ):
         owner = "codex-plugin"
         mode = "managed"
     else:
         owner = "external-observer"
         mode = "external"
+    observer_started_at = ""
+    if health_payload is not None and isinstance(health_payload.get("startedAt"), str):
+        observer_started_at = str(health_payload["startedAt"])
     return {
         "owner": owner,
         "mode": mode,
         "healthUrl": OBSTUDIO_HEALTH_URL,
         "mcpUrl": derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL),
         "pid": pid,
+        "observerStartedAt": observer_started_at,
         "logPath": str(log_path) if log_path is not None else "",
     }
 

@@ -36,10 +36,12 @@ start a second copy.
    rules below.
 4. If it is `shared` or `external`, do not restart it unless the current plugin
    explicitly owns it.
-5. If it is `managed`, restart only the process that the current plugin
+5. Clear `"status": "stopped"` from the plugin `bootstrap-state.json` before
+   starting a managed Observer again.
+6. If it is `managed`, restart only the process that the current plugin
    started, even when the health endpoint is currently good.
-6. If startup fails because one of the expected ports is already in use,
+7. If startup fails because one of the expected ports is already in use,
    inspect only ports `3000`, `4317`, and `4318`.
-7. If the ports belong to another binary, or ownership cannot be determined,
+8. If the ports belong to another binary, or ownership cannot be determined,
    treat it as `shared` or `external`; do not kill or restart it. Report the
    conflicting PID/port and recommend manual recovery.

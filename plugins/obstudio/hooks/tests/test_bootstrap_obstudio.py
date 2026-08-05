@@ -316,6 +316,7 @@ class ObserverStateFieldsTest(unittest.TestCase):
                 process_started=True,
                 live_pid="",
                 pid="1234",
+                health_payload={"kind": "obstudio", "apiVersion": "v1", "owner": "codex-plugin", "mode": "managed"},
                 log_path=Path(tempdir) / "obstudio.log",
             )
 
@@ -331,6 +332,7 @@ class ObserverStateFieldsTest(unittest.TestCase):
                 process_started=False,
                 live_pid="4321",
                 pid="4321",
+                health_payload={"kind": "obstudio", "apiVersion": "v1", "owner": "external", "mode": "standalone"},
                 log_path=None,
             )
 
@@ -341,7 +343,14 @@ class ObserverStateFieldsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             state_path = Path(tempdir) / "bootstrap-state.json"
             state_path.write_text(
-                json.dumps({"owner": "codex-plugin", "mode": "managed", "pid": "4321"}),
+                json.dumps(
+                    {
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "4321",
+                        "observerStartedAt": "2026-08-04T00:00:00Z",
+                    }
+                ),
                 encoding="utf-8",
             )
             got = BOOTSTRAP.observer_state_fields(
@@ -350,6 +359,13 @@ class ObserverStateFieldsTest(unittest.TestCase):
                 process_started=False,
                 live_pid="4321",
                 pid="4321",
+                health_payload={
+                    "kind": "obstudio",
+                    "apiVersion": "v1",
+                    "owner": "codex-plugin",
+                    "mode": "managed",
+                    "startedAt": "2026-08-04T00:00:00Z",
+                },
                 log_path=None,
             )
 
@@ -358,6 +374,13 @@ class ObserverStateFieldsTest(unittest.TestCase):
 
 
 class BootstrapStateHealthTest(unittest.TestCase):
+    def test_stopped_bootstrap_state_requests_stop(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(json.dumps({"status": "stopped"}), encoding="utf-8")
+
+            self.assertTrue(BOOTSTRAP.bootstrap_state_requests_stop(state_path))
+
     def test_bootstrap_state_requires_live_health_for_shared_url(self):
         with tempfile.TemporaryDirectory() as tempdir:
             tempdir_path = Path(tempdir)
@@ -381,7 +404,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
             )
             state_path.write_text(json.dumps({"pluginVersion": "0.1.0"}), encoding="utf-8")
 
-            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=False):
+            with mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=None):
                 self.assertFalse(
                     BOOTSTRAP.is_bootstrapped(
                         state_path,
@@ -391,7 +414,11 @@ class BootstrapStateHealthTest(unittest.TestCase):
                     )
                 )
 
-            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True):
+            with mock.patch.object(
+                BOOTSTRAP,
+                "fetch_obstudio_health",
+                return_value={"kind": "obstudio", "apiVersion": "v1"},
+            ):
                 self.assertTrue(
                     BOOTSTRAP.is_bootstrapped(
                         state_path,
@@ -422,13 +449,28 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            health_payload = {
+                "kind": "obstudio",
+                "apiVersion": "v1",
+                "owner": "codex-plugin",
+                "mode": "managed",
+                "startedAt": "2026-08-04T00:00:00Z",
+            }
             state_path.write_text(
-                json.dumps({"pluginVersion": "0.1.0", "owner": "codex-plugin", "mode": "managed", "pid": "1234"}),
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "1234",
+                        "observerStartedAt": "2026-08-04T00:00:00Z",
+                    }
+                ),
                 encoding="utf-8",
             )
 
             with (
-                mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True),
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=health_payload),
                 mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="5678"),
             ):
                 self.assertFalse(
@@ -441,7 +483,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 )
 
             with (
-                mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True),
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=health_payload),
                 mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="1234"),
             ):
                 self.assertTrue(
@@ -452,6 +494,136 @@ class BootstrapStateHealthTest(unittest.TestCase):
                         skills_path,
                     )
                 )
+
+    def test_managed_state_accepts_missing_pid_lookup_when_health_metadata_matches(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            state_path = tempdir_path / "bootstrap-state.json"
+            skills_path = tempdir_path / ".codex" / "skills" / "obstudio"
+            config_path = tempdir_path / ".codex" / "config.toml"
+            skills_path.mkdir(parents=True, exist_ok=True)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:3000/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            health_payload = {
+                "kind": "obstudio",
+                "apiVersion": "v1",
+                "owner": "codex-plugin",
+                "mode": "managed",
+                "startedAt": "2026-08-04T00:00:00Z",
+            }
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "1234",
+                        "observerStartedAt": "2026-08-04T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=health_payload),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value=""),
+            ):
+                self.assertTrue(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+    def test_managed_state_rejects_reused_pid_with_different_started_at(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "1234",
+                        "observerStartedAt": "2026-08-04T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(
+                BOOTSTRAP.bootstrap_state_proves_managed_owner(
+                    state_path,
+                    "1234",
+                    {
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "startedAt": "2026-08-04T00:01:00Z",
+                    },
+                )
+            )
+
+    def test_managed_state_rejects_health_metadata_owner_mismatch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(
+                json.dumps({"owner": "codex-plugin", "mode": "managed", "pid": "1234"}),
+                encoding="utf-8",
+            )
+
+            self.assertFalse(
+                BOOTSTRAP.bootstrap_state_proves_managed_owner(
+                    state_path,
+                    "1234",
+                    {
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "cli",
+                        "mode": "standalone",
+                    },
+                )
+            )
+
+    def test_main_honors_stopped_state_before_install(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.1.0"}),
+                encoding="utf-8",
+            )
+            state_path.write_text(json.dumps({"status": "stopped"}), encoding="utf-8")
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "run_install") as run_install,
+                mock.patch.object(BOOTSTRAP, "emit_context"),
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            run_install.assert_not_called()
 
 
 class BootstrapHealthCheckTest(unittest.TestCase):
@@ -478,7 +650,7 @@ class BootstrapHealthCheckTest(unittest.TestCase):
             )
             state_path.write_text(json.dumps({"pluginVersion": "0.1.0"}), encoding="utf-8")
 
-            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=False):
+            with mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=None):
                 self.assertFalse(
                     BOOTSTRAP.is_bootstrapped(
                         state_path,
@@ -488,7 +660,11 @@ class BootstrapHealthCheckTest(unittest.TestCase):
                     )
                 )
 
-            with mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True):
+            with mock.patch.object(
+                BOOTSTRAP,
+                "fetch_obstudio_health",
+                return_value={"kind": "obstudio", "apiVersion": "v1"},
+            ):
                 self.assertTrue(
                     BOOTSTRAP.is_bootstrapped(
                         state_path,
@@ -653,7 +829,16 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "fetch_expected_checksum", return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum")),
                 mock.patch.object(BOOTSTRAP, "locate_existing_obstudio", return_value=binary),
                 mock.patch.object(BOOTSTRAP, "run_install", side_effect=fake_run_install),
-                mock.patch.object(BOOTSTRAP, "probe_obstudio_health", return_value=True),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_obstudio_health",
+                    return_value={
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                    },
+                ),
                 mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="4321"),
                 mock.patch.object(BOOTSTRAP, "emit_context"),
             ):
