@@ -280,3 +280,26 @@ export interface ValidationSnapshot {
   findings: ValidationFinding[];
   issues: ValidationIssue[];
 }
+
+export interface SplunkExportAttempt {
+  error?: string;
+  success: boolean;
+  time: string;
+}
+
+export interface SplunkExportSignalStatus {
+  configured: boolean;
+  enabled: boolean;
+  exportedBatches: number;
+  exportedItems: number;
+  failedBatches: number;
+  lastExport?: SplunkExportAttempt;
+}
+
+export interface SplunkExportStatus {
+  connected: boolean;
+  enabled: boolean;
+  realm?: string;
+  metrics: SplunkExportSignalStatus;
+  traces: SplunkExportSignalStatus;
+}

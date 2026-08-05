@@ -21,11 +21,13 @@ export type ObserverHealth = {
 
 type SharedObserverState = {
 	baseUrl?: string;
+	controlToken?: string;
 	updatedAt?: string;
 };
 
 export type SharedObserverDiscovery = {
 	baseUrl: string;
+	controlToken?: string;
 	updatedAtMs?: number;
 };
 
@@ -82,8 +84,12 @@ export function readSharedObserverDiscovery(
 			return undefined;
 		}
 		const updatedAtMs = typeof state.updatedAt === 'string' ? Date.parse(state.updatedAt) : Number.NaN;
+		const controlToken = typeof state.controlToken === 'string' && state.controlToken.trim().length > 0
+			? state.controlToken.trim()
+			: undefined;
 		return {
 			baseUrl: normalizeObserverBaseUrl(state.baseUrl),
+			...(controlToken !== undefined ? { controlToken } : {}),
 			...(Number.isFinite(updatedAtMs) ? { updatedAtMs } : {}),
 		};
 	} catch {

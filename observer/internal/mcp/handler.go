@@ -78,6 +78,7 @@ type Dispatcher struct {
 	store             *store.Store
 	validationService *validator.Service
 	splunkMetricsCtrl *otlp.SplunkMetricsExportController
+	splunkTracesCtrl  *otlp.SplunkTracesExportController
 	tools             []toolDef
 }
 
@@ -86,6 +87,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var validationStore *validator.Store
 	var runner validator.Runner
 	var splunkMetricsCtrl *otlp.SplunkMetricsExportController
+	var splunkTracesCtrl *otlp.SplunkTracesExportController
 	for _, param := range params {
 		switch value := param.(type) {
 		case *validator.Store:
@@ -100,6 +102,10 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 			if value != nil {
 				splunkMetricsCtrl = value
 			}
+		case *otlp.SplunkTracesExportController:
+			if value != nil {
+				splunkTracesCtrl = value
+			}
 		}
 	}
 	if validationStore == nil {
@@ -109,6 +115,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 		store:             s,
 		validationService: validator.NewService(validationStore, runner),
 		splunkMetricsCtrl: splunkMetricsCtrl,
+		splunkTracesCtrl:  splunkTracesCtrl,
 		tools:             buildToolDefs(splunkMetricsCtrl != nil),
 	}
 }
@@ -180,7 +187,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.validationAnalyze(args)
 	case "observer_validation_refresh":
 		result = d.validationRefresh(args)
-	case "observer_splunk_metrics_export_status",
+	case "observer_splunk_connection_realm",
+		"observer_splunk_metrics_export_status",
 		"observer_splunk_metrics_export_configure",
 		"observer_splunk_metrics_export_test":
 		// These tools are only advertised in tools/list when a Splunk metrics
@@ -190,6 +198,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 			return rpcError(req.ID, -32602, fmt.Sprintf("Unknown tool: %s", toolName))
 		}
 		switch toolName {
+		case "observer_splunk_connection_realm":
+			result = d.splunkConnectionRealm()
 		case "observer_splunk_metrics_export_status":
 			result = d.splunkMetricsExportStatus()
 		case "observer_splunk_metrics_export_configure":
@@ -319,6 +329,51 @@ func (d *Dispatcher) validationRefresh(args map[string]any) toolResult {
 
 func (d *Dispatcher) splunkMetricsExportStatus() toolResult {
 	return jsonToolResult(d.splunkMetricsCtrl.Status())
+}
+
+func (d *Dispatcher) splunkConnectionRealm() toolResult {
+	realm := ""
+	if d.splunkTracesCtrl != nil {
+		metricsStatus := d.splunkMetricsCtrl.Status()
+		tracesStatus := d.splunkTracesCtrl.Status()
+		metricsConfig := d.splunkMetricsCtrl.Config()
+		tracesConfig := d.splunkTracesCtrl.Config()
+		if sameSplunkConnectionRealm(
+			metricsStatus.Realm,
+			metricsConfig.AccessToken,
+			metricsConfig.Endpoint != "",
+			tracesStatus.Realm,
+			tracesConfig.AccessToken,
+			tracesConfig.Endpoint != "",
+		) {
+			realm = metricsStatus.Realm
+		}
+	}
+	return jsonToolResult(struct {
+		Realm string `json:"realm,omitempty"`
+	}{
+		Realm: realm,
+	})
+}
+
+func sameSplunkConnectionRealm(
+	metricsRealm string,
+	metricsAccessToken string,
+	metricsEndpointOverridden bool,
+	tracesRealm string,
+	tracesAccessToken string,
+	tracesEndpointOverridden bool,
+) bool {
+	metricsToken := strings.TrimSpace(metricsAccessToken)
+	tracesToken := strings.TrimSpace(tracesAccessToken)
+	return metricsRealm != "" &&
+		tracesRealm != "" &&
+		metricsRealm == tracesRealm &&
+		metricsToken != "" &&
+		tracesToken != "" &&
+		metricsToken == tracesToken &&
+		!metricsEndpointOverridden &&
+		!tracesEndpointOverridden
 }
 
 func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResult {
@@ -492,6 +547,12 @@ func buildToolDefs(withSplunk bool) []toolDef {
 	}
 	if withSplunk {
 		tools = append(tools,
+			toolDef{
+				Name:        "observer_splunk_connection_realm",
+				Description: "Return only the non-secret Splunk Observability Cloud realm stored with the current SOS connection. Use this realm as the default when the user has not supplied one. This tool never returns an access token or token metadata.",
+				InputSchema: jsonSchema{Type: "object", AdditionalProperties: &f},
+				Annotations: toolAnnot{Title: "Splunk Connection Realm", ReadOnlyHint: true, IdempotentHint: true},
+			},
 			toolDef{
 				Name:        "observer_splunk_metrics_export_status",
 				Description: "Return the current Splunk Observability Cloud metrics forwarding status, including configured endpoints, token presence, and the last export attempt. Use this to check whether Splunk metrics export is active.",

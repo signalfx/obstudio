@@ -11,6 +11,12 @@ import {
 	readSharedObserverDiscovery,
 	resolveBackend,
 } from '../backend';
+import {
+	isCloudBridgeReady,
+	isCloudBridgeRequest,
+	parseStoredSplunkCloudConnection,
+	restoreSplunkCloudConnectionFromStorage,
+} from '../cloud-bridge';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
 const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
@@ -39,6 +45,110 @@ function withTempExtensionRoot(run: (extensionRoot: string) => void) {
 		fs.rmSync(extensionRoot, { force: true, recursive: true });
 	}
 }
+
+test('cloud bridge accepts only bounded known requests', () => {
+	assert.equal(isCloudBridgeRequest({
+		action: 'connect',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: {
+			accessToken: 'token_1234567890123456',
+			realm: 'us0',
+		},
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'paste-token',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-free-edition',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-ingest-token-help',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'unsupported',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'connect',
+		bridgeToken: 'short',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'connect',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { unexpectedField: 'must-not-pass' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+});
+
+test('cloud bridge ready messages require the bound token shape', () => {
+	assert.equal(isCloudBridgeReady({
+		bridgeToken: 'bridge-token-1234567890123456',
+		type: 'obstudio.cloud.ready',
+	}), true);
+	assert.equal(isCloudBridgeReady({
+		type: 'obstudio.cloud.ready',
+	}), false);
+	assert.equal(isCloudBridgeReady({
+		bridgeToken: 'short',
+		type: 'obstudio.cloud.ready',
+	}), false);
+	assert.equal(isCloudBridgeReady({
+		bridgeToken: 'bridge-token-1234567890123456',
+		type: 'obstudio.cloud.request',
+	}), false);
+});
+
+test('stored cloud connections require a valid realm and opaque token', () => {
+	assert.deepEqual(
+		parseStoredSplunkCloudConnection(JSON.stringify({
+			accessToken: 'token_1234567890123456',
+			realm: 'us0',
+		})),
+		{
+			accessToken: 'token_1234567890123456',
+			realm: 'us0',
+		},
+	);
+	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: 'too-short',
+		realm: 'us0',
+	})), undefined);
+	assert.deepEqual(
+		parseStoredSplunkCloudConnection(JSON.stringify({
+			accessToken: 'opaque.token+/=123456789',
+			realm: 'us0',
+		})),
+		{
+			accessToken: 'opaque.token+/=123456789',
+			realm: 'us0',
+		},
+	);
+	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: 'token with spaces 1234',
+		realm: 'us0',
+	})), undefined);
+	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: 'token_1234567890123456',
+		realm: 'https://attacker.example',
+	})), undefined);
+	assert.equal(parseStoredSplunkCloudConnection('not-json'), undefined);
+});
 
 test('resolveBackend returns observer binary when it exists', () => {
 	withTempExtensionRoot((extensionRoot) => {
@@ -162,6 +272,126 @@ test('observer webview panel uses the bundled observer icon', () => {
 	assert.match(source, /observer-icon\.png/);
 });
 
+test('managed observer startup restores cloud export without opening the Cloud tab', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(
+		source,
+		/completeObserverStart\(observerLifecycleState,\s*runId,\s*observerPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?syncObserverUi\(\);/,
+	);
+});
+
+test('cloud export preference survives managed observer restarts', async () => {
+	const stored = {
+		accessToken: 'token_1234567890123456',
+		realm: 'us0',
+	};
+	const refreshed = cloudStatus(false, false, false);
+	const configured = cloudStatus(true, false, true);
+	const enabled = cloudStatus(true, true, true);
+	const calls: Array<[string, unknown?]> = [];
+
+	const result = await restoreSplunkCloudConnectionFromStorage({
+		configure: async (connection) => {
+			calls.push(['configure', connection]);
+			return configured;
+		},
+		readConnection: async () => {
+			calls.push(['readConnection']);
+			return stored;
+		},
+		readExportEnabled: () => {
+			calls.push(['readExportEnabled']);
+			return true;
+		},
+		refresh: async () => {
+			calls.push(['refresh']);
+			return refreshed;
+		},
+		setEnabled: async (value) => {
+			calls.push(['setEnabled', value]);
+			return enabled;
+		},
+	});
+
+	assert.equal(result, enabled);
+	assert.deepEqual(calls, [
+		['refresh'],
+		['readConnection'],
+		['configure', stored],
+		['readExportEnabled'],
+		['setEnabled', true],
+	]);
+});
+
+test('cloud export restore skips secure storage when observer is already configured', async () => {
+	const refreshed = cloudStatus(true, false, true);
+	let readConnection = false;
+
+	const result = await restoreSplunkCloudConnectionFromStorage({
+		configure: async () => {
+			throw new Error('configure should not be called');
+		},
+		readConnection: async () => {
+			readConnection = true;
+			return undefined;
+		},
+		readExportEnabled: () => {
+			throw new Error('readExportEnabled should not be called');
+		},
+		refresh: async () => refreshed,
+		setEnabled: async () => {
+			throw new Error('setEnabled should not be called');
+		},
+	});
+
+	assert.equal(result, refreshed);
+	assert.equal(readConnection, false);
+});
+
+test('cloud export bridge persists preference keys and refresh fallback paths', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(source, /const splunkCloudExportEnabledStateKey = 'splunkCloudExportEnabled\.v1';/);
+	assert.match(
+		source,
+		/case 'set-enabled':[\s\S]*?context\.globalState\.update\(\s*splunkCloudExportEnabledStateKey,\s*request\.payload\.enabled[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/enabled'/,
+	);
+	assert.match(
+		source,
+		/async function refreshSplunkCloudConnection[\s\S]*?restoreSplunkCloudConnectionFromStorage\(\{[\s\S]*?context\.globalState\.get<boolean>\(splunkCloudExportEnabledStateKey\)[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/enabled', \{ enabled \}\)/,
+	);
+	assert.match(
+		source,
+		/case 'connect':[\s\S]*?context\.globalState\.update\(splunkCloudExportEnabledStateKey, false\)/,
+	);
+	assert.match(
+		source,
+		/async function forgetSplunkCloudConnection[\s\S]*?context\.globalState\.update\(splunkCloudExportEnabledStateKey, undefined\)/,
+	);
+});
+
+function cloudStatus(connected: boolean, enabled: boolean, configured: boolean) {
+	return {
+		connected,
+		enabled,
+		metrics: { configured, enabled },
+		traces: { configured, enabled },
+	};
+}
+
+test('shared observer discovery token takes precedence over inherited env token', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+
+	assert.match(
+		source,
+		/function activeObserverControlToken\(\): string \{[\s\S]*?return observerSharedControlToken \?\? sharedObserverControlTokenFromEnv\(\) \?\? '';/,
+	);
+});
+
 test('extension unload paths clean up observer state', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
@@ -227,12 +457,14 @@ test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
 			path.join(stateDir, 'shared-observer.json'),
 			JSON.stringify({
 				baseUrl: 'http://127.0.0.1:3001/',
+				controlToken: 'shared-control-token',
 				updatedAt: '2026-07-28T07:08:55.652888Z',
 			}),
 		);
 
 		assert.deepEqual(readSharedObserverDiscovery(homeDir), {
 			baseUrl: 'http://127.0.0.1:3001',
+			controlToken: 'shared-control-token',
 			updatedAtMs: Date.parse('2026-07-28T07:08:55.652888Z'),
 		});
 	} finally {

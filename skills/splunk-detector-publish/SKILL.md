@@ -13,7 +13,7 @@ description: >-
   missing", "create missing monitors", or "push detector gaps to Splunk".
 metadata:
   author: otel-studio
-  version: 0.3.0
+  version: 0.3.2
   category: observability
 ---
 
@@ -43,18 +43,25 @@ ledger so re-runs are idempotent and auditable.
 > by all Splunk sync skills. The detector-specific concrete steps below restate
 > the parts this skill depends on.
 
-All Splunk O11y calls use the **Splunk REST API** directly — no MCP tool
-required. Read credentials from the environment:
+All Splunk O11y data calls use the **Splunk REST API** directly. Read the token
+from the environment:
 
 | Variable | Purpose |
 |---|---|
 | `SPLUNK_ACCESS_TOKEN` | Org access token; sent as `X-SF-Token` header |
-| `SPLUNK_REALM` | Realm (e.g. `lab0`, `us0`, `us1`); builds the base URL |
+| `SPLUNK_REALM` | Optional fallback realm (e.g. `lab0`, `us0`, `us1`) |
 
-Base URL: `https://api.${SPLUNK_REALM}.signalfx.com`
+Resolve the realm using `../references/splunk-api.md`: keep
+`SPLUNK_ACCESS_TOKEN` paired with a non-empty `SPLUNK_REALM` when it is set;
+otherwise call `observer_splunk_connection_realm` and use the connected SOS
+destination's non-empty `realm`. The read-only tool returns only the non-secret
+region.
 
-If either variable is missing, stop and tell the user to set them (they are also
-used by obstudio for metrics and traces forwarding, so they should already be set).
+If `SPLUNK_ACCESS_TOKEN` is missing, or neither realm source is available, stop
+and tell the user. Before creating detectors, include the resolved realm and its
+source in the confirmation.
+
+Base URL: `https://api.${realm}.signalfx.com`
 
 **Important:** The `/v2/detector` list endpoint has a known server-side bug where
 certain offset values return HTTP 500. Always skip-on-500 when paginating — do
@@ -183,7 +190,7 @@ import urllib.request, json, sys
 from collections import defaultdict
 
 token = "<SPLUNK_ACCESS_TOKEN>"
-realm = "<SPLUNK_REALM>"
+realm = "<resolved realm>"
 base  = f"https://api.{realm}.signalfx.com/v2/detector"
 
 limit = 50          # keep small; large limits hit the 500 bug more often
@@ -329,7 +336,7 @@ After the user confirms, for each GAP spec:
 
 1. First offer a dry run: construct the POST body and print it without sending.
    If the user says "dry run first" or "preview", show the payload before creating.
-2. POST to `https://api.${SPLUNK_REALM}.signalfx.com/v2/detector`:
+2. POST to `https://api.${realm}.signalfx.com/v2/detector` using the resolved realm:
    ```python
    body = {
        "name": resolved_name,           # ${var.service_name} substituted
@@ -365,7 +372,7 @@ After the user confirms, for each GAP spec:
    Note: HCL uses `detect_label`; the REST API uses `detectLabel` — normalize.
    `urllib` raises `HTTPError` for any non-2xx response, so branch on `status`:
 3. On HTTP 200: record `created["id"]` and `created["name"]` plus
-   `https://app.${SPLUNK_REALM}.signalfx.com/#/detector/{id}` for the ledger.
+   `https://app.${realm}.signalfx.com/#/detector/{id}` for the ledger.
 4. On HTTP 409 or a duplicate-name response: reclassify as COVERED in the ledger
    (race condition between diff and create). Not an error.
 5. On HTTP 403: token lacks detector-write scope. Stop and tell the user.
@@ -443,7 +450,8 @@ reviewing and resolving the ambiguous live detectors manually.
 ## Red Flags
 
 - `.observe/terraform/detectors.tf` missing — run `$splunk-configure` first
-- `SPLUNK_ACCESS_TOKEN` or `SPLUNK_REALM` not set — stop and tell the user
+- `SPLUNK_ACCESS_TOKEN` not set — stop and tell the user
+- No realm from `SPLUNK_REALM` or the connected Observer — stop and tell the user
 - `service_name` not resolvable from `terraform.tfvars` or `.example` — prompt
   the user before fetching live detectors
 - All offsets returning HTTP 500 continuously (not intermittent) — likely an

@@ -146,6 +146,20 @@ function makeTraceDetail(): TraceDetail {
   };
 }
 
+function stubCloudStatusFetch(): void {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => ({
+      connected: false,
+      enabled: false,
+      metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+    }),
+  }));
+}
+
 beforeEach(() => {
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
@@ -442,7 +456,21 @@ describe("AppView validation tab", () => {
     expect(helpMap["1"]).toMatch(/metrics/i);
     expect(helpMap["2"]).toMatch(/traces/i);
     expect(helpMap["3"]).toMatch(/logs/i);
+    expect(helpMap["6"]).toMatch(/dashboards/i);
+    expect(helpMap["7"]).toMatch(/cloud/i);
     expect(helpMap["P"]).toMatch(/pause/i);
+  });
+
+  it("switches to the Cloud tab with the 7 shortcut", async () => {
+    window.history.replaceState({}, "", "/?tab=metrics");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.keyDown(window, { key: "7" });
+
+    expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByText(/Splunk Observability Cloud/i)).toBeTruthy());
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {

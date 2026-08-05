@@ -3,6 +3,7 @@ package otlp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -154,6 +155,133 @@ func TestSplunkMetricsExporterReportsHTTPErrorWithoutToken(t *testing.T) {
 	}
 }
 
+func TestSplunkMetricsExportControllerTracksRedactedActivity(t *testing.T) {
+	controller := &SplunkMetricsExportController{
+		config: SplunkMetricsExporterConfig{
+			Enabled:     true,
+			Realm:       "us0",
+			AccessToken: "secret-token",
+		},
+		exporter: &stubMetricsExporterRuntime{},
+	}
+
+	if err := controller.ExportMetrics(context.Background(), createTestMetric()); err != nil {
+		t.Fatalf("export metrics: %v", err)
+	}
+	status := controller.Status()
+	if status.ExportedBatches != 1 || status.ExportedDataPoints != 1 || status.FailedBatches != 0 {
+		t.Fatalf("unexpected success status: %#v", status)
+	}
+	if status.LastExport == nil || !status.LastExport.Success {
+		t.Fatalf("expected successful last export, got %#v", status.LastExport)
+	}
+
+	controller.mu.Lock()
+	controller.exporter = &stubMetricsExporterRuntime{err: errors.New("backend echoed secret-token")}
+	controller.mu.Unlock()
+	if err := controller.ExportMetrics(context.Background(), createTestMetric()); err == nil {
+		t.Fatal("expected export error")
+	}
+	status = controller.Status()
+	if status.ExportedBatches != 1 || status.ExportedDataPoints != 1 || status.FailedBatches != 1 {
+		t.Fatalf("unexpected failure status: %#v", status)
+	}
+	if status.LastExport == nil || status.LastExport.Success {
+		t.Fatalf("expected failed last export, got %#v", status.LastExport)
+	}
+	if strings.Contains(status.LastExport.Error, "secret-token") {
+		t.Fatalf("status leaked access token: %q", status.LastExport.Error)
+	}
+}
+
+func TestSplunkMetricsExportControllerShutdownWaitsForInFlightExport(t *testing.T) {
+	runtime := &blockingMetricsExporterRuntime{
+		release:  make(chan struct{}),
+		shutdown: make(chan struct{}),
+		started:  make(chan struct{}),
+	}
+	controller := &SplunkMetricsExportController{
+		config: SplunkMetricsExporterConfig{
+			Enabled:     true,
+			Realm:       "us0",
+			AccessToken: "secret-token",
+		},
+		exporter: runtime,
+	}
+
+	exportDone := make(chan error, 1)
+	go func() {
+		exportDone <- controller.ExportMetrics(context.Background(), createTestMetric())
+	}()
+	awaitSignal(t, runtime.started, "metrics export start")
+
+	shutdownAttempted := make(chan struct{})
+	shutdownDone := make(chan struct{})
+	go func() {
+		close(shutdownAttempted)
+		controller.Shutdown(context.Background())
+		close(shutdownDone)
+	}()
+	awaitSignal(t, shutdownAttempted, "metrics shutdown attempt")
+	select {
+	case <-runtime.shutdown:
+		t.Fatal("exporter shut down while an export was in flight")
+	default:
+	}
+
+	close(runtime.release)
+	if err := <-exportDone; err != nil {
+		t.Fatalf("export metrics: %v", err)
+	}
+	awaitSignal(t, shutdownDone, "metrics controller shutdown")
+	awaitSignal(t, runtime.shutdown, "metrics exporter shutdown")
+	if got := controller.Status().ExportedBatches; got != 1 {
+		t.Fatalf("exported batches = %d, want 1", got)
+	}
+}
+
+func TestSplunkMetricsExportControllerShutdownHonorsContextWhileExportInFlight(t *testing.T) {
+	runtime := &blockingMetricsExporterRuntime{
+		release:  make(chan struct{}),
+		shutdown: make(chan struct{}),
+		started:  make(chan struct{}),
+	}
+	controller := &SplunkMetricsExportController{
+		config: SplunkMetricsExporterConfig{
+			Enabled:     true,
+			Realm:       "us0",
+			AccessToken: "secret-token",
+		},
+		exporter: runtime,
+	}
+
+	exportDone := make(chan error, 1)
+	go func() {
+		exportDone <- controller.ExportMetrics(context.Background(), createTestMetric())
+	}()
+	awaitSignal(t, runtime.started, "metrics export start")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	shutdownDone := make(chan struct{})
+	go func() {
+		controller.Shutdown(ctx)
+		close(shutdownDone)
+	}()
+
+	awaitSignal(t, shutdownDone, "metrics controller shutdown deadline")
+	select {
+	case <-runtime.shutdown:
+		t.Fatal("exporter shut down after the shutdown context expired")
+	default:
+	}
+
+	close(runtime.release)
+	if err := <-exportDone; err != nil {
+		t.Fatalf("export metrics: %v", err)
+	}
+}
+
 func TestOTLPHTTPMetricsHandlerForwardsMetricsWhenExporterConfigured(t *testing.T) {
 	s := store.New()
 	exporter := &captureMetricsExporter{ch: make(chan pmetric.Metrics, 1)}
@@ -191,6 +319,21 @@ func TestOTLPHTTPMetricsHandlerForwardsMetricsWhenExporterConfigured(t *testing.
 	}
 }
 
+func TestExportMetricsAsyncSkipsDisabledStatefulExporter(t *testing.T) {
+	exporter := &statefulCaptureMetricsExporter{
+		captureMetricsExporter: captureMetricsExporter{ch: make(chan pmetric.Metrics, 1)},
+		enabled:                false,
+	}
+
+	exportMetricsAsync(exporter, createTestMetric())
+
+	select {
+	case <-exporter.ch:
+		t.Fatal("disabled stateful metrics exporter received telemetry")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 type captureMetricsExporter struct {
 	ch chan pmetric.Metrics
 }
@@ -198,4 +341,56 @@ type captureMetricsExporter struct {
 func (e *captureMetricsExporter) ExportMetrics(_ context.Context, md pmetric.Metrics) error {
 	e.ch <- md
 	return nil
+}
+
+type statefulCaptureMetricsExporter struct {
+	captureMetricsExporter
+	enabled bool
+}
+
+func (e *statefulCaptureMetricsExporter) ExportEnabled() bool {
+	return e.enabled
+}
+
+type stubMetricsExporterRuntime struct {
+	err error
+}
+
+func (e *stubMetricsExporterRuntime) ExportMetrics(_ context.Context, _ pmetric.Metrics) error {
+	return e.err
+}
+
+func (e *stubMetricsExporterRuntime) Endpoints() []string {
+	return []string{"https://ingest.us0.observability.splunkcloud.com/v2/datapoint/otlp"}
+}
+
+func (e *stubMetricsExporterRuntime) Shutdown(context.Context) {}
+
+type blockingMetricsExporterRuntime struct {
+	release  chan struct{}
+	shutdown chan struct{}
+	started  chan struct{}
+}
+
+func (e *blockingMetricsExporterRuntime) ExportMetrics(_ context.Context, _ pmetric.Metrics) error {
+	close(e.started)
+	<-e.release
+	return nil
+}
+
+func (e *blockingMetricsExporterRuntime) Endpoints() []string {
+	return []string{"https://ingest.us0.observability.splunkcloud.com/v2/datapoint/otlp"}
+}
+
+func (e *blockingMetricsExporterRuntime) Shutdown(context.Context) {
+	close(e.shutdown)
+}
+
+func awaitSignal(t *testing.T, signal <-chan struct{}, name string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", name)
+	}
 }

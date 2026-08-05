@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
 )
@@ -511,6 +512,7 @@ func TestToolsCallSplunkExportRejectedWhenUnconfigured(t *testing.T) {
 	d := NewDispatcher(s)
 
 	for _, name := range []string{
+		"observer_splunk_connection_realm",
 		"observer_splunk_metrics_export_status",
 		"observer_splunk_metrics_export_configure",
 		"observer_splunk_metrics_export_test",
@@ -533,6 +535,156 @@ func TestToolsCallSplunkExportRejectedWhenUnconfigured(t *testing.T) {
 		if resp.Error.Code != -32602 {
 			t.Fatalf("%s: error code = %d, want -32602", name, resp.Error.Code)
 		}
+	}
+}
+
+func TestToolsCallSplunkConnectionRealmReturnsOnlyRealm(t *testing.T) {
+	s := store.New()
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		Realm:       "us0",
+		AccessToken: "not-returned-by-realm-tool",
+	})
+	if err != nil {
+		t.Fatalf("create metrics export controller: %v", err)
+	}
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
+		Realm:       "us0",
+		AccessToken: "not-returned-by-realm-tool",
+	})
+	if err != nil {
+		t.Fatalf("create traces export controller: %v", err)
+	}
+	d := NewDispatcher(s, metricsController, tracesController)
+
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "observer_splunk_connection_realm",
+			"arguments": map[string]any{},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	result := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	if len(result) != 1 {
+		t.Fatalf("realm response contains unexpected fields: %#v", result)
+	}
+	if result["realm"] != "us0" {
+		t.Fatalf("realm = %v, want us0", result["realm"])
+	}
+}
+
+func TestToolsCallSplunkConnectionRealmOmitsRealmWithoutToken(t *testing.T) {
+	s := store.New()
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		Realm: "us0",
+	})
+	if err != nil {
+		t.Fatalf("create metrics export controller: %v", err)
+	}
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
+		Realm: "us0",
+	})
+	if err != nil {
+		t.Fatalf("create traces export controller: %v", err)
+	}
+	d := NewDispatcher(s, metricsController, tracesController)
+
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "observer_splunk_connection_realm",
+			"arguments": map[string]any{},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	result := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	if len(result) != 0 {
+		t.Fatalf("realm response = %#v, want empty response without token", result)
+	}
+}
+
+func TestToolsCallSplunkConnectionRealmOmitsRealmForMismatchedTokens(t *testing.T) {
+	s := store.New()
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		Realm:       "us0",
+		AccessToken: "metrics-token-not-returned",
+	})
+	if err != nil {
+		t.Fatalf("create metrics export controller: %v", err)
+	}
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
+		Realm:       "us0",
+		AccessToken: "traces-token-not-returned",
+	})
+	if err != nil {
+		t.Fatalf("create traces export controller: %v", err)
+	}
+	d := NewDispatcher(s, metricsController, tracesController)
+
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "observer_splunk_connection_realm",
+			"arguments": map[string]any{},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	result := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	if len(result) != 0 {
+		t.Fatalf("realm response = %#v, want empty response with mismatched tokens", result)
+	}
+}
+
+func TestToolsCallSplunkConnectionRealmOmitsRealmForEndpointOverride(t *testing.T) {
+	s := store.New()
+	metricsController, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
+		Realm:       "us0",
+		Endpoint:    "https://metrics.example.com/v2/datapoint/otlp",
+		AccessToken: "not-returned-by-realm-tool",
+	})
+	if err != nil {
+		t.Fatalf("create metrics export controller: %v", err)
+	}
+	tracesController, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
+		Realm:       "us0",
+		AccessToken: "not-returned-by-realm-tool",
+	})
+	if err != nil {
+		t.Fatalf("create traces export controller: %v", err)
+	}
+	d := NewDispatcher(s, metricsController, tracesController)
+
+	resp, handled := d.Dispatch(jsonRPCRequest{
+		ID:      1,
+		JSONRPC: "2.0",
+		Method:  "tools/call",
+		Params: map[string]any{
+			"name":      "observer_splunk_connection_realm",
+			"arguments": map[string]any{},
+		},
+	})
+	if !handled || resp.Error != nil {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	result := toMapAny(parseToolResult(t, resp.Result.(toolResult)))
+	if len(result) != 0 {
+		t.Fatalf("realm response = %#v, want empty response with endpoint override", result)
 	}
 }
 
