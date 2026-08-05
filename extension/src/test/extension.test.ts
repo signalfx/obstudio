@@ -292,7 +292,7 @@ test('managed observer startup restores cloud export without opening the Cloud t
 
 	assert.match(
 		source,
-		/completeObserverStart\(observerLifecycleState,\s*runId,\s*observerPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?syncObserverUi\(\);/,
+		/completeObserverStart\(observerLifecycleState,\s*runId,\s*spawnedPort\)[\s\S]*?await restoreManagedObserverCloudConnection\(context\);[\s\S]*?syncObserverUi\(\);/,
 	);
 });
 
@@ -470,14 +470,14 @@ test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
 		fs.writeFileSync(
 			path.join(stateDir, 'shared-observer.json'),
 			JSON.stringify({
-				baseUrl: 'http://127.0.0.1:3001/',
+			baseUrl: 'http://127.0.0.1:17900/',
 				controlToken: 'shared-control-token',
 				updatedAt: '2026-07-28T07:08:55.652888Z',
 			}),
 		);
 
 		assert.deepEqual(readSharedObserverDiscovery(homeDir), {
-			baseUrl: 'http://127.0.0.1:3001',
+			baseUrl: 'http://127.0.0.1:17900',
 			controlToken: 'shared-control-token',
 			updatedAtMs: Date.parse('2026-07-28T07:08:55.652888Z'),
 		});
@@ -497,7 +497,7 @@ test('readSharedObserverDiscovery ignores missing, malformed, and incomplete sta
 		fs.writeFileSync(statePath, '{');
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 
-		fs.writeFileSync(statePath, JSON.stringify({ healthUrl: 'http://127.0.0.1:3001/api/health' }));
+		fs.writeFileSync(statePath, JSON.stringify({ healthUrl: 'http://127.0.0.1:17900/api/health' }));
 		assert.equal(readSharedObserverDiscovery(homeDir), undefined);
 	} finally {
 		fs.rmSync(homeDir, { force: true, recursive: true });

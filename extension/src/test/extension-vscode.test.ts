@@ -557,43 +557,27 @@ suite('VS Code Host', () => {
 		assert.match(state.statusBarText ?? '', /Observer/);
 	});
 
-	test('managed observer uses the configured port across restarts', async function () {
+	test('managed observer starts and reports a running URL', async function () {
 		this.timeout(30_000);
-		if (process.platform === 'darwin') {
-			this.skip();
-		}
 
 		await getExtension();
-		const managedPort = await getAvailablePort();
 		const config = vscode.workspace.getConfiguration('observability-studio');
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
-
 			await vscode.commands.executeCommand('observability-studio.startObserver');
-			const firstState = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => Boolean(value?.observerUrl === `http://127.0.0.1:${managedPort}`),
-				20_000,
-			);
-			assert.equal(firstState.observerUrl, `http://127.0.0.1:${managedPort}`);
-			const firstHealth = await fetchJson(`${firstState.observerUrl}/api/health`);
-			assert.equal(firstHealth.kind, 'obstudio');
 
-			await vscode.commands.executeCommand('observability-studio.restartObserver');
-			const secondState = await waitFor(
+			const state = await waitFor(
 				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => Boolean(value?.observerUrl === `http://127.0.0.1:${managedPort}`),
+				(value) => Boolean(value?.observerUrl),
 				20_000,
 			);
-			assert.equal(secondState.observerUrl, `http://127.0.0.1:${managedPort}`);
-			const secondHealth = await fetchJson(`${secondState.observerUrl}/api/health`);
-			assert.equal(secondHealth.kind, 'obstudio');
+			assert.ok(state.observerUrl, 'expected observer URL to be set after start');
+			const health = await fetchJson(`${state.observerUrl}/api/health`);
+			assert.equal(health.kind, 'obstudio');
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
 
@@ -658,13 +642,11 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('extension ignores mismatched shared state and continues with the managed observer', async function () {
+	test('extension ignores mismatched shared state and falls back to spawning the managed observer', async function () {
 		this.timeout(30_000);
 
 		await getExtension();
 		const mismatchedObserver = await startConflictingHttpService(await getAvailablePort());
-		const managedObserver = await startDiscoverableSharedObserver(0);
-		const managedPort = Number(new URL(managedObserver.baseUrl).port);
 		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
 		const stateDir = path.join(tempHome, '.obstudio');
@@ -685,21 +667,19 @@ suite('VS Code Host', () => {
 
 		try {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', managedPort, vscode.ConfigurationTarget.Global);
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			await vscode.commands.executeCommand('observability-studio.startObserver');
 
 			const state = await waitFor(
 				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => Boolean(
-					value
-					&& value.sharedMode
-					&& value.observerUrl === managedObserver.baseUrl,
-				),
+				(value) => Boolean(value?.observerUrl && !value.sharedMode),
 				20_000,
 			);
-			assert.equal(state.sharedMode, true);
-			assert.equal(state.observerUrl, managedObserver.baseUrl);
+			assert.equal(state.sharedMode, false);
+			assert.ok(state.observerUrl, 'expected observer URL to be set after falling back to managed start');
+			assert.notEqual(state.observerUrl, mismatchedObserver.baseUrl);
+			const health = await fetchJson(`${state.observerUrl}/api/health`);
+			assert.equal(health.kind, 'obstudio');
 		} finally {
 			await vscode.commands.executeCommand('observability-studio.stopObserver');
 			if (originalSharedObserverStatePath === undefined) {
@@ -707,10 +687,8 @@ suite('VS Code Host', () => {
 			} else {
 				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
 			}
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
 			cleanupTempDir(tempHome);
 			await mismatchedObserver.dispose();
-			await managedObserver.dispose();
 		}
 	});
 
@@ -775,76 +753,6 @@ suite('VS Code Host', () => {
 		}
 	});
 
-	test('managed observer does not fall back when the configured port is occupied', async function () {
-		this.timeout(30_000);
-
-		await getExtension();
-		const conflictPort = await getAvailablePort();
-		const conflictService = await startConflictingHttpService(conflictPort);
-		const config = vscode.workspace.getConfiguration('observability-studio');
-
-		try {
-			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', conflictPort, vscode.ConfigurationTarget.Global);
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-
-			await vscode.commands.executeCommand('observability-studio.openObserver');
-			const failedState = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => {
-					if (!value || value.observerPort !== undefined || value.observerUrl !== undefined) {
-						return false;
-					}
-					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
-						&& value.panelHtml.includes(`http://127.0.0.1:${conflictPort}`)
-						&& value.panelHtml.includes('not Splunk Observability Studio')
-						&& value.panelHtml.includes('observability-studio.managedObserverPort')
-						&& !value.panelHtml.includes('/api/health')
-						&& value.panelHtml.includes('after freeing the conflicting port');
-				},
-				20_000,
-			);
-			assert.equal(failedState.sharedMode, false);
-		} finally {
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
-			await conflictService.dispose();
-		}
-	});
-
-	test('managed observer rejects ports reserved for fixed OTLP listeners', async function () {
-		this.timeout(30_000);
-
-		await getExtension();
-		const config = vscode.workspace.getConfiguration('observability-studio');
-
-		try {
-			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
-			await config.update('managedObserverPort', 4318, vscode.ConfigurationTarget.Global);
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-
-			await vscode.commands.executeCommand('observability-studio.openObserver');
-			const failedState = await waitFor(
-				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
-				(value) => {
-					if (!value || value.observerPort !== undefined || value.observerUrl !== undefined) {
-						return false;
-					}
-					return typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes('Observer could not start')
-						&& value.panelHtml.includes('observability-studio.managedObserverPort')
-						&& value.panelHtml.includes('4318')
-						&& value.panelHtml.includes('OTLP/HTTP');
-				},
-				20_000,
-			);
-			assert.equal(failedState.sharedMode, false);
-		} finally {
-			await vscode.commands.executeCommand('observability-studio.stopObserver');
-			await config.update('managedObserverPort', undefined, vscode.ConfigurationTarget.Global);
-		}
-	});
 
 	test('configured shared observer hides raw health probe details when it is unreachable', async function () {
 		this.timeout(45_000);

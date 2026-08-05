@@ -3,7 +3,6 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as https from 'node:https';
-import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -39,11 +38,9 @@ import {
 	describeObserverStartupFailure,
 	formatObserverProbeMismatchMessage,
 	formatObserverProbeUnavailableMessage,
-	formatPortConflictMessage,
 	getObserverProbeMismatchHint,
 	getObserverProbeUnavailableHint,
 	getObserverStartupHint,
-	type ObserverPortRole,
 } from './startup-errors';
 import {
 	cloudStatusConnected,
@@ -73,12 +70,11 @@ let agentIntegrationPromptPromise: Promise<void> | undefined;
 let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
 let lastObserverPanelRenderKey: string | undefined;
+let observerWatchdogTimer: ReturnType<typeof setTimeout> | undefined;
 
 const observerPanelViewType = 'observabilityStudioObserver';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
-const managedObserverPortSetting = 'managedObserverPort';
 const managedObserverHost = '127.0.0.1';
-const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
 const observerAPIVersion = 'v1';
 const managedObserverControlToken = crypto.randomBytes(32).toString('base64url');
@@ -133,12 +129,6 @@ type ObserverProbeResult =
 	| { health: ObserverHealth; status: 'ready' }
 	| { error: Error; status: 'unavailable' }
 	| { reason: string; status: 'mismatch' };
-
-type PortReservation = {
-	port: number;
-	role: ObserverPortRole;
-	settingName?: string;
-};
 
 type StartupHintCarrier = {
 	startupHint?: string;
@@ -205,10 +195,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-		if (
-			!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)
-			&& !event.affectsConfiguration(`observability-studio.${managedObserverPortSetting}`)
-		) {
+		if (!event.affectsConfiguration(`observability-studio.${sharedObserverUrlSetting}`)) {
 			return;
 		}
 		void restartObserver(context);
@@ -498,6 +485,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 			if (completeObserverStart(observerLifecycleState, runId, sharedPort)) {
 				syncObserverUi();
+				startObserverWatchdog(context);
 			}
 			return;
 		}
@@ -538,6 +526,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					appendObserverOutputLine(`Reusing discovered shared observer at ${discoveredObserver.baseUrl}`);
 					if (completeObserverStart(observerLifecycleState, runId, discoveredPort)) {
 						syncObserverUi();
+						startObserverWatchdog(context);
 					}
 					return;
 				}
@@ -552,72 +541,9 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			);
 		}
 
-		const managedPort = getConfiguredManagedObserverPort();
-		const managedObserverBaseUrl = buildManagedObserverBaseUrl(managedPort);
-		const existingObserver = await probeObserver(managedObserverBaseUrl, 500, { requireStableOtlp: true });
-		assertObserverRunCurrent(observerLifecycleState, runId);
-
-		if (existingObserver.status === 'ready') {
-			observerUsesSharedServer = true;
-			observerSharedControlToken = sharedObserverControlTokenFromEnv();
-			observerBaseUrl = managedObserverBaseUrl;
-			appendObserverOutputLine(`Reusing shared observer at ${managedObserverBaseUrl}`);
-			if (completeObserverStart(observerLifecycleState, runId, managedPort)) {
-				syncObserverUi();
-			}
-			return;
-		}
-
-		if (existingObserver.status === 'mismatch') {
-			appendObserverOutputLine(`Observer health probe mismatch at ${managedObserverBaseUrl}: ${existingObserver.reason}`);
-			logObserverLifecycle(`Run ${runId}: existing service on ${managedObserverBaseUrl} did not match observer health: ${existingObserver.reason}`);
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${formatObserverProbeMismatchMessage(managedObserverBaseUrl, 'managed-reuse')} ` +
-				`Stop the conflicting service or configure observability-studio.${managedObserverPortSetting} ` +
-				`or observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			Object.assign(wrappedError, { startupHint: getObserverProbeMismatchHint('managed-reuse') });
-			throw wrappedError;
-		}
-
 		const backend = resolveBackend(context.extensionPath);
-		let observerPort: number;
-		try {
-			observerPort = await ensurePortAvailable({
-				port: managedPort,
-				role: 'Observer UI',
-				settingName: managedObserverPortSetting,
-			});
-		} catch (error) {
-			const wrappedError = new Error(
-				`Cannot use ${managedObserverBaseUrl}: ${getErrorMessage(error)} ` +
-				`Configure observability-studio.${managedObserverPortSetting} or ` +
-				`observability-studio.${sharedObserverUrlSetting}.`,
-			);
-			if (typeof error === 'object' && error !== null && typeof (error as StartupHintCarrier).startupHint === 'string') {
-				Object.assign(wrappedError, { startupHint: (error as StartupHintCarrier).startupHint });
-			}
-			throw wrappedError;
-		}
-		logObserverLifecycle(`Run ${runId}: reserved UI port ${observerPort}.`);
-		assertObserverRunCurrent(observerLifecycleState, runId);
 
-		const otlpHttpPort = await ensurePortAvailable({
-			port: observerOtlpHttpPort,
-			role: 'OTLP/HTTP',
-		});
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		const otlpGrpcPort = await ensurePortAvailable({
-			port: observerOtlpGrpcPort,
-			role: 'OTLP/gRPC',
-		});
-		assertObserverRunCurrent(observerLifecycleState, runId);
-		logObserverLifecycle(`Run ${runId}: OTLP ports ready (HTTP ${otlpHttpPort}, gRPC ${otlpGrpcPort}).`);
-		observerUsesSharedServer = false;
-		observerSharedControlToken = undefined;
-		observerBaseUrl = managedObserverBaseUrl;
-
-		appendObserverOutputLine(`Starting ${backend.label} on ${managedObserverBaseUrl}`);
+		appendObserverOutputLine(`Starting ${backend.label}`);
 		appendObserverOutputLine(`OTLP/HTTP receiver listening on ${observerOtlpHttpEndpoint}`);
 		appendObserverOutputLine(`OTLP/gRPC receiver listening on ${observerOtlpGrpcEndpoint}`);
 
@@ -629,10 +555,9 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 					...backend.env,
 					HOST: managedObserverHost,
 					OTLP_HOST: managedObserverHost,
-					OTLP_PORT: String(otlpHttpPort),
-					OTLP_HTTP_PORT: String(otlpHttpPort),
-					OTLP_GRPC_PORT: String(otlpGrpcPort),
-					PORT: String(observerPort),
+					OTLP_PORT: String(observerOtlpHttpPort),
+					OTLP_HTTP_PORT: String(observerOtlpHttpPort),
+					OTLP_GRPC_PORT: String(observerOtlpGrpcPort),
 					OBSTUDIO_CONTROL_TOKEN: managedObserverControlToken,
 					// Pass the workspace root so the preview resolver locates
 					// .observe/dashboards.preview.json relative to the open
@@ -672,6 +597,22 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
+			// code=0 means the binary detected an existing instance and deferred to it.
+			// Attach to that instance rather than treating this as a failed startup.
+			if (code === 0) {
+				const existing = readSharedObserverDiscovery(os.homedir());
+				if (existing !== undefined) {
+					const existingPort = observerPortFromUrl(existing.baseUrl);
+					if (existingPort !== undefined && completeObserverStart(observerLifecycleState, runId, existingPort)) {
+						observerBaseUrl = existing.baseUrl;
+						observerUsesSharedServer = true;
+						syncObserverUi();
+						startObserverWatchdog(context);
+						logObserverLifecycle(`Run ${runId}: attached to existing observer at ${existing.baseUrl}.`);
+					}
+					return;
+				}
+			}
 			if (finishObserverRun(observerLifecycleState, runId)) {
 				observerBaseUrl = undefined;
 				observerUsesSharedServer = false;
@@ -701,9 +642,19 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 			}
 		});
 
-		await waitForObserverReady(managedObserverBaseUrl, { requireStableOtlp: true }, runId);
-		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${managedObserverBaseUrl}.`);
-		if (!completeObserverStart(observerLifecycleState, runId, observerPort)) {
+		// Wait for the binary to write shared-observer.json, then read the actual bound port/URL from it.
+		const spawnedObserverUrl = await waitForInstanceFile(runId);
+		observerUsesSharedServer = false;
+		observerBaseUrl = spawnedObserverUrl;
+		const spawnedPort = observerPortFromUrl(spawnedObserverUrl);
+		if (spawnedPort === undefined) {
+			throw new Error(`Observer URL from instance file does not contain a usable port: ${spawnedObserverUrl}`);
+		}
+
+		await waitForObserverReady(spawnedObserverUrl, { requireStableOtlp: true }, runId);
+		logObserverLifecycle(`Run ${runId}: observer is accepting connections at ${spawnedObserverUrl}.`);
+		appendObserverOutputLine(`Observer started on ${spawnedObserverUrl}`);
+		if (!completeObserverStart(observerLifecycleState, runId, spawnedPort)) {
 			if (observerProcess === startedProcess) {
 				observerProcess = undefined;
 			}
@@ -714,6 +665,7 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 
 		await restoreManagedObserverCloudConnection(context);
 		syncObserverUi();
+		startObserverWatchdog(context);
 	})().catch((error) => {
 		if (isObserverLifecycleCancelled(error)) {
 			logObserverLifecycle(`Run ${runId}: startup cancelled because lifecycle state changed.`);
@@ -753,6 +705,37 @@ async function startObserver(context: vscode.ExtensionContext): Promise<void> {
 	return observerStartupPromise;
 }
 
+const observerWatchdogIntervalMs = 5_000;
+
+function stopObserverWatchdog(): void {
+	if (observerWatchdogTimer !== undefined) {
+		clearTimeout(observerWatchdogTimer);
+		observerWatchdogTimer = undefined;
+	}
+}
+
+function startObserverWatchdog(context: vscode.ExtensionContext): void {
+	stopObserverWatchdog();
+	observerWatchdogTimer = setTimeout(() => {
+		observerWatchdogTimer = undefined;
+		if (observerLifecycleState.status !== 'running' || observerBaseUrl === undefined) {
+			return;
+		}
+		void probeObserver(observerBaseUrl, 2_000, { requireStableOtlp: false }).then((probe) => {
+			if (probe.status !== 'ready') {
+				logObserverLifecycle(`Watchdog: observer at ${observerBaseUrl} is unreachable; restarting.`);
+				observerBaseUrl = undefined;
+				observerUsesSharedServer = false;
+				stopObserverRun(observerLifecycleState);
+				syncObserverUi();
+				void ensureObserverRunning(context);
+			} else {
+				startObserverWatchdog(context);
+			}
+		});
+	}, observerWatchdogIntervalMs);
+}
+
 async function stopObserver(): Promise<void> {
 	if (observerStopPromise !== undefined) {
 		logObserverLifecycle('Stop requested while shutdown is already in progress; waiting for existing shutdown.');
@@ -768,6 +751,7 @@ async function stopObserver(): Promise<void> {
 	logObserverLifecycle(
 		`Stopping observer (status=${observerLifecycleState.status}, pid=${proc?.pid ?? 'none'}, port=${observerLifecycleState.port ?? 'none'}, url=${observerBaseUrl ?? 'none'}).`,
 	);
+	stopObserverWatchdog();
 	stopObserverRun(observerLifecycleState);
 	observerProcess = undefined;
 	observerStartupPromise = undefined;
@@ -1317,53 +1301,6 @@ function isLoopbackObserverHost(hostname: string): boolean {
 
 // ---------------------------------------------------------------------------
 // Port helpers
-// ---------------------------------------------------------------------------
-
-async function ensurePortAvailable(reservation: PortReservation): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const server = net.createServer();
-		server.once('error', (error: NodeJS.ErrnoException) => {
-			if (error.code === 'EADDRINUSE') {
-				void identifyPortOwner(reservation.port).then((owner) => {
-					const detail = formatPortConflictMessage({
-						owner,
-						port: reservation.port,
-						role: reservation.role,
-						settingName: reservation.settingName,
-					});
-					logObserverLifecycle(detail);
-					const error = new Error(detail);
-					Object.assign(error, { startupHint: getObserverStartupHint('port-conflict') });
-					reject(error);
-				});
-				return;
-			}
-			logObserverLifecycle(`Port check failed for ${reservation.role} port ${reservation.port}: ${error.message}`);
-			reject(error);
-		});
-		server.listen(reservation.port, '127.0.0.1', () => {
-			server.close((error) => {
-				if (error) { reject(error); return; }
-				resolve(reservation.port);
-			});
-		});
-	});
-}
-
-async function identifyPortOwner(port: number): Promise<string | undefined> {
-	return new Promise((resolve) => {
-		cp.exec(`lsof -i :${port} -sTCP:LISTEN -n -P 2>/dev/null`, { timeout: 3000 }, (error, stdout) => {
-			if (error || !stdout) { resolve(undefined); return; }
-			const lines = stdout.trim().split('\n');
-			if (lines.length < 2) { resolve(undefined); return; }
-			const fields = lines[1].split(/\s+/);
-			const command = fields[0];
-			const pid = fields[1];
-			resolve(command && pid ? `${command} (PID ${pid})` : undefined);
-		});
-	});
-}
-
 async function waitForObserverReady(
 	baseUrl: string,
 	options: ObserverProbeOptions,
@@ -1552,23 +1489,18 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
-function buildManagedObserverBaseUrl(port: number): string {
-	return `http://${managedObserverHost}:${port}`;
-}
-
-function getConfiguredManagedObserverPort(): number {
-	const configured = vscode.workspace.getConfiguration('observability-studio').get<number>(managedObserverPortSetting);
-	if (typeof configured === 'number' && Number.isInteger(configured) && configured > 0 && configured <= 65_535) {
-		if (configured === observerOtlpHttpPort || configured === observerOtlpGrpcPort) {
-			const signal = configured === observerOtlpHttpPort ? 'OTLP/HTTP' : 'OTLP/gRPC';
-			throw new Error(
-				`observability-studio.${managedObserverPortSetting} cannot use port ${configured}; ` +
-				`${signal} already uses that port.`,
-			);
+async function waitForInstanceFile(runId: number): Promise<string> {
+	const statePath = path.join(os.homedir(), '.obstudio', 'shared-observer.json');
+	const deadline = Date.now() + 15_000;
+	while (Date.now() < deadline) {
+		assertObserverRunCurrent(observerLifecycleState, runId);
+		const discovered = readSharedObserverDiscovery(os.homedir(), statePath);
+		if (discovered !== undefined) {
+			return discovered.baseUrl;
 		}
-		return configured;
+		await delay(100);
 	}
-	return defaultManagedObserverPort;
+	throw new Error('Timed out waiting for observer to write shared-observer.json.');
 }
 
 function appendObserverOutput(text: string): void {
