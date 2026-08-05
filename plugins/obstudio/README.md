@@ -26,7 +26,23 @@ Current scope:
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
-The plugin is intentionally self-contained from Codex’s point of view:
+For local development, `plugins/obstudio/skills/` may contain symlinks back to
+the canonical top-level `skills/` source of truth. Before publishing or
+marketplace installation, build a self-contained staged plugin with materialized
+skill trees:
+
+```bash
+make stage-obstudio-plugin
+```
+
+The staged directory is `.release/plugins/obstudio`. To also write
+`.release/plugins/obstudio.zip`, run:
+
+```bash
+make package-obstudio-plugin
+```
+
+The staged plugin is intentionally self-contained from Codex’s point of view:
 
 - Codex can see the bundled skills immediately after installation.
 - The plugin’s bootstrap script can bootstrap the release archive and Codex
