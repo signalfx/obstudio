@@ -240,6 +240,33 @@ class FetchExpectedChecksumTest(unittest.TestCase):
         self.assertEqual(name, "obstudio_0.0.9_linux_amd64.zip")
         self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
+    def test_fully_offline_cache_fallback_sorts_prerelease_numbers(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.11-fork9").write_text(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.11-fork9_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.11-fork10").write_text(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.11-fork10_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+
+            def fake_urlopen(url, timeout=0):
+                raise RuntimeError(f"network unavailable: {url}")
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+        self.assertEqual(name, "obstudio_0.0.11-fork10_linux_amd64.zip")
+        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+    def test_semver_sort_ignores_build_metadata(self):
+        self.assertEqual(
+            BOOTSTRAP.semver_sort_key("0.0.11-fork10+build2"),
+            BOOTSTRAP.semver_sort_key("0.0.11-fork10+build1"),
+        )
+
     def test_uses_versioned_checksum_cache_when_stable_alias_is_missing(self):
         with tempfile.TemporaryDirectory() as tempdir:
             checksums_path = Path(tempdir) / "checksums.txt"
@@ -432,6 +459,63 @@ class BootstrapHealthCheckTest(unittest.TestCase):
 
             got = BOOTSTRAP.codex_obstudio_health_url(config_path)
             self.assertEqual(got, "http://127.0.0.1:3000/api/health")
+
+
+class ConfigureCodexMCPURLTest(unittest.TestCase):
+    def test_replaces_command_config_with_url_config(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_path = Path(tempdir) / ".codex" / "config.toml"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        'model = "gpt-5.4"',
+                        "",
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'command = "/tmp/obstudio"',
+                        "args = []",
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            BOOTSTRAP.configure_codex_mcp_url(config_path, "http://127.0.0.1:3000/mcp")
+
+            got = config_path.read_text(encoding="utf-8")
+            self.assertFalse(BOOTSTRAP.codex_config_requests_local_obstudio(config_path))
+
+        self.assertIn('model = "gpt-5.4"', got)
+        self.assertIn('url = "http://127.0.0.1:3000/mcp"', got)
+        self.assertNotIn("command =", got)
+
+
+class StartObstudioBackgroundTest(unittest.TestCase):
+    def test_sets_managed_owner_environment(self):
+        captured = {}
+
+        class FakeProcess:
+            pid = 1234
+
+        def fake_popen(command, **kwargs):
+            captured["command"] = command
+            captured["kwargs"] = kwargs
+            return FakeProcess()
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "obstudio"
+            binary.write_text("binary", encoding="utf-8")
+            with mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen):
+                process, log_path = BOOTSTRAP.start_obstudio_background(binary, Path(tempdir))
+
+        self.assertEqual(process.pid, 1234)
+        self.assertEqual(captured["command"], [str(binary)])
+        self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_OWNER"], "codex-plugin")
+        self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_MODE"], "managed")
+        self.assertEqual(log_path.name, "obstudio.log")
 
 
 class ParseObstudioVersionTest(unittest.TestCase):

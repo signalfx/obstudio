@@ -38,7 +38,7 @@ CHECKSUM_LINE_PATTERNS = (
     re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<name>.+)$"),
     re.compile(r"^SHA256 \((?P<name>.+)\) = (?P<hash>[0-9a-fA-F]{64})$"),
 )
-VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b")
+VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\b")
 HELP_SKILL_HINT = "Use $obstudio-help to list available commands."
 
 
@@ -91,6 +91,7 @@ def main() -> int:
                 try:
                     verify_local_obstudio_health()
                     ensure_process_running(process)
+                    configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
                 except Exception:
                     terminate_process(process)
                     raise
@@ -390,15 +391,29 @@ def cached_checksum_version(path: Path) -> str | None:
     return match.group(1)
 
 
-def semver_sort_key(version: str) -> tuple[int, int, int, int, str]:
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:([-+])([0-9A-Za-z.-]+))?", version)
+def semver_sort_key(version: str) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?", version)
     if not match:
-        return (0, 0, 0, 0, version)
+        return (0, 0, 0, 0, ((1, version),))
     major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
-    suffix_kind = match.group(4) or ""
-    suffix = match.group(5) or ""
-    stable_rank = 1 if suffix_kind != "-" else 0
-    return (major, minor, patch, stable_rank, suffix)
+    prerelease = match.group(4)
+    stable_rank = 1 if prerelease is None else 0
+    return (major, minor, patch, stable_rank, semver_prerelease_key(prerelease or ""))
+
+
+def semver_prerelease_key(prerelease: str) -> tuple[tuple[int, int | str], ...]:
+    key = []
+    for part in prerelease.split("."):
+        if re.fullmatch(r"\d+", part):
+            key.append((0, int(part)))
+            continue
+        match = re.fullmatch(r"([A-Za-z-]+)(\d+)", part)
+        if match:
+            key.append((1, match.group(1)))
+            key.append((0, int(match.group(2))))
+            continue
+        key.append((1, part))
+    return tuple(key)
 
 
 def archive_is_valid(archive_path: Path, expected_checksum: str) -> bool:
@@ -594,11 +609,15 @@ def start_obstudio_background(obstudio_binary: Path, plugin_data: Path) -> tuple
     log_dir = plugin_data / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "obstudio.log"
+    env = os.environ.copy()
+    env["OBSTUDIO_OWNER"] = "codex-plugin"
+    env["OBSTUDIO_MODE"] = "managed"
     with log_path.open("a", encoding="utf-8") as log_file:
         process = subprocess.Popen(
             [str(obstudio_binary)],
             stdout=log_file,
             stderr=log_file,
+            env=env,
             start_new_session=True,
         )
     return process, log_path
@@ -696,6 +715,40 @@ def derive_obstudio_mcp_url(health_url: str) -> str:
     else:
         path = "/mcp"
     return parsed._replace(path=path).geturl()
+
+
+def configure_codex_mcp_url(config_path: Path, mcp_url: str) -> None:
+    try:
+        config = config_path.read_text(encoding="utf-8")
+    except OSError:
+        config = ""
+
+    block = "\n".join(
+        [
+            CODEX_MANAGED_BLOCK,
+            "[mcp_servers.obstudio]",
+            "enabled = true",
+            f'url = "{mcp_url}"',
+            "# END OBSTUDIO MCP CONFIG",
+            "",
+        ]
+    )
+    start = config.find(CODEX_MANAGED_BLOCK)
+    if start != -1:
+        end = config.find("# END OBSTUDIO MCP CONFIG", start)
+        if end != -1:
+            end += len("# END OBSTUDIO MCP CONFIG")
+            config = config[:start].rstrip() + "\n\n" + block + config[end:].lstrip("\n")
+        else:
+            config = config.rstrip() + "\n\n" + block
+    else:
+        config = config.rstrip()
+        if config:
+            config += "\n\n"
+        config += block
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(config, encoding="utf-8")
 
 
 def is_tcp_port_open(url_text: str) -> bool:
