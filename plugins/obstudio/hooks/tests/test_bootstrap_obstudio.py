@@ -108,6 +108,38 @@ class ExtractedBinaryMatchesArchiveTest(unittest.TestCase):
             self.assertFalse(BOOTSTRAP.extracted_binary_matches_archive(archive_path, extracted_binary, binary_name))
 
 
+class ValidateZipEntriesTest(unittest.TestCase):
+    def test_accepts_normal_nested_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            archive_path = Path(tempdir) / "safe.zip"
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr("obstudio_0.0.14/obstudio", b"binary")
+
+            with zipfile.ZipFile(archive_path) as zf:
+                BOOTSTRAP.validate_zip_entries(zf, Path(tempdir) / "extract")
+
+    def test_rejects_parent_traversal_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            archive_path = Path(tempdir) / "traversal.zip"
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr("../outside", b"bad")
+
+            with zipfile.ZipFile(archive_path) as zf:
+                with self.assertRaisesRegex(RuntimeError, "unsafe path"):
+                    BOOTSTRAP.validate_zip_entries(zf, Path(tempdir) / "extract")
+
+    def test_rejects_absolute_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            archive_path = Path(tempdir) / "absolute.zip"
+            absolute_entry = str(Path(Path(tempdir).anchor or "/") / "outside")
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr(absolute_entry, b"bad")
+
+            with zipfile.ZipFile(archive_path) as zf:
+                with self.assertRaisesRegex(RuntimeError, "unsafe path"):
+                    BOOTSTRAP.validate_zip_entries(zf, Path(tempdir) / "extract")
+
+
 class FetchExpectedChecksumTest(unittest.TestCase):
     def test_falls_back_to_versioned_checksum_manifest(self):
         class FakeResponse(io.BytesIO):
@@ -136,6 +168,78 @@ class FetchExpectedChecksumTest(unittest.TestCase):
         self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
         self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 
+    def test_creates_checksum_cache_parent_before_writing(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        checksums_text = (
+            b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef *obstudio_0.0.14_linux_amd64.zip\n"
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "missing" / "checksums.txt"
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", return_value=FakeResponse(checksums_text)):
+                BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+            self.assertTrue(checksums_path.is_file())
+            self.assertTrue(BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14").is_file())
+
+    def test_prefers_exact_versioned_cache_after_resolving_latest(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.13").write_text(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.13_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14").write_text(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.14_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+
+            def fake_urlopen(url, timeout=0):
+                if url.endswith("/checksums.txt"):
+                    raise RuntimeError("stable checksum alias missing")
+                if url.endswith("/releases/latest"):
+                    return FakeResponse(json.dumps({"tag_name": "v0.0.14"}).encode("utf-8"))
+                raise AssertionError(f"unexpected URL: {url}")
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
+        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+    def test_fully_offline_cache_fallback_uses_semver_order(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.8").write_text(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa *obstudio_0.0.8_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+            BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.9").write_text(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *obstudio_0.0.9_linux_amd64.zip\n",
+                encoding="utf-8",
+            )
+
+            def fake_urlopen(url, timeout=0):
+                raise RuntimeError(f"network unavailable: {url}")
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+        self.assertEqual(name, "obstudio_0.0.9_linux_amd64.zip")
+        self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
     def test_uses_versioned_checksum_cache_when_stable_alias_is_missing(self):
         with tempfile.TemporaryDirectory() as tempdir:
             checksums_path = Path(tempdir) / "checksums.txt"
@@ -157,6 +261,56 @@ class FetchExpectedChecksumTest(unittest.TestCase):
 
         self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
         self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+
+class ObserverStateFieldsTest(unittest.TestCase):
+    def test_started_local_process_is_managed(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            got = BOOTSTRAP.observer_state_fields(
+                Path(tempdir) / "bootstrap-state.json",
+                local_requested=True,
+                process_started=True,
+                live_pid="",
+                pid="1234",
+                log_path=Path(tempdir) / "obstudio.log",
+            )
+
+        self.assertEqual(got["owner"], "codex-plugin")
+        self.assertEqual(got["mode"], "managed")
+        self.assertEqual(got["pid"], "1234")
+
+    def test_reused_listener_without_prior_owned_pid_is_external(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            got = BOOTSTRAP.observer_state_fields(
+                Path(tempdir) / "bootstrap-state.json",
+                local_requested=True,
+                process_started=False,
+                live_pid="4321",
+                pid="4321",
+                log_path=None,
+            )
+
+        self.assertEqual(got["owner"], "external-observer")
+        self.assertEqual(got["mode"], "external")
+
+    def test_reused_listener_with_matching_prior_owned_pid_remains_managed(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "bootstrap-state.json"
+            state_path.write_text(
+                json.dumps({"owner": "codex-plugin", "mode": "managed", "pid": "4321"}),
+                encoding="utf-8",
+            )
+            got = BOOTSTRAP.observer_state_fields(
+                state_path,
+                local_requested=True,
+                process_started=False,
+                live_pid="4321",
+                pid="4321",
+                log_path=None,
+            )
+
+        self.assertEqual(got["owner"], "codex-plugin")
+        self.assertEqual(got["mode"], "managed")
 
 
 class BootstrapStateHealthTest(unittest.TestCase):

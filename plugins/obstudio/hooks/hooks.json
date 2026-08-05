@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py",
-            "commandWindows": "py -3 ${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
+            "commandWindows": "py -3 \"${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
             "statusMessage": "Bootstrapping Obstudio for Codex"
           }
         ]
