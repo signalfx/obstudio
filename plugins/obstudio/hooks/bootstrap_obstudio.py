@@ -71,8 +71,14 @@ def main() -> int:
             obstudio_binary = download_obstudio(plugin_data, artifact_suffix, resolved_artifact, expected_checksum)
             install_source = "downloaded"
 
+        prior_managed_pid = read_managed_bootstrap_state_pid(state_path)
+        local_obstudio_requested_before_install = codex_config_requests_local_obstudio(codex_config_path)
         run_install(obstudio_binary)
-        local_obstudio_requested = codex_config_requests_local_obstudio(codex_config_path)
+        local_obstudio_requested = (
+            codex_config_requests_local_obstudio(codex_config_path)
+            or bool(prior_managed_pid)
+            or local_obstudio_requested_before_install
+        )
         pid = ""
         live_pid = ""
         log_path = None
@@ -81,6 +87,8 @@ def main() -> int:
             if probe_obstudio_health(OBSTUDIO_HEALTH_URL):
                 live_pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL)
                 pid = live_pid
+                if prior_managed_pid and prior_managed_pid == live_pid:
+                    configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
             else:
                 if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
                     raise RuntimeError(
@@ -219,7 +227,12 @@ def is_bootstrapped(
     health_url = codex_obstudio_health_url(codex_config_path)
     if health_url is None:
         return False
-    return probe_obstudio_health(health_url)
+    if not probe_obstudio_health(health_url):
+        return False
+    if state.get("owner") == "codex-plugin" and state.get("mode") == "managed":
+        live_pid = find_pid_listening_on_url(health_url)
+        return read_bootstrap_state_pid(state_path) == live_pid
+    return True
 
 
 def locate_existing_obstudio(expected_version: str) -> Path | None:
@@ -349,6 +362,10 @@ def fetch_expected_checksum(
     cached_result = newest_cached_checksum(checksums_path, artifact_suffix)
     if cached_result is not None:
         return cached_result
+    try:
+        return parse_checksum(checksums_path.read_text(encoding="utf-8"), artifact_suffix)
+    except (OSError, RuntimeError):
+        pass
     raise RuntimeError("failed to download release checksum manifest") from last_error
 
 
@@ -774,6 +791,13 @@ def read_bootstrap_state_pid(state_path: Path) -> str:
     return ""
 
 
+def read_managed_bootstrap_state_pid(state_path: Path) -> str:
+    state = read_bootstrap_state(state_path)
+    if state.get("owner") != "codex-plugin" or state.get("mode") != "managed":
+        return ""
+    return read_bootstrap_state_pid(state_path)
+
+
 def read_bootstrap_state(state_path: Path) -> dict[str, object]:
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -834,6 +858,8 @@ def find_pid_listening_on_url(health_url: str) -> str:
     port = parsed.port
     if port is None:
         return ""
+    if is_windows():
+        return find_windows_pid_listening_on_port(port)
     try:
         result = subprocess.run(
             ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
@@ -842,6 +868,26 @@ def find_pid_listening_on_url(health_url: str) -> str:
             text=True,
             timeout=5,
         )
+    except Exception:
+        return ""
+    if result.returncode != 0:
+        return ""
+    for line in result.stdout.splitlines():
+        pid = line.strip()
+        if pid.isdigit():
+            return pid
+    return ""
+
+
+def find_windows_pid_listening_on_port(port: int) -> str:
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        f"(Get-NetTCPConnection -LocalPort {port} -State Listen | Select-Object -First 1 -ExpandProperty OwningProcess)",
+    ]
+    try:
+        result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=5)
     except Exception:
         return ""
     if result.returncode != 0:
