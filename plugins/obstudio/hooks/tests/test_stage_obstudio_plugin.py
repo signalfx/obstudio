@@ -27,6 +27,7 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
             self.assertTrue((output / "skills" / "otel-instrument" / "SKILL.md").is_file())
+            self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
             self.assertFalse(any(path.is_symlink() for path in output.rglob("*")))
 
@@ -42,14 +43,33 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must not contain symlinks"):
                 STAGE.verify_staged_plugin(output)
 
-    def test_marketplace_installs_from_staged_plugin_tree(self):
+    def test_marketplace_installs_from_committed_plugin_tree(self):
         marketplace_path = Path(__file__).resolve().parents[4] / ".agents" / "plugins" / "marketplace.json"
         marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
 
         self.assertEqual(
             marketplace["plugins"][0]["source"]["path"],
-            "./.release/plugins/obstudio",
+            "./plugins/obstudio",
         )
+
+    def test_plugin_manifest_uses_committed_skills(self):
+        plugin_root = Path(__file__).resolve().parents[2]
+        manifest_path = plugin_root / ".codex-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        skills_path = plugin_root / manifest["skills"]
+
+        self.assertEqual(manifest["skills"], "./skills/")
+        self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
+        self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
+
+    def test_committed_plugin_skills_are_synced(self):
+        STAGE.verify_plugin_skills_synced()
+
+    def test_plugin_local_command_skills_are_not_shared(self):
+        root = Path(__file__).resolve().parents[4]
+
+        self.assertFalse((root / "skills" / "obstudio-help").exists())
+        self.assertFalse((root / "skills" / "observer-control").exists())
 
 
 if __name__ == "__main__":

@@ -70,6 +70,19 @@ class ParseChecksumTest(unittest.TestCase):
             "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
         )
 
+    def test_matches_release_artifact_with_prerelease_and_build_metadata(self):
+        checksums_text = (
+            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface "
+            "*obstudio_1.2.3-rc.1+build.2_linux_amd64.zip\n"
+        )
+
+        name, checksum = BOOTSTRAP.parse_checksum(checksums_text, "linux_amd64.zip")
+        self.assertEqual(name, "obstudio_1.2.3-rc.1+build.2_linux_amd64.zip")
+        self.assertEqual(
+            checksum,
+            "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
+        )
+
 
 class EnsureProcessRunningTest(unittest.TestCase):
     def test_accepts_running_child(self):
@@ -612,7 +625,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 json.dumps({"version": "0.1.0"}),
                 encoding="utf-8",
             )
-            state_path.write_text(json.dumps({"status": "stopped"}), encoding="utf-8")
+            state_path.write_text(json.dumps({"pluginVersion": "0.1.0", "status": "stopped"}), encoding="utf-8")
 
             with (
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
@@ -624,6 +637,58 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
             run_install.assert_not_called()
+
+    def test_main_reinstalls_on_version_change_when_stopped_without_starting_process(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            binary = tempdir_path / "obstudio"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            binary.write_text("binary", encoding="utf-8")
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.2.0"}),
+                encoding="utf-8",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "status": "stopped",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "1234",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                ),
+                mock.patch.object(BOOTSTRAP, "locate_existing_obstudio", return_value=binary),
+                mock.patch.object(BOOTSTRAP, "run_install") as run_install,
+                mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
+                mock.patch.object(BOOTSTRAP, "emit_context"),
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            run_install.assert_called_once_with(binary)
+            start_obstudio_background.assert_not_called()
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["pluginVersion"], "0.2.0")
+            self.assertEqual(state["status"], "stopped")
+            self.assertEqual(state["owner"], "codex-plugin")
 
 
 class BootstrapHealthCheckTest(unittest.TestCase):
@@ -721,7 +786,23 @@ class BootstrapHealthCheckTest(unittest.TestCase):
             )
 
             got = BOOTSTRAP.codex_obstudio_health_url(config_path)
-            self.assertEqual(got, "http://127.0.0.1:3000/api/health")
+        self.assertEqual(got, "http://127.0.0.1:3000/api/health")
+
+
+class LocateExistingObstudioTest(unittest.TestCase):
+    def test_does_not_reuse_installed_destination_binary_as_source(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            home = Path(tempdir) / "home"
+            installed = home / ".codex" / "skills" / "obstudio" / "obstudio"
+            installed.parent.mkdir(parents=True)
+            installed.write_text("binary", encoding="utf-8")
+
+            with (
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=home),
+                mock.patch.object(BOOTSTRAP.shutil, "which", return_value=None),
+                mock.patch.object(BOOTSTRAP, "existing_binary_matches_release", return_value=True),
+            ):
+                self.assertIsNone(BOOTSTRAP.locate_existing_obstudio("0.1.0"))
 
 
 class ConfigureCodexMCPURLTest(unittest.TestCase):
