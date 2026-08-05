@@ -310,6 +310,7 @@ def is_bootstrapped(
 
 
 def locate_existing_obstudio(expected_version: str) -> Path | None:
+    installed_root = (Path.home() / ".codex" / "skills" / "obstudio").resolve()
     candidates = [
         shutil.which("obstudio"),
     ]
@@ -317,9 +318,19 @@ def locate_existing_obstudio(expected_version: str) -> Path | None:
         if not candidate:
             continue
         path = Path(candidate).expanduser().resolve()
+        if path_is_relative_to(path, installed_root):
+            continue
         if path.is_file() and existing_binary_matches_release(path, expected_version):
             return path
     return None
+
+
+def path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def download_obstudio(

@@ -799,10 +799,11 @@ class LocateExistingObstudioTest(unittest.TestCase):
 
             with (
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=home),
-                mock.patch.object(BOOTSTRAP.shutil, "which", return_value=None),
-                mock.patch.object(BOOTSTRAP, "existing_binary_matches_release", return_value=True),
+                mock.patch.object(BOOTSTRAP.shutil, "which", return_value=str(installed)),
+                mock.patch.object(BOOTSTRAP, "existing_binary_matches_release", return_value=True) as matches_release,
             ):
                 self.assertIsNone(BOOTSTRAP.locate_existing_obstudio("0.1.0"))
+            matches_release.assert_not_called()
 
 
 class ConfigureCodexMCPURLTest(unittest.TestCase):
