@@ -421,6 +421,10 @@ func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {
 	return detectSharedObserverURL(defaultSharedObserverHealth, client)
 }
 
+func detectAnyRunningObserver(client *http.Client) (string, bool) {
+	return detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client)
+}
+
 func ensureInstallWeaverRuntime(exePath, destDir string, requireLocalRuntime bool) (bool, string, error) {
 	installed, err := copySiblingWeaverRuntime(exePath, destDir)
 	if err != nil {
