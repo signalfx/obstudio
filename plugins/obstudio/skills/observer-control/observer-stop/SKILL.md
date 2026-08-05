@@ -29,9 +29,12 @@ just because the cached state is stale.
 ## Steps
 
 1. Check whether the Observer is `managed`, `shared`, or `external`.
-2. Check `http://localhost:3000/api/health`. If the in-sandbox localhost check
-   fails with a connection or permission error, retry the same localhost-only
-   health check outside the sandbox before treating the Observer as down.
+2. Check the configured health endpoint. Prefer
+   `http://127.0.0.1:3000/api/health` unless the Codex MCP config explicitly
+   points to a different host. If a sandboxed `localhost` probe fails but the
+   configured `127.0.0.1` endpoint is healthy, treat the Observer as healthy and
+   say: `Local sandbox cannot reach localhost, but the configured 127.0.0.1
+   endpoint is healthy.`
 3. If health is good and the bundled Observer is already listening, update the
    saved PID to match the live process, then continue applying the ownership
    rules below.
