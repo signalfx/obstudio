@@ -96,7 +96,8 @@ def bootstrap_locked(
     codex_config_path: Path,
     codex_skills_path: Path,
 ) -> int:
-    if bootstrap_state_requests_stop(state_path):
+    stopped_state = read_bootstrap_state(state_path) if bootstrap_state_requests_stop(state_path) else {}
+    if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
             "Obstudio Observer is intentionally stopped for this plugin. "
             f"{HELP_SKILL_HINT} Use $observer-restart to start the managed Observer again."
@@ -127,6 +128,22 @@ def bootstrap_locked(
         prior_managed_pid = read_managed_bootstrap_state_pid(state_path)
         local_obstudio_requested_before_install = codex_config_requests_local_obstudio(codex_config_path)
         run_install(obstudio_binary)
+        if stopped_state:
+            write_state(
+                state_path,
+                stopped_observer_state(
+                    stopped_state,
+                    plugin_version=plugin_version,
+                    install_source=install_source,
+                    obstudio_binary=obstudio_binary,
+                ),
+            )
+            emit_context(
+                "Obstudio plugin files and MCP config were updated, and the managed Observer "
+                "remains intentionally stopped. "
+                f"{HELP_SKILL_HINT} Use $observer-restart to start it again."
+            )
+            return 0
         local_obstudio_requested = (
             codex_config_requests_local_obstudio(codex_config_path)
             or bool(prior_managed_pid)
@@ -295,8 +312,6 @@ def is_bootstrapped(
 def locate_existing_obstudio(expected_version: str) -> Path | None:
     candidates = [
         shutil.which("obstudio"),
-        Path.home() / ".codex" / "skills" / "obstudio" / "obstudio",
-        Path.home() / ".codex" / "skills" / "obstudio" / "obstudio.exe",
     ]
     for candidate in candidates:
         if not candidate:
@@ -428,7 +443,7 @@ def fetch_expected_checksum(
 
 def parse_checksum(checksums_text: str, artifact_suffix: str) -> tuple[str, str]:
     target_name = re.compile(
-        rf"^obstudio_\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?_{re.escape(artifact_suffix)}$"
+        rf"^obstudio_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?_{re.escape(artifact_suffix)}$"
     )
     for raw_line in checksums_text.splitlines():
         line = raw_line.strip()
@@ -867,6 +882,38 @@ def read_bootstrap_state(state_path: Path) -> dict[str, object]:
 def bootstrap_state_requests_stop(state_path: Path) -> bool:
     state = read_bootstrap_state(state_path)
     return state.get("status") == BOOTSTRAP_STATUS_STOPPED or state.get("disabled") is True
+
+
+def stopped_observer_state(
+    prior_state: dict[str, object],
+    *,
+    plugin_version: str,
+    install_source: str,
+    obstudio_binary: Path,
+) -> dict[str, str]:
+    return {
+        "pluginVersion": plugin_version,
+        "installSource": install_source,
+        "obstudioBinary": str(obstudio_binary),
+        "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
+        "status": BOOTSTRAP_STATUS_STOPPED,
+        "owner": string_state_value(prior_state, "owner"),
+        "mode": string_state_value(prior_state, "mode"),
+        "healthUrl": string_state_value(prior_state, "healthUrl"),
+        "mcpUrl": string_state_value(prior_state, "mcpUrl"),
+        "pid": string_state_value(prior_state, "pid"),
+        "observerStartedAt": string_state_value(prior_state, "observerStartedAt"),
+        "logPath": string_state_value(prior_state, "logPath"),
+    }
+
+
+def string_state_value(state: dict[str, object], key: str) -> str:
+    value = state.get(key)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    return ""
 
 
 def bootstrap_state_proves_managed_owner(

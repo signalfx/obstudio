@@ -8,7 +8,7 @@
       "name": "obstudio",
       "source": {
         "source": "local",
-        "path": "./.release/plugins/obstudio"
+        "path": "./plugins/obstudio"
       },
       "policy": {
         "installation": "AVAILABLE",

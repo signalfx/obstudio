@@ -26,10 +26,19 @@ Current scope:
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
-For local development, `plugins/obstudio/skills/` may contain symlinks back to
-the canonical top-level `skills/` source of truth. Before publishing or
-marketplace installation, build a self-contained staged plugin with materialized
-skill trees:
+Shared workflow skill sources live in the top-level `skills/` directory. The
+plugin keeps a committed, materialized copy under `plugins/obstudio/skills/` so
+repo-local marketplace installs work from a fresh checkout without preserving
+cross-directory symlinks. Plugin-only command/control skills, such as
+`obstudio-help` and `observer-control/*`, live only under
+`plugins/obstudio/skills/`. Refresh the shared plugin copy after editing
+canonical skills:
+
+```bash
+make sync-obstudio-plugin-skills
+```
+
+Before publishing, build the staged plugin with materialized skill trees:
 
 ```bash
 make stage-obstudio-plugin
