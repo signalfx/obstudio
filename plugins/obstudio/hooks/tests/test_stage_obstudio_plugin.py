@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,6 +41,15 @@ class StageObstudioPluginTest(unittest.TestCase):
 
             with self.assertRaisesRegex(RuntimeError, "must not contain symlinks"):
                 STAGE.verify_staged_plugin(output)
+
+    def test_marketplace_installs_from_staged_plugin_tree(self):
+        marketplace_path = Path(__file__).resolve().parents[4] / ".agents" / "plugins" / "marketplace.json"
+        marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            marketplace["plugins"][0]["source"]["path"],
+            "./.release/plugins/obstudio",
+        )
 
 
 if __name__ == "__main__":

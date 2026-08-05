@@ -38,5 +38,7 @@ just because the cached state is stale.
 4. If it is `shared` or `external`, do not stop it unless the current plugin
    explicitly owns it.
 5. If it is `managed`, stop only the process that the current plugin started.
-6. Confirm the `api/health` endpoint is no longer reachable if the goal was to
+6. Record `"status": "stopped"` in the plugin `bootstrap-state.json` so the
+   next `SessionStart` hook does not restart the managed Observer.
+7. Confirm the `api/health` endpoint is no longer reachable if the goal was to
    fully shut down the local runtime.
