@@ -19,7 +19,7 @@ DEFAULT_ARCHIVE = ROOT / ".release" / "plugins" / "obstudio.zip"
 PLUGIN_SKILLS_DIR = "skills"
 PLUGIN_LOCAL_SKILL_ENTRIES = (
     "obstudio-help",
-    "observer-control/open-observer",
+    "observer-control/observer-open",
     "observer-control/observer-restart",
     "observer-control/observer-status",
     "observer-control/observer-stop",

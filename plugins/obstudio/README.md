@@ -13,7 +13,7 @@ a plugin-root SessionStart hook manifest for first-run bootstrap.
    also review the Obstudio plugin hooks from Codex plugin settings and trust
    the hook there.
 3. Try one of these actions:
-   - Open the local Observer with `$open-observer`.
+   - Open the local Observer with `$observer-open`.
    - Check Observer health with `$observer-status`.
    - Audit this repo for observability gaps with `$otel-audit`.
    - Add instrumentation for selected findings with `$otel-instrument`.
@@ -24,7 +24,7 @@ Current scope:
 - bundled skills for audit, instrumentation, verification, and Splunk publish workflows
 - bundled observer control skills:
   - `obstudio-help`
-  - `open-observer`
+  - `observer-open`
   - `observer-status`
   - `observer-restart`
   - `observer-stop`

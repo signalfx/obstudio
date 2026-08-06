@@ -1,5 +1,5 @@
 ---
-name: open-observer
+name: observer-open
 description: >-
   Open the local Obstudio Observer in the built-in browser at
   http://127.0.0.1:3000/ and confirm the UI is reachable.
