@@ -15,7 +15,7 @@ This skill is read-only. It should not start, stop, or restart anything.
 
 ## Available Skills
 
-- `open-observer` - open `http://127.0.0.1:3000/` and confirm the UI is
+- `observer-open` - open `http://127.0.0.1:3000/` and confirm the UI is
   reachable.
 - `observer-status` - report whether the local Observer is installed,
   bootstrapped, and reachable.
@@ -35,7 +35,7 @@ This skill is read-only. It should not start, stop, or restart anything.
 ## Steps
 
 1. Read the list above and pick the narrowest skill for the task.
-2. If the user wants the local Observer UI, use `open-observer`.
+2. If the user wants the local Observer UI, use `observer-open`.
 3. If the user wants runtime state, use `observer-status`.
 4. If the user wants a destructive action, check ownership before using
    `observer-restart` or `observer-stop`.
