@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -26,6 +27,8 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.stage_plugin(output)
 
             self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
+            self.assertTrue((output / "PRIVACY.md").is_file())
+            self.assertTrue((output / "SECURITY.md").is_file())
             self.assertTrue((output / "skills" / "otel-instrument" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
@@ -64,6 +67,31 @@ class StageObstudioPluginTest(unittest.TestCase):
 
     def test_committed_plugin_skills_are_synced(self):
         STAGE.verify_plugin_skills_synced()
+
+    def test_archive_orders_skills_by_trust_group(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            archive = Path(tempdir) / "obstudio.zip"
+
+            STAGE.stage_plugin(output)
+            STAGE.write_archive(output, archive)
+
+            with zipfile.ZipFile(archive) as zf:
+                skill_dirs = []
+                seen = set()
+                for name in zf.namelist():
+                    parts = name.split("/")
+                    if len(parts) < 3 or parts[0] != "obstudio" or parts[1] != "skills":
+                        continue
+                    if parts[2] == "observer-control" and len(parts) >= 4:
+                        skill = "/".join(parts[2:4])
+                    else:
+                        skill = parts[2]
+                    if skill not in seen:
+                        seen.add(skill)
+                        skill_dirs.append(skill)
+
+            self.assertEqual(skill_dirs[:14], list(STAGE.PLUGIN_SKILL_ENTRIES[:14]))
 
     def test_plugin_local_command_skills_are_not_shared(self):
         root = Path(__file__).resolve().parents[4]

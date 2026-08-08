@@ -20,8 +20,8 @@ PLUGIN_SKILLS_DIR = "skills"
 PLUGIN_LOCAL_SKILL_ENTRIES = (
     "obstudio-help",
     "observer-control/observer-open",
-    "observer-control/observer-restart",
     "observer-control/observer-status",
+    "observer-control/observer-restart",
     "observer-control/observer-stop",
 )
 PLUGIN_SHARED_SKILL_ENTRIES = (
@@ -36,12 +36,30 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
     "splunk-detector-publish",
     "splunk-sync",
 )
-PLUGIN_SKILL_ENTRIES = (*PLUGIN_LOCAL_SKILL_ENTRIES, *PLUGIN_SHARED_SKILL_ENTRIES)
+PLUGIN_SKILL_ENTRIES = (
+    "obstudio-help",
+    "observer-control/observer-open",
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify",
+    "splunk-configure",
+    "splunk-dashboard",
+    "observer-control/observer-status",
+    "observer-control/observer-restart",
+    "observer-control/observer-stop",
+    "splunk-detector-publish",
+    "splunk-dashboard-publish",
+    "splunk-sync",
+    "splunk-dashboard-sync",
+    "references",
+)
 
 PLUGIN_PATHS = (
     ".codex-plugin",
     ".mcp.json",
+    "PRIVACY.md",
     "README.md",
+    "SECURITY.md",
     "assets",
     "hooks",
 )
@@ -92,15 +110,37 @@ def stage_skills(skills_output: Path) -> None:
     if skills_output.exists():
         shutil.rmtree(skills_output)
     skills_output.mkdir(parents=True)
-    copy_shared_skills(skills_output)
-    copy_local_skills(skills_output)
+    copy_plugin_skills(skills_output)
 
 
 def sync_plugin_skills() -> None:
     skills_output = PLUGIN_ROOT / PLUGIN_SKILLS_DIR
-    skills_output.mkdir(parents=True, exist_ok=True)
-    copy_shared_skills(skills_output)
-    verify_local_plugin_skills(skills_output)
+    temp_output = PLUGIN_ROOT / ".skills-sync-tmp"
+    remove_path(temp_output)
+    temp_output.mkdir(parents=True)
+    try:
+        copy_plugin_skills(temp_output, local_source_root=skills_output)
+        verify_local_plugin_skills(temp_output)
+        remove_path(skills_output)
+        temp_output.rename(skills_output)
+    finally:
+        remove_path(temp_output)
+
+
+def copy_plugin_skills(skills_output: Path, local_source_root: Path | None = None) -> None:
+    for relative in PLUGIN_SKILL_ENTRIES:
+        source = source_for_plugin_skill_entry(relative, local_source_root=local_source_root)
+        if not source.exists():
+            raise RuntimeError(f"missing plugin skill entry: {source}")
+        destination = skills_output / relative
+        remove_path(destination)
+        copy_path(source, destination)
+
+
+def source_for_plugin_skill_entry(relative: str, local_source_root: Path | None = None) -> Path:
+    if relative in PLUGIN_LOCAL_SKILL_ENTRIES:
+        return (local_source_root or PLUGIN_ROOT / PLUGIN_SKILLS_DIR) / relative
+    return CANONICAL_SKILLS_ROOT / relative
 
 
 def copy_shared_skills(skills_output: Path) -> None:
@@ -249,11 +289,36 @@ def should_ignore(path: Path) -> bool:
 def write_archive(source: Path, archive: Path) -> None:
     archive.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(source.rglob("*")):
-            if path.is_dir():
-                continue
+        for path in iter_archive_files(source):
             arcname = Path(source.name) / path.relative_to(source)
             zf.write(path, arcname.as_posix())
+
+
+def iter_archive_files(source: Path) -> list[Path]:
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+
+    def add_files(root: Path) -> None:
+        if root.is_file():
+            files = [root]
+        elif root.is_dir():
+            files = sorted(path for path in root.rglob("*") if path.is_file())
+        else:
+            files = []
+        for path in files:
+            if path not in seen:
+                seen.add(path)
+                ordered.append(path)
+
+    for relative in PLUGIN_PATHS:
+        add_files(source / relative)
+    for relative in PLUGIN_SKILL_ENTRIES:
+        add_files(source / PLUGIN_SKILLS_DIR / relative)
+    for path in sorted(source.rglob("*")):
+        if path.is_file() and path not in seen:
+            seen.add(path)
+            ordered.append(path)
+    return ordered
 
 
 if __name__ == "__main__":
