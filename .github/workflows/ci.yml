@@ -56,6 +56,9 @@ jobs:
       - name: Run eval-input handoff tests
         run: make test-pytest-plugin
 
+      - name: Run Obstudio plugin hook tests
+        run: python3 -m unittest discover -s plugins/obstudio/hooks/tests -p 'test_*.py'
+
   observer-smoke:
     name: Observer smoke – ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
