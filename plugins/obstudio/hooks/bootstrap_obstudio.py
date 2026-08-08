@@ -21,10 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-RELEASE_BASE_URL = os.environ.get(
-    "OBSTUDIO_RELEASE_BASE_URL",
-    "https://github.com/signalfx/obstudio/releases/latest/download",
-)
+RELEASE_BASE_URL = "https://github.com/signalfx/obstudio/releases/latest/download"
 OBSTUDIO_HEALTH_URL = os.environ.get(
     "OBSTUDIO_HEALTH_URL",
     "http://127.0.0.1:3000/api/health",
