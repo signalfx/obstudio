@@ -1,0 +1,13 @@
+# Agent policy and merge-gate changes require maintainer review.
+AGENTS.md @tilakchowdary @btiwana21
+/CONTRIBUTING.md @tilakchowdary @btiwana21
+/Makefile @tilakchowdary @btiwana21
+/.github/CODEOWNERS @tilakchowdary @btiwana21
+/.github/copilot-instructions.md @tilakchowdary @btiwana21
+/.github/PULL_REQUEST_TEMPLATE.md @tilakchowdary @btiwana21
+/.github/workflows/ @tilakchowdary @btiwana21
+/evals/agent-guidelines/ @tilakchowdary @btiwana21
+/evals/Makefile @tilakchowdary @btiwana21
+/evals/test_agent_guideline_contracts.py @tilakchowdary @btiwana21
+/scripts/check_agent_policy.py @tilakchowdary @btiwana21
+/tests/test_agent_policy.py @tilakchowdary @btiwana21

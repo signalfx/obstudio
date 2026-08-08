@@ -64,7 +64,11 @@ npm test              # vscode-test
 ### CI
 
 GitHub Actions runs on every push to `main` and `feature/**` branches.
-PRs cannot be merged if tests are failing.
+The `Required CI` status aggregates every mandatory job. A repository
+maintainer must configure that exact status as required in the repository
+ruleset; until that settings change is made, it is visible on PRs but is not a
+hard merge gate. The PR that introduces or changes the aggregate check must
+call out this repository-settings follow-up explicitly.
 
 | Job | What it checks |
 |-----|---------------|
@@ -72,6 +76,8 @@ PRs cannot be merged if tests are failing.
 | interactive-otel-scripts | OTel report/selection tests and pytest eval-input handoff tests |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
+| agent-policy | Agent instruction routing, review IDs, skill parity, and command references |
+| Required CI | Aggregate result for all mandatory CI and policy checks |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -79,6 +85,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ```sh
 make test-all            # Go + observer client + extension + interactive OTel tests
+make agent-policy-check  # agent instruction and repository-policy contracts
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests
 ```
@@ -86,8 +93,11 @@ cd extension && npm test # VS Code-hosted extension tests
 ### Testing Policy
 
 - Every PR must include tests for new or changed functionality.
-- All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
-- Code coverage tools will be used to identify untested functionality. See `AGENTS.md` for how AI agents should incorporate coverage analysis.
+- All tests run in CI. Treat failures as merge-blocking even when the repository
+  ruleset does not yet enforce `Required CI`. Flaky tests are bugs -- fix them.
+- Use coverage output to identify untested changed behavior, not to satisfy an
+  arbitrary repository-wide percentage. See `AGENTS.md` for the coding-agent
+  completion and review rules.
 
 ## Skill Evals
 
@@ -116,6 +126,16 @@ Pre-merge human reviews are not required. If the author is satisfied with
 the PR and Copilot's review, they can merge. Post-merge reviews are
 encouraged for knowledge sharing -- comments should be addressed in a
 follow-up PR.
+
+Changes to `AGENTS.md`, nested agent instructions, `.github/copilot-instructions.md`,
+repository policy checks, or GitHub Actions workflows require pre-merge review
+from a repository maintainer. These controls define how automated changes are
+made and verified, so an agent must not approve a change that weakens the rules
+used to review that same change. `CODEOWNERS` requests this review, but a
+repository maintainer must also configure required code-owner review and at
+least one approval in the repository ruleset before it becomes a hard merge
+gate. The PR that introduces these controls must call out that settings
+follow-up together with the `Required CI` status requirement.
 
 For major design decisions, request a pre-merge human review. While
 waiting, switch to a different task.

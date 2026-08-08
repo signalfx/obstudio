@@ -15,7 +15,7 @@ PYTEST_PLUGIN_DIR := pytest-codex-evals
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -73,6 +73,12 @@ test-interactive-otel-scripts: ## Run interactive OTel report and selection unit
 	$(PYTHON) -m unittest discover -s skills/otel-instrument/tests -p 'test_*.py'
 	$(PYTHON) -m unittest discover -s skills/otel-verify/tests -p 'test_*.py'
 	$(MAKE) -C $(EVALS_DIR) test-interactive-guidance
+
+test-agent-policy: ## Run unit tests for the deterministic agent-policy checker
+	$(PYTHON) -m unittest discover -s tests -p 'test_agent_policy.py'
+
+agent-policy-check: test-agent-policy ## Validate agent instructions and repository-policy contracts
+	$(PYTHON) scripts/check_agent_policy.py
 
 test-all: ## Run all tests (Go + client + extension + interactive OTel scripts)
 	$(MAKE) test
