@@ -12,6 +12,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  agent-policy:
+    name: Agent policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate agent-policy contracts
+        run: make agent-policy-check
+
   observer:
     name: Observer – vet, build & test
     runs-on: ubuntu-latest
@@ -222,3 +235,28 @@ jobs:
       - name: Run tests
         working-directory: observer/client
         run: npx vitest run
+
+  required-ci:
+    name: Required CI
+    if: ${{ always() }}
+    needs:
+      - agent-policy
+      - observer
+      - interactive-otel-scripts
+      - observer-smoke
+      - extension
+      - extension-vsix
+      - extension-smoke
+      - client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm every mandatory job passed
+        env:
+          REQUIRED_RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $REQUIRED_RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "A mandatory CI job finished with result: $result"
+              exit 1
+            fi
+          done

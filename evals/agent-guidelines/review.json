@@ -1,0 +1,128 @@
+{
+  "id": "review-agent-guidelines",
+  "role": "review",
+  "policy_source": "AGENTS.md",
+  "judge_prompt": "Review the supplied diff summary as a repository reviewer. Report only actionable findings supported by the described changed lines, use the stable rule IDs, and accept safe counterexamples and unrelated clean changes without manufacturing findings. Return exactly one object matching output_schema.",
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "verdict",
+      "rule_ids",
+      "evidence",
+      "rationale"
+    ],
+    "properties": {
+      "verdict": {
+        "type": "string",
+        "enum": [
+          "acceptable",
+          "changes-required"
+        ]
+      },
+      "rule_ids": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": [
+            "OBS-SCOPE",
+            "OBS-TEST",
+            "OBS-SKILL",
+            "OBS-PRESERVE"
+          ]
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "rationale": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "rubric": [
+    {
+      "id": "OBS-SCOPE",
+      "criterion": "Flag changed lines that add an unrelated refactor or expand beyond the pull request's stated purpose."
+    },
+    {
+      "id": "OBS-TEST",
+      "criterion": "Flag a changed behavior that lacks proportionate tests or evidence, but do not demand code tests for a documentation-only edit."
+    },
+    {
+      "id": "OBS-SKILL",
+      "criterion": "Treat skills/ as canonical, .agents/skills as discovery links only, and require an eval update or an evidence-based explanation when skill behavior changes."
+    },
+    {
+      "id": "OBS-PRESERVE",
+      "criterion": "Flag changed lines that overwrite or revert unrelated user work."
+    }
+  ],
+  "cases": [
+    {
+      "id": "skill-behavior-without-eval",
+      "category": "violation",
+      "pull_request_goal": "Clarify the final response produced by otel-audit.",
+      "diff_summary": [
+        "skills/otel-audit/SKILL.md changes the required final response from one report link to a prose summary with findings.",
+        "No file under evals/ changes and the pull request gives no evidence that existing coverage exercises the new final-response behavior."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-SKILL",
+          "OBS-TEST"
+        ],
+        "evidence": [
+          "The canonical skill's observable final-response contract changes.",
+          "The diff contains neither an eval update nor a coverage explanation for that behavior change."
+        ],
+        "rationale": "The reviewer should identify the uncovered canonical skill behavior instead of approving a prose-only instruction change."
+      }
+    },
+    {
+      "id": "portable-discovery-link",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Expose an existing canonical skill to repo-local agent discovery.",
+      "diff_summary": [
+        "Adds .agents/skills/example as a relative symbolic link to ../../skills/example.",
+        "The target resolves inside this repository and no canonical skill content or behavior changes."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The new entry is a portable discovery link to the canonical skills/ source.",
+          "No skill behavior changed, so an additional behavior eval is not required by this diff."
+        ],
+        "rationale": "OBS-SKILL should protect the source boundary without falsely rejecting a valid discovery link."
+      }
+    },
+    {
+      "id": "documentation-only-clean-diff",
+      "category": "unrelated-clean",
+      "pull_request_goal": "Correct a command spelling in docs/usage.md.",
+      "diff_summary": [
+        "Changes only the misspelled command name in one documentation sentence.",
+        "No application, skill, test, generated artifact, or link target changes."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The described diff is limited to the requested documentation correction.",
+          "There is no changed behavior that needs a new test."
+        ],
+        "rationale": "A clean documentation correction should receive no policy finding."
+      }
+    }
+  ]
+}
