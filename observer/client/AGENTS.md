@@ -10,10 +10,14 @@ This file adds React client guidance to the applicable parent instructions.
   drop-downs must expose the supported option set and apply the chosen value.
   Cover keyboard and focus behavior for the affected workflow.
 - For material visual changes, inspect the rendered state at normal and narrow
-  widths and in each relevant theme. Follow existing design tokens and visual
-  hierarchy; avoid clipping, overflow, unreadably small text or controls, and
-  oversized layouts that crowd out the user's task. CSS/source-string tests do
-  not replace rendered visual evidence.
+  widths and in each relevant theme. Treat constrained embedded containers as
+  first-class layouts: use the documented smallest supported viewport or
+  record the narrowest tested width and height, exercise live resizing and
+  supported zoom or text scaling, and keep essential controls and state
+  feedback reachable. Follow existing design tokens and visual hierarchy;
+  avoid clipping, overlap, hidden actions, avoidable horizontal scrolling,
+  unreadably small text or controls, and oversized layouts that crowd out the
+  user's task. CSS/source-string tests do not replace rendered visual evidence.
 - Edit source under `src/` or `public/`, not generated Go static assets.
 
 For a narrow check, run the changed test file, for example

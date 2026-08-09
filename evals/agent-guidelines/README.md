@@ -7,8 +7,9 @@ Each role includes a seeded violation, a safe counterexample, and an unrelated
 clean change so a future grader must detect real violations without
 manufacturing findings. The matrix covers focused diffs and tests, mandatory
 skill rubric pairing and local-run evidence, functional/accessibility/visual UI
-proof, reusable-plugin compatibility and isolation, and per-target agent
-integration failure containment.
+proof in constrained IDE and embedded viewports, shared plugin-host UI
+compatibility and capability isolation, reusable-plugin compatibility and
+isolation, and per-target agent integration failure containment.
 
 `test_agent_guideline_contracts.py` deterministically verifies the policy
 headings, stable rule IDs, case balance, rubric coverage, and judge output

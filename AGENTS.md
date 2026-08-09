@@ -71,10 +71,23 @@ Before handing work back:
   markup. When the changed flow contains text fields, selects/drop-downs,
   actions, state transitions, or persisted values, prove those affected
   behaviors. Preserve accessible names and roles plus the applicable keyboard
-  and focus path. Visually inspect material visual changes at normal and narrow
-  widths and in relevant themes, using existing typography, spacing, and
-  control sizing so the result is legible, balanced, and neither oversized nor
-  cramped.
+  and focus path. Treat constrained IDE sidebars, panels, webviews, and other
+  embedded containers as first-class supported layouts. Exercise the flow at
+  the documented smallest supported viewport, or record the narrowest tested
+  width and height when no minimum is documented, at a normal size, and after
+  live resizing. Visually inspect material changes in relevant themes and at
+  supported zoom or text-scaling levels. Keep essential controls and state
+  feedback reachable, and avoid clipping, overlap, hidden actions, or
+  horizontal scrolling except for intrinsically wide data. Use existing
+  typography, spacing, and control sizing so the result is legible, balanced,
+  and neither oversized nor cramped.
+- For UI shared across plugin or editor hosts, keep common rendering and state
+  host-neutral and isolate host-specific APIs behind explicit capability
+  adapters. Prove the shared workflow in every materially distinct supported
+  host. For a host-specific change, prove the changed host and at least one
+  unchanged existing host. A missing or failing host capability must affect
+  only the dependent feature, present clear host-scoped feedback, and leave
+  unrelated plugins, integrations, and the core Observer usable.
 - For plugin or agent-integration changes, preserve existing public contracts
   and user-owned configuration. Prove the new or changed path alongside at
   least one existing path. When discovery, shared state, lifecycle, execution,
@@ -174,9 +187,13 @@ Flag UI changes when text fields cannot accept or edit valid values,
 select/drop-down controls omit or misapply supported options, actions or state
 transitions do not work, or affected loading, empty, and error states are
 unproven. Also flag lost semantic names/roles, keyboard or focus behavior,
-clipping, overflow, unreadable contrast, weak hierarchy, or layouts and control
-sizes that become oversized, undersized, or unusable at supported widths or
-themes. The safe path is focused role/name and interaction assertions plus
+unreadable contrast, weak hierarchy, or layouts and control sizes that become
+oversized, undersized, or unusable. Treat IDE sidebars, panels, webviews, and
+embedded containers as supported viewports: flag clipping, overlap, hidden
+actions, or avoidable horizontal scrolling at the smallest supported size or
+narrowest recorded test size, at normal size, after live resizing, in relevant
+themes, or at supported zoom and text-scaling levels. The safe path is focused
+role/name and interaction assertions plus recorded viewport dimensions and
 rendered screenshots or documented manual visual inspection for material
 visual changes. CSS/source-string assertions are supplemental, not visual
 proof.
@@ -187,9 +204,13 @@ Flag new or modified plugin support that changes existing plugin discovery,
 registration, CLI/config defaults, schemas, public imports, aliases, caches, or
 run state without compatibility proof, or lets one plugin's load or execution
 failure prevent unrelated plugins from running where the host supports
-independent continuation. The safe path is additive, isolated behavior with
-new-plus-existing compatibility proof; add failure-path tests when discovery,
-shared state, lifecycle, or execution changes. Breaking public contracts
+independent continuation. Also flag shared plugin-host UI that embeds
+host-specific APIs without capability adapters, is not validated in every
+materially distinct supported host, or lets a missing or failing host capability
+break unrelated UI or plugins. The safe path is additive, isolated, host-neutral
+behavior with new-plus-existing compatibility proof and a materially distinct
+host matrix; add failure-path tests when discovery, shared state, lifecycle,
+execution, shared UI, or host capabilities change. Breaking public contracts
 require explicit versioning, migration, and rollback guidance.
 
 ### OBS-INTEGRATION -- Isolate agent integrations and preserve host state

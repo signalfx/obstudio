@@ -176,7 +176,11 @@ interfaces, plugins, and integrations:
   representative local rubric run.
 - Treat user experience as functional behavior. Controls must support their
   intended input and options, remain accessible, communicate state honestly,
-  and render with clear hierarchy and balanced sizing.
+  and render with clear hierarchy and balanced sizing. Treat constrained IDE
+  sidebars, panels, webviews, live resizing, relevant themes, and supported
+  zoom or text scaling as normal operating conditions. Keep shared plugin-host
+  UI host-neutral, guard host-specific capabilities, and verify materially
+  distinct supported hosts without allowing one host failure to cascade.
 - Preserve compatibility and user-owned state. Keep optional components and
   integration targets isolated so one failure does not cascade into unrelated
   paths when independent continuation is supported.

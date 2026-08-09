@@ -8,6 +8,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_POLICY = REPO_ROOT / "AGENTS.md"
+OBSERVER_CLIENT_POLICY = REPO_ROOT / "observer" / "client" / "AGENTS.md"
+EXTENSION_POLICY = REPO_ROOT / "extension" / "AGENTS.md"
+PR_TEMPLATE = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 CASE_ROOT = REPO_ROOT / "evals" / "agent-guidelines"
 CASE_FILES = (CASE_ROOT / "coding.json", CASE_ROOT / "review.json")
@@ -154,8 +157,17 @@ def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
         "loading",
         "empty",
         "error",
-        "supported widths",
+        "ide sidebars",
+        "panels",
+        "webviews",
+        "smallest supported",
+        "narrowest recorded",
+        "live resizing",
         "themes",
+        "zoom",
+        "text-scaling",
+        "horizontal scrolling",
+        "viewport dimensions",
     ):
         assert marker in _squash(ui)
     _assert_any(ui, "semantic names/roles", "accessible names/roles")
@@ -173,6 +185,12 @@ def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
         "run state",
         "versioning",
         "migration",
+        "shared plugin-host ui",
+        "host-specific apis",
+        "capability adapters",
+        "not validated in every materially distinct supported host",
+        "host-neutral",
+        "host matrix",
     ):
         assert marker in _squash(plugin)
     _assert_any(plugin, "isolated", "isolation")
@@ -186,6 +204,41 @@ def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
     _assert_any(integration, "one automatic target failure", "later targets")
     _assert_any(integration, "core observer", "stop the core observer")
     _assert_any(integration, "middle integration fails", "mixed-target path")
+
+
+def test_constrained_ide_and_cross_host_ui_guidance_is_scoped_and_evidenced() -> None:
+    client = _squash(_read(OBSERVER_CLIENT_POLICY))
+    for marker in (
+        "constrained embedded containers",
+        "smallest supported viewport",
+        "narrowest tested width and height",
+        "live resizing",
+        "zoom or text scaling",
+        "horizontal scrolling",
+    ):
+        assert marker in client
+
+    extension = _squash(_read(EXTENSION_POLICY))
+    for marker in (
+        "constrained ide sidebars",
+        "visual studio code, cursor, and kiro",
+        "host-neutral",
+        "capability adapters",
+        "materially distinct supported host",
+        "one unchanged existing host",
+        "host-scoped feedback",
+    ):
+        assert marker in extension
+
+    template = _squash(_read(PR_TEMPLATE))
+    for marker in (
+        "smallest supported or narrowest tested ide/container dimensions",
+        "normal and live-resize behavior",
+        "theme/zoom or text-scaling visual evidence",
+        "shared ui host compatibility evidence",
+        "host apis changed",
+    ):
+        assert marker in template
 
 
 def test_agent_guideline_case_matrix_is_balanced_and_schema_constrained() -> None:
@@ -287,23 +340,99 @@ def test_review_cases_cover_ui_plugin_and_integration_both_ways() -> None:
     definition = _load(CASE_ROOT / "review.json")
     cases = definition["cases"]
     cases_by_id = {case["id"]: case for case in cases}
+    rubrics_by_id = {
+        item["id"]: _squash(item["criterion"])
+        for item in definition["rubric"]
+    }
     safe_case_ids = {
         "OBS-UI": "ui-control-and-layout-with-complete-proof",
         "OBS-PLUGIN": "plugin-change-isolated-and-compatible",
         "OBS-INTEGRATION": "automatic-agent-integration-isolates-middle-failure",
     }
+    expected_violation_ids = {
+        "OBS-UI": {
+            "ui-control-and-layout-without-proof",
+            "shared-ide-ui-breaks-in-constrained-host",
+        },
+        "OBS-PLUGIN": {
+            "plugin-change-breaks-existing-contracts",
+            "shared-ide-ui-breaks-in-constrained-host",
+        },
+        "OBS-INTEGRATION": {
+            "automatic-agent-integration-stops-on-middle-failure",
+        },
+    }
 
     for rule_id in ("OBS-UI", "OBS-PLUGIN", "OBS-INTEGRATION"):
-        violations = [
-            case
+        violation_ids = {
+            case["id"]
             for case in cases
             if case["category"] == "violation"
             and rule_id in case["expected"]["rule_ids"]
-        ]
+        }
         safe_case = cases_by_id[safe_case_ids[rule_id]]
-        assert len(violations) == 1
+        assert violation_ids == expected_violation_ids[rule_id]
         assert safe_case["category"] == "safe-counterexample"
         assert safe_case["expected"]["verdict"] == "acceptable"
+
+    for marker in (
+        "legible contrast",
+        "clear hierarchy",
+        "balanced layout and control sizing",
+        "neither oversized nor undersized",
+        "rendered screenshots",
+        "documented manual inspection",
+        "css or source-string assertions alone are insufficient",
+    ):
+        assert marker in rubrics_by_id["OBS-UI"]
+
+    existing_ui_safe = _squash(
+        json.dumps(cases_by_id["ui-control-and-layout-with-complete-proof"])
+    )
+    for marker in (
+        "320-by-480",
+        "live resizing",
+        "zoom/text scaling",
+        "rendered screenshots",
+        "documented manual inspection",
+        "clear hierarchy",
+        "balanced control sizing",
+    ):
+        assert marker in existing_ui_safe
+
+    shared_violation = cases_by_id["shared-ide-ui-breaks-in-constrained-host"]
+    shared_safe = cases_by_id["shared-ide-ui-is-responsive-and-host-safe"]
+    assert set(shared_violation["expected"]["rule_ids"]) == {
+        "OBS-UI",
+        "OBS-PLUGIN",
+    }
+    assert shared_safe["category"] == "safe-counterexample"
+    assert shared_safe["expected"]["verdict"] == "acceptable"
+
+    violation_text = _squash(json.dumps(shared_violation))
+    safe_text = _squash(json.dumps(shared_safe))
+    for marker in (
+        "280-by-360",
+        "horizontal scrolling",
+        "live-resize",
+        "capability adapter",
+        "visual studio code and cursor",
+        "omits kiro entirely",
+        "every materially distinct supported host",
+        "cursor",
+        "kiro",
+    ):
+        assert marker in violation_text
+    for marker in (
+        "280-by-360",
+        "host-neutral",
+        "capability adapters",
+        "live resizing",
+        "zoom/text scaling",
+        "materially distinct",
+        "core observer",
+    ):
+        assert marker in safe_text
 
 
 def main() -> int:
@@ -311,6 +440,7 @@ def main() -> int:
         test_agent_policy_exposes_coding_and_review_contracts,
         test_agent_policy_ci_uses_the_complete_feature_branch_diff,
         test_code_review_rules_have_stable_ids_and_semantic_markers,
+        test_constrained_ide_and_cross_host_ui_guidance_is_scoped_and_evidenced,
         test_agent_guideline_case_matrix_is_balanced_and_schema_constrained,
         test_agent_guideline_rubrics_use_only_documented_rules,
         test_skill_change_cases_require_matching_rubric_eval_and_exact_run,

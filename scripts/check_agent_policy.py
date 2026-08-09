@@ -98,10 +98,12 @@ PR_TEMPLATE_REQUIRED_FIELDS = {
         "Skill eval file(s), when shipped skill content changed:",
         "Local rubric command and result for each added or modified skill; for a "
         "complete retirement, record agent-policy and eval-harness cleanup results:",
-        "Affected UI interaction/accessibility evidence; normal+narrow/theme visual "
-        "evidence for material visual changes:",
-        "Plugin/integration compatibility evidence; isolated-failure evidence when "
-        "discovery, shared state, lifecycle, execution, or orchestration changed:",
+        "Affected UI interaction/accessibility evidence; smallest supported or "
+        "narrowest tested IDE/container dimensions, normal and live-resize behavior, "
+        "and relevant theme/zoom or text-scaling visual evidence:",
+        "Plugin/integration and shared UI host compatibility evidence; capability "
+        "and isolated-failure evidence when discovery, shared state, lifecycle, "
+        "execution, orchestration, or host APIs changed:",
         "Checks skipped and why:",
     ),
     "Risk and review": ("Residual risks or unverified assumptions:",),
