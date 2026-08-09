@@ -62,7 +62,7 @@
     },
     {
       "id": "OBS-SKILL",
-      "criterion": "Treat skills/ as canonical and .agents/skills as discovery links only; every addition or modification to shipped skill content requires a semantically changed matching eval/qual or eval/rubric definition and a recorded exact local make eval-rubric command and result."
+      "criterion": "Treat skills/ as canonical and .agents/skills as discovery links only; every addition or modification to shipped skill content requires a semantically changed matching eval/qual or eval/rubric definition and a recorded exact local make eval-rubric command and result. Effective-equivalent formatting, relocation, prompt ordering, or identity/default metadata does not count. A complete retirement instead removes all canonical, discovery, table, eval, tracked-report, retired-skill consumer-list, and compatibility surfaces and validates cleanup without requiring a rubric run for the absent skill."
     },
     {
       "id": "OBS-PRESERVE",

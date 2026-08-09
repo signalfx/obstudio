@@ -48,9 +48,25 @@ Before handing work back:
   exact command and result. Validation-only collection is required too, but it
   does not replace a rubric run. Shipped content means a skill's `SKILL.md`,
   references, scripts, and assets; test-only changes are not skill behavior.
+  Effectively equivalent rubric edits do not satisfy this requirement. This
+  includes formatting or key-order changes, same-case relocation, prompt
+  reordering, identity-only ID changes, language/service-only metadata changes,
+  and omitted-versus-empty input defaults. For a complete skill retirement, remove
+  all tracked and non-ignored canonical content, the discovery link, Available
+  Skills row, matching eval definitions, and tracked
+  `eval-reports/<skill>/` artifacts;
+  remove the retired skill from every shared-reference consumer list, deleting
+  a map key only when its shared reference is also removed; and update related
+  aliases or documentation. Run `make agent-policy-check` and
+  `make test-eval-harness`; a local rubric run is not required for a skill that
+  no longer exists. Deleting shipped content from a retained skill remains a
+  modification and still needs semantic rubric coverage and a local rubric run.
+  Ignored local caches are outside the repository contract and need not be
+  deleted.
   For shared `skills/references/` changes, identify every affected skill and
   keep `skills/references/consumers.json` aligned, then update and run a
-  relevant rubric eval for every declared consumer.
+  relevant rubric eval for every retained declared consumer. A consumer retired
+  in the same diff follows the complete-retirement cleanup exception instead.
 - For UI changes, exercise the affected workflow rather than only rendering
   markup. When the changed flow contains text fields, selects/drop-downs,
   actions, state transitions, or persisted values, prove those affected
@@ -122,8 +138,19 @@ the narrowest matching rubric eval, run
 `make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`, and report the
 exact result. `eval-validation` alone is not rubric proof. Every shipped shared
 reference must appear in `skills/references/consumers.json`; a shared-reference
-change requires a changed matching rubric for every current or prior declared
-consumer.
+change requires a changed matching rubric for every retained current or prior
+declared consumer; a concurrently retired consumer follows the complete-skill
+cleanup exception. Formatting, key ordering, same-case relocation, prompt
+reordering, identity-only IDs, language/service-only metadata changes, and empty
+default fields are effectively equivalent for coverage rather than semantic eval
+updates. A complete skill
+retirement instead removes all tracked and non-ignored canonical content,
+discovery/table entries, matching eval definitions, tracked eval reports, the
+retired skill's consumer-list memberships, and related compatibility surfaces,
+then proves the cleanup with agent-policy and eval-harness validation; delete a
+consumer-map key only when its shared reference is also removed, and do not
+require an impossible rubric run for the removed skill. A deletion inside a
+retained skill still follows the normal rubric-update and local-run rule.
 
 ### OBS-PRESERVE -- Preserve compatibility and user work
 
@@ -215,6 +242,14 @@ Outputs:
 - For every addition or modification to shipped skill content, add or
   semantically update a matching rubric eval and run the representative local
   `make eval-rubric SKILL=skills/<name> CASE=<language>/<service>` command.
+  Effective-equivalent formatting, relocation, identity/default metadata, or
+  prompt ordering is not a semantic update. A complete retirement instead
+  removes all tracked and non-ignored skill content, discovery/table entries,
+  matching eval definitions, tracked eval reports, the retired skill's
+  consumer-list memberships, and related compatibility surfaces, then runs
+  agent-policy and eval-harness validation. Delete a consumer-map key only when
+  its shared reference is also removed; no local rubric run is needed for the
+  absent skill.
 - Keep `skills/references/consumers.json` exact when shared behavior is added,
   removed, renamed, or consumed by another skill.
 - Run `make eval-validation SKILL=skills/<name>` as the deterministic schema and

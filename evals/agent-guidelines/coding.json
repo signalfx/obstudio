@@ -62,7 +62,7 @@
     },
     {
       "id": "OBS-SKILL",
-      "criterion": "Every addition or modification to shipped skill content semantically updates a matching eval/qual or eval/rubric definition for the same skill, runs the exact representative make eval-rubric SKILL=skills/<name> CASE=<language>/<service> command, and reports its result; eval-validation alone is not rubric proof."
+      "criterion": "Every addition or modification to shipped skill content semantically updates a matching eval/qual or eval/rubric definition for the same skill, runs the exact representative make eval-rubric SKILL=skills/<name> CASE=<language>/<service> command, and reports its result; effective-equivalent formatting, relocation, prompt ordering, identity/default metadata, and eval-validation alone are not rubric proof. A complete retirement instead removes all canonical, discovery, table, eval, tracked-report, retired-skill consumer-list, and compatibility surfaces and validates cleanup without requiring a rubric run for the absent skill."
     },
     {
       "id": "OBS-PRESERVE",
@@ -157,6 +157,49 @@
           "Validation supplements rather than replaces the rubric run."
         ],
         "rationale": "The shipped skill change carries both matching judgment coverage and the required local rubric proof."
+      }
+    },
+    {
+      "id": "skill-change-with-effective-equivalent-rubric",
+      "category": "violation",
+      "task": "Change the final-response contract in skills/otel-audit/SKILL.md.",
+      "observed_agent_actions": [
+        "Changed the canonical otel-audit final-response behavior.",
+        "Reformatted and reordered keys and prompts in evals/go/chi-basic/eval/qual/audit.json, changed only top-level and prompt IDs and language/service identity labels, added empty input defaults, and left every task and rubric criterion unchanged.",
+        "Ran the unchanged rubric case and reported its prior expectations as proof of the new behavior."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-SKILL"
+        ],
+        "evidence": [
+          "The matching rubric file is effective-equivalent to its merge-base definition after identity and default metadata normalization.",
+          "Formatting, ordering, IDs, path labels, and empty defaults do not add judgment coverage for the changed response contract.",
+          "Running unchanged expectations does not prove the new observable behavior."
+        ],
+        "rationale": "A skill behavior change needs a semantic matching rubric update; an effective-equivalent edit cannot satisfy that requirement."
+      }
+    },
+    {
+      "id": "complete-skill-retirement-with-cleanup",
+      "category": "safe-counterexample",
+      "task": "Retire the obsolete example-legacy skill after consumers migrate to its supported replacement.",
+      "observed_agent_actions": [
+        "Removed the complete skills/example-legacy directory, its relative discovery link, Available Skills row, and compatibility aliases and documentation.",
+        "Deleted or migrated every eval definition and tracked eval report for example-legacy, and removed only example-legacy from shared-reference consumer lists.",
+        "Documented the supported replacement and rollback path, then ran make agent-policy-check and make test-eval-harness successfully.",
+        "Reported the local rubric command as not applicable because the retired skill no longer exists."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The retirement removes canonical, discovery, table, eval, tracked-report, retired-skill consumer-list, documentation, and compatibility remnants.",
+          "The replacement and rollback path preserve consumers.",
+          "Agent-policy and full eval-harness validation prove cleanup without inventing an impossible rubric run for an absent skill."
+        ],
+        "rationale": "A complete validated retirement is distinct from deleting behavior inside a retained skill and does not require a runnable rubric for the removed skill."
       }
     },
     {

@@ -14,7 +14,15 @@ This file adds eval-harness and fixture guidance to the repository-root
   its top-level `skill` field and exercise the changed observable behavior. Run
   its exact `make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`
   command locally and report the result; validation-only collection is not a
-  semantic substitute.
+  semantic substitute. Effective-equivalent formatting, key/order or prompt
+  reordering, same-case relocation, identity-only IDs, language/service-only
+  metadata changes, or empty input defaults are not semantic coverage updates.
+- When a skill is completely retired, delete or migrate every eval definition
+  that names it and remove its tracked `eval-reports/<skill>/` artifacts or
+  relocate them outside that canonical per-skill path, then run the full
+  eval-harness validation. Do not require a local rubric run for the absent
+  skill; deleting content from a retained skill still requires the normal
+  semantic rubric update and run.
 - Treat `.workspace/codex-evals/` as generated run output. Update tracked latest
   reports only through the corresponding report target.
 

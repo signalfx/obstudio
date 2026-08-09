@@ -93,8 +93,10 @@ cd extension && npm test # VS Code-hosted extension tests
 ### Testing Policy
 
 - Every PR must include tests for new or changed functionality.
-- All tests run in CI. Treat failures as merge-blocking even when the repository
-  ruleset does not yet enforce `Required CI`. Flaky tests are bugs -- fix them.
+- Deterministic and required suites wired into the workflows run in CI. Treat
+  failures as merge-blocking even when the repository ruleset does not yet
+  enforce `Required CI`. Model-backed rubric runs remain locally attested until
+  credentials-backed rubric CI is enabled. Flaky tests are bugs -- fix them.
 - Use coverage output to identify untested changed behavior, not to satisfy an
   arbitrary repository-wide percentage. See `AGENTS.md` for the coding-agent
   completion and review rules.
@@ -113,7 +115,20 @@ semantically update a matching rubric eval, run
 exact commands and results in the pull request. Validation-only collection is
 not a substitute for the local rubric result. Shared `skills/references/`
 changes must keep `skills/references/consumers.json` aligned and repeat the eval
-update and rubric run for every declared affected skill.
+update and rubric run for every retained declared affected skill; a consumer
+retired in the same diff follows the complete-retirement cleanup exception.
+Effective-equivalent formatting, key ordering, same-case relocation, prompt
+ordering, identity-only IDs, language/service-only metadata changes, or empty
+input defaults do not count as a semantic rubric coverage update. A complete
+skill retirement instead removes all tracked and non-ignored canonical content,
+discovery/table entries, matching eval
+definitions, tracked eval reports, the retired skill's consumer-list
+memberships, and related compatibility surfaces. Ignored local caches are
+outside the repository contract. Delete a consumer-map key only when its shared
+reference is also removed; run `make agent-policy-check` and
+`make test-eval-harness`, but do not run a rubric for a skill that no longer
+exists. Deleting shipped content from a retained skill still requires the normal
+semantic rubric update and local run.
 
 The reusable pytest plugin is built and published alongside this repository:
 

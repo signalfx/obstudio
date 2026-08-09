@@ -123,6 +123,8 @@ def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
     _assert_any(skill, "make eval-rubric")
     _assert_any(skill, "exact result", "command and result")
     _assert_any(skill, "`eval-validation` alone", "validation alone")
+    _assert_any(skill, "effectively equivalent", "effective-equivalent")
+    _assert_any(skill, "complete skill retirement")
 
     ui = _rule_section(policy, "OBS-UI")
     for marker in (
@@ -217,6 +219,8 @@ def test_skill_change_cases_require_matching_rubric_eval_and_exact_run() -> None
     cases = {case["id"]: case for case in definition["cases"]}
     violation = cases["skill-change-without-matching-rubric-run"]
     safe = cases["skill-change-with-matching-rubric-run"]
+    formatting_only = cases["skill-change-with-effective-equivalent-rubric"]
+    retirement = cases["complete-skill-retirement-with-cleanup"]
 
     violation_text = _squash(json.dumps(violation))
     safe_text = _squash(json.dumps(safe))
@@ -231,6 +235,33 @@ def test_skill_change_cases_require_matching_rubric_eval_and_exact_run() -> None
         "make eval-rubric skill=skills/otel-audit case=go/chi-basic" in safe_text
     )
     assert safe["expected"]["verdict"] == "acceptable"
+
+    formatting_text = _squash(json.dumps(formatting_only))
+    assert "effective-equivalent" in formatting_text
+    for marker in (
+        "formatting",
+        "ordering",
+        "top-level and prompt ids",
+        "language/service identity labels",
+        "empty input defaults",
+    ):
+        assert marker in formatting_text
+    assert formatting_only["expected"]["rule_ids"] == ["OBS-SKILL"]
+
+    retirement_text = _squash(json.dumps(retirement))
+    for marker in (
+        "canonical",
+        "discovery",
+        "available skills row",
+        "eval definition",
+        "tracked eval report",
+        "consumer",
+        "make agent-policy-check",
+        "make test-eval-harness",
+        "not applicable",
+    ):
+        assert marker in retirement_text
+    assert retirement["expected"]["verdict"] == "acceptable"
 
 
 def test_review_cases_cover_ui_plugin_and_integration_both_ways() -> None:

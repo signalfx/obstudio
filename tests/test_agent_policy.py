@@ -218,6 +218,164 @@ make -C evals --directory=. verify
         )
         self.assertTrue(any("shipped skill content changed" in error for error in errors))
 
+    def test_effective_equivalent_rubric_changes_do_not_satisfy_pairing(self) -> None:
+        rubric_path = Path("evals/go/example/eval/qual/audit.json")
+        renamed_rubric_path = rubric_path.with_name("renamed.json")
+        self._write(
+            rubric_path.as_posix(),
+            '{"skill":"example","prompts":'
+            '[{"id":"first","task":"First task.","eval_inputs":'
+            '["eval/inputs/b.txt","eval/inputs/a.txt"]},'
+            '{"id":"second","task":"Second task."}],"rubric":["old"]}\n',
+        )
+        self._init_git()
+
+        self._write(
+            "skills/example/SKILL.md",
+            "---\nname: example\n---\nChanged behavior.\n",
+        )
+        self._write(
+            rubric_path.as_posix(),
+            '{\n  "judge_inputs": [],\n  "language": "metadata-only",\n'
+            '  "prompts": ['
+            '{"task": "Second task.", "id": "renamed-second", "eval_inputs": []}, '
+            '{"task": "First task.", "id": "renamed-first", "eval_inputs": '
+            '["eval/inputs/a.txt", "eval/inputs/b.txt"]}],\n'
+            '  "rubric": ["old"],\n  "service": "metadata-only",\n'
+            '  "skill": "example",\n'
+            '  "id": "go/example/qual/audit"\n}\n',
+        )
+        errors = check_repository(self.root, "main")
+        self.assertTrue(
+            any("effectively equivalent to the base tree" in error for error in errors)
+        )
+
+        (self.root / rubric_path).rename(self.root / renamed_rubric_path)
+        errors = check_repository(self.root, "main")
+        self.assertTrue(
+            any("effectively equivalent to the base tree" in error for error in errors)
+        )
+
+        self._write(
+            renamed_rubric_path.as_posix(),
+            '{"skill":"example","prompts":'
+            '[{"id":"renamed-first","task":"First task.","eval_inputs":'
+            '["eval/inputs/a.txt","eval/inputs/b.txt"]},'
+            '{"id":"renamed-second","task":"Second task."}],"rubric":["new"]}\n',
+        )
+        self.assertEqual(check_repository(self.root, "main"), [])
+
+    def test_complete_skill_removal_cleans_up_evals_without_a_rubric_run(self) -> None:
+        self._write(".gitignore", "__pycache__/\n")
+        self._write("skills/second/SKILL.md", "---\nname: second\n---\n")
+        (self.root / ".agents/skills/second").symlink_to("../../skills/second")
+        agents = self.root.joinpath("AGENTS.md").read_text(encoding="utf-8")
+        self._write(
+            "AGENTS.md",
+            agents.replace(
+                "| `$example` | Example |",
+                "| `$example` | Example |\n| `$second` | Second |",
+            ),
+        )
+        rubric_path = Path("evals/go/example/eval/qual/audit.json")
+        self._write(rubric_path.as_posix(), '{"skill":"example"}\n')
+        self._init_git()
+
+        (self.root / "skills/example/SKILL.md").unlink()
+        (self.root / ".agents/skills/example").unlink()
+        (self.root / rubric_path).unlink()
+        self._write("skills/example/__pycache__/local.pyc", "ignored cache\n")
+        agents = self.root.joinpath("AGENTS.md").read_text(encoding="utf-8")
+        self._write("AGENTS.md", agents.replace("| `$example` | Example |\n", ""))
+
+        self.assertEqual(check_repository(self.root, "main"), [])
+
+    def test_complete_skill_removal_rejects_leftover_content_and_evals(self) -> None:
+        self._write("skills/example/references/contract.md", "# Contract\n")
+        rubric_path = Path("evals/go/example/eval/sanity/audit.json")
+        self._write(rubric_path.as_posix(), '{"skill":"example"}\n')
+        self._write("eval-reports/example/rubric/report.md", "# Prior result\n")
+        (self.root / "skills/example/SKILL.md").unlink()
+
+        errors: list[str] = []
+        _check_skill_eval_diff(
+            self.root,
+            [("D", Path("skills/example/SKILL.md"))],
+            errors,
+        )
+
+        self.assertTrue(
+            any("leaves repository-visible canonical files" in error for error in errors)
+        )
+        self.assertTrue(any("leaves eval definitions" in error for error in errors))
+        self.assertTrue(any("leaves tracked latest eval reports" in error for error in errors))
+
+    def test_complete_skill_removal_rejects_a_root_path_replacement(self) -> None:
+        skill_file = self.root / "skills/example/SKILL.md"
+        skill_file.unlink()
+        skill_file.parent.rmdir()
+        self._write("skills/example", "not a skill directory\n")
+
+        errors: list[str] = []
+        _check_skill_eval_diff(
+            self.root,
+            [("D", Path("skills/example/SKILL.md"))],
+            errors,
+        )
+
+        self.assertTrue(
+            any("leaves repository-visible canonical files" in error for error in errors)
+        )
+
+    def test_skill_rename_requires_a_rubric_for_the_new_name(self) -> None:
+        (self.root / "skills/example/SKILL.md").unlink()
+        self._write("skills/renamed/SKILL.md", "---\nname: renamed\n---\n")
+        changes = [
+            ("D", Path("skills/example/SKILL.md")),
+            ("A", Path("skills/renamed/SKILL.md")),
+        ]
+        errors: list[str] = []
+        _check_skill_eval_diff(self.root, changes, errors)
+
+        self.assertFalse(any("skills/example/" in error for error in errors))
+        self.assertTrue(any("skills/renamed/" in error for error in errors))
+
+        rubric_path = Path("evals/go/example/eval/qual/renamed.json")
+        self._write(rubric_path.as_posix(), '{"skill":"renamed"}\n')
+        errors = []
+        _check_skill_eval_diff(
+            self.root,
+            [*changes, ("A", rubric_path)],
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+    def test_removed_prior_shared_reference_consumer_is_exempt(self) -> None:
+        (self.root / "skills/example/SKILL.md").unlink()
+        changes = [
+            ("D", Path("skills/example/SKILL.md")),
+            ("D", Path("skills/references/shared.md")),
+        ]
+        errors: list[str] = []
+        _check_skill_eval_diff(
+            self.root,
+            changes,
+            errors,
+            shared_consumers={},
+            base_shared_consumers={"shared.md": {"example"}},
+        )
+        self.assertEqual(errors, [])
+
+        errors = []
+        _check_skill_eval_diff(
+            self.root,
+            changes,
+            errors,
+            shared_consumers={},
+            base_shared_consumers={"shared.md": {"example", "retained"}},
+        )
+        self.assertTrue(any("affected skill 'retained'" in error for error in errors))
+
     def test_nested_rubric_file_does_not_satisfy_skill_pairing(self) -> None:
         skill_change = ("M", Path("skills/example/SKILL.md"))
         rubric_path = Path("evals/go/example/eval/qual/ignored/audit.json")
@@ -455,6 +613,22 @@ make -C evals --directory=. verify
         path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+    def _init_git(self) -> None:
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", *args],
+                cwd=self.root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        git("init", "-b", "main")
+        git("config", "user.name", "Agent Policy Test")
+        git("config", "user.email", "agent-policy@example.invalid")
+        git("add", ".")
+        git("commit", "-m", "baseline")
 
 
 if __name__ == "__main__":

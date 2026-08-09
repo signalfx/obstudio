@@ -24,11 +24,27 @@ a follow-up.
 
 Separately, `scripts/check_agent_policy.py --base-ref <ref>` performs a
 deterministic diff check: changed content under a named skill must be paired
-with a changed rubric JSON whose top-level `skill` matches. A shared
+with a changed rubric JSON whose top-level `skill` matches and whose parsed
+effective definition differs from every rubric in the same fixture case at the
+merge base. Effective comparison ignores top-level and prompt IDs, uses the
+physical path to decide whether language/service-only metadata adds coverage,
+normalizes omitted and empty input defaults, and ignores prompt and eval-input
+ordering. The eval loader still preserves explicit language/service values for
+case identity and reporting; the policy check only determines whether an edit
+adds behavior coverage. A shared
 `skills/references/` change is mapped through
 `skills/references/consumers.json` and requires a changed matching rubric for
-every current or prior declared consumer. This proves repository pairing and
-schema alignment, not that the local model-backed rubric command actually ran.
+every retained current or prior declared consumer; a concurrently retired
+consumer follows the complete-retirement cleanup exception. A complete skill
+retirement instead requires removal or migration of its tracked and non-ignored
+canonical content, eval definitions, and tracked latest eval reports; ignored
+local caches are outside the repository contract. Consumer mappings must remove
+only the retired skill's memberships unless the shared reference itself is also
+removed. The checker does not require a rubric run for a skill that no longer
+exists.
+This proves repository pairing and schema alignment, not that the rubric change
+exercises the right behavior or that the local model-backed rubric command
+actually ran.
 Until a credentials-backed live rubric CI job is enabled, the exact command and
 result recorded in the pull request remain an explicit author attestation
 reviewed under `OBS-SKILL`.

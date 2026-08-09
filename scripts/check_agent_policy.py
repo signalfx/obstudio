@@ -37,6 +37,7 @@ ROUTED_AGENT_GUIDES = (
     "pytest-codex-evals/AGENTS.md",
 )
 RUBRIC_DIRECTORY_NAMES = {"qual", "rubric"}
+EVAL_DEFINITION_DIRECTORY_NAMES = RUBRIC_DIRECTORY_NAMES | {"runtime", "sanity"}
 SHARED_CONSUMER_MAP = Path("skills/references/consumers.json")
 
 MAKE_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*[?+:!]?=")
@@ -545,22 +546,181 @@ def _check_shared_reference_consumers(
     return mapping
 
 
+def _eval_definition_case(
+    path: Path, directory_names: set[str]
+) -> str | None:
+    parts = path.parts
+    if (
+        len(parts) != 6
+        or path.suffix != ".json"
+        or parts[0] != "evals"
+        or parts[3] != "eval"
+        or parts[4] not in directory_names
+    ):
+        return None
+    return f"{parts[1]}/{parts[2]}"
+
+
+def _json_equivalent(left: object, right: object) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return left == right
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        if not isinstance(right, dict):
+            return False
+        return left.keys() == right.keys() and all(
+            _json_equivalent(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        if not isinstance(right, list):
+            return False
+        return len(left) == len(right) and all(
+            _json_equivalent(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    return left == right
+
+
+def _json_sort_key(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _effective_rubric_definition(
+    definition: object, path: Path, path_case: str
+) -> tuple[object, str]:
+    if not isinstance(definition, dict):
+        return definition, path_case
+
+    normalized = dict(definition)
+    normalized.pop("id", None)
+    normalized["language"] = path.parts[1]
+    normalized["service"] = path.parts[2]
+    normalized.setdefault("judge_prompt", None)
+    if not normalized.get("judge_inputs"):
+        normalized["judge_inputs"] = []
+
+    prompts = normalized.get("prompts")
+    if isinstance(prompts, list):
+        normalized_prompts: list[object] = []
+        for prompt in prompts:
+            if not isinstance(prompt, dict):
+                normalized_prompts.append(prompt)
+                continue
+            normalized_prompt = dict(prompt)
+            normalized_prompt.pop("id", None)
+            if not normalized_prompt.get("eval_inputs"):
+                normalized_prompt["eval_inputs"] = []
+            elif isinstance(normalized_prompt["eval_inputs"], list):
+                normalized_prompt["eval_inputs"] = sorted(
+                    normalized_prompt["eval_inputs"],
+                    key=_json_sort_key,
+                )
+            normalized_prompts.append(normalized_prompt)
+        normalized["prompts"] = sorted(
+            normalized_prompts,
+            key=_json_sort_key,
+        )
+
+    return normalized, path_case
+
+
+def _git_tree_paths(
+    root: Path, tree: str, prefix: Path, errors: list[str]
+) -> list[Path] | None:
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                tree,
+                "--",
+                prefix.as_posix(),
+            ],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"cannot inspect {prefix} at base tree {tree}: {exc}")
+        return None
+    if completed.returncode != 0:
+        detail = (
+            completed.stderr.decode("utf-8", "replace").strip()
+            or completed.stdout.decode("utf-8", "replace").strip()
+            or "git ls-tree failed"
+        )
+        errors.append(f"cannot inspect {prefix} at base tree {tree}: {detail}")
+        return None
+    if completed.stdout and not completed.stdout.endswith(b"\0"):
+        errors.append(
+            f"cannot inspect {prefix} at base tree {tree}: missing NUL terminator"
+        )
+        return None
+
+    paths: list[Path] = []
+    for raw_path in completed.stdout.rstrip(b"\0").split(b"\0"):
+        if not raw_path:
+            continue
+        path = _repo_path(os.fsdecode(raw_path), errors)
+        if path is not None:
+            paths.append(path)
+    return paths
+
+
+def _base_rubric_definitions(
+    root: Path, base_tree: str, errors: list[str]
+) -> dict[str, list[object]] | None:
+    paths = _git_tree_paths(root, base_tree, Path("evals"), errors)
+    if paths is None:
+        return None
+
+    definitions: dict[str, list[object]] = {}
+    for path in paths:
+        path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)
+        if path_case is None:
+            continue
+        text = _git_file_text(root, base_tree, path)
+        if text is None:
+            errors.append(f"cannot read {path} at base tree {base_tree}")
+            return None
+        try:
+            definition = json.loads(text)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path} at base tree {base_tree}: invalid JSON: {exc}")
+            return None
+        definition, case = _effective_rubric_definition(
+            definition, path, path_case
+        )
+        definitions.setdefault(case, []).append(definition)
+    return definitions
+
+
 def _changed_rubric_evals(
     root: Path,
     changes: list[tuple[str, Path]],
     errors: list[str],
     base_tree: str | None = None,
-) -> dict[str, list[tuple[Path, str]]]:
+) -> tuple[
+    dict[str, list[tuple[Path, str]]],
+    dict[str, list[tuple[Path, str]]],
+]:
     by_skill: dict[str, list[tuple[Path, str]]] = {}
+    candidates: list[tuple[Path, str, str, object]] = []
     for status, path in changes:
-        parts = path.parts
-        if len(parts) != 6 or path.suffix != ".json":
-            continue
-        if not (
-            parts[0] == "evals"
-            and parts[3] == "eval"
-            and parts[4] in RUBRIC_DIRECTORY_NAMES
-        ):
+        path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)
+        if path_case is None:
             continue
         if status.startswith("D"):
             continue
@@ -574,9 +734,142 @@ def _changed_rubric_evals(
         if not isinstance(skill, str) or not skill.strip():
             errors.append(f"{path}: changed rubric eval must have a non-empty top-level skill")
             continue
-        case = f"{parts[1]}/{parts[2]}"
+        definition, case = _effective_rubric_definition(
+            definition, path, path_case
+        )
+        candidates.append((path, case, skill, definition))
+
+    base_definitions: dict[str, list[object]] = {}
+    if candidates and base_tree is not None:
+        loaded = _base_rubric_definitions(root, base_tree, errors)
+        if loaded is None:
+            return {}, {}
+        base_definitions = loaded
+
+    unchanged_by_skill: dict[str, list[tuple[Path, str]]] = {}
+    for path, case, skill, definition in candidates:
+        if base_tree is not None and any(
+            _json_equivalent(definition, base_definition)
+            for base_definition in base_definitions.get(case, [])
+        ):
+            unchanged_by_skill.setdefault(skill, []).append((path, case))
+            continue
         by_skill.setdefault(skill, []).append((path, case))
+    return by_skill, unchanged_by_skill
+
+
+def _physical_tree_paths(root: Path, relative_root: Path) -> list[Path]:
+    tree_root = root / relative_root
+    if tree_root.is_file() or tree_root.is_symlink():
+        return [tree_root.relative_to(root)]
+    if not tree_root.exists():
+        return []
+    return sorted(
+        path.relative_to(root)
+        for path in tree_root.rglob("*")
+        if path.is_file() or path.is_symlink()
+    )
+
+
+def _remaining_tree_paths(
+    root: Path, relative_root: Path, errors: list[str]
+) -> list[Path]:
+    if not (root / ".git").exists():
+        return _physical_tree_paths(root, relative_root)
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "--",
+                relative_root.as_posix(),
+            ],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"cannot inspect remaining paths under {relative_root}: {exc}")
+        return _physical_tree_paths(root, relative_root)
+    if completed.returncode != 0:
+        detail = (
+            completed.stderr.decode("utf-8", "replace").strip()
+            or completed.stdout.decode("utf-8", "replace").strip()
+            or "git ls-files failed"
+        )
+        errors.append(f"cannot inspect remaining paths under {relative_root}: {detail}")
+        return _physical_tree_paths(root, relative_root)
+    if completed.stdout and not completed.stdout.endswith(b"\0"):
+        errors.append(
+            f"cannot inspect remaining paths under {relative_root}: "
+            "missing NUL terminator"
+        )
+        return _physical_tree_paths(root, relative_root)
+
+    paths: list[Path] = []
+    for raw_path in completed.stdout.rstrip(b"\0").split(b"\0"):
+        if not raw_path:
+            continue
+        path = _repo_path(os.fsdecode(raw_path), errors)
+        if path is None:
+            continue
+        absolute_path = root / path
+        if absolute_path.exists() or absolute_path.is_symlink():
+            paths.append(path)
+    return sorted(set(paths))
+
+
+def _current_eval_definitions_for_skills(
+    root: Path, skills: set[str], errors: list[str]
+) -> dict[str, list[Path]]:
+    by_skill = {skill: [] for skill in skills}
+    if not skills:
+        return by_skill
+    for relative_path in _remaining_tree_paths(root, Path("evals"), errors):
+        if (
+            _eval_definition_case(relative_path, EVAL_DEFINITION_DIRECTORY_NAMES)
+            is None
+        ):
+            continue
+        text = _read(root / relative_path, errors)
+        try:
+            definition = json.loads(text)
+        except json.JSONDecodeError as exc:
+            errors.append(
+                f"{relative_path}: cannot validate removed skill eval cleanup: {exc}"
+            )
+            continue
+        skill = definition.get("skill") if isinstance(definition, dict) else None
+        if skill in by_skill:
+            by_skill[skill].append(relative_path)
     return by_skill
+
+
+def _missing_rubric_message(
+    skill: str,
+    unchanged_rubrics: dict[str, list[tuple[Path, str]]],
+) -> str:
+    unchanged = unchanged_rubrics.get(skill, [])
+    if unchanged:
+        paths = ", ".join(str(path) for path, _case in unchanged)
+        return (
+            f"skills/{skill}/: shipped skill content changed, but its matching rubric "
+            f"changes are effectively equivalent to the base tree after normalizing "
+            f"identity and default metadata ({paths}); semantically update a rubric eval "
+            "that exercises the changed behavior and run "
+            f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+        )
+    return (
+        f"skills/{skill}/: shipped skill content changed without a changed matching "
+        "rubric eval under evals/<language>/<service>/eval/qual/ (or "
+        f"eval/rubric/) with skill={skill!r}; add or update one and run "
+        f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+    )
 
 
 def _check_skill_eval_diff(
@@ -588,8 +881,9 @@ def _check_skill_eval_diff(
     base_tree: str | None = None,
 ) -> None:
     changed_skills: set[str] = set()
+    deleted_skill_manifests: set[str] = set()
     changed_shared_references: set[str] = set()
-    for _status, path in changes:
+    for status, path in changes:
         parts = path.parts
         if len(parts) < 3 or parts[0] != "skills":
             continue
@@ -601,17 +895,54 @@ def _check_skill_eval_diff(
                 changed_shared_references.add(reference)
             continue
         changed_skills.add(parts[1])
+        if (
+            status.startswith("D")
+            and len(parts) == 3
+            and parts[2] == "SKILL.md"
+        ):
+            deleted_skill_manifests.add(parts[1])
 
-    changed_rubrics = _changed_rubric_evals(root, changes, errors, base_tree)
-    for skill in sorted(changed_skills):
-        if skill in changed_rubrics:
-            continue
-        errors.append(
-            f"skills/{skill}/: shipped skill content changed without a changed matching "
-            "rubric eval under evals/<language>/<service>/eval/qual/ (or "
-            f"eval/rubric/) with skill={skill!r}; add or update one and run "
-            f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+    removed_skills = {
+        skill
+        for skill in deleted_skill_manifests
+        if not (root / "skills" / skill / "SKILL.md").is_file()
+    }
+    removed_eval_definitions = _current_eval_definitions_for_skills(
+        root, removed_skills, errors
+    )
+    for skill in sorted(removed_skills):
+        remaining_paths = _remaining_tree_paths(
+            root, Path("skills") / skill, errors
         )
+        if remaining_paths:
+            errors.append(
+                f"skills/{skill}/: complete skill removal leaves repository-visible "
+                "canonical files: "
+                + ", ".join(str(path) for path in remaining_paths)
+            )
+        remaining_reports = _remaining_tree_paths(
+            root, Path("eval-reports") / skill, errors
+        )
+        if remaining_reports:
+            errors.append(
+                f"skills/{skill}/: complete skill removal leaves tracked latest eval "
+                "reports: " + ", ".join(str(path) for path in remaining_reports)
+            )
+        stale_evals = removed_eval_definitions.get(skill, [])
+        if stale_evals:
+            errors.append(
+                f"skills/{skill}/: complete skill removal leaves eval definitions naming "
+                f"the removed skill: {', '.join(str(path) for path in stale_evals)}; "
+                "delete them or migrate their top-level skill field"
+            )
+
+    changed_rubrics, unchanged_rubrics = _changed_rubric_evals(
+        root, changes, errors, base_tree
+    )
+    for skill in sorted(changed_skills):
+        if skill in removed_skills or skill in changed_rubrics:
+            continue
+        errors.append(_missing_rubric_message(skill, unchanged_rubrics))
 
     if shared_consumers is None:
         shared_consumers = _load_shared_consumers(root, errors)
@@ -627,7 +958,18 @@ def _check_skill_eval_diff(
             )
             continue
         for skill in sorted(consumers):
-            if skill in changed_rubrics:
+            if skill in removed_skills or skill in changed_rubrics:
+                continue
+            unchanged = unchanged_rubrics.get(skill, [])
+            if unchanged:
+                paths = ", ".join(str(path) for path, _case in unchanged)
+                errors.append(
+                    f"skills/references/{reference}: affected skill {skill!r} has only "
+                    f"effectively equivalent matching rubric changes after normalizing "
+                    f"identity and default metadata ({paths}); semantically update its "
+                    "eval and run "
+                    f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+                )
                 continue
             errors.append(
                 f"skills/references/{reference}: affected skill {skill!r} has no changed "
