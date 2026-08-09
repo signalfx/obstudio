@@ -236,7 +236,7 @@ def _default_base_ref(root: Path) -> str | None:
         return None
     if symbolic.returncode == 0 and symbolic.stdout.strip():
         candidates.append(symbolic.stdout.strip())
-    candidates.extend(("origin/main", "origin/master", "main", "master", "HEAD^", "HEAD"))
+    candidates.extend(("origin/main", "origin/master", "main", "master"))
     for candidate in candidates:
         resolved = subprocess.run(
             ["git", "rev-parse", "--verify", f"{candidate}^{{commit}}"],
@@ -286,30 +286,36 @@ def _git_changed_files(
 
     try:
         completed = subprocess.run(
-            ["git", "diff", "--name-status", "--find-renames", base_tree, "--"],
+            ["git", "diff", "--name-status", "-z", "--find-renames", base_tree, "--"],
             cwd=root,
             check=False,
             capture_output=True,
-            text=True,
             timeout=30,
         )
         untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard", "--"],
+            ["git", "ls-files", "-z", "--others", "--exclude-standard", "--"],
             cwd=root,
             check=False,
             capture_output=True,
-            text=True,
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         errors.append(f"cannot inspect changed files from {base_ref!r}: {exc}")
         return [], base_tree
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "git diff failed"
+        detail = (
+            completed.stderr.decode("utf-8", "replace").strip()
+            or completed.stdout.decode("utf-8", "replace").strip()
+            or "git diff failed"
+        )
         errors.append(f"cannot inspect changed files from {base_ref!r}: {detail}")
         return [], base_tree
     if untracked.returncode != 0:
-        detail = untracked.stderr.strip() or untracked.stdout.strip() or "git ls-files failed"
+        detail = (
+            untracked.stderr.decode("utf-8", "replace").strip()
+            or untracked.stdout.decode("utf-8", "replace").strip()
+            or "git ls-files failed"
+        )
         errors.append(f"cannot inspect untracked files: {detail}")
         return [], base_tree
 
@@ -323,27 +329,35 @@ def _git_changed_files(
             seen.add(item)
             changes.append(item)
 
-    for line in completed.stdout.splitlines():
-        fields = line.split("\t")
-        if len(fields) < 2:
-            errors.append(f"cannot parse git diff entry: {line!r}")
-            continue
-        status = fields[0]
+    def nul_fields(output: bytes, source: str) -> list[bytes]:
+        if not output:
+            return []
+        if not output.endswith(b"\0"):
+            errors.append(f"cannot parse {source}: missing NUL terminator")
+            return []
+        return output[:-1].split(b"\0")
+
+    diff_fields = nul_fields(completed.stdout, "git diff output")
+    index = 0
+    while index < len(diff_fields):
+        status = os.fsdecode(diff_fields[index])
+        index += 1
+        path_count = 2 if status.startswith(("R", "C")) else 1
+        if index + path_count > len(diff_fields):
+            errors.append(f"cannot parse git diff entry for status {status!r}")
+            break
+        paths = [os.fsdecode(value) for value in diff_fields[index : index + path_count]]
+        index += path_count
         if status.startswith("R"):
-            if len(fields) != 3:
-                errors.append(f"cannot parse git rename entry: {line!r}")
-                continue
-            add("D", fields[1])
-            add("A", fields[2])
+            add("D", paths[0])
+            add("A", paths[1])
         elif status.startswith("C"):
-            if len(fields) != 3:
-                errors.append(f"cannot parse git copy entry: {line!r}")
-                continue
-            add("A", fields[2])
+            add("A", paths[1])
         else:
-            add(status, fields[1])
-    for raw_path in untracked.stdout.splitlines():
-        add("A", raw_path)
+            add(status, paths[0])
+
+    for raw_path in nul_fields(untracked.stdout, "git ls-files output"):
+        add("A", os.fsdecode(raw_path))
     return changes, base_tree
 
 
@@ -433,7 +447,7 @@ def _check_shared_reference_consumers(
 ) -> dict[str, set[str]]:
     mapping = _load_shared_consumers(root, errors, canonical)
     shared_root = root / "skills" / "references"
-    expected: set[str] = set()
+    shared_paths: dict[str, Path] = {}
     for path in shared_root.rglob("*"):
         if not path.is_file():
             continue
@@ -444,7 +458,8 @@ def _check_shared_reference_consumers(
             or "__pycache__" in relative.parts
         ):
             continue
-        expected.add(relative.as_posix())
+        shared_paths[relative.as_posix()] = path
+    expected = set(shared_paths)
     missing = expected - set(mapping)
     extra = set(mapping) - expected
     if missing:
@@ -459,35 +474,62 @@ def _check_shared_reference_consumers(
         )
 
     references_by_name: dict[str, list[str]] = {}
-    for reference in mapping:
+    for reference in expected:
         references_by_name.setdefault(Path(reference).name, []).append(reference)
+    unique_references_by_name: dict[str, str] = {}
     for name, references in sorted(references_by_name.items()):
         if len(references) > 1:
             errors.append(
                 f"{SHARED_CONSUMER_MAP}: shared filename {name!r} is ambiguous across: "
                 + ", ".join(sorted(references))
             )
+        else:
+            unique_references_by_name[name] = references[0]
+
+    direct_consumers = {reference: set() for reference in expected}
+    for consumer in sorted(canonical):
+        consumer_root = root / "skills" / consumer
+        for path in consumer_root.rglob("*"):
+            relative = path.relative_to(consumer_root)
+            if (
+                not path.is_file()
+                or "tests" in relative.parts
+                or "__pycache__" in relative.parts
+            ):
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+            for marker, reference in unique_references_by_name.items():
+                if marker in content:
+                    direct_consumers[reference].add(consumer)
+
+    dependencies = {reference: set() for reference in expected}
+    for source, path in shared_paths.items():
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for marker, target in unique_references_by_name.items():
+            if target != source and marker in content:
+                dependencies[source].add(target)
+
+    effective_consumers = {
+        reference: set(consumers) for reference, consumers in direct_consumers.items()
+    }
+    changed = True
+    while changed:
+        changed = False
+        for source, targets in dependencies.items():
+            for target in targets:
+                added = effective_consumers[source] - effective_consumers[target]
+                if added:
+                    effective_consumers[target].update(added)
+                    changed = True
 
     for reference, consumers in mapping.items():
-        marker = Path(reference).name
-        discovered: set[str] = set()
-        for consumer in sorted(canonical):
-            consumer_root = root / "skills" / consumer
-            for path in consumer_root.rglob("*"):
-                relative = path.relative_to(consumer_root)
-                if (
-                    not path.is_file()
-                    or "tests" in relative.parts
-                    or "__pycache__" in relative.parts
-                ):
-                    continue
-                try:
-                    content = path.read_text(encoding="utf-8")
-                except (OSError, UnicodeError):
-                    continue
-                if marker in content:
-                    discovered.add(consumer)
-                    break
+        discovered = effective_consumers.get(reference, set())
         omitted = discovered - consumers
         stale = consumers - discovered
         if omitted:
@@ -512,7 +554,7 @@ def _changed_rubric_evals(
     by_skill: dict[str, list[tuple[Path, str]]] = {}
     for status, path in changes:
         parts = path.parts
-        if len(parts) < 6 or path.suffix != ".json":
+        if len(parts) != 6 or path.suffix != ".json":
             continue
         if not (
             parts[0] == "evals"

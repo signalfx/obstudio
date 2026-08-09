@@ -218,6 +218,18 @@ make -C evals --directory=. verify
         )
         self.assertTrue(any("shipped skill content changed" in error for error in errors))
 
+    def test_nested_rubric_file_does_not_satisfy_skill_pairing(self) -> None:
+        skill_change = ("M", Path("skills/example/SKILL.md"))
+        rubric_path = Path("evals/go/example/eval/qual/ignored/audit.json")
+        self._write(rubric_path.as_posix(), '{"skill": "example"}\n')
+        errors: list[str] = []
+        _check_skill_eval_diff(
+            self.root,
+            [skill_change, ("A", rubric_path)],
+            errors,
+        )
+        self.assertTrue(any("shipped skill content changed" in error for error in errors))
+
     def test_sanity_or_runtime_eval_does_not_satisfy_skill_rubric_pairing(self) -> None:
         skill_change = ("M", Path("skills/example/references/contract.md"))
         sanity_path = Path("evals/go/example/eval/sanity/audit.json")
@@ -299,6 +311,79 @@ make -C evals --directory=. verify
         )
         self.assertTrue(any("omits consuming skills: second" in error for error in errors))
 
+    def test_shared_reference_map_includes_transitive_consumers_and_cycles(self) -> None:
+        self._write("skills/references/a.md", "Read b.md.\n")
+        self._write("skills/references/b.md", "Read a.md.\n")
+        self._write(
+            "skills/references/consumers.json",
+            '{"a.md": ["example", "second"], '
+            '"b.md": ["example", "second"]}\n',
+        )
+        self._write(
+            "skills/example/SKILL.md",
+            "---\nname: example\n---\nRead ../references/a.md.\n",
+        )
+        self._write(
+            "skills/second/SKILL.md",
+            "---\nname: second\n---\nRead ../references/b.md.\n",
+        )
+        errors: list[str] = []
+        _check_shared_reference_consumers(
+            self.root,
+            {"example", "second"},
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+        self._write(
+            "skills/references/consumers.json",
+            '{"a.md": ["example", "second"], "b.md": ["second"]}\n',
+        )
+        errors = []
+        _check_shared_reference_consumers(
+            self.root,
+            {"example", "second"},
+            errors,
+        )
+        self.assertTrue(any("'b.md' omits consuming skills: example" in error for error in errors))
+
+    def test_shared_reference_basenames_must_be_unique(self) -> None:
+        self._write("skills/references/one/common.md", "# One\n")
+        self._write("skills/references/two/common.md", "# Two\n")
+        self._write(
+            "skills/references/consumers.json",
+            '{"one/common.md": ["example"], "two/common.md": ["example"]}\n',
+        )
+        self._write(
+            "skills/example/SKILL.md",
+            "---\nname: example\n---\nRead common.md.\n",
+        )
+        errors: list[str] = []
+        _check_shared_reference_consumers(self.root, {"example"}, errors)
+        self.assertTrue(any("shared filename 'common.md' is ambiguous" in error for error in errors))
+
+    def test_default_base_ref_fails_closed_without_default_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args: str) -> None:
+                subprocess.run(
+                    ["git", *args],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            git("init", "-b", "feature-only")
+            git("config", "user.name", "Agent Policy Test")
+            git("config", "user.email", "agent-policy@example.invalid")
+            self._write_at(root, "README.md", "feature-only repository\n")
+            git("add", "README.md")
+            git("commit", "-m", "baseline")
+
+            self.assertIsNone(_default_base_ref(root))
+
     def test_git_diff_includes_worktree_index_untracked_and_both_rename_sides(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -317,6 +402,12 @@ make -C evals --directory=. verify
             git("config", "user.email", "agent-policy@example.invalid")
             self._write_at(root, "skills/example/SKILL.md", "---\nname: example\n---\n")
             self._write_at(root, "skills/example/reference.md", "move me\n")
+            unicode_path = (
+                "skills/example/"
+                "r\N{LATIN SMALL LETTER E WITH ACUTE}f"
+                "\N{LATIN SMALL LETTER E WITH ACUTE}rence.md"
+            )
+            self._write_at(root, unicode_path, "international path\n")
             git("add", ".")
             git("commit", "-m", "baseline")
 
@@ -332,6 +423,9 @@ make -C evals --directory=. verify
             )
             git("add", "evals/go/example/eval/qual/audit.json")
             self._write_at(root, "notes.txt", "untracked\n")
+            self._write_at(root, unicode_path, "changed international path\n")
+            tab_path = "skills/example/tab\treference.md"
+            self._write_at(root, tab_path, "untracked path with tab\n")
             (root / "skills/example/reference.md").rename(root / "moved-reference.md")
             git(
                 "add",
@@ -351,6 +445,8 @@ make -C evals --directory=. verify
             self.assertIn(("M", Path("skills/example/SKILL.md")), changes)
             self.assertIn(("A", Path("evals/go/example/eval/qual/audit.json")), changes)
             self.assertIn(("A", Path("notes.txt")), changes)
+            self.assertIn(("M", Path(unicode_path)), changes)
+            self.assertIn(("A", Path(tab_path)), changes)
             self.assertIn(("D", Path("skills/example/reference.md")), changes)
             self.assertIn(("A", Path("moved-reference.md")), changes)
 
