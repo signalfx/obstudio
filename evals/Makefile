@@ -120,7 +120,7 @@ test-eval-harness: ## Run fast unit tests for the Codex eval harness
 	@uv run pytest . --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 
 test-interactive-guidance: ## Run interactive OTel workflow guidance tests
-	@uv run pytest test_json_report_workflow_guidance.py test_audit_progressive_disclosure.py test_genai_skill_guidance.py test_dashboard_skill_guidance.py --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
+	@uv run pytest test_json_report_workflow_guidance.py test_audit_progressive_disclosure.py test_genai_skill_guidance.py test_dashboard_skill_guidance.py test_agent_guideline_contracts.py --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 
 eval-all: eval-validation eval-sanity eval-rubric eval-runtime ## Run validation, sanity, rubric, and runtime evals
 

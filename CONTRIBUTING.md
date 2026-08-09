@@ -64,7 +64,11 @@ npm test              # vscode-test
 ### CI
 
 GitHub Actions runs on every push to `main` and `feature/**` branches.
-PRs cannot be merged if tests are failing.
+The `Required CI` status aggregates every mandatory job. A repository
+maintainer must configure that exact status as required in the repository
+ruleset; until that settings change is made, it is visible on PRs but is not a
+hard merge gate. The PR that introduces or changes the aggregate check must
+call out this repository-settings follow-up explicitly.
 
 | Job | What it checks |
 |-----|---------------|
@@ -72,6 +76,8 @@ PRs cannot be merged if tests are failing.
 | interactive-otel-scripts | OTel report/selection tests and pytest eval-input handoff tests |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
+| agent-policy | Agent instruction routing, review IDs, skill/eval pairing, skill parity, and command references |
+| Required CI | Aggregate result for all mandatory CI and policy checks |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -79,6 +85,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ```sh
 make test-all            # Go + observer client + extension + interactive OTel tests
+make agent-policy-check  # agent instruction and repository-policy contracts
 npm run build            # root build path for binary + extension
 cd extension && npm test # VS Code-hosted extension tests
 ```
@@ -86,8 +93,13 @@ cd extension && npm test # VS Code-hosted extension tests
 ### Testing Policy
 
 - Every PR must include tests for new or changed functionality.
-- All tests run in CI. Failing tests block merge. Flaky tests are bugs -- fix immediately.
-- Code coverage tools will be used to identify untested functionality. See `AGENTS.md` for how AI agents should incorporate coverage analysis.
+- Deterministic and required suites wired into the workflows run in CI. Treat
+  failures as merge-blocking even when the repository ruleset does not yet
+  enforce `Required CI`. Model-backed rubric runs remain locally attested until
+  credentials-backed rubric CI is enabled. Flaky tests are bugs -- fix them.
+- Use coverage output to identify untested changed behavior, not to satisfy an
+  arbitrary repository-wide percentage. See `AGENTS.md` for the coding-agent
+  completion and review rules.
 
 ## Skill Evals
 
@@ -95,6 +107,28 @@ Skill eval definitions and fixture apps live under `evals/`. See
 [`evals/README.md`](evals/README.md) for eval modes, commands, configs, and
 report locations. Run `make test-eval-harness` for validation-only checks and
 `make test-pytest-plugin` for the reusable plugin tests.
+
+Every addition or modification to shipped skill content must add or
+semantically update a matching rubric eval, run
+`make eval-validation SKILL=skills/<name>`, and run a representative local
+`make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`. Record both
+exact commands and results in the pull request. Validation-only collection is
+not a substitute for the local rubric result. Shared `skills/references/`
+changes must keep `skills/references/consumers.json` aligned and repeat the eval
+update and rubric run for every retained declared affected skill; a consumer
+retired in the same diff follows the complete-retirement cleanup exception.
+Effective-equivalent formatting, key ordering, same-case relocation, prompt
+ordering, identity-only IDs, language/service-only metadata changes, or empty
+input defaults do not count as a semantic rubric coverage update. A complete
+skill retirement instead removes all tracked and non-ignored canonical content,
+discovery/table entries, matching eval
+definitions, tracked eval reports, the retired skill's consumer-list
+memberships, and related compatibility surfaces. Ignored local caches are
+outside the repository contract. Delete a consumer-map key only when its shared
+reference is also removed; run `make agent-policy-check` and
+`make test-eval-harness`, but do not run a rubric for a skill that no longer
+exists. Deleting shipped content from a retained skill still requires the normal
+semantic rubric update and local run.
 
 The reusable pytest plugin is built and published alongside this repository:
 
@@ -117,8 +151,48 @@ the PR and Copilot's review, they can merge. Post-merge reviews are
 encouraged for knowledge sharing -- comments should be addressed in a
 follow-up PR.
 
+For changes to `AGENTS.md`, nested agent instructions,
+`.github/copilot-instructions.md`, repository policy checks, or GitHub Actions
+workflows, request a focused pre-merge review and include the exact
+`make agent-policy-check` result. No named reviewer gate is configured at this
+time.
+
 For major design decisions, request a pre-merge human review. While
 waiting, switch to a different task.
+
+### General Engineering Guidelines
+
+Apply these principles to code, documentation, automation, skills, user
+interfaces, plugins, and integrations:
+
+- Keep changes scoped and keep the full contract aligned across producers,
+  consumers, schemas, configuration, documentation, examples, tests, generated
+  artifacts, compatibility paths, and CI.
+- Require evidence proportional to the risk. Exercise real public or runtime
+  boundaries and relevant success, failure, retry, fallback, rollback, and
+  recovery paths; confirm CI actually runs the affected checks.
+- Treat reusable instructions and skills as tested behavior. Pair additions or
+  modifications with a matching rubric eval addition or semantic update and a
+  representative local rubric run.
+- Treat user experience as functional behavior. Controls must support their
+  intended input and options, remain accessible, communicate state honestly,
+  and render with clear hierarchy and balanced sizing. Treat constrained IDE
+  sidebars, panels, webviews, live resizing, relevant themes, and supported
+  zoom or text scaling as normal operating conditions. Keep shared plugin-host
+  UI host-neutral, guard host-specific capabilities, and verify materially
+  distinct supported hosts without allowing one host failure to cascade.
+- Preserve compatibility and user-owned state. Keep optional components and
+  integration targets isolated so one failure does not cascade into unrelated
+  paths when independent continuation is supported.
+- Preserve lifecycle, configuration-precedence, concurrency, idempotency, and
+  cleanup invariants across startup, refresh, retry, upgrade, reuse, and
+  shutdown.
+- Treat external input, files, processes, browser surfaces, archives, and
+  secrets as trust boundaries. Validate the actual object and authorization,
+  minimize exposure, and fail safely.
+- Verify data and telemetry semantics at the source. Distinguish absence,
+  invalid input, authorization failure, retryable failure, partial results, and
+  offline state without destructive cleanup, duplication, or false success.
 
 ## Design and Architecture
 

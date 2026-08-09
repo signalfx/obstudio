@@ -1,0 +1,310 @@
+{
+  "id": "review-agent-guidelines",
+  "role": "review",
+  "policy_source": "AGENTS.md",
+  "judge_prompt": "Review the supplied diff summary as a repository reviewer. Report only actionable findings supported by the described changed lines, use the stable rule IDs, and accept safe counterexamples and unrelated clean changes without manufacturing findings. Return exactly one object matching output_schema.",
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "verdict",
+      "rule_ids",
+      "evidence",
+      "rationale"
+    ],
+    "properties": {
+      "verdict": {
+        "type": "string",
+        "enum": [
+          "acceptable",
+          "changes-required"
+        ]
+      },
+      "rule_ids": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": [
+            "OBS-SCOPE",
+            "OBS-TEST",
+            "OBS-SKILL",
+            "OBS-PRESERVE",
+            "OBS-UI",
+            "OBS-PLUGIN",
+            "OBS-INTEGRATION"
+          ]
+        }
+      },
+      "evidence": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "rationale": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "rubric": [
+    {
+      "id": "OBS-SCOPE",
+      "criterion": "Flag changed lines that add an unrelated refactor or expand beyond the pull request's stated purpose."
+    },
+    {
+      "id": "OBS-TEST",
+      "criterion": "Flag a changed behavior that lacks proportionate tests or evidence, but do not demand code tests for a documentation-only edit."
+    },
+    {
+      "id": "OBS-SKILL",
+      "criterion": "Treat skills/ as canonical and .agents/skills as discovery links only; every addition or modification to shipped skill content requires a semantically changed matching eval/qual or eval/rubric definition and a recorded exact local make eval-rubric command and result. Effective-equivalent formatting, relocation, prompt ordering, or identity/default metadata does not count. A complete retirement instead removes all canonical, discovery, table, eval, tracked-report, retired-skill consumer-list, and compatibility surfaces and validates cleanup without requiring a rubric run for the absent skill."
+    },
+    {
+      "id": "OBS-PRESERVE",
+      "criterion": "Flag changed lines that overwrite or revert unrelated user work."
+    },
+    {
+      "id": "OBS-UI",
+      "criterion": "Flag changed UI behavior without proof that text and select/drop-down controls work, accessible names/roles and keyboard/focus behavior remain intact, loading/empty/error states behave correctly, and essential controls and feedback remain reachable without clipping, overlap, hidden actions, or avoidable horizontal scrolling at the smallest supported or narrowest recorded constrained IDE/embedded viewport, normal size, after live resizing, in relevant themes, and at supported zoom or text-scaling levels. Material visuals must retain legible contrast, clear hierarchy, and balanced layout and control sizing that is neither oversized nor undersized. Material visual changes require rendered screenshots or documented manual inspection; CSS or source-string assertions alone are insufficient."
+    },
+    {
+      "id": "OBS-PLUGIN",
+      "criterion": "Flag plugin changes that break discovery, registration, CLI/config defaults, schemas, public imports, aliases, caches, or run-state isolation, and flag shared plugin-host UI that uses host-specific APIs without capability adapters, is not validated in every materially distinct supported host, or lets one host capability failure break unrelated UI or plugins. Require new-plus-existing compatibility, a materially distinct host matrix when shared UI changes, and failure-path proof, plus versioning and migration guidance for unavoidable breaks."
+    },
+    {
+      "id": "OBS-INTEGRATION",
+      "criterion": "Flag Claude Code, Codex, Cursor, Kiro, or Copilot integration changes that assume a shared target schema, overwrite target user state, or let one automatic target failure prevent later targets or the core Observer; require a mixed-target middle-failure proof."
+    }
+  ],
+  "cases": [
+    {
+      "id": "skill-behavior-without-eval",
+      "category": "violation",
+      "pull_request_goal": "Clarify the final response produced by otel-audit.",
+      "diff_summary": [
+        "skills/otel-audit/SKILL.md changes the required final response from one report link to a prose summary with findings.",
+        "No matching eval/qual or eval/rubric definition changes, and no exact local make eval-rubric command and result are recorded."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-SKILL",
+          "OBS-TEST"
+        ],
+        "evidence": [
+          "The canonical skill's observable final-response contract changes.",
+          "The diff has no semantically updated matching rubric eval and no recorded local rubric run."
+        ],
+        "rationale": "The reviewer should identify the uncovered canonical skill behavior instead of approving a prose-only instruction change."
+      }
+    },
+    {
+      "id": "portable-discovery-link",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Expose an existing canonical skill to repo-local agent discovery.",
+      "diff_summary": [
+        "Adds .agents/skills/example as a relative symbolic link to ../../skills/example.",
+        "The target resolves inside this repository and no canonical skill content or behavior changes."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The new entry is a portable discovery link to the canonical skills/ source.",
+          "No skill behavior changed, so an additional behavior eval is not required by this diff."
+        ],
+        "rationale": "OBS-SKILL should protect the source boundary without falsely rejecting a valid discovery link."
+      }
+    },
+    {
+      "id": "ui-control-and-layout-without-proof",
+      "category": "violation",
+      "pull_request_goal": "Add editable trace limits and a theme selector to the Telemetry Explorer filter bar.",
+      "diff_summary": [
+        "Adds a text field that replaces valid in-progress input with a parsed number on every keystroke and a select control whose Dark option still applies the Light value.",
+        "The controls have no accessible names, and the change has no keyboard/focus assertions or loading, empty, and error-state interaction tests.",
+        "At the narrow viewport, labels become unreadably small and controls become oversized relative to the available task area. Only CSS source-string assertions were added; there is no rendered screenshot or documented manual inspection at normal and narrow widths in light and dark themes."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-UI"
+        ],
+        "evidence": [
+          "The text field cannot preserve valid editable input and the select misapplies a supported option.",
+          "Accessible names, keyboard/focus behavior, and affected state transitions are unproven.",
+          "The narrow layout has unreadably small labels and oversized controls, and CSS string checks do not prove visual balance across supported widths and themes."
+        ],
+        "rationale": "The changed controls are functionally incorrect and lack the accessibility, state, and rendered visual proof required for material UI behavior."
+      }
+    },
+    {
+      "id": "ui-control-and-layout-with-complete-proof",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Add editable trace limits and a theme selector to the Telemetry Explorer filter bar.",
+      "diff_summary": [
+        "The text field preserves valid editable values, the select maps every supported option correctly, and actions transition through loading, empty, success, and error states.",
+        "Colocated Vitest tests query the controls by accessible role and name and exercise keyboard and focus behavior.",
+        "Rendered screenshots and documented manual inspection cover a recorded 320-by-480 narrowest supported container, normal size, live resizing, light and dark themes, and supported zoom/text scaling without clipping, overlap, hidden actions, avoidable horizontal scrolling, or unreadable contrast, while preserving clear hierarchy and balanced control sizing."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "Functional, state-transition, accessible-name/role, keyboard, and focus behavior are covered.",
+          "Rendered evidence records the constrained and normal dimensions and covers live resizing, supported zoom/text scaling, and themes rather than relying on CSS strings alone."
+        ],
+        "rationale": "The UI change has proportionate functional, accessibility, and visual proof."
+      }
+    },
+    {
+      "id": "plugin-change-breaks-existing-contracts",
+      "category": "violation",
+      "pull_request_goal": "Add a new agent backend to the reusable pytest plugin.",
+      "diff_summary": [
+        "Replaces the existing default backend, removes a public import alias, and changes a report schema field without versioning or migration guidance.",
+        "Stores backend cache and run state in a module-level singleton shared across workspaces.",
+        "A new backend registration failure aborts collection before existing backends can run, and tests cover only the new happy path."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-PLUGIN",
+          "OBS-PRESERVE"
+        ],
+        "evidence": [
+          "Existing defaults, public imports, and schemas change without a compatibility contract.",
+          "Caches and run state leak across isolated consumers.",
+          "One plugin registration failure suppresses unrelated existing plugin behavior."
+        ],
+        "rationale": "The new plugin path is neither isolated nor backward-compatible and lacks failure-path proof and migration guidance."
+      }
+    },
+    {
+      "id": "plugin-change-isolated-and-compatible",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Add a new agent backend to the reusable pytest plugin.",
+      "diff_summary": [
+        "Registers the backend additively while preserving existing discovery, CLI/config defaults, schemas, public imports, and aliases.",
+        "Keeps caches, worker results, and run state inside each temporary workspace.",
+        "Pytester coverage runs the new backend beside an existing backend and proves that new-backend initialization and report failures do not suppress or corrupt the existing path."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The new plugin support is additive and preserves public compatibility.",
+          "Workspace isolation and new-plus-existing failure behavior are proven."
+        ],
+        "rationale": "The added backend preserves established contracts and cannot leak or suppress unrelated plugin runs."
+      }
+    },
+    {
+      "id": "automatic-agent-integration-stops-on-middle-failure",
+      "category": "violation",
+      "pull_request_goal": "Automatically configure Claude Code, Codex, Cursor, Kiro, and Copilot integrations.",
+      "diff_summary": [
+        "Serializes every target through one shared settings schema and replaces each target's complete configuration instead of merging user-owned fields.",
+        "The automatic loop returns when Cursor, the middle target, fails, so Kiro and Copilot are never attempted and the core Observer does not start.",
+        "Tests cover only an all-targets-success path."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-INTEGRATION",
+          "OBS-PRESERVE"
+        ],
+        "evidence": [
+          "The implementation assumes incompatible targets share one schema and overwrites user-owned settings.",
+          "A middle automatic target failure prevents later targets and the Observer from continuing.",
+          "There is no mixed-target middle-failure proof."
+        ],
+        "rationale": "Automatic integration setup must isolate target schemas and failures while preserving host state and core startup."
+      }
+    },
+    {
+      "id": "automatic-agent-integration-isolates-middle-failure",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Automatically configure Claude Code, Codex, Cursor, Kiro, and Copilot integrations.",
+      "diff_summary": [
+        "Uses a per-target schema and state-preserving merge for Claude Code, Codex, Cursor, Kiro, and Copilot.",
+        "Records failures per target while retaining successful configuration and continuing the automatic sequence and core Observer startup.",
+        "A mixed-target test proves Codex succeeds, Cursor fails in the middle, Kiro and Copilot still run, and the Observer starts without corrupting any target's user-owned state."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "Each integration preserves its own schema and user-owned state.",
+          "The mixed-target test proves a middle failure does not prevent later targets or core Observer startup."
+        ],
+        "rationale": "Automatic integration setup is isolated, state-preserving, and resilient across a realistic mixed-target failure."
+      }
+    },
+    {
+      "id": "shared-ide-ui-breaks-in-constrained-host",
+      "category": "violation",
+      "pull_request_goal": "Reuse an extension connection panel across Visual Studio Code, Cursor, and Kiro.",
+      "diff_summary": [
+        "The shared webview calls a host-specific command without a capability adapter, so the panel throws during startup when that command is unavailable in Kiro.",
+        "The toolbar has a fixed 640-pixel minimum width; at a 280-by-360 sidebar size the editable field and primary action are clipped behind horizontal scrolling, and resizing does not recover them.",
+        "Validation covers wide Visual Studio Code and Cursor views but omits Kiro entirely and has no constrained-size, live-resize, keyboard/focus, theme, zoom/text-scaling, or missing-capability proof."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-UI",
+          "OBS-PLUGIN"
+        ],
+        "evidence": [
+          "Essential controls are unusable in a recorded constrained IDE viewport and remain broken after live resizing.",
+          "Shared UI depends directly on one host capability, allowing its absence to prevent the panel from rendering in the omitted supported host.",
+          "Two wide-host views do not prove constrained layout, accessibility, visual scaling, or compatibility in every materially distinct supported host."
+        ],
+        "rationale": "Shared IDE UI must remain functional and accessible in constrained containers and isolate host-specific capabilities instead of failing the complete panel."
+      }
+    },
+    {
+      "id": "shared-ide-ui-is-responsive-and-host-safe",
+      "category": "safe-counterexample",
+      "pull_request_goal": "Reuse an extension connection panel across Visual Studio Code, Cursor, and Kiro.",
+      "diff_summary": [
+        "The shared rendering and state model are host-neutral, and host-specific commands are accessed through capability adapters; an unavailable command disables only its dependent action with host-scoped feedback.",
+        "Interaction tests prove editable fields, every select option, primary actions, loading/error/recovery states, accessible names, keyboard/focus behavior, and live resizing at a recorded 280-by-360 minimum and at the normal panel size.",
+        "Rendered evidence covers light and dark themes plus supported zoom/text scaling without clipping, overlap, hidden actions, or avoidable horizontal scrolling, and smoke tests cover the materially distinct Visual Studio Code, Cursor, and Kiro paths while a missing middle-host capability leaves the other hosts and core Observer usable."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The constrained and normal layouts, live resize, interactions, accessibility, state feedback, themes, and visual scaling have direct evidence.",
+          "Host-neutral UI and capability adapters localize an unavailable feature, while the materially distinct host matrix proves existing hosts and the Observer continue safely."
+        ],
+        "rationale": "The shared IDE UI has proportionate constrained-layout evidence and preserves compatible, isolated behavior across supported hosts."
+      }
+    },
+    {
+      "id": "documentation-only-clean-diff",
+      "category": "unrelated-clean",
+      "pull_request_goal": "Correct a command spelling in docs/usage.md.",
+      "diff_summary": [
+        "Changes only the misspelled command name in one documentation sentence.",
+        "No application, skill, test, generated artifact, or link target changes."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The described diff is limited to the requested documentation correction.",
+          "There is no changed behavior that needs a new test."
+        ],
+        "rationale": "A clean documentation correction should receive no policy finding."
+      }
+    }
+  ]
+}
