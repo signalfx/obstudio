@@ -11,6 +11,8 @@ BUILD_DIR  := build
 SKILLS_SRC := skills
 EVALS_DIR  := evals
 PYTEST_PLUGIN_DIR := pytest-codex-evals
+AGENT_POLICY_BASE ?=
+AGENT_POLICY_ARGS := $(if $(strip $(AGENT_POLICY_BASE)),--base-ref "$(AGENT_POLICY_BASE)",)
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
@@ -74,11 +76,12 @@ test-interactive-otel-scripts: ## Run interactive OTel report and selection unit
 	$(PYTHON) -m unittest discover -s skills/otel-verify/tests -p 'test_*.py'
 	$(MAKE) -C $(EVALS_DIR) test-interactive-guidance
 
-test-agent-policy: ## Run unit tests for the deterministic agent-policy checker
+test-agent-policy: ## Run deterministic agent-policy and guideline contract tests
 	$(PYTHON) -m unittest discover -s tests -p 'test_agent_policy.py'
+	$(PYTHON) evals/test_agent_guideline_contracts.py
 
 agent-policy-check: test-agent-policy ## Validate agent instructions and repository-policy contracts
-	$(PYTHON) scripts/check_agent_policy.py
+	$(PYTHON) scripts/check_agent_policy.py $(AGENT_POLICY_ARGS)
 
 test-all: ## Run all tests (Go + client + extension + interactive OTel scripts)
 	$(MAKE) test

@@ -10,6 +10,11 @@ This file adds eval-harness and fixture guidance to the repository-root
   telemetry proof.
 - Keep baseline checks intentionally simple and do not weaken expected behavior
   to make an implementation pass.
+- A rubric eval added for shipped skill content must name the affected skill in
+  its top-level `skill` field and exercise the changed observable behavior. Run
+  its exact `make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`
+  command locally and report the result; validation-only collection is not a
+  semantic substitute.
 - Treat `.workspace/codex-evals/` as generated run output. Update tracked latest
   reports only through the corresponding report target.
 

@@ -17,12 +17,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Validate agent-policy contracts
+        env:
+          AGENT_POLICY_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: make agent-policy-check
 
   observer:
@@ -65,6 +69,9 @@ jobs:
 
       - name: Run interactive OTel report and selection tests
         run: make test-interactive-otel-scripts
+
+      - name: Validate every eval definition and fixture
+        run: make test-eval-harness
 
       - name: Run eval-input handoff tests
         run: make test-pytest-plugin

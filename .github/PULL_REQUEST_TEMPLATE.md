@@ -14,6 +14,12 @@
 - Exact commands and results:
 - Agent-policy check (when applicable):
 - Regression test added or updated:
+- Skill eval file(s), when shipped skill content changed:
+- Local rubric command and result for each changed skill:
+- Affected UI interaction/accessibility evidence; normal+narrow/theme visual
+  evidence for material visual changes:
+- Plugin/integration compatibility evidence; isolated-failure evidence when
+  discovery, shared state, lifecycle, execution, or orchestration changed:
 - Checks skipped and why:
 - Coverage or other evidence for changed behavior:
 
@@ -22,7 +28,9 @@
 - Compatibility, migration, or rollback considerations:
 - Residual risks or unverified assumptions:
 - [ ] The diff contains no unrelated changes.
-- [ ] Skill behavior changes include the smallest relevant eval update, or the
-      summary explains why existing coverage is sufficient.
-- [ ] Agent-policy and workflow changes have repository-maintainer review, or
-      this item is not applicable.
+- [ ] No shipped skill content changed, or every changed skill has a matching
+      rubric eval update and an exact local rubric command/result above.
+- [ ] No UI changed, or every affected field, option, action, accessibility
+      path, state, and material visual change has proportionate evidence above.
+- [ ] No plugin/integration changed, or an existing path has compatibility
+      evidence and affected failure-isolation behavior is proven above.

@@ -40,9 +40,32 @@ Before handing work back:
   repository-wide percentage with unrelated tests.
 - Run the narrowest relevant check first, followed by the broader checks that
   match the risk and the applicable nested `AGENTS.md` file.
-- For skill behavior changes, update the canonical source under `skills/` and
-  add or update the smallest relevant eval. If existing coverage is sufficient,
-  record why.
+- For every addition or modification to shipped skill content, update the
+  canonical source under `skills/`, add or semantically update at least one
+  matching rubric eval under `evals/*/*/eval/qual/` (or
+  `evals/*/*/eval/rubric/`), and run a representative local rubric command such
+  as `make eval-rubric SKILL=skills/otel-instrument CASE=go/kvstore`. Record the
+  exact command and result. Validation-only collection is required too, but it
+  does not replace a rubric run. Shipped content means a skill's `SKILL.md`,
+  references, scripts, and assets; test-only changes are not skill behavior.
+  For shared `skills/references/` changes, identify every affected skill and
+  keep `skills/references/consumers.json` aligned, then update and run a
+  relevant rubric eval for every declared consumer.
+- For UI changes, exercise the affected workflow rather than only rendering
+  markup. When the changed flow contains text fields, selects/drop-downs,
+  actions, state transitions, or persisted values, prove those affected
+  behaviors. Preserve accessible names and roles plus the applicable keyboard
+  and focus path. Visually inspect material visual changes at normal and narrow
+  widths and in relevant themes, using existing typography, spacing, and
+  control sizing so the result is legible, balanced, and neither oversized nor
+  cramped.
+- For plugin or agent-integration changes, preserve existing public contracts
+  and user-owned configuration. Prove the new or changed path alongside at
+  least one existing path. When discovery, shared state, lifecycle, execution,
+  or multi-target orchestration changes, include a failure case where the
+  affected plugin or integration fails without preventing unrelated plugins,
+  later integration targets, or the core Observer from continuing safely when
+  the host supports that isolation.
 - In the handoff, list changed behavior, exact validation commands and results,
   skipped checks with reasons, and any residual risk.
 
@@ -56,6 +79,7 @@ changed path:
 - `extension/AGENTS.md` -- VS Code-compatible editor extension and packaging.
 - `skills/AGENTS.md` -- canonical skill sources and skill-level tests.
 - `evals/AGENTS.md` -- eval fixtures, checks, configs, and reports.
+- `pytest-codex-evals/AGENTS.md` -- reusable pytest plugin and compatibility.
 
 Treat review as read-only unless the user explicitly asks for fixes. Review the
 merge-base diff, start with actionable findings ordered by severity, and focus
@@ -88,12 +112,18 @@ branches, not as an arbitrary global threshold.
 ### OBS-SKILL -- Keep skill sources, discovery, and evals aligned
 
 Flag skill behavior edited outside canonical `skills/`, missing or mismatched
-discovery links, and behavior changes without an eval update or a documented
-reason that existing coverage is sufficient. Every `.agents/skills/<name>`
-entry must be a relative link to `../../skills/<name>`, and the Available
-Skills table below must match canonical `skills/*/SKILL.md` directories. The
-safe path is to edit the canonical source, repair the relative link or table,
-and add the narrowest meaningful eval.
+discovery links, and any addition or modification to shipped skill content
+without a matching rubric eval change and a recorded local rubric run. Every
+`.agents/skills/<name>` entry must be a relative link to
+`../../skills/<name>`, and the Available Skills table below must match
+canonical `skills/*/SKILL.md` directories. The safe path is to edit the
+canonical source, repair the relative link or table, add or semantically update
+the narrowest matching rubric eval, run
+`make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`, and report the
+exact result. `eval-validation` alone is not rubric proof. Every shipped shared
+reference must appear in `skills/references/consumers.json`; a shared-reference
+change requires a changed matching rubric for every current or prior declared
+consumer.
 
 ### OBS-PRESERVE -- Preserve compatibility and user work
 
@@ -102,6 +132,41 @@ compatibility, persisted data, telemetry semantics, supported platforms, or
 unrelated user work. The safe path is a backward-compatible change; when that
 is impossible, require an explicit migration or rollback path and regression
 proof.
+
+### OBS-UI -- Prove functional, accessible, and visually balanced UI behavior
+
+Flag UI changes when text fields cannot accept or edit valid values,
+select/drop-down controls omit or misapply supported options, actions or state
+transitions do not work, or affected loading, empty, and error states are
+unproven. Also flag lost semantic names/roles, keyboard or focus behavior,
+clipping, overflow, unreadable contrast, weak hierarchy, or layouts and control
+sizes that become oversized, undersized, or unusable at supported widths or
+themes. The safe path is focused role/name and interaction assertions plus
+rendered screenshots or documented manual visual inspection for material
+visual changes. CSS/source-string assertions are supplemental, not visual
+proof.
+
+### OBS-PLUGIN -- Keep plugins isolated and backward-compatible
+
+Flag new or modified plugin support that changes existing plugin discovery,
+registration, CLI/config defaults, schemas, public imports, aliases, caches, or
+run state without compatibility proof, or lets one plugin's load or execution
+failure prevent unrelated plugins from running where the host supports
+independent continuation. The safe path is additive, isolated behavior with
+new-plus-existing compatibility proof; add failure-path tests when discovery,
+shared state, lifecycle, or execution changes. Breaking public contracts
+require explicit versioning, migration, and rollback guidance.
+
+### OBS-INTEGRATION -- Isolate agent integrations and preserve host state
+
+Flag changes to Claude Code, Codex, Cursor, Kiro, Copilot, or other agent/editor
+integrations that assume a shared schema, overwrite unrelated settings,
+servers, skills, or policy fields, or allow one automatic target failure to
+prevent later targets or stop the core Observer. The safe path preserves every
+target's schema and user-owned state, keeps successful targets configured,
+reports failures per target, and proves a mixed-target path where a middle
+integration fails while earlier and later integrations continue. Explicit
+single-target commands may fail clearly, but must not corrupt other targets.
 
 ## Testing
 
@@ -147,7 +212,13 @@ Outputs:
 
 - Keep `skills/` as the source of truth.
 - Keep `.agents/skills/` as repo-local Codex discovery links only.
-- Add or update evals when skill instructions change or a real failure is found.
+- For every addition or modification to shipped skill content, add or
+  semantically update a matching rubric eval and run the representative local
+  `make eval-rubric SKILL=skills/<name> CASE=<language>/<service>` command.
+- Keep `skills/references/consumers.json` exact when shared behavior is added,
+  removed, renamed, or consumed by another skill.
+- Run `make eval-validation SKILL=skills/<name>` as the deterministic schema and
+  fixture check; do not present it as a substitute for the rubric result.
 - Keep sanity checks quick and tied to observable artifacts: files, final output,
   commands, and skill-loading guards.
 - Keep A/B baseline checks simple; detailed artifact checks should default to

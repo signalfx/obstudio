@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,28 +19,25 @@ REQUIRED_HEADINGS = (
     "Code Review Rules",
     "Confluence Document Updates",
 )
-REQUIRED_RULE_IDS = ("OBS-SCOPE", "OBS-TEST", "OBS-SKILL", "OBS-PRESERVE")
+REQUIRED_RULE_IDS = (
+    "OBS-SCOPE",
+    "OBS-TEST",
+    "OBS-SKILL",
+    "OBS-PRESERVE",
+    "OBS-UI",
+    "OBS-PLUGIN",
+    "OBS-INTEGRATION",
+)
 ROUTED_AGENT_GUIDES = (
     "observer/AGENTS.md",
     "observer/client/AGENTS.md",
     "extension/AGENTS.md",
     "skills/AGENTS.md",
     "evals/AGENTS.md",
+    "pytest-codex-evals/AGENTS.md",
 )
-REQUIRED_CODEOWNER_PATTERNS = (
-    "AGENTS.md",
-    "/CONTRIBUTING.md",
-    "/Makefile",
-    "/.github/CODEOWNERS",
-    "/.github/copilot-instructions.md",
-    "/.github/PULL_REQUEST_TEMPLATE.md",
-    "/.github/workflows/",
-    "/evals/agent-guidelines/",
-    "/evals/Makefile",
-    "/evals/test_agent_guideline_contracts.py",
-    "/scripts/check_agent_policy.py",
-    "/tests/test_agent_policy.py",
-)
+RUBRIC_DIRECTORY_NAMES = {"qual", "rubric"}
+SHARED_CONSUMER_MAP = Path("skills/references/consumers.json")
 
 MAKE_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*[?+:!]?=")
 MAKE_TARGET_RE = re.compile(r"^([^\s:#=][^:#=]*):(?!=)")
@@ -192,7 +191,15 @@ def _check_pr_template(root: Path, errors: list[str]) -> None:
     for heading in ("Summary", "Scope", "Validation evidence", "Risk and review"):
         if re.search(rf"^##\s+{re.escape(heading)}\s*$", template, re.MULTILINE) is None:
             errors.append(f".github/PULL_REQUEST_TEMPLATE.md: missing '## {heading}'")
-    for evidence in ("Exact commands and results", "Checks skipped", "Residual risks"):
+    for evidence in (
+        "Exact commands and results",
+        "Skill eval file(s)",
+        "Local rubric command and result",
+        "UI interaction/accessibility",
+        "Plugin/integration compatibility",
+        "Checks skipped",
+        "Residual risks",
+    ):
         if evidence.casefold() not in template.casefold():
             errors.append(
                 f".github/PULL_REQUEST_TEMPLATE.md: missing evidence field {evidence!r}"
@@ -214,45 +221,377 @@ def _check_cross_document_claims(
         )
 
 
-def _codeowner_patterns(text: str, errors: list[str]) -> dict[str, tuple[str, ...]]:
-    patterns: dict[str, tuple[str, ...]] = {}
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        try:
-            fields = shlex.split(stripped, comments=True)
-        except ValueError as exc:
-            errors.append(f".github/CODEOWNERS:{line_number}: invalid entry: {exc}")
-            continue
-        if len(fields) < 2 or not all(owner.startswith("@") for owner in fields[1:]):
-            errors.append(
-                f".github/CODEOWNERS:{line_number}: expected a path and at least one @owner"
-            )
-            continue
-        patterns[fields[0]] = tuple(fields[1:])
-    return patterns
+def _default_base_ref(root: Path) -> str | None:
+    candidates: list[str] = []
+    try:
+        symbolic = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if symbolic.returncode == 0 and symbolic.stdout.strip():
+        candidates.append(symbolic.stdout.strip())
+    candidates.extend(("origin/main", "origin/master", "main", "master", "HEAD^", "HEAD"))
+    for candidate in candidates:
+        resolved = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{candidate}^{{commit}}"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if resolved.returncode == 0:
+            return candidate
+    return None
 
 
-def _check_codeowners(root: Path, errors: list[str]) -> None:
-    path = root / ".github" / "CODEOWNERS"
-    patterns = _codeowner_patterns(_read(path, errors), errors)
-    missing = set(REQUIRED_CODEOWNER_PATTERNS) - set(patterns)
+def _repo_path(raw_path: str, errors: list[str]) -> Path | None:
+    path = Path(raw_path)
+    if path.is_absolute() or ".." in path.parts:
+        errors.append(f"git diff path escapes repository: {raw_path!r}")
+        return None
+    return path
+
+
+def _git_changed_files(
+    root: Path, base_ref: str, errors: list[str]
+) -> tuple[list[tuple[str, Path]], str | None]:
+    if base_ref.startswith("-") or re.fullmatch(r"[A-Za-z0-9._/@{}^~:+-]+", base_ref) is None:
+        errors.append(f"invalid agent-policy base ref: {base_ref!r}")
+        return [], None
+
+    try:
+        merge_base = subprocess.run(
+            ["git", "merge-base", base_ref, "HEAD"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"cannot resolve agent-policy base {base_ref!r}: {exc}")
+        return [], None
+    if merge_base.returncode != 0 or not merge_base.stdout.strip():
+        detail = merge_base.stderr.strip() or merge_base.stdout.strip() or "git merge-base failed"
+        errors.append(f"cannot resolve agent-policy base {base_ref!r}: {detail}")
+        return [], None
+    base_tree = merge_base.stdout.strip()
+
+    try:
+        completed = subprocess.run(
+            ["git", "diff", "--name-status", "--find-renames", base_tree, "--"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard", "--"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"cannot inspect changed files from {base_ref!r}: {exc}")
+        return [], base_tree
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "git diff failed"
+        errors.append(f"cannot inspect changed files from {base_ref!r}: {detail}")
+        return [], base_tree
+    if untracked.returncode != 0:
+        detail = untracked.stderr.strip() or untracked.stdout.strip() or "git ls-files failed"
+        errors.append(f"cannot inspect untracked files: {detail}")
+        return [], base_tree
+
+    changes: list[tuple[str, Path]] = []
+    seen: set[tuple[str, Path]] = set()
+
+    def add(status: str, raw_path: str) -> None:
+        path = _repo_path(raw_path, errors)
+        item = (status, path) if path is not None else None
+        if item is not None and item not in seen:
+            seen.add(item)
+            changes.append(item)
+
+    for line in completed.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 2:
+            errors.append(f"cannot parse git diff entry: {line!r}")
+            continue
+        status = fields[0]
+        if status.startswith("R"):
+            if len(fields) != 3:
+                errors.append(f"cannot parse git rename entry: {line!r}")
+                continue
+            add("D", fields[1])
+            add("A", fields[2])
+        elif status.startswith("C"):
+            if len(fields) != 3:
+                errors.append(f"cannot parse git copy entry: {line!r}")
+                continue
+            add("A", fields[2])
+        else:
+            add(status, fields[1])
+    for raw_path in untracked.stdout.splitlines():
+        add("A", raw_path)
+    return changes, base_tree
+
+
+def _git_file_text(root: Path, tree: str, path: Path) -> str | None:
+    completed = subprocess.run(
+        ["git", "show", f"{tree}:{path.as_posix()}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return completed.stdout if completed.returncode == 0 else None
+
+
+def _parse_shared_consumer_map(
+    text: str,
+    source: str,
+    errors: list[str],
+    canonical: set[str] | None = None,
+) -> dict[str, set[str]]:
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        errors.append(f"{source}: invalid JSON: {exc}")
+        return {}
+    if not isinstance(raw, dict):
+        errors.append(f"{source}: expected an object mapping shared files to skills")
+        return {}
+
+    mapping: dict[str, set[str]] = {}
+    for reference, consumers in raw.items():
+        if not isinstance(reference, str) or not reference or Path(reference).is_absolute():
+            errors.append(f"{source}: invalid shared reference key {reference!r}")
+            continue
+        if ".." in Path(reference).parts:
+            errors.append(f"{source}: shared reference key escapes its directory: {reference!r}")
+            continue
+        if not isinstance(consumers, list) or not consumers:
+            errors.append(f"{source}: {reference!r} must name at least one consuming skill")
+            continue
+        if not all(isinstance(item, str) and item for item in consumers):
+            errors.append(f"{source}: {reference!r} has an invalid consumer list")
+            continue
+        consumer_set = set(consumers)
+        if len(consumer_set) != len(consumers):
+            errors.append(f"{source}: {reference!r} repeats a consuming skill")
+        if canonical is not None:
+            unknown = consumer_set - canonical
+            if unknown:
+                errors.append(
+                    f"{source}: {reference!r} names unknown skills: "
+                    + ", ".join(sorted(unknown))
+                )
+        mapping[reference] = consumer_set
+    return mapping
+
+
+def _load_shared_consumers(
+    root: Path, errors: list[str], canonical: set[str] | None = None
+) -> dict[str, set[str]]:
+    return _parse_shared_consumer_map(
+        _read(root / SHARED_CONSUMER_MAP, errors),
+        SHARED_CONSUMER_MAP.as_posix(),
+        errors,
+        canonical,
+    )
+
+
+def _shared_consumers_at_ref(
+    root: Path, tree: str | None, errors: list[str]
+) -> dict[str, set[str]]:
+    if tree is None:
+        return {}
+    text = _git_file_text(root, tree, SHARED_CONSUMER_MAP)
+    if text is None:
+        return {}
+    return _parse_shared_consumer_map(
+        text,
+        f"{SHARED_CONSUMER_MAP.as_posix()} at {tree}",
+        errors,
+    )
+
+
+def _check_shared_reference_consumers(
+    root: Path, canonical: set[str], errors: list[str]
+) -> dict[str, set[str]]:
+    mapping = _load_shared_consumers(root, errors, canonical)
+    shared_root = root / "skills" / "references"
+    expected: set[str] = set()
+    for path in shared_root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(shared_root)
+        if (
+            relative.as_posix() == "consumers.json"
+            or "tests" in relative.parts
+            or "__pycache__" in relative.parts
+        ):
+            continue
+        expected.add(relative.as_posix())
+    missing = expected - set(mapping)
+    extra = set(mapping) - expected
     if missing:
         errors.append(
-            ".github/CODEOWNERS: missing protected policy paths: "
+            f"{SHARED_CONSUMER_MAP}: missing shared references: "
             + ", ".join(sorted(missing))
         )
-    single_owner = [
-        pattern
-        for pattern in REQUIRED_CODEOWNER_PATTERNS
-        if pattern in patterns and len(set(patterns[pattern])) < 2
-    ]
-    if single_owner:
+    if extra:
         errors.append(
-            ".github/CODEOWNERS: policy paths need at least two independent owners: "
-            + ", ".join(single_owner)
+            f"{SHARED_CONSUMER_MAP}: unknown shared references: "
+            + ", ".join(sorted(extra))
         )
+
+    references_by_name: dict[str, list[str]] = {}
+    for reference in mapping:
+        references_by_name.setdefault(Path(reference).name, []).append(reference)
+    for name, references in sorted(references_by_name.items()):
+        if len(references) > 1:
+            errors.append(
+                f"{SHARED_CONSUMER_MAP}: shared filename {name!r} is ambiguous across: "
+                + ", ".join(sorted(references))
+            )
+
+    for reference, consumers in mapping.items():
+        marker = Path(reference).name
+        discovered: set[str] = set()
+        for consumer in sorted(canonical):
+            consumer_root = root / "skills" / consumer
+            for path in consumer_root.rglob("*"):
+                relative = path.relative_to(consumer_root)
+                if (
+                    not path.is_file()
+                    or "tests" in relative.parts
+                    or "__pycache__" in relative.parts
+                ):
+                    continue
+                try:
+                    content = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    continue
+                if marker in content:
+                    discovered.add(consumer)
+                    break
+        omitted = discovered - consumers
+        stale = consumers - discovered
+        if omitted:
+            errors.append(
+                f"{SHARED_CONSUMER_MAP}: {reference!r} omits consuming skills: "
+                + ", ".join(sorted(omitted))
+            )
+        if stale:
+            errors.append(
+                f"{SHARED_CONSUMER_MAP}: {reference!r} names skills that do not reference it: "
+                + ", ".join(sorted(stale))
+            )
+    return mapping
+
+
+def _changed_rubric_evals(
+    root: Path,
+    changes: list[tuple[str, Path]],
+    errors: list[str],
+    base_tree: str | None = None,
+) -> dict[str, list[tuple[Path, str]]]:
+    by_skill: dict[str, list[tuple[Path, str]]] = {}
+    for status, path in changes:
+        parts = path.parts
+        if len(parts) < 6 or path.suffix != ".json":
+            continue
+        if not (
+            parts[0] == "evals"
+            and parts[3] == "eval"
+            and parts[4] in RUBRIC_DIRECTORY_NAMES
+        ):
+            continue
+        if status.startswith("D"):
+            continue
+        text = _read(root / path, errors)
+        try:
+            definition = json.loads(text)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path}: changed rubric eval is invalid JSON: {exc}")
+            continue
+        skill = definition.get("skill") if isinstance(definition, dict) else None
+        if not isinstance(skill, str) or not skill.strip():
+            errors.append(f"{path}: changed rubric eval must have a non-empty top-level skill")
+            continue
+        case = f"{parts[1]}/{parts[2]}"
+        by_skill.setdefault(skill, []).append((path, case))
+    return by_skill
+
+
+def _check_skill_eval_diff(
+    root: Path,
+    changes: list[tuple[str, Path]],
+    errors: list[str],
+    shared_consumers: dict[str, set[str]] | None = None,
+    base_shared_consumers: dict[str, set[str]] | None = None,
+    base_tree: str | None = None,
+) -> None:
+    changed_skills: set[str] = set()
+    changed_shared_references: set[str] = set()
+    for _status, path in changes:
+        parts = path.parts
+        if len(parts) < 3 or parts[0] != "skills":
+            continue
+        if "tests" in parts[2:] or "__pycache__" in parts[2:]:
+            continue
+        if parts[1] == "references":
+            reference = Path(*parts[2:]).as_posix()
+            if reference != "consumers.json":
+                changed_shared_references.add(reference)
+            continue
+        changed_skills.add(parts[1])
+
+    changed_rubrics = _changed_rubric_evals(root, changes, errors, base_tree)
+    for skill in sorted(changed_skills):
+        if skill in changed_rubrics:
+            continue
+        errors.append(
+            f"skills/{skill}/: shipped skill content changed without a changed matching "
+            "rubric eval under evals/<language>/<service>/eval/qual/ (or "
+            f"eval/rubric/) with skill={skill!r}; add or update one and run "
+            f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+        )
+
+    if shared_consumers is None:
+        shared_consumers = _load_shared_consumers(root, errors)
+    if base_shared_consumers is None:
+        base_shared_consumers = {}
+    for reference in sorted(changed_shared_references):
+        consumers = set(shared_consumers.get(reference, set()))
+        consumers.update(base_shared_consumers.get(reference, set()))
+        if not consumers:
+            errors.append(
+                f"skills/references/{reference}: no affected skills are declared in "
+                f"{SHARED_CONSUMER_MAP} in the current or base tree"
+            )
+            continue
+        for skill in sorted(consumers):
+            if skill in changed_rubrics:
+                continue
+            errors.append(
+                f"skills/references/{reference}: affected skill {skill!r} has no changed "
+                "matching rubric eval; update its eval and run "
+                f"make eval-rubric SKILL=skills/{skill} CASE=<language>/<service>"
+            )
 
 
 def _markdown_snippets(text: str) -> list[tuple[int, str]]:
@@ -404,7 +743,7 @@ def _check_make_references(root: Path, documents: tuple[Path, ...], errors: list
                 )
 
 
-def check_repository(root: Path) -> list[str]:
+def check_repository(root: Path, base_ref: str | None = None) -> list[str]:
     root = root.resolve()
     errors: list[str] = []
     agents_path = root / "AGENTS.md"
@@ -414,10 +753,22 @@ def check_repository(root: Path) -> list[str]:
 
     canonical = _canonical_skills(root, errors)
     _check_skill_discovery(root, canonical, errors)
+    shared_consumers = _check_shared_reference_consumers(root, canonical, errors)
     _check_instruction_structure(root, agents_text, canonical, errors)
     _check_cross_document_claims(agents_text, contributing_text, errors)
     _check_pr_template(root, errors)
-    _check_codeowners(root, errors)
+    if base_ref:
+        changes, base_tree = _git_changed_files(root, base_ref, errors)
+        if changes:
+            base_shared_consumers = _shared_consumers_at_ref(root, base_tree, errors)
+            _check_skill_eval_diff(
+                root,
+                changes,
+                errors,
+                shared_consumers=shared_consumers,
+                base_shared_consumers=base_shared_consumers,
+                base_tree=base_tree,
+            )
     policy_documents = (
         agents_path,
         contributing_path,
@@ -435,8 +786,29 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(__file__).resolve().parents[1],
         help="repository root (defaults to this script's parent repository)",
     )
+    parser.add_argument(
+        "--base-ref",
+        default=os.environ.get("AGENT_POLICY_BASE"),
+        help=(
+            "git base ref used to enforce changed skill/rubric pairing "
+            "(defaults to AGENT_POLICY_BASE, then the repository default branch)"
+        ),
+    )
     args = parser.parse_args(argv)
-    errors = check_repository(args.root)
+    base_ref = args.base_ref
+    if base_ref and re.fullmatch(r"0+", base_ref):
+        base_ref = None
+    if not base_ref:
+        base_ref = _default_base_ref(args.root.resolve())
+    if not base_ref:
+        print(
+            "Agent policy check failed:\n"
+            "  - cannot determine a git base ref; pass --base-ref or set "
+            "AGENT_POLICY_BASE",
+            file=sys.stderr,
+        )
+        return 1
+    errors = check_repository(args.root, base_ref)
     if errors:
         print("Agent policy check failed:", file=sys.stderr)
         for error in errors:

@@ -30,7 +30,10 @@
             "OBS-SCOPE",
             "OBS-TEST",
             "OBS-SKILL",
-            "OBS-PRESERVE"
+            "OBS-PRESERVE",
+            "OBS-UI",
+            "OBS-PLUGIN",
+            "OBS-INTEGRATION"
           ]
         }
       },
@@ -56,6 +59,10 @@
     {
       "id": "OBS-TEST",
       "criterion": "A behavior change adds or updates the narrowest relevant tests, runs the narrowest useful check first, and reports exact commands and outcomes; a documentation-only change may explicitly explain why no test was run."
+    },
+    {
+      "id": "OBS-SKILL",
+      "criterion": "Every addition or modification to shipped skill content semantically updates a matching eval/qual or eval/rubric definition for the same skill, runs the exact representative make eval-rubric SKILL=skills/<name> CASE=<language>/<service> command, and reports its result; eval-validation alone is not rubric proof."
     },
     {
       "id": "OBS-PRESERVE",
@@ -106,6 +113,50 @@
           "The narrow package test passed and unrelated work was preserved."
         ],
         "rationale": "The focused behavior change has proportionate test evidence and no policy violation."
+      }
+    },
+    {
+      "id": "skill-change-without-matching-rubric-run",
+      "category": "violation",
+      "task": "Change the final-response contract in skills/otel-audit/SKILL.md.",
+      "observed_agent_actions": [
+        "Changed shipped otel-audit instructions to return a prose summary instead of the prior report-link response.",
+        "Updated only an eval/sanity definition; no matching eval/qual or eval/rubric definition with skill set to otel-audit changed.",
+        "Ran make eval-validation SKILL=skills/otel-audit and treated it as sufficient proof.",
+        "Did not run or report a representative local make eval-rubric command."
+      ],
+      "expected": {
+        "verdict": "changes-required",
+        "rule_ids": [
+          "OBS-SKILL"
+        ],
+        "evidence": [
+          "Shipped skill behavior changed without a semantically updated matching qual/rubric eval.",
+          "Validation-only collection does not prove the changed final-response rubric.",
+          "No exact local rubric command and result were recorded."
+        ],
+        "rationale": "The skill change is incomplete until a matching rubric eval changes and the representative local rubric case is run and reported."
+      }
+    },
+    {
+      "id": "skill-change-with-matching-rubric-run",
+      "category": "safe-counterexample",
+      "task": "Change the final-response contract in skills/otel-audit/SKILL.md.",
+      "observed_agent_actions": [
+        "Changed the canonical shipped instructions in skills/otel-audit/SKILL.md.",
+        "Semantically updated evals/go/chi-basic/eval/qual/audit.json, whose skill field is otel-audit, to grade the changed response contract.",
+        "Ran make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic and reported the exact passing result.",
+        "Also ran make eval-validation SKILL=skills/otel-audit for deterministic schema and fixture validation."
+      ],
+      "expected": {
+        "verdict": "acceptable",
+        "rule_ids": [],
+        "evidence": [
+          "The changed canonical skill has a semantically updated matching qual rubric eval.",
+          "The exact representative local rubric command and result are recorded.",
+          "Validation supplements rather than replaces the rubric run."
+        ],
+        "rationale": "The shipped skill change carries both matching judgment coverage and the required local rubric proof."
       }
     },
     {

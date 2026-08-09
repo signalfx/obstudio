@@ -76,7 +76,7 @@ call out this repository-settings follow-up explicitly.
 | interactive-otel-scripts | OTel report/selection tests and pytest eval-input handoff tests |
 | extension | `npm run test:all` |
 | client | `npx vitest run` |
-| agent-policy | Agent instruction routing, review IDs, skill parity, and command references |
+| agent-policy | Agent instruction routing, review IDs, skill/eval pairing, skill parity, and command references |
 | Required CI | Aggregate result for all mandatory CI and policy checks |
 
 See [.github/workflows/ci.yml](.github/workflows/ci.yml).
@@ -106,6 +106,15 @@ Skill eval definitions and fixture apps live under `evals/`. See
 report locations. Run `make test-eval-harness` for validation-only checks and
 `make test-pytest-plugin` for the reusable plugin tests.
 
+Every addition or modification to shipped skill content must add or
+semantically update a matching rubric eval, run
+`make eval-validation SKILL=skills/<name>`, and run a representative local
+`make eval-rubric SKILL=skills/<name> CASE=<language>/<service>`. Record both
+exact commands and results in the pull request. Validation-only collection is
+not a substitute for the local rubric result. Shared `skills/references/`
+changes must keep `skills/references/consumers.json` aligned and repeat the eval
+update and rubric run for every declared affected skill.
+
 The reusable pytest plugin is built and published alongside this repository:
 
 ```sh
@@ -127,18 +136,61 @@ the PR and Copilot's review, they can merge. Post-merge reviews are
 encouraged for knowledge sharing -- comments should be addressed in a
 follow-up PR.
 
-Changes to `AGENTS.md`, nested agent instructions, `.github/copilot-instructions.md`,
-repository policy checks, or GitHub Actions workflows require pre-merge review
-from a repository maintainer. These controls define how automated changes are
-made and verified, so an agent must not approve a change that weakens the rules
-used to review that same change. `CODEOWNERS` requests this review, but a
-repository maintainer must also configure required code-owner review and at
-least one approval in the repository ruleset before it becomes a hard merge
-gate. The PR that introduces these controls must call out that settings
-follow-up together with the `Required CI` status requirement.
+For changes to `AGENTS.md`, nested agent instructions,
+`.github/copilot-instructions.md`, repository policy checks, or GitHub Actions
+workflows, request a focused pre-merge review and include the exact
+`make agent-policy-check` result. No named reviewer gate is configured at this
+time.
 
 For major design decisions, request a pre-merge human review. While
 waiting, switch to a different task.
+
+### Recurring Review Lessons
+
+A review of historical Copilot and human comments found these recurring
+failure patterns. Apply the rule, not just the linked example:
+
+- Treat implementation, docs, skills, schemas, fixtures, examples, generated
+  artifacts, compatibility aliases, and CI as one contract. Trace a changed
+  producer through every consumer instead of leaving a partial migration
+  ([#59](https://github.com/signalfx/obstudio/pull/59#discussion_r3097097508),
+  [#169](https://github.com/signalfx/obstudio/pull/169#discussion_r3648554303)).
+- Test the real public/runtime boundary and its negative, fallback, retry,
+  rollback, and recovery branches. Confirm that the named CI target actually
+  runs the changed suites
+  ([#154](https://github.com/signalfx/obstudio/pull/154#discussion_r3605446962),
+  [#176](https://github.com/signalfx/obstudio/pull/176#discussion_r3663162407),
+  [#178](https://github.com/signalfx/obstudio/pull/178#discussion_r3663670194)).
+- Treat UI quality as behavior: controls must accept the supported input,
+  remain keyboard/focus accessible, communicate honest state, and render with
+  readable hierarchy and sizing at supported widths
+  ([#107](https://github.com/signalfx/obstudio/pull/107#discussion_r3277560511),
+  [#177](https://github.com/signalfx/obstudio/pull/177#discussion_r3663904325)).
+- Preserve target-specific config schemas and user fields. In automatic
+  multi-target flows, one plugin or Claude Code, Codex, Cursor, Kiro, or Copilot
+  integration failure must not block unrelated targets or the core Observer
+  ([#152](https://github.com/signalfx/obstudio/pull/152#discussion_r3591235259),
+  [#186](https://github.com/signalfx/obstudio/pull/186#discussion_r3717037959)).
+- Preserve state, configuration precedence, ownership, and lifecycle invariants
+  across startup, refresh, shared-host reuse, retry, upgrade, concurrency, and
+  shutdown
+  ([#26](https://github.com/signalfx/obstudio/pull/26#discussion_r3060162191),
+  [#180](https://github.com/signalfx/obstudio/pull/180#discussion_r3709268798)).
+- Treat file, process, browser/iframe, clipboard, archive, checksum, and secret
+  flows as security boundaries; validate the opened or authenticated object,
+  not only a path or caller claim
+  ([#159](https://github.com/signalfx/obstudio/pull/159#discussion_r3627606897),
+  [#180](https://github.com/signalfx/obstudio/pull/180#discussion_r3709631625)).
+- Prove OpenTelemetry semantics from the actual producer: names, units,
+  attributes, temporality, aggregation, cardinality, and current-versus-desired
+  signals must match the relevant contract
+  ([#32](https://github.com/signalfx/obstudio/pull/32#discussion_r3066502729),
+  [#169](https://github.com/signalfx/obstudio/pull/169#discussion_r3648554322)).
+- Distinguish expected absence, malformed input, authorization failure,
+  retryable failure, partial results, and offline state. Do not turn uncertainty
+  into destructive cleanup, duplicate creation, or a false success
+  ([#128](https://github.com/signalfx/obstudio/pull/128#discussion_r3470949227),
+  [#175](https://github.com/signalfx/obstudio/pull/175#discussion_r3715836332)).
 
 ## Design and Architecture
 
