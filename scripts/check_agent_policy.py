@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -19,6 +20,7 @@ REQUIRED_HEADINGS = (
     "Code Review Rules",
     "Confluence Document Updates",
 )
+PROTECTED_SECTION_TITLES = REQUIRED_HEADINGS + ("Available Skills",)
 REQUIRED_RULE_IDS = (
     "OBS-SCOPE",
     "OBS-TEST",
@@ -36,13 +38,148 @@ ROUTED_AGENT_GUIDES = (
     "evals/AGENTS.md",
     "pytest-codex-evals/AGENTS.md",
 )
+ROUTED_AGENT_GUIDE_DESCRIPTIONS = {
+    "observer/AGENTS.md": "Go collector, OTLP, REST, MCP, storage, and serving.",
+    "observer/client/AGENTS.md": "React Telemetry Explorer.",
+    "extension/AGENTS.md": (
+        "VS Code-compatible editor extension and packaging."
+    ),
+    "skills/AGENTS.md": "canonical skill sources and skill-level tests.",
+    "evals/AGENTS.md": "eval fixtures, checks, configs, and reports.",
+    "pytest-codex-evals/AGENTS.md": (
+        "reusable pytest plugin and compatibility."
+    ),
+}
+ROUTED_AGENT_GUIDE_PREAMBLES = {
+    "observer/AGENTS.md": (
+        "This file adds Go backend guidance to the repository-root `AGENTS.md`."
+    ),
+    "observer/client/AGENTS.md": (
+        "This file adds React client guidance to the applicable parent instructions."
+    ),
+    "extension/AGENTS.md": (
+        "This file adds editor-extension guidance to the repository-root `AGENTS.md`."
+    ),
+    "skills/AGENTS.md": (
+        "This file adds skill-maintenance guidance to the repository-root `AGENTS.md`."
+    ),
+    "evals/AGENTS.md": (
+        "This file adds eval-harness and fixture guidance to the repository-root "
+        "`AGENTS.md`."
+    ),
+    "pytest-codex-evals/AGENTS.md": (
+        "This file adds reusable-plugin guidance to the repository-root `AGENTS.md`."
+    ),
+}
+ROUTED_AGENT_GUIDE_TITLES = {
+    "observer/AGENTS.md": "Observer Instructions",
+    "observer/client/AGENTS.md": "Observer Client Instructions",
+    "extension/AGENTS.md": "Extension Instructions",
+    "skills/AGENTS.md": "Skill Source Instructions",
+    "evals/AGENTS.md": "Eval Instructions",
+    "pytest-codex-evals/AGENTS.md": "Pytest Plugin Instructions",
+}
+COPILOT_ADAPTER_CONTRACT = """# Repository Instructions
+
+`/AGENTS.md` is the canonical instruction source for this repository. Read and
+follow it before coding or reviewing, together with every nested `AGENTS.md`
+that applies to a changed path.
+
+For pull request reviews, follow `/AGENTS.md` sections **Reviewer Routing** and
+**Code Review Rules**. Identify a finding with its stable `OBS-*` rule ID when
+one applies; do not force ordinary correctness, security, or reliability bugs
+into an unrelated repository-specific rule. Use `/CONTRIBUTING.md` for the
+development and pull request workflow. Do not duplicate or redefine those
+policies here.
+"""
+PR_TEMPLATE_REQUIRED_FIELDS = {
+    "Validation evidence": (
+        "Exact commands and results:",
+        "Skill eval file(s), when shipped skill content changed:",
+        "Local rubric command and result for each added or modified skill; for a "
+        "complete retirement, record agent-policy and eval-harness cleanup results:",
+        "Affected UI interaction/accessibility evidence; normal+narrow/theme visual "
+        "evidence for material visual changes:",
+        "Plugin/integration compatibility evidence; isolated-failure evidence when "
+        "discovery, shared state, lifecycle, execution, or orchestration changed:",
+        "Checks skipped and why:",
+    ),
+    "Risk and review": ("Residual risks or unverified assumptions:",),
+}
 RUBRIC_DIRECTORY_NAMES = {"qual", "rubric"}
 EVAL_DEFINITION_DIRECTORY_NAMES = RUBRIC_DIRECTORY_NAMES | {"runtime", "sanity"}
 SHARED_CONSUMER_MAP = Path("skills/references/consumers.json")
 
 MAKE_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*[?+:!]?=")
 MAKE_TARGET_RE = re.compile(r"^([^\s:#=][^:#=]*):(?!=)")
-SKILL_TABLE_ROW_RE = re.compile(r"^\|\s*`\$([^`]+)`\s*\|", re.MULTILINE)
+AVAILABLE_SKILLS_HEADER_RE = re.compile(
+    r"^\|[ \t]*Skill[ \t]*\|[ \t]*Purpose[ \t]*\|[ \t]*$"
+)
+AVAILABLE_SKILLS_DELIMITER_RE = re.compile(
+    r"^\|[ \t]*:?-{3,}:?[ \t]*\|"
+    r"[ \t]*:?-{3,}:?[ \t]*\|[ \t]*$"
+)
+SKILL_TABLE_ROW_RE = re.compile(
+    r"^\|[ \t]*`\$([^`]+)`[ \t]*\|.+\|[ \t]*$"
+)
+FENCE_RE = re.compile(r"^[ ]{0,3}(`{3,}|~{3,})(.*)$")
+ATX_HEADING_RE = re.compile(r"^(#{1,6})(?!#)(?:[ \t]+(.*?))?[ \t]*$")
+INDENTED_ATX_HEADING_RE = re.compile(
+    r"^[ ]{1,3}(#{1,6})(?!#)(?:[ \t]+(.*?))?[ \t]*$"
+)
+SETEXT_UNDERLINE_RE = re.compile(r"^[ ]{0,3}(?P<marker>=+|-+)[ \t]*$")
+THEMATIC_BREAK_RE = re.compile(
+    r"^[ ]{0,3}(?:\*[ \t]*){3,}$|"
+    r"^[ ]{0,3}(?:_[ \t]*){3,}$|"
+    r"^[ ]{0,3}(?:-[ \t]*){3,}$"
+)
+CONTAINER_BLOCK_RE = re.compile(
+    r"^[ ]{0,3}(?:>|[*+-](?:[ \t]+|$)|[0-9]{1,9}[.)](?:[ \t]+|$))"
+)
+BLOCK_QUOTE_PREFIX_RE = re.compile(r"^[ ]{0,3}>[ \t]?")
+LIST_PREFIX_RE = re.compile(
+    r"^[ ]{0,3}(?:[*+-]|[0-9]{1,9}[.)])(?P<spacing>[ \t]+)(?P<content>.*)$"
+)
+INDENTED_CONTENT_RE = re.compile(r"^(?: {4}| {0,3}\t)")
+LINK_REFERENCE_BLOCK_RE = re.compile(
+    r"(?m)^[ ]{0,3}\["
+    r"(?:\\[^\r\n]|[^\[\]\\\r\n]|(?:\r\n|\r|\n)[ ]{0,3}(?=[^\r\n])){1,999}"
+    r"\]:"
+)
+GFM_TABLE_DELIMITER_RE = re.compile(
+    r"^[ \t]*(?=[^\r\n]*\|)\|?[ \t]*:?-+:?[ \t]*"
+    r"(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$"
+)
+PLAIN_SECTION_HEADING_RE = re.compile(r"^## [A-Za-z0-9][A-Za-z0-9 ]*$")
+EXACT_RULE_HEADING_RE = re.compile(
+    r"^###[ \t]+(?P<id>OBS-[A-Z][A-Z0-9-]*)[ \t]+--[ \t]+(?P<title>.+?)"
+    r"[ \t]*$"
+)
+FORBIDDEN_RULE_TITLE_MARKUP = frozenset("\\`*_[]<>#&~$")
+RAW_HTML_RE = re.compile(
+    r"<(?:!--|\?|!\[CDATA\[|![A-Za-z]|"
+    r"/?[A-Za-z][A-Za-z0-9-]*(?=[ \t\v\f\r\n/>]|$))",
+    re.IGNORECASE,
+)
+PARENT_INSTRUCTION_NEGATION_RE = re.compile(
+    r"\b(?:ignore|disregard|override|supersede|do not follow|don't follow)\b"
+    r"[^\r\n.]{0,120}\b(?:repository(?:-root| root)?|parent)\b|"
+    r"\b(?:repository(?:-root| root)?|parent)\b[^\r\n.]{0,120}"
+    r"\b(?:do not apply|does not apply|are not applicable|must not be followed)\b",
+    re.IGNORECASE,
+)
+
+
+def _commonmark_lines(markdown: str) -> list[str]:
+    return [
+        match.group(0)
+        for match in re.finditer(r"[^\r\n]*(?:\r\n|\r|\n|$)", markdown)
+        if match.group(0)
+    ]
+
+
+def _is_markdown_blank(text: str) -> bool:
+    return not text or all(character in " \t" for character in text)
 
 
 def _read(path: Path, errors: list[str]) -> str:
@@ -53,14 +190,578 @@ def _read(path: Path, errors: list[str]) -> str:
         return ""
 
 
+def _read_policy_file(path: Path, root: Path, errors: list[str]) -> str:
+    if path.is_symlink():
+        errors.append(
+            f"{path.relative_to(root)}: policy entrypoint must not be a symbolic link"
+        )
+        return ""
+    return _read(path, errors)
+
+
+def _mask_fenced_blocks(markdown: str) -> str:
+    masked: list[str] = []
+    fence: tuple[str, int] | None = None
+    for raw_line in _commonmark_lines(markdown):
+        line = raw_line.rstrip("\r\n")
+        marker = FENCE_RE.match(line)
+        if fence is not None:
+            if marker:
+                token, suffix = marker.groups()
+                if (
+                    token[0] == fence[0]
+                    and len(token) >= fence[1]
+                    and _is_markdown_blank(suffix)
+                ):
+                    fence = None
+            masked.append("".join(char if char in "\r\n" else " " for char in raw_line))
+            continue
+
+        if (
+            marker
+            and line.startswith(marker.group(1)[0])
+            and _is_valid_fence_opener(marker)
+        ):
+            token = marker.group(1)
+            fence = (token[0], len(token))
+            masked.append("".join(char if char in "\r\n" else " " for char in raw_line))
+            continue
+        masked.append(raw_line)
+    return "".join(masked)
+
+
+def _character_is_escaped(markdown: str, index: int) -> bool:
+    backslashes = 0
+    index -= 1
+    while index >= 0 and markdown[index] == "\\":
+        backslashes += 1
+        index -= 1
+    return backslashes % 2 == 1
+
+
+def _mask_code_spans(markdown: str) -> str:
+    masked = list(markdown)
+    index = 0
+    while index < len(markdown):
+        if markdown[index] != "`" or _character_is_escaped(markdown, index):
+            index += 1
+            continue
+
+        opener_end = index
+        while opener_end < len(markdown) and markdown[opener_end] == "`":
+            opener_end += 1
+        delimiter_length = opener_end - index
+        search_at = opener_end
+        line_end = len(markdown)
+        for separator in ("\r", "\n"):
+            separator_at = markdown.find(separator, opener_end)
+            if separator_at >= 0:
+                line_end = min(line_end, separator_at)
+        closer_end: int | None = None
+        while search_at < line_end:
+            closer_start = markdown.find("`", search_at)
+            if closer_start < 0 or closer_start >= line_end:
+                break
+            candidate_end = closer_start
+            while candidate_end < len(markdown) and markdown[candidate_end] == "`":
+                candidate_end += 1
+            if candidate_end - closer_start == delimiter_length:
+                closer_end = candidate_end
+                break
+            search_at = candidate_end
+
+        if closer_end is None:
+            index = opener_end
+            continue
+        for position in range(index, closer_end):
+            if masked[position] not in "\r\n":
+                masked[position] = " "
+        masked[index] = "x"
+        index = closer_end
+    return "".join(masked)
+
+
+def _mask_html_comments(markdown: str) -> str:
+    visible_markdown = _mask_code_spans(markdown)
+    masked = list(markdown)
+    cursor = 0
+    while cursor < len(markdown):
+        start = visible_markdown.find("<!--", cursor)
+        if start < 0:
+            break
+        if _character_is_escaped(visible_markdown, start):
+            cursor = start + 4
+            continue
+        close = visible_markdown.find("-->", start + 4)
+        end = len(markdown) if close < 0 else close + 3
+        for position in range(start, end):
+            if masked[position] not in "\r\n":
+                masked[position] = " "
+        cursor = end
+    return "".join(masked)
+
+
+def _active_markdown(markdown: str) -> str:
+    return _mask_html_comments(_mask_fenced_blocks(markdown))
+
+
+def _check_nested_fences(markdown: str, source: str, errors: list[str]) -> None:
+    active_markdown = _active_markdown(markdown)
+    for raw_line in _commonmark_lines(active_markdown):
+        line = raw_line.rstrip("\r\n")
+        marker = FENCE_RE.match(_without_container_prefixes(line))
+        if marker and _is_valid_fence_opener(marker):
+            errors.append(
+                f"{source}: nested or indented fenced blocks are not supported"
+            )
+            return
+
+
+def _check_active_raw_html(markdown: str, source: str, errors: list[str]) -> None:
+    visible_markdown = _mask_code_spans(_active_markdown(markdown))
+    for raw_line in _commonmark_lines(visible_markdown):
+        line = raw_line.rstrip("\r\n")
+        if any(
+            not _character_is_escaped(line, match.start())
+            for match in RAW_HTML_RE.finditer(line)
+        ):
+            errors.append(f"{source}: raw HTML is not supported in active directives")
+            return
+
+
+def _without_container_prefixes(line: str) -> str:
+    content = line
+    while True:
+        content = content.lstrip(" \t")
+        if SETEXT_UNDERLINE_RE.match(content) or THEMATIC_BREAK_RE.match(content):
+            return content
+        quote = BLOCK_QUOTE_PREFIX_RE.match(content)
+        if quote:
+            content = content[quote.end() :]
+            continue
+        item = LIST_PREFIX_RE.match(content)
+        if item:
+            content = item.group("content")
+            continue
+        return content
+
+
+def _is_valid_fence_opener(marker: re.Match[str]) -> bool:
+    token, suffix = marker.groups()
+    return token[0] == "~" or "`" not in suffix
+
+
+def _policy_atx_headings(
+    markdown: str,
+) -> list[tuple[int, str, int, int]]:
+    headings: list[tuple[int, str, int, int]] = []
+    fence: tuple[str, int] | None = None
+    offset = 0
+    for raw_line in _commonmark_lines(markdown):
+        line = raw_line.rstrip("\r\n")
+        if fence is not None:
+            marker = FENCE_RE.match(line)
+            if marker:
+                token, suffix = marker.groups()
+                if (
+                    token[0] == fence[0]
+                    and len(token) >= fence[1]
+                    and _is_markdown_blank(suffix)
+                ):
+                    fence = None
+            offset += len(raw_line)
+            continue
+
+        marker = FENCE_RE.match(line)
+        if (
+            marker
+            and line.startswith(marker.group(1)[0])
+            and _is_valid_fence_opener(marker)
+        ):
+            token = marker.group(1)
+            fence = (token[0], len(token))
+            offset += len(raw_line)
+            continue
+
+        heading = ATX_HEADING_RE.match(line)
+        if heading:
+            hashes, raw_title = heading.groups()
+            title_without_closer = re.sub(
+                r"[ \t]+#+[ \t]*$", "", raw_title or ""
+            )
+            title = title_without_closer.strip(" \t")
+            headings.append((len(hashes), title, offset, offset + len(raw_line)))
+        offset += len(raw_line)
+    return headings
+
+
+def _source_line(markdown: str, start: int) -> str:
+    end = start
+    while end < len(markdown) and markdown[end] not in "\r\n":
+        end += 1
+    return markdown[start:end]
+
+
+def _normalized_section_title(title: str) -> str:
+    return " ".join(html.unescape(title).split()).casefold()
+
+
+def _matching_section_headings(
+    markdown: str, title: str
+) -> list[tuple[str, str]]:
+    expected = _normalized_section_title(title)
+    return [
+        (heading_title, _source_line(markdown, start).rstrip(" \t"))
+        for level, heading_title, start, _end in _policy_atx_headings(markdown)
+        if _normalized_section_title(heading_title) == expected
+    ]
+
+
+def _check_policy_markdown_ambiguity(markdown: str, errors: list[str]) -> None:
+    unfenced_markdown = _mask_fenced_blocks(markdown)
+    visible_markdown = _mask_code_spans(unfenced_markdown)
+    for raw_line in _commonmark_lines(visible_markdown):
+        line = raw_line.rstrip("\r\n")
+        if any(
+            character == "`" and not _character_is_escaped(line, index)
+            for index, character in enumerate(line)
+        ):
+            errors.append(
+                "AGENTS.md: inline code spans must open and close on the same "
+                f"physical line: {line!r}"
+            )
+        if any(
+            not _character_is_escaped(line, match.start())
+            for match in RAW_HTML_RE.finditer(line)
+        ):
+            errors.append(
+                "AGENTS.md: column-leading raw HTML syntax and inline raw HTML "
+                f"syntax are not supported in the policy document: {line!r}"
+            )
+
+    fence: tuple[str, int] | None = None
+    for raw_line in _commonmark_lines(markdown):
+        line = raw_line.rstrip("\r\n")
+        marker = FENCE_RE.match(line)
+        if fence is not None:
+            if marker:
+                token, suffix = marker.groups()
+                if (
+                    token[0] == fence[0]
+                    and len(token) >= fence[1]
+                    and _is_markdown_blank(suffix)
+                ):
+                    fence = None
+            continue
+
+        if marker and _is_valid_fence_opener(marker):
+            token = marker.group(1)
+            if line.startswith(token[0]):
+                fence = (token[0], len(token))
+            else:
+                errors.append(
+                    "AGENTS.md: indented fenced blocks are ambiguous in the policy "
+                    f"document; use a column-1 fence: {line!r}"
+                )
+            continue
+
+        source_content = line.lstrip(" \t")
+        container_content = _without_container_prefixes(line)
+        structural_content = container_content.lstrip(" \t")
+        nested_heading = ATX_HEADING_RE.match(structural_content)
+        if structural_content != line and nested_heading:
+            errors.append(
+                "AGENTS.md: structural policy headings must use column-1 ATX "
+                f"headings: {line!r}"
+            )
+        if (
+            SETEXT_UNDERLINE_RE.match(source_content)
+            or THEMATIC_BREAK_RE.match(source_content)
+            or SETEXT_UNDERLINE_RE.match(structural_content)
+            or THEMATIC_BREAK_RE.match(structural_content)
+        ):
+            errors.append(
+                "AGENTS.md: setext headings and thematic breaks are not supported "
+                "in the policy document"
+            )
+
+    if fence is not None:
+        errors.append("AGENTS.md: unclosed fenced code block")
+
+    headings = _policy_atx_headings(markdown)
+    h1_sources = [
+        _source_line(markdown, start).rstrip(" \t")
+        for level, _title, start, _end in headings
+        if level == 1
+    ]
+    if h1_sources != ["# AGENTS.md"]:
+        errors.append(
+            "AGENTS.md: expected exactly one literal '# AGENTS.md' document heading"
+        )
+
+    normalized_h2_titles: list[str] = []
+    for level, title, start, _end in headings:
+        if level >= 4:
+            errors.append(
+                "AGENTS.md: H4-H6 headings are not supported; use a plain paragraph"
+            )
+        if level != 2:
+            continue
+        source = _source_line(markdown, start).rstrip(" \t")
+        normalized_h2_titles.append(_normalized_section_title(title))
+        if PLAIN_SECTION_HEADING_RE.fullmatch(source) is None:
+            errors.append(
+                "AGENTS.md: top-level policy sections must use literal, plain-text "
+                f"H2 headings: {source!r}"
+            )
+    for title in sorted(set(normalized_h2_titles)):
+        if normalized_h2_titles.count(title) > 1:
+            errors.append(
+                "AGENTS.md: top-level policy section headings must be unique; "
+                f"found {normalized_h2_titles.count(title)} headings named {title!r}"
+            )
+
+
+def _section_bounds_all(markdown: str, title: str) -> list[tuple[int, int]]:
+    headings = _policy_atx_headings(markdown)
+    sections: list[tuple[int, int]] = []
+    for index, (level, heading_title, _start, content_start) in enumerate(headings):
+        source = _source_line(markdown, _start).rstrip(" \t")
+        if level != 2 or heading_title != title or source != f"## {title}":
+            continue
+        content_end = len(markdown)
+        for next_level, _next_title, next_start, _next_end in headings[index + 1 :]:
+            if next_level <= level:
+                content_end = next_start
+                break
+        sections.append((content_start, content_end))
+    return sections
+
+
+def _section_bounds(markdown: str, title: str) -> tuple[int, int] | None:
+    sections = _section_bounds_all(markdown, title)
+    return sections[0] if sections else None
+
+
 def _section(markdown: str, title: str) -> str | None:
-    match = re.search(rf"^##\s+{re.escape(title)}\s*$", markdown, re.MULTILINE)
-    if not match:
+    bounds = _section_bounds(markdown, title)
+    if bounds is None:
         return None
-    end = re.search(r"^##\s+", markdown[match.end() :], re.MULTILINE)
-    if end:
-        return markdown[match.end() : match.end() + end.start()]
-    return markdown[match.end() :]
+    return markdown[bounds[0] : bounds[1]]
+
+
+def _routing_entry_is_canonical(routing: str, guide: str) -> bool:
+    entries = [
+        raw_line.rstrip("\r\n")
+        for raw_line in _commonmark_lines(routing)
+        if re.match(
+            rf"^[ ]{{0,3}}[-*+][ \t]+`{re.escape(guide)}`(?:[ \t]|$)",
+            raw_line,
+        )
+    ]
+    expected = f"- `{guide}` -- {ROUTED_AGENT_GUIDE_DESCRIPTIONS[guide]}"
+    return entries == [expected]
+
+
+def _available_skill_table_names(
+    available: str, errors: list[str]
+) -> set[str]:
+    lines = [line.rstrip("\r\n") for line in _commonmark_lines(available)]
+    header_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if AVAILABLE_SKILLS_HEADER_RE.fullmatch(line)
+    ]
+    if len(header_indexes) != 1:
+        errors.append(
+            "AGENTS.md Available Skills: expected exactly one literal "
+            "'| Skill | Purpose |' table header"
+        )
+        return set()
+
+    header_index = header_indexes[0]
+    if header_index > 0 and not _is_markdown_blank(lines[header_index - 1]):
+        errors.append(
+            "AGENTS.md Available Skills: table header must begin a new Markdown block"
+        )
+        return set()
+    if header_index + 1 >= len(lines) or AVAILABLE_SKILLS_DELIMITER_RE.fullmatch(
+        lines[header_index + 1]
+    ) is None:
+        errors.append(
+            "AGENTS.md Available Skills: table header must be followed by a "
+            "two-column GFM delimiter row"
+        )
+        return set()
+
+    names: list[str] = []
+    for line in lines[header_index + 2 :]:
+        if _is_markdown_blank(line) or not line.lstrip(" ").startswith("|"):
+            break
+        row = SKILL_TABLE_ROW_RE.fullmatch(line)
+        if row is None:
+            errors.append(
+                "AGENTS.md Available Skills: every table row must use "
+                "'| `$skill-name` | Purpose |'"
+            )
+            continue
+        names.append(row.group(1))
+
+    duplicates = sorted(name for name in set(names) if names.count(name) > 1)
+    if duplicates:
+        errors.append(
+            "AGENTS.md Available Skills: duplicate skill rows: "
+            + ", ".join(duplicates)
+        )
+    return set(names)
+
+
+def _top_level_list_items(markdown: str) -> list[str]:
+    items: list[str] = []
+    current: list[str] | None = None
+    for raw_line in _commonmark_lines(markdown):
+        line = raw_line.rstrip("\r\n")
+        item = re.match(r"^[-*+][ \t]+(.+)$", line)
+        if item:
+            if current is not None:
+                items.append(" ".join(current))
+            current = [item.group(1).strip()]
+            continue
+        if current is not None and re.match(r"^(?: {2,}|\t)\S", line):
+            current.append(line.strip())
+            continue
+        if current is not None:
+            items.append(" ".join(current))
+            current = None
+    if current is not None:
+        items.append(" ".join(current))
+    return items
+
+
+def _review_section_source_bounds(markdown: str) -> list[tuple[int, int]]:
+    return _section_bounds_all(markdown, "Code Review Rules")
+
+
+def _check_review_rule_contract(markdown: str, errors: list[str]) -> None:
+    sections = _review_section_source_bounds(markdown)
+    review_headings = _matching_section_headings(markdown, "Code Review Rules")
+    if len(sections) != 1 or len(review_headings) != 1:
+        errors.append(
+            "AGENTS.md Code Review Rules: expected one literal, top-level "
+            "'## Code Review Rules' section, found "
+            f"{len(review_headings)} matching top-level headings"
+        )
+    elif review_headings[0][1] != "## Code Review Rules":
+        errors.append(
+            "AGENTS.md Code Review Rules: the top-level heading must use the "
+            "literal spelling '## Code Review Rules'"
+        )
+
+    for level, _title, heading_start, _end in _policy_atx_headings(markdown):
+        if level != 3:
+            continue
+        if not any(start <= heading_start < end for start, end in sections):
+            errors.append(
+                "AGENTS.md: H3 headings are reserved for literal OBS rules inside "
+                f"the Code Review Rules section: {_source_line(markdown, heading_start)!r}"
+            )
+
+    defined_rule_ids: list[str] = []
+    for start, end in sections:
+        section_text = markdown[start:end]
+        structural_section = _mask_code_spans(section_text)
+        if LINK_REFERENCE_BLOCK_RE.search(structural_section):
+            errors.append(
+                "AGENTS.md Code Review Rules: link-reference and table blocks "
+                "are not allowed"
+            )
+        source_lines = _commonmark_lines(section_text)
+        structural_lines = _commonmark_lines(structural_section)
+        for raw_line, source_raw_line in zip(structural_lines, source_lines, strict=True):
+            line = raw_line.rstrip("\r\n")
+            source_line = source_raw_line.rstrip("\r\n")
+            fence = FENCE_RE.match(line)
+            if fence and _is_valid_fence_opener(fence):
+                errors.append(
+                    "AGENTS.md Code Review Rules: fenced blocks are not allowed; "
+                    "keep rule definitions in literal top-level headings"
+                )
+                continue
+            if SETEXT_UNDERLINE_RE.match(line) or THEMATIC_BREAK_RE.match(line):
+                errors.append(
+                    "AGENTS.md Code Review Rules: setext headings and thematic "
+                    "breaks are not allowed"
+                )
+                continue
+            if GFM_TABLE_DELIMITER_RE.match(line):
+                errors.append(
+                    "AGENTS.md Code Review Rules: link-reference and table blocks "
+                    "are not allowed"
+                )
+                continue
+            if CONTAINER_BLOCK_RE.match(line):
+                errors.append(
+                    "AGENTS.md Code Review Rules: block quotes and lists are not "
+                    "allowed; keep rule definitions at the document root"
+                )
+                continue
+            if not _is_markdown_blank(line) and INDENTED_CONTENT_RE.match(line):
+                errors.append(
+                    "AGENTS.md Code Review Rules: indented code blocks are not "
+                    "allowed"
+                )
+                continue
+            indented_heading = INDENTED_ATX_HEADING_RE.match(line)
+            heading = ATX_HEADING_RE.match(line)
+            if not indented_heading and not heading:
+                continue
+            if indented_heading:
+                errors.append(
+                    "AGENTS.md Code Review Rules: structural headings must start "
+                    f"at column 1: {line!r}"
+                )
+                continue
+
+            level = len(heading.group(1))
+            exact = EXACT_RULE_HEADING_RE.fullmatch(source_line)
+            if level != 3 or exact is None:
+                errors.append(
+                    "AGENTS.md Code Review Rules: every structural heading must "
+                    f"match '### OBS-ID -- <plain title>': {source_line!r}"
+                )
+                continue
+
+            title = exact.group("title").strip(" \t")
+            if (
+                not any(character.isascii() and character.isalnum() for character in title)
+                or any(not 0x20 <= ord(character) <= 0x7E for character in title)
+                or any(character in FORBIDDEN_RULE_TITLE_MARKUP for character in title)
+            ):
+                errors.append(
+                    "AGENTS.md Code Review Rules: rule titles must contain plain, "
+                    f"visible text without Markdown or HTML markup: {source_line!r}"
+                )
+                continue
+            defined_rule_ids.append(exact.group("id"))
+
+    unknown_rule_ids = set(defined_rule_ids) - set(REQUIRED_RULE_IDS)
+    if unknown_rule_ids:
+        errors.append(
+            "AGENTS.md Code Review Rules: unknown exact rule headings: "
+            + ", ".join(sorted(unknown_rule_ids))
+        )
+    for rule_id in REQUIRED_RULE_IDS:
+        count = defined_rule_ids.count(rule_id)
+        if count == 0:
+            errors.append(
+                "AGENTS.md Code Review Rules: missing exact rule heading "
+                f"'### {rule_id} -- <plain title>'"
+            )
+        elif count > 1:
+            errors.append(
+                "AGENTS.md Code Review Rules: duplicate exact rule heading for "
+                f"{rule_id}"
+            )
 
 
 def _canonical_skills(root: Path, errors: list[str]) -> set[str]:
@@ -68,19 +769,64 @@ def _canonical_skills(root: Path, errors: list[str]) -> set[str]:
     if not skills_dir.is_dir():
         errors.append("skills/: canonical skill directory is missing")
         return set()
+    if skills_dir.is_symlink():
+        errors.append("skills/: canonical skill root must not be a symbolic link")
+        return set()
 
     names: set[str] = set()
     for skill_file in sorted(skills_dir.glob("*/SKILL.md")):
         name = skill_file.parent.name
         names.add(name)
+        skill_root = skill_file.parent
+        resolved_skill_root = skill_root.resolve()
+        if skill_root.is_symlink():
+            errors.append(
+                f"{skill_root.relative_to(root)}: canonical skill directory must not "
+                "be a symbolic link"
+            )
+            continue
+        unsafe_symlink = False
+        for relative_path in _remaining_tree_paths(
+            root, skill_root.relative_to(root), errors
+        ):
+            path = root / relative_path
+            if not path.is_symlink():
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+            except OSError as exc:
+                errors.append(f"{path.relative_to(root)}: broken canonical symlink: {exc}")
+                unsafe_symlink = True
+                continue
+            if not resolved.is_relative_to(resolved_skill_root):
+                errors.append(
+                    f"{path.relative_to(root)}: canonical skill symlink must stay "
+                    f"inside {skill_root.relative_to(root)}"
+                )
+                unsafe_symlink = True
+        if unsafe_symlink:
+            continue
         text = _read(skill_file, errors)
-        frontmatter_name = re.search(r"^name:\s*([^\s]+)\s*$", text, re.MULTILINE)
-        if not frontmatter_name:
-            errors.append(f"{skill_file.relative_to(root)}: missing frontmatter name")
-        elif frontmatter_name.group(1) != name:
+        lines = _commonmark_lines(text)
+        frontmatter_end: int | None = None
+        if lines and lines[0].rstrip("\r\n") == "---":
+            for index, raw_line in enumerate(lines[1:], start=1):
+                if raw_line.rstrip("\r\n") == "---":
+                    frontmatter_end = index
+                    break
+        frontmatter = "" if frontmatter_end is None else "".join(lines[1:frontmatter_end])
+        frontmatter_names = re.findall(
+            r"^name:[ \t]*([^\s]+)[ \t]*$", frontmatter, re.MULTILINE
+        )
+        if len(frontmatter_names) != 1:
+            errors.append(
+                f"{skill_file.relative_to(root)}: leading YAML frontmatter must "
+                "contain exactly one name"
+            )
+        elif frontmatter_names[0] != name:
             errors.append(
                 f"{skill_file.relative_to(root)}: frontmatter name "
-                f"{frontmatter_name.group(1)!r} must match directory {name!r}"
+                f"{frontmatter_names[0]!r} must match directory {name!r}"
             )
     if not names:
         errors.append("skills/: no canonical */SKILL.md files found")
@@ -135,31 +881,103 @@ def _check_skill_discovery(root: Path, canonical: set[str], errors: list[str]) -
 def _check_instruction_structure(
     root: Path, agents_text: str, canonical: set[str], errors: list[str]
 ) -> None:
-    for heading in REQUIRED_HEADINGS:
-        if _section(agents_text, heading) is None:
+    _check_policy_markdown_ambiguity(agents_text, errors)
+    _check_nested_fences(agents_text, "AGENTS.md", errors)
+    active_agents_text = _active_markdown(agents_text)
+    for heading in PROTECTED_SECTION_TITLES:
+        sections = _section_bounds_all(agents_text, heading)
+        matching_headings = _matching_section_headings(agents_text, heading)
+        if not sections:
             errors.append(f"AGENTS.md: missing required '## {heading}' section")
+        elif len(sections) != 1 or len(matching_headings) != 1:
+            errors.append(
+                f"AGENTS.md: expected exactly one literal '## {heading}' section; "
+                f"found {len(matching_headings)} matching top-level headings"
+            )
 
     for reference in ("CONTRIBUTING.md", "skills/", ".agents/skills/"):
-        if reference not in agents_text:
+        if reference not in active_agents_text:
             errors.append(f"AGENTS.md: missing required reference to {reference}")
 
-    routing = _section(agents_text, "Reviewer Routing") or ""
+    routing = _section(active_agents_text, "Reviewer Routing") or ""
+    literal_routing_directive = (
+        "Apply this file and every more-specific instruction file that covers the\n"
+        "changed path:"
+    )
+    if not routing.lstrip("\r\n").startswith(literal_routing_directive):
+        errors.append(
+            "AGENTS.md Reviewer Routing: missing the canonical positive routing "
+            "directive"
+        )
     for guide in ROUTED_AGENT_GUIDES:
-        if guide not in routing:
-            errors.append(f"AGENTS.md Reviewer Routing: missing {guide}")
-        if not (root / guide).is_file():
+        if not _routing_entry_is_canonical(routing, guide):
+            errors.append(
+                "AGENTS.md Reviewer Routing: expected exactly one canonical entry "
+                f"for {guide}"
+            )
+        guide_path = root / guide
+        if guide_path.is_symlink():
+            errors.append(f"{guide}: policy entrypoint must not be a symbolic link")
+            continue
+        if not guide_path.is_file():
             errors.append(f"{guide}: routed instruction file is missing")
+            continue
+        guide_text = _read_policy_file(guide_path, root, errors)
+        _check_nested_fences(guide_text, guide, errors)
+        _check_active_raw_html(guide_text, guide, errors)
+        if any(
+            not _is_markdown_blank(raw.rstrip("\r\n"))
+            and INDENTED_CONTENT_RE.match(raw.rstrip("\r\n"))
+            for raw in _commonmark_lines(_mask_fenced_blocks(guide_text))
+        ):
+            errors.append(f"{guide}: indented code blocks are not supported")
+        active_guide = _active_markdown(guide_text)
+        guide_lines = _commonmark_lines(active_guide)
+        first_index = next(
+            (
+                index
+                for index, raw in enumerate(guide_lines)
+                if not _is_markdown_blank(raw.rstrip("\r\n"))
+            ),
+            None,
+        )
+        expected_title = f"# {ROUTED_AGENT_GUIDE_TITLES[guide]}"
+        first_line = (
+            "" if first_index is None else guide_lines[first_index].rstrip("\r\n")
+        )
+        preamble_lines: list[str] = []
+        if first_index is not None:
+            for raw in guide_lines[first_index + 1 :]:
+                line = raw.rstrip("\r\n")
+                if not preamble_lines and _is_markdown_blank(line):
+                    continue
+                if _is_markdown_blank(line):
+                    break
+                preamble_lines.append(line)
+        preamble = " ".join(" ".join(preamble_lines).split())
+        if (
+            first_line != expected_title
+            or any(line.startswith((" ", "\t")) for line in preamble_lines)
+            or not preamble.startswith(ROUTED_AGENT_GUIDE_PREAMBLES[guide])
+        ):
+            errors.append(
+                f"{guide}: missing canonical positive parent-inheritance preamble"
+            )
+        normalized_guide_prose = " ".join(
+            _mask_code_spans(active_guide).split()
+        )
+        if PARENT_INSTRUCTION_NEGATION_RE.search(normalized_guide_prose):
+            errors.append(
+                f"{guide}: active directives conflict with parent instructions"
+            )
 
-    review_rules = _section(agents_text, "Code Review Rules") or ""
-    for rule_id in REQUIRED_RULE_IDS:
-        if rule_id not in review_rules:
-            errors.append(f"AGENTS.md Code Review Rules: missing {rule_id}")
+    _check_review_rule_contract(agents_text, errors)
 
-    available = _section(agents_text, "Available Skills")
+    available = _section(active_agents_text, "Available Skills")
     if available is None:
         errors.append("AGENTS.md: missing required '## Available Skills' section")
     else:
-        table_names = set(SKILL_TABLE_ROW_RE.findall(available))
+        table_names = _available_skill_table_names(available, errors)
         missing = canonical - table_names
         extra = table_names - canonical
         if missing:
@@ -173,38 +991,87 @@ def _check_instruction_structure(
             )
 
     adapter_path = root / ".github" / "copilot-instructions.md"
-    adapter = _read(adapter_path, errors)
-    if adapter:
-        if "/AGENTS.md" not in adapter and "`AGENTS.md`" not in adapter:
+    adapter = _read_policy_file(adapter_path, root, errors)
+    _check_nested_fences(adapter, adapter_path.as_posix(), errors)
+    _check_active_raw_html(adapter, adapter_path.as_posix(), errors)
+    if any(
+        not _is_markdown_blank(raw_line.rstrip("\r\n"))
+        and INDENTED_CONTENT_RE.match(raw_line.rstrip("\r\n"))
+        for raw_line in _commonmark_lines(_mask_fenced_blocks(adapter))
+    ):
+        errors.append(
+            ".github/copilot-instructions.md: indented code blocks are not "
+            "supported in the routing adapter"
+        )
+    if not adapter.strip():
+        errors.append(
+            ".github/copilot-instructions.md: missing active Copilot routing directives"
+        )
+    else:
+        normalized_adapter = " ".join(adapter.split())
+        expected_adapter = " ".join(COPILOT_ADAPTER_CONTRACT.split())
+        if normalized_adapter != expected_adapter:
             errors.append(
-                ".github/copilot-instructions.md: must route to the canonical root AGENTS.md"
+                ".github/copilot-instructions.md: active content must match the "
+                "canonical positive routing adapter"
             )
-        for heading in ("Reviewer Routing", "Code Review Rules"):
-            if heading not in adapter:
-                errors.append(
-                    f".github/copilot-instructions.md: missing routing reference to {heading}"
-                )
 
 
 def _check_pr_template(root: Path, errors: list[str]) -> None:
     path = root / ".github" / "PULL_REQUEST_TEMPLATE.md"
-    template = _read(path, errors)
-    for heading in ("Summary", "Scope", "Validation evidence", "Risk and review"):
-        if re.search(rf"^##\s+{re.escape(heading)}\s*$", template, re.MULTILINE) is None:
-            errors.append(f".github/PULL_REQUEST_TEMPLATE.md: missing '## {heading}'")
-    for evidence in (
-        "Exact commands and results",
-        "Skill eval file(s)",
-        "Local rubric command and result",
-        "UI interaction/accessibility",
-        "Plugin/integration compatibility",
-        "Checks skipped",
-        "Residual risks",
-    ):
-        if evidence.casefold() not in template.casefold():
+    template = _read_policy_file(path, root, errors)
+    _check_nested_fences(template, path.as_posix(), errors)
+    _check_active_raw_html(template, path.as_posix(), errors)
+    active_template = _active_markdown(template)
+    normalized_h2_titles: list[str] = []
+    for level, title, start, _end in _policy_atx_headings(active_template):
+        source = _source_line(active_template, start).rstrip(" \t")
+        literal_heading = re.compile(
+            rf"^{'#' * level} [A-Za-z0-9][A-Za-z0-9 ]*$"
+        )
+        if literal_heading.fullmatch(source) is None:
             errors.append(
-                f".github/PULL_REQUEST_TEMPLATE.md: missing evidence field {evidence!r}"
+                ".github/PULL_REQUEST_TEMPLATE.md: headings must be literal "
+                f"plain text: {source!r}"
             )
+        if level != 2:
+            continue
+        normalized_h2_titles.append(_normalized_section_title(title))
+    for title in set(normalized_h2_titles):
+        if normalized_h2_titles.count(title) > 1:
+            errors.append(
+                ".github/PULL_REQUEST_TEMPLATE.md: H2 headings must be unique; "
+                f"found duplicate {title!r}"
+            )
+    sections_by_title: dict[str, str] = {}
+    for heading in ("Summary", "Scope", "Validation evidence", "Risk and review"):
+        sections = _section_bounds_all(active_template, heading)
+        matching_headings = _matching_section_headings(active_template, heading)
+        if not sections:
+            errors.append(f".github/PULL_REQUEST_TEMPLATE.md: missing '## {heading}'")
+        elif len(sections) != 1 or len(matching_headings) != 1:
+            errors.append(
+                ".github/PULL_REQUEST_TEMPLATE.md: expected exactly one literal "
+                f"'## {heading}' heading"
+            )
+        if len(sections) == 1:
+            sections_by_title[heading] = active_template[sections[0][0] : sections[0][1]]
+    for section_title, fields in PR_TEMPLATE_REQUIRED_FIELDS.items():
+        list_items = [
+            " ".join(item.split()).casefold()
+            for item in _top_level_list_items(sections_by_title.get(section_title, ""))
+        ]
+        for evidence in fields:
+            count = list_items.count(" ".join(evidence.split()).casefold())
+            if count == 0:
+                errors.append(
+                    ".github/PULL_REQUEST_TEMPLATE.md: missing evidence field "
+                    f"{evidence!r} from '## {section_title}'"
+                )
+            elif count > 1:
+                errors.append(
+                    f".github/PULL_REQUEST_TEMPLATE.md: duplicate evidence field {evidence!r}"
+                )
 
 
 def _check_cross_document_claims(
@@ -443,13 +1310,46 @@ def _shared_consumers_at_ref(
     )
 
 
+def _contains_reference_name(content: str, name: str) -> bool:
+    return (
+        re.search(
+            rf"(?<![A-Za-z0-9_.-]){re.escape(name)}"
+            r"(?![A-Za-z0-9_-])(?!\.[A-Za-z0-9_-])",
+            content,
+        )
+        is not None
+    )
+
+
 def _check_shared_reference_consumers(
     root: Path, canonical: set[str], errors: list[str]
 ) -> dict[str, set[str]]:
-    mapping = _load_shared_consumers(root, errors, canonical)
     shared_root = root / "skills" / "references"
+    if shared_root.is_symlink():
+        errors.append(
+            f"{shared_root.relative_to(root)}: shared reference root must not be a "
+            "symbolic link"
+        )
+        return {}
+    if not shared_root.is_dir():
+        errors.append(f"{shared_root.relative_to(root)}: shared reference root is missing")
+        return {}
+    mapping = _load_shared_consumers(root, errors, canonical)
+    resolved_shared_root = shared_root.resolve()
     shared_paths: dict[str, Path] = {}
     for path in shared_root.rglob("*"):
+        if path.is_symlink():
+            try:
+                resolved = path.resolve(strict=True)
+            except OSError as exc:
+                errors.append(f"{path.relative_to(root)}: broken shared symlink: {exc}")
+                continue
+            if not resolved.is_relative_to(resolved_shared_root):
+                errors.append(
+                    f"{path.relative_to(root)}: shared reference symlink must stay "
+                    f"inside {shared_root.relative_to(root)}"
+                )
+                continue
         if not path.is_file():
             continue
         relative = path.relative_to(shared_root)
@@ -503,7 +1403,7 @@ def _check_shared_reference_consumers(
             except (OSError, UnicodeError):
                 continue
             for marker, reference in unique_references_by_name.items():
-                if marker in content:
+                if _contains_reference_name(content, marker):
                     direct_consumers[reference].add(consumer)
 
     dependencies = {reference: set() for reference in expected}
@@ -513,7 +1413,7 @@ def _check_shared_reference_consumers(
         except (OSError, UnicodeError):
             continue
         for marker, target in unique_references_by_name.items():
-            if target != source and marker in content:
+            if target != source and _contains_reference_name(content, marker):
                 dependencies[source].add(target)
 
     effective_consumers = {
@@ -980,18 +1880,25 @@ def _check_skill_eval_diff(
 
 def _markdown_snippets(text: str) -> list[tuple[int, str]]:
     snippets: list[tuple[int, str]] = []
-    fence: str | None = None
+    fence: tuple[str, int] | None = None
     for line_number, line in enumerate(text.splitlines(), start=1):
-        marker = re.match(r"^\s*(`{3,}|~{3,})", line)
-        if marker:
-            token = marker.group(1)
-            if fence is None:
-                fence = token[0]
-            elif token[0] == fence:
-                fence = None
-            continue
+        marker = re.match(r"^[ ]{0,3}(`{3,}|~{3,})(.*)$", line)
         if fence is not None:
+            if marker:
+                token, suffix = marker.groups()
+                if (
+                    token[0] == fence[0]
+                    and len(token) >= fence[1]
+                    and _is_markdown_blank(suffix)
+                ):
+                    fence = None
+                    continue
             snippets.append((line_number, line))
+            continue
+
+        if marker and _is_valid_fence_opener(marker):
+            token = marker.group(1)
+            fence = (token[0], len(token))
             continue
         for inline in re.findall(r"`([^`\n]+)`", line):
             snippets.append((line_number, inline))
@@ -1132,8 +2039,8 @@ def check_repository(root: Path, base_ref: str | None = None) -> list[str]:
     errors: list[str] = []
     agents_path = root / "AGENTS.md"
     contributing_path = root / "CONTRIBUTING.md"
-    agents_text = _read(agents_path, errors)
-    contributing_text = _read(contributing_path, errors)
+    agents_text = _read_policy_file(agents_path, root, errors)
+    contributing_text = _read_policy_file(contributing_path, root, errors)
 
     canonical = _canonical_skills(root, errors)
     _check_skill_discovery(root, canonical, errors)
@@ -1153,10 +2060,14 @@ def check_repository(root: Path, base_ref: str | None = None) -> list[str]:
                 base_shared_consumers=base_shared_consumers,
                 base_tree=base_tree,
             )
-    policy_documents = (
-        agents_path,
-        contributing_path,
-        *(root / guide for guide in ROUTED_AGENT_GUIDES),
+    policy_documents = tuple(
+        path
+        for path in (
+            agents_path,
+            contributing_path,
+            *(root / guide for guide in ROUTED_AGENT_GUIDES),
+        )
+        if not path.is_symlink()
     )
     _check_make_references(root, policy_documents, errors)
     return errors

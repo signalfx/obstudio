@@ -109,6 +109,14 @@ tests or risks that remain unverified.
 
 ## Code Review Rules
 
+Keep this policy machine-checkable: `AGENTS.md` uses one literal `# AGENTS.md`
+document heading, unique literal plain-text column-1 H2 section headings, and no
+raw HTML, setext headings, or thematic breaks. H3 headings are reserved for the
+literal `### OBS-ID -- Plain title` rules in this section; H4-H6 headings are
+not supported, and inline code spans must open and close on the same physical
+line. Within this section, use only paragraphs and those rule headings; do not
+add lists, block quotes, fenced blocks, link-reference definitions, or tables.
+
 ### OBS-SCOPE -- Keep the diff within the requested scope
 
 Flag changes that do not serve the stated goal, cross an ownership boundary
