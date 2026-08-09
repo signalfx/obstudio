@@ -145,35 +145,35 @@ time.
 For major design decisions, request a pre-merge human review. While
 waiting, switch to a different task.
 
-### Recurring Review Lessons
+### General Engineering Guidelines
 
-A review of historical Copilot and human comments found these recurring
-failure patterns. Apply these guidelines consistently:
+Apply these principles to code, documentation, automation, skills, user
+interfaces, plugins, and integrations:
 
-- Treat implementation, docs, skills, schemas, fixtures, examples, generated
-  artifacts, compatibility aliases, and CI as one contract. Trace a changed
-  producer through every consumer instead of leaving a partial migration.
-- Test the real public/runtime boundary and its negative, fallback, retry,
-  rollback, and recovery branches. Confirm that the named CI target actually
-  runs the changed suites.
-- Treat UI quality as behavior: controls must accept the supported input,
-  remain keyboard/focus accessible, communicate honest state, and render with
-  readable hierarchy and sizing at supported widths.
-- Preserve target-specific config schemas and user fields. In automatic
-  multi-target flows, one plugin or Claude Code, Codex, Cursor, Kiro, or Copilot
-  integration failure must not block unrelated targets or the core Observer.
-- Preserve state, configuration precedence, ownership, and lifecycle invariants
-  across startup, refresh, shared-host reuse, retry, upgrade, concurrency, and
+- Keep changes scoped and keep the full contract aligned across producers,
+  consumers, schemas, configuration, documentation, examples, tests, generated
+  artifacts, compatibility paths, and CI.
+- Require evidence proportional to the risk. Exercise real public or runtime
+  boundaries and relevant success, failure, retry, fallback, rollback, and
+  recovery paths; confirm CI actually runs the affected checks.
+- Treat reusable instructions and skills as tested behavior. Pair additions or
+  modifications with a matching rubric eval addition or semantic update and a
+  representative local rubric run.
+- Treat user experience as functional behavior. Controls must support their
+  intended input and options, remain accessible, communicate state honestly,
+  and render with clear hierarchy and balanced sizing.
+- Preserve compatibility and user-owned state. Keep optional components and
+  integration targets isolated so one failure does not cascade into unrelated
+  paths when independent continuation is supported.
+- Preserve lifecycle, configuration-precedence, concurrency, idempotency, and
+  cleanup invariants across startup, refresh, retry, upgrade, reuse, and
   shutdown.
-- Treat file, process, browser/iframe, clipboard, archive, checksum, and secret
-  flows as security boundaries; validate the opened or authenticated object,
-  not only a path or caller claim.
-- Prove OpenTelemetry semantics from the actual producer: names, units,
-  attributes, temporality, aggregation, cardinality, and current-versus-desired
-  signals must match the relevant contract.
-- Distinguish expected absence, malformed input, authorization failure,
-  retryable failure, partial results, and offline state. Do not turn uncertainty
-  into destructive cleanup, duplicate creation, or a false success.
+- Treat external input, files, processes, browser surfaces, archives, and
+  secrets as trust boundaries. Validate the actual object and authorization,
+  minimize exposure, and fail safely.
+- Verify data and telemetry semantics at the source. Distinguish absence,
+  invalid input, authorization failure, retryable failure, partial results, and
+  offline state without destructive cleanup, duplication, or false success.
 
 ## Design and Architecture
 
