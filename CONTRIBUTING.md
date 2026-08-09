@@ -148,49 +148,32 @@ waiting, switch to a different task.
 ### Recurring Review Lessons
 
 A review of historical Copilot and human comments found these recurring
-failure patterns. Apply the rule, not just the linked example:
+failure patterns. Apply these guidelines consistently:
 
 - Treat implementation, docs, skills, schemas, fixtures, examples, generated
   artifacts, compatibility aliases, and CI as one contract. Trace a changed
-  producer through every consumer instead of leaving a partial migration
-  ([#59](https://github.com/signalfx/obstudio/pull/59#discussion_r3097097508),
-  [#169](https://github.com/signalfx/obstudio/pull/169#discussion_r3648554303)).
+  producer through every consumer instead of leaving a partial migration.
 - Test the real public/runtime boundary and its negative, fallback, retry,
   rollback, and recovery branches. Confirm that the named CI target actually
-  runs the changed suites
-  ([#154](https://github.com/signalfx/obstudio/pull/154#discussion_r3605446962),
-  [#176](https://github.com/signalfx/obstudio/pull/176#discussion_r3663162407),
-  [#178](https://github.com/signalfx/obstudio/pull/178#discussion_r3663670194)).
+  runs the changed suites.
 - Treat UI quality as behavior: controls must accept the supported input,
   remain keyboard/focus accessible, communicate honest state, and render with
-  readable hierarchy and sizing at supported widths
-  ([#107](https://github.com/signalfx/obstudio/pull/107#discussion_r3277560511),
-  [#177](https://github.com/signalfx/obstudio/pull/177#discussion_r3663904325)).
+  readable hierarchy and sizing at supported widths.
 - Preserve target-specific config schemas and user fields. In automatic
   multi-target flows, one plugin or Claude Code, Codex, Cursor, Kiro, or Copilot
-  integration failure must not block unrelated targets or the core Observer
-  ([#152](https://github.com/signalfx/obstudio/pull/152#discussion_r3591235259),
-  [#186](https://github.com/signalfx/obstudio/pull/186#discussion_r3717037959)).
+  integration failure must not block unrelated targets or the core Observer.
 - Preserve state, configuration precedence, ownership, and lifecycle invariants
   across startup, refresh, shared-host reuse, retry, upgrade, concurrency, and
-  shutdown
-  ([#26](https://github.com/signalfx/obstudio/pull/26#discussion_r3060162191),
-  [#180](https://github.com/signalfx/obstudio/pull/180#discussion_r3709268798)).
+  shutdown.
 - Treat file, process, browser/iframe, clipboard, archive, checksum, and secret
   flows as security boundaries; validate the opened or authenticated object,
-  not only a path or caller claim
-  ([#159](https://github.com/signalfx/obstudio/pull/159#discussion_r3627606897),
-  [#180](https://github.com/signalfx/obstudio/pull/180#discussion_r3709631625)).
+  not only a path or caller claim.
 - Prove OpenTelemetry semantics from the actual producer: names, units,
   attributes, temporality, aggregation, cardinality, and current-versus-desired
-  signals must match the relevant contract
-  ([#32](https://github.com/signalfx/obstudio/pull/32#discussion_r3066502729),
-  [#169](https://github.com/signalfx/obstudio/pull/169#discussion_r3648554322)).
+  signals must match the relevant contract.
 - Distinguish expected absence, malformed input, authorization failure,
   retryable failure, partial results, and offline state. Do not turn uncertainty
-  into destructive cleanup, duplicate creation, or a false success
-  ([#128](https://github.com/signalfx/obstudio/pull/128#discussion_r3470949227),
-  [#175](https://github.com/signalfx/obstudio/pull/175#discussion_r3715836332)).
+  into destructive cleanup, duplicate creation, or a false success.
 
 ## Design and Architecture
 
