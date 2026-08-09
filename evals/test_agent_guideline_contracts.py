@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_POLICY = REPO_ROOT / "AGENTS.md"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 CASE_ROOT = REPO_ROOT / "evals" / "agent-guidelines"
 CASE_FILES = (CASE_ROOT / "coding.json", CASE_ROOT / "review.json")
 EXPECTED_HEADINGS = (
@@ -104,6 +105,24 @@ def test_agent_policy_exposes_coding_and_review_contracts() -> None:
     _assert_any(reviewer, "correctness", "regression")
     _assert_any(reviewer, "file and line", "file/line", "changed line")
     _assert_any(reviewer, "missing tests", "missing proof", "test coverage")
+
+
+def test_agent_policy_ci_uses_the_complete_feature_branch_diff() -> None:
+    workflow = _read(CI_WORKFLOW)
+    expected_base = (
+        "AGENT_POLICY_BASE: ${{ github.event.pull_request.base.sha || "
+        "(github.event_name == 'push' && "
+        "github.ref_name == github.event.repository.default_branch && "
+        "github.event.before) || "
+        "format('origin/{0}', github.event.repository.default_branch) }}"
+    )
+
+    assert expected_base in workflow
+    assert (
+        "AGENT_POLICY_BASE: "
+        "${{ github.event.pull_request.base.sha || github.event.before }}"
+        not in workflow
+    )
 
 
 def test_code_review_rules_have_stable_ids_and_semantic_markers() -> None:
@@ -290,6 +309,7 @@ def test_review_cases_cover_ui_plugin_and_integration_both_ways() -> None:
 def main() -> int:
     tests = (
         test_agent_policy_exposes_coding_and_review_contracts,
+        test_agent_policy_ci_uses_the_complete_feature_branch_diff,
         test_code_review_rules_have_stable_ids_and_semantic_markers,
         test_agent_guideline_case_matrix_is_balanced_and_schema_constrained,
         test_agent_guideline_rubrics_use_only_documented_rules,
