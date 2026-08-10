@@ -1,131 +1,143 @@
 # Splunk Observability Studio
 
-Splunk Observability Studio brings a local OpenTelemetry collector and
-Telemetry Explorer into Visual Studio Code, Kiro, and Cursor.
+Give your coding agent an evidence-backed OpenTelemetry workflow, then inspect the proof without leaving your editor.
 
-When the extension activates, it reuses or starts a bundled `obstudio` backend and exposes OTLP receivers on localhost. Open the embedded Observer UI with `Splunk Observability Studio: Open Observer` from the Command Palette. The `Observer` status bar item appears on activation and opens the Observer status menu for reopen, restart, and log actions.
+Splunk Observability Studio combines agent skills for auditing, instrumenting, verifying, and operationalizing telemetry with a local Observer for traces, metrics, logs, services, validation, dashboard previews, and optional Splunk Observability Cloud export.
 
-## Editor Compatibility
+![Audit, selection, instrumentation, and verification workflow](assets/marketplace-skills-workflow.gif)
 
-| Editor | Status | Install from |
-|---|---|---|
-| Visual Studio Code | Supported | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
-| Kiro | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
-| Cursor | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+## Start with the skills
 
-## Quick Start
+Use the skills as a guided path from source code to proven telemetry:
 
-1. Install the extension.
-2. Run `Splunk Observability Studio: Open Observer`.
-3. Send telemetry to `127.0.0.1:4318` (OTLP/HTTP) or `127.0.0.1:4317` (OTLP/gRPC).
-4. Use the Metrics, Traces, Logs, and Validation tabs to inspect what arrived.
+```text
+audit → review and select → instrument → verify → configure → publish
+```
 
-Use the `Live` button in the top-right corner of the Explorer, or press `P`
-while the Explorer is focused, to pause the stream while you inspect a trace,
-metric, or log. Pause freezes traces, metrics, logs, and summary counts on the
-current view. Validation continues to update.
+| Skill | Use it when you want to… |
+|---|---|
+| `$otel-audit` | Read the codebase without changing application code, find coverage gaps, and review a prioritized interactive report. |
+| `$otel-instrument` | Implement only the approved findings or a concrete telemetry request. Verification runs by default after the change. |
+| `$otel-verify` | Recheck existing instrumentation with project-runtime, app-code, and optional local OTLP proof. |
+| `$splunk-dashboard` | Generate dashboard Terraform from source-backed metrics in the audit report and preview the layout against local data in Observer. |
+| `$splunk-configure` | Generate evidence-backed detector and dashboard Terraform, while calling out instrumentation prerequisites that still block safe resources. |
+| `$splunk-detector-publish` | Diff detector specs against live Splunk state, confirm the gaps, and create only what is missing. |
+| `$splunk-dashboard-publish` | Diff dashboard groups, dashboards, and charts, confirm the gaps, and publish them safely. |
 
-## Metrics Explorer
+The older `$splunk-sync` and `$splunk-dashboard-sync` names remain compatibility aliases; use the `*-publish` skills for new work.
 
-Inspect live metric series, compare dimensions, and drill into retained points directly inside the editor.
+### Typical workflow
 
-![Metrics Explorer](assets/marketplace-metrics-tab.gif)
+From your service directory:
 
-## Trace Investigation
+```text
+$otel-audit
+# Open the returned local report, select findings, and copy its generated command.
 
-Open recent traces, expand the waterfall, and use the detail view to see where time was spent and which downstream call failed.
+$otel-instrument --ids OTEL-001
+# Run the report's generated command; the scope is implemented and verified.
 
-![Trace Investigation](assets/marketplace-traces-tab.gif)
+$splunk-dashboard
+# Preview the generated dashboard in Observer.
 
-## Log Inspection
+$splunk-dashboard-publish
+# Review the live diff, confirm, and create only the gaps.
+```
 
-Review structured logs alongside severity, resource metadata, and trace correlation details.
+The audit returns a tokenized localhost link to its interactive report. The report keeps decision answers separate from executable fixes and generates the exact instrumentation command for the selected scope.
 
-![Log Inspection](assets/marketplace-logs-tab.gif)
+Codex uses `$otel-audit`-style invocations. Claude Code, Cursor, and Kiro use `/otel-audit`-style commands. You can also ask naturally, for example: “Audit this checkout service, let me approve the plan, then instrument only the selected gaps.”
 
-## Validation
+## Quick start
 
-Validation runs the bundled OpenTelemetry Weaver validator against the spans, metrics, logs, and resources currently retained in Observer. It highlights missing context, naming problems, and malformed telemetry before those issues turn into harder debugging sessions.
+### Visual Studio Code and Kiro
 
-It is most useful when you want to answer questions like:
+1. Install this extension.
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Accept the agent-integration prompt, or run the matching **Enable … Integration** command.
+4. Restart the agent so it discovers the installed skills and local Observer connection.
+5. Run `$otel-audit` in Codex or `/otel-audit` in a slash-command agent.
 
-- Did I miss an expected HTTP attribute such as method, route, or status code?
-- Did I name this metric or field in a way other tools may not recognize?
-- Is this telemetry technically valid, but missing context that would make it more useful?
+### Cursor
 
-Results are grouped by metric, span, log, or resource so you can work through one signal type at a time.
+1. Install this extension from Open VSX.
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Accept the detected Cursor integration prompt, or run **Splunk Observability Studio: Enable Cursor Integration**.
+4. Restart Cursor so it discovers the installed skills and local Observer connection.
+5. Start with `/otel-audit`.
 
-Typical flow:
+The release CLI also supports a Windsurf integration target. Windsurf setup is CLI-only and is not offered as an extension Command Palette action.
 
-1. Send telemetry to the local Observer.
-2. Open the Validation tab.
-3. Click `Run Validation` or `Re-run Validation`.
-4. Start with the signal you care about most, then open an issue to see the plain-language finding.
+## See the proof locally
 
-Severity is intentionally simple:
+The extension starts or reuses a bundled local Observer and exposes stable receivers at:
 
-- `Violation` usually means something expected is missing or incorrect.
-- `Improvement` means the telemetry is usable, but more detail would help.
-- `Information` is low-priority guidance for optional or situation-specific context.
+| Service | Local endpoint |
+|---|---|
+| OTLP/HTTP | `http://127.0.0.1:4318` |
+| OTLP/gRPC | `127.0.0.1:4317` |
+| Observer UI and REST | `http://127.0.0.1:3000` by default |
+| Local Observer MCP | `http://127.0.0.1:3000/mcp` by default |
 
-![Validation](assets/marketplace-validation-tab.gif)
+Telemetry stays local unless you explicitly enable Splunk Observability Cloud export.
 
-## Features
+Observer provides seven focused views:
 
-- Reuses a healthy local observer recorded in `~/.obstudio/shared-observer.json` or listening on the configured managed port, otherwise starts a bundled observer on activation.
-- Detects local Codex, Claude Code, Cursor, and Kiro installs and offers a one-time prompt to enable integration.
-- Exposes stable OTLP endpoints for local applications:
-  - OTLP/HTTP on `127.0.0.1:4318`
-  - OTLP/gRPC on `127.0.0.1:4317`
-- Opens the Telemetry Explorer in an editor webview panel.
-- Keeps a status bar entry available for status, reopen, restart, and log actions.
-- Includes commands for starting, stopping, restarting, and reusing the shared observer runtime.
-- Includes helper commands to enable agent integrations against the shared observer endpoint.
+| View | What it helps you prove |
+|---|---|
+| **Metrics** | Series, dimensions, retained points, distributions, and resource metadata. |
+| **Traces** | End-to-end waterfalls, downstream latency, errors, span attributes, and GenAI agent flow. |
+| **Logs** | Structured messages, severity, resources, attributes, and trace correlation. |
+| **Services** | Trace and span volume, errors, and client/server duration by service. |
+| **Validation** | OpenTelemetry semantic-convention findings across metrics, spans, logs, and resources. |
+| **Dashboards** | An approximate local-data preview of Terraform generated by the dashboard skills. |
+| **Cloud** | Optional Splunk Observability Cloud connection and export controls. |
+
+### Investigate a checkout trace
+
+Open a trace to see the complete waterfall and identify the slow dependency.
+
+![Checkout trace waterfall](assets/marketplace-traces-tab.gif)
+
+### Preview a generated dashboard
+
+Use `$splunk-dashboard`, then inspect the generated layout against the telemetry retained locally. The preview is clearly labeled approximate because SignalFlow executes in Splunk Observability Cloud. Observer reads the workspace that launched it, so restart Observer after switching workspaces or repositories before opening a new preview.
+
+![Local dashboard preview](assets/marketplace-dashboards-tab.gif)
+
+### Inspect metrics and logs
+
+Filter a metric by service, open the retained series, and compare values without leaving the editor.
+
+![Metric inspection](assets/marketplace-metrics-tab.gif)
+
+Filter structured logs to the affected service, then inspect the message, resource, scope, and attributes.
+
+![Structured log detail](assets/marketplace-logs-tab.gif)
+
+### Validate semantic conventions
+
+Run the bundled OpenTelemetry Weaver validator, filter findings by severity and signal, then open an issue for actionable detail.
+
+![OpenTelemetry validation results](assets/marketplace-validation-tab.gif)
+
+The demo media uses synthetic fixtures and telemetry, including the `demo-store` service, `order.demo-1042`, a 450 ms DemoPay timeout, and a five-minute checkout dashboard. It contains no production identifiers or credentials.
 
 ## Commands
 
-- `Splunk Observability Studio: Open Observer` — opens the Observer webview panel.
-- `Splunk Observability Studio: Observer Status` — opens the quick status menu.
-- `Splunk Observability Studio: Start Observer` — starts the shared observer runtime.
-- `Splunk Observability Studio: Stop Observer` — stops the shared observer runtime.
-- `Splunk Observability Studio: Restart Observer` — restarts the shared observer runtime.
-- `Splunk Observability Studio: Enable Codex Integration` — installs bundled skills and writes Codex MCP settings for the shared observer.
-- `Splunk Observability Studio: Enable Claude Code Integration` — installs bundled skills and writes Claude Code MCP settings for the shared observer.
-- `Splunk Observability Studio: Enable Cursor Integration` — installs bundled skills and writes Cursor MCP settings for the shared observer.
-- `Splunk Observability Studio: Enable Kiro Integration` — installs bundled skills and writes Kiro MCP settings for the shared observer.
+- **Splunk Observability Studio: Open Observer** — open the local visualization panel.
+- **Splunk Observability Studio: Observer Status** — reopen, restart, or inspect the Observer runtime.
+- **Splunk Observability Studio: Start Observer**, **Stop Observer**, **Restart Observer** — manage the shared local runtime.
+- **Splunk Observability Studio: Enable Codex Integration** — install the bundled skills and configure the local MCP endpoint for Codex.
+- **Splunk Observability Studio: Enable Claude Code Integration** — install the bundled skills and configure the local MCP endpoint for Claude Code.
+- **Splunk Observability Studio: Enable Cursor Integration** — install the bundled skills and configure the local MCP endpoint for Cursor.
+- **Splunk Observability Studio: Enable Kiro Integration** — install the bundled skills and configure the local MCP endpoint for Kiro.
 
-## Agent Skills
-
-The extension can point supported AI coding agents at the same local Observer instance used by the editor webview.
-
-It does not add new skills inside the webview itself. Instead, it installs all
-bundled skills, including `otel-audit`, `otel-instrument`, and `otel-verify`,
-for supported agents and updates their MCP config to use the shared local
-Observer.
-
-For Kiro, the managed bundle is stored under `~/.kiro/skills/obstudio`, with
-top-level discovery entries in `~/.kiro/skills`; the MCP server entry is
-written to `~/.kiro/settings/mcp.json`.
-
-Use it like this:
-
-1. Start the extension-managed Observer, or reuse an existing shared Observer.
-2. Accept the one-time integration prompt when Codex, Claude Code, Cursor, or Kiro is detected, or run one of the `Enable ... Integration` commands from the Command Palette.
-3. After installation, restart the agent if it does not discover the new skills.
-4. In the agent, use the syntax that agent expects for the bundled skills:
-   - Codex-style examples: `$otel-audit`, `$otel-instrument`, `$otel-verify`
-   - Slash-command style examples for Claude Code, Cursor, and Kiro: `/otel-audit`, `/otel-instrument`, `/otel-verify`
-
-For the full skill reference, use the repo docs:
-
-- [Core skills overview](https://github.com/signalfx/obstudio/blob/main/README.md#core-skills)
-- [OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)
-- [README: Using The Skills](https://github.com/signalfx/obstudio/blob/main/README.md#using-the-skills)
-- [User guide: Using Skills](https://github.com/signalfx/obstudio/blob/main/docs/USER.md#using-skills)
+Use the **Live** control, or press `P` while Observer is focused, to pause telemetry while inspecting a row. Standard editor shortcuts such as `Cmd+P` and `Ctrl+P` continue to work.
 
 ## Configuration
 
-To run the extension-managed Observer on a different local UI/MCP port, set:
+Move the extension-managed Observer UI and MCP endpoint to another local port with:
 
 ```json
 {
@@ -133,49 +145,28 @@ To run the extension-managed Observer on a different local UI/MCP port, set:
 }
 ```
 
-This is the extension equivalent of `obstudio --observer-http-port 41234`.
-The extension-managed OTLP receiver ports stay fixed at `4318` and `4317`.
+The OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.sharedObserverUrl` to reuse an Observer you already manage.
 
-## How It Works
+## Local by default
 
-The extension packages a pre-built observer binary (Go) into the extension bundle under `dist/observer/obstudio`. The binary embeds its own web UI via Go's `//go:embed` directive.
+- Incoming telemetry is retained locally for development inspection.
+- The Cloud tab exports metrics and traces only. Its key is stored in IDE secret storage, and a new connection leaves remote export off until you explicitly enable it.
+- Optional remote Splunk MCP setup connects the coding agent to remote tools; it is separate from telemetry export.
+- Publishing skills show a diff and require confirmation before creating missing detectors or dashboards.
+- Access tokens are not part of the demo media and should be supplied only through the supported local configuration flow.
 
-At startup, the extension:
+## Troubleshooting
 
-1. Uses `observability-studio.sharedObserverUrl` when it is configured.
-2. Otherwise reuses a healthy observer already serving `http://127.0.0.1:3000` when one is available.
-3. If no shared observer is already running, verifies that `managedObserverPort`, `4317`, and `4318` are available.
-4. Launches the bundled observer binary on the managed local endpoint `http://127.0.0.1:<managedObserverPort>`.
-5. When a supported agent home is detected, offers a one-time prompt to install bundled skills and point that agent at the shared Observer MCP endpoint.
-6. Connects the editor webview to the Observer UI via an iframe.
+- If Observer cannot start, check whether ports `3000`, `4318`, or `4317` are already used, or configure a different `managedObserverPort` for the UI and MCP endpoint.
+- Restart your coding agent after enabling an integration so it reloads the skills and MCP settings.
+- In Cursor, restart the editor after enabling integration so it reloads the installed skills and MCP settings.
+- Use **Observer Status** to restart the local runtime or open its logs.
 
-If the managed endpoint or either OTLP port is already in use by an incompatible service, the extension reports a startup error.
+## Requirements and links
 
-## Requirements
-
-- Visual Studio Code `^1.82.0`, Kiro, or Cursor.
-- Install the extension from the editor's Extensions view by searching for
-  `Splunk Observability Studio`. VS Code installs it from Visual Studio
-  Marketplace; beginning with extension version `0.0.13`, Kiro and Cursor
-  install it from Open VSX. If registry installation is unavailable, download
-  the platform-specific `.vsix` from the
-  [GitHub release](https://github.com/signalfx/obstudio/releases/latest) and
-  run `Extensions: Install from VSIX...`.
-- No additional runtime setup is required for normal extension use.
-- To build the extension from source, install Node.js, `npm`, and the Go toolchain, and make sure `go version` works in your shell before running the build scripts.
-
-## Development
-
-From a full repo checkout, run these commands from the `extension` directory. The build expects the sibling `observer/` and `skills/` directories from this repository to be present:
-
-- Confirm the Go toolchain is available in your shell with `go version`.
-- `npm ci` — install local dependencies before running the build or test scripts.
-- `npm run compile` — type-checks, lints, builds the Go binary, and bundles the extension.
-- `npm run package` — production build.
-- `npm run build:vsix` — packages the extension into a `.vsix` file.
-- `npm run test:unit` — runs unit tests.
-- `npm run test:all` — runs unit, integration, and VS Code host tests.
-
-## Known Limitations
-
-- The managed local observer expects `127.0.0.1:<managedObserverPort>`, `127.0.0.1:4318`, and `127.0.0.1:4317` to be free unless you point the extension at an existing shared observer with `observability-studio.sharedObserverUrl`.
+- Visual Studio Code `^1.82.0`, Kiro, or a compatible Cursor release.
+- No separate collector, web runtime, or Weaver installation is required for normal extension use.
+- [User guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md)
+- [Skill documentation](https://github.com/signalfx/obstudio/tree/main/skills)
+- [Source and releases](https://github.com/signalfx/obstudio)
+- [Contributing](https://github.com/signalfx/obstudio/blob/main/CONTRIBUTING.md)
