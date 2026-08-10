@@ -171,8 +171,6 @@ Run the bundled OpenTelemetry Weaver validator, filter findings by severity and 
 
 ![OpenTelemetry validation results](assets/marketplace-validation-tab.gif)
 
-All GIFs use fictional data created for this walkthrough. They contain no customer data, production identifiers, or credentials.
-
 ## Commands
 
 - **Splunk Observability Studio: Open Observer** — open the local visualization panel.
