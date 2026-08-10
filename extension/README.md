@@ -6,13 +6,56 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 
 ![Audit, selection, instrumentation, and verification workflow](assets/marketplace-skills-workflow.gif)
 
-## Start with the skills
+## Quick start
+
+### Visual Studio Code
+
+1. Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio).
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Codex Integration** or **Enable Claude Code Integration** for the agent you use.
+4. Restart Codex or Claude Code so it reloads the installed skills and local Observer connection.
+
+### Kiro
+
+1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Kiro's Extensions view.
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Accept the detected Kiro prompt. If it does not appear, run **Splunk Observability Studio: Enable Kiro Integration**.
+4. Restart Kiro so it reloads the installed skills and local Observer connection.
+
+### Cursor
+
+1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Cursor's Extensions view.
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Accept the detected Cursor prompt. If it does not appear, run **Splunk Observability Studio: Enable Cursor Integration**.
+4. Restart Cursor so it reloads the installed skills and local Observer connection.
+
+### Start here — run the audit
+
+Open your service directory, then enter the matching command in your coding agent chat—not in the terminal.
+
+**Codex**
+
+```text
+$otel-audit
+```
+
+**Claude Code, Kiro, or Cursor**
+
+```text
+/otel-audit
+```
+
+The GIF begins at Step 1 after this command returns the audit report. Review the prioritized findings, select the work, and run the generated instrumentation command. In a slash-command agent, use `/otel-instrument` where the report shows `$otel-instrument`; keep its generated IDs, decisions, and service path unchanged.
+
+## Choose the skill for the job
 
 Use the skills as a guided path from source code to proven telemetry:
 
 ```text
 audit → review and select → instrument → verify → configure → publish
 ```
+
+The table uses Codex `$` notation. In Claude Code, Kiro, or Cursor, replace the leading `$` with `/` for every listed skill; keep its name and arguments unchanged.
 
 | Skill | Use it when you want to… |
 |---|---|
@@ -24,47 +67,15 @@ audit → review and select → instrument → verify → configure → publish
 | `$splunk-detector-publish` | Diff detector specs against live Splunk state, confirm the gaps, and create only what is missing. |
 | `$splunk-dashboard-publish` | Diff dashboard groups, dashboards, and charts, confirm the gaps, and publish them safely. |
 
-### Typical workflow
+### Continue the workflow
 
-From your service directory:
+1. Open the tokenized localhost report returned by the audit.
+2. Review the prioritized findings and select the work you approve.
+3. Copy the report's generated instrumentation command. Run it in agent chat using the prefix shown above; do not remove its generated IDs, decisions, or service path.
+4. Review the verification result that runs by default after instrumentation.
+5. Use `$splunk-dashboard` to preview a dashboard, then `$splunk-dashboard-publish` to review the live diff and create only confirmed gaps.
 
-```text
-$otel-audit
-# Open the returned local report, select findings, and copy its generated command.
-
-$otel-instrument --ids OTEL-001
-# Run the report's generated command; the scope is implemented and verified.
-
-$splunk-dashboard
-# Preview the generated dashboard in Observer.
-
-$splunk-dashboard-publish
-# Review the live diff, confirm, and create only the gaps.
-```
-
-The audit returns a tokenized localhost link to its interactive report. The report keeps decision answers separate from executable fixes and generates the exact instrumentation command for the selected scope.
-
-Codex uses `$otel-audit`-style invocations. Claude Code, Cursor, and Kiro use `/otel-audit`-style commands. You can also ask naturally, for example: “Audit this checkout service, let me approve the plan, then instrument only the selected gaps.”
-
-## Quick start
-
-### Visual Studio Code and Kiro
-
-1. Install this extension.
-2. Run **Splunk Observability Studio: Open Observer**.
-3. Accept the agent-integration prompt, or run the matching **Enable … Integration** command.
-4. Restart the agent so it discovers the installed skills and local Observer connection.
-5. Run `$otel-audit` in Codex or `/otel-audit` in a slash-command agent.
-
-### Cursor
-
-1. Install this extension from Open VSX.
-2. Run **Splunk Observability Studio: Open Observer**.
-3. Accept the detected Cursor integration prompt, or run **Splunk Observability Studio: Enable Cursor Integration**.
-4. Restart Cursor so it discovers the installed skills and local Observer connection.
-5. Start with `/otel-audit`.
-
-The release CLI also supports a Windsurf integration target. Windsurf setup is CLI-only and is not offered as an extension Command Palette action.
+You can also ask naturally, for example: “Audit this checkout service, let me approve the plan, then instrument only the selected gaps.”
 
 ## See the proof locally
 
@@ -131,6 +142,8 @@ The demo media uses synthetic fixtures and telemetry, including the `demo-store`
 - **Splunk Observability Studio: Enable Cursor Integration** — install the bundled skills and configure the local MCP endpoint for Cursor.
 - **Splunk Observability Studio: Enable Kiro Integration** — install the bundled skills and configure the local MCP endpoint for Kiro.
 
+The release CLI also supports a Windsurf integration target. Windsurf setup is CLI-only and is not offered as an extension Command Palette action.
+
 Use the **Live** control, or press `P` while Observer is focused, to pause telemetry while inspecting a row. Standard editor shortcuts such as `Cmd+P` and `Ctrl+P` continue to work.
 
 ## Configuration
@@ -157,7 +170,6 @@ The OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.
 
 - If Observer cannot start, check whether ports `3000`, `4318`, or `4317` are already used, or configure a different `managedObserverPort` for the UI and MCP endpoint.
 - Restart your coding agent after enabling an integration so it reloads the skills and MCP settings.
-- In Cursor, restart the editor after enabling integration so it reloads the installed skills and MCP settings.
 - Use **Observer Status** to restart the local runtime or open its logs.
 
 ## Requirements and links
