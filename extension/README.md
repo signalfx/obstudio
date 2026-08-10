@@ -13,11 +13,11 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 | Cursor | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 | Kiro | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 | Visual Studio Code | Supported on `1.82.0` or later | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
-| Windsurf | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+| Windsurf / Devin Desktop | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 
 ### Coding-agent integration
 
-Editor compatibility and coding-agent integration are separate. Cursor and Kiro setup is built into the extension. In Visual Studio Code, the extension configures Claude Code and Codex; GitHub Copilot uses the standalone CLI. Windsurf agent setup is also CLI-only. See [Commands](#commands) for the exact local targets.
+Editor compatibility and coding-agent integration are separate. Setup for Cursor and Kiro is built into the extension. In Visual Studio Code, the extension configures Claude Code and Codex; GitHub Copilot uses the standalone CLI. Windsurf / Devin Desktop agent setup is also CLI-only: the current `windsurf` target configures legacy Cascade automatically, while Devin Local needs one additional MCP command. See [Commands](#commands) for the exact local targets.
 
 ## Quick start
 
@@ -42,12 +42,19 @@ Editor compatibility and coding-agent integration are separate. Cursor and Kiro 
 3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Claude Code Integration** or **Enable Codex Integration** for the agent you use.
 4. Restart Claude Code or Codex so it reloads the installed skills and local Observer connection.
 
-### Windsurf
+### Windsurf / Devin Desktop
 
-1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Windsurf's Extensions view.
+1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in the Extensions view.
 2. Run **Splunk Observability Studio: Open Observer**.
-3. Install the standalone `obstudio` CLI from the [latest GitHub release](https://github.com/signalfx/obstudio/releases/latest), then run `obstudio install --target windsurf` in a terminal.
-4. Restart Windsurf so it reloads the installed skills and local Observer connection.
+3. Install the standalone `obstudio` CLI from the [latest GitHub release](https://github.com/signalfx/obstudio/releases/latest), then run `obstudio install --target windsurf` in a terminal. This installs skills for Devin Local and legacy Cascade; on Windows, enable Developer Mode or use an elevated terminal so the installer can create skill links.
+4. Devin Local is the default agent for new tabs. Make sure the `devin` command is on your `PATH` using the [Devin CLI quick start](https://docs.devin.ai/cli), then connect it to the running Observer with the URL shown by **Observer Status** (`3000` is the default):
+
+   ```text
+   devin mcp add -s user obstudio http://127.0.0.1:3000/mcp
+   ```
+
+   Legacy Cascade does not need this extra command because the `windsurf` target configures its MCP file.
+5. Restart the agent so it reloads the installed skills and local Observer connection.
 
 ### Start here — run the audit
 
@@ -65,13 +72,19 @@ $otel-audit
 /otel-audit
 ```
 
-**Windsurf**
+**Windsurf / Devin Desktop — Devin Local**
+
+```text
+/otel-audit
+```
+
+**Windsurf / Devin Desktop — legacy Cascade**
 
 ```text
 @otel-audit
 ```
 
-The GIF begins at Step 1 after this command returns the audit report. Review the prioritized findings, select the work, and run the generated instrumentation command. Use `/otel-instrument` in a slash-command agent or `@otel-instrument` in Windsurf where the report shows `$otel-instrument`; keep its generated IDs, decisions, and service path unchanged.
+The GIF begins at Step 1 after this command returns the audit report. Review the prioritized findings, select the work, and run the generated instrumentation command. Use `/otel-instrument` in a slash-command agent, including Devin Local, or `@otel-instrument` in legacy Cascade where the report shows `$otel-instrument`; keep its generated IDs, decisions, and service path unchanged.
 
 ## Choose the skill for the job
 
@@ -81,7 +94,7 @@ Use the skills as a guided path from source code to proven telemetry:
 audit → review and select → instrument → verify → configure → publish
 ```
 
-The table uses Codex `$` notation. Replace the leading `$` with `/` in Claude Code, Cursor, or Kiro, and with `@` in Windsurf; keep the skill name and arguments unchanged.
+The table uses Codex `$` notation. Replace the leading `$` with `/` in Claude Code, Cursor, Devin Local, or Kiro, and with `@` in legacy Cascade; keep the skill name and arguments unchanged.
 
 | Skill | Use it when you want to… |
 |---|---|
@@ -173,7 +186,7 @@ The demo media uses synthetic fixtures and telemetry, including the `demo-store`
 The standalone release CLI also supports integrations that are not offered as extension Command Palette actions:
 
 - `obstudio install --target copilot` configures the local MCP connection for GitHub Copilot in Visual Studio Code. Agent-skill installation is not supported for this target.
-- `obstudio install --target windsurf` installs the bundled skills and configures the local MCP connection for Windsurf.
+- `obstudio install --target windsurf` installs the bundled skills used by Devin Local and legacy Cascade, and configures the local MCP connection for legacy Cascade. Add the running Observer to Devin Local with the `devin mcp add` command in its [quick start](#windsurf--devin-desktop).
 
 Use the **Live** control, or press `P` while Observer is focused, to pause telemetry while inspecting a row. Standard editor shortcuts such as `Cmd+P` and `Ctrl+P` continue to work.
 
@@ -193,7 +206,7 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 
 - An extension-managed Observer retains incoming telemetry locally for development inspection. A shared Observer follows its own retention and export configuration.
 - The Cloud tab exports metrics and traces only. Its key is stored in IDE secret storage, and a new connection leaves remote export off until you explicitly enable it.
-- Optional remote Splunk MCP setup is separate from telemetry export. Its connector supports Claude Code, Codex, Cursor, and GitHub Copilot in Visual Studio Code; it does not support Kiro or Windsurf.
+- Optional remote Splunk MCP setup is separate from telemetry export. Its automatic connector supports Claude Code, Codex, Cursor, and GitHub Copilot in Visual Studio Code; it does not configure Devin Local, Kiro, or legacy Cascade. Those agents can still be configured manually when they support the remote MCP transport.
 - Publishing skills show a diff and require confirmation before creating missing detectors or dashboards.
 - Access tokens are not part of the demo media and should be supplied only through the supported local configuration flow.
 
@@ -206,7 +219,7 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 
 ## Requirements and links
 
-- Cursor (compatible release), Kiro, Visual Studio Code `1.82.0` or later (declared as `^1.82.0`), or Windsurf.
+- Cursor (compatible release), Kiro, Visual Studio Code `1.82.0` or later (declared as `^1.82.0`), or Windsurf / Devin Desktop.
 - No separate collector, web runtime, or Weaver installation is required for normal extension use.
 - [User guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md)
 - [Skill documentation](https://github.com/signalfx/obstudio/tree/main/skills)

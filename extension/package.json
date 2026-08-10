@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Audit, instrument, verify, and inspect OpenTelemetry in Cursor, Kiro, Visual Studio Code, and Windsurf.",
+  "description": "Audit, instrument, verify, and inspect OpenTelemetry in Cursor, Kiro, Visual Studio Code, and Windsurf / Devin Desktop.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
@@ -41,6 +41,7 @@
     "codex",
     "copilot",
     "cursor",
+    "devin",
     "kiro",
     "splunk",
     "windsurf"
@@ -137,7 +138,9 @@
     "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:integration:smoke": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test --test-name-pattern=\"installed VSIX smoke test\" out/test/extension-integration.test.js",
-    "test:host": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:host:current": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:host:minimum": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000 --code-version 1.82.0 --grep \"openObserver exposes validator summary\"",
+    "test:host": "npm run test:host:current && npm run test:host:minimum",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
     "test": "vscode-test"
   },
