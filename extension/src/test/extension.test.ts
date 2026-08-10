@@ -227,7 +227,7 @@ test('package metadata declares marketplace categories, tags, and resource links
 		repository?: { directory?: string; type?: string; url?: string };
 	};
 
-	assert.deepEqual(packageJSON.categories, ['Visualization', 'Debuggers', 'Testing', 'Other']);
+	assert.deepEqual(packageJSON.categories, ['Visualization', 'Other']);
 	assert.deepEqual(packageJSON.galleryBanner, { color: '#111827', theme: 'dark' });
 	assert.equal(packageJSON.homepage, 'https://github.com/signalfx/obstudio/tree/main/extension');
 	assert.equal(packageJSON.bugs?.url, 'https://github.com/signalfx/obstudio/issues');
