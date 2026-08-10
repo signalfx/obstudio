@@ -69,7 +69,7 @@ The table uses Codex `$` notation. In Claude Code, Kiro, or Cursor, replace the 
 
 ### Continue the workflow
 
-1. Open the tokenized localhost report returned by the audit.
+1. When the audit finishes, open the interactive report link shown in agent chat.
 2. Review the prioritized findings and select the work you approve.
 3. Copy the report's generated instrumentation command. Run it in agent chat using the prefix shown above; do not remove its generated IDs, decisions, or service path.
 4. Review the verification result that runs by default after instrumentation.
