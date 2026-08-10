@@ -6,6 +6,19 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 
 ![Audit, selection, instrumentation, and verification workflow](assets/marketplace-skills-workflow.gif)
 
+## Editor compatibility
+
+| Editor | Extension status | Install from |
+|---|---|---|
+| Cursor | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+| Kiro | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+| Visual Studio Code | Supported on `1.82.0` or later | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
+| Windsurf | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
+
+### Coding-agent integration
+
+Editor compatibility and coding-agent integration are separate. Cursor and Kiro setup is built into the extension. In Visual Studio Code, the extension configures Claude Code and Codex; GitHub Copilot uses the standalone CLI. Windsurf agent setup is also CLI-only. See [Commands](#commands) for the exact local targets.
+
 ## Quick start
 
 ### Cursor
@@ -29,6 +42,13 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Claude Code Integration** or **Enable Codex Integration** for the agent you use.
 4. Restart Claude Code or Codex so it reloads the installed skills and local Observer connection.
 
+### Windsurf
+
+1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Windsurf's Extensions view.
+2. Run **Splunk Observability Studio: Open Observer**.
+3. Install the standalone `obstudio` CLI from the [latest GitHub release](https://github.com/signalfx/obstudio/releases/latest), then run `obstudio install --target windsurf` in a terminal.
+4. Restart Windsurf so it reloads the installed skills and local Observer connection.
+
 ### Start here — run the audit
 
 Open your service directory, then enter the matching command in your coding agent chat—not in the terminal.
@@ -45,7 +65,13 @@ $otel-audit
 /otel-audit
 ```
 
-The GIF begins at Step 1 after this command returns the audit report. Review the prioritized findings, select the work, and run the generated instrumentation command. In a slash-command agent, use `/otel-instrument` where the report shows `$otel-instrument`; keep its generated IDs, decisions, and service path unchanged.
+**Windsurf**
+
+```text
+@otel-audit
+```
+
+The GIF begins at Step 1 after this command returns the audit report. Review the prioritized findings, select the work, and run the generated instrumentation command. Use `/otel-instrument` in a slash-command agent or `@otel-instrument` in Windsurf where the report shows `$otel-instrument`; keep its generated IDs, decisions, and service path unchanged.
 
 ## Choose the skill for the job
 
@@ -55,7 +81,7 @@ Use the skills as a guided path from source code to proven telemetry:
 audit → review and select → instrument → verify → configure → publish
 ```
 
-The table uses Codex `$` notation. In Claude Code, Cursor, or Kiro, replace the leading `$` with `/` for every listed skill; keep its name and arguments unchanged.
+The table uses Codex `$` notation. Replace the leading `$` with `/` in Claude Code, Cursor, or Kiro, and with `@` in Windsurf; keep the skill name and arguments unchanged.
 
 | Skill | Use it when you want to… |
 |---|---|
@@ -167,7 +193,7 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 
 - An extension-managed Observer retains incoming telemetry locally for development inspection. A shared Observer follows its own retention and export configuration.
 - The Cloud tab exports metrics and traces only. Its key is stored in IDE secret storage, and a new connection leaves remote export off until you explicitly enable it.
-- Optional remote Splunk MCP setup connects the coding agent to remote tools; it is separate from telemetry export.
+- Optional remote Splunk MCP setup is separate from telemetry export. Its connector supports Claude Code, Codex, Cursor, and GitHub Copilot in Visual Studio Code; it does not support Kiro or Windsurf.
 - Publishing skills show a diff and require confirmation before creating missing detectors or dashboards.
 - Access tokens are not part of the demo media and should be supplied only through the supported local configuration flow.
 
@@ -180,7 +206,7 @@ For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and
 
 ## Requirements and links
 
-- Cursor (compatible release), Kiro, or Visual Studio Code `^1.82.0`.
+- Cursor (compatible release), Kiro, Visual Studio Code `1.82.0` or later (declared as `^1.82.0`), or Windsurf.
 - No separate collector, web runtime, or Weaver installation is required for normal extension use.
 - [User guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md)
 - [Skill documentation](https://github.com/signalfx/obstudio/tree/main/skills)

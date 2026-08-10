@@ -216,6 +216,17 @@ test('package metadata declares an extension icon that exists', () => {
 	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
 });
 
+test('package metadata keeps the VS Code minimum aligned with the API types', () => {
+	const packageJSONPath = path.join(extensionRoot, 'package.json');
+	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
+		devDependencies?: Record<string, string>;
+		engines?: { vscode?: string };
+	};
+
+	assert.equal(packageJSON.engines?.vscode, '^1.82.0');
+	assert.equal(packageJSON.devDependencies?.['@types/vscode'], '1.82.0');
+});
+
 test('package metadata declares marketplace categories, tags, and resource links', () => {
 	const packageJSONPath = path.join(extensionRoot, 'package.json');
 	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
