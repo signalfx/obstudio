@@ -247,7 +247,9 @@ test('package metadata declares marketplace categories, tags, and resource links
 	assert.ok(packageJSON.keywords!.includes('code-analysis'));
 	assert.ok(packageJSON.keywords!.includes('mcp'));
 	assert.ok(packageJSON.keywords!.includes('codex'));
+	assert.ok(packageJSON.keywords!.includes('copilot'));
 	assert.ok(packageJSON.keywords!.includes('kiro'));
+	assert.ok(packageJSON.keywords!.includes('windsurf'));
 	assert.ok(packageJSON.keywords!.length <= 30, `expected <= 30 keywords, got ${packageJSON.keywords!.length}`);
 });
 

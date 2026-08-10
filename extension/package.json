@@ -39,9 +39,11 @@
     "mcp",
     "claude",
     "codex",
+    "copilot",
     "cursor",
     "kiro",
-    "splunk"
+    "splunk",
+    "windsurf"
   ],
   "galleryBanner": {
     "color": "#111827",
@@ -107,7 +109,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",

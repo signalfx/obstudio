@@ -79,16 +79,18 @@ You can also ask naturally, for example: “Audit this checkout service, let me 
 
 ## See the proof locally
 
-The extension starts or reuses a bundled local Observer and exposes stable receivers at:
+When the extension starts its bundled Observer, it exposes these local endpoints:
 
-| Service | Local endpoint |
+| Service | Extension-managed endpoint |
 |---|---|
 | OTLP/HTTP | `http://127.0.0.1:4318` |
 | OTLP/gRPC | `127.0.0.1:4317` |
 | Observer UI and REST | `http://127.0.0.1:3000` by default |
 | Local Observer MCP | `http://127.0.0.1:3000/mcp` by default |
 
-Telemetry stays local unless you explicitly enable Splunk Observability Cloud export.
+If the extension reuses a shared Observer, use that Observer's configured UI, MCP, and OTLP receiver endpoints. A manually configured `sharedObserverUrl` does not remap or validate the shared Observer's OTLP ports.
+
+The extension-managed Observer keeps telemetry local unless you explicitly enable Splunk Observability Cloud export. A shared Observer follows its own export configuration.
 
 Observer provides seven focused views:
 
@@ -110,7 +112,7 @@ Open a trace to see the complete waterfall and identify the slow dependency.
 
 ### Preview a generated dashboard
 
-Use `$splunk-dashboard`, then inspect the generated layout against the telemetry retained locally. The preview is clearly labeled approximate because SignalFlow executes in Splunk Observability Cloud. Observer reads the workspace that launched it, so restart Observer after switching workspaces or repositories before opening a new preview.
+Use `$splunk-dashboard`, then inspect the generated layout against the telemetry retained locally. The preview is clearly labeled approximate because SignalFlow executes in Splunk Observability Cloud. Observer reads the workspace that launched its process. After switching workspaces or repositories, run **Restart Observer** if the extension manages it. If you reuse a shared Observer, relaunch that process from the intended workspace, then run **Restart Observer** to reconnect.
 
 ![Local dashboard preview](assets/marketplace-dashboards-tab.gif)
 
@@ -136,13 +138,16 @@ The demo media uses synthetic fixtures and telemetry, including the `demo-store`
 
 - **Splunk Observability Studio: Open Observer** — open the local visualization panel.
 - **Splunk Observability Studio: Observer Status** — reopen, restart, or inspect the Observer runtime.
-- **Splunk Observability Studio: Start Observer**, **Stop Observer**, **Restart Observer** — manage the shared local runtime.
+- **Splunk Observability Studio: Start Observer**, **Stop Observer**, **Restart Observer** — manage the extension-owned process, or connect, disconnect, and reconnect when using a shared Observer.
 - **Splunk Observability Studio: Enable Claude Code Integration** — install the bundled skills and configure the local MCP endpoint for Claude Code.
 - **Splunk Observability Studio: Enable Codex Integration** — install the bundled skills and configure the local MCP endpoint for Codex.
 - **Splunk Observability Studio: Enable Cursor Integration** — install the bundled skills and configure the local MCP endpoint for Cursor.
 - **Splunk Observability Studio: Enable Kiro Integration** — install the bundled skills and configure the local MCP endpoint for Kiro.
 
-The release CLI also supports a Windsurf integration target. Windsurf setup is CLI-only and is not offered as an extension Command Palette action.
+The standalone release CLI also supports integrations that are not offered as extension Command Palette actions:
+
+- `obstudio install --target copilot` configures the local MCP connection for GitHub Copilot in Visual Studio Code. Agent-skill installation is not supported for this target.
+- `obstudio install --target windsurf` installs the bundled skills and configures the local MCP connection for Windsurf.
 
 Use the **Live** control, or press `P` while Observer is focused, to pause telemetry while inspecting a row. Standard editor shortcuts such as `Cmd+P` and `Ctrl+P` continue to work.
 
@@ -156,11 +161,11 @@ Move the extension-managed Observer UI and MCP endpoint to another local port wi
 }
 ```
 
-The OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.sharedObserverUrl` to reuse an Observer you already manage.
+For an extension-managed Observer, the OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.sharedObserverUrl` to reuse an Observer you already manage, then send telemetry to the receiver endpoints configured by that Observer.
 
 ## Local by default
 
-- Incoming telemetry is retained locally for development inspection.
+- An extension-managed Observer retains incoming telemetry locally for development inspection. A shared Observer follows its own retention and export configuration.
 - The Cloud tab exports metrics and traces only. Its key is stored in IDE secret storage, and a new connection leaves remote export off until you explicitly enable it.
 - Optional remote Splunk MCP setup connects the coding agent to remote tools; it is separate from telemetry export.
 - Publishing skills show a diff and require confirmation before creating missing detectors or dashboards.
@@ -168,9 +173,10 @@ The OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.
 
 ## Troubleshooting
 
-- If Observer cannot start, check whether ports `3000`, `4318`, or `4317` are already used, or configure a different `managedObserverPort` for the UI and MCP endpoint.
+- If the extension-managed Observer cannot start, check its configured UI/MCP port (`managedObserverPort`, `3000` by default) and the fixed receiver ports `4318` and `4317`. Choose another `managedObserverPort` if its UI/MCP port is already used.
+- If the extension cannot connect to a shared Observer, verify `sharedObserverUrl`. If its UI loads but telemetry does not arrive, use the OTLP receiver endpoints configured by that Observer.
 - Restart your coding agent after enabling an integration so it reloads the skills and MCP settings.
-- Use **Observer Status** to restart the local runtime or open its logs.
+- Use **Observer Status** to restart the extension-managed runtime, reconnect a shared Observer, or open the extension logs.
 
 ## Requirements and links
 
