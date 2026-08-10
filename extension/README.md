@@ -112,7 +112,7 @@ Open a trace to see the complete waterfall and identify the slow dependency.
 
 ### Preview a generated dashboard
 
-Use `$splunk-dashboard`, then inspect the generated layout against the telemetry retained locally. The preview is clearly labeled approximate because SignalFlow executes in Splunk Observability Cloud. Observer reads the workspace that launched its process. After switching workspaces or repositories, run **Restart Observer** if the extension manages it. If you reuse a shared Observer, relaunch that process from the intended workspace, then run **Restart Observer** to reconnect.
+Use `$splunk-dashboard`, then inspect the generated layout against the telemetry retained locally. The preview is clearly labeled approximate because SignalFlow executes in Splunk Observability Cloud. An extension-managed Observer reads the first editor workspace folder captured when its process starts. In a multi-root workspace, open the service in its own window or make it the first workspace folder, then run **Restart Observer**. Also restart after switching a single-root workspace or repository. If you reuse a shared Observer, relaunch that process from the intended workspace, then run **Restart Observer** to reconnect.
 
 ![Local dashboard preview](assets/marketplace-dashboards-tab.gif)
 
