@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Audit, instrument, verify, and inspect OpenTelemetry in Visual Studio Code, Kiro, and Cursor.",
+  "description": "Audit, instrument, verify, and inspect OpenTelemetry in Cursor, Kiro, and Visual Studio Code.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
@@ -37,9 +37,9 @@
     "developer-tools",
     "code-analysis",
     "mcp",
+    "claude",
     "codex",
     "cursor",
-    "claude",
     "kiro",
     "splunk"
   ],
@@ -81,13 +81,13 @@
         "category": "Splunk Observability Studio"
       },
       {
-        "command": "observability-studio.configureCodexMCP",
-        "title": "Enable Codex Integration",
+        "command": "observability-studio.configureClaudeCodeMCP",
+        "title": "Enable Claude Code Integration",
         "category": "Splunk Observability Studio"
       },
       {
-        "command": "observability-studio.configureClaudeCodeMCP",
-        "title": "Enable Claude Code Integration",
+        "command": "observability-studio.configureCodexMCP",
+        "title": "Enable Codex Integration",
         "category": "Splunk Observability Studio"
       },
       {

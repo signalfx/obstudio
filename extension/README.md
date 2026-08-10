@@ -8,12 +8,12 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 
 ## Quick start
 
-### Visual Studio Code
+### Cursor
 
-1. Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio).
+1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Cursor's Extensions view.
 2. Run **Splunk Observability Studio: Open Observer**.
-3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Codex Integration** or **Enable Claude Code Integration** for the agent you use.
-4. Restart Codex or Claude Code so it reloads the installed skills and local Observer connection.
+3. Accept the detected Cursor prompt. If it does not appear, run **Splunk Observability Studio: Enable Cursor Integration**.
+4. Restart Cursor so it reloads the installed skills and local Observer connection.
 
 ### Kiro
 
@@ -22,12 +22,12 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 3. Accept the detected Kiro prompt. If it does not appear, run **Splunk Observability Studio: Enable Kiro Integration**.
 4. Restart Kiro so it reloads the installed skills and local Observer connection.
 
-### Cursor
+### Visual Studio Code
 
-1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in Cursor's Extensions view.
+1. Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio).
 2. Run **Splunk Observability Studio: Open Observer**.
-3. Accept the detected Cursor prompt. If it does not appear, run **Splunk Observability Studio: Enable Cursor Integration**.
-4. Restart Cursor so it reloads the installed skills and local Observer connection.
+3. Accept the detected integration prompt. If it does not appear, run **Splunk Observability Studio: Enable Claude Code Integration** or **Enable Codex Integration** for the agent you use.
+4. Restart Claude Code or Codex so it reloads the installed skills and local Observer connection.
 
 ### Start here — run the audit
 
@@ -39,7 +39,7 @@ Open your service directory, then enter the matching command in your coding agen
 $otel-audit
 ```
 
-**Claude Code, Kiro, or Cursor**
+**Claude Code, Cursor, or Kiro**
 
 ```text
 /otel-audit
@@ -55,7 +55,7 @@ Use the skills as a guided path from source code to proven telemetry:
 audit → review and select → instrument → verify → configure → publish
 ```
 
-The table uses Codex `$` notation. In Claude Code, Kiro, or Cursor, replace the leading `$` with `/` for every listed skill; keep its name and arguments unchanged.
+The table uses Codex `$` notation. In Claude Code, Cursor, or Kiro, replace the leading `$` with `/` for every listed skill; keep its name and arguments unchanged.
 
 | Skill | Use it when you want to… |
 |---|---|
@@ -137,8 +137,8 @@ The demo media uses synthetic fixtures and telemetry, including the `demo-store`
 - **Splunk Observability Studio: Open Observer** — open the local visualization panel.
 - **Splunk Observability Studio: Observer Status** — reopen, restart, or inspect the Observer runtime.
 - **Splunk Observability Studio: Start Observer**, **Stop Observer**, **Restart Observer** — manage the shared local runtime.
-- **Splunk Observability Studio: Enable Codex Integration** — install the bundled skills and configure the local MCP endpoint for Codex.
 - **Splunk Observability Studio: Enable Claude Code Integration** — install the bundled skills and configure the local MCP endpoint for Claude Code.
+- **Splunk Observability Studio: Enable Codex Integration** — install the bundled skills and configure the local MCP endpoint for Codex.
 - **Splunk Observability Studio: Enable Cursor Integration** — install the bundled skills and configure the local MCP endpoint for Cursor.
 - **Splunk Observability Studio: Enable Kiro Integration** — install the bundled skills and configure the local MCP endpoint for Kiro.
 
@@ -174,7 +174,7 @@ The OTLP receivers remain fixed at `4318` and `4317`. Set `observability-studio.
 
 ## Requirements and links
 
-- Visual Studio Code `^1.82.0`, Kiro, or a compatible Cursor release.
+- Cursor (compatible release), Kiro, or Visual Studio Code `^1.82.0`.
 - No separate collector, web runtime, or Weaver installation is required for normal extension use.
 - [User guide](https://github.com/signalfx/obstudio/blob/main/docs/USER.md)
 - [Skill documentation](https://github.com/signalfx/obstudio/tree/main/skills)
