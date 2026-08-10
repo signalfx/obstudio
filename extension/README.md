@@ -47,10 +47,10 @@ Editor compatibility and coding-agent integration are separate. Setup for Cursor
 1. Install from [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) in the Extensions view.
 2. Run **Splunk Observability Studio: Open Observer**.
 3. Install the standalone `obstudio` CLI from the [latest GitHub release](https://github.com/signalfx/obstudio/releases/latest), then run `obstudio install --target windsurf` in a terminal. This installs skills for Devin Local and legacy Cascade; on Windows, enable Developer Mode or use an elevated terminal so the installer can create skill links.
-4. Devin Local is the default agent for new tabs. Make sure the `devin` command is on your `PATH` using the [Devin CLI quick start](https://docs.devin.ai/cli), then connect it to the running Observer with the URL shown by **Observer Status** (`3000` is the default):
+4. Devin Local is the default agent for new tabs. Make sure the `devin` command is on your `PATH` using the [Devin CLI quick start](https://docs.devin.ai/cli). Copy the base URL shown by **Observer Status**, replace `OBSERVER_BASE_URL` below, and keep the `/mcp` suffix:
 
    ```text
-   devin mcp add -s user obstudio http://127.0.0.1:3000/mcp
+   devin mcp add -s user obstudio OBSERVER_BASE_URL/mcp
    ```
 
    Legacy Cascade does not need this extra command because the `windsurf` target configures its MCP file.
