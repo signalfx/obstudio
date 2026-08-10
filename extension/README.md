@@ -171,7 +171,7 @@ Run the bundled OpenTelemetry Weaver validator, filter findings by severity and 
 
 ![OpenTelemetry validation results](assets/marketplace-validation-tab.gif)
 
-The demo media uses synthetic fixtures and telemetry, including the `demo-store` service, `order.demo-1042`, a 450 ms DemoPay timeout, and a five-minute checkout dashboard. It contains no production identifiers or credentials.
+All GIFs use fictional data created for this walkthrough. They contain no customer data, production identifiers, or credentials.
 
 ## Commands
 
