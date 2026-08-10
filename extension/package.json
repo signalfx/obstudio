@@ -2,7 +2,7 @@
   "name": "observability-studio",
   "publisher": "Splunk",
   "displayName": "Splunk Observability Studio",
-  "description": "Inspect OpenTelemetry traces, metrics, logs, and validation issues in Visual Studio Code, Kiro, and Cursor.",
+  "description": "Audit, instrument, verify, and inspect OpenTelemetry in Cursor, Kiro, Visual Studio Code, and Windsurf / Devin Desktop.",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "homepage": "https://github.com/signalfx/obstudio/tree/main/extension",
@@ -19,8 +19,6 @@
   },
   "categories": [
     "Visualization",
-    "Debuggers",
-    "Testing",
     "Other"
   ],
   "keywords": [
@@ -39,11 +37,14 @@
     "developer-tools",
     "code-analysis",
     "mcp",
-    "codex",
-    "cursor",
     "claude",
+    "codex",
+    "copilot",
+    "cursor",
+    "devin",
     "kiro",
-    "splunk"
+    "splunk",
+    "windsurf"
   ],
   "galleryBanner": {
     "color": "#111827",
@@ -83,13 +84,13 @@
         "category": "Splunk Observability Studio"
       },
       {
-        "command": "observability-studio.configureCodexMCP",
-        "title": "Enable Codex Integration",
+        "command": "observability-studio.configureClaudeCodeMCP",
+        "title": "Enable Claude Code Integration",
         "category": "Splunk Observability Studio"
       },
       {
-        "command": "observability-studio.configureClaudeCodeMCP",
-        "title": "Enable Claude Code Integration",
+        "command": "observability-studio.configureCodexMCP",
+        "title": "Enable Codex Integration",
         "category": "Splunk Observability Studio"
       },
       {
@@ -109,7 +110,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",
@@ -137,7 +138,9 @@
     "test:unit": "npm run compile-tests && node --test --experimental-test-coverage out/test/extension.test.js out/test/webview-html.test.js out/test/observer-lifecycle.test.js out/test/build-vsix.test.js out/test/startup-errors.test.js",
     "test:integration": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test out/test/extension-integration.test.js",
     "test:integration:smoke": "tsc --outDir out --rootDir src --module Node16 --target ES2022 --strict --skipLibCheck --esModuleInterop src/test/extension-integration.test.ts && node --test --test-name-pattern=\"installed VSIX smoke test\" out/test/extension-integration.test.js",
-    "test:host": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:host:current": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000",
+    "test:host:minimum": "npm run compile-tests && npm run compile && vscode-test --run out/test/extension-vscode.test.js --fail-zero --timeout 30000 --code-version 1.82.0 --grep \"openObserver exposes validator summary\"",
+    "test:host": "npm run test:host:current && npm run test:host:minimum",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:host",
     "test": "vscode-test"
   },

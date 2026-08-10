@@ -216,6 +216,17 @@ test('package metadata declares an extension icon that exists', () => {
 	assert.equal(fs.existsSync(path.join(extensionRoot, packageJSON.icon!)), true);
 });
 
+test('package metadata keeps the VS Code minimum aligned with the API types', () => {
+	const packageJSONPath = path.join(extensionRoot, 'package.json');
+	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
+		devDependencies?: Record<string, string>;
+		engines?: { vscode?: string };
+	};
+
+	assert.equal(packageJSON.engines?.vscode, '^1.82.0');
+	assert.equal(packageJSON.devDependencies?.['@types/vscode'], '1.82.0');
+});
+
 test('package metadata declares marketplace categories, tags, and resource links', () => {
 	const packageJSONPath = path.join(extensionRoot, 'package.json');
 	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
@@ -227,7 +238,7 @@ test('package metadata declares marketplace categories, tags, and resource links
 		repository?: { directory?: string; type?: string; url?: string };
 	};
 
-	assert.deepEqual(packageJSON.categories, ['Visualization', 'Debuggers', 'Testing', 'Other']);
+	assert.deepEqual(packageJSON.categories, ['Visualization', 'Other']);
 	assert.deepEqual(packageJSON.galleryBanner, { color: '#111827', theme: 'dark' });
 	assert.equal(packageJSON.homepage, 'https://github.com/signalfx/obstudio/tree/main/extension');
 	assert.equal(packageJSON.bugs?.url, 'https://github.com/signalfx/obstudio/issues');
@@ -247,7 +258,10 @@ test('package metadata declares marketplace categories, tags, and resource links
 	assert.ok(packageJSON.keywords!.includes('code-analysis'));
 	assert.ok(packageJSON.keywords!.includes('mcp'));
 	assert.ok(packageJSON.keywords!.includes('codex'));
+	assert.ok(packageJSON.keywords!.includes('devin'));
+	assert.ok(packageJSON.keywords!.includes('copilot'));
 	assert.ok(packageJSON.keywords!.includes('kiro'));
+	assert.ok(packageJSON.keywords!.includes('windsurf'));
 	assert.ok(packageJSON.keywords!.length <= 30, `expected <= 30 keywords, got ${packageJSON.keywords!.length}`);
 });
 
