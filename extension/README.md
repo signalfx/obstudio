@@ -24,8 +24,6 @@ audit → review and select → instrument → verify → configure → publish
 | `$splunk-detector-publish` | Diff detector specs against live Splunk state, confirm the gaps, and create only what is missing. |
 | `$splunk-dashboard-publish` | Diff dashboard groups, dashboards, and charts, confirm the gaps, and publish them safely. |
 
-The older `$splunk-sync` and `$splunk-dashboard-sync` names remain compatibility aliases; use the `*-publish` skills for new work.
-
 ### Typical workflow
 
 From your service directory:
