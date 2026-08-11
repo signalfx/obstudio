@@ -129,7 +129,7 @@ class ConnectionScriptTests(unittest.TestCase):
         endpoint = "http://splunk-otel-collector.observability.svc.cluster.local:4318"
         self.assertIn(f'endpoint: "{endpoint}"', contract)
         self.assertIn(f'tracesEndpoint: "{endpoint}/v1/traces"', contract)
-        self.assertIn('serviceResolution: "splunk-chart-default"', contract)
+        self.assertIn('serviceResolution: "release-topology-default"', contract)
         self.assertIn(f'value: "{endpoint}"', overlay)
         self.assertIn('name: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"', overlay)
         self.assertIn('name: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"', overlay)
@@ -378,7 +378,7 @@ spec:
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(self.output.exists())
 
-    def test_accepts_collector_release_at_safe_helm_limit(self) -> None:
+    def test_accepts_collector_release_at_safe_kubernetes_limit(self) -> None:
         release_name = "a" * 47
         result = self.run_generator(
             "--collector-release", release_name
@@ -389,7 +389,7 @@ spec:
             (self.output / "otel-connection.yaml").read_text(),
         )
 
-    def test_rejects_collector_release_longer_than_safe_helm_limit(self) -> None:
+    def test_rejects_collector_release_longer_than_safe_kubernetes_limit(self) -> None:
         result = self.run_generator(
             "--collector-release", "a" * 48
         )

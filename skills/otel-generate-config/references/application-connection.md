@@ -22,21 +22,19 @@ The generated `otel-connection.yaml` records:
 - explicit transport TLS and authentication modes;
 - evidence source, evidence SHA-256, and live-verification status.
 
-The Secret reference contains only its Kubernetes name and the chart's expected
+The Secret reference contains only its Kubernetes name and the Collector's expected
 key, `splunk_observability_access_token`. It is metadata for the Collector
 deployment boundary, not an application credential.
 
 ## Service and endpoint rules
 
-With the Splunk OpenTelemetry Collector chart's default naming:
+With the generated Collector YAML default naming:
 
 | Topology | Service | Default OTLP/HTTP endpoint |
 |---|---|---|
 | `gateway` | `<release>-collector` | `http://<service>.<namespace>.svc.cluster.local:4318` |
 | `agent-service` | `<release>-collector-agent` | `http://<service>.<namespace>.svc.cluster.local:4318` |
 
-The agent Service uses local traffic policy in current chart releases, so live
-verification must ensure every application node has a ready agent endpoint.
 Name overrides invalidate derived names; use generated Collector YAML evidence
 and pass `--collector-service`.
 

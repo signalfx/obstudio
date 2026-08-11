@@ -4,62 +4,32 @@ Use this contract for every generated Collector configuration.
 
 ## Supported outputs
 
-Generate three related deployment paths:
+Generate two related deployment paths:
 
 1. `collector-config.yaml`: a standalone Splunk Distribution of the
    OpenTelemetry Collector configuration for receiving OTLP metrics and traces
    and exporting them to Splunk Observability Cloud.
-2. `helm/`: a version-pinned wrapper around the official
-   `splunk-otel-collector` chart.
-3. `kubernetes/collector.yaml`: plain Kubernetes resources generated directly
-   from the same public inputs.
+2. `kubernetes/collector.yaml`: plain Kubernetes resources generated directly
+   from the public inputs.
 
-Do not generate `helm-rendered.yaml`, render provenance, or any optional
-Helm-rendered Kubernetes artifact. The application route must be bound to
+Do not generate `helm/`, `helm-rendered.yaml`, render provenance, or any
+optional rendered artifact. The application route must be bound to
 `kubernetes/collector.yaml`.
-
-## Official chart contract
-
-Use this chart repository:
-
-```text
-https://signalfx.github.io/splunk-otel-collector-chart
-```
-
-Pin an exact released chart version in `helm/Chart.yaml`. Resolve it from a
-published release or a user-supplied pin. Do not use a range, wildcard, or
-`latest`.
-
-Configure the dependency with these values:
-
-```yaml
-splunkObservability:
-  realm: <realm>
-  metricsEnabled: true
-  tracesEnabled: true
-secret:
-  create: false
-  name: <secret-name>
-  validateSecret: true
-```
-
-The chart does not use an `existingSecret` key. Do not write a non-empty
-`splunkObservability.accessToken`.
 
 Default Collector namespace, release, topology, and cluster domain are
 `observability`, `splunk-otel`, `gateway`, and `cluster.local`.
 
 ## Kubernetes YAML contract
 
-Write `kubernetes/collector.yaml` without using Helm. It must contain:
+Write `kubernetes/collector.yaml`. It must contain:
 
 - one ConfigMap using the Collector workload name
   (`<release>-collector` for gateway topology or
   `<release>-collector-agent` for agent-service topology);
 - one Service named `<release>-collector` for gateway topology or
   `<release>-collector-agent` for agent-service topology;
-- one Collector Deployment using a pinned Splunk Collector image tag derived
-  from the requested chart/collector version;
+- one Collector Deployment using the pinned Splunk Collector image tag requested
+  with `--collector-version`;
 - named OTLP ports `otlp` on 4317 and `otlp-http` on 4318;
 - `SPLUNK_REALM` as a non-secret environment value;
 - `SPLUNK_ACCESS_TOKEN` loaded from the existing Kubernetes Secret key
@@ -115,16 +85,11 @@ Write:
 ├── kubernetes/
 │   ├── collector.yaml
 │   └── splunk-secret.example.yaml
-├── helm/
-│   ├── Chart.yaml
-│   ├── values.yaml
-│   └── examples/splunk-secret.yaml
 └── DEPLOYMENT.md
 ```
 
-Regeneration with `--overwrite` removes stale legacy render artifacts,
-`Chart.lock`, and cached dependency archives so they cannot be mistaken for
-current generated output.
+Regeneration with `--overwrite` removes stale legacy render and Helm artifacts
+so they cannot be mistaken for current generated output.
 
 ## Validation contract
 
@@ -136,16 +101,11 @@ Run, in order:
 4. `kubectl kustomize` as an offline application-overlay render when available.
 5. A recursive secret scan across both outputs.
 
-Do not run `kubectl apply`, even in dry-run mode, as part of ordinary
-generation. Static validation does not prove live Service readiness or Splunk
-Observability Cloud receipt.
+Do not run `kubectl apply` as part of ordinary generation. Static validation
+does not prove live Service readiness or Splunk Observability Cloud receipt.
 
 ## Primary references
 
-- Splunk chart repository:
-  https://github.com/signalfx/splunk-otel-collector-chart
-- Splunk Helm installation:
-  https://help.splunk.com/en/splunk-observability-cloud/manage-data/splunk-distribution-of-the-opentelemetry-collector/get-started-with-the-splunk-distribution-of-the-opentelemetry-collector/collector-for-kubernetes/install-with-helm
 - Splunk YAML manifest installation:
   https://help.splunk.com/en/splunk-observability-cloud/manage-data/splunk-distribution-of-the-opentelemetry-collector/get-started-with-the-splunk-distribution-of-the-opentelemetry-collector/collector-for-kubernetes/install-with-yaml-manifests
 - Splunk OTLP/HTTP exporter:

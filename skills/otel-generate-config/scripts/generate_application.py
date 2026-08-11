@@ -34,7 +34,7 @@ MANAGED_FILES = (
 YAML_DOCUMENT_BOUNDARY = re.compile(
     r"^---(?:\s+#.*)?\s*$", re.MULTILINE
 )
-HELM_RELEASE_NAME_MAX_LENGTH = 47
+COLLECTOR_RELEASE_NAME_MAX_LENGTH = 47
 KUSTOMIZE_TIMEOUT_SECONDS = 60
 SECRET_NAME_ERROR = "invalid Kubernetes Secret name"
 OTEL_ENV_CONFLICT_ERROR = (
@@ -719,10 +719,10 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
     ):
         validate_dns_label(label, value)
     validate_secret_name(args.secret_name)
-    if len(args.collector_release) > HELM_RELEASE_NAME_MAX_LENGTH:
+    if len(args.collector_release) > COLLECTOR_RELEASE_NAME_MAX_LENGTH:
         raise ValueError(
             "collector release must not exceed "
-            f"{HELM_RELEASE_NAME_MAX_LENGTH} characters"
+            f"{COLLECTOR_RELEASE_NAME_MAX_LENGTH} characters"
         )
 
     service_name = args.service_name or args.workload_name
@@ -755,7 +755,7 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         if evidence
         else "explicit"
         if args.collector_service
-        else "splunk-chart-default"
+        else "release-topology-default"
     )
     port = 4318 if args.protocol == "http/protobuf" else 4317
     port_name = "otlp-http" if args.protocol == "http/protobuf" else "otlp"

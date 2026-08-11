@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "matched-current-context",
-      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. Use $otel-generate-config with Kubernetes, realm us0, cluster checkout-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact official chart version 0.157.0, and --existing-secret splunk-otel-token. Deliberately omit the user-facing --app input so current-context resolution is exercised. Generate the Collector configuration under ./service/deploy/otel-collector and the matched application connection contract and Kustomize overlay under ./service/deploy/otel-config; do not create top-level ./deploy. Resolve the unique Deployment checkout, namespace checkout, container checkout, and existing Kustomization. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as the Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: only kubectl kustomize against local files is permitted for target proof; do not use the network, Helm repositories, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag. Do not modify the base application manifest."
+      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. Use $otel-generate-config with Kubernetes, realm us0, cluster checkout-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact Collector image version 0.157.0, and --existing-secret splunk-otel-token. Deliberately omit the user-facing --app input so current-context resolution is exercised. Generate the Collector configuration under ./service/deploy/otel-collector and the matched application connection contract and Kustomize overlay under ./service/deploy/otel-config; do not create top-level ./deploy. Resolve the unique Deployment checkout, namespace checkout, container checkout, and existing Kustomization. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as the Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: only kubectl kustomize against local files is permitted for target proof; do not use the network, Helm, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag. Do not modify the base application manifest."
     }
   ],
   "checks": [
@@ -16,20 +16,8 @@
       "path": "deploy/otel-collector/collector-config.yaml"
     },
     {
-      "id": "collector-helm-written",
-      "description": "The combined workflow must generate a pinned official Helm wrapper and values.",
-      "kind": "file_exists",
-      "path": "deploy/otel-collector/helm/Chart.yaml"
-    },
-    {
-      "id": "collector-values-written",
-      "description": "The combined workflow must generate secure Collector values.",
-      "kind": "file_exists",
-      "path": "deploy/otel-collector/helm/values.yaml"
-    },
-    {
       "id": "collector-yaml-written",
-      "description": "The combined workflow must generate plain Kubernetes Collector YAML without Helm rendering.",
+      "description": "The combined workflow must generate plain Kubernetes Collector YAML.",
       "kind": "file_exists",
       "path": "deploy/otel-collector/kubernetes/collector.yaml"
     },
@@ -52,13 +40,13 @@
       "path": "deploy/otel-config/kubernetes/kustomization.yaml"
     },
     {
-      "id": "collector-chart-and-values-match",
-      "description": "Collector chart, realm, gateway, and Secret reference must match the requested public inputs.",
+      "id": "collector-yaml-inputs-match",
+      "description": "Collector image, realm, gateway Service, and Secret reference must match the requested public inputs.",
       "kind": "command_succeeds",
       "command": [
         "python3",
         "-c",
-        "from pathlib import Path; chart=Path('deploy/otel-collector/helm/Chart.yaml').read_text(); values=Path('deploy/otel-collector/helm/values.yaml').read_text(); assert 'version: \"0.157.0\"' in chart; required=('realm: \"us0\"','name: \"splunk-otel-token\"','gateway:','enabled: true','tokenPassthrough: false'); assert not [v for v in required if v not in values]; assert 'accessToken:' not in values and 'existingSecret:' not in values"
+        "from pathlib import Path; manifest=Path('deploy/otel-collector/kubernetes/collector.yaml').read_text(); secret=Path('deploy/otel-collector/kubernetes/splunk-secret.example.yaml').read_text(); required=('image: \"quay.io/signalfx/splunk-otel-collector:0.157.0\"','namespace: observability','name: splunk-otel-collector','value: \"us0\"','name: splunk-otel-token','key: splunk_observability_access_token'); assert not [v for v in required if v not in manifest]; assert 'name: splunk-otel-token' in secret; assert 'accessToken:' not in manifest"
       ]
     },
     {
@@ -183,8 +171,14 @@
       "path": "deploy/otel-connect"
     },
     {
+      "id": "helm-output-not-created",
+      "description": "The offline eval must not create Helm output.",
+      "kind": "no_file_exists",
+      "path": "deploy/otel-collector/helm"
+    },
+    {
       "id": "helm-render-not-created",
-      "description": "The offline eval must not create Helm-rendered Kubernetes YAML.",
+      "description": "The offline eval must not create legacy rendered Kubernetes YAML.",
       "kind": "no_file_exists",
       "path": "deploy/otel-collector/kubernetes/helm-rendered.yaml"
     },

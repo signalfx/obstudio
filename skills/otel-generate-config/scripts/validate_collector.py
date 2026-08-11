@@ -12,51 +12,20 @@ from pathlib import Path
 
 REQUIRED_FILES = (
     "collector-config.yaml",
-    "helm/Chart.yaml",
-    "helm/values.yaml",
-    "helm/examples/splunk-secret.yaml",
     "kubernetes/collector.yaml",
     "kubernetes/splunk-secret.example.yaml",
     "DEPLOYMENT.md",
 )
 EXAMPLE_SECRET_FILES = {
-    "helm/examples/splunk-secret.yaml",
     "kubernetes/splunk-secret.example.yaml",
 }
-OFFICIAL_CHART_REPOSITORY = (
-    "https://signalfx.github.io/splunk-otel-collector-chart"
-)
-EXACT_CHART_VERSION = re.compile(
-    r"^\s*-\s*name:\s*splunk-otel-collector\s*$"
-    r"(?:(?!^\s*-\s*name:).)*?"
-    r"^\s*version:\s*[\"']?"
-    r"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)"
-    r"[\"']?\s*$",
-    re.MULTILINE | re.DOTALL,
-)
-CHART_REPOSITORY = re.compile(
-    r"^\s*-\s*name:\s*splunk-otel-collector\s*$"
-    r"(?:(?!^\s*-\s*name:).)*?"
-    r"^\s*repository:\s*[\"']?([^\"'\s]+)[\"']?\s*$",
-    re.MULTILINE | re.DOTALL,
-)
 INLINE_ACCESS_TOKEN = re.compile(
     r"^[ \t]*(?P<quote>[\"']?)accessToken(?P=quote)[ \t]*:"
     r"[ \t]*(?![\"']{2}[ \t]*$)(\S.*)$",
     re.MULTILINE,
 )
-EXISTING_SECRET = re.compile(
-    r"^[ \t]*(?P<quote>[\"']?)existingSecret(?P=quote)[ \t]*:",
-    re.MULTILINE,
-)
 STRING_DATA = re.compile(
     r"^[ \t]*(?P<quote>[\"']?)stringData(?P=quote)[ \t]*:",
-    re.MULTILINE,
-)
-TOKEN_PASSTHROUGH = re.compile(
-    r"^[ \t]*(?P<quote>[\"']?)tokenPassthrough(?P=quote)"
-    r"[ \t]*:[ \t]*(?P<value>[^\s#]+)",
     re.MULTILINE,
 )
 UNRESOLVED = re.compile(r"@@[A-Z0-9_]+@@")
@@ -66,16 +35,6 @@ COLLECTOR_MANIFEST_PATH = "kubernetes/collector.yaml"
 RENDERED_PATH = COLLECTOR_MANIFEST_PATH
 LEGACY_RENDERED_PATH = "kubernetes/helm-rendered.yaml"
 PROVENANCE_PATH = "kubernetes/helm-rendered.provenance.json"
-HELM_ALLOWED_FILES = {
-    "helm/Chart.yaml",
-    "helm/Chart.lock",
-    "helm/examples/splunk-secret.yaml",
-    "helm/values.yaml",
-}
-HELM_ALLOWED_DIRECTORIES = {
-    "helm/charts",
-    "helm/examples",
-}
 DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 DNS_SUBDOMAIN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
@@ -92,71 +51,14 @@ SECRET_TOKEN_MAPPING_KEY = re.compile(
     r"(?<![A-Za-z0-9_])(?P<quote>[\"']?)"
     r"splunk_observability_access_token(?P=quote)[ \t]*:"
 )
-
-
-def expected_dependency_archive_name(lock: str) -> str:
-    version_match = EXACT_CHART_VERSION.search(lock)
-    if not version_match:
-        raise ValueError("helm/Chart.lock has no exact Splunk chart version")
-    archive_version = version_match.group(1).replace("+", "_")
-    return f"splunk-otel-collector-{archive_version}.tgz"
-
-
-def expected_dependency_archives(bundle: Path) -> tuple[str, ...]:
-    lock_path = bundle / "helm" / "Chart.lock"
-    try:
-        lock = lock_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
-        raise ValueError(f"cannot read Helm dependency lock: {exc}") from exc
-    expected_name = expected_dependency_archive_name(lock)
-    charts = bundle / "helm" / "charts"
-    if charts.is_symlink() or not charts.is_dir():
-        raise ValueError("helm/charts must be a real directory after dependency update")
-    archives = sorted(
-        path.relative_to(bundle).as_posix()
-        for path in charts.iterdir()
-        if path.is_file() and path.suffix == ".tgz"
-    )
-    expected = f"helm/charts/{expected_name}"
-    if archives != [expected]:
-        found = ", ".join(archives) if archives else "none"
-        raise ValueError(
-            "Helm dependency archives differ from Chart.lock; expected exactly "
-            f"{expected}, found {found}"
-        )
-    return tuple(archives)
-
-
-def unexpected_helm_render_inputs(bundle: Path) -> list[str]:
-    helm = bundle / "helm"
-    if helm.is_symlink() or not helm.is_dir():
-        return []
-
-    allowed_files = set(HELM_ALLOWED_FILES)
-    lock_path = helm / "Chart.lock"
-    if lock_path.is_file() and not lock_path.is_symlink():
-        try:
-            lock = lock_path.read_text(encoding="utf-8")
-            archive_name = expected_dependency_archive_name(lock)
-        except (OSError, UnicodeError, ValueError):
-            pass
-        else:
-            allowed_files.add(f"helm/charts/{archive_name}")
-
-    errors: list[str] = []
-    for path in sorted(helm.rglob("*")):
-        if path.is_symlink():
-            continue
-        relative = path.relative_to(bundle).as_posix()
-        if path.is_dir():
-            allowed = relative in HELM_ALLOWED_DIRECTORIES
-        elif path.is_file():
-            allowed = relative in allowed_files
-        else:
-            allowed = False
-        if not allowed:
-            errors.append(f"unexpected Helm input: {relative}")
-    return errors
+COLLECTOR_IMAGE = re.compile(
+    r"^\s*image:\s*[\"']?"
+    r"quay\.io/signalfx/splunk-otel-collector:"
+    r"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)"
+    r"[\"']?\s*$",
+    re.MULTILINE,
+)
 
 
 def _strip_yaml_comment(value: str) -> str:
@@ -664,7 +566,7 @@ def validate_rendered_resources(
         if name != secret_name:
             errors.append(
                 f"{COLLECTOR_MANIFEST_PATH} Collector Secret reference name differs "
-                f"from helm/values.yaml: {name!r}"
+                f"from generated Secret example: {name!r}"
             )
     service_count, grpc_routes, duplicate_grpc_routes = service_routes_in_namespace(
         rendered,
@@ -696,7 +598,7 @@ def validate_rendered_resources(
     return errors
 
 
-def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
+def validate(bundle: Path) -> list[str]:
     errors: list[str] = []
     if bundle.is_symlink():
         return [f"configuration directory must not be a symlink: {bundle}"]
@@ -711,7 +613,8 @@ def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
             errors.append(
                 f"{relative} is no longer generated; rerun with --overwrite"
             )
-    errors.extend(unexpected_helm_render_inputs(bundle))
+    if (bundle / "helm").exists():
+        errors.append("helm/ is no longer generated; rerun with --overwrite")
 
     for path in sorted(bundle.rglob("*")):
         if path.is_symlink():
@@ -729,7 +632,7 @@ def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
     for relative, text in contents.items():
         if not text:
             continue
-        if relative.endswith((".yaml", ".yml")) or relative == "helm/Chart.lock":
+        if relative.endswith((".yaml", ".yml")):
             errors.extend(duplicate_yaml_mapping_keys(relative, text))
         unresolved = sorted(set(UNRESOLVED.findall(text)))
         if unresolved:
@@ -782,88 +685,8 @@ def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
         if value not in collector:
             errors.append(f"collector-config.yaml missing required value: {value}")
 
-    chart = contents.get("helm/Chart.yaml", "")
-    chart_repository_match = CHART_REPOSITORY.search(chart)
-    if (
-        not chart_repository_match
-        or chart_repository_match.group(1) != OFFICIAL_CHART_REPOSITORY
-    ):
-        errors.append("helm/Chart.yaml does not use the official chart repository")
-    version_match = EXACT_CHART_VERSION.search(chart)
-    if not version_match:
-        errors.append("helm/Chart.yaml dependency version is not exact semver")
-    elif "latest" in version_match.group(1).lower():
-        errors.append("helm/Chart.yaml must not use latest")
-    chart_lock = contents.get("helm/Chart.lock")
-    if chart_lock:
-        lock_match = EXACT_CHART_VERSION.search(chart_lock)
-        lock_repository_match = CHART_REPOSITORY.search(chart_lock)
-        if not lock_match:
-            errors.append("helm/Chart.lock has no exact Splunk chart version")
-        elif version_match and lock_match.group(1) != version_match.group(1):
-            errors.append("helm/Chart.lock is stale; run helm dependency update")
-        if (
-            not lock_repository_match
-            or lock_repository_match.group(1) != OFFICIAL_CHART_REPOSITORY
-        ):
-            errors.append(
-                "helm/Chart.lock does not use the official chart repository"
-            )
-
-    values = contents.get("helm/values.yaml", "")
-    realm = nested_yaml_scalar(
-        values,
-        ("collector", "splunkObservability", "realm"),
-    )
-    if not realm or not re.fullmatch(
-        r"[a-z][a-z0-9-]{0,30}[a-z0-9]",
-        realm,
-    ):
-        errors.append("helm/values.yaml has an invalid Collector realm")
-    expected_values = {
-        ("collector", "splunkObservability", "metricsEnabled"): "true",
-        ("collector", "splunkObservability", "tracesEnabled"): "true",
-        ("collector", "secret", "create"): "false",
-        ("collector", "secret", "validateSecret"): "true",
-        ("collector", "agent", "enabled"): "true",
-    }
-    for path, expected in expected_values.items():
-        actual = nested_yaml_scalar(values, path)
-        if actual != expected:
-            errors.append(
-                "helm/values.yaml requires "
-                f"{'.'.join(path)}={expected}, found {actual!r}"
-            )
-    values_secret_name = nested_yaml_scalar(
-        values,
-        ("collector", "secret", "name"),
-    )
-    if not values_secret_name or not DNS_LABEL.fullmatch(values_secret_name):
-        errors.append("helm/values.yaml has an invalid Collector Secret name")
-    gateway_enabled = nested_yaml_scalar(
-        values,
-        ("collector", "gateway", "enabled"),
-    )
-    if gateway_enabled not in {"true", "false"}:
-        errors.append("helm/values.yaml has an invalid collector.gateway.enabled")
-    if EXISTING_SECRET.search(values):
-        errors.append("helm/values.yaml uses unsupported existingSecret")
-    passthrough = nested_yaml_scalar(
-        values,
-        ("collector", "gateway", "tokenPassthrough"),
-    )
-    passthrough_values = [
-        match.group("value")
-        for match in TOKEN_PASSTHROUGH.finditer(values)
-    ]
-    if len(passthrough_values) > 1:
-        errors.append("helm/values.yaml has duplicate gateway tokenPassthrough")
-    if (
-        passthrough is not None and passthrough.lower() != "false"
-    ) or any(value.lower() != "false" for value in passthrough_values):
-        errors.append("helm/values.yaml enables gateway token passthrough")
-
     example_namespaces: set[str] = set()
+    example_secret_names: set[str] = set()
     for relative in EXAMPLE_SECRET_FILES:
         secret = contents.get(relative, "")
         token_values = [
@@ -898,16 +721,18 @@ def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
             if child_indent is not None
             else None
         )
-        if secret_name != values_secret_name:
-            errors.append(
-                f"{relative} Secret name differs from helm/values.yaml"
-            )
+        if not secret_name or not DNS_LABEL.fullmatch(secret_name):
+            errors.append(f"{relative} has an invalid Secret name")
+        else:
+            example_secret_names.add(secret_name)
         if not secret_namespace or not DNS_LABEL.fullmatch(secret_namespace):
             errors.append(f"{relative} has an invalid Secret namespace")
         else:
             example_namespaces.add(secret_namespace)
     if len(example_namespaces) > 1:
         errors.append("Collector Secret examples use different namespaces")
+    if len(example_secret_names) > 1:
+        errors.append("Collector Secret examples use different Secret names")
 
     manifest = contents.get(COLLECTOR_MANIFEST_PATH, "")
     if not manifest.strip():
@@ -918,12 +743,19 @@ def validate(bundle: Path, *, include_rendered: bool = True) -> list[str]:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains a token placeholder")
     if "helm.sh/hook" in manifest:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains Helm hooks")
+    image_tags = COLLECTOR_IMAGE.findall(manifest)
+    if len(image_tags) != 1:
+        errors.append(
+            f"{COLLECTOR_MANIFEST_PATH} must pin exactly one Splunk Collector "
+            "image tag as an exact semantic version"
+        )
     namespace = next(iter(example_namespaces)) if len(example_namespaces) == 1 else None
-    secret_name = nested_yaml_scalar(
-        values,
-        ("collector", "secret", "name"),
+    secret_name = (
+        next(iter(example_secret_names))
+        if len(example_secret_names) == 1
+        else None
     )
-    if isinstance(namespace, str):
+    if isinstance(namespace, str) and isinstance(secret_name, str):
         errors.extend(
             validate_rendered_resources(
                 manifest,

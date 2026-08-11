@@ -83,7 +83,7 @@ spec:
                 "splunk-otel-token",
                 "--distribution",
                 "other",
-                "--chart-version",
+                "--collector-version",
                 "0.157.0",
             ]
         )
@@ -199,8 +199,13 @@ spec:
 
     def test_realm_drift_is_rejected(self) -> None:
         self.generate()
-        values = self.collector / "helm" / "values.yaml"
-        values.write_text(values.read_text().replace('realm: "us0"', 'realm: "us1"'))
+        self.collector_yaml.write_text(
+            self.collector_yaml.read_text().replace(
+                'value: "us0"',
+                'value: "us1"',
+            )
+        )
+        self.rewrite_contract_hash(self.collector_yaml)
 
         result = self.validate()
 

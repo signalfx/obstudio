@@ -84,7 +84,7 @@ test-agent-policy: ## Run deterministic agent-policy and guideline contract test
 agent-policy-check: test-agent-policy ## Validate agent instructions and repository-policy contracts
 	$(PYTHON) scripts/check_agent_policy.py $(AGENT_POLICY_ARGS)
 
-test-otel-generate-config-kind: ## Prove generated Helm and YAML locally in disposable Kind
+test-otel-generate-config-kind: ## Prove generated Kubernetes YAML locally in disposable Kind
 	skills/otel-generate-config/tests/kind_e2e/run.sh
 
 eval-kind-generate-config: test-otel-generate-config-kind ## Alias for the opt-in Kind proof

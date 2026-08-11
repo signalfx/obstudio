@@ -12,7 +12,7 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
-| `$otel-generate-config` | Generate version-pinned Collector Helm and plain Kubernetes YAML plus a matching non-secret application Kustomize overlay; never deploys or verifies live connectivity |
+| `$otel-generate-config` | Generate version-pinned Collector Kubernetes YAML plus a matching non-secret application Kustomize overlay; never deploys or verifies live connectivity |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
 | `$splunk-dashboard-publish` | Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
@@ -167,9 +167,9 @@ and refresh proof in the instrumentation HTML. It produces
 `.observe/otel-verify.json` plus the readable `.observe/otel-verify.md`. See
 [OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
 Use `$otel-generate-config` to generate one coordinated, token-free
-configuration set: version-pinned Collector Helm, plain Kubernetes YAML, and a
-matching non-secret Kustomize overlay that points the application at the
-generated Collector service.
+configuration set: version-pinned Collector Kubernetes YAML and a matching
+non-secret Kustomize overlay that points the application at the generated
+Collector service.
 
 ```text
 $otel-generate-config \
@@ -178,7 +178,7 @@ $otel-generate-config \
   --cluster-name checkout-prod \
   --environment production \
   --distribution other \
-  --chart-version 0.157.0 \
+  --collector-version 0.157.0 \
   --existing-secret splunk-otel-token
 ```
 

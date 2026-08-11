@@ -4,15 +4,13 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 FIXTURES_DIR="${SCRIPT_DIR}/fixtures"
-LOCAL_VALUES="${FIXTURES_DIR}/local-debug.values.yaml"
-POST_RENDERER="${SCRIPT_DIR}/postrender-local-debug.sh"
 COLLECTOR_GENERATOR="${SKILL_DIR}/scripts/generate_collector.py"
 COLLECTOR_VALIDATOR="${SKILL_DIR}/scripts/validate_collector.py"
 APPLICATION_GENERATOR="${SKILL_DIR}/scripts/generate_application.py"
 APPLICATION_VALIDATOR="${SKILL_DIR}/scripts/validate_application.py"
 CONFIG_VALIDATOR="${SKILL_DIR}/scripts/validate_config.py"
 
-CHART_VERSION="${OTEL_E2E_CHART_VERSION:-0.157.0}"
+COLLECTOR_VERSION="${OTEL_E2E_COLLECTOR_VERSION:-0.157.0}"
 KIND_NODE_IMAGE="${OTEL_E2E_KIND_NODE_IMAGE:-kindest/node:v1.31.0}"
 WAIT_TIMEOUT="${OTEL_E2E_TIMEOUT:-300s}"
 
@@ -30,7 +28,7 @@ if [ -n "${OTEL_E2E_KIND_CLUSTER:-}" ]; then
   exit 2
 fi
 
-for command_name in bash docker helm kind kubectl python3 rg sed; do
+for command_name in bash docker kind kubectl python3 rg sed; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     echo "error: required command is unavailable: ${command_name}" >&2
     exit 2
@@ -38,8 +36,6 @@ for command_name in bash docker helm kind kubectl python3 rg sed; do
 done
 
 for required_file in \
-  "${LOCAL_VALUES}" \
-  "${POST_RENDERER}" \
   "${COLLECTOR_GENERATOR}" \
   "${COLLECTOR_VALIDATOR}" \
   "${APPLICATION_GENERATOR}" \
@@ -59,26 +55,17 @@ temp_parent="$(cd "${temp_parent}" && pwd -P)"
 WORK_ROOT="$(mktemp -d "${temp_parent}/obstudio-otel-kind.XXXXXX")"
 KUBECONFIG_PATH="${WORK_ROOT}/kubeconfig"
 export KUBECONFIG="${KUBECONFIG_PATH}"
-export HELM_CONFIG_HOME="${WORK_ROOT}/helm/config"
-export HELM_CACHE_HOME="${WORK_ROOT}/helm/cache"
-export HELM_DATA_HOME="${WORK_ROOT}/helm/data"
-export HELM_DRIVER=configmap
 
 run_stamp="$(date -u +%H%M%S)-$$"
 CLUSTER_NAME="ogc-e2e-${run_stamp}"
 CONTEXT="kind-${CLUSTER_NAME}"
 CLUSTER_CREATED=false
 CLUSTER_AVAILABLE=false
-HELM_RELEASES=()
 YAML_MANIFESTS=()
 TEST_NAMESPACES=()
 
 kubectl_cmd() {
   kubectl --kubeconfig "${KUBECONFIG_PATH}" --context "${CONTEXT}" "$@"
-}
-
-helm_cmd() {
-  helm --kubeconfig "${KUBECONFIG_PATH}" --kube-context "${CONTEXT}" "$@"
 }
 
 diagnostics() {
@@ -98,7 +85,7 @@ diagnostics() {
 cleanup() {
   local exit_status="$?"
   local cleanup_status=0
-  local item release namespace manifest
+  local namespace manifest
   trap - EXIT INT TERM
   set +e
 
@@ -107,13 +94,6 @@ cleanup() {
   fi
 
   if [ "${CLUSTER_AVAILABLE}" = true ]; then
-    for item in "${HELM_RELEASES[@]-}"; do
-      [ -n "${item}" ] || continue
-      release="${item%%|*}"
-      namespace="${item#*|}"
-      helm_cmd -n "${namespace}" uninstall "${release}" --timeout 30s >/dev/null 2>&1 \
-        || cleanup_status=1
-    done
     for manifest in "${YAML_MANIFESTS[@]-}"; do
       [ -n "${manifest}" ] || continue
       kubectl_cmd delete -f "${manifest}" --ignore-not-found --wait=false >/dev/null 2>&1 \
@@ -182,18 +162,6 @@ assert_manifest_absent() {
   if [ -n "${existing}" ]; then
     printf '%s\n' "${existing}" >&2
     fail "refuse to replace existing resources from manifest: ${manifest}"
-  fi
-}
-
-assert_helm_release_absent() {
-  local release="$1"
-  local namespace="$2"
-  local existing
-  if ! existing="$(helm_cmd -n "${namespace}" list --all --filter "^${release}$" --short)"; then
-    fail "could not preflight Helm release ownership: ${namespace}/${release}"
-  fi
-  if [ -n "${existing}" ]; then
-    fail "refuse to reuse existing Helm release: ${namespace}/${release}"
   fi
 }
 
@@ -376,8 +344,7 @@ EOF
 }
 
 run_case() {
-  local deployment_mode="$1"
-  local short_mode="$2"
+  local short_mode="y"
   local case_id="${short_mode}-${run_stamp}"
   local release="ogc-${case_id}"
   local collector_namespace="ogc-${short_mode}-c-${run_stamp}"
@@ -386,7 +353,7 @@ run_case() {
   local service_name="checkout-${case_id}"
   local collector_service="${release}-collector"
   local expected_endpoint="http://${collector_service}.${collector_namespace}.svc.cluster.local:4318"
-  local case_root="${WORK_ROOT}/${deployment_mode}"
+  local case_root="${WORK_ROOT}/yaml"
   local collector_bundle="${case_root}/deploy/otel-collector"
   local app_root="${case_root}/checkout"
   local application_output="${app_root}/deploy/otel-config"
@@ -411,7 +378,7 @@ run_case() {
     --release-name "${release}" \
     --secret-name "${secret_name}" \
     --distribution other \
-    --chart-version "${CHART_VERSION}" \
+    --collector-version "${COLLECTOR_VERSION}" \
     --gateway
   python3 "${COLLECTOR_VALIDATOR}" "${collector_bundle}"
 
@@ -421,27 +388,11 @@ run_case() {
     -f "${production_manifest}" \
     >/dev/null
 
-  if [ "${deployment_mode}" = helm ]; then
-    helm_cmd dependency update "${collector_bundle}/helm" >/dev/null
-    python3 "${COLLECTOR_VALIDATOR}" "${collector_bundle}"
-    export E2E_RELEASE="${release}"
-    export E2E_COLLECTOR_NAMESPACE="${collector_namespace}"
-    helm template "${release}" "${collector_bundle}/helm" \
-      --namespace "${collector_namespace}" \
-      --include-crds \
-      --no-hooks \
-      --values "${LOCAL_VALUES}" \
-      --post-renderer "${POST_RENDERER}" \
-      > "${runtime_manifest}"
-  elif [ "${deployment_mode}" = yaml ]; then
-    render_local_debug_yaml_manifest \
-      "${production_manifest}" \
-      "${runtime_manifest}" \
-      "${release}" \
-      "${collector_namespace}"
-  else
-    fail "unknown deployment mode: ${deployment_mode}"
-  fi
+  render_local_debug_yaml_manifest \
+    "${production_manifest}" \
+    "${runtime_manifest}" \
+    "${release}" \
+    "${collector_namespace}"
   assert_runtime_safe "${runtime_manifest}" "${secret_name}"
 
   (
@@ -478,27 +429,9 @@ run_case() {
 
   assert_manifest_absent "${runtime_manifest}"
 
-  if [ "${deployment_mode}" = helm ]; then
-    applied_config_name="${release}-collector-otel-collector"
-    assert_helm_release_absent "${release}" "${collector_namespace}"
-    helm_cmd upgrade --install "${release}" "${collector_bundle}/helm" \
-      --namespace "${collector_namespace}" \
-      --values "${LOCAL_VALUES}" \
-      --post-renderer "${POST_RENDERER}" \
-      --atomic \
-      --wait \
-      --timeout "${WAIT_TIMEOUT}"
-    HELM_RELEASES+=("${release}|${collector_namespace}")
-    helm_cmd -n "${collector_namespace}" get manifest "${release}" \
-      > "${case_root}/helm-applied-manifest.yaml"
-    assert_runtime_safe "${case_root}/helm-applied-manifest.yaml" "${secret_name}"
-  elif [ "${deployment_mode}" = yaml ]; then
-    applied_config_name="${release}-collector"
-    kubectl_cmd apply -f "${runtime_manifest}"
-    YAML_MANIFESTS+=("${runtime_manifest}")
-  else
-    fail "unknown deployment mode: ${deployment_mode}"
-  fi
+  applied_config_name="${release}-collector"
+  kubectl_cmd apply -f "${runtime_manifest}"
+  YAML_MANIFESTS+=("${runtime_manifest}")
 
   kubectl_cmd -n "${collector_namespace}" rollout status \
     "deployment/${release}-collector" \
@@ -551,7 +484,7 @@ run_case() {
     "${case_id}" \
     "${logs_file}"
 
-  echo "PASS ${deployment_mode}: ${service_name} sent a trace and metric to ${expected_endpoint}"
+  echo "PASS yaml: ${service_name} sent a trace and metric to ${expected_endpoint}"
 }
 
 if ! existing_clusters="$(kind get clusters)"; then
@@ -583,11 +516,8 @@ case "${server}" in
 esac
 kubectl_cmd wait --for=condition=Ready nodes --all --timeout "${WAIT_TIMEOUT}"
 
-mkdir -p "${HELM_CONFIG_HOME}" "${HELM_CACHE_HOME}" "${HELM_DATA_HOME}"
+run_case
 
-run_case helm h
-run_case yaml y
-
-echo "PASS: generated Helm and Kubernetes YAML deployment paths accepted unique traces and metrics"
+echo "PASS: generated Kubernetes YAML deployment path accepted unique traces and metrics"
 echo "No Kubernetes Secret was created and no cloud endpoint was applied."
 echo "Temporary cluster and files will now be removed."
