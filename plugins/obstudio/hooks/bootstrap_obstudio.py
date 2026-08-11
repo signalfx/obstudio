@@ -11,9 +11,11 @@ import platform
 import re
 import socket
 import shutil
+import signal
 import subprocess
 import sys
 import time
+import tomllib
 import urllib.request
 import urllib.parse
 import zipfile
@@ -34,6 +36,9 @@ DOWNLOAD_TIMEOUT_SECONDS = 30
 DOWNLOAD_ATTEMPTS = 3
 HEALTH_CHECK_ATTEMPTS = 20
 HEALTH_CHECK_SLEEP_SECONDS = 0.5
+HOOK_EXECUTION_DEADLINE_SECONDS = 120
+LOCK_DEADLINE_SAFETY_SECONDS = 2
+LOCK_POLL_SECONDS = 0.25
 CHECKSUM_LINE_PATTERNS = (
     re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<name>.+)$"),
     re.compile(r"^SHA256 \((?P<name>.+)\) = (?P<hash>[0-9a-fA-F]{64})$"),
@@ -42,14 +47,17 @@ VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-
 HELP_SKILL_HINT = "Use $obstudio-help to list available commands."
 
 
+class BootstrapLockTimeout(RuntimeError):
+    pass
+
+
 @contextlib.contextmanager
 def bootstrap_lock(lock_path: Path):
+    lock_deadline = time.monotonic() + max(0.0, hook_execution_deadline_seconds() - LOCK_DEADLINE_SAFETY_SECONDS)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+", encoding="utf-8") as lock_file:
         if is_windows():
-            import msvcrt
-
-            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            acquire_windows_lock(lock_file, lock_deadline)
         else:
             import fcntl
 
@@ -68,22 +76,58 @@ def bootstrap_lock(lock_path: Path):
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def main() -> int:
-    plugin_root = resolve_plugin_root()
-    plugin_data = resolve_plugin_data()
-    plugin_version = read_plugin_version(plugin_root)
-    state_path = plugin_data / BOOTSTRAP_STATE_FILE
-    codex_config_path = Path.home() / ".codex" / "config.toml"
-    codex_skills_path = Path.home() / ".codex" / "skills" / "obstudio"
+def hook_execution_deadline_seconds() -> float:
+    raw = os.environ.get("OBSTUDIO_HOOK_EXECUTION_DEADLINE_SECONDS", "")
+    if not raw:
+        return HOOK_EXECUTION_DEADLINE_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return HOOK_EXECUTION_DEADLINE_SECONDS
+    return max(0.0, value)
 
-    with bootstrap_lock(plugin_data / BOOTSTRAP_LOCK_FILE):
-        return bootstrap_locked(
-            plugin_data,
-            plugin_version,
-            state_path,
-            codex_config_path,
-            codex_skills_path,
+
+def acquire_windows_lock(lock_file, deadline: float) -> None:
+    import msvcrt
+
+    while True:
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as exc:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise BootstrapLockTimeout("timed out waiting for Obstudio bootstrap lock") from exc
+            time.sleep(min(LOCK_POLL_SECONDS, remaining))
+
+
+def main() -> int:
+    try:
+        plugin_root = resolve_plugin_root()
+        plugin_data = resolve_plugin_data()
+        plugin_version = read_plugin_version(plugin_root)
+        state_path = plugin_data / BOOTSTRAP_STATE_FILE
+        codex_config_path = Path.home() / ".codex" / "config.toml"
+        codex_skills_path = Path.home() / ".codex" / "skills" / "obstudio"
+        plugin_mcp_path = plugin_root / ".mcp.json"
+
+        with bootstrap_lock(plugin_data / BOOTSTRAP_LOCK_FILE):
+            return bootstrap_locked(
+                plugin_data,
+                plugin_version,
+                state_path,
+                codex_config_path,
+                codex_skills_path,
+                plugin_mcp_path,
+            )
+    except Exception as exc:  # pragma: no cover - defensive hook boundary
+        emit_error(
+            "Obstudio bootstrap could not complete automatically. "
+            "The plugin bundle is present, but the managed runtime could not be prepared."
         )
+        print(f"bootstrap error: {exc}", file=sys.stderr)
+        return 2
 
 
 def bootstrap_locked(
@@ -92,6 +136,7 @@ def bootstrap_locked(
     state_path: Path,
     codex_config_path: Path,
     codex_skills_path: Path,
+    plugin_mcp_path: Path,
 ) -> int:
     stopped_state = read_bootstrap_state(state_path) if bootstrap_state_requests_stop(state_path) else {}
     if stopped_state.get("pluginVersion") == plugin_version:
@@ -100,8 +145,52 @@ def bootstrap_locked(
             f"{HELP_SKILL_HINT} Use $observer-restart to start the managed Observer again."
         )
         return 0
+    if stopped_state:
+        write_state(
+            state_path,
+            stopped_observer_state(
+                stopped_state,
+                plugin_version=plugin_version,
+                install_source=string_state_value(stopped_state, "installSource"),
+                obstudio_binary=string_state_value(stopped_state, "obstudioBinary"),
+            ),
+        )
+        emit_context(
+            "Obstudio plugin files were updated, and the managed Observer "
+            "remains intentionally stopped. "
+            f"{HELP_SKILL_HINT} Use $observer-restart to start it again."
+        )
+        return 0
 
-    if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path):
+    plugin_mcp_url = read_plugin_obstudio_mcp_url(plugin_mcp_path)
+    plugin_health_url = derive_health_url(plugin_mcp_url) if plugin_mcp_url else OBSTUDIO_HEALTH_URL
+    mcp_policy = codex_obstudio_mcp_policy(codex_config_path, plugin_mcp_url)
+    if mcp_policy == "disabled":
+        write_state(
+            state_path,
+            plugin_policy_state(plugin_version, owner="user-configured", mode="disabled"),
+        )
+        emit_context(
+            "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
+            "left the managed Observer stopped, did not start or restart the "
+            "plugin-managed Observer, and bundled Obstudio skills remain available. "
+            f"{HELP_SKILL_HINT}"
+        )
+        return 0
+    if mcp_policy == "custom":
+        write_state(
+            state_path,
+            plugin_policy_state(plugin_version, owner="external-observer", mode="custom"),
+        )
+        emit_context(
+            "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
+            f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
+            "did not start or restart the plugin-managed Observer, and bundled "
+            f"Obstudio skills remain available. {HELP_SKILL_HINT}"
+        )
+        return 0
+
+    if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
         emit_context(
             "Obstudio is already bootstrapped for Codex. "
             f"{HELP_SKILL_HINT} Use $otel-audit, $otel-instrument, and $otel-verify as needed."
@@ -116,59 +205,48 @@ def bootstrap_locked(
         resolved_artifact, expected_checksum = fetch_expected_checksum(artifact_suffix, checksums_path)
         release_version = resolve_release_version(resolved_artifact, artifact_suffix)
 
-        obstudio_binary = locate_existing_obstudio(release_version)
-        install_source = "existing"
-        if obstudio_binary is None:
-            obstudio_binary = download_obstudio(plugin_data, artifact_suffix, resolved_artifact, expected_checksum)
-            install_source = "downloaded"
+        obstudio_binary = download_obstudio(plugin_data, artifact_suffix, resolved_artifact, expected_checksum)
+        install_source = "downloaded"
 
         prior_managed_pid = read_managed_bootstrap_state_pid(state_path)
-        local_obstudio_requested_before_install = codex_config_requests_local_obstudio(codex_config_path)
-        run_install(obstudio_binary)
-        if stopped_state:
-            write_state(
-                state_path,
-                stopped_observer_state(
-                    stopped_state,
-                    plugin_version=plugin_version,
-                    install_source=install_source,
-                    obstudio_binary=obstudio_binary,
-                ),
-            )
-            emit_context(
-                "Obstudio plugin files and MCP config were updated, and the managed Observer "
-                "remains intentionally stopped. "
-                f"{HELP_SKILL_HINT} Use $observer-restart to start it again."
-            )
-            return 0
-        local_obstudio_requested = (
-            codex_config_requests_local_obstudio(codex_config_path)
-            or bool(prior_managed_pid)
-            or local_obstudio_requested_before_install
-        )
+        local_obstudio_requested = mcp_policy == "plugin-local" or bool(prior_managed_pid)
         pid = ""
         live_pid = ""
         live_health = None
         log_path = None
         process_started = False
         if local_obstudio_requested:
-            live_health = fetch_obstudio_health(OBSTUDIO_HEALTH_URL)
+            live_health = fetch_obstudio_health(plugin_health_url)
             if live_health is not None:
-                live_pid = find_pid_listening_on_url(OBSTUDIO_HEALTH_URL)
+                live_pid = find_pid_listening_on_url(plugin_health_url)
                 pid = live_pid
-                if prior_managed_pid and bootstrap_state_proves_managed_owner(state_path, live_pid, live_health):
-                    configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
+                managed_owner = bool(prior_managed_pid) and bootstrap_state_proves_managed_owner(
+                    state_path,
+                    live_pid,
+                    live_health,
+                )
+                if managed_owner and not health_payload_version_matches_release(live_health, release_version):
+                    terminate_managed_process(live_pid or prior_managed_pid, plugin_health_url)
+                    process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
+                    try:
+                        live_health = verify_local_obstudio_health(plugin_health_url)
+                        ensure_process_running(process)
+                    except Exception:
+                        terminate_process(process)
+                        raise
+                    pid = str(process.pid)
+                    live_pid = ""
+                    process_started = True
             else:
-                if is_tcp_port_open(OBSTUDIO_HEALTH_URL):
+                if is_tcp_port_open(plugin_health_url):
                     raise RuntimeError(
-                        f"local Observer port is already occupied at {OBSTUDIO_HEALTH_URL} "
+                        f"local Observer port is already occupied at {plugin_health_url} "
                         "but the health endpoint is not reporting Obstudio; stop the existing process or clear the stale shared-observer state"
                     )
                 process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
                 try:
-                    live_health = verify_local_obstudio_health()
+                    live_health = verify_local_obstudio_health(plugin_health_url)
                     ensure_process_running(process)
-                    configure_codex_mcp_url(codex_config_path, derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL))
                 except Exception:
                     terminate_process(process)
                     raise
@@ -182,11 +260,15 @@ def bootstrap_locked(
             pid=pid,
             health_payload=live_health,
             log_path=log_path,
+            expected_version=release_version,
+            health_url=plugin_health_url,
+            mcp_url=plugin_mcp_url,
         )
         write_state(
             state_path,
             {
                 "pluginVersion": plugin_version,
+                "releaseVersion": release_version,
                 "installSource": install_source,
                 "obstudioBinary": str(obstudio_binary),
                 "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
@@ -217,7 +299,7 @@ def bootstrap_locked(
     except Exception as exc:  # pragma: no cover - defensive hook boundary
         emit_error(
             "Obstudio bootstrap could not complete automatically. "
-            "The plugin bundle is present, but the release installer failed."
+            "The plugin bundle is present, but the managed runtime could not be prepared."
         )
         print(f"bootstrap error: {exc}", file=sys.stderr)
         return 2
@@ -251,12 +333,121 @@ def read_plugin_version(plugin_root: Path) -> str:
     return version
 
 
+def read_plugin_obstudio_mcp_url(mcp_path: Path) -> str:
+    try:
+        payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+    if not isinstance(payload, dict):
+        return derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+    servers = payload.get("mcpServers")
+    if not isinstance(servers, dict):
+        return derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+    obstudio = servers.get("obstudio")
+    if not isinstance(obstudio, dict):
+        return derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+    url = obstudio.get("url")
+    if isinstance(url, str) and url.strip():
+        return url.strip()
+    return derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+
+
+def plugin_policy_state(plugin_version: str, *, owner: str, mode: str) -> dict[str, str]:
+    return {
+        "pluginVersion": plugin_version,
+        "releaseVersion": "",
+        "installSource": "",
+        "obstudioBinary": "",
+        "bootstrappedAt": datetime.now(timezone.utc).isoformat(),
+        "owner": owner,
+        "mode": mode,
+        "healthUrl": "",
+        "mcpUrl": "",
+        "pid": "",
+        "observerStartedAt": "",
+        "logPath": "",
+    }
+
+
+def codex_obstudio_mcp_policy(config_path: Path, plugin_mcp_url: str) -> str:
+    try:
+        config = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return "plugin-local"
+
+    server = read_codex_obstudio_server(config)
+    if server is None:
+        return "plugin-local"
+    if server.get("enabled") is False:
+        return "disabled"
+    url = server.get("url")
+    if isinstance(url, str) and url.strip():
+        return "plugin-local" if normalize_mcp_url(url) == normalize_mcp_url(plugin_mcp_url) else "custom"
+    command = server.get("command")
+    if isinstance(command, str) and command.strip():
+        return "plugin-local" if CODEX_MANAGED_BLOCK in config else "custom"
+    return "plugin-local"
+
+
+def codex_obstudio_mcp_url(config_path: Path) -> str:
+    try:
+        config = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    server = read_codex_obstudio_server(config)
+    if server is None:
+        return ""
+    url = server.get("url")
+    if isinstance(url, str):
+        return url.strip()
+    return ""
+
+
+def read_codex_obstudio_server(config: str) -> dict[str, object] | None:
+    try:
+        payload = tomllib.loads(config)
+    except tomllib.TOMLDecodeError:
+        return read_codex_obstudio_server_fallback(config)
+    mcp_servers = payload.get("mcp_servers")
+    if not isinstance(mcp_servers, dict):
+        return None
+    obstudio = mcp_servers.get("obstudio")
+    if isinstance(obstudio, dict):
+        return obstudio
+    return None
+
+
+def read_codex_obstudio_server_fallback(config: str) -> dict[str, object] | None:
+    match = re.search(r"(?ms)^\s*\[mcp_servers\.obstudio\]\s*$(.*?)(?=^\s*\[|\Z)", config)
+    if not match:
+        return None
+    block = match.group(1)
+    server: dict[str, object] = {}
+    enabled_match = re.search(r"(?m)^\s*enabled\s*=\s*(true|false)\s*$", block)
+    if enabled_match:
+        server["enabled"] = enabled_match.group(1) == "true"
+    url_match = re.search(r'(?m)^\s*url\s*=\s*"([^"]+)"\s*$', block)
+    if url_match:
+        server["url"] = url_match.group(1)
+    command_match = re.search(r'(?m)^\s*command\s*=\s*"([^"]+)"\s*$', block)
+    if command_match:
+        server["command"] = command_match.group(1)
+    return server
+
+
+def normalize_mcp_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url.strip())
+    path = parsed.path.rstrip("/") or "/mcp"
+    if not path.endswith("/mcp"):
+        path = path + "/mcp"
+    return parsed._replace(path=path).geturl()
+
+
 def codex_config_requests_local_obstudio(config_path: Path) -> bool:
     try:
         config = config_path.read_text(encoding="utf-8")
     except OSError:
         return False
-
     start = config.find(CODEX_MANAGED_BLOCK)
     if start == -1:
         return False
@@ -272,18 +463,8 @@ def is_bootstrapped(
     plugin_version: str,
     codex_config_path: Path,
     codex_skills_path: Path,
+    plugin_mcp_path: Path | None = None,
 ) -> bool:
-    if not codex_skills_path.is_dir() or not codex_config_path.is_file():
-        return False
-
-    try:
-        config = codex_config_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-
-    if CODEX_MANAGED_BLOCK not in config:
-        return False
-
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except OSError:
@@ -294,39 +475,18 @@ def is_bootstrapped(
     if state.get("pluginVersion") != plugin_version:
         return False
 
-    health_url = codex_obstudio_health_url(codex_config_path)
-    if health_url is None:
-        return False
+    plugin_mcp_url = read_plugin_obstudio_mcp_url(plugin_mcp_path) if plugin_mcp_path is not None else derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL)
+    policy = codex_obstudio_mcp_policy(codex_config_path, plugin_mcp_url)
+    if policy in {"disabled", "custom"}:
+        return True
+    health_url = string_state_value(state, "healthUrl") or derive_health_url(plugin_mcp_url)
     health_payload = fetch_obstudio_health(health_url)
     if health_payload is None:
         return False
     if state.get("owner") == "codex-plugin" and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
-        return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload)
-    return True
-
-
-def locate_existing_obstudio(expected_version: str) -> Path | None:
-    installed_root = (Path.home() / ".codex" / "skills" / "obstudio").resolve()
-    candidates = [
-        shutil.which("obstudio"),
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        path = Path(candidate).expanduser().resolve()
-        if path_is_relative_to(path, installed_root):
-            continue
-        if path.is_file() and existing_binary_matches_release(path, expected_version):
-            return path
-    return None
-
-
-def path_is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
+        expected_version = string_state_value(state, "releaseVersion")
+        return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, expected_version)
     return True
 
 
@@ -336,15 +496,15 @@ def download_obstudio(
     resolved_artifact: str,
     expected_checksum: str,
 ) -> Path:
-    release_dir = plugin_data / "release" / artifact_suffix.removesuffix(".zip")
+    release_dir = plugin_data / "release" / resolved_artifact.removesuffix(".zip")
     release_dir.mkdir(parents=True, exist_ok=True)
     extracted_dir = release_dir / "extracted"
     binary_name = "obstudio.exe" if is_windows() else "obstudio"
-    binary_path = extracted_dir / binary_name
 
     archive_path = release_dir / resolved_artifact
-    if archive_is_valid(archive_path, expected_checksum) and binary_path.is_file():
-        if extracted_binary_matches_archive(archive_path, binary_path, binary_name):
+    if archive_is_valid(archive_path, expected_checksum):
+        binary_path = find_extracted_binary_matching_archive(archive_path, extracted_dir, binary_name)
+        if binary_path is not None:
             ensure_executable(binary_path)
             return binary_path
 
@@ -401,7 +561,7 @@ def fetch_expected_checksum(
                 text = response.read().decode("utf-8")
             result = parse_checksum(text, artifact_suffix)
             try:
-                checksums_path.write_text(text, encoding="utf-8")
+                write_text_atomic(checksums_path, text)
                 cache_versioned_checksums(
                     checksums_path,
                     resolve_release_version(result[0], artifact_suffix),
@@ -421,17 +581,16 @@ def fetch_expected_checksum(
     if release_version:
         versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
         if versioned_checksums_path.is_file():
-            try:
-                return parse_checksum(versioned_checksums_path.read_text(encoding="utf-8"), artifact_suffix)
-            except OSError:
-                pass
+            cached_result = parse_cached_checksum(versioned_checksums_path, artifact_suffix)
+            if cached_result is not None:
+                return cached_result
         versioned_download_url = f"{RELEASE_BASE_URL}/obstudio_{release_version}_checksums.txt"
         try:
             with urllib.request.urlopen(versioned_download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
                 text = response.read().decode("utf-8")
             result = parse_checksum(text, artifact_suffix)
             try:
-                checksums_path.write_text(text, encoding="utf-8")
+                write_text_atomic(checksums_path, text)
                 cache_versioned_checksums(checksums_path, release_version, text)
             except OSError:
                 pass
@@ -442,10 +601,9 @@ def fetch_expected_checksum(
     cached_result = newest_cached_checksum(checksums_path, artifact_suffix)
     if cached_result is not None:
         return cached_result
-    try:
-        return parse_checksum(checksums_path.read_text(encoding="utf-8"), artifact_suffix)
-    except (OSError, RuntimeError):
-        pass
+    cached_result = parse_cached_checksum(checksums_path, artifact_suffix)
+    if cached_result is not None:
+        return cached_result
     raise RuntimeError("failed to download release checksum manifest") from last_error
 
 
@@ -474,11 +632,23 @@ def newest_cached_checksum(checksums_path: Path, artifact_suffix: str) -> tuple[
             cached_paths.append((release_version, cached_path))
     cached_paths.sort(key=lambda item: semver_sort_key(item[0]), reverse=True)
     for _, cached_path in cached_paths:
-        try:
-            return parse_checksum(cached_path.read_text(encoding="utf-8"), artifact_suffix)
-        except (OSError, RuntimeError):
-            continue
+        cached_result = parse_cached_checksum(cached_path, artifact_suffix)
+        if cached_result is not None:
+            return cached_result
     return None
+
+
+def parse_cached_checksum(path: Path, artifact_suffix: str) -> tuple[str, str] | None:
+    try:
+        return parse_checksum(path.read_text(encoding="utf-8"), artifact_suffix)
+    except OSError:
+        return None
+    except RuntimeError:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
 
 
 def cached_checksum_version(path: Path) -> str | None:
@@ -531,6 +701,23 @@ def extracted_binary_matches_archive(archive_path: Path, binary_path: Path, bina
             return sha256_file(binary_path) == sha256_zip_member(zf, member_name)
     except (OSError, zipfile.BadZipFile):
         return False
+
+
+def find_extracted_binary_matching_archive(archive_path: Path, extracted_dir: Path, binary_name: str) -> Path | None:
+    try:
+        root = extracted_dir.resolve()
+        with zipfile.ZipFile(archive_path) as zf:
+            for member_name in find_zip_members(zf, binary_name):
+                candidate = (root / member_name).resolve()
+                try:
+                    candidate.relative_to(root)
+                except ValueError:
+                    continue
+                if candidate.is_file() and sha256_file(candidate) == sha256_zip_member(zf, member_name):
+                    return candidate
+    except (OSError, zipfile.BadZipFile):
+        return None
+    return None
 
 
 def verify_checksum(archive_path: Path, expected_checksum: str) -> None:
@@ -618,29 +805,33 @@ def ensure_process_running(process: subprocess.Popen[str]) -> None:
         raise RuntimeError("Observer process exited before becoming healthy")
 
 
-def existing_binary_matches_release(obstudio_binary: Path, expected_version: str) -> bool:
-    try:
-        result = subprocess.run(
-            [str(obstudio_binary), "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except Exception:
-        return False
-    if result.returncode != 0:
-        return False
-    reported_version = parse_obstudio_version(result.stdout, result.stderr)
-    return reported_version == expected_version
-
-
 def parse_obstudio_version(stdout: str, stderr: str) -> str | None:
     text = "\n".join(part for part in (stdout, stderr) if part)
     matches = VERSION_PATTERN.findall(text)
     if not matches:
         return None
     return matches[-1]
+
+
+def normalize_obstudio_version(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if not text:
+        return ""
+    without_prefix = text.removeprefix("v")
+    if re.fullmatch(VERSION_PATTERN, without_prefix):
+        return without_prefix
+    matches = VERSION_PATTERN.findall(text)
+    if not matches:
+        return ""
+    return matches[-1]
+
+
+def health_payload_version_matches_release(health_payload: dict[str, object] | None, release_version: str) -> bool:
+    if health_payload is None:
+        return False
+    return normalize_obstudio_version(health_payload.get("version")) == normalize_obstudio_version(release_version)
 
 
 def is_windows() -> bool:
@@ -671,16 +862,27 @@ def versioned_checksum_cache_path(checksums_path: Path, release_version: str) ->
 def cache_versioned_checksums(checksums_path: Path, release_version: str, text: str) -> None:
     versioned_checksums_path = versioned_checksum_cache_path(checksums_path, release_version)
     try:
-        versioned_checksums_path.write_text(text, encoding="utf-8")
+        write_text_atomic(versioned_checksums_path, text)
     except OSError:
         pass
 
 
+def write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        temp_path.write_text(text, encoding="utf-8")
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def find_zip_member(zf: zipfile.ZipFile, binary_name: str) -> str | None:
-    for name in zf.namelist():
-        if Path(name).name == binary_name:
-            return name
-    return None
+    return next(iter(find_zip_members(zf, binary_name)), None)
+
+
+def find_zip_members(zf: zipfile.ZipFile, binary_name: str) -> list[str]:
+    return [name for name in zf.namelist() if Path(name).name == binary_name]
 
 
 def sha256_zip_member(zf: zipfile.ZipFile, member_name: str) -> str:
@@ -691,22 +893,17 @@ def sha256_zip_member(zf: zipfile.ZipFile, member_name: str) -> str:
     return digest.hexdigest()
 
 
-def run_install(obstudio_binary: Path) -> None:
-    command = [str(obstudio_binary), "install", "--target=codex"]
-    result = subprocess.run(command, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            "obstudio install failed:\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
-        )
-
-
 def start_obstudio_background(obstudio_binary: Path, plugin_data: Path) -> tuple[subprocess.Popen[str], Path]:
     log_dir = plugin_data / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "obstudio.log"
     env = os.environ.copy()
+    for key in ("HOST", "PORT", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_PORT"):
+        env.pop(key, None)
+    env["HOST"] = "127.0.0.1"
+    env["PORT"] = "3000"
+    env["OTLP_HTTP_PORT"] = "4318"
+    env["OTLP_GRPC_PORT"] = "4317"
     env["OBSTUDIO_OWNER"] = "codex-plugin"
     env["OBSTUDIO_MODE"] = "managed"
     with log_path.open("a", encoding="utf-8") as log_file:
@@ -732,18 +929,49 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
             pass
 
 
-def verify_local_obstudio_health() -> dict[str, object]:
+def terminate_managed_process(pid: str, health_url: str = OBSTUDIO_HEALTH_URL) -> None:
+    pid = pid.strip()
+    if not pid.isdigit():
+        raise RuntimeError("could not determine managed Observer process pid")
+    if is_windows():
+        subprocess.run(["taskkill", "/PID", pid, "/T"], check=False, capture_output=True, text=True, timeout=5)
+    else:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except ProcessLookupError:
+            return
+    if wait_for_managed_process_exit(pid, health_url):
+        return
+    if is_windows():
+        subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], check=False, capture_output=True, text=True, timeout=5)
+    else:
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+        except ProcessLookupError:
+            return
+    wait_for_managed_process_exit(pid, health_url)
+
+
+def wait_for_managed_process_exit(pid: str, health_url: str = OBSTUDIO_HEALTH_URL) -> bool:
+    for _ in range(20):
+        if find_pid_listening_on_url(health_url) != pid:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def verify_local_obstudio_health(health_url: str = OBSTUDIO_HEALTH_URL) -> dict[str, object]:
     last_error: Exception | None = None
     for _ in range(HEALTH_CHECK_ATTEMPTS):
         try:
-            payload = fetch_obstudio_health(OBSTUDIO_HEALTH_URL)
+            payload = fetch_obstudio_health(health_url)
             if payload is not None:
                 return payload
         except Exception as exc:  # pragma: no cover - health boundary
             last_error = exc
         time.sleep(HEALTH_CHECK_SLEEP_SECONDS)
     raise RuntimeError(
-        f"local Observer did not become healthy at {OBSTUDIO_HEALTH_URL}"
+        f"local Observer did not become healthy at {health_url}"
     ) from last_error
 
 
@@ -897,7 +1125,7 @@ def stopped_observer_state(
     *,
     plugin_version: str,
     install_source: str,
-    obstudio_binary: Path,
+    obstudio_binary: Path | str,
 ) -> dict[str, str]:
     return {
         "pluginVersion": plugin_version,
@@ -928,8 +1156,11 @@ def bootstrap_state_proves_managed_owner(
     state_path: Path,
     live_pid: str,
     health_payload: dict[str, object] | None,
+    expected_version: str = "",
 ) -> bool:
     if not health_payload_reports_managed(health_payload):
+        return False
+    if expected_version and not health_payload_version_matches_release(health_payload, expected_version):
         return False
     state = read_bootstrap_state(state_path)
     if state.get("owner") != "codex-plugin" or state.get("mode") != "managed":
@@ -963,6 +1194,9 @@ def observer_state_fields(
     pid: str,
     health_payload: dict[str, object] | None,
     log_path: Path | None,
+    expected_version: str = "",
+    health_url: str = OBSTUDIO_HEALTH_URL,
+    mcp_url: str = "",
 ) -> dict[str, str]:
     if not local_requested:
         return {
@@ -978,6 +1212,7 @@ def observer_state_fields(
         state_path,
         live_pid,
         health_payload,
+        expected_version,
     ):
         owner = "codex-plugin"
         mode = "managed"
@@ -990,8 +1225,8 @@ def observer_state_fields(
     return {
         "owner": owner,
         "mode": mode,
-        "healthUrl": OBSTUDIO_HEALTH_URL,
-        "mcpUrl": derive_obstudio_mcp_url(OBSTUDIO_HEALTH_URL),
+        "healthUrl": health_url,
+        "mcpUrl": mcp_url or derive_obstudio_mcp_url(health_url),
         "pid": pid,
         "observerStartedAt": observer_started_at,
         "logPath": str(log_path) if log_path is not None else "",

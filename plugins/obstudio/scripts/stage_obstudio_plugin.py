@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -63,6 +65,8 @@ PLUGIN_PATHS = (
     "assets",
     "hooks",
 )
+MAX_DEFAULT_PROMPTS = 3
+SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
 
 
 def main() -> int:
@@ -191,10 +195,81 @@ def verify_staged_plugin(output: Path) -> None:
         raise RuntimeError(f"missing plugin manifest: {manifest}")
     if not skills.is_dir():
         raise RuntimeError(f"missing staged skills directory: {skills}")
+    verify_plugin_manifest(manifest, skills)
     symlinks = [path for path in output.rglob("*") if path.is_symlink()]
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+
+
+def verify_plugin_manifest(manifest_path: Path, skills_root: Path) -> None:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"invalid plugin manifest JSON: {manifest_path}") from exc
+    interface = manifest.get("interface")
+    if not isinstance(interface, dict):
+        raise RuntimeError("plugin manifest must include an interface object")
+    default_prompts = interface.get("defaultPrompt", [])
+    if not isinstance(default_prompts, list) or any(not isinstance(prompt, str) for prompt in default_prompts):
+        raise RuntimeError("plugin manifest interface.defaultPrompt must be a list of strings")
+    if len(default_prompts) > MAX_DEFAULT_PROMPTS:
+        raise RuntimeError(
+            "plugin manifest interface.defaultPrompt must contain at most "
+            f"{MAX_DEFAULT_PROMPTS} entries"
+        )
+    verify_manifest_skill_references(manifest, available_skill_names(skills_root))
+
+
+def verify_manifest_skill_references(manifest: object, skill_names: set[str]) -> None:
+    missing = sorted(
+        {
+            reference
+            for text in iter_manifest_strings(manifest)
+            for reference in SKILL_REFERENCE_PATTERN.findall(text)
+            if reference not in skill_names
+        }
+    )
+    if missing:
+        rendered = ", ".join(f"${name}" for name in missing)
+        raise RuntimeError(f"plugin manifest references unknown skills: {rendered}")
+
+
+def iter_manifest_strings(value: object):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from iter_manifest_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from iter_manifest_strings(item)
+
+
+def available_skill_names(skills_root: Path) -> set[str]:
+    names: set[str] = set()
+    for skill_path in skills_root.rglob("SKILL.md"):
+        name = read_skill_name(skill_path)
+        if name:
+            names.add(name)
+    return names
+
+
+def read_skill_name(skill_path: Path) -> str | None:
+    try:
+        lines = skill_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        stripped = line.strip()
+        if stripped == "---":
+            return None
+        match = re.fullmatch(r"name:\s*([A-Za-z0-9_-]+)", stripped)
+        if match:
+            return match.group(1)
+    return None
 
 
 def verify_plugin_skills_synced() -> None:

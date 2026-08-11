@@ -99,11 +99,12 @@ If the user trusts the SessionStart hook, the bootstrap may:
 - download an Obstudio release binary;
 - verify it against `checksums.txt`;
 - extract the release into plugin data;
-- configure local Codex access to the Observer MCP endpoint;
-- start or reuse a local Observer process.
+- use the bundled plugin `.mcp.json` endpoint policy;
+- start or reuse a local Observer process unless Codex has an explicit
+  Obstudio MCP opt-out or custom endpoint.
 
 Do not trust the hook if you do not want plugin-managed binary download,
-checksum validation, local process startup, or MCP configuration.
+checksum validation, or local process startup.
 
 ## Risky Surfaces
 

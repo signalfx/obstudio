@@ -38,7 +38,10 @@ class StageObstudioPluginTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
             (output / ".codex-plugin").mkdir(parents=True)
-            (output / ".codex-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+            (output / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"interface": {"defaultPrompt": []}}),
+                encoding="utf-8",
+            )
             (output / "skills").mkdir()
             (output / "target").write_text("target", encoding="utf-8")
             (output / "skills" / "linked").symlink_to(output / "target")
@@ -62,8 +65,61 @@ class StageObstudioPluginTest(unittest.TestCase):
         skills_path = plugin_root / manifest["skills"]
 
         self.assertEqual(manifest["skills"], "./skills/")
+        self.assertLessEqual(
+            len(manifest["interface"]["defaultPrompt"]),
+            STAGE.MAX_DEFAULT_PROMPTS,
+        )
         self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
         self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
+
+    def test_verify_rejects_too_many_default_prompts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            (output / ".codex-plugin").mkdir(parents=True)
+            (output / "skills").mkdir(parents=True)
+            (output / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "interface": {
+                            "defaultPrompt": [
+                                "one",
+                                "two",
+                                "three",
+                                "four",
+                            ],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "defaultPrompt must contain at most 3 entries"):
+                STAGE.verify_staged_plugin(output)
+
+    def test_verify_rejects_unknown_manifest_skill_references(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio"
+            (output / ".codex-plugin").mkdir(parents=True)
+            skill_dir = output / "skills" / "observer-control" / "observer-open"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: observer-open\n---\n",
+                encoding="utf-8",
+            )
+            (output / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "interface": {
+                            "longDescription": "Open with $open-observer.",
+                            "defaultPrompt": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, r"unknown skills: \$open-observer"):
+                STAGE.verify_staged_plugin(output)
 
     def test_committed_plugin_skills_are_synced(self):
         STAGE.verify_plugin_skills_synced()

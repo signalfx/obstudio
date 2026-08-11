@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import sys
 import unittest
 from pathlib import Path
 import tempfile
@@ -27,6 +28,61 @@ class DummyProcess:
 
     def poll(self):
         return self._poll_result
+
+
+class BootstrapLockTest(unittest.TestCase):
+    def test_windows_lock_retries_with_nonblocking_lock(self):
+        class FakeMsvcrt:
+            LK_NBLCK = 1
+            LK_UNLCK = 2
+            attempts = 0
+            modes = []
+
+            @classmethod
+            def locking(cls, _fileno, mode, _length):
+                cls.modes.append(mode)
+                if mode == cls.LK_NBLCK:
+                    cls.attempts += 1
+                    if cls.attempts < 3:
+                        raise OSError("busy")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            lock_path = Path(tempdir) / "bootstrap.lock"
+            with (
+                mock.patch.object(BOOTSTRAP, "is_windows", return_value=True),
+                mock.patch.dict(sys.modules, {"msvcrt": FakeMsvcrt}),
+                mock.patch.object(BOOTSTRAP.time, "monotonic", side_effect=[0.0, 1.0, 2.0]),
+                mock.patch.object(BOOTSTRAP.time, "sleep") as sleep,
+            ):
+                with BOOTSTRAP.bootstrap_lock(lock_path):
+                    pass
+
+        self.assertEqual(FakeMsvcrt.modes, [FakeMsvcrt.LK_NBLCK, FakeMsvcrt.LK_NBLCK, FakeMsvcrt.LK_NBLCK, FakeMsvcrt.LK_UNLCK])
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_main_reports_lock_failure_through_hook_error_boundary(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_root = Path(tempdir) / "plugin"
+            plugin_data = Path(tempdir) / "data"
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.1.0"}),
+                encoding="utf-8",
+            )
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=Path(tempdir) / "home"),
+                mock.patch.object(BOOTSTRAP, "bootstrap_lock", side_effect=BOOTSTRAP.BootstrapLockTimeout("busy")),
+                mock.patch.object(BOOTSTRAP, "emit_error") as emit_error,
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 2)
+
+        emit_error.assert_called_once_with(
+            "Obstudio bootstrap could not complete automatically. "
+            "The plugin bundle is present, but the managed runtime could not be prepared."
+        )
 
 
 class ResolveReleaseVersionTest(unittest.TestCase):
@@ -119,6 +175,75 @@ class ExtractedBinaryMatchesArchiveTest(unittest.TestCase):
                 zf.writestr(f"obstudio_0.0.14_linux_amd64/{binary_name}", b"different-bytes")
 
             self.assertFalse(BOOTSTRAP.extracted_binary_matches_archive(archive_path, extracted_binary, binary_name))
+
+
+class DownloadObstudioTest(unittest.TestCase):
+    def test_reuses_wrapped_extracted_binary_from_valid_cache(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_data = Path(tempdir)
+            release_dir = plugin_data / "release" / "obstudio_0.0.14_linux_amd64"
+            extracted_binary = release_dir / "extracted" / "obstudio_0.0.14_linux_amd64" / "obstudio"
+            archive_path = release_dir / "obstudio_0.0.14_linux_amd64.zip"
+            extracted_binary.parent.mkdir(parents=True)
+            extracted_binary.write_bytes(b"hello-obstudio")
+            with zipfile.ZipFile(archive_path, "w") as zf:
+                zf.writestr("obstudio_0.0.14_linux_amd64/obstudio", b"hello-obstudio")
+            expected_checksum = BOOTSTRAP.sha256_file(archive_path)
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen") as urlopen:
+                got = BOOTSTRAP.download_obstudio(
+                    plugin_data,
+                    "linux_amd64.zip",
+                    "obstudio_0.0.14_linux_amd64.zip",
+                    expected_checksum,
+                )
+
+            self.assertEqual(got, extracted_binary.resolve())
+            urlopen.assert_not_called()
+
+    def test_downloads_new_release_without_removing_old_extracted_release(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_data = Path(tempdir)
+            old_binary = (
+                plugin_data
+                / "release"
+                / "obstudio_0.0.13_linux_amd64"
+                / "extracted"
+                / "obstudio_0.0.13_linux_amd64"
+                / "obstudio"
+            )
+            old_binary.parent.mkdir(parents=True)
+            old_binary.write_bytes(b"old-running-obstudio")
+
+            archive_buffer = io.BytesIO()
+            with zipfile.ZipFile(archive_buffer, "w") as zf:
+                zf.writestr("obstudio_0.0.14_linux_amd64/obstudio", b"new-obstudio")
+            archive_bytes = archive_buffer.getvalue()
+            expected_checksum = BOOTSTRAP.hashlib.sha256(archive_bytes).hexdigest()
+
+            with mock.patch.object(
+                BOOTSTRAP.urllib.request,
+                "urlopen",
+                return_value=FakeResponse(archive_bytes),
+            ):
+                got = BOOTSTRAP.download_obstudio(
+                    plugin_data,
+                    "linux_amd64.zip",
+                    "obstudio_0.0.14_linux_amd64.zip",
+                    expected_checksum,
+                )
+
+            self.assertTrue(old_binary.is_file())
+            self.assertEqual(got.name, "obstudio")
+            self.assertEqual(got.read_bytes(), b"new-obstudio")
+            self.assertIn("obstudio_0.0.14_linux_amd64", str(got))
 
 
 class ValidateZipEntriesTest(unittest.TestCase):
@@ -232,6 +357,40 @@ class FetchExpectedChecksumTest(unittest.TestCase):
         self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
         self.assertEqual(checksum, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
+    def test_malformed_exact_versioned_cache_falls_back_to_remote_manifest(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        remote_text = (
+            b"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd *obstudio_0.0.14_linux_amd64.zip\n"
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            checksums_path = Path(tempdir) / "checksums.txt"
+            versioned_cache = BOOTSTRAP.versioned_checksum_cache_path(checksums_path, "0.0.14")
+            versioned_cache.write_text("truncated\n", encoding="utf-8")
+
+            def fake_urlopen(url, timeout=0):
+                if url.endswith("/checksums.txt"):
+                    raise RuntimeError("stable checksum alias missing")
+                if url.endswith("/releases/latest"):
+                    return FakeResponse(json.dumps({"tag_name": "v0.0.14"}).encode("utf-8"))
+                if url.endswith("/obstudio_0.0.14_checksums.txt"):
+                    return FakeResponse(remote_text)
+                raise AssertionError(f"unexpected URL: {url}")
+
+            with mock.patch.object(BOOTSTRAP.urllib.request, "urlopen", side_effect=fake_urlopen):
+                name, checksum = BOOTSTRAP.fetch_expected_checksum("linux_amd64.zip", checksums_path)
+
+            self.assertEqual(versioned_cache.read_text(encoding="utf-8"), remote_text.decode("utf-8"))
+            self.assertFalse(list(Path(tempdir).glob(".*.tmp-*")))
+
+        self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
+        self.assertEqual(checksum, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+
     def test_fully_offline_cache_fallback_uses_semver_order(self):
         with tempfile.TemporaryDirectory() as tempdir:
             checksums_path = Path(tempdir) / "checksums.txt"
@@ -318,6 +477,16 @@ class FetchExpectedChecksumTest(unittest.TestCase):
 
         self.assertEqual(name, "obstudio_0.0.14_linux_amd64.zip")
         self.assertEqual(checksum, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+    def test_write_text_atomic_replaces_with_complete_text(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = Path(tempdir) / "checksums.txt"
+            path.write_text("old\n", encoding="utf-8")
+
+            BOOTSTRAP.write_text_atomic(path, "new\n")
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "new\n")
+            self.assertFalse(list(Path(tempdir).glob(".*.tmp-*")))
 
 
 class ObserverStateFieldsTest(unittest.TestCase):
@@ -508,6 +677,80 @@ class BootstrapStateHealthTest(unittest.TestCase):
                     )
                 )
 
+    def test_managed_state_requires_matching_release_version(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            state_path = tempdir_path / "bootstrap-state.json"
+            skills_path = tempdir_path / ".codex" / "skills" / "obstudio"
+            config_path = tempdir_path / ".codex" / "config.toml"
+            skills_path.mkdir(parents=True, exist_ok=True)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:3000/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "releaseVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "1234",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stale_health_payload = {
+                "kind": "obstudio",
+                "apiVersion": "v1",
+                "owner": "codex-plugin",
+                "mode": "managed",
+                "version": "0.0.9",
+            }
+            current_health_payload = {
+                "kind": "obstudio",
+                "apiVersion": "v1",
+                "owner": "codex-plugin",
+                "mode": "managed",
+                "version": "v0.1.0",
+            }
+
+            with (
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=stale_health_payload),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="1234"),
+            ):
+                self.assertFalse(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=current_health_payload),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="1234"),
+            ):
+                self.assertTrue(
+                    BOOTSTRAP.is_bootstrapped(
+                        state_path,
+                        "0.1.0",
+                        config_path,
+                        skills_path,
+                    )
+                )
+
     def test_managed_state_accepts_missing_pid_lookup_when_health_metadata_matches(self):
         with tempfile.TemporaryDirectory() as tempdir:
             tempdir_path = Path(tempdir)
@@ -631,12 +874,9 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
-                mock.patch.object(BOOTSTRAP, "run_install") as run_install,
                 mock.patch.object(BOOTSTRAP, "emit_context"),
             ):
                 self.assertEqual(BOOTSTRAP.main(), 0)
-
-            run_install.assert_not_called()
 
     def test_main_reinstalls_on_version_change_when_stopped_without_starting_process(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -676,19 +916,121 @@ class BootstrapStateHealthTest(unittest.TestCase):
                     "fetch_expected_checksum",
                     return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
                 ),
-                mock.patch.object(BOOTSTRAP, "locate_existing_obstudio", return_value=binary),
-                mock.patch.object(BOOTSTRAP, "run_install") as run_install,
                 mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
                 mock.patch.object(BOOTSTRAP, "emit_context"),
             ):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
-            run_install.assert_called_once_with(binary)
             start_obstudio_background.assert_not_called()
             state = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertEqual(state["pluginVersion"], "0.2.0")
             self.assertEqual(state["status"], "stopped")
             self.assertEqual(state["owner"], "codex-plugin")
+
+    def test_main_preserves_explicit_codex_mcp_opt_out_without_installing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            config_path.parent.mkdir(parents=True)
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.1.0"}),
+                encoding="utf-8",
+            )
+            (plugin_root / ".mcp.json").write_text(
+                json.dumps({"mcpServers": {"obstudio": {"type": "http", "url": "http://127.0.0.1:3000/mcp"}}}),
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[mcp_servers.obstudio]",
+                        "enabled = false",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "fetch_expected_checksum") as fetch_expected_checksum,
+                mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
+                mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            fetch_expected_checksum.assert_not_called()
+            start_obstudio_background.assert_not_called()
+            emit_context.assert_called_once_with(
+                "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
+                "left the managed Observer stopped, did not start or restart the "
+                "plugin-managed Observer, and bundled Obstudio skills remain available. "
+                f"{BOOTSTRAP.HELP_SKILL_HINT}"
+            )
+            self.assertIn("enabled = false", config_path.read_text(encoding="utf-8"))
+            state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
+        self.assertEqual(state["pluginVersion"], "0.1.0")
+        self.assertEqual(state["mode"], "disabled")
+
+    def test_main_preserves_custom_codex_mcp_url_without_installing(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            config_path.parent.mkdir(parents=True)
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.1.0"}),
+                encoding="utf-8",
+            )
+            (plugin_root / ".mcp.json").write_text(
+                json.dumps({"mcpServers": {"obstudio": {"type": "http", "url": "http://127.0.0.1:3000/mcp"}}}),
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:4111/mcp"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "fetch_expected_checksum") as fetch_expected_checksum,
+                mock.patch.object(BOOTSTRAP, "start_obstudio_background") as start_obstudio_background,
+                mock.patch.object(BOOTSTRAP, "emit_context") as emit_context,
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            fetch_expected_checksum.assert_not_called()
+            start_obstudio_background.assert_not_called()
+            emit_context.assert_called_once_with(
+                "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
+                "left the configured endpoint unchanged (http://127.0.0.1:4111/mcp), "
+                "did not start or restart the plugin-managed Observer, and bundled "
+                f"Obstudio skills remain available. {BOOTSTRAP.HELP_SKILL_HINT}"
+            )
+            self.assertIn('url = "http://127.0.0.1:4111/mcp"', config_path.read_text(encoding="utf-8"))
+            state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
+        self.assertEqual(state["pluginVersion"], "0.1.0")
+        self.assertEqual(state["mode"], "custom")
 
 
 class BootstrapHealthCheckTest(unittest.TestCase):
@@ -789,21 +1131,84 @@ class BootstrapHealthCheckTest(unittest.TestCase):
         self.assertEqual(got, "http://127.0.0.1:3000/api/health")
 
 
-class LocateExistingObstudioTest(unittest.TestCase):
-    def test_does_not_reuse_installed_destination_binary_as_source(self):
+class ReleaseBinarySelectionTest(unittest.TestCase):
+    def test_main_uses_verified_release_instead_of_path_candidate(self):
+        class FakeProcess:
+            pid = 2222
+
+            def poll(self):
+                return None
+
         with tempfile.TemporaryDirectory() as tempdir:
-            home = Path(tempdir) / "home"
-            installed = home / ".codex" / "skills" / "obstudio" / "obstudio"
-            installed.parent.mkdir(parents=True)
-            installed.write_text("binary", encoding="utf-8")
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            path_candidate = tempdir_path / "path" / "obstudio"
+            verified_binary = tempdir_path / "verified" / "obstudio"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            path_candidate.parent.mkdir()
+            verified_binary.parent.mkdir()
+            path_candidate.write_text("untrusted", encoding="utf-8")
+            verified_binary.write_text("verified", encoding="utf-8")
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.1.0"}),
+                encoding="utf-8",
+            )
+            (plugin_root / ".mcp.json").write_text(
+                json.dumps({"mcpServers": {"obstudio": {"type": "http", "url": "http://127.0.0.1:3000/mcp"}}}),
+                encoding="utf-8",
+            )
 
             with (
-                mock.patch.object(BOOTSTRAP.Path, "home", return_value=home),
-                mock.patch.object(BOOTSTRAP.shutil, "which", return_value=str(installed)),
-                mock.patch.object(BOOTSTRAP, "existing_binary_matches_release", return_value=True) as matches_release,
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum"),
+                ),
+                mock.patch.object(BOOTSTRAP.shutil, "which", return_value=str(path_candidate)) as which,
+                mock.patch.object(BOOTSTRAP.subprocess, "run") as run,
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=verified_binary) as download_obstudio,
+                mock.patch.object(BOOTSTRAP, "fetch_obstudio_health", return_value=None),
+                mock.patch.object(BOOTSTRAP, "is_tcp_port_open", return_value=False),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "start_obstudio_background",
+                    return_value=(FakeProcess(), plugin_data / "logs" / "obstudio.log"),
+                ) as start_obstudio_background,
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "verify_local_obstudio_health",
+                    return_value={
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "version": "0.1.0",
+                    },
+                ),
+                mock.patch.object(BOOTSTRAP, "emit_context"),
             ):
-                self.assertIsNone(BOOTSTRAP.locate_existing_obstudio("0.1.0"))
-            matches_release.assert_not_called()
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            which.assert_not_called()
+            run.assert_not_called()
+            download_obstudio.assert_called_once_with(
+                plugin_data,
+                "linux_amd64.zip",
+                "obstudio_0.1.0_linux_amd64.zip",
+                "checksum",
+            )
+            start_obstudio_background.assert_called_once_with(verified_binary, plugin_data)
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["obstudioBinary"], str(verified_binary))
 
 
 class ConfigureCodexMCPURLTest(unittest.TestCase):
@@ -853,18 +1258,35 @@ class StartObstudioBackgroundTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             binary = Path(tempdir) / "obstudio"
             binary.write_text("binary", encoding="utf-8")
-            with mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen):
+            with (
+                mock.patch.dict(
+                    BOOTSTRAP.os.environ,
+                    {
+                        "HOST": "0.0.0.0",
+                        "PORT": "9999",
+                        "OTLP_PORT": "9998",
+                        "OTLP_HTTP_PORT": "9997",
+                        "OTLP_GRPC_PORT": "9996",
+                    },
+                ),
+                mock.patch.object(BOOTSTRAP.subprocess, "Popen", side_effect=fake_popen),
+            ):
                 process, log_path = BOOTSTRAP.start_obstudio_background(binary, Path(tempdir))
 
         self.assertEqual(process.pid, 1234)
         self.assertEqual(captured["command"], [str(binary)])
+        self.assertEqual(captured["kwargs"]["env"]["HOST"], "127.0.0.1")
+        self.assertEqual(captured["kwargs"]["env"]["PORT"], "3000")
+        self.assertNotIn("OTLP_PORT", captured["kwargs"]["env"])
+        self.assertEqual(captured["kwargs"]["env"]["OTLP_HTTP_PORT"], "4318")
+        self.assertEqual(captured["kwargs"]["env"]["OTLP_GRPC_PORT"], "4317")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_OWNER"], "codex-plugin")
         self.assertEqual(captured["kwargs"]["env"]["OBSTUDIO_MODE"], "managed")
         self.assertEqual(log_path.name, "obstudio.log")
 
 
 class MainOwnershipFlowTest(unittest.TestCase):
-    def test_prior_managed_state_survives_installer_url_detection(self):
+    def test_prior_managed_state_survives_legacy_command_config(self):
         with tempfile.TemporaryDirectory() as tempdir:
             tempdir_path = Path(tempdir)
             plugin_root = tempdir_path / "plugin"
@@ -900,17 +1322,13 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            def fake_run_install(_binary):
-                BOOTSTRAP.configure_codex_mcp_url(config_path, "http://127.0.0.1:3000/mcp")
-
             with (
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
                 mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
                 mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
                 mock.patch.object(BOOTSTRAP, "fetch_expected_checksum", return_value=("obstudio_0.1.0_linux_amd64.zip", "checksum")),
-                mock.patch.object(BOOTSTRAP, "locate_existing_obstudio", return_value=binary),
-                mock.patch.object(BOOTSTRAP, "run_install", side_effect=fake_run_install),
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
                 mock.patch.object(
                     BOOTSTRAP,
                     "fetch_obstudio_health",
@@ -919,6 +1337,7 @@ class MainOwnershipFlowTest(unittest.TestCase):
                         "apiVersion": "v1",
                         "owner": "codex-plugin",
                         "mode": "managed",
+                        "version": "0.1.0",
                     },
                 ),
                 mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="4321"),
@@ -927,8 +1346,113 @@ class MainOwnershipFlowTest(unittest.TestCase):
                 self.assertEqual(BOOTSTRAP.main(), 0)
 
             state = json.loads(state_path.read_text(encoding="utf-8"))
+            config = config_path.read_text(encoding="utf-8")
         self.assertEqual(state["owner"], "codex-plugin")
         self.assertEqual(state["mode"], "managed")
+        self.assertIn('command = "/tmp/obstudio"', config)
+
+    def test_stale_managed_observer_is_restarted_before_new_state_is_written(self):
+        class FakeProcess:
+            pid = 5555
+
+            def poll(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            plugin_root = tempdir_path / "plugin"
+            plugin_data = tempdir_path / "data"
+            codex_home = tempdir_path / "home"
+            config_path = codex_home / ".codex" / "config.toml"
+            skills_path = codex_home / ".codex" / "skills" / "obstudio"
+            binary = tempdir_path / "obstudio"
+            state_path = plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            plugin_data.mkdir()
+            skills_path.mkdir(parents=True)
+            binary.write_text("binary", encoding="utf-8")
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps({"version": "0.2.0"}),
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                "\n".join(
+                    [
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK,
+                        "[mcp_servers.obstudio]",
+                        "enabled = true",
+                        'url = "http://127.0.0.1:3000/mcp"',
+                        BOOTSTRAP.CODEX_MANAGED_BLOCK.replace("# BEGIN", "# END"),
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "pluginVersion": "0.1.0",
+                        "releaseVersion": "0.1.0",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "pid": "4321",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_root", return_value=plugin_root),
+                mock.patch.object(BOOTSTRAP, "resolve_plugin_data", return_value=plugin_data),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=codex_home),
+                mock.patch.object(BOOTSTRAP, "resolve_release_artifact", return_value="linux_amd64.zip"),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_expected_checksum",
+                    return_value=("obstudio_0.2.0_linux_amd64.zip", "checksum"),
+                ),
+                mock.patch.object(BOOTSTRAP, "download_obstudio", return_value=binary),
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "fetch_obstudio_health",
+                    return_value={
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "version": "0.1.0",
+                    },
+                ),
+                mock.patch.object(BOOTSTRAP, "find_pid_listening_on_url", return_value="4321"),
+                mock.patch.object(BOOTSTRAP, "terminate_managed_process") as terminate_managed_process,
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "start_obstudio_background",
+                    return_value=(FakeProcess(), plugin_data / "logs" / "obstudio.log"),
+                ) as start_obstudio_background,
+                mock.patch.object(
+                    BOOTSTRAP,
+                    "verify_local_obstudio_health",
+                    return_value={
+                        "kind": "obstudio",
+                        "apiVersion": "v1",
+                        "owner": "codex-plugin",
+                        "mode": "managed",
+                        "version": "0.2.0",
+                    },
+                ),
+                mock.patch.object(BOOTSTRAP, "emit_context"),
+            ):
+                self.assertEqual(BOOTSTRAP.main(), 0)
+
+            terminate_managed_process.assert_called_once_with("4321", "http://127.0.0.1:3000/api/health")
+            start_obstudio_background.assert_called_once_with(binary, plugin_data)
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["pluginVersion"], "0.2.0")
+        self.assertEqual(state["releaseVersion"], "0.2.0")
+        self.assertEqual(state["owner"], "codex-plugin")
+        self.assertEqual(state["mode"], "managed")
+        self.assertEqual(state["pid"], "5555")
 
 
 class ParseObstudioVersionTest(unittest.TestCase):

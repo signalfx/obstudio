@@ -33,9 +33,9 @@ Current scope:
 - one-time SessionStart hook manifest in [`hooks/hooks.json`](./hooks/hooks.json)
   that calls a dedicated bootstrap script
 - [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py) downloads the
-  release archive when needed, verifies the release checksum, runs
-  `obstudio install --target=codex`, and starts the local Observer process if
-  the Codex config is using the bundled HTTP MCP endpoint
+  release archive when needed, verifies the release checksum, and starts the
+  local Observer process for the bundled plugin MCP endpoint unless Codex has
+  an explicit Obstudio MCP opt-out or custom endpoint
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
@@ -67,7 +67,7 @@ make package-obstudio-plugin
 The staged plugin is intentionally self-contained from Codex’s point of view:
 
 - Codex can see the bundled skills immediately after installation.
-- The plugin’s bootstrap script can bootstrap the release archive and Codex
-  MCP config on first session start.
+- The plugin’s bootstrap script can bootstrap the release archive and managed
+  local Observer runtime on first session start.
 - The hook is non-managed, so Codex will ask you to review and trust it before
   it runs the first time.

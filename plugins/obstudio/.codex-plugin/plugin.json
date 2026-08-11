@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Obstudio",
     "shortDescription": "OpenTelemetry workflows and observer controls for Codex.",
-    "longDescription": "Obstudio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, observer controls, and a help skill to Codex.\n\nHow to get started:\n1. Install the Obstudio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Obstudio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $open-observer, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
+    "longDescription": "Obstudio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, observer controls, and a help skill to Codex.\n\nHow to get started:\n1. Install the Obstudio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Obstudio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $observer-open, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
     "developerName": "Splunk",
     "category": "Productivity",
     "capabilities": [
@@ -31,8 +31,7 @@
     "defaultPrompt": [
       "Open the local Obstudio Observer.",
       "Audit this repo for observability gaps.",
-      "Verify the current OpenTelemetry instrumentation.",
-      "Suggest GenAI telemetry improvements."
+      "Verify instrumentation and suggest GenAI telemetry improvements."
     ],
     "brandColor": "#111827",
     "composerIcon": "./assets/observer-icon.png",
