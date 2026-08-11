@@ -59,11 +59,13 @@ and creates relative symbolic links for skill discovery.
     obstudio[.exe]             # CLI and MCP server binary
     weaver[.exe]               # validation runtime
     otel-audit/SKILL.md        # bundled otel-audit skill
+    otel-generate-config/SKILL.md # bundled configuration-generation skill
     otel-instrument/SKILL.md   # bundled otel-instrument skill
     otel-verify/SKILL.md       # bundled otel-verify skill
     ...                        # additional bundled skills
     references/                # shared reference material
   otel-audit -> obstudio/otel-audit
+  otel-generate-config -> obstudio/otel-generate-config
   otel-instrument -> obstudio/otel-instrument
   otel-verify -> obstudio/otel-verify
   ...                          # one discovery link per bundled skill
@@ -87,6 +89,7 @@ Once installed, open any project in your agent and use:
 | Command | What it does |
 |---------|-------------|
 | `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
+| `/otel-generate-config` | Generate version-pinned Collector Helm and plain Kubernetes YAML plus a matching non-secret application Kustomize overlay; never deploys or verifies live connectivity |
 | `/otel-instrument` | Implement canonical audit selections and write instrumentation JSON plus interactive `.observe/otel-instrumentation.html` |
 | `/otel-verify` | Write bound verification JSON and refresh instrumentation proof in the instrumentation HTML |
 
@@ -96,12 +99,36 @@ Or use natural language:
 instrument this service with OpenTelemetry
 audit this service for observability gaps
 verify this service's OpenTelemetry instrumentation
+generate Collector and application Kubernetes configuration without deploying it
 ```
 
 Claude Code, Cursor, and Kiro use the slash-command syntax shown above; Kiro
 also discovers the same Agent Skills from natural-language requests. Codex
-uses the equivalent `$otel-audit`, `$otel-instrument`, and `$otel-verify`
-syntax. `$otel-instrument` runs the verification workflow by default after its
+uses the equivalent `$otel-audit`, `$otel-generate-config`,
+`$otel-instrument`, and `$otel-verify` syntax. Generate a coordinated
+Collector and application configuration set with:
+
+```text
+$otel-generate-config \
+  --platform kubernetes \
+  --realm us0 \
+  --cluster-name checkout-prod \
+  --environment production \
+  --distribution other \
+  --chart-version 0.157.0 \
+  --existing-secret splunk-otel-token
+```
+
+When the current task already identifies one unambiguous application, omit
+`--app`; otherwise add `--app ./checkout`. When omitted, Collector namespace
+defaults to `observability`, release defaults to `splunk-otel`, and topology
+defaults to `gateway`; the application endpoint uses cluster domain
+`cluster.local`. The skill generates and statically validates version-pinned
+Collector Helm, plain Kubernetes YAML, and a matching non-secret Kustomize
+application overlay. It never deploys resources, creates or reads the Secret,
+or verifies live Collector or Splunk connectivity.
+
+`$otel-instrument` runs the verification workflow by default after its
 implementation gate unless you explicitly opt out or a concrete prerequisite
 blocks it. See the
 [OTel Verify guide](https://github.com/signalfx/obstudio/blob/main/docs/otel-verify.md)

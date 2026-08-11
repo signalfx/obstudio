@@ -1,0 +1,13 @@
+{
+  "skill": "otel-generate-config",
+  "prompts": [
+    {
+      "id": "direct",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-generate-config skill loaded."
+    },
+    {
+      "id": "generation-only",
+      "task": "Sanity check only. Do not inspect files and do not modify files. Reply with exactly: otel-generate-config generation-only ready."
+    }
+  ]
+}

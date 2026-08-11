@@ -1,0 +1,63 @@
+collector:
+  secret:
+    create: false
+    validateSecret: false
+
+  agent:
+    enabled: false
+
+  clusterReceiver:
+    enabled: false
+
+  gateway:
+    enabled: true
+    replicaCount: 1
+    tokenPassthrough: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    config:
+      exporters:
+        debug:
+          verbosity: detailed
+          sampling_initial: 100
+          sampling_thereafter: 1
+        otlp_http: null
+        otlp_http/entities: null
+        signalfx: null
+      extensions:
+        headers_setter: null
+        http_forwarder: null
+        http_forwarder/opamp_splunk_o11y: null
+        opamp/splunk_o11y: null
+      processors:
+        batch:
+          metadata_keys: []
+      receivers:
+        prometheus/collector: null
+      service:
+        extensions:
+          - health_check
+        pipelines:
+          logs/entities: null
+          metrics:
+            receivers:
+              - otlp
+            processors:
+              - memory_limiter
+              - batch
+            exporters:
+              - debug
+          metrics/collector: null
+          traces:
+            receivers:
+              - otlp
+            processors:
+              - memory_limiter
+              - batch
+            exporters:
+              - debug

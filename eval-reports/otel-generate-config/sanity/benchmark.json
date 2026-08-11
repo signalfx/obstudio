@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "kind": "sanity",
+  "mode": "with_skill",
+  "skill": "otel-generate-config",
+  "metadata": {
+    "mode": "with_skill",
+    "eval_kind": "sanity",
+    "skill": "otel-generate-config",
+    "run_id": "20260811T153828209971Z",
+    "agent_model": "gpt-5.5",
+    "judge_model": "gpt-5.5",
+    "rubric_enabled": false,
+    "runtime_enabled": false,
+    "workers": "1",
+    "config_path": "/private/tmp/otel-generate-config-eval.toml"
+  },
+  "summary": {
+    "eval_count": 1,
+    "prompt_count": 1,
+    "failure_count": 0,
+    "with_skill": {
+      "prompt_count": 1,
+      "command_count": 96,
+      "duration_seconds": 278.654,
+      "agent_duration_seconds": 278.323,
+      "tokens": 717808,
+      "agent_tokens": 717808,
+      "error_count": 0,
+      "checks": {
+        "passed": 21,
+        "total": 21,
+        "skipped": 0
+      }
+    },
+    "with_baseline": null
+  },
+  "evals": [
+    {
+      "id": "deployments/generate-config-basic/sanity/generate",
+      "case": "deployments/generate-config-basic",
+      "language": "deployments",
+      "service": "generate-config-basic",
+      "prompt_count": 1,
+      "prompts": [
+        "matched-current-context"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 96,
+        "duration_seconds": 278.654,
+        "agent_duration_seconds": 278.323,
+        "tokens": 717808,
+        "agent_tokens": 717808,
+        "error_count": 0,
+        "checks": {
+          "passed": 21,
+          "total": 21,
+          "skipped": 0
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/otel-generate-config/20260811T153828209971Z/results/deployments/generate-config-basic/sanity-generate/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-generate-config/20260811T153828209971Z/results/deployments/generate-config-basic/sanity-generate/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-generate-config/20260811T153828209971Z/results/deployments/generate-config-basic/sanity-generate/with_baseline.json"
+      }
+    }
+  ],
+  "failures": []
+}
