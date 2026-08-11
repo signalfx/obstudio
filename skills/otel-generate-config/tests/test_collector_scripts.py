@@ -38,8 +38,8 @@ class BundleScriptsTest(unittest.TestCase):
             "agent-service",
             "--distribution",
             "eks",
-            "--collector-version",
-            "0.155.0",
+            "--chart-version",
+            "0.157.0",
             *extra,
         ]
         result = subprocess.run(command, capture_output=True, text=True)
@@ -93,20 +93,33 @@ class BundleScriptsTest(unittest.TestCase):
             self.validate(output)
 
             collector = (output / "collector-config.yaml").read_text()
+            chart = (output / "helm" / "Chart.yaml").read_text()
+            values = (output / "helm" / "values.yaml").read_text()
+            helm_secret = (
+                output / "helm" / "examples" / "splunk-secret.yaml"
+            ).read_text()
             manifest = (output / "kubernetes" / "collector.yaml").read_text()
             secret = (
                 output / "kubernetes" / "splunk-secret.example.yaml"
             ).read_text()
             deployment = (output / "DEPLOYMENT.md").read_text()
 
-            self.assertFalse((output / "helm").exists())
             self.assertFalse((output / "kubernetes" / "helm-rendered.yaml").exists())
+            self.assertIn("version: \"0.157.0\"", chart)
+            self.assertIn(
+                "repository: \"https://signalfx.github.io/splunk-otel-collector-chart\"",
+                chart,
+            )
+            self.assertIn("realm: \"us1\"", values)
+            self.assertIn("name: \"splunk-otel-secret\"", values)
+            self.assertIn("enabled: false", values)
+            self.assertNotIn("tokenPassthrough", values)
             self.assertIn("${env:SPLUNK_ACCESS_TOKEN}", collector)
             self.assertIn("kind: Service", manifest)
             self.assertIn("kind: Deployment", manifest)
             self.assertIn("name: splunk-otel-collector-agent", manifest)
             self.assertIn(
-                "image: \"quay.io/signalfx/splunk-otel-collector:0.155.0\"",
+                "image: \"quay.io/signalfx/splunk-otel-collector:0.157.0\"",
                 manifest,
             )
             self.assertIn("name: splunk-otel-secret", manifest)
@@ -115,18 +128,24 @@ class BundleScriptsTest(unittest.TestCase):
                 "splunk_observability_access_token: REPLACE_AT_DEPLOY_TIME",
                 secret,
             )
+            self.assertIn(
+                "splunk_observability_access_token: REPLACE_AT_DEPLOY_TIME",
+                helm_secret,
+            )
+            self.assertIn("helm/values.yaml", deployment)
             self.assertIn("kubernetes/collector.yaml", deployment)
+            self.assertIn("does not require the Helm CLI", deployment)
             self.assertNotIn("helm-rendered", deployment)
-            self.assertNotIn("helm/", deployment)
 
     def test_gateway_mode_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             self.generate(output, "--gateway")
             manifest = (output / "kubernetes" / "collector.yaml").read_text()
-            deployment = (output / "DEPLOYMENT.md").read_text()
+            values = (output / "helm" / "values.yaml").read_text()
             self.assertIn("name: splunk-otel-collector", manifest)
-            self.assertIn("gateway using image", deployment)
+            self.assertIn("enabled: true", values)
+            self.assertIn("tokenPassthrough: false", values)
 
     def test_standard_route_inputs_default_to_gateway(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -152,7 +171,11 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("name: splunk-otel-collector", manifest)
             self.assertIn('value: "us0"', manifest)
             self.assertIn("name: splunk-otel-secret", manifest)
-            self.assertFalse((output / "helm").exists())
+            values = (output / "helm" / "values.yaml").read_text()
+            self.assertIn("realm: \"us0\"", values)
+            self.assertIn("name: \"splunk-otel-secret\"", values)
+            self.assertIn("enabled: true", values)
+            self.assertIn("tokenPassthrough: false", values)
 
     def test_existing_secret_alias_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -221,26 +244,43 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("use --overwrite", result.stderr)
             self.assertTrue((output / "helm" / "values.yaml").exists())
 
-    def test_overwrite_removes_legacy_helm_output(self) -> None:
+    def test_overwrite_removes_stale_helm_dependency_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             self.add_legacy_helm_output(output)
 
             self.generate(output, "--overwrite")
 
-            self.assertFalse((output / "helm").exists())
+            self.assertTrue((output / "helm" / "Chart.yaml").is_file())
+            self.assertTrue((output / "helm" / "values.yaml").is_file())
+            self.assertTrue(
+                (output / "helm" / "examples" / "splunk-secret.yaml").is_file()
+            )
+            self.assertFalse((output / "helm" / "Chart.lock").exists())
+            self.assertFalse(
+                (
+                    output
+                    / "helm"
+                    / "charts"
+                    / "splunk-otel-collector-0.155.0.tgz"
+                ).exists()
+            )
+            chart = (output / "helm" / "Chart.yaml").read_text()
+            values = (output / "helm" / "values.yaml").read_text()
+            self.assertIn("version: \"0.157.0\"", chart)
+            self.assertIn("clusterName: \"checkout-prod\"", values)
             self.validate(output)
 
-    def test_empty_legacy_helm_directory_requires_overwrite(self) -> None:
+    def test_generates_into_empty_helm_directory_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             (output / "helm").mkdir(parents=True)
 
-            result = self.generate(output, expect_success=False)
+            result = self.generate(output)
 
-            self.assertIn("use --overwrite", result.stderr)
-            self.generate(output, "--overwrite")
-            self.assertFalse((output / "helm").exists())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((output / "helm" / "Chart.yaml").is_file())
+            self.assertTrue((output / "helm" / "values.yaml").is_file())
             self.validate(output)
 
     def test_overwrite_preflights_managed_destinations(self) -> None:
@@ -338,16 +378,16 @@ class BundleScriptsTest(unittest.TestCase):
                 self.assertNotIn(sentinel, combined)
                 self.assertFalse(output.exists())
 
-    def test_rejects_invalid_collector_version(self) -> None:
+    def test_rejects_invalid_chart_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             result = self.generate(
                 output,
-                "--collector-version",
+                "--chart-version",
                 "latest",
                 expect_success=False,
             )
-            self.assertIn("invalid collector version", result.stderr)
+            self.assertIn("invalid chart version", result.stderr)
 
     def test_rejects_realm_with_trailing_hyphen(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -440,15 +480,17 @@ class BundleScriptsTest(unittest.TestCase):
 
             self.assertIn("helm-rendered.yaml is no longer generated", result.stderr)
 
-    def test_validator_rejects_legacy_helm_directory(self) -> None:
+    def test_validator_rejects_unexpected_helm_input(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             self.generate(output)
-            (output / "helm").mkdir()
+            unexpected = output / "helm" / "templates" / "configmap.yaml"
+            unexpected.parent.mkdir()
+            unexpected.write_text("apiVersion: v1\nkind: ConfigMap\n")
 
             result = self.validate(output, expect_success=False)
 
-            self.assertIn("helm/ is no longer generated", result.stderr)
+            self.assertIn("unexpected Helm input", result.stderr)
 
     def test_validator_rejects_invalid_image_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -457,7 +499,7 @@ class BundleScriptsTest(unittest.TestCase):
             manifest_path = output / "kubernetes" / "collector.yaml"
             manifest_path.write_text(
                 manifest_path.read_text(encoding="utf-8").replace(
-                    "quay.io/signalfx/splunk-otel-collector:0.155.0",
+                    "quay.io/signalfx/splunk-otel-collector:0.157.0",
                     "quay.io/signalfx/splunk-otel-collector:latest",
                 ),
                 encoding="utf-8",

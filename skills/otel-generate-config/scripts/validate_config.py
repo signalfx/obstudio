@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import re
 import sys
@@ -213,13 +212,19 @@ def validate(
         *(f"Application: {error}" for error in validate_application(application_bundle)),
     ]
     contract_path = application_bundle / "otel-connection.yaml"
+    values_path = collector_bundle / "helm" / "values.yaml"
     secret_example_path = (
         collector_bundle / "kubernetes" / "splunk-secret.example.yaml"
+    )
+    helm_secret_example_path = (
+        collector_bundle / "helm" / "examples" / "splunk-secret.yaml"
     )
     required_paths = [
         ("canonical generated Collector YAML", rendered),
         ("application connection contract", contract_path),
+        ("Collector Helm values", values_path),
         ("Collector Secret example", secret_example_path),
+        ("Collector Helm Secret example", helm_secret_example_path),
     ]
     missing_required = False
     for label, path in required_paths:
@@ -231,8 +236,10 @@ def validate(
 
     try:
         contract = contract_path.read_text(encoding="utf-8")
+        values = values_path.read_text(encoding="utf-8")
         rendered_text = rendered.read_text(encoding="utf-8")
         secret_example = secret_example_path.read_text(encoding="utf-8")
+        helm_secret_example = helm_secret_example_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         errors.append(f"cannot read coordinated configuration: {exc}")
         return errors
@@ -242,28 +249,52 @@ def validate(
     secret_contract = section(collector_contract, "secretRef")
     verification = section(contract, "verification")
     otlp = section(contract, "otlp")
+    chart_values = section(values, "collector")
+    chart_o11y = section(chart_values, "splunkObservability")
+    chart_secret = section(chart_values, "secret")
+    chart_gateway = section(chart_values, "gateway")
 
     realm = quoted_value(section(contract, "splunkObservability"), "realm")
     manifest_realm = env_value(rendered_text, "SPLUNK_REALM")
-    if realm != manifest_realm:
+    chart_realm = scalar_value(chart_o11y, "realm")
+    if realm != manifest_realm or realm != chart_realm:
         errors.append("realm differs between Collector and application configuration")
 
     secret_name = quoted_value(secret_contract, "name")
+    chart_secret_name = scalar_value(chart_secret, "name")
+    if secret_name != chart_secret_name:
+        errors.append("Secret name differs between Collector and application configuration")
     namespace = quoted_value(collector_contract, "namespace")
     secret_namespace = quoted_value(secret_contract, "namespace")
     if namespace != secret_namespace:
         errors.append("application contract Secret namespace differs from Collector namespace")
 
-    example_secret_name, example_namespace = secret_metadata(secret_example)
-    if secret_name != example_secret_name:
+    example_secret_names: list[str | None] = []
+    example_secret_namespaces: list[str | None] = []
+    for current_secret_example in (
+        secret_example,
+        helm_secret_example,
+    ):
+        example_secret_name, example_namespace = secret_metadata(
+            current_secret_example
+        )
+        example_secret_names.append(example_secret_name)
+        example_secret_namespaces.append(example_namespace)
+
+    if any(example != secret_name for example in example_secret_names):
         errors.append("Secret name differs between Collector and application configuration")
-    if example_namespace != namespace:
+    if any(example != namespace for example in example_secret_namespaces):
         errors.append(
             "Collector namespace differs between generated Secret resources "
             "and application configuration"
         )
 
     topology = quoted_value(collector_contract, "topology")
+    gateway_enabled = scalar_value(chart_gateway, "enabled")
+    expected_gateway = "true" if topology == "gateway" else "false"
+    if gateway_enabled != expected_gateway:
+        errors.append("topology differs between Collector and application configuration")
+
     release = quoted_value(collector_contract, "release")
     service = quoted_value(collector_contract, "service")
     if not release:

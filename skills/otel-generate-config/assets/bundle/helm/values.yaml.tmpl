@@ -1,0 +1,26 @@
+collector:
+  clusterName: @@CLUSTER_NAME@@
+  environment: @@ENVIRONMENT@@
+  cloudProvider: @@CLOUD_PROVIDER@@
+  distribution: @@DISTRIBUTION@@
+
+  splunkObservability:
+    realm: @@REALM@@
+    metricsEnabled: true
+    tracesEnabled: true
+
+  # The token is supplied by a pre-created Secret. Never put accessToken here.
+  secret:
+    create: false
+    name: @@SECRET_NAME@@
+    validateSecret: true
+
+  agent:
+    enabled: true
+
+  clusterReceiver:
+    enabled: true
+
+  gateway:
+    enabled: @@GATEWAY_ENABLED@@
+@@GATEWAY_TOKEN_PASSTHROUGH@@

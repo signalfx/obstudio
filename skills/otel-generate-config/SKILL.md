@@ -2,10 +2,10 @@
 name: otel-generate-config
 description: >-
   Generate a coordinated OpenTelemetry configuration set for Splunk
-  Observability Cloud: token-free, version-pinned Collector Kubernetes YAML,
-  a standalone Collector config, and a matching non-secret Kubernetes
-  application Kustomize overlay. Use when a user invokes $otel-generate-config,
-  asks for Collector YAML plus
+  Observability Cloud: token-free, version-pinned Collector Helm files,
+  plain Kubernetes YAML, a standalone Collector config, and a matching
+  non-secret Kubernetes application Kustomize overlay. Use when
+  a user invokes $otel-generate-config, asks for Collector Helm files or YAML plus
   application configuration, needs the correct in-cluster OTLP endpoint, or
   wants deploy-ready configuration files without deploying them.
 ---
@@ -13,9 +13,9 @@ description: >-
 # Generate OpenTelemetry configuration
 
 Generate one reviewable configuration set for the Collector and application.
-The Collector generator writes plain Kubernetes YAML and a standalone Collector
-config. The application overlay targets the Service proven by the generated
-Kubernetes YAML.
+The Collector generator writes Helm files from local templates, plain
+Kubernetes YAML directly, and a standalone Collector config. The application
+overlay targets the Service proven by the generated Kubernetes YAML.
 
 This skill only generates and validates local files. Never deploy resources,
 create or inspect Secrets, query Splunk Observability Cloud, or claim live
@@ -33,7 +33,7 @@ $otel-generate-config \
   --cluster-name checkout-prod \
   --environment production \
   --distribution other \
-  --collector-version 0.157.0 \
+  --chart-version 0.157.0 \
   --existing-secret splunk-otel-token
 ```
 
@@ -61,8 +61,8 @@ clearly requires them.
 
 ## Inspect before writing
 
-Read the repository and application `AGENTS.md` files plus existing Kubernetes
-and GitOps sources. Resolve all required values and exactly one
+Read the repository and application `AGENTS.md` files plus existing Helm,
+Kubernetes, and GitOps sources. Resolve all required values and exactly one
 application target before generating anything:
 
 - Kubernetes `Deployment`, `StatefulSet`, or `DaemonSet`;
@@ -70,7 +70,7 @@ application target before generating anything:
 - exactly one application container after ignoring known sidecars;
 - a raw workload manifest or an existing Kustomization base;
 - Splunk realm, cluster name, environment, Collector namespace and release;
-- Kubernetes distribution and exact Collector image version;
+- Kubernetes distribution and exact Collector chart version;
 - `gateway` or `agent-service` topology;
 - Collector-only Secret name.
 
@@ -100,16 +100,19 @@ python3 <skill-dir>/scripts/generate_collector.py \
   --environment <environment> \
   --existing-secret <secret-name> \
   --distribution <distribution> \
-  --collector-version <exact-collector-version> \
+  --chart-version <exact-chart-version> \
   --topology <topology>
 ```
+
+`--collector-version` is accepted as an alias for `--chart-version`; prefer
+`--chart-version` when generating Helm files.
 
 Omit `--namespace`, `--release-name`, and `--topology` when using the defaults:
 `observability`, `splunk-otel`, and `gateway`. Pass `--topology agent-service`
 only when the application will route to the generated agent Service. Use
 `--overwrite` only after confirming the existing generator-managed files may be
 replaced. Regeneration deliberately removes stale legacy render artifacts and
-legacy generated Helm files when they exist.
+Helm dependency artifacts such as `Chart.lock` and cached chart archives.
 
 Run the static validator after generation:
 
@@ -124,7 +127,9 @@ The Collector Kubernetes manifest is generated directly at:
 <workspace>/deploy/otel-collector/kubernetes/collector.yaml
 ```
 
-Do not run Helm or create Helm files. Do not create `helm/`,
+Do not run Helm to generate the Helm files or Kubernetes YAML. The generator
+must write `helm/Chart.yaml`, `helm/values.yaml`, and
+`helm/examples/splunk-secret.yaml` from local templates. Do not create
 `helm-rendered.yaml`, `helm-rendered.provenance.json`, or any equivalent
 optional render artifact.
 
@@ -214,6 +219,10 @@ The completed configuration is:
 <workspace>/deploy/otel-collector/
 ├── collector-config.yaml
 ├── DEPLOYMENT.md
+├── helm/
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   └── examples/splunk-secret.yaml
 └── kubernetes/
     ├── collector.yaml
     └── splunk-secret.example.yaml
@@ -226,7 +235,7 @@ The completed configuration is:
 ```
 
 Report the resolved application, workload/container, Collector endpoint,
-Collector image version, output paths, and checks run. End with this explicit
+chart version, output paths, and checks run. End with this explicit
 boundary:
 
 ```text

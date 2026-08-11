@@ -5,8 +5,11 @@ This configuration targets Splunk Observability Cloud realm @@REALM_RAW@@ for cl
 
 ## Generated outputs
 
+- **Helm files:** `helm/Chart.yaml` and `helm/values.yaml` are generated from
+  local templates and pin the Splunk OpenTelemetry Collector chart to
+  @@CHART_VERSION_RAW@@. Generating these files does not require the Helm CLI.
 - **Kubernetes YAML:** `kubernetes/collector.yaml` deploys a Collector
-  @@GATEWAY_DESCRIPTION@@ using image
+  directly for GitOps or manifest-based deployment. It uses image
   `quay.io/signalfx/splunk-otel-collector:@@COLLECTOR_VERSION_RAW@@`.
 - **Standalone config:** `collector-config.yaml` receives OTLP on ports 4317
   and 4318 and exports metrics and traces. Use it with a compatible current
@@ -42,6 +45,19 @@ kubectl apply --dry-run=client --validate=strict \
 ```
 
 A client dry run does not prove compatibility with a target cluster.
+
+## Deploy with Helm
+
+Helm is needed only if you choose this deployment path:
+
+```bash
+helm dependency update ./helm
+helm upgrade --install @@RELEASE_NAME_RAW@@ ./helm \
+  --namespace @@NAMESPACE_RAW@@ \
+  --create-namespace \
+  --wait \
+  --timeout 10m
+```
 
 ## Deploy Kubernetes YAML
 

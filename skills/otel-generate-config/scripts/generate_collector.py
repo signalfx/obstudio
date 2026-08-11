@@ -28,7 +28,7 @@ SEMVER = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 UNRESOLVED = re.compile(r"@@[A-Z0-9_]+@@")
-RELEASE_NAME_MAX_LENGTH = 47
+HELM_RELEASE_NAME_MAX_LENGTH = 47
 SECRET_NAME_ERROR = "invalid Kubernetes Secret name"
 
 
@@ -61,7 +61,10 @@ def reject_token_argument(argv: list[str] | None) -> list[str]:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     arguments = reject_token_argument(argv)
     parser = argparse.ArgumentParser(
-        description="Generate token-free Collector Kubernetes YAML."
+        description=(
+            "Generate token-free Collector Kubernetes YAML and Helm files "
+            "without invoking Helm."
+        )
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--realm", required=True)
@@ -80,13 +83,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=SUPPORTED_DISTRIBUTIONS,
         default="other",
     )
-    parser.add_argument("--collector-version", required=True)
+    parser.add_argument("--chart-version")
+    parser.add_argument(
+        "--collector-version",
+        help="Alias for --chart-version.",
+    )
     parser.add_argument(
         "--gateway",
         action="store_true",
         help=(
-            "Use gateway topology. Kept for compatibility; --topology "
-            "gateway is the default."
+            "Enable the chart's centralized OTLP gateway in addition to "
+            "agents. Kept for compatibility; --topology gateway is the "
+            "default."
         ),
     )
     parser.add_argument(
@@ -94,10 +102,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Replace generator-managed files and remove stale generated "
-            "artifacts."
+            "render and Helm dependency artifacts."
         ),
     )
     parsed = parser.parse_args(arguments)
+    if parsed.chart_version and parsed.collector_version:
+        if parsed.chart_version != parsed.collector_version:
+            parser.error("--chart-version and --collector-version must match")
+    parsed.chart_version = parsed.chart_version or parsed.collector_version
+    if not parsed.chart_version:
+        parser.error("--chart-version is required")
     if parsed.gateway:
         parsed.topology = "gateway"
     parsed.gateway = parsed.topology == "gateway"
@@ -121,25 +135,43 @@ def validate_text(name: str, value: str, max_length: int = 253) -> None:
         raise ValueError(f"{name} contains a control character")
 
 
+def cloud_provider(distribution: str) -> str:
+    if distribution == "aks":
+        return "azure"
+    if distribution.startswith("eks"):
+        return "aws"
+    if distribution.startswith("gke"):
+        return "gcp"
+    return ""
+
+
 def replacements(args: argparse.Namespace) -> dict[str, str]:
     secret_name = args.secret_name or f"{args.release_name}-secret"
     validate_input("realm", args.realm, REALM)
     validate_input("namespace", args.namespace, DNS_LABEL)
     validate_input("release name", args.release_name, DNS_LABEL)
-    if len(args.release_name) > RELEASE_NAME_MAX_LENGTH:
+    if len(args.release_name) > HELM_RELEASE_NAME_MAX_LENGTH:
         raise ValueError(
             "release name must not exceed "
-            f"{RELEASE_NAME_MAX_LENGTH} characters"
+            f"{HELM_RELEASE_NAME_MAX_LENGTH} characters"
         )
     validate_secret_name(secret_name)
-    validate_input("collector version", args.collector_version, SEMVER)
+    validate_input("chart version", args.chart_version, SEMVER)
     validate_text("cluster name", args.cluster_name)
     validate_text("environment", args.environment, max_length=128)
 
+    distribution = "" if args.distribution == "other" else args.distribution
+    chart_core = args.chart_version.split("-", 1)[0].split("+", 1)[0]
+    chart_parts = tuple(int(part) for part in chart_core.split("."))
+    token_passthrough = (
+        "    tokenPassthrough: false"
+        if args.gateway and chart_parts >= (0, 157, 0)
+        else ""
+    )
     gateway_description = (
-        "gateway"
+        ", plus a centralized OTLP gateway"
         if args.gateway
-        else "agent Service"
+        else ""
     )
     collector_service = (
         f"{args.release_name}-collector"
@@ -155,16 +187,22 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     ):
         validate_input(name, value, DNS_LABEL)
     return {
-        "@@COLLECTOR_VERSION_RAW@@": args.collector_version,
+        "@@CHART_VERSION@@": json.dumps(args.chart_version),
+        "@@CHART_VERSION_RAW@@": args.chart_version,
+        "@@COLLECTOR_VERSION_RAW@@": args.chart_version,
         "@@CLUSTER_NAME@@": json.dumps(args.cluster_name),
         "@@CLUSTER_NAME_RAW@@": args.cluster_name,
+        "@@CLOUD_PROVIDER@@": json.dumps(cloud_provider(args.distribution)),
+        "@@DISTRIBUTION@@": json.dumps(distribution),
         "@@ENVIRONMENT@@": json.dumps(args.environment),
         "@@ENVIRONMENT_RAW@@": args.environment,
         "@@GATEWAY_DESCRIPTION@@": gateway_description,
+        "@@GATEWAY_ENABLED@@": "true" if args.gateway else "false",
+        "@@GATEWAY_TOKEN_PASSTHROUGH@@": token_passthrough,
         "@@NAMESPACE_RAW@@": args.namespace,
         "@@COLLECTOR_CONFIGMAP_NAME_RAW@@": collector_configmap,
         "@@COLLECTOR_IMAGE@@": json.dumps(
-            f"quay.io/signalfx/splunk-otel-collector:{args.collector_version}"
+            f"quay.io/signalfx/splunk-otel-collector:{args.chart_version}"
         ),
         "@@COLLECTOR_SERVICE_NAME_RAW@@": collector_service,
         "@@COLLECTOR_WORKLOAD_NAME_RAW@@": collector_workload,
@@ -225,19 +263,13 @@ def generate(args: argparse.Namespace) -> list[Path]:
     legacy_rendered_provenance = (
         output / "kubernetes" / "helm-rendered.provenance.json"
     )
-    legacy_helm_files = (
-        output / "helm" / "Chart.yaml",
-        output / "helm" / "values.yaml",
-        output / "helm" / "examples" / "splunk-secret.yaml",
-        output / "helm" / "Chart.lock",
-    )
-    legacy_helm_directory = output / "helm"
+    chart_lock = output / "helm" / "Chart.lock"
     charts_directory = output / "helm" / "charts"
     for destination in [
         *destinations,
         legacy_rendered_manifest,
         legacy_rendered_provenance,
-        *legacy_helm_files,
+        chart_lock,
         charts_directory,
     ]:
         cursor = destination
@@ -285,7 +317,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
         for path in (
             legacy_rendered_manifest,
             legacy_rendered_provenance,
-            *legacy_helm_files,
+            chart_lock,
         )
         if path.exists()
     ]
@@ -293,7 +325,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
     if charts_directory.exists():
         if not charts_directory.is_dir():
             raise ValueError(
-                f"legacy chart cache path is not a directory: {charts_directory}"
+                f"Helm charts path is not a directory: {charts_directory}"
             )
         dependency_archives = sorted(
             charts_directory.glob("splunk-otel-collector-*.tgz")
@@ -305,12 +337,8 @@ def generate(args: argparse.Namespace) -> list[Path]:
             )
 
     stale_artifacts = [*stale_files, *dependency_archives]
-    legacy_artifacts = [
-        *stale_artifacts,
-        *([legacy_helm_directory] if legacy_helm_directory.exists() else []),
-    ]
-    if legacy_artifacts and not args.overwrite:
-        joined = ", ".join(str(path) for path in legacy_artifacts)
+    if stale_artifacts and not args.overwrite:
+        joined = ", ".join(str(path) for path in stale_artifacts)
         raise ValueError(
             "generated artifacts already exist; use --overwrite: "
             f"{joined}"
@@ -322,11 +350,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
                 "Removed stale generated artifact: "
                 f"{stale_file}"
             )
-        for stale_dir in (
-            output / "helm" / "examples",
-            output / "helm" / "charts",
-            output / "helm",
-        ):
+        for stale_dir in (output / "helm" / "charts",):
             try:
                 stale_dir.rmdir()
             except OSError:
