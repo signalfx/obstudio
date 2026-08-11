@@ -16,8 +16,10 @@ AGENT_POLICY_ARGS := $(if $(strip $(AGENT_POLICY_BASE)),--base-ref "$(AGENT_POLI
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 RELEASE_WEAVER_DIR := $(CURDIR)/.release/weaver
+PLUGIN_STAGE_DIR := $(CURDIR)/.release/plugins/obstudio
+PLUGIN_ARCHIVE := $(CURDIR)/.release/plugins/obstudio.zip
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver sync-obstudio-plugin-skills check-obstudio-plugin-skills stage-obstudio-plugin package-obstudio-plugin dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -45,6 +47,18 @@ stage-release-weaver: ## Fetch Weaver runtimes for all release targets
 	rm -rf "$(RELEASE_WEAVER_DIR)"
 	mkdir -p "$(RELEASE_WEAVER_DIR)"
 	cd $(GO_DIR) && $(GO) run ./cmd/fetch-weaver -all -output "$(RELEASE_WEAVER_DIR)"
+
+sync-obstudio-plugin-skills: ## Refresh committed Obstudio plugin skills from canonical skills
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --sync-plugin-skills
+
+check-obstudio-plugin-skills: ## Verify committed Obstudio plugin skills match canonical skills
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-plugin-skills
+
+stage-obstudio-plugin: ## Stage a self-contained Codex plugin with materialized skills
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --output "$(PLUGIN_STAGE_DIR)"
+
+package-obstudio-plugin: ## Build a self-contained Codex plugin zip artifact
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --output "$(PLUGIN_STAGE_DIR)" --archive "$(PLUGIN_ARCHIVE)"
 
 build: stage-skills build-client bundle-weaver ## Build obstudio binary (client + skills embedded)
 	@mkdir -p $(BUILD_DIR)
@@ -103,7 +117,7 @@ lint: stage-skills ## Run golangci-lint (requires golangci-lint on PATH)
 
 # --- Release ---
 
-release-prep: stage-skills build-client stage-release-weaver ## Prepare assets for GoReleaser (skills + client + validator runtimes)
+release-prep: stage-skills build-client stage-release-weaver package-obstudio-plugin ## Prepare assets for GoReleaser and plugin publishing
 
 release-local: release-prep ## Build release archives locally via GoReleaser (snapshot, no publish)
 	goreleaser release --snapshot --clean
