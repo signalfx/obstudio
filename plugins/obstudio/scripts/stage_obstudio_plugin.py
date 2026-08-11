@@ -139,6 +139,8 @@ def copy_plugin_skills(skills_output: Path, local_source_root: Path | None = Non
         destination = skills_output / relative
         remove_path(destination)
         copy_path(source, destination)
+        if relative not in PLUGIN_LOCAL_SKILL_ENTRIES:
+            normalize_text_tree(destination)
 
 
 def source_for_plugin_skill_entry(relative: str, local_source_root: Path | None = None) -> Path:
@@ -186,6 +188,43 @@ def copy_path(source: Path, destination: Path) -> None:
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination, follow_symlinks=True)
+
+
+def normalize_text_tree(path: Path) -> None:
+    if path.is_file():
+        normalize_text_file(path)
+        return
+    if path.is_dir():
+        for child in path.rglob("*"):
+            if child.is_file():
+                normalize_text_file(child)
+
+
+def normalize_text_file(path: Path) -> None:
+    data = path.read_bytes()
+    normalized = normalize_text_bytes(data)
+    if normalized != data:
+        path.write_bytes(normalized)
+
+
+def normalize_text_bytes(data: bytes) -> bytes:
+    if b"\0" in data:
+        return data
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    return "".join(normalize_text_line(line) for line in text.splitlines(keepends=True)).encode("utf-8")
+
+
+def normalize_text_line(line: str) -> str:
+    if line.endswith("\r\n"):
+        return line[:-2].rstrip(" \t") + "\r\n"
+    if line.endswith("\n"):
+        return line[:-1].rstrip(" \t") + "\n"
+    if line.endswith("\r"):
+        return line[:-1].rstrip(" \t") + "\r"
+    return line.rstrip(" \t")
 
 
 def verify_staged_plugin(output: Path) -> None:
@@ -295,8 +334,8 @@ def verify_plugin_skills_synced() -> None:
         destination = PLUGIN_ROOT / PLUGIN_SKILLS_DIR / relative
         if destination.is_symlink():
             raise RuntimeError(f"plugin skill copy must not contain symlinks: {destination}")
-        source_hash = file_sha256(source)
-        destination_hash = file_sha256(destination)
+        source_hash = normalized_file_sha256(source)
+        destination_hash = normalized_file_sha256(destination)
         if source_hash != destination_hash:
             raise RuntimeError(
                 "plugin skill copy differs from canonical source: "
@@ -321,6 +360,10 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def normalized_file_sha256(path: Path) -> str:
+    return hashlib.sha256(normalize_text_bytes(path.read_bytes())).hexdigest()
 
 
 def flatten_expected_skill_files() -> set[Path]:

@@ -124,6 +124,18 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_committed_plugin_skills_are_synced(self):
         STAGE.verify_plugin_skills_synced()
 
+    def test_normalized_hash_ignores_trailing_line_whitespace(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            source = Path(tempdir) / "source.md"
+            destination = Path(tempdir) / "destination.md"
+            source.write_text("same text \nnext\t\r\nlast ", encoding="utf-8")
+            destination.write_text("same text\nnext\r\nlast", encoding="utf-8")
+
+            self.assertEqual(
+                STAGE.normalized_file_sha256(source),
+                STAGE.normalized_file_sha256(destination),
+            )
+
     def test_archive_orders_skills_by_trust_group(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"

@@ -41,7 +41,7 @@ live `programText`.
 ### COVERED
 A live Standard detector's `programText` contains:
 - the same OTel metric name as the local spec's `data(...)` call, AND
-- a `filter('service.name', '<service>')` or `filter('sf_service', '<service>')`
+- a `filter('service.name', '<service>')` or `filter('sf_service', '<service>')` 
   call with the resolved service name value.
 
 **Action:** skip — no create needed.
