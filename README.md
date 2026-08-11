@@ -52,10 +52,6 @@ discoverable skill entries in `~/.kiro/skills`, and configures MCP in
 `~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,
 such as `/otel-audit`.
 
-Pass `--connect-remote-o11y` to also connect the installed target(s) to the Splunk
-Observability **remote** MCP server (separate from the local server the install above
-configures) — see [docs/USER.md](docs/USER.md#connecting-to-the-splunk-observability-remote-mcp-server).
-
 ### Build From Source
 
 ```bash
@@ -267,7 +263,6 @@ report locations.
 |---|---|
 | `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP for one or more supported agents |
-| `obstudio install --target=<agent>[,<agent>...] --connect-remote-o11y` | Also connect the installed target(s) to the Splunk Observability remote MCP server |
 | `obstudio --version` | Print version |
 
 ## Contributing
