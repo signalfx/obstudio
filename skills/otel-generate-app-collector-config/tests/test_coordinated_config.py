@@ -377,14 +377,14 @@ spec:
             ),
             (
                 "workload name",
-                'name: "checkout"\n      namespace: "checkout"',
-                'name: "worker"\n      namespace: "checkout"',
+                'name: "^checkout$"\n      namespace: "checkout"',
+                'name: "^worker$"\n      namespace: "checkout"',
                 "target name differs",
             ),
             (
                 "namespace",
-                'name: "checkout"\n      namespace: "checkout"',
-                'name: "checkout"\n      namespace: "worker"',
+                'name: "^checkout$"\n      namespace: "checkout"',
+                'name: "^checkout$"\n      namespace: "worker"',
                 "target namespace differs",
             ),
         )

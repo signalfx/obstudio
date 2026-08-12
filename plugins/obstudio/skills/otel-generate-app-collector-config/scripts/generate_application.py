@@ -167,6 +167,10 @@ def dns_label_from_text(value: str, *, fallback: str) -> str:
     return label
 
 
+def kustomize_target_name(value: str) -> str:
+    return f"^{re.escape(value)}$"
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -1087,7 +1091,7 @@ def documents(values: dict[str, Any], input_hash: str) -> dict[Path, str]:
                     "group": "apps",
                     "version": "v1",
                     "kind": values["workload_kind"],
-                    "name": values["workload_name"],
+                    "name": kustomize_target_name(values["workload_name"]),
                     "namespace": values["application_namespace"],
                 },
             }

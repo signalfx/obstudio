@@ -362,6 +362,10 @@ def validate_workload_identity(
         errors.append(f"{label} has an invalid container name")
 
 
+def kustomize_target_name(value: str) -> str:
+    return f"^{re.escape(value)}$"
+
+
 def validate_kustomization_target(
     kustomization: str,
     contract: WorkloadIdentity | None,
@@ -421,7 +425,7 @@ def validate_kustomization_target(
         "group": expected_group,
         "version": expected_version,
         "kind": contract.kind,
-        "name": contract.name,
+        "name": kustomize_target_name(contract.name),
         "namespace": contract.namespace,
     }
     for field, value in expected.items():

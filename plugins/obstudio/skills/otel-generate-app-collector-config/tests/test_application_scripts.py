@@ -287,12 +287,24 @@ class ConnectionScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         contract = (self.output / "otel-connection.yaml").read_text()
         overlay = (self.output / "kubernetes/otel-env-patch.yaml").read_text()
-        kustomization = (self.output / "kubernetes/kustomization.yaml").read_text()
+        kustomization_path = self.output / "kubernetes/kustomization.yaml"
+        kustomization = kustomization_path.read_text()
         self.assertIn('name: "checkout.api"', contract)
-        self.assertIn('name: "checkout.api"', kustomization)
+        self.assertIn('name: "^checkout\\\\.api$"', kustomization)
         self.assertIn('value: "checkout.api"', overlay)
         validated = self.run_validator()
         self.assertEqual(validated.returncode, 0, validated.stderr)
+
+        kustomization_path.write_text(
+            kustomization.replace(
+                'name: "^checkout\\\\.api$"',
+                'name: "checkout.api"',
+            ),
+            encoding="utf-8",
+        )
+        invalid = self.run_validator()
+        self.assertEqual(invalid.returncode, 1)
+        self.assertIn("patch target name differs", invalid.stderr)
 
     def test_agent_service_and_grpc_are_bound_together(self) -> None:
         args = self.arguments()
@@ -971,6 +983,51 @@ spec:
         )
         self.assertNotIn(sentinel, combined)
         self.assertFalse(self.output.exists())
+
+    @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
+    def test_dns_subdomain_kustomize_target_is_literal(self) -> None:
+        self.base.write_text(
+            DEPLOYMENT.replace(
+                "  name: checkout\n  namespace: checkout",
+                "  name: checkout.api\n  namespace: checkout",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        (self.base.parent / "collision.yaml").write_text(
+            DEPLOYMENT.replace(
+                "  name: checkout\n  namespace: checkout",
+                "  name: checkoutXapi\n  namespace: checkout",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        (self.base.parent / "kustomization.yaml").write_text(
+            """\
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - collision.yaml
+""",
+            encoding="utf-8",
+        )
+        generated = self.run_generator(
+            "--base",
+            "kubernetes",
+            "--workload-name",
+            "checkout.api",
+        )
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        result = subprocess.run(
+            ["kubectl", "kustomize", str(self.output / "kubernetes")],
+            cwd=self.workspace,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("OTEL_EXPORTER_OTLP_ENDPOINT"), 1)
 
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_generated_kustomization_builds_offline(self) -> None:
