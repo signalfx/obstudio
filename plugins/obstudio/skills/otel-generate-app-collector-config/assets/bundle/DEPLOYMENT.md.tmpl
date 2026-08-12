@@ -80,8 +80,8 @@ Use this only to prove the generated YAML starts locally and can receive OTLP.
 It does not deploy the application scaffold and it does not require Helm.
 
 ```bash
-kind create cluster --name @@CLUSTER_NAME_RAW@@
-kubectl cluster-info --context kind-@@CLUSTER_NAME_RAW@@
+kind create cluster --name @@CLUSTER_NAME_SHELL@@
+kubectl cluster-info --context @@KIND_CONTEXT_SHELL@@
 ```
 
 Create the Secret and deploy the generated Collector YAML to the kind context:
@@ -90,21 +90,21 @@ Create the Secret and deploy the generated Collector YAML to the kind context:
 printf 'Splunk Observability ingest token: '
 read -rs SPLUNK_ACCESS_TOKEN
 echo
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
-printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
+kubectl --context @@KIND_CONTEXT_SHELL@@ create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl --context @@KIND_CONTEXT_SHELL@@ apply -f -
+printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
   --from-file=splunk_observability_access_token=/dev/stdin \
-  --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
+  --dry-run=client -o yaml | kubectl --context @@KIND_CONTEXT_SHELL@@ apply -f -
 unset SPLUNK_ACCESS_TOKEN
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f ./kubernetes/collector.yaml
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ rollout status deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --timeout=120s
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ get pods,svc
+kubectl --context @@KIND_CONTEXT_SHELL@@ apply -f ./kubernetes/collector.yaml
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ rollout status deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --timeout=120s
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ get pods,svc
 ```
 
 Send test telemetry through the Collector Service with the pinned telemetrygen
 image. The tag uses a leading `v`.
 
 ```bash
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-traces \
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ run telemetrygen-traces \
   --rm -i --restart=Never \
   --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
   -- traces \
@@ -114,7 +114,7 @@ kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetryge
   --traces=10
 
 SMOKE_METRIC="otel_generate_app_collector_config_kind_demo_$(date +%Y%m%d%H%M%S)"
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-metrics \
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ run telemetrygen-metrics \
   --rm -i --restart=Never \
   --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
   -- metrics \
@@ -129,7 +129,7 @@ kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetryge
 Check Collector logs for exporter authentication or delivery failures:
 
 ```bash
-kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ logs deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --since=5m | \
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ logs deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --since=5m | \
   grep -E "Exporting failed|Unauthenticated|error exporting" || true
 ```
 

@@ -156,6 +156,10 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("does not require the Helm CLI", deployment)
             self.assertIn("Local kind smoke test", deployment)
             self.assertIn(
+                "kubectl cluster-info --context kind-checkout-prod",
+                deployment,
+            )
+            self.assertIn(
                 "--from-file=splunk_observability_access_token=/dev/stdin",
                 deployment,
             )
@@ -169,6 +173,27 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("ingest.us1.observability.splunkcloud.com", deployment)
             self.assertIn("query token is not accepted", deployment)
             self.assertNotIn("helm-rendered", deployment)
+
+    def test_kind_smoke_commands_shell_quote_cluster_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--cluster-name",
+                "demo$(touch /tmp/pwn)",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            deployment = (output / "DEPLOYMENT.md").read_text()
+            self.assertIn(
+                "kind create cluster --name 'demo$(touch /tmp/pwn)'",
+                deployment,
+            )
+            self.assertIn(
+                "kubectl cluster-info --context 'kind-demo$(touch /tmp/pwn)'",
+                deployment,
+            )
+            self.assertNotIn("--context kind-demo$(touch /tmp/pwn)", deployment)
 
     def test_gateway_mode_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

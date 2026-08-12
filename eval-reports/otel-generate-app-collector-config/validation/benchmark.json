@@ -6,7 +6,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-generate-app-collector-config",
-    "run_id": "20260812T051922067964Z",
+    "run_id": "20260812T054534640487Z",
     "repo_root": "/Users/tithumma/code/splunk/obstudio-main-fresh-20260729",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",

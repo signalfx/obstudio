@@ -193,6 +193,7 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         "@@COLLECTOR_VERSION_RAW@@": args.chart_version,
         "@@CLUSTER_NAME@@": json.dumps(args.cluster_name),
         "@@CLUSTER_NAME_RAW@@": args.cluster_name,
+        "@@CLUSTER_NAME_SHELL@@": shell_quote(args.cluster_name),
         "@@CLOUD_PROVIDER@@": json.dumps(cloud_provider(args.distribution)),
         "@@DISTRIBUTION@@": json.dumps(distribution),
         "@@ENVIRONMENT@@": json.dumps(args.environment),
@@ -200,6 +201,7 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         "@@GATEWAY_DESCRIPTION@@": gateway_description,
         "@@GATEWAY_ENABLED@@": "true" if args.gateway else "false",
         "@@GATEWAY_TOKEN_PASSTHROUGH@@": token_passthrough,
+        "@@KIND_CONTEXT_SHELL@@": shell_quote(f"kind-{args.cluster_name}"),
         "@@NAMESPACE_RAW@@": args.namespace,
         "@@COLLECTOR_CONFIGMAP_NAME_RAW@@": collector_configmap,
         "@@COLLECTOR_IMAGE@@": json.dumps(

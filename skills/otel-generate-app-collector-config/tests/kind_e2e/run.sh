@@ -499,12 +499,12 @@ else
   fi
 fi
 echo "Creating disposable Kind cluster ${CLUSTER_NAME}"
+CLUSTER_CREATED=true
 kind create cluster \
   --name "${CLUSTER_NAME}" \
   --image "${KIND_NODE_IMAGE}" \
   --kubeconfig "${KUBECONFIG_PATH}" \
   --wait "${WAIT_TIMEOUT}"
-CLUSTER_CREATED=true
 CLUSTER_AVAILABLE=true
 server="$(kubectl_cmd config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
 case "${server}" in

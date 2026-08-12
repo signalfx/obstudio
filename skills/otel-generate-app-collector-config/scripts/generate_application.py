@@ -1166,16 +1166,41 @@ def write_documents(
     if output.exists() and not output.is_dir():
         raise ValueError(f"output path is not a directory: {output}")
     destinations = {output / relative: text for relative, text in rendered.items()}
+
+    for path in destinations:
+        reject_symlink_components(path, output)
+
+    stale_scaffold = output / SCAFFOLD_WORKLOAD_FILE
+    stale_scaffold_cleanup = False
+    if stale_scaffold not in destinations and (
+        stale_scaffold.exists() or stale_scaffold.is_symlink()
+    ):
+        reject_symlink_components(stale_scaffold, output)
+        if not stale_scaffold.is_file():
+            raise ValueError(
+                f"stale scaffold output is not a regular file: {stale_scaffold}"
+            )
+        existing = stale_scaffold.read_text(encoding="utf-8")
+        if not existing.startswith(MANAGED_PREFIXES):
+            raise ValueError(
+                "refusing to remove hand-authored stale scaffold file: "
+                f"{stale_scaffold}"
+            )
+        if not overwrite:
+            raise ValueError(
+                "stale generated scaffold remains; review changes and use "
+                f"--overwrite: {stale_scaffold}"
+            )
+        stale_scaffold_cleanup = True
+
     unchanged = all(
         path.is_file() and path.read_text(encoding="utf-8") == text
         for path, text in destinations.items()
     )
-    if unchanged:
+    if unchanged and not stale_scaffold_cleanup:
         return list(destinations), True
 
     for path in destinations:
-        if path.is_symlink():
-            raise ValueError(f"managed output must not be a symlink: {path}")
         if path.exists() and not path.is_file():
             raise ValueError(f"managed output is not a regular file: {path}")
         if path.exists():
@@ -1189,6 +1214,8 @@ def write_documents(
 
     for path, text in destinations.items():
         atomic_write(path, text)
+    if stale_scaffold_cleanup:
+        stale_scaffold.unlink()
     return list(destinations), False
 
 

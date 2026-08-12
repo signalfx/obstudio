@@ -373,6 +373,36 @@ spec:
         self.assertEqual(replaced.returncode, 0, replaced.stderr)
         self.assertIn('realm: "us1"', (self.output / "otel-connection.yaml").read_text())
 
+    def test_overwrite_from_scaffold_to_base_removes_stale_workload(self) -> None:
+        scaffold_args = self.arguments()
+        base_index = scaffold_args.index("--base")
+        del scaffold_args[base_index : base_index + 2]
+        scaffold = subprocess.run(
+            [
+                sys.executable,
+                str(GENERATOR),
+                *scaffold_args,
+                "--image",
+                "example.invalid/checkout:1",
+                "--container-port",
+                "8080",
+            ],
+            cwd=self.workspace,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(scaffold.returncode, 0, scaffold.stderr)
+        workload = self.output / "kubernetes/workload.yaml"
+        self.assertTrue(workload.is_file())
+
+        replaced = self.run_generator("--overwrite")
+        self.assertEqual(replaced.returncode, 0, replaced.stderr)
+        self.assertFalse(workload.exists())
+        contract = (self.output / "otel-connection.yaml").read_text()
+        self.assertIn('overlayMode: "component"', contract)
+        self.assertEqual(self.run_validator().returncode, 0)
+
     def test_legacy_managed_files_can_be_overwritten_after_rename(self) -> None:
         self.assertEqual(self.run_generator().returncode, 0)
         for path in self.output.rglob("*"):
@@ -731,6 +761,19 @@ resources:
         result = self.run_generator("--output", str(linked_output))
         self.assertEqual(result.returncode, 2)
         self.assertIn("symlink", result.stderr)
+
+    def test_managed_subdirectory_symlink_is_rejected(self) -> None:
+        self.output.mkdir(parents=True)
+        outside = self.workspace / "outside-kubernetes"
+        outside.mkdir()
+        (self.output / "kubernetes").symlink_to(
+            outside,
+            target_is_directory=True,
+        )
+        result = self.run_generator()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("symlink", result.stderr)
+        self.assertFalse((outside / "otel-env-patch.yaml").exists())
 
     def test_validator_rejects_overlay_secret_and_cross_file_drift(self) -> None:
         self.assertEqual(self.run_generator().returncode, 0)
