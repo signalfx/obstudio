@@ -98,6 +98,19 @@ Generated handoff commands should prefer `kubectl create secret --from-file` fed
 from stdin over `--from-literal` so token bytes are not placed directly in the
 kubectl process arguments.
 
+The Collector generator should print a concise `Next commands:` block to
+stdout after file generation. Include:
+
+- a Secret creation command that reads `SPLUNK_ACCESS_TOKEN` and pipes it to
+  `kubectl create secret --from-file=splunk_observability_access_token=/dev/stdin`;
+- `kubectl apply -f <output>/kubernetes/collector.yaml`;
+- `kubectl -n <namespace> rollout status deployment/<collector-workload>
+  --timeout=120s`;
+- a pointer to `<output>/DEPLOYMENT.md` for the full handoff.
+
+Do not print a literal token, token-like sample value, or `--from-literal` token
+command.
+
 ## Endpoint and signal contract
 
 Use the current Observability Cloud domains:

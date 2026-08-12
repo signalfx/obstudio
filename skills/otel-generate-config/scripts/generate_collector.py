@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -364,6 +365,47 @@ def generate(args: argparse.Namespace) -> list[Path]:
     return written
 
 
+def shell_quote(value: object) -> str:
+    return shlex.quote(str(value))
+
+
+def print_next_commands(args: argparse.Namespace) -> None:
+    values = replacements(args)
+    namespace = values["@@NAMESPACE_RAW@@"]
+    secret_name = values["@@SECRET_NAME_RAW@@"]
+    workload_name = values["@@COLLECTOR_WORKLOAD_NAME_RAW@@"]
+    collector_yaml = args.output / "kubernetes" / "collector.yaml"
+    deployment_doc = args.output / "DEPLOYMENT.md"
+
+    print()
+    print("Next commands:")
+    print("# 1. Create/update the Collector token Secret")
+    print("printf 'Splunk Observability ingest token: '")
+    print("read -rs SPLUNK_ACCESS_TOKEN")
+    print("echo")
+    print(
+        f"kubectl create namespace {shell_quote(namespace)} "
+        "--dry-run=client -o yaml | kubectl apply -f -"
+    )
+    print(
+        "printf '%s' \"${SPLUNK_ACCESS_TOKEN}\" | "
+        f"kubectl -n {shell_quote(namespace)} create secret generic "
+        f"{shell_quote(secret_name)} \\"
+    )
+    print("  --from-file=splunk_observability_access_token=/dev/stdin \\")
+    print("  --dry-run=client -o yaml | kubectl apply -f -")
+    print("unset SPLUNK_ACCESS_TOKEN")
+    print()
+    print("# 2. Deploy the generated Collector YAML")
+    print(f"kubectl apply -f {shell_quote(collector_yaml)}")
+    print(
+        f"kubectl -n {shell_quote(namespace)} rollout status "
+        f"deployment/{shell_quote(workload_name)} --timeout=120s"
+    )
+    print()
+    print(f"# Full deployment handoff: {shell_quote(deployment_doc)}")
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
@@ -376,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(path)
     print("No access token was read or written.")
+    print_next_commands(args)
     return 0
 
 

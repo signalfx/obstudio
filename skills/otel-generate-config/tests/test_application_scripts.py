@@ -145,6 +145,13 @@ class ConnectionScriptTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, overlay)
         self.assertIn("No access token was read or written.", result.stdout)
+        self.assertIn("Next commands:", result.stdout)
+        self.assertIn("Add the generated component", result.stdout)
+        self.assertIn("components:", result.stdout)
+        self.assertIn('  - "deploy/otel-config/kubernetes"', result.stdout)
+        self.assertIn("adjust this app-root-relative path", result.stdout)
+        self.assertNotIn("kubectl kustomize", result.stdout)
+        self.assertNotIn("kubectl apply -k", result.stdout)
         self.assertEqual(self.run_validator().returncode, 0)
 
     def test_missing_base_generates_reviewable_workload_scaffold(self) -> None:
@@ -184,6 +191,10 @@ class ConnectionScriptTests(unittest.TestCase):
         self.assertIn('name: "OTEL_EXPORTER_OTLP_ENDPOINT"', overlay)
         self.assertNotIn("splunk-otel-token", overlay)
         self.assertNotIn("SPLUNK_ACCESS_TOKEN", scaffold)
+        self.assertIn("Next commands:", result.stdout)
+        self.assertIn("Review the workload scaffold", result.stdout)
+        self.assertIn("Replace the image, resources, probes", result.stdout)
+        self.assertIn("kubectl apply -k", result.stdout)
         self.assertEqual(self.run_validator().returncode, 0)
 
     def test_omitted_app_uses_original_current_directory(self) -> None:

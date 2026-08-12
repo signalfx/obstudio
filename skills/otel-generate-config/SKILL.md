@@ -152,6 +152,12 @@ the skill must not create kind clusters, create Secrets, apply Kubernetes YAML,
 send telemetry, query Splunk, or treat absence of collector log errors as cloud
 query proof.
 
+The generator console output must also include a short `Next commands:` block
+with the token Secret creation, Collector apply, and Collector rollout commands.
+Those commands must use a token value read into `SPLUNK_ACCESS_TOKEN` and piped
+to `kubectl create secret --from-file=...=/dev/stdin`; never print or embed a
+literal token.
+
 ## Generate the matching application configuration
 
 Default application output to `<app>/deploy/otel-config`. For gateway topology,
@@ -242,6 +248,16 @@ When the selected base is a Kustomization directory, run `kubectl kustomize`
 against the generated overlay as an offline render only. Do not run any
 `kubectl apply` or cluster-reading command.
 
+The application generator console output must include a short `Next commands:`
+block. For deployable Kustomization outputs, show how to render the generated
+application overlay with `kubectl kustomize` and deploy it with
+`kubectl apply -k`; for scaffold mode, place a review warning immediately
+before the apply command. For raw-manifest component mode, do not show a direct
+render or apply command; show how to add the generated component path to the
+user's own Kustomization instead. The component snippet must use a path
+relative to the user's Kustomization file when known, or clearly tell the user
+to adjust the shown app-root-relative path.
+
 ## Validate the coordinated result
 
 Before finishing, verify all of these invariants:
@@ -292,7 +308,9 @@ The completed configuration is:
 Report the resolved application, workload/container, Collector endpoint, chart
 version, output paths, checks run, and whether the application output is
 existing-base mode or scaffold mode. Mention that the generated
-`DEPLOYMENT.md` includes optional user-run kind smoke steps. End with this
+`DEPLOYMENT.md` includes optional user-run kind smoke steps. Include a concise
+`Next commands` summary in the final response so the user does not need to open
+the generated files to know the immediate follow-up commands. End with this
 explicit boundary:
 
 ```text

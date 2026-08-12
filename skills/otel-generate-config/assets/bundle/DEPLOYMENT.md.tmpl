@@ -24,7 +24,8 @@ Use a Splunk Observability Cloud organization token with ingest scope. Keep the
 token out of values files and shell history:
 
 ```bash
-read -rsp "Splunk Observability ingest token: " SPLUNK_ACCESS_TOKEN
+printf 'Splunk Observability ingest token: '
+read -rs SPLUNK_ACCESS_TOKEN
 echo
 kubectl create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl apply -f -
 printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
@@ -86,7 +87,8 @@ kubectl cluster-info --context kind-@@CLUSTER_NAME_RAW@@
 Create the Secret and deploy the generated Collector YAML to the kind context:
 
 ```bash
-read -rsp "Splunk Observability ingest token: " SPLUNK_ACCESS_TOKEN
+printf 'Splunk Observability ingest token: '
+read -rs SPLUNK_ACCESS_TOKEN
 echo
 kubectl --context kind-@@CLUSTER_NAME_RAW@@ create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
 printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
@@ -137,7 +139,8 @@ an exporter failure. It is still not the same as proving cloud queryability.
 If you have a Splunk Observability API-capable token, query the unique metric:
 
 ```bash
-read -rsp "Splunk Observability API token: " SPLUNK_API_TOKEN
+printf 'Splunk Observability API token: '
+read -rs SPLUNK_API_TOKEN
 echo
 END_MS="$(python3 -c 'import time; print(int(time.time() * 1000))')"
 START_MS="$((END_MS - 900000))"

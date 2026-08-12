@@ -90,6 +90,25 @@ class BundleScriptsTest(unittest.TestCase):
             result = self.generate(output)
 
             self.assertIn("No access token was read or written.", result.stdout)
+            self.assertIn("Next commands:", result.stdout)
+            self.assertIn(
+                "--from-file=splunk_observability_access_token=/dev/stdin",
+                result.stdout,
+            )
+            self.assertIn("read -rs SPLUNK_ACCESS_TOKEN", result.stdout)
+            self.assertIn(
+                f"kubectl apply -f {output / 'kubernetes' / 'collector.yaml'}",
+                result.stdout,
+            )
+            self.assertIn(
+                "rollout status deployment/splunk-otel-collector-agent",
+                result.stdout,
+            )
+            self.assertNotIn(
+                "--from-literal=splunk_observability_access_token",
+                result.stdout,
+            )
+            self.assertNotIn("read -rsp", result.stdout)
             self.validate(output)
 
             collector = (output / "collector-config.yaml").read_text()
@@ -140,6 +159,8 @@ class BundleScriptsTest(unittest.TestCase):
                 "--from-file=splunk_observability_access_token=/dev/stdin",
                 deployment,
             )
+            self.assertIn("read -rs SPLUNK_ACCESS_TOKEN", deployment)
+            self.assertNotIn("read -rsp", deployment)
             self.assertIn(
                 "ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.157.0",
                 deployment,

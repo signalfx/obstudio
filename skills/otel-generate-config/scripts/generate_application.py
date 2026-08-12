@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1193,6 +1194,50 @@ def generate(args: argparse.Namespace) -> tuple[dict[str, Any], list[Path], bool
     return values, written, unchanged
 
 
+def shell_quote(value: object) -> str:
+    return shlex.quote(str(value))
+
+
+def print_next_commands(values: dict[str, Any]) -> None:
+    overlay = values["output"] / "kubernetes"
+
+    print()
+    print("Next commands:")
+
+    if values["base_is_kustomization"]:
+        print("# 1. Render the generated application config")
+        print(f"kubectl kustomize {shell_quote(overlay)}")
+        if values["scaffold_workload"]:
+            print()
+            print("# 2. Review the workload scaffold before deploying")
+            print(
+                "# Replace the image, resources, probes, service account, "
+                "secrets, and rollout settings first."
+            )
+            if "replace-at-deploy-time" in values["image"]:
+                workload = overlay / SCAFFOLD_WORKLOAD_FILE.name
+                print(
+                    "# Placeholder image is still present in "
+                    f"{shell_quote(workload)}"
+                )
+            print("# After review, deploy the application config")
+        else:
+            print()
+            print("# 2. Deploy the application config")
+        print(f"kubectl apply -k {shell_quote(overlay)}")
+    else:
+        component_from_app = Path(os.path.relpath(overlay, values["app"])).as_posix()
+        print("# 1. Add the generated component to your app Kustomization")
+        print(
+            "# Use a path relative to that Kustomization file; adjust this "
+            "app-root-relative path if needed."
+        )
+        print("components:")
+        print(f"  - {json.dumps(component_from_app)}")
+        print(f"# Generated component directory: {shell_quote(overlay)}")
+        print("# 2. Render/deploy the Kustomization that includes this component.")
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
@@ -1214,6 +1259,7 @@ def main(argv: list[str] | None = None) -> int:
         print(path)
     print("No access token was read or written.")
     print("Live Collector Service readiness remains unverified.")
+    print_next_commands(values)
     return 0
 
 

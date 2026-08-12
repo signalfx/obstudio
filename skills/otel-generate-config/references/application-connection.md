@@ -83,6 +83,25 @@ It does not configure logs unless requested and proven in the Collector
 pipeline. It does not include realm, Secret name, Secret key, token headers, TLS
 verification bypasses, or Splunk credentials.
 
+## Console next commands
+
+The application generator should print a concise `Next commands:` block to
+stdout after file generation. For deployable Kustomization outputs, include:
+
+```bash
+kubectl kustomize <app>/deploy/otel-config/kubernetes
+kubectl apply -k <app>/deploy/otel-config/kubernetes
+```
+
+For scaffold mode, print a warning immediately before the apply command that the
+user must review image, resources, probes, service account, secrets, rollout
+settings, and scheduling constraints first. For raw-manifest component mode, do
+not print a direct render or apply command; tell the user to add the generated
+component path to their own application Kustomization and deploy that
+Kustomization. The snippet should avoid absolute paths by default; show an
+app-root-relative component path and tell the user to adjust it relative to the
+Kustomization file they edit.
+
 ## Verification levels
 
 Generation and static validation prove only internal artifact consistency. A
