@@ -30,6 +30,10 @@ This installs the included skills and configures the MCP server for all four
 agents. Pass a single `codex`, `claude-code`, `cursor`, or `kiro` value when
 you only want to configure one agent.
 
+The Codex plugin bootstrapper also expects the release pipeline to publish a
+`checksums.txt` file alongside the zip archives and validates the archive
+before extraction.
+
 ### Supported Targets
 
 | Target | Skills directory | MCP config |

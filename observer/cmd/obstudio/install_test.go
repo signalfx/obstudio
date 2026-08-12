@@ -161,6 +161,15 @@ func TestInstallTargetFlagAcceptsCommaSeparatedValues(t *testing.T) {
 	}
 }
 
+func TestInstallCommandHasNoConnectRemoteO11yFlag(t *testing.T) {
+	t.Parallel()
+
+	cmd := newInstallCmd()
+	if flag := cmd.Flags().Lookup("connect-remote-o11y"); flag != nil {
+		t.Fatalf("expected --connect-remote-o11y to be removed, but flag is still registered: %+v", flag)
+	}
+}
+
 func TestNormalizeInstallTargets(t *testing.T) {
 	t.Parallel()
 

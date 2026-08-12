@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: @@APP_NAMESPACE@@
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: checkout
+          image: curlimages/curl:8.12.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              sed \
+                -e "s/@@SERVICE_NAME@@/${OTEL_SERVICE_NAME}/g" \
+                -e "s/@@CASE_ID@@/${E2E_CASE_ID}/g" \
+                /payload/traces.json > /tmp/traces.json
+              sed \
+                -e "s/@@SERVICE_NAME@@/${OTEL_SERVICE_NAME}/g" \
+                -e "s/@@CASE_ID@@/${E2E_CASE_ID}/g" \
+                /payload/metrics.json > /tmp/metrics.json
+              while true; do
+                trace_status="$(curl \
+                  --connect-timeout 2 \
+                  --max-time 5 \
+                  --silent \
+                  --show-error \
+                  --output /tmp/trace-response \
+                  --write-out '%{http_code}' \
+                  --header 'Content-Type: application/json' \
+                  --data-binary @/tmp/traces.json \
+                  "${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}" || true)"
+                metric_status="$(curl \
+                  --connect-timeout 2 \
+                  --max-time 5 \
+                  --silent \
+                  --show-error \
+                  --output /tmp/metric-response \
+                  --write-out '%{http_code}' \
+                  --header 'Content-Type: application/json' \
+                  --data-binary @/tmp/metrics.json \
+                  "${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT}" || true)"
+                if [ "${trace_status}" = "200" ] && [ "${metric_status}" = "200" ]; then
+                  touch /tmp/otel-signals-accepted
+                  while true; do sleep 3600; done
+                fi
+                sleep 2
+              done
+          env:
+            - name: E2E_CASE_ID
+              value: "@@E2E_CASE_VALUE@@"
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - test -f /tmp/otel-signals-accepted
+            initialDelaySeconds: 1
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 60
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: payloads
+              mountPath: /payload
+              readOnly: true
+      volumes:
+        - name: payloads
+          configMap:
+            name: checkout-otlp-payloads

@@ -1,0 +1,170 @@
+# OpenTelemetry Collector deployment
+
+This configuration targets Splunk Observability Cloud realm @@REALM_RAW@@ for cluster
+@@CLUSTER_NAME_RAW@@ in the @@ENVIRONMENT_RAW@@ environment.
+
+## Generated outputs
+
+- **Helm files:** `helm/Chart.yaml` and `helm/values.yaml` are generated from
+  local templates and pin the Splunk OpenTelemetry Collector chart to
+  @@CHART_VERSION_RAW@@. Generating these files does not require the Helm CLI.
+- **Kubernetes YAML:** `kubernetes/collector.yaml` deploys a Collector
+  directly for GitOps or manifest-based deployment. It uses image
+  `quay.io/signalfx/splunk-otel-collector:@@COLLECTOR_VERSION_RAW@@`.
+- **Standalone config:** `collector-config.yaml` receives OTLP on ports 4317
+  and 4318 and exports metrics and traces. Use it with a compatible current
+  Splunk Collector distribution.
+
+Logs are not exported by this configuration. Application logs require a separate
+Splunk Platform or Splunk Cloud HEC destination and index.
+
+## Create the token Secret
+
+Use a Splunk Observability Cloud organization token with ingest scope. Keep the
+token out of values files and shell history:
+
+```bash
+printf 'Splunk Observability ingest token: '
+read -rs SPLUNK_ACCESS_TOKEN
+echo
+kubectl create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl apply -f -
+printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
+  --from-file=splunk_observability_access_token=/dev/stdin \
+  --dry-run=client -o yaml | kubectl apply -f -
+unset SPLUNK_ACCESS_TOKEN
+```
+
+The example Secret files contain `REPLACE_AT_DEPLOY_TIME`, not a usable token.
+
+## Validate
+
+Run from this configuration directory:
+
+```bash
+python3 /path/to/otel-generate-app-collector-config/scripts/validate_collector.py .
+kubectl apply --dry-run=client --validate=strict \
+  -f ./kubernetes/collector.yaml
+```
+
+A client dry run does not prove compatibility with a target cluster.
+
+## Deploy with Helm
+
+Helm is needed only if you choose this deployment path:
+
+```bash
+helm dependency update ./helm
+helm upgrade --install @@RELEASE_NAME_RAW@@ ./helm \
+  --namespace @@NAMESPACE_RAW@@ \
+  --create-namespace \
+  --wait \
+  --timeout 10m
+```
+
+## Deploy Kubernetes YAML
+
+Create the Secret first, then run:
+
+```bash
+kubectl apply --dry-run=server --validate=strict \
+  -f ./kubernetes/collector.yaml
+kubectl apply -f ./kubernetes/collector.yaml
+```
+
+The server dry run and apply use the current kubectl context. Confirm the
+cluster and namespace before running them.
+
+## Local kind smoke test
+
+Use this only to prove the generated YAML starts locally and can receive OTLP.
+It does not deploy the application scaffold and it does not require Helm.
+
+```bash
+kind create cluster --name @@CLUSTER_NAME_RAW@@
+kubectl cluster-info --context kind-@@CLUSTER_NAME_RAW@@
+```
+
+Create the Secret and deploy the generated Collector YAML to the kind context:
+
+```bash
+printf 'Splunk Observability ingest token: '
+read -rs SPLUNK_ACCESS_TOKEN
+echo
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
+printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
+  --from-file=splunk_observability_access_token=/dev/stdin \
+  --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
+unset SPLUNK_ACCESS_TOKEN
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f ./kubernetes/collector.yaml
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ rollout status deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --timeout=120s
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ get pods,svc
+```
+
+Send test telemetry through the Collector Service with the pinned telemetrygen
+image. The tag uses a leading `v`.
+
+```bash
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-traces \
+  --rm -i --restart=Never \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
+  -- traces \
+  --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
+  --otlp-insecure \
+  --service=otel-generate-app-collector-config-smoke \
+  --traces=10
+
+SMOKE_METRIC="otel_generate_app_collector_config_kind_demo_$(date +%Y%m%d%H%M%S)"
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-metrics \
+  --rm -i --restart=Never \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
+  -- metrics \
+  --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
+  --otlp-insecure \
+  --service=otel-generate-app-collector-config-smoke \
+  --otlp-metric-name="${SMOKE_METRIC}" \
+  --metrics=20 \
+  --rate=5
+```
+
+Check Collector logs for exporter authentication or delivery failures:
+
+```bash
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ logs deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --since=5m | \
+  grep -E "Exporting failed|Unauthenticated|error exporting" || true
+```
+
+No matching log lines after the smoke test means the Collector did not report
+an exporter failure. It is still not the same as proving cloud queryability.
+
+If you have a Splunk Observability API-capable token, query the unique metric:
+
+```bash
+printf 'Splunk Observability API token: '
+read -rs SPLUNK_API_TOKEN
+echo
+END_MS="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+START_MS="$((END_MS - 900000))"
+curl -sS -G "https://api.@@REALM_RAW@@.observability.splunkcloud.com/v1/timeserieswindow" \
+  -H "X-SF-Token: ${SPLUNK_API_TOKEN}" \
+  --data-urlencode "query=sf_metric:${SMOKE_METRIC}" \
+  --data-urlencode "startMs=${START_MS}" \
+  --data-urlencode "endMs=${END_MS}" \
+  --data-urlencode "resolution=1000"
+unset SPLUNK_API_TOKEN
+```
+
+If Collector logs show HTTP 401 from
+`ingest.@@REALM_RAW@@.observability.splunkcloud.com`, the Secret does not
+contain an ingest token accepted for this realm. If the API query returns HTTP
+401, the query token is not accepted for the Splunk Observability API; that is a
+different failure from Collector export.
+
+## Send application telemetry
+
+Configure workloads to send OTLP to the generated Collector Service in
+`kubernetes/collector.yaml`. The matching application overlay generated by
+this skill records the exact in-cluster endpoint and patches the selected
+workload with OTLP/HTTP environment variables.
+
+Use OTLP/gRPC on port 4317 or OTLP/HTTP on port 4318. The default application
+overlay uses OTLP/HTTP.

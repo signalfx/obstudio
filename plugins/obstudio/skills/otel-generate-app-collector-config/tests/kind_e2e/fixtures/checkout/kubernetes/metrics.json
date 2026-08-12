@@ -1,0 +1,44 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {"stringValue": "@@SERVICE_NAME@@"}
+          },
+          {
+            "key": "e2e.case_id",
+            "value": {"stringValue": "@@CASE_ID@@"}
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {"name": "obstudio.kind.e2e", "version": "1.0.0"},
+          "metrics": [
+            {
+              "name": "checkout.e2e.requests",
+              "description": "Requests emitted by the Kind end-to-end fixture",
+              "unit": "1",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      {
+                        "key": "e2e.case_id",
+                        "value": {"stringValue": "@@CASE_ID@@"}
+                      }
+                    ],
+                    "timeUnixNano": "1786400001000000000",
+                    "asInt": "1"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
