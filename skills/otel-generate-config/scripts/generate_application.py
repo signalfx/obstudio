@@ -31,6 +31,7 @@ MANAGED_FILES = (
     Path("kubernetes/kustomization.yaml"),
     Path("kubernetes/otel-env-patch.yaml"),
 )
+SCAFFOLD_WORKLOAD_FILE = Path("kubernetes/workload.yaml")
 YAML_DOCUMENT_BOUNDARY = re.compile(
     r"^---(?:\s+#.*)?\s*$", re.MULTILINE
 )
@@ -104,15 +105,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--protocol", choices=("http/protobuf", "grpc"), default="http/protobuf"
     )
-    parser.add_argument("--base", required=True, type=Path)
-    parser.add_argument("--application-namespace", required=True)
+    parser.add_argument("--base", type=Path)
+    parser.add_argument(
+        "--scaffold-workload",
+        action="store_true",
+        help=(
+            "Generate a reviewable Kubernetes workload scaffold when the "
+            "application repo has no existing workload base."
+        ),
+    )
+    parser.add_argument("--application-namespace")
     parser.add_argument(
         "--workload-kind",
         choices=("Deployment", "StatefulSet", "DaemonSet"),
-        required=True,
+        default="Deployment",
     )
-    parser.add_argument("--workload-name", required=True)
-    parser.add_argument("--container", required=True)
+    parser.add_argument("--workload-name")
+    parser.add_argument("--container")
+    parser.add_argument("--image")
+    parser.add_argument("--container-port", type=int)
     parser.add_argument("--service-name")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args(arguments)
@@ -126,6 +137,16 @@ def validate_dns_label(label: str, value: str) -> None:
 def validate_secret_name(value: str) -> None:
     if not DNS_LABEL.fullmatch(value):
         raise ValueError(SECRET_NAME_ERROR)
+
+
+def dns_label_from_text(value: str, *, fallback: str) -> str:
+    label = re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
+    label = re.sub(r"-+", "-", label)
+    if len(label) > 63:
+        label = label[:63].rstrip("-")
+    if not label or not DNS_LABEL.fullmatch(label):
+        return fallback
+    return label
 
 
 def is_within(path: Path, root: Path) -> bool:
@@ -695,27 +716,64 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         )
     reject_symlink_components(raw_output, app)
 
-    base = resolve_from(args.base, app, strict=True)
-    if not is_within(base, app):
-        raise ValueError(f"base path escapes application root: {base}")
-    if base == output or is_within(base, output):
-        raise ValueError("base path must not be inside the generated overlay")
-    if not base.is_file() and not base.is_dir():
-        raise ValueError(f"base path is not a file or directory: {base}")
-    if base.is_dir() and not any(
-        (base / name).is_file()
-        for name in ("kustomization.yaml", "kustomization.yml", "Kustomization")
-    ):
-        raise ValueError(f"base directory has no Kustomization file: {base}")
+    if args.scaffold_workload and args.base is not None:
+        raise ValueError("--scaffold-workload cannot be combined with --base")
+    scaffold_workload = args.scaffold_workload or args.base is None
+    base: Path | None = None
+    if args.base is not None:
+        base = resolve_from(args.base, app, strict=True)
+        if not is_within(base, app):
+            raise ValueError(f"base path escapes application root: {base}")
+        if base == output or is_within(base, output):
+            raise ValueError("base path must not be inside the generated overlay")
+        if not base.is_file() and not base.is_dir():
+            raise ValueError(f"base path is not a file or directory: {base}")
+        if base.is_dir() and not any(
+            (base / name).is_file()
+            for name in ("kustomization.yaml", "kustomization.yml", "Kustomization")
+        ):
+            raise ValueError(f"base directory has no Kustomization file: {base}")
 
     if not REALM.fullmatch(args.realm):
         raise ValueError(f"invalid realm: {args.realm!r}")
+    default_name = dns_label_from_text(app.name, fallback="application")
+    if scaffold_workload:
+        application_namespace = args.application_namespace or default_name
+        workload_name = args.workload_name or default_name
+        container = args.container or workload_name
+    else:
+        if args.image or args.container_port is not None:
+            raise ValueError("--image and --container-port are scaffold-only")
+        missing = [
+            flag
+            for flag, value in (
+                ("--application-namespace", args.application_namespace),
+                ("--workload-name", args.workload_name),
+                ("--container", args.container),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "existing-base mode requires "
+                + ", ".join(missing)
+                + "; omit --base or pass --scaffold-workload to generate a scaffold"
+            )
+        application_namespace = args.application_namespace or default_name
+        workload_name = args.workload_name or default_name
+        container = args.container or workload_name
+
+    image = args.image or f"example.invalid/{workload_name}:replace-at-deploy-time"
+    container_port = args.container_port
+    if container_port is not None and not 1 <= container_port <= 65535:
+        raise ValueError("--container-port must be between 1 and 65535")
+
     for label, value in (
         ("collector namespace", args.collector_namespace),
         ("collector release", args.collector_release),
-        ("application namespace", args.application_namespace),
-        ("workload name", args.workload_name),
-        ("container name", args.container),
+        ("application namespace", application_namespace),
+        ("workload name", workload_name),
+        ("container name", container),
     ):
         validate_dns_label(label, value)
     validate_secret_name(args.secret_name)
@@ -725,7 +783,7 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
             f"{COLLECTOR_RELEASE_NAME_MAX_LENGTH} characters"
         )
 
-    service_name = args.service_name or args.workload_name
+    service_name = args.service_name or workload_name
     validate_dns_label("OTel service name", service_name)
     default_suffix = "-collector" if args.topology == "gateway" else "-collector-agent"
     collector_service = args.collector_service or f"{args.collector_release}{default_suffix}"
@@ -787,18 +845,26 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": args.protocol,
     }
 
-    validate_base_target(
-        base,
-        allowed_root=app,
-        workload_kind=args.workload_kind,
-        workload_name=args.workload_name,
-        namespace=args.application_namespace,
-        container=args.container,
-        expected_environment=otel_environment,
-    )
+    if not scaffold_workload and base is not None:
+        validate_base_target(
+            base,
+            allowed_root=app,
+            workload_kind=args.workload_kind,
+            workload_name=workload_name,
+            namespace=application_namespace,
+            container=container,
+            expected_environment=otel_environment,
+        )
 
-    base_from_overlay = os.path.relpath(base, output / "kubernetes")
-    base_from_app = os.path.relpath(base, app)
+    if scaffold_workload:
+        base_from_overlay = SCAFFOLD_WORKLOAD_FILE.name
+        base_from_app = os.path.relpath(output / SCAFFOLD_WORKLOAD_FILE, app)
+        base_is_kustomization = True
+    else:
+        assert base is not None
+        base_from_overlay = os.path.relpath(base, output / "kubernetes")
+        base_from_app = os.path.relpath(base, app)
+        base_is_kustomization = base.is_dir()
     app_from_output = os.path.relpath(app, output)
     workspace_from_output = os.path.relpath(workspace, output)
     return {
@@ -810,7 +876,8 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "base_from_app": Path(base_from_app).as_posix(),
         "app_from_output": Path(app_from_output).as_posix(),
         "workspace_from_output": Path(workspace_from_output).as_posix(),
-        "base_is_kustomization": base.is_dir(),
+        "base_is_kustomization": base_is_kustomization,
+        "scaffold_workload": scaffold_workload,
         "platform": args.platform,
         "realm": args.realm,
         "collector_namespace": args.collector_namespace,
@@ -829,11 +896,13 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "traces_endpoint": traces_endpoint,
         "metrics_endpoint": metrics_endpoint,
         "otel_environment": otel_environment,
-        "application_namespace": args.application_namespace,
+        "application_namespace": application_namespace,
         "workload_api_version": "apps/v1",
         "workload_kind": args.workload_kind,
-        "workload_name": args.workload_name,
-        "container": args.container,
+        "workload_name": workload_name,
+        "container": container,
+        "image": image,
+        "container_port": container_port,
         "service_name": service_name,
     }
 
@@ -917,7 +986,9 @@ def documents(values: dict[str, Any], input_hash: str) -> dict[Path, str]:
             "workspaceRoot": values["workspace_from_output"],
             "base": values["base_from_app"],
             "overlayMode": (
-                "standalone"
+                "scaffold"
+                if values["scaffold_workload"]
+                else "standalone"
                 if values["base_is_kustomization"]
                 else "component"
             ),
@@ -1006,11 +1077,61 @@ def documents(values: dict[str, Any], input_hash: str) -> dict[Path, str]:
     }
     if values["base_is_kustomization"]:
         kustomization["resources"] = [values["base_from_overlay"]]
-    return {
+
+    rendered = {
         MANAGED_FILES[0]: render_yaml(contract, input_hash),
         MANAGED_FILES[1]: render_yaml(kustomization, input_hash),
         MANAGED_FILES[2]: render_yaml(patch, input_hash),
     }
+    if values["scaffold_workload"]:
+        labels = {"app.kubernetes.io/name": values["service_name"]}
+        container: dict[str, Any] = {
+            "name": values["container"],
+            "image": values["image"],
+        }
+        if values["container_port"] is not None:
+            container["ports"] = [
+                {
+                    "name": "http",
+                    "containerPort": values["container_port"],
+                    "protocol": "TCP",
+                }
+            ]
+        workload_spec: dict[str, Any] = {
+            "selector": {"matchLabels": labels},
+            "template": {
+                "metadata": {
+                    "labels": labels,
+                    "annotations": {
+                        "obstudio.splunk.com/otel-generate-config-input": input_hash
+                    },
+                },
+                "spec": {"containers": [container]},
+            },
+        }
+        if values["workload_kind"] in {"Deployment", "StatefulSet"}:
+            workload_spec["replicas"] = 1
+        if values["workload_kind"] == "StatefulSet":
+            workload_spec["serviceName"] = values["service_name"]
+
+        workload = {
+            "apiVersion": values["workload_api_version"],
+            "kind": values["workload_kind"],
+            "metadata": {
+                "name": values["workload_name"],
+                "namespace": values["application_namespace"],
+                "annotations": {
+                    "obstudio.splunk.com/scaffold": "true",
+                    "obstudio.splunk.com/review-required": (
+                        "image, resources, probes, service account, "
+                        "secrets, and rollout settings"
+                    ),
+                },
+            },
+            "spec": workload_spec,
+        }
+        rendered[SCAFFOLD_WORKLOAD_FILE] = render_yaml(workload, input_hash)
+    return rendered
 
 
 def atomic_write(path: Path, text: str) -> None:

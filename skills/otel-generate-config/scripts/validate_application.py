@@ -31,6 +31,7 @@ REQUIRED_FILES = (
     Path("kubernetes/kustomization.yaml"),
     Path("kubernetes/otel-env-patch.yaml"),
 )
+SCAFFOLD_WORKLOAD_FILE = Path("kubernetes/workload.yaml")
 FORBIDDEN_OVERLAY = (
     "splunk_observability_access_token",
     "X-SF-Token",
@@ -254,6 +255,73 @@ def parse_patch_workload(
     )
 
 
+def parse_scaffold_workload(
+    workload: str,
+    errors: list[str],
+) -> WorkloadIdentity | None:
+    root = mapping_scalars(
+        workload,
+        indent=0,
+        fields=("apiVersion", "kind"),
+        label="scaffold workload",
+        errors=errors,
+    )
+    metadata = nested_mapping(workload, ("metadata",))
+    metadata_values = None
+    if not metadata:
+        errors.append("scaffold workload has no structurally valid metadata")
+    else:
+        body, indent = metadata
+        metadata_values = mapping_scalars(
+            body,
+            indent=indent,
+            fields=("name", "namespace"),
+            label="scaffold workload metadata",
+            errors=errors,
+        )
+
+    pod_spec = nested_mapping(workload, ("spec", "template", "spec"))
+    container: str | None = None
+    if not pod_spec:
+        errors.append("scaffold workload has no structurally valid pod spec")
+    else:
+        body, indent = pod_spec
+        containers = yaml_section(body, "containers", indent=indent)
+        if not containers:
+            errors.append("scaffold workload has no target containers")
+        else:
+            container_body, _ = containers
+            items = yaml_sequence_items(container_body)
+            if len(items) != 1:
+                errors.append(
+                    "scaffold workload must contain exactly one container; "
+                    f"found {len(items)}"
+                )
+            else:
+                item, item_indent = items[0]
+                container = sequence_item_scalar(
+                    item,
+                    indent=item_indent,
+                    key="name",
+                )
+                if not container:
+                    errors.append(
+                        "scaffold workload container has no unambiguous name"
+                    )
+                if not sequence_item_scalar(item, indent=item_indent, key="image"):
+                    errors.append("scaffold workload container has no image")
+
+    if not root or not metadata_values or not container:
+        return None
+    return WorkloadIdentity(
+        api_version=root["apiVersion"],
+        kind=root["kind"],
+        name=metadata_values["name"],
+        namespace=metadata_values["namespace"],
+        container=container,
+    )
+
+
 def compare_workload_identities(
     contract: WorkloadIdentity,
     patch: WorkloadIdentity,
@@ -438,6 +506,21 @@ def validate(bundle: Path) -> list[str]:
         relative: read_managed(bundle / relative, errors)
         for relative in REQUIRED_FILES
     }
+    initial_contract = contents[Path("otel-connection.yaml")]
+    scaffold_mode = (
+        quoted_value(section(initial_contract, "application"), "overlayMode")
+        == "scaffold"
+    )
+    if scaffold_mode:
+        contents[SCAFFOLD_WORKLOAD_FILE] = read_managed(
+            bundle / SCAFFOLD_WORKLOAD_FILE,
+            errors,
+        )
+    elif (bundle / SCAFFOLD_WORKLOAD_FILE).exists():
+        errors.append(
+            "kubernetes/workload.yaml exists but application overlayMode "
+            "is not scaffold"
+        )
     hashes: set[str] = set()
     for relative, text in contents.items():
         match = HASH.search(text)
@@ -451,6 +534,7 @@ def validate(bundle: Path) -> list[str]:
     contract = contents[REQUIRED_FILES[0]]
     kustomization = contents[REQUIRED_FILES[1]]
     overlay = contents[REQUIRED_FILES[2]]
+    scaffold_workload = contents.get(SCAFFOLD_WORKLOAD_FILE, "")
     for relative, text in contents.items():
         if text:
             errors.extend(
@@ -484,6 +568,15 @@ def validate(bundle: Path) -> list[str]:
         if overlay
         else ""
     )
+    scaffold_document = (
+        single_yaml_document(
+            scaffold_workload,
+            label="workload.yaml",
+            errors=errors,
+        )
+        if scaffold_workload
+        else ""
+    )
     contract_workload = (
         parse_contract_workload(contract_document, errors)
         if contract_document
@@ -496,12 +589,21 @@ def validate(bundle: Path) -> list[str]:
     )
     if contract_workload and patch_workload:
         compare_workload_identities(contract_workload, patch_workload, errors)
+    scaffold_identity = (
+        parse_scaffold_workload(scaffold_document, errors)
+        if scaffold_document
+        else None
+    )
+    if contract_workload and scaffold_identity:
+        compare_workload_identities(contract_workload, scaffold_identity, errors)
     if kustomization_document:
         validate_kustomization_target(
             kustomization_document,
             contract_workload,
             errors,
         )
+        if scaffold_mode and 'workload.yaml' not in kustomization_document:
+            errors.append("scaffold kustomization does not reference workload.yaml")
 
     for required in (
         "schemaVersion: 1",
@@ -568,6 +670,8 @@ def validate(bundle: Path) -> list[str]:
     for forbidden in FORBIDDEN_OVERLAY:
         if forbidden.lower() in overlay.lower():
             errors.append(f"application overlay contains forbidden value: {forbidden}")
+        if scaffold_workload and forbidden.lower() in scaffold_workload.lower():
+            errors.append(f"scaffold workload contains forbidden value: {forbidden}")
     expected_env = {
         "OTEL_SERVICE_NAME": quoted_value(contract, "serviceName"),
         "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
@@ -598,6 +702,8 @@ def validate(bundle: Path) -> list[str]:
     contract_hash = next(iter(hashes), None)
     if contract_hash and contract_hash not in overlay:
         errors.append("application overlay annotation does not match input hash")
+    if scaffold_workload and contract_hash and contract_hash not in scaffold_workload:
+        errors.append("scaffold workload annotation does not match input hash")
     return errors
 
 

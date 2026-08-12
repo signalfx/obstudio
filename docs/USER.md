@@ -89,7 +89,7 @@ Once installed, open any project in your agent and use:
 | Command | What it does |
 |---------|-------------|
 | `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
-| `/otel-generate-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay; never deploys or verifies live connectivity |
+| `/otel-generate-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
 | `/otel-instrument` | Implement canonical audit selections and write instrumentation JSON plus interactive `.observe/otel-instrumentation.html` |
 | `/otel-verify` | Write bound verification JSON and refresh instrumentation proof in the instrumentation HTML |
 
@@ -125,9 +125,9 @@ defaults to `observability`, release defaults to `splunk-otel`, and topology
 defaults to `gateway`; the application endpoint uses cluster domain
 `cluster.local`. The skill generates and statically validates version-pinned
 Collector Helm files, plain Kubernetes YAML, and a matching non-secret
-Kustomize application overlay. Helm is not required to generate or validate
-these files. It never deploys resources, creates or reads the Secret, or
-verifies live Collector or Splunk connectivity.
+Kustomize application overlay or workload scaffold. Helm is not required to
+generate or validate these files. It never deploys resources, creates or reads
+the Secret, or verifies live Collector or Splunk connectivity.
 
 `$otel-instrument` runs the verification workflow by default after its
 implementation gate unless you explicitly opt out or a concrete prerequisite

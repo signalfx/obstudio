@@ -1,0 +1,10 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: entity-model-service
+  title: entity-model-service
+spec:
+  lifecycle: production
+  type: product
+  owner: group:entity-platform

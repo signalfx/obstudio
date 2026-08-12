@@ -15,7 +15,8 @@ The generated `otel-connection.yaml` records:
 
 - schema and generator version;
 - application and workspace roots as relative paths from the generated contract
-  directory, plus the base resource, workload identity, namespace, and container;
+  directory, plus the base resource or scaffold resource, workload identity,
+  namespace, and container;
 - Collector topology, release, namespace, Service, and collector-side Secret
   reference;
 - OTLP protocol, ports, base endpoint, and trace/metric endpoints;
@@ -53,7 +54,25 @@ target container. This render does not read a kubectl context or call a cluster.
 When the selected base is a raw manifest, the generator validates that manifest
 directly and emits a Kustomization `Component` for the application's own overlay
 to include; this avoids copying or editing the base and avoids disabling
-Kustomize load restrictions. The patch sets:
+Kustomize load restrictions.
+
+When there is no selected base, generate scaffold mode instead of blocking all
+output. Scaffold mode writes:
+
+```text
+kubernetes/workload.yaml
+kubernetes/kustomization.yaml
+kubernetes/otel-env-patch.yaml
+```
+
+The generated contract must set `application.overlayMode: "scaffold"` and
+`application.base` to the generated workload scaffold. The scaffold must be
+annotated as review-required and may use a non-secret placeholder image when the
+real deployable image is not knowable from the repository. Do not claim scaffold
+mode is production-ready until the user reviews image, resources, probes,
+service account, secrets, rollout settings, and scheduling constraints.
+
+In all modes, the OTel patch sets:
 
 - `OTEL_SERVICE_NAME`;
 - `OTEL_EXPORTER_OTLP_ENDPOINT`;

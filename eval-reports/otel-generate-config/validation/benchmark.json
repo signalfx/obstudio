@@ -6,7 +6,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-generate-config",
-    "run_id": "20260811T194647915845Z",
+    "run_id": "20260812T010701303934Z",
     "repo_root": "/Users/tithumma/code/splunk/obstudio-main-fresh-20260729",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
@@ -52,6 +52,22 @@
       "runtime_check_count": 0
     },
     {
+      "id": "deployments/generate-config-scaffold/sanity/generate",
+      "case": "deployments/generate-config-scaffold",
+      "language": "deployments",
+      "service": "generate-config-scaffold",
+      "prompt_count": 1,
+      "prompts": [
+        "scaffold-current-context"
+      ],
+      "definition_path": "evals/deployments/generate-config-scaffold/eval/sanity/generate.json",
+      "eval_dir": "evals/deployments/generate-config-scaffold",
+      "skill_path": "skills/otel-generate-config",
+      "sanity_check_count": 13,
+      "rubric_check_count": 0,
+      "runtime_check_count": 0
+    },
+    {
       "id": "sanity/skill-smoke/sanity/generate-config",
       "case": "sanity/skill-smoke",
       "language": "sanity",
@@ -70,10 +86,10 @@
     }
   ],
   "summary": {
-    "eval_count": 3,
-    "case_count": 4,
-    "prompt_count": 4,
-    "sanity_check_count": 20,
+    "eval_count": 4,
+    "case_count": 5,
+    "prompt_count": 5,
+    "sanity_check_count": 33,
     "rubric_check_count": 9,
     "runtime_check_count": 0
   }

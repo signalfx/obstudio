@@ -4,7 +4,7 @@ description: >-
   Generate a coordinated OpenTelemetry configuration set for Splunk
   Observability Cloud: token-free, version-pinned Collector Helm files,
   plain Kubernetes YAML, a standalone Collector config, and a matching
-  non-secret Kubernetes application Kustomize overlay. Use when
+  non-secret Kubernetes application Kustomize overlay or workload scaffold. Use when
   a user invokes $otel-generate-config, asks for Collector Helm files or YAML plus
   application configuration, needs the correct in-cluster OTLP endpoint, or
   wants deploy-ready configuration files without deploying them.
@@ -15,7 +15,9 @@ description: >-
 Generate one reviewable configuration set for the Collector and application.
 The Collector generator writes Helm files from local templates, plain
 Kubernetes YAML directly, and a standalone Collector config. The application
-overlay targets the Service proven by the generated Kubernetes YAML.
+configuration targets the Service proven by the generated Kubernetes YAML. If
+the app has no Kubernetes base, generate a reviewable workload scaffold instead
+of stopping before writing configuration.
 
 This skill only generates and validates local files. Never deploy resources,
 create or inspect Secrets, query Splunk Observability Cloud, or claim live
@@ -62,13 +64,24 @@ clearly requires them.
 ## Inspect before writing
 
 Read the repository and application `AGENTS.md` files plus existing Helm,
-Kubernetes, and GitOps sources. Resolve all required values and exactly one
-application target before generating anything:
+Kubernetes, and GitOps sources. Prefer an existing application target:
 
 - Kubernetes `Deployment`, `StatefulSet`, or `DaemonSet`;
 - workload namespace and name;
 - exactly one application container after ignoring known sidecars;
 - a raw workload manifest or an existing Kustomization base;
+
+When no raw workload manifest, Helm chart, or Kustomization base exists, do not
+block all generation. Generate the Collector configuration and generate an
+application scaffold when one application identity can be resolved from repo
+evidence such as a service manifest, Dockerfile, Java main class, README, open
+ports, or package metadata. Infer workload/container names only from concrete
+repo evidence; otherwise use the repo/service name and clearly mark the output
+as a scaffold requiring review. Ask only if multiple applications or conflicting
+names are present.
+
+Resolve these public inputs before generating:
+
 - Splunk realm, cluster name, environment, Collector namespace and release;
 - Kubernetes distribution and exact Collector chart version;
 - `gateway` or `agent-service` topology;
@@ -158,6 +171,32 @@ python3 <skill-dir>/scripts/generate_application.py \
   --container <container>
 ```
 
+If there is no application base, run the same generator without `--base` or pass
+`--scaffold-workload` explicitly:
+
+```bash
+python3 <skill-dir>/scripts/generate_application.py \
+  --app <resolved-app> \
+  --workspace-root <workspace> \
+  --platform kubernetes \
+  --realm <realm> \
+  --existing-secret <secret-name> \
+  --collector-evidence <workspace>/deploy/otel-collector/kubernetes/collector.yaml \
+  --scaffold-workload \
+  --application-namespace <namespace> \
+  --workload-kind Deployment \
+  --workload-name <name> \
+  --container <container> \
+  --image <reviewed-image-or-placeholder> \
+  --container-port <port>
+```
+
+For scaffold mode, use the best repo evidence for namespace, workload name,
+container, image, and port. If the image is not knowable from the repo, use a
+clear non-secret placeholder such as
+`example.invalid/<service>:replace-at-deploy-time` and report that the scaffold
+is not production-ready until image and platform settings are reviewed.
+
 The Secret name is recorded only in the non-deployable connection contract as
 Collector-boundary metadata. It must never appear in the application patch or
 Pod configuration. Add `--collector-service` only when a verified generated
@@ -169,7 +208,14 @@ For a Kustomization base, the generator performs a local `kubectl kustomize`
 render before writing and requires exactly one matching workload with exactly
 one existing target container. This command reads local files only; it does not
 read a kubectl context or contact a cluster. A missing, ambiguous, or invented
-container is a blocking error.
+container is a blocking error for existing-base mode.
+
+For scaffold mode, the generator writes `kubernetes/workload.yaml` plus the
+same OTel environment patch and records `overlayMode: "scaffold"` in
+`otel-connection.yaml`. Treat scaffold output as a reviewable starting point:
+the user must confirm image, resources, probes, service account, secrets,
+rollout settings, and any platform-specific scheduling constraints before
+deployment.
 
 Run the application validator:
 
@@ -205,7 +251,9 @@ Before finishing, verify all of these invariants:
   `secretKeyRef`, or TLS-verification bypass;
 - only example Secret files contain `REPLACE_AT_DEPLOY_TIME`;
 - no generated file contains a literal token or unresolved placeholder;
-- application source and base deployment files remain unchanged.
+- application source and base deployment files remain unchanged, except for
+  generated scaffold files under `<app>/deploy/otel-config` when scaffold mode
+  is used.
 
 Any failed generator, validator, Kustomize build, or secret scan is a blocking
 defect. Do not describe an incomplete output as
@@ -231,12 +279,13 @@ The completed configuration is:
 ├── otel-connection.yaml
 └── kubernetes/
     ├── kustomization.yaml
-    └── otel-env-patch.yaml
+    ├── otel-env-patch.yaml
+    └── workload.yaml          # scaffold mode only
 ```
 
-Report the resolved application, workload/container, Collector endpoint,
-chart version, output paths, and checks run. End with this explicit
-boundary:
+Report the resolved application, workload/container, Collector endpoint, chart
+version, output paths, checks run, and whether the application output is
+existing-base mode or scaffold mode. End with this explicit boundary:
 
 ```text
 Configuration files were generated and validated locally. No resources were

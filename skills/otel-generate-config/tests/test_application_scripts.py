@@ -147,6 +147,45 @@ class ConnectionScriptTests(unittest.TestCase):
         self.assertIn("No access token was read or written.", result.stdout)
         self.assertEqual(self.run_validator().returncode, 0)
 
+    def test_missing_base_generates_reviewable_workload_scaffold(self) -> None:
+        args = self.arguments()
+        base_index = args.index("--base")
+        del args[base_index : base_index + 2]
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(GENERATOR),
+                *args,
+                "--image",
+                "example.invalid/checkout:1",
+                "--container-port",
+                "8080",
+            ],
+            cwd=self.workspace,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        contract = (self.output / "otel-connection.yaml").read_text()
+        kustomization = (
+            self.output / "kubernetes/kustomization.yaml"
+        ).read_text()
+        overlay = (self.output / "kubernetes/otel-env-patch.yaml").read_text()
+        scaffold = (self.output / "kubernetes/workload.yaml").read_text()
+        self.assertIn('overlayMode: "scaffold"', contract)
+        self.assertIn('base: "deploy/otel-config/kubernetes/workload.yaml"', contract)
+        self.assertIn('resources:\n  - "workload.yaml"', kustomization)
+        self.assertIn('path: "otel-env-patch.yaml"', kustomization)
+        self.assertIn('"obstudio.splunk.com/scaffold": "true"', scaffold)
+        self.assertIn('image: "example.invalid/checkout:1"', scaffold)
+        self.assertIn("containerPort: 8080", scaffold)
+        self.assertIn('name: "OTEL_EXPORTER_OTLP_ENDPOINT"', overlay)
+        self.assertNotIn("splunk-otel-token", overlay)
+        self.assertNotIn("SPLUNK_ACCESS_TOKEN", scaffold)
+        self.assertEqual(self.run_validator().returncode, 0)
+
     def test_omitted_app_uses_original_current_directory(self) -> None:
         result = self.run_generator(include_app=False, cwd=self.app)
         self.assertEqual(result.returncode, 0, result.stderr)
