@@ -905,7 +905,7 @@ def validate(bundle: Path) -> list[str]:
         values,
         ("collector", "secret", "name"),
     )
-    if not values_secret_name or not DNS_LABEL.fullmatch(values_secret_name):
+    if not values_secret_name or not DNS_SUBDOMAIN.fullmatch(values_secret_name):
         errors.append("helm/values.yaml has an invalid Collector Secret name")
     gateway_enabled = nested_yaml_scalar(
         values,
@@ -982,7 +982,7 @@ def validate(bundle: Path) -> list[str]:
             errors.append(
                 f"{relative} Secret name differs from helm/values.yaml"
             )
-        if not secret_name or not DNS_LABEL.fullmatch(secret_name):
+        if not secret_name or not DNS_SUBDOMAIN.fullmatch(secret_name):
             errors.append(f"{relative} has an invalid Secret name")
         else:
             example_secret_names.add(secret_name)

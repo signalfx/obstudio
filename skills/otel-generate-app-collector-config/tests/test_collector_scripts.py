@@ -363,6 +363,26 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("name: splunk-otel-token", manifest)
             self.assertIn("name: splunk-otel-token", secret)
 
+    def test_dns_subdomain_secret_name_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--secret-name",
+                "team.splunk-otel-token",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = (output / "kubernetes" / "collector.yaml").read_text()
+            values = (output / "helm" / "values.yaml").read_text()
+            secret = (
+                output / "kubernetes" / "splunk-secret.example.yaml"
+            ).read_text()
+            self.assertIn("name: team.splunk-otel-token", manifest)
+            self.assertIn('name: "team.splunk-otel-token"', values)
+            self.assertIn("name: team.splunk-otel-token", secret)
+            self.validate(output)
+
     def test_refuses_overwrite_without_flag(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"

@@ -23,6 +23,10 @@ SUPPORTED_DISTRIBUTIONS = (
     "other",
 )
 DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+DNS_SUBDOMAIN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 REALM = re.compile(r"^[a-z][a-z0-9-]{0,30}[a-z0-9]$")
 SEMVER_NUMERIC_IDENTIFIER = r"(?:0|[1-9]\d*)"
 SEMVER_NONNUMERIC_IDENTIFIER = r"(?:[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
@@ -64,14 +68,14 @@ def reject_token_argument(argv: list[str] | None) -> list[str]:
             if (
                 index + 1 >= len(arguments)
                 or arguments[index + 1].startswith("--")
-                or not DNS_LABEL.fullmatch(arguments[index + 1])
+                or not DNS_SUBDOMAIN.fullmatch(arguments[index + 1])
             ):
                 raise ValueError(SECRET_NAME_ERROR)
         elif (
             argument.startswith("--secret-name=")
             or argument.startswith("--existing-secret=")
         ):
-            if not DNS_LABEL.fullmatch(argument.partition("=")[2]):
+            if not DNS_SUBDOMAIN.fullmatch(argument.partition("=")[2]):
                 raise ValueError(SECRET_NAME_ERROR)
     return arguments
 
@@ -150,7 +154,7 @@ def validate_input(name: str, value: str, pattern: re.Pattern[str]) -> None:
 
 
 def validate_secret_name(value: str) -> None:
-    if not DNS_LABEL.fullmatch(value):
+    if not DNS_SUBDOMAIN.fullmatch(value):
         raise ValueError(SECRET_NAME_ERROR)
 
 

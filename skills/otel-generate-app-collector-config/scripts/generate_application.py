@@ -29,6 +29,10 @@ MANAGED_PREFIXES = (
     f"{LEGACY_OWNER_MARKER}\n{LEGACY_HASH_PREFIX}",
 )
 DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+DNS_SUBDOMAIN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 REALM = re.compile(r"^[a-z][a-z0-9-]{0,30}[a-z0-9]$")
 DOMAIN = re.compile(
     r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
@@ -76,14 +80,14 @@ def reject_token_argument(argv: list[str] | None) -> list[str]:
             if (
                 index + 1 >= len(arguments)
                 or arguments[index + 1].startswith("--")
-                or not DNS_LABEL.fullmatch(arguments[index + 1])
+                or not DNS_SUBDOMAIN.fullmatch(arguments[index + 1])
             ):
                 raise ValueError(SECRET_NAME_ERROR)
         elif (
             argument.startswith("--secret-name=")
             or argument.startswith("--existing-secret=")
         ):
-            if not DNS_LABEL.fullmatch(argument.partition("=")[2]):
+            if not DNS_SUBDOMAIN.fullmatch(argument.partition("=")[2]):
                 raise ValueError(SECRET_NAME_ERROR)
     return arguments
 
@@ -143,8 +147,13 @@ def validate_dns_label(label: str, value: str) -> None:
         raise ValueError(f"invalid {label}: {value!r}")
 
 
+def validate_dns_subdomain(label: str, value: str) -> None:
+    if not DNS_SUBDOMAIN.fullmatch(value):
+        raise ValueError(f"invalid {label}: {value!r}")
+
+
 def validate_secret_name(value: str) -> None:
-    if not DNS_LABEL.fullmatch(value):
+    if not DNS_SUBDOMAIN.fullmatch(value):
         raise ValueError(SECRET_NAME_ERROR)
 
 
@@ -781,10 +790,10 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         ("collector namespace", args.collector_namespace),
         ("collector release", args.collector_release),
         ("application namespace", application_namespace),
-        ("workload name", workload_name),
         ("container name", container),
     ):
         validate_dns_label(label, value)
+    validate_dns_subdomain("workload name", workload_name)
     validate_secret_name(args.secret_name)
     if len(args.collector_release) > COLLECTOR_RELEASE_NAME_MAX_LENGTH:
         raise ValueError(
@@ -793,7 +802,7 @@ def normalized_inputs(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     service_name = args.service_name or workload_name
-    validate_dns_label("OTel service name", service_name)
+    validate_dns_subdomain("OTel service name", service_name)
     default_suffix = "-collector" if args.topology == "gateway" else "-collector-agent"
     collector_service = args.collector_service or f"{args.collector_release}{default_suffix}"
     validate_dns_label("collector Service", collector_service)
@@ -1093,7 +1102,11 @@ def documents(values: dict[str, Any], input_hash: str) -> dict[Path, str]:
         MANAGED_FILES[2]: render_yaml(patch, input_hash),
     }
     if values["scaffold_workload"]:
-        labels = {"app.kubernetes.io/name": values["service_name"]}
+        scaffold_label = dns_label_from_text(
+            values["service_name"],
+            fallback="application",
+        )
+        labels = {"app.kubernetes.io/name": scaffold_label}
         container: dict[str, Any] = {
             "name": values["container"],
             "image": values["image"],
@@ -1121,7 +1134,10 @@ def documents(values: dict[str, Any], input_hash: str) -> dict[Path, str]:
         if values["workload_kind"] in {"Deployment", "StatefulSet"}:
             workload_spec["replicas"] = 1
         if values["workload_kind"] == "StatefulSet":
-            workload_spec["serviceName"] = values["service_name"]
+            workload_spec["serviceName"] = dns_label_from_text(
+                values["workload_name"],
+                fallback="workload",
+            )
 
         workload = {
             "apiVersion": values["workload_api_version"],

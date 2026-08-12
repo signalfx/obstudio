@@ -49,6 +49,10 @@ FORBIDDEN_OVERLAY = (
     "insecure_skip_verify",
 )
 DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+DNS_SUBDOMAIN = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+)
 
 
 @dataclass(frozen=True)
@@ -345,6 +349,19 @@ def compare_workload_identities(
             )
 
 
+def validate_workload_identity(
+    label: str,
+    identity: WorkloadIdentity,
+    errors: list[str],
+) -> None:
+    if not DNS_SUBDOMAIN.fullmatch(identity.name):
+        errors.append(f"{label} has an invalid workload name")
+    if not DNS_LABEL.fullmatch(identity.namespace):
+        errors.append(f"{label} has an invalid namespace")
+    if not DNS_LABEL.fullmatch(identity.container):
+        errors.append(f"{label} has an invalid container name")
+
+
 def validate_kustomization_target(
     kustomization: str,
     contract: WorkloadIdentity | None,
@@ -594,6 +611,16 @@ def validate(bundle: Path) -> list[str]:
         else None
     )
     if contract_workload and patch_workload:
+        validate_workload_identity(
+            "otel-connection.yaml application workload",
+            contract_workload,
+            errors,
+        )
+        validate_workload_identity(
+            "application patch",
+            patch_workload,
+            errors,
+        )
         compare_workload_identities(contract_workload, patch_workload, errors)
     scaffold_identity = (
         parse_scaffold_workload(scaffold_document, errors)
@@ -601,6 +628,11 @@ def validate(bundle: Path) -> list[str]:
         else None
     )
     if contract_workload and scaffold_identity:
+        validate_workload_identity(
+            "scaffold workload",
+            scaffold_identity,
+            errors,
+        )
         compare_workload_identities(contract_workload, scaffold_identity, errors)
     if kustomization_document:
         kustomization_kind = yaml_scalar(kustomization_document, "kind", indent=0)
@@ -678,6 +710,10 @@ def validate(bundle: Path) -> list[str]:
 
     if not secret_name:
         errors.append("collector Secret reference has no name")
+    elif not DNS_SUBDOMAIN.fullmatch(secret_name):
+        errors.append("collector Secret reference has an invalid name")
+    if secret_namespace and not DNS_LABEL.fullmatch(secret_namespace):
+        errors.append("collector Secret reference has an invalid namespace")
     if secret_namespace != collector_namespace:
         errors.append("collector Secret reference must use the collector namespace")
     if not realm:

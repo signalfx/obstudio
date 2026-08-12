@@ -246,6 +246,54 @@ class ConnectionScriptTests(unittest.TestCase):
         contract = (self.output / "otel-connection.yaml").read_text()
         self.assertIn('name: "splunk-otel-token"', contract)
 
+    def test_dns_subdomain_secret_name_is_accepted(self) -> None:
+        args = self.arguments()
+        args[args.index("--secret-name") + 1] = "team.splunk-otel-token"
+
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), *args],
+            cwd=self.workspace,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        contract = (self.output / "otel-connection.yaml").read_text()
+        self.assertIn('name: "team.splunk-otel-token"', contract)
+        validated = self.run_validator()
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+
+    def test_dns_subdomain_workload_name_is_accepted(self) -> None:
+        self.base.write_text(
+            DEPLOYMENT.replace(
+                "  name: checkout\n  namespace: checkout",
+                "  name: checkout.api\n  namespace: checkout",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        args = self.arguments()
+        args[args.index("--workload-name") + 1] = "checkout.api"
+
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), *args],
+            cwd=self.workspace,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        contract = (self.output / "otel-connection.yaml").read_text()
+        overlay = (self.output / "kubernetes/otel-env-patch.yaml").read_text()
+        kustomization = (self.output / "kubernetes/kustomization.yaml").read_text()
+        self.assertIn('name: "checkout.api"', contract)
+        self.assertIn('name: "checkout.api"', kustomization)
+        self.assertIn('value: "checkout.api"', overlay)
+        validated = self.run_validator()
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+
     def test_agent_service_and_grpc_are_bound_together(self) -> None:
         args = self.arguments()
         args[args.index("gateway")] = "agent-service"
