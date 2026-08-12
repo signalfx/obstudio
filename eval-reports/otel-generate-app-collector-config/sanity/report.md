@@ -1,4 +1,4 @@
-# otel-generate-config Sanity Codex Eval Report
+# otel-generate-app-collector-config Sanity Codex Eval Report
 
 ## Environment
 
@@ -6,11 +6,11 @@
 |---|---|
 | Mode | with_skill |
 | Eval kind | sanity |
-| Skill | otel-generate-config |
+| Skill | otel-generate-app-collector-config |
 | Run ID | 20260811T153828209971Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
-| Config | /private/tmp/otel-generate-config-eval.toml |
+| Config | /private/tmp/otel-generate-app-collector-config-eval.toml |
 
 ## Sanity Summary
 

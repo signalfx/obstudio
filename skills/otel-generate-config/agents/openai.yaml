@@ -1,4 +1,0 @@
-interface:
-  display_name: "Generate OTel Config"
-  short_description: "Generate Collector and application configs"
-  default_prompt: "Use $otel-generate-config to generate and locally validate matching Collector Helm files, Kubernetes YAML, and application overlay or scaffold without deploying anything."

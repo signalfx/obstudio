@@ -1,4 +1,4 @@
-# otel-generate-config Codex Eval Validation Report
+# otel-generate-app-collector-config Codex Eval Validation Report
 
 This report validates eval JSON, eval directory availability, and skill source availability. It does not run Codex execution.
 
@@ -8,8 +8,8 @@ This report validates eval JSON, eval directory availability, and skill source a
 |---|---|
 | Mode | validation |
 | Eval kind | validation |
-| Skill | otel-generate-config |
-| Run ID | 20260812T045624719984Z |
+| Skill | otel-generate-app-collector-config |
+| Run ID | 20260812T050859470673Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 

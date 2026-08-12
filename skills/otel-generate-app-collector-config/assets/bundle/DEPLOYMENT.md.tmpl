@@ -41,7 +41,7 @@ The example Secret files contain `REPLACE_AT_DEPLOY_TIME`, not a usable token.
 Run from this configuration directory:
 
 ```bash
-python3 /path/to/otel-generate-config/scripts/validate_collector.py .
+python3 /path/to/otel-generate-app-collector-config/scripts/validate_collector.py .
 kubectl apply --dry-run=client --validate=strict \
   -f ./kubernetes/collector.yaml
 ```
@@ -110,17 +110,17 @@ kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetryge
   -- traces \
   --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
   --otlp-insecure \
-  --service=otel-generate-config-smoke \
+  --service=otel-generate-app-collector-config-smoke \
   --traces=10
 
-SMOKE_METRIC="otel_generate_config_kind_demo_$(date +%Y%m%d%H%M%S)"
+SMOKE_METRIC="otel_generate_app_collector_config_kind_demo_$(date +%Y%m%d%H%M%S)"
 kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-metrics \
   --rm -i --restart=Never \
   --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
   -- metrics \
   --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
   --otlp-insecure \
-  --service=otel-generate-config-smoke \
+  --service=otel-generate-app-collector-config-smoke \
   --otlp-metric-name="${SMOKE_METRIC}" \
   --metrics=20 \
   --rate=5

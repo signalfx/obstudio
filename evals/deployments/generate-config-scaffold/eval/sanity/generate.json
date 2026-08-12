@@ -1,11 +1,11 @@
 {
-  "skill": "otel-generate-config",
+  "skill": "otel-generate-app-collector-config",
   "language": "deployments",
   "service": "generate-config-scaffold",
   "prompts": [
     {
       "id": "scaffold-current-context",
-      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. This application intentionally has no Kubernetes Deployment, StatefulSet, DaemonSet, Helm chart, or Kustomization base. Use $otel-generate-config with Kubernetes, realm us0, cluster entity-model-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact official chart version 0.157.0, and --existing-secret splunk-otel-token. Generate the Collector configuration under ./service/deploy/otel-collector. Generate the application configuration under ./service/deploy/otel-config using scaffold mode instead of blocking: resolve service/workload/container name entity-model-service from the component and Docker evidence, namespace entity-model-service, container port 8080, and placeholder image example.invalid/entity-model-service:replace-at-deploy-time. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: do not use the network, run Helm, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag."
+      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. This application intentionally has no Kubernetes Deployment, StatefulSet, DaemonSet, Helm chart, or Kustomization base. Use $otel-generate-app-collector-config with Kubernetes, realm us0, cluster entity-model-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact official chart version 0.157.0, and --existing-secret splunk-otel-token. Generate the Collector configuration under ./service/deploy/otel-collector. Generate the application configuration under ./service/deploy/otel-config using scaffold mode instead of blocking: resolve service/workload/container name entity-model-service from the component and Docker evidence, namespace entity-model-service, container port 8080, and placeholder image example.invalid/entity-model-service:replace-at-deploy-time. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: do not use the network, run Helm, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag."
     }
   ],
   "checks": [
@@ -84,7 +84,7 @@
       "kind": "command_succeeds",
       "command": [
         "python3",
-        "../.agents/skills/otel-generate-config/scripts/validate_collector.py",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_collector.py",
         "deploy/otel-collector"
       ]
     },
@@ -94,7 +94,7 @@
       "kind": "command_succeeds",
       "command": [
         "python3",
-        "../.agents/skills/otel-generate-config/scripts/validate_application.py",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_application.py",
         "deploy/otel-config"
       ]
     },
@@ -104,7 +104,7 @@
       "kind": "command_succeeds",
       "command": [
         "python3",
-        "../.agents/skills/otel-generate-config/scripts/validate_config.py",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_config.py",
         "--collector",
         "deploy/otel-collector",
         "--application",

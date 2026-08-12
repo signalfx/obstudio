@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: splunk-otel-collector
     app.kubernetes.io/instance: @@RELEASE_NAME_RAW@@
     app.kubernetes.io/component: collector
-    app.kubernetes.io/managed-by: otel-generate-config
+    app.kubernetes.io/managed-by: otel-generate-app-collector-config
 data:
   collector.yaml: |
     # Standalone Splunk OpenTelemetry Collector configuration.
@@ -71,7 +71,7 @@ metadata:
     app.kubernetes.io/name: splunk-otel-collector
     app.kubernetes.io/instance: @@RELEASE_NAME_RAW@@
     app.kubernetes.io/component: collector
-    app.kubernetes.io/managed-by: otel-generate-config
+    app.kubernetes.io/managed-by: otel-generate-app-collector-config
 spec:
   type: ClusterIP
   selector:
@@ -97,7 +97,7 @@ metadata:
     app.kubernetes.io/name: splunk-otel-collector
     app.kubernetes.io/instance: @@RELEASE_NAME_RAW@@
     app.kubernetes.io/component: collector
-    app.kubernetes.io/managed-by: otel-generate-config
+    app.kubernetes.io/managed-by: otel-generate-app-collector-config
 spec:
   replicas: 1
   selector:

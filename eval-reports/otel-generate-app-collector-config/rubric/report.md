@@ -1,4 +1,4 @@
-# otel-generate-config Rubric Codex Eval Report
+# otel-generate-app-collector-config Rubric Codex Eval Report
 
 ## Environment
 
@@ -6,13 +6,13 @@
 |---|---|
 | Mode | with_skill |
 | Eval kind | rubric |
-| Skill | otel-generate-config |
+| Skill | otel-generate-app-collector-config |
 | Run ID | 20260811T154322367173Z |
 | Agent model | gpt-5.5 |
 | Judge model | gpt-5.5 |
 | Rubric enabled | True |
 | Workers | 1 |
-| Config | /private/tmp/otel-generate-config-eval.toml |
+| Config | /private/tmp/otel-generate-app-collector-config-eval.toml |
 
 ## Rubric Summary
 

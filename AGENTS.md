@@ -312,7 +312,7 @@ Outputs:
 | `$otel-audit` | Read-only observability coverage scan |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |
 | `$otel-verify` | Prove instrumentation with project-runtime, app-code, and optional OTLP checks |
-| `$otel-generate-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
+| `$otel-generate-app-collector-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from audit report |
 | `$splunk-dashboard` | Generate Splunk O11y dashboard Terraform from audit and verification reports |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |

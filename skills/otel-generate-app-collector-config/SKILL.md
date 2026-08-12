@@ -1,11 +1,11 @@
 ---
-name: otel-generate-config
+name: otel-generate-app-collector-config
 description: >-
   Generate a coordinated OpenTelemetry configuration set for Splunk
   Observability Cloud: token-free, version-pinned Collector Helm files,
   plain Kubernetes YAML, a standalone Collector config, and a matching
   non-secret Kubernetes application Kustomize overlay or workload scaffold. Use when
-  a user invokes $otel-generate-config, asks for Collector Helm files or YAML plus
+  a user invokes $otel-generate-app-collector-config, asks for Collector Helm files or YAML plus
   application configuration, needs the correct in-cluster OTLP endpoint, or
   wants deploy-ready configuration files without deploying them.
 ---
@@ -28,7 +28,7 @@ connectivity.
 Accept this user-facing invocation:
 
 ```text
-$otel-generate-config \
+$otel-generate-app-collector-config \
   --app ./checkout \
   --platform kubernetes \
   --realm us0 \

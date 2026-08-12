@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`otel-generate-config` separates two trust boundaries:
+`otel-generate-app-collector-config` separates two trust boundaries:
 
 - Collector-to-Splunk egress owns the Splunk realm and access-token Secret.
 - Application-to-Collector routing owns only an in-environment OTLP endpoint.

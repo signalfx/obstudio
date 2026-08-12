@@ -59,13 +59,13 @@ and creates relative symbolic links for skill discovery.
     obstudio[.exe]             # CLI and MCP server binary
     weaver[.exe]               # validation runtime
     otel-audit/SKILL.md        # bundled otel-audit skill
-    otel-generate-config/SKILL.md # bundled configuration-generation skill
+    otel-generate-app-collector-config/SKILL.md # bundled configuration-generation skill
     otel-instrument/SKILL.md   # bundled otel-instrument skill
     otel-verify/SKILL.md       # bundled otel-verify skill
     ...                        # additional bundled skills
     references/                # shared reference material
   otel-audit -> obstudio/otel-audit
-  otel-generate-config -> obstudio/otel-generate-config
+  otel-generate-app-collector-config -> obstudio/otel-generate-app-collector-config
   otel-instrument -> obstudio/otel-instrument
   otel-verify -> obstudio/otel-verify
   ...                          # one discovery link per bundled skill
@@ -89,7 +89,7 @@ Once installed, open any project in your agent and use:
 | Command | What it does |
 |---------|-------------|
 | `/otel-audit` | Analyze gaps and write canonical `.observe/otel-audit.json` plus interactive `.observe/otel.html` |
-| `/otel-generate-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
+| `/otel-generate-app-collector-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
 | `/otel-instrument` | Implement canonical audit selections and write instrumentation JSON plus interactive `.observe/otel-instrumentation.html` |
 | `/otel-verify` | Write bound verification JSON and refresh instrumentation proof in the instrumentation HTML |
 
@@ -104,12 +104,12 @@ generate Collector and application Kubernetes configuration without deploying it
 
 Claude Code, Cursor, and Kiro use the slash-command syntax shown above; Kiro
 also discovers the same Agent Skills from natural-language requests. Codex
-uses the equivalent `$otel-audit`, `$otel-generate-config`,
+uses the equivalent `$otel-audit`, `$otel-generate-app-collector-config`,
 `$otel-instrument`, and `$otel-verify` syntax. Generate a coordinated
 Collector and application configuration set with:
 
 ```text
-$otel-generate-config \
+$otel-generate-app-collector-config \
   --platform kubernetes \
   --realm us0 \
   --cluster-name checkout-prod \
