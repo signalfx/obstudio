@@ -209,6 +209,12 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     distribution = "" if args.distribution == "other" else args.distribution
     chart_core = args.chart_version.split("-", 1)[0].split("+", 1)[0]
     chart_parts = tuple(int(part) for part in chart_core.split("."))
+    if chart_parts >= (0, 158, 0):
+        raise ValueError(
+            "chart version 0.158.0 and newer are not supported until the "
+            "generated standalone and direct Kubernetes configs support "
+            "deployment.environment.name"
+        )
     token_passthrough = (
         "    tokenPassthrough: false"
         if args.gateway and chart_parts >= (0, 157, 0)
@@ -236,6 +242,7 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     ):
         validate_input(name, value, DNS_LABEL)
     return {
+        "@@AGENT_SERVICE_ENABLED@@": "false" if args.gateway else "true",
         "@@CHART_VERSION@@": json.dumps(args.chart_version),
         "@@CHART_VERSION_RAW@@": args.chart_version,
         "@@COLLECTOR_VERSION_RAW@@": args.chart_version,

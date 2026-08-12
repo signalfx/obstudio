@@ -639,10 +639,12 @@ def validate_rendered_resources(
                 f"{kind} {resource_namespace or '<cluster>'}/{name}"
             )
         identities.add(identity)
-        if kind == "Service" and resource_namespace != namespace:
+        if kind in {"ConfigMap", "Service", "Deployment", "DaemonSet"} and (
+            resource_namespace != namespace
+        ):
             errors.append(
-                f"{COLLECTOR_MANIFEST_PATH} Service {name!r} is not in namespace "
-                f"{namespace!r}"
+                f"{COLLECTOR_MANIFEST_PATH} {kind} {name!r} is not in "
+                f"namespace {namespace!r}"
             )
 
     token_key = "splunk_observability_access_token"
@@ -836,6 +838,14 @@ def validate(bundle: Path) -> list[str]:
         errors.append("helm/Chart.yaml dependency version is not exact semver")
     elif "latest" in version_match.group(1).lower():
         errors.append("helm/Chart.yaml must not use latest")
+    elif tuple(
+        int(part)
+        for part in version_match.group(1).split("-", 1)[0].split("+", 1)[0].split(".")
+    ) >= (0, 158, 0):
+        errors.append(
+            "helm/Chart.yaml uses unsupported Splunk chart version 0.158.0 "
+            "or newer"
+        )
     chart_lock = contents.get("helm/Chart.lock")
     if chart_lock:
         lock_match = EXACT_CHART_VERSION.search(chart_lock)
@@ -903,6 +913,18 @@ def validate(bundle: Path) -> list[str]:
     )
     if gateway_enabled not in {"true", "false"}:
         errors.append("helm/values.yaml has an invalid collector.gateway.enabled")
+    else:
+        expected_agent_service = "false" if gateway_enabled == "true" else "true"
+        actual_agent_service = nested_yaml_scalar(
+            values,
+            ("collector", "agent", "service", "enabled"),
+        )
+        if actual_agent_service != expected_agent_service:
+            errors.append(
+                "helm/values.yaml requires "
+                "collector.agent.service.enabled="
+                f"{expected_agent_service}, found {actual_agent_service!r}"
+            )
     if EXISTING_SECRET.search(values):
         errors.append("helm/values.yaml uses unsupported existingSecret")
     passthrough = nested_yaml_scalar(

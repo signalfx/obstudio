@@ -512,10 +512,11 @@ def validate(bundle: Path) -> list[str]:
         for relative in REQUIRED_FILES
     }
     initial_contract = contents[Path("otel-connection.yaml")]
-    scaffold_mode = (
-        quoted_value(section(initial_contract, "application"), "overlayMode")
-        == "scaffold"
-    )
+    initial_application = section(initial_contract, "application")
+    overlay_mode = quoted_value(initial_application, "overlayMode")
+    if overlay_mode not in {"component", "scaffold", "standalone"}:
+        errors.append("otel-connection.yaml has an invalid application overlayMode")
+    scaffold_mode = overlay_mode == "scaffold"
     if scaffold_mode:
         contents[SCAFFOLD_WORKLOAD_FILE] = read_managed(
             bundle / SCAFFOLD_WORKLOAD_FILE,
@@ -602,6 +603,18 @@ def validate(bundle: Path) -> list[str]:
     if contract_workload and scaffold_identity:
         compare_workload_identities(contract_workload, scaffold_identity, errors)
     if kustomization_document:
+        kustomization_kind = yaml_scalar(kustomization_document, "kind", indent=0)
+        if overlay_mode == "component" and kustomization_kind != "Component":
+            errors.append("component overlayMode requires a Component kustomization")
+        if overlay_mode in {"scaffold", "standalone"} and kustomization_kind != "Kustomization":
+            errors.append(
+                f"{overlay_mode} overlayMode requires a Kustomization"
+            )
+        has_resources = yaml_section(kustomization_document, "resources", indent=0)
+        if overlay_mode == "standalone" and not has_resources:
+            errors.append("standalone overlayMode requires kustomization resources")
+        if overlay_mode == "component" and has_resources:
+            errors.append("component overlayMode must not define kustomization resources")
         validate_kustomization_target(
             kustomization_document,
             contract_workload,

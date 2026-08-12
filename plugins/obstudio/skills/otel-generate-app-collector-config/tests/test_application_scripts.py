@@ -838,6 +838,41 @@ resources:
         validated = self.run_validator()
         self.assertEqual(validated.returncode, 0, validated.stderr)
 
+    def test_validator_rejects_invalid_overlay_mode(self) -> None:
+        self.assertEqual(self.run_generator().returncode, 0)
+        contract_path = self.output / "otel-connection.yaml"
+        contract_path.write_text(
+            contract_path.read_text(encoding="utf-8").replace(
+                'overlayMode: "component"',
+                'overlayMode: "invalid"',
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid application overlayMode", result.stderr)
+
+    def test_validator_rejects_overlay_mode_kustomization_kind_drift(self) -> None:
+        self.assertEqual(self.run_generator().returncode, 0)
+        contract_path = self.output / "otel-connection.yaml"
+        contract_path.write_text(
+            contract_path.read_text(encoding="utf-8").replace(
+                'overlayMode: "component"',
+                'overlayMode: "standalone"',
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "standalone overlayMode requires a Kustomization",
+            result.stderr,
+        )
+
     @unittest.skipUnless(shutil.which("kubectl"), "kubectl is not installed")
     def test_rendered_kustomization_env_conflict_is_rejected_without_echo(
         self,
