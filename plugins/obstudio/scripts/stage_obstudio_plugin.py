@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage a self-contained Obstudio Codex plugin package."""
+"""Stage a self-contained Obstudio plugin bundle for Codex and Claude."""
 
 from __future__ import annotations
 
@@ -56,16 +56,15 @@ PLUGIN_SKILL_ENTRIES = (
     "references",
 )
 
-PLUGIN_PATHS = (
-    ".codex-plugin",
+PLUGIN_SHARED_PATHS = (
     ".mcp.json",
     "PRIVACY.md",
     "README.md",
     "SECURITY.md",
     "assets",
-    "hooks",
 )
 MAX_DEFAULT_PROMPTS = 3
+PLUGIN_HOSTS = ("codex", "claude")
 SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
 
 
@@ -73,6 +72,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="staged plugin directory")
     parser.add_argument("--archive", type=Path, default=None, help="optional zip archive to write")
+    parser.add_argument(
+        "--host",
+        choices=("all", *PLUGIN_HOSTS),
+        default="all",
+        help="host manifest to validate; defaults to both plugin hosts",
+    )
     parser.add_argument("--check", action="store_true", help="verify the staged plugin and exit")
     parser.add_argument("--sync-plugin-skills", action="store_true", help="refresh the committed plugin skills copy")
     parser.add_argument("--check-plugin-skills", action="store_true", help="verify committed plugin skills are synced")
@@ -87,27 +92,44 @@ def main() -> int:
 
     output = args.output.expanduser().resolve()
     if args.check:
-        verify_staged_plugin(output)
+        verify_staged_plugin(output, args.host)
         return 0
 
-    stage_plugin(output)
+    stage_plugin(output, args.host)
     if args.archive is not None:
         write_archive(output, args.archive.expanduser().resolve())
     return 0
 
 
-def stage_plugin(output: Path) -> None:
+def stage_plugin(output: Path, host: str = "all") -> None:
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
-    for relative in PLUGIN_PATHS:
+    for relative in plugin_paths(host):
         copy_path(PLUGIN_ROOT / relative, output / relative)
+    stage_hooks(output / "hooks", host)
 
     skills_output = output / PLUGIN_SKILLS_DIR
     stage_skills(skills_output)
 
-    verify_staged_plugin(output)
+    verify_staged_plugin(output, host)
+
+
+def plugin_paths(host: str) -> tuple[str, ...]:
+    if host == "all":
+        manifests = (".codex-plugin", ".claude-plugin")
+    else:
+        manifests = (".claude-plugin" if host == "claude" else ".codex-plugin",)
+    return (*manifests, *PLUGIN_SHARED_PATHS)
+
+
+def stage_hooks(hooks_output: Path, host: str) -> None:
+    hooks_output.mkdir(parents=True, exist_ok=True)
+    copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_obstudio.py", hooks_output / "bootstrap_obstudio.py")
+    hook_files = ("codex-hooks.json", "claude-hooks.json") if host == "all" else (f"{host}-hooks.json",)
+    for hook_file in hook_files:
+        copy_path(PLUGIN_ROOT / "hooks" / hook_file, hooks_output / hook_file)
 
 
 def stage_skills(skills_output: Path) -> None:
@@ -227,36 +249,41 @@ def normalize_text_line(line: str) -> str:
     return line.rstrip(" \t")
 
 
-def verify_staged_plugin(output: Path) -> None:
-    manifest = output / ".codex-plugin" / "plugin.json"
+def verify_staged_plugin(output: Path, host: str = "codex") -> None:
     skills = output / PLUGIN_SKILLS_DIR
-    if not manifest.is_file():
-        raise RuntimeError(f"missing plugin manifest: {manifest}")
     if not skills.is_dir():
         raise RuntimeError(f"missing staged skills directory: {skills}")
-    verify_plugin_manifest(manifest, skills)
     symlinks = [path for path in output.rglob("*") if path.is_symlink()]
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+    for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
+        manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
+        if not manifest.is_file():
+            raise RuntimeError(f"missing plugin manifest: {manifest}")
+        verify_plugin_manifest(manifest, skills, selected_host)
 
 
-def verify_plugin_manifest(manifest_path: Path, skills_root: Path) -> None:
+def verify_plugin_manifest(manifest_path: Path, skills_root: Path, host: str = "codex") -> None:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"invalid plugin manifest JSON: {manifest_path}") from exc
-    interface = manifest.get("interface")
-    if not isinstance(interface, dict):
-        raise RuntimeError("plugin manifest must include an interface object")
-    default_prompts = interface.get("defaultPrompt", [])
-    if not isinstance(default_prompts, list) or any(not isinstance(prompt, str) for prompt in default_prompts):
-        raise RuntimeError("plugin manifest interface.defaultPrompt must be a list of strings")
-    if len(default_prompts) > MAX_DEFAULT_PROMPTS:
-        raise RuntimeError(
-            "plugin manifest interface.defaultPrompt must contain at most "
-            f"{MAX_DEFAULT_PROMPTS} entries"
-        )
+    if host == "claude":
+        if not isinstance(manifest.get("name"), str) or not manifest["name"].strip():
+            raise RuntimeError("plugin manifest must include a non-empty name")
+    else:
+        interface = manifest.get("interface")
+        if not isinstance(interface, dict):
+            raise RuntimeError("plugin manifest must include an interface object")
+        default_prompts = interface.get("defaultPrompt", [])
+        if not isinstance(default_prompts, list) or any(not isinstance(prompt, str) for prompt in default_prompts):
+            raise RuntimeError("plugin manifest interface.defaultPrompt must be a list of strings")
+        if len(default_prompts) > MAX_DEFAULT_PROMPTS:
+            raise RuntimeError(
+                "plugin manifest interface.defaultPrompt must contain at most "
+                f"{MAX_DEFAULT_PROMPTS} entries"
+            )
     verify_manifest_skill_references(manifest, available_skill_names(skills_root))
 
 
@@ -428,8 +455,9 @@ def iter_archive_files(source: Path) -> list[Path]:
                 seen.add(path)
                 ordered.append(path)
 
-    for relative in PLUGIN_PATHS:
+    for relative in plugin_paths("all"):
         add_files(source / relative)
+    add_files(source / "hooks")
     for relative in PLUGIN_SKILL_ENTRIES:
         add_files(source / PLUGIN_SKILLS_DIR / relative)
     for path in sorted(source.rglob("*")):

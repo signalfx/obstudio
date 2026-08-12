@@ -62,7 +62,8 @@ pipeline before the Codex plugin bootstrapper extracts them.
 For the Codex plugin trust contract, including local Observer bootstrap,
 localhost endpoints and Splunk publish behavior,
 see [plugins/obstudio/SECURITY.md](plugins/obstudio/SECURITY.md) and
-[plugins/obstudio/PRIVACY.md](plugins/obstudio/PRIVACY.md).
+[plugins/obstudio/PRIVACY.md](plugins/obstudio/PRIVACY.md). The same plugin
+bundle serves Claude Code through the repository's `.claude-plugin/marketplace.json`.
 
 ### Build From Source
 

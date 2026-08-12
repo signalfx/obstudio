@@ -1,17 +1,15 @@
-# Obstudio Codex Plugin
+# Obstudio Codex and Claude Code Plugin
 
-This directory is the repo-local Codex plugin scaffold for Obstudio.
+This directory is the portable Obstudio plugin bundle for Codex and Claude Code.
 
-It packages the canonical skill sources from `../../skills/`, points Codex
+It packages the canonical skill sources from `../../skills/`, points both hosts
 at the local Observer MCP endpoint via [`.mcp.json`](./.mcp.json), and includes
-a plugin-root SessionStart hook manifest for first-run bootstrap.
+host-specific SessionStart hook manifests for first-run bootstrap.
 
 ## How to get started
 
 1. Install the Obstudio plugin.
-2. Trust the `SessionStart` hook when Codex prompts you to review it. You can
-   also review the Obstudio plugin hooks from Codex plugin settings and trust
-   the hook there.
+2. Trust the host's `SessionStart` hook when prompted to review it.
 3. Try one of these actions:
    - Open the local Observer with `$observer-open`.
    - Check Observer health with `$observer-status`.
@@ -29,22 +27,25 @@ Current scope:
   - `observer-restart`
   - `observer-stop`
 - Codex marketplace entry under [`.agents/plugins/marketplace.json`](../../.agents/plugins/marketplace.json)
+- Claude Code marketplace entry under [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json)
 - MCP server configuration for a local Observer at `http://127.0.0.1:3000/mcp`
-- one-time SessionStart hook manifest in [`hooks/hooks.json`](./hooks/hooks.json)
-  that calls a dedicated bootstrap script
+- one-time SessionStart hook manifests in
+  [`hooks/codex-hooks.json`](./hooks/codex-hooks.json) and
+  [`hooks/claude-hooks.json`](./hooks/claude-hooks.json), both calling the
+  shared bootstrapper
 - [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py) downloads the
   release archive when needed, verifies the release checksum, and starts the
-  local Observer process for the bundled plugin MCP endpoint unless Codex has
-  an explicit Obstudio MCP opt-out or custom endpoint
+  local Observer process for the bundled plugin MCP endpoint when the active
+  host permits managed local startup
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
 Shared workflow skill sources live in the top-level `skills/` directory. The
-plugin keeps a committed, materialized copy under `plugins/obstudio/skills/` so
+plugin keeps its canonical bundled skills under `plugins/obstudio/skills/` so
 repo-local marketplace installs work from a fresh checkout without preserving
 cross-directory symlinks. Plugin-only command/control skills, such as
 `obstudio-help` and `observer-control/*`, live only under
-`plugins/obstudio/skills/`. Refresh the shared plugin copy after editing
+`plugins/obstudio/skills/`. Refresh the bundled plugin copy after editing
 canonical skills:
 
 ```bash
@@ -57,17 +58,18 @@ Before publishing, build the staged plugin with materialized skill trees:
 make stage-obstudio-plugin
 ```
 
-The staged directory is `.release/plugins/obstudio`. To also write
-`.release/plugins/obstudio.zip`, run:
+The staged directories are `.release/plugins/obstudio-codex` and
+`.release/plugins/obstudio-claude`. To also write the corresponding
+`obstudio-codex.zip` and `obstudio-claude.zip` archives, run:
 
 ```bash
 make package-obstudio-plugin
 ```
 
-The staged plugin is intentionally self-contained from Codex’s point of view:
+Each staged plugin is intentionally self-contained for its host:
 
-- Codex can see the bundled skills immediately after installation.
+- Both hosts can see the bundled skills immediately after installation.
 - The plugin’s bootstrap script can bootstrap the release archive and managed
   local Observer runtime on first session start.
-- The hook is non-managed, so Codex will ask you to review and trust it before
-  it runs the first time.
+- Each host asks you to review and trust the hook before it runs for the first
+  time.

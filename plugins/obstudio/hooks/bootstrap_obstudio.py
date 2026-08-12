@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bootstrap Obstudio the first time a Codex session loads the plugin."""
+"""Shared bootstrap runtime for host-scoped Obstudio plugins."""
 
 from __future__ import annotations
 
@@ -44,7 +44,32 @@ CHECKSUM_LINE_PATTERNS = (
     re.compile(r"^SHA256 \((?P<name>.+)\) = (?P<hash>[0-9a-fA-F]{64})$"),
 )
 VERSION_PATTERN = re.compile(r"\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\b")
-HELP_SKILL_HINT = "Use $obstudio-help to list available commands."
+
+
+def plugin_host() -> str:
+    configured = os.environ.get("OBSTUDIO_PLUGIN_HOST", "").strip().lower()
+    if configured:
+        return configured
+    return "claude" if os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip() else "codex"
+
+
+def host_name() -> str:
+    return "Claude Code" if plugin_host() == "claude" else "Codex"
+
+
+def plugin_owner() -> str:
+    return f"{plugin_host()}-plugin"
+
+
+def skill_command(name: str) -> str:
+    return f"/obstudio:{name}" if plugin_host() == "claude" else f"${name}"
+
+
+def help_skill_hint() -> str:
+    return f"Use {skill_command('obstudio-help')} to list available commands."
+
+
+HELP_SKILL_HINT = help_skill_hint()
 
 
 class BootstrapLockTimeout(RuntimeError):
@@ -142,7 +167,7 @@ def bootstrap_locked(
     if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
             "Obstudio Observer is intentionally stopped for this plugin. "
-            f"{HELP_SKILL_HINT} Use $observer-restart to start the managed Observer again."
+            f"{help_skill_hint()} Use {skill_command('observer-restart')} to start the managed Observer again."
         )
         return 0
     if stopped_state:
@@ -158,7 +183,7 @@ def bootstrap_locked(
         emit_context(
             "Obstudio plugin files were updated, and the managed Observer "
             "remains intentionally stopped. "
-            f"{HELP_SKILL_HINT} Use $observer-restart to start it again."
+            f"{help_skill_hint()} Use {skill_command('observer-restart')} to start it again."
         )
         return 0
 
@@ -174,7 +199,7 @@ def bootstrap_locked(
             "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
             "left the managed Observer stopped, did not start or restart the "
             "plugin-managed Observer, and bundled Obstudio skills remain available. "
-            f"{HELP_SKILL_HINT}"
+            f"{help_skill_hint()}"
         )
         return 0
     if mcp_policy == "custom":
@@ -186,14 +211,15 @@ def bootstrap_locked(
             "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
             f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
             "did not start or restart the plugin-managed Observer, and bundled "
-            f"Obstudio skills remain available. {HELP_SKILL_HINT}"
+            f"Obstudio skills remain available. {help_skill_hint()}"
         )
         return 0
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
         emit_context(
-            "Obstudio is already bootstrapped for Codex. "
-            f"{HELP_SKILL_HINT} Use $otel-audit, $otel-instrument, and $otel-verify as needed."
+            f"Obstudio is already bootstrapped for {host_name()}. "
+            f"{help_skill_hint()} Use {skill_command('otel-audit')}, "
+            f"{skill_command('otel-instrument')}, and {skill_command('otel-verify')} as needed."
         )
         return 0
 
@@ -277,23 +303,23 @@ def bootstrap_locked(
         )
         if process_started:
             emit_context(
-                "Obstudio bootstrap complete. Codex now has the bundled skills, "
+                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and a background Observer process "
                 "was started for the bundled HTTP MCP endpoint. "
-                f"{HELP_SKILL_HINT}"
+                f"{help_skill_hint()}"
             )
         elif observer_state["mode"] == "managed":
             emit_context(
-                "Obstudio bootstrap complete. Codex now has the bundled skills, "
+                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and the managed background Observer "
                 "is healthy. "
-                f"{HELP_SKILL_HINT}"
+                f"{help_skill_hint()}"
             )
         else:
             emit_context(
-                "Obstudio bootstrap complete. Codex now has the bundled skills "
+                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills "
                 "and the MCP config points at a shared Observer. "
-                f"{HELP_SKILL_HINT}"
+                f"{help_skill_hint()}"
             )
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
@@ -324,7 +350,8 @@ def resolve_plugin_data() -> Path:
 
 
 def read_plugin_version(plugin_root: Path) -> str:
-    manifest_path = plugin_root / ".codex-plugin" / "plugin.json"
+    manifest_dir = ".claude-plugin" if plugin_host() == "claude" else ".codex-plugin"
+    manifest_path = plugin_root / manifest_dir / "plugin.json"
     with manifest_path.open("r", encoding="utf-8") as fh:
         manifest = json.load(fh)
     version = manifest.get("version", "").strip()
@@ -370,6 +397,8 @@ def plugin_policy_state(plugin_version: str, *, owner: str, mode: str) -> dict[s
 
 
 def codex_obstudio_mcp_policy(config_path: Path, plugin_mcp_url: str) -> str:
+    if plugin_host() != "codex":
+        return "plugin-local"
     try:
         config = config_path.read_text(encoding="utf-8")
     except OSError:
@@ -483,7 +512,7 @@ def is_bootstrapped(
     health_payload = fetch_obstudio_health(health_url)
     if health_payload is None:
         return False
-    if state.get("owner") == "codex-plugin" and state.get("mode") == "managed":
+    if state.get("owner") == plugin_owner() and state.get("mode") == "managed":
         live_pid = find_pid_listening_on_url(health_url)
         expected_version = string_state_value(state, "releaseVersion")
         return bootstrap_state_proves_managed_owner(state_path, live_pid, health_payload, expected_version)
@@ -904,7 +933,7 @@ def start_obstudio_background(obstudio_binary: Path, plugin_data: Path) -> tuple
     env["PORT"] = "3000"
     env["OTLP_HTTP_PORT"] = "4318"
     env["OTLP_GRPC_PORT"] = "4317"
-    env["OBSTUDIO_OWNER"] = "codex-plugin"
+    env["OBSTUDIO_OWNER"] = plugin_owner()
     env["OBSTUDIO_MODE"] = "managed"
     with log_path.open("a", encoding="utf-8") as log_file:
         process = subprocess.Popen(
@@ -1100,7 +1129,7 @@ def read_bootstrap_state_pid(state_path: Path) -> str:
 
 def read_managed_bootstrap_state_pid(state_path: Path) -> str:
     state = read_bootstrap_state(state_path)
-    if state.get("owner") != "codex-plugin" or state.get("mode") != "managed":
+    if state.get("owner") != plugin_owner() or state.get("mode") != "managed":
         return ""
     return read_bootstrap_state_pid(state_path)
 
@@ -1163,7 +1192,7 @@ def bootstrap_state_proves_managed_owner(
     if expected_version and not health_payload_version_matches_release(health_payload, expected_version):
         return False
     state = read_bootstrap_state(state_path)
-    if state.get("owner") != "codex-plugin" or state.get("mode") != "managed":
+    if state.get("owner") != plugin_owner() or state.get("mode") != "managed":
         return False
 
     saved_pid = read_bootstrap_state_pid(state_path)
@@ -1180,7 +1209,7 @@ def bootstrap_state_proves_managed_owner(
 def health_payload_reports_managed(health_payload: dict[str, object] | None) -> bool:
     return (
         health_payload is not None
-        and health_payload.get("owner") == "codex-plugin"
+        and health_payload.get("owner") == plugin_owner()
         and health_payload.get("mode") == "managed"
     )
 
@@ -1214,7 +1243,7 @@ def observer_state_fields(
         health_payload,
         expected_version,
     ):
-        owner = "codex-plugin"
+        owner = plugin_owner()
         mode = "managed"
     else:
         owner = "external-observer"

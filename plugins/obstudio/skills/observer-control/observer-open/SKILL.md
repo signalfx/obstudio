@@ -7,7 +7,7 @@ description: >-
 
 # Open Observer
 
-Use this skill to open the local Obstudio UI in Codex.
+Use this skill to open the local Obstudio UI.
 
 This skill is read-only. It must not start, stop, or restart any Observer
 process. It is limited to the loopback Observer UI at

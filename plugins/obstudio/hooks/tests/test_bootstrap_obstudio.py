@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -83,6 +84,37 @@ class BootstrapLockTest(unittest.TestCase):
             "Obstudio bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
+
+
+class ClaudeBootstrapTest(unittest.TestCase):
+    def test_uses_claude_manifest_and_owner(self):
+        root = Path(__file__).resolve().parents[4]
+        prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")
+        os.environ["OBSTUDIO_PLUGIN_HOST"] = "claude"
+        try:
+            self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
+            self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/obstudio:observer-open")
+            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.1.0")
+            self.assertEqual(
+                BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
+                "plugin-local",
+            )
+            state = BOOTSTRAP.observer_state_fields(
+                Path("missing-state.json"),
+                local_requested=True,
+                process_started=True,
+                live_pid="",
+                pid="1234",
+                health_payload={"owner": "claude-plugin", "mode": "managed"},
+                log_path=None,
+            )
+            self.assertEqual(state["owner"], "claude-plugin")
+            self.assertEqual(state["mode"], "managed")
+        finally:
+            if prior is None:
+                os.environ.pop("OBSTUDIO_PLUGIN_HOST", None)
+            else:
+                os.environ["OBSTUDIO_PLUGIN_HOST"] = prior
 
 
 class ResolveReleaseVersionTest(unittest.TestCase):

@@ -20,19 +20,32 @@ STAGE = load_stage_module()
 
 
 class StageObstudioPluginTest(unittest.TestCase):
-    def test_stage_materializes_symlinked_skill_trees(self):
+    def test_stage_materializes_unified_plugin(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
 
             STAGE.stage_plugin(output)
 
             self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
+            self.assertTrue((output / ".claude-plugin" / "plugin.json").is_file())
             self.assertTrue((output / "PRIVACY.md").is_file())
             self.assertTrue((output / "SECURITY.md").is_file())
+            self.assertTrue((output / "hooks" / "bootstrap_obstudio.py").is_file())
             self.assertTrue((output / "skills" / "otel-instrument" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
             self.assertFalse(any(path.is_symlink() for path in output.rglob("*")))
+
+    def test_host_stage_omits_other_host_metadata(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            output = Path(tempdir) / "obstudio-codex"
+
+            STAGE.stage_plugin(output, host="codex")
+
+            self.assertTrue((output / ".codex-plugin" / "plugin.json").is_file())
+            self.assertFalse((output / ".claude-plugin").exists())
+            self.assertTrue((output / "hooks" / "codex-hooks.json").is_file())
+            self.assertFalse((output / "hooks" / "claude-hooks.json").exists())
 
     def test_verify_rejects_staged_symlinks(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -71,6 +84,14 @@ class StageObstudioPluginTest(unittest.TestCase):
         )
         self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
         self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
+
+    def test_host_manifests_explicitly_select_hook_files(self):
+        plugin_root = Path(__file__).resolve().parents[2]
+        codex_manifest = json.loads((plugin_root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        claude_manifest = json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
+        self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
 
     def test_verify_rejects_too_many_default_prompts(self):
         with tempfile.TemporaryDirectory() as tempdir:

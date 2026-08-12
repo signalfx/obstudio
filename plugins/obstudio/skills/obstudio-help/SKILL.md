@@ -1,15 +1,14 @@
 ---
 name: obstudio-help
 description: >-
-  List the Obstudio skills available in the Codex plugin and point the user to
-  the right skill for opening, checking, restarting, or stopping the local
+  List the Obstudio skills available in the plugin and point the user to the
+  right skill for opening, checking, restarting, or stopping the local
   Observer.
 ---
 
 # Obstudio Help
 
-Use this skill when you want a quick index of the Obstudio commands available
-in Codex.
+Use this skill when you want a quick index of the available Obstudio skills.
 
 This skill is read-only. It should not start, stop, or restart anything.
 Observer command skills are loopback-only and use the fixed local Observer

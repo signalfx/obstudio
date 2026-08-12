@@ -18,6 +18,7 @@
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Obstudio",
     "shortDescription": "OpenTelemetry workflows and observer controls for Codex.",

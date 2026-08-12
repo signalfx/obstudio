@@ -1,0 +1,14 @@
+{
+  "name": "obstudio",
+  "owner": {
+    "name": "Splunk"
+  },
+  "description": "Obstudio plugins for local OpenTelemetry workflows and Observer controls.",
+  "plugins": [
+    {
+      "name": "obstudio",
+      "source": "./plugins/obstudio",
+      "description": "Local OpenTelemetry workflows, Observer controls, and MCP tools for Claude Code."
+    }
+  ]
+}
