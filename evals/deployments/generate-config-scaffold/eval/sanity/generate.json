@@ -1,0 +1,127 @@
+{
+  "skill": "otel-generate-app-collector-config",
+  "language": "deployments",
+  "service": "generate-config-scaffold",
+  "prompts": [
+    {
+      "id": "scaffold-current-context",
+      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. This application intentionally has no Kubernetes Deployment, StatefulSet, DaemonSet, Helm chart, or Kustomization base. Use $otel-generate-app-collector-config with Kubernetes, realm us0, cluster entity-model-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact official chart version 0.157.0, and --existing-secret splunk-otel-token. Generate the Collector configuration under ./service/deploy/otel-collector. Generate the application configuration under ./service/deploy/otel-config using scaffold mode instead of blocking: resolve service/workload/container name entity-model-service from the component and Docker evidence, namespace entity-model-service, container port 8080, and placeholder image example.invalid/entity-model-service:replace-at-deploy-time. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: do not use the network, run Helm, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag."
+    }
+  ],
+  "checks": [
+    {
+      "id": "collector-config-written",
+      "description": "The workflow must still generate the Collector configuration when the app has no Kubernetes base.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/collector-config.yaml"
+    },
+    {
+      "id": "collector-helm-written",
+      "description": "The workflow must generate Helm files without running Helm.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/helm/Chart.yaml"
+    },
+    {
+      "id": "application-contract-written",
+      "description": "The scaffolded application connection contract must be generated.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/otel-connection.yaml"
+    },
+    {
+      "id": "application-scaffold-written",
+      "description": "A reviewable workload scaffold must be generated when no base exists.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/kubernetes/workload.yaml"
+    },
+    {
+      "id": "application-patch-written",
+      "description": "The OTel environment patch must still be generated in scaffold mode.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/kubernetes/otel-env-patch.yaml"
+    },
+    {
+      "id": "scaffold-contract-matches-route",
+      "description": "The scaffold contract must identify scaffold mode and bind to the generated Collector Service route.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-config/otel-connection.yaml",
+      "values": [
+        "overlayMode: \"scaffold\"",
+        "base: \"deploy/otel-config/kubernetes/workload.yaml\"",
+        "kind: \"Deployment\"",
+        "name: \"entity-model-service\"",
+        "namespace: \"entity-model-service\"",
+        "container: \"entity-model-service\"",
+        "endpoint: \"http://splunk-otel-collector.observability.svc.cluster.local:4318\"",
+        "serviceResolution: \"generated-collector-yaml\"",
+        "liveRoute: \"unverified\""
+      ]
+    },
+    {
+      "id": "scaffold-is-review-marked",
+      "description": "The generated workload must be clearly marked as a review-required scaffold with app evidence carried through.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-config/kubernetes/workload.yaml",
+      "values": [
+        "\"obstudio.splunk.com/scaffold\": \"true\"",
+        "\"obstudio.splunk.com/review-required\"",
+        "image: \"example.invalid/entity-model-service:replace-at-deploy-time\"",
+        "containerPort: 8080"
+      ]
+    },
+    {
+      "id": "application-patch-has-no-collector-credential",
+      "description": "The application patch must not contain Collector token material or Splunk realm.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "from pathlib import Path; text=Path('deploy/otel-config/kubernetes/otel-env-patch.yaml').read_text(); forbidden=('splunk-otel-token','splunk_observability_access_token','SPLUNK_ACCESS_TOKEN','SPLUNK_REALM','X-SF-Token','us0','accessToken','secretKeyRef','insecure_skip_verify'); assert not [v for v in forbidden if v.lower() in text.lower()]"
+      ]
+    },
+    {
+      "id": "collector-validates",
+      "description": "The included Collector validator must accept the generated configuration.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_collector.py",
+        "deploy/otel-collector"
+      ]
+    },
+    {
+      "id": "application-validates",
+      "description": "The included application validator must accept the scaffolded contract and overlay.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_application.py",
+        "deploy/otel-config"
+      ]
+    },
+    {
+      "id": "coordinated-config-validates",
+      "description": "The coordinated validator must accept scaffold mode and generated Collector YAML evidence.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_config.py",
+        "--collector",
+        "deploy/otel-collector",
+        "--application",
+        "deploy/otel-config"
+      ]
+    },
+    {
+      "id": "helm-render-not-created",
+      "description": "The offline eval must not create legacy rendered Kubernetes YAML.",
+      "kind": "no_file_exists",
+      "path": "deploy/otel-collector/kubernetes/helm-rendered.yaml"
+    },
+    {
+      "id": "orchestration-parent-not-used",
+      "description": "Current-context resolution must not mistake the harness parent for the application workspace.",
+      "kind": "no_file_exists",
+      "path": "../deploy/otel-collector"
+    }
+  ]
+}

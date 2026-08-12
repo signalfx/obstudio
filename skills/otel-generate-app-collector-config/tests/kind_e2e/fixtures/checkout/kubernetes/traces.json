@@ -1,0 +1,40 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {"stringValue": "@@SERVICE_NAME@@"}
+          },
+          {
+            "key": "e2e.case_id",
+            "value": {"stringValue": "@@CASE_ID@@"}
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "obstudio.kind.e2e", "version": "1.0.0"},
+          "spans": [
+            {
+              "traceId": "@@TRACE_ID@@",
+              "spanId": "@@SPAN_ID@@",
+              "name": "checkout-kind-@@CASE_ID@@",
+              "kind": 2,
+              "startTimeUnixNano": "1786400000000000000",
+              "endTimeUnixNano": "1786400001000000000",
+              "attributes": [
+                {
+                  "key": "e2e.case_id",
+                  "value": {"stringValue": "@@CASE_ID@@"}
+                }
+              ],
+              "status": {"code": 1}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

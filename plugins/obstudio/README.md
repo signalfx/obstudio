@@ -16,12 +16,15 @@ a plugin-root SessionStart hook manifest for first-run bootstrap.
    - Open the local Observer with `$observer-open`.
    - Check Observer health with `$observer-status`.
    - Audit this repo for observability gaps with `$otel-audit`.
+   - Generate app and Collector deployment config with
+     `$otel-generate-app-collector-config`.
    - Add instrumentation for selected findings with `$otel-instrument`.
    - Verify emitted telemetry with `$otel-verify`.
 
 Current scope:
 
-- bundled skills for audit, instrumentation, verification, and Splunk publish workflows
+- bundled skills for audit, app and Collector config generation,
+  instrumentation, verification, and Splunk publish workflows
 - bundled observer control skills:
   - `obstudio-help`
   - `observer-open`

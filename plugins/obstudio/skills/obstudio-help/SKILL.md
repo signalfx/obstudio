@@ -30,6 +30,8 @@ report the custom URL but must not probe or control it automatically.
 - `observer-stop` - stop the Observer only when the current plugin owns the
   runtime.
 - `otel-audit` - scan a codebase for observability gaps.
+- `otel-generate-app-collector-config` - generate coordinated Collector Helm
+  files, Kubernetes YAML, and application connection config without deploying.
 - `otel-instrument` - add OpenTelemetry instrumentation.
 - `otel-verify` - verify existing instrumentation with deterministic checks.
 - `splunk-configure` - generate detector and dashboard Terraform from audit

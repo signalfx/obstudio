@@ -12,6 +12,7 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
+| `$otel-generate-app-collector-config` | Generate version-pinned Collector Helm files and Kubernetes YAML plus a matching non-secret application Kustomize overlay or scaffold; never deploys or verifies live connectivity |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
 | `$splunk-dashboard-publish` | Diff local dashboard Terraform against live Splunk dashboards and create only the gaps |
@@ -151,6 +152,7 @@ From a service directory, invoke the relevant skill in Codex:
 $otel-audit
 $otel-instrument
 $otel-verify
+$otel-generate-app-collector-config
 $splunk-configure
 $splunk-sync
 ```
@@ -176,6 +178,31 @@ audit/selection and instrumentation handoff to recheck existing instrumentation
 and refresh proof in the instrumentation HTML. It produces
 `.observe/otel-verify.json` plus the readable `.observe/otel-verify.md`. See
 [OTel Verify](docs/otel-verify.md) for invocation and report-reading guidance.
+Use `$otel-generate-app-collector-config` to generate one coordinated, token-free
+configuration set: version-pinned Collector Helm files, plain Kubernetes YAML,
+and a matching non-secret Kustomize overlay or workload scaffold that points the
+application at the generated Collector service. Helm is not required to generate
+or validate these files.
+
+```text
+$otel-generate-app-collector-config \
+  --platform kubernetes \
+  --realm us0 \
+  --cluster-name checkout-prod \
+  --environment production \
+  --distribution other \
+  --chart-version 0.157.0 \
+  --existing-secret splunk-otel-token
+```
+
+Omit `--app` when the current task already identifies one unambiguous
+application; otherwise add `--app ./checkout`. When omitted, Collector namespace
+defaults to `observability`, release defaults to `splunk-otel`, and topology
+defaults to `gateway`; the application endpoint uses cluster domain
+`cluster.local`. The skill only writes and statically validates configuration.
+It never deploys resources, creates or reads the Secret, or verifies live
+Collector or Splunk connectivity.
+
 Use `$splunk-configure` after auditing to generate Splunk Observability Cloud
 detector Terraform — it reads the audit report, classifies metrics, and outputs
 ready-to-apply HCL with a `terraform.tfvars.example` for credentials. Use
@@ -208,6 +235,7 @@ obstudio/
 ├── extension/         # VS Code-compatible extension for Visual Studio Code, Kiro, and Cursor
 ├── skills/            # Canonical agent skill sources
 │   ├── otel-audit/
+│   ├── otel-generate-app-collector-config/
 │   ├── otel-instrument/
 │   ├── otel-verify/
 │   ├── splunk-configure/

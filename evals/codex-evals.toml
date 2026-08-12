@@ -11,3 +11,8 @@ enabled = false
 # Agent model can be set here or overridden with MODEL=... in Make.
 agent = "gpt-5.5"
 judge = "gpt-5.5"
+
+[agent]
+# Keep model-backed evals independent from local Codex preferences such as
+# unsupported reasoning-effort overrides. Auth still uses CODEX_HOME.
+extra_args = ["--ignore-user-config"]

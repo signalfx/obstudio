@@ -28,6 +28,7 @@ PLUGIN_LOCAL_SKILL_ENTRIES = (
 )
 PLUGIN_SHARED_SKILL_ENTRIES = (
     "otel-audit",
+    "otel-generate-app-collector-config",
     "otel-instrument",
     "otel-verify",
     "references",
@@ -42,6 +43,7 @@ PLUGIN_SKILL_ENTRIES = (
     "obstudio-help",
     "observer-control/observer-open",
     "otel-audit",
+    "otel-generate-app-collector-config",
     "otel-instrument",
     "otel-verify",
     "splunk-configure",

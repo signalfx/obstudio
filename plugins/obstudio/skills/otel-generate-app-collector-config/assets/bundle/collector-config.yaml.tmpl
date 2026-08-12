@@ -1,0 +1,60 @@
+# Standalone Splunk OpenTelemetry Collector configuration.
+# Required environment variables: SPLUNK_REALM, SPLUNK_ACCESS_TOKEN.
+# Cluster/environment resource attributes are rendered at generation time.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+  resource/identity:
+    attributes:
+      - key: k8s.cluster.name
+        value: @@CLUSTER_NAME@@
+        action: upsert
+      - key: deployment.environment
+        value: @@ENVIRONMENT@@
+        action: upsert
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+
+exporters:
+  otlphttp/splunk:
+    traces_endpoint: "https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/trace/otlp"
+    metrics_endpoint: "https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/datapoint/otlp"
+    headers:
+      X-SF-Token: "${env:SPLUNK_ACCESS_TOKEN}"
+    compression: gzip
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/identity, batch]
+      exporters: [otlphttp/splunk]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/identity, batch]
+      exporters: [otlphttp/splunk]

@@ -1,0 +1,208 @@
+{
+  "skill": "otel-generate-app-collector-config",
+  "language": "deployments",
+  "service": "generate-config-basic",
+  "prompts": [
+    {
+      "id": "matched-current-context",
+      "task": "The harness starts one directory above the fixture. Treat ./service as both the invocation workspace and the application currently in context; begin from ./service and do not treat its parent as the workspace. Use $otel-generate-app-collector-config with Kubernetes, realm us0, cluster checkout-kind, environment test, default Collector namespace observability, default Collector release splunk-otel, distribution other, default gateway topology, default cluster domain cluster.local, exact official chart version 0.157.0, and --existing-secret splunk-otel-token. Deliberately omit the user-facing --app input so current-context resolution is exercised. Generate the Collector configuration under ./service/deploy/otel-collector and the matched application connection contract and Kustomize overlay under ./service/deploy/otel-config; do not create top-level ./deploy. Resolve the unique Deployment checkout, namespace checkout, container checkout, and existing Kustomization. Use the generated ./service/deploy/otel-collector/kubernetes/collector.yaml as the Collector route evidence. Run the Collector and application static validators, then run the coordinated validator. This eval is generation-only and offline: only kubectl kustomize against local files is permitted for target proof; do not use the network, run Helm, Docker, Kind, kubectl context, kubectl get, kubectl apply, any cluster API or mutation, deployment commands, cloud queries, or Secret reads or creation. Never request, accept, print, or write a token value, and never use a --token flag. Do not modify the base application manifest."
+    }
+  ],
+  "checks": [
+    {
+      "id": "collector-config-written",
+      "description": "The combined workflow must generate a standalone Collector configuration.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/collector-config.yaml"
+    },
+    {
+      "id": "collector-helm-written",
+      "description": "The combined workflow must generate a pinned official Helm wrapper.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/helm/Chart.yaml"
+    },
+    {
+      "id": "collector-values-written",
+      "description": "The combined workflow must generate secure Collector Helm values.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/helm/values.yaml"
+    },
+    {
+      "id": "collector-yaml-written",
+      "description": "The combined workflow must generate plain Kubernetes Collector YAML.",
+      "kind": "file_exists",
+      "path": "deploy/otel-collector/kubernetes/collector.yaml"
+    },
+    {
+      "id": "collector-handoff-restarts-workload",
+      "description": "The generated deployment handoff must restart the Collector workload after apply so rotated Secrets and regenerated ConfigMaps are picked up.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-collector/DEPLOYMENT.md",
+      "values": [
+        "rollout restart deployment/splunk-otel-collector",
+        "rollout status deployment/splunk-otel-collector"
+      ]
+    },
+    {
+      "id": "application-contract-written",
+      "description": "The matched application connection contract must use the new output path.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/otel-connection.yaml"
+    },
+    {
+      "id": "application-overlay-written",
+      "description": "A targeted application environment patch must be generated.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/kubernetes/otel-env-patch.yaml"
+    },
+    {
+      "id": "application-kustomization-written",
+      "description": "A renderable application Kustomization must be generated.",
+      "kind": "file_exists",
+      "path": "deploy/otel-config/kubernetes/kustomization.yaml"
+    },
+    {
+      "id": "collector-chart-and-values-match",
+      "description": "Collector chart, realm, gateway, and Secret reference must match the requested public inputs.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "from pathlib import Path; chart=Path('deploy/otel-collector/helm/Chart.yaml').read_text(); values=Path('deploy/otel-collector/helm/values.yaml').read_text(); manifest=Path('deploy/otel-collector/kubernetes/collector.yaml').read_text(); required_values=('realm: \"us0\"','name: \"splunk-otel-token\"','gateway:','enabled: true','tokenPassthrough: false'); required_manifest=('image: \"quay.io/signalfx/splunk-otel-collector:0.157.0\"','name: splunk-otel-collector','key: splunk_observability_access_token'); assert 'version: \"0.157.0\"' in chart; assert not [v for v in required_values if v not in values]; assert not [v for v in required_manifest if v not in manifest]; assert 'accessToken:' not in values and 'existingSecret:' not in values"
+      ]
+    },
+    {
+      "id": "collector-pipelines-correct",
+      "description": "The Collector must receive OTLP traces and metrics and keep token material in its environment boundary.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-collector/collector-config.yaml",
+      "values": [
+        "endpoint: 0.0.0.0:4317",
+        "endpoint: 0.0.0.0:4318",
+        "processors: [memory_limiter, resource/identity, batch]",
+        "observability.splunkcloud.com/v2/trace/otlp",
+        "observability.splunkcloud.com/v2/datapoint/otlp",
+        "${env:SPLUNK_ACCESS_TOKEN}"
+      ]
+    },
+    {
+      "id": "application-route-matches-collector",
+      "description": "The app contract must match the generated Collector identity and generated Collector YAML evidence.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-config/otel-connection.yaml",
+      "values": [
+        "schemaVersion: 1",
+        "platform: \"kubernetes\"",
+        "topology: \"gateway\"",
+        "release: \"splunk-otel\"",
+        "namespace: \"observability\"",
+        "service: \"splunk-otel-collector\"",
+        "name: \"splunk-otel-token\"",
+        "realm: \"us0\"",
+        "protocol: \"http/protobuf\"",
+        "endpoint: \"http://splunk-otel-collector.observability.svc.cluster.local:4318\"",
+        "source: \"deploy/otel-collector/kubernetes/collector.yaml\"",
+        "serviceResolution: \"generated-collector-yaml\"",
+        "liveRoute: \"unverified\""
+      ]
+    },
+    {
+      "id": "application-target-and-env-match",
+      "description": "The app patch must target checkout and configure generic and signal-specific OTLP HTTP variables.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-config/kubernetes/otel-env-patch.yaml",
+      "values": [
+        "kind: \"Deployment\"",
+        "name: \"checkout\"",
+        "namespace: \"checkout\"",
+        "OTEL_SERVICE_NAME",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+        "http://splunk-otel-collector.observability.svc.cluster.local:4318",
+        "http/protobuf"
+      ]
+    },
+    {
+      "id": "application-has-no-collector-credential",
+      "description": "The application patch must contain no realm, Secret reference, token, header, or TLS bypass.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "from pathlib import Path; text=Path('deploy/otel-config/kubernetes/otel-env-patch.yaml').read_text(); forbidden=('splunk-otel-token','splunk_observability_access_token','SPLUNK_ACCESS_TOKEN','SPLUNK_REALM','X-SF-Token','us0','accessToken','secretKeyRef','insecure_skip_verify'); assert not [v for v in forbidden if v.lower() in text.lower()]"
+      ]
+    },
+    {
+      "id": "fixture-inputs-preserved",
+      "description": "Generation must preserve the application base byte for byte.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "from pathlib import Path; assert Path('kubernetes/deployment.yaml').read_bytes()==Path('kubernetes/deployment.yaml.seed').read_bytes()"
+      ]
+    },
+    {
+      "id": "collector-yaml-evidence-sha-bound",
+      "description": "The generated Collector YAML SHA-256 must be recorded in the application contract.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "-c",
+        "from pathlib import Path; import hashlib; evidence=Path('deploy/otel-collector/kubernetes/collector.yaml').read_bytes(); contract=Path('deploy/otel-config/otel-connection.yaml').read_text(); digest=hashlib.sha256(evidence).hexdigest(); assert f'sha256: \"{digest}\"' in contract; assert 'source: \"deploy/otel-collector/kubernetes/collector.yaml\"' in contract"
+      ]
+    },
+    {
+      "id": "collector-validates",
+      "description": "The included Collector validator must accept the generated configuration.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_collector.py",
+        "deploy/otel-collector"
+      ]
+    },
+    {
+      "id": "application-validates",
+      "description": "The included application validator must accept the matched contract and overlay.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_application.py",
+        "deploy/otel-config"
+      ]
+    },
+    {
+      "id": "coordinated-config-validates",
+      "description": "The coordinated validator must accept the SHA-bound generated Collector YAML evidence.",
+      "kind": "command_succeeds",
+      "command": [
+        "python3",
+        "../.agents/skills/otel-generate-app-collector-config/scripts/validate_config.py",
+        "--collector",
+        "deploy/otel-collector",
+        "--application",
+        "deploy/otel-config"
+      ]
+    },
+    {
+      "id": "legacy-output-not-created",
+      "description": "The consolidated skill must not write the retired otel-connect output tree.",
+      "kind": "no_file_exists",
+      "path": "deploy/otel-connect"
+    },
+    {
+      "id": "helm-render-not-created",
+      "description": "The offline eval must not create legacy rendered Kubernetes YAML.",
+      "kind": "no_file_exists",
+      "path": "deploy/otel-collector/kubernetes/helm-rendered.yaml"
+    },
+    {
+      "id": "orchestration-parent-not-used",
+      "description": "Current-context resolution must not mistake the harness parent for the application workspace.",
+      "kind": "no_file_exists",
+      "path": "../deploy/otel-collector"
+    }
+  ]
+}
