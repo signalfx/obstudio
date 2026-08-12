@@ -226,9 +226,9 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     )
     collector_workload = collector_service
     collector_configmap = collector_workload
-    helm_workload_kind = "deployment" if args.gateway else "daemonset"
-    helm_workload_ref = f"{helm_workload_kind}/{collector_workload}"
-    kubernetes_workload_ref = f"deployment/{collector_workload}"
+    workload_kind = "deployment" if args.gateway else "daemonset"
+    workload_ref = f"{workload_kind}/{collector_workload}"
+    kubernetes_replicas = "  replicas: 1\n" if args.gateway else ""
     for name, value in (
         ("collector Service", collector_service),
         ("collector workload", collector_workload),
@@ -251,8 +251,10 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         "@@GATEWAY_TOKEN_PASSTHROUGH@@": token_passthrough,
         "@@KIND_CLUSTER_NAME_SHELL@@": shell_quote(kind_name),
         "@@KIND_CONTEXT_SHELL@@": shell_quote(f"kind-{kind_name}"),
-        "@@HELM_WORKLOAD_REF_RAW@@": helm_workload_ref,
-        "@@KUBERNETES_WORKLOAD_REF_RAW@@": kubernetes_workload_ref,
+        "@@HELM_WORKLOAD_REF_RAW@@": workload_ref,
+        "@@KUBERNETES_REPLICAS_BLOCK@@": kubernetes_replicas,
+        "@@KUBERNETES_WORKLOAD_KIND_RAW@@": "Deployment" if args.gateway else "DaemonSet",
+        "@@KUBERNETES_WORKLOAD_REF_RAW@@": workload_ref,
         "@@NAMESPACE_RAW@@": args.namespace,
         "@@COLLECTOR_CONFIGMAP_NAME_RAW@@": collector_configmap,
         "@@COLLECTOR_IMAGE@@": json.dumps(

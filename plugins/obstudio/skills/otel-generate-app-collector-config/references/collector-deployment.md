@@ -70,8 +70,9 @@ Write `kubernetes/collector.yaml`. It must contain:
   `<release>-collector-agent` for agent-service topology);
 - one Service named `<release>-collector` for gateway topology or
   `<release>-collector-agent` for agent-service topology;
-- one Collector Deployment using a pinned Splunk Collector image tag derived
-  from the requested chart version;
+- one Collector Deployment for gateway topology or DaemonSet for agent-service
+  topology using a pinned Splunk Collector image tag derived from the requested
+  chart version;
 - named OTLP ports `otlp` on 4317 and `otlp-http` on 4318;
 - `SPLUNK_REALM` as a non-secret environment value;
 - `SPLUNK_ACCESS_TOKEN` loaded from the existing Kubernetes Secret key
@@ -104,8 +105,8 @@ stdout after file generation. Include:
 - a Secret creation command that reads `SPLUNK_ACCESS_TOKEN` and pipes it to
   `kubectl create secret --from-file=splunk_observability_access_token=/dev/stdin`;
 - `kubectl apply -f <output>/kubernetes/collector.yaml`;
-- `kubectl -n <namespace> rollout restart deployment/<collector-workload>`;
-- `kubectl -n <namespace> rollout status deployment/<collector-workload>
+- `kubectl -n <namespace> rollout restart <collector-workload-ref>`;
+- `kubectl -n <namespace> rollout status <collector-workload-ref>
   --timeout=120s`;
 - a pointer to `<output>/DEPLOYMENT.md` for the full handoff.
 

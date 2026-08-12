@@ -144,7 +144,7 @@ kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ run telemetrygen-m
 Check Collector logs for exporter authentication or delivery failures:
 
 ```bash
-kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ logs deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --since=5m | \
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ logs @@KUBERNETES_WORKLOAD_REF_RAW@@ --since=5m | \
   grep -E "Exporting failed|Unauthenticated|error exporting" || true
 ```
 

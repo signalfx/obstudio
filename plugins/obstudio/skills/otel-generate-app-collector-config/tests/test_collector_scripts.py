@@ -125,11 +125,11 @@ class BundleScriptsTest(unittest.TestCase):
                 result.stdout,
             )
             self.assertIn(
-                "rollout restart deployment/splunk-otel-collector-agent",
+                "rollout restart daemonset/splunk-otel-collector-agent",
                 result.stdout,
             )
             self.assertIn(
-                "rollout status deployment/splunk-otel-collector-agent",
+                "rollout status daemonset/splunk-otel-collector-agent",
                 result.stdout,
             )
             self.assertNotIn(
@@ -184,7 +184,8 @@ class BundleScriptsTest(unittest.TestCase):
             )
             self.assertNotIn("otlp_http/splunk", collector)
             self.assertIn("kind: Service", manifest)
-            self.assertIn("kind: Deployment", manifest)
+            self.assertIn("kind: DaemonSet", manifest)
+            self.assertNotIn("replicas: 1", manifest)
             self.assertIn("name: splunk-otel-collector-agent", manifest)
             self.assertIn("otlphttp/splunk:", manifest)
             self.assertIn("exporters: [otlphttp/splunk]", manifest)
@@ -231,6 +232,10 @@ class BundleScriptsTest(unittest.TestCase):
                 deployment,
             )
             self.assertIn(
+                "rollout status daemonset/splunk-otel-collector-agent",
+                deployment,
+            )
+            self.assertNotIn(
                 "rollout restart deployment/splunk-otel-collector-agent",
                 deployment,
             )
@@ -287,6 +292,8 @@ class BundleScriptsTest(unittest.TestCase):
             values = (output / "helm" / "values.yaml").read_text()
             deployment = (output / "DEPLOYMENT.md").read_text()
             self.assertIn("name: splunk-otel-collector", manifest)
+            self.assertIn("kind: Deployment", manifest)
+            self.assertIn("replicas: 1", manifest)
             self.assertIn("enabled: true", values)
             self.assertIn("tokenPassthrough: false", values)
             self.assertIn(
@@ -701,6 +708,31 @@ class BundleScriptsTest(unittest.TestCase):
             )
             self.assertIn(
                 "kubernetes/collector.yaml uses invalid Collector exporter type otlp_http",
+                result.stderr,
+            )
+
+    def test_validator_rejects_agent_service_manifest_deployment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            self.generate(output)
+            manifest_path = output / "kubernetes" / "collector.yaml"
+            manifest_path.write_text(
+                manifest_path.read_text(encoding="utf-8").replace(
+                    "kind: DaemonSet",
+                    "kind: Deployment",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.validate(output, expect_success=False)
+
+            self.assertIn(
+                "must contain exactly one DaemonSet for the selected Collector topology",
+                result.stderr,
+            )
+            self.assertIn(
+                "must not contain a Deployment for the selected Collector topology",
                 result.stderr,
             )
 

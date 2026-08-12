@@ -696,6 +696,23 @@ def validate_rendered_resources(
     return errors
 
 
+def rendered_kind_count(rendered: str, *, kind: str, namespace: str) -> int:
+    count = 0
+    for document in split_yaml_documents(rendered):
+        if yaml_scalar(document, "kind", indent=0) != kind:
+            continue
+        metadata_result = yaml_section(document, "metadata", indent=0)
+        if not metadata_result:
+            continue
+        metadata, metadata_indent = metadata_result
+        child_indent = direct_child_indent(metadata, metadata_indent)
+        if child_indent is None:
+            continue
+        if yaml_scalar(metadata, "namespace", indent=child_indent) == namespace:
+            count += 1
+    return count
+
+
 def validate(bundle: Path) -> list[str]:
     errors: list[str] = []
     if bundle.is_symlink():
@@ -1010,6 +1027,30 @@ def validate(bundle: Path) -> list[str]:
                 secret_name=secret_name,
             )
         )
+        if gateway_enabled in {"true", "false"}:
+            expected_kind = "Deployment" if gateway_enabled == "true" else "DaemonSet"
+            unexpected_kind = "DaemonSet" if expected_kind == "Deployment" else "Deployment"
+            if (
+                rendered_kind_count(
+                    manifest,
+                    kind=expected_kind,
+                    namespace=namespace,
+                )
+                != 1
+            ):
+                errors.append(
+                    f"{COLLECTOR_MANIFEST_PATH} must contain exactly one "
+                    f"{expected_kind} for the selected Collector topology"
+                )
+            if rendered_kind_count(
+                manifest,
+                kind=unexpected_kind,
+                namespace=namespace,
+            ):
+                errors.append(
+                    f"{COLLECTOR_MANIFEST_PATH} must not contain a "
+                    f"{unexpected_kind} for the selected Collector topology"
+                )
 
     return errors
 

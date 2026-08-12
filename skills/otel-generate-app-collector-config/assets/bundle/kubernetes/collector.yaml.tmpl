@@ -98,7 +98,7 @@ spec:
       protocol: TCP
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: @@KUBERNETES_WORKLOAD_KIND_RAW@@
 metadata:
   name: @@COLLECTOR_WORKLOAD_NAME_RAW@@
   namespace: @@NAMESPACE_RAW@@
@@ -108,8 +108,7 @@ metadata:
     app.kubernetes.io/component: collector
     app.kubernetes.io/managed-by: otel-generate-app-collector-config
 spec:
-  replicas: 1
-  selector:
+@@KUBERNETES_REPLICAS_BLOCK@@  selector:
     matchLabels:
       app.kubernetes.io/name: splunk-otel-collector
       app.kubernetes.io/instance: @@RELEASE_NAME_RAW@@
