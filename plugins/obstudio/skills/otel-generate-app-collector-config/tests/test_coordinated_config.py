@@ -283,6 +283,23 @@ spec:
         self.assertEqual(result.returncode, 1)
         self.assertIn("realm differs", result.stderr)
 
+    def test_release_drift_is_rejected(self) -> None:
+        self.generate()
+        contract = self.application / "otel-connection.yaml"
+        contract.write_text(
+            contract.read_text(encoding="utf-8").replace(
+                'release: "splunk-otel"',
+                'release: "other-otel"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Collector release differs", result.stderr)
+
     def test_application_patch_target_identity_drift_is_rejected(self) -> None:
         self.generate()
         patch = self.application / "kubernetes" / "otel-env-patch.yaml"

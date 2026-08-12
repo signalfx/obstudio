@@ -267,6 +267,18 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertNotIn("kind create cluster --name demo$(touch", deployment)
             self.assertNotIn("--context kind-demo$(touch", deployment)
 
+    def test_rejects_placeholder_syntax_in_free_text_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--cluster-name",
+                "@@REALM@@",
+                expect_success=False,
+            )
+
+            self.assertIn("reserved template placeholder syntax", result.stderr)
+
     def test_gateway_mode_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"

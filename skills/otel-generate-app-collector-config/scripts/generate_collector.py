@@ -159,6 +159,8 @@ def validate_text(name: str, value: str, max_length: int = 253) -> None:
         raise ValueError(f"{name} must contain 1-{max_length} characters")
     if any(ord(char) < 32 for char in value):
         raise ValueError(f"{name} contains a control character")
+    if UNRESOLVED.search(value):
+        raise ValueError(f"{name} contains reserved template placeholder syntax")
 
 
 def kind_cluster_name(value: str) -> str:
@@ -267,15 +269,21 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
 
 
 def render(template: str, values: dict[str, str], source: Path) -> str:
-    result = template
-    for placeholder, value in values.items():
-        result = result.replace(placeholder, value)
-    unresolved = sorted(set(UNRESOLVED.findall(result)))
+    unresolved = sorted(
+        {
+            placeholder
+            for placeholder in UNRESOLVED.findall(template)
+            if placeholder not in values
+        }
+    )
     if unresolved:
         raise ValueError(
             f"{source} contains unresolved placeholders: {', '.join(unresolved)}"
         )
-    return result
+    return UNRESOLVED.sub(
+        lambda match: values.get(match.group(0), match.group(0)),
+        template,
+    )
 
 
 def managed_templates() -> list[Path]:

@@ -38,6 +38,17 @@ def scalar_value(text: str, key: str) -> str | None:
     return next((value for value in match.groups() if value is not None), "").strip()
 
 
+def scalar_values(text: str, key: str) -> set[str]:
+    pattern = re.compile(
+        rf"^\s*{re.escape(key)}:\s*(?:\"([^\"\r\n]*)\"|'([^'\r\n]*)'|([^#\r\n]*?))\s*(?:#.*)?$",
+        re.MULTILINE,
+    )
+    return {
+        next((value for value in match.groups() if value is not None), "").strip()
+        for match in pattern.finditer(text)
+    }
+
+
 def secret_metadata(secret: str) -> tuple[str | None, str | None]:
     if yaml_scalar(secret, "kind", indent=0) != "Secret":
         return None, None
@@ -299,6 +310,13 @@ def validate(
     service = quoted_value(collector_contract, "service")
     if not release:
         errors.append("application contract has no Collector release")
+    else:
+        instance_labels = scalar_values(rendered_text, "app.kubernetes.io/instance")
+        if instance_labels != {release}:
+            errors.append(
+                "Collector release differs between generated Collector YAML "
+                "and application contract"
+            )
     if topology not in {"gateway", "agent-service"}:
         errors.append("application contract has invalid Collector topology")
 
