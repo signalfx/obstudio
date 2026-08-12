@@ -89,9 +89,12 @@ existing pods do not reread those values automatically.
 
 Use this only to prove the generated YAML starts locally and can receive OTLP.
 It does not deploy the application scaffold and it does not require Helm.
+The Kind cluster name is derived from the configured cluster name so the smoke
+workflow is safe for Kind/Docker while the Collector still emits the original
+`k8s.cluster.name=@@CLUSTER_NAME_RAW@@` telemetry attribute.
 
 ```bash
-kind create cluster --name @@CLUSTER_NAME_SHELL@@
+kind create cluster --name @@KIND_CLUSTER_NAME_SHELL@@
 kubectl cluster-info --context @@KIND_CONTEXT_SHELL@@
 ```
 

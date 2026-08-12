@@ -44,6 +44,7 @@ SEMVER = re.compile(rf"^{SEMVER_PATTERN}$")
 COLLECTOR_IMAGE_TAG_VERSION = re.compile(rf"^{COLLECTOR_IMAGE_TAG_PATTERN}$")
 UNRESOLVED = re.compile(r"@@[A-Z0-9_]+@@")
 HELM_RELEASE_NAME_MAX_LENGTH = 47
+KIND_CLUSTER_NAME_MAX_LENGTH = 49
 SECRET_NAME_ERROR = "invalid Kubernetes Secret name"
 OWNER_MANIFEST_NAME = ".otel-generate-app-collector-config.json"
 OWNER_MANIFEST_GENERATOR = "otel-generate-app-collector-config"
@@ -160,6 +161,18 @@ def validate_text(name: str, value: str, max_length: int = 253) -> None:
         raise ValueError(f"{name} contains a control character")
 
 
+def kind_cluster_name(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    normalized = re.sub(r"-+", "-", normalized)
+    if not normalized:
+        normalized = "otel-cluster"
+    normalized = normalized[:KIND_CLUSTER_NAME_MAX_LENGTH].rstrip("-")
+    if not normalized:
+        normalized = "otel-cluster"
+    validate_input("Kind cluster name", normalized, DNS_LABEL)
+    return normalized
+
+
 def cloud_provider(distribution: str) -> str:
     if distribution == "aks":
         return "azure"
@@ -189,6 +202,7 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     )
     validate_text("cluster name", args.cluster_name)
     validate_text("environment", args.environment, max_length=128)
+    kind_name = kind_cluster_name(args.cluster_name)
 
     distribution = "" if args.distribution == "other" else args.distribution
     chart_core = args.chart_version.split("-", 1)[0].split("+", 1)[0]
@@ -233,7 +247,8 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         "@@GATEWAY_DESCRIPTION@@": gateway_description,
         "@@GATEWAY_ENABLED@@": "true" if args.gateway else "false",
         "@@GATEWAY_TOKEN_PASSTHROUGH@@": token_passthrough,
-        "@@KIND_CONTEXT_SHELL@@": shell_quote(f"kind-{args.cluster_name}"),
+        "@@KIND_CLUSTER_NAME_SHELL@@": shell_quote(kind_name),
+        "@@KIND_CONTEXT_SHELL@@": shell_quote(f"kind-{kind_name}"),
         "@@HELM_WORKLOAD_REF_RAW@@": helm_workload_ref,
         "@@KUBERNETES_WORKLOAD_REF_RAW@@": kubernetes_workload_ref,
         "@@NAMESPACE_RAW@@": args.namespace,

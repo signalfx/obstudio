@@ -245,7 +245,7 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("query token is not accepted", deployment)
             self.assertNotIn("helm-rendered", deployment)
 
-    def test_kind_smoke_commands_shell_quote_cluster_name(self) -> None:
+    def test_kind_smoke_commands_use_dns_safe_demo_cluster_name(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
             result = self.generate(
@@ -257,14 +257,15 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             deployment = (output / "DEPLOYMENT.md").read_text()
             self.assertIn(
-                "kind create cluster --name 'demo$(touch /tmp/pwn)'",
+                "kind create cluster --name demo-touch-tmp-pwn",
                 deployment,
             )
             self.assertIn(
-                "kubectl cluster-info --context 'kind-demo$(touch /tmp/pwn)'",
+                "kubectl cluster-info --context kind-demo-touch-tmp-pwn",
                 deployment,
             )
-            self.assertNotIn("--context kind-demo$(touch /tmp/pwn)", deployment)
+            self.assertNotIn("kind create cluster --name demo$(touch", deployment)
+            self.assertNotIn("--context kind-demo$(touch", deployment)
 
     def test_gateway_mode_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
