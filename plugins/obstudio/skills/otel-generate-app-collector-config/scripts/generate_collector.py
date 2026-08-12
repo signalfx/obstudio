@@ -119,6 +119,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--chart-version is required")
     if parsed.gateway:
         parsed.topology = "gateway"
+    if (
+        parsed.distribution == "eks/fargate"
+        and parsed.topology == "agent-service"
+    ):
+        parser.error(
+            "--distribution eks/fargate requires --topology gateway; "
+            "Fargate does not support DaemonSet agent collectors"
+        )
     parsed.gateway = parsed.topology == "gateway"
     return parsed
 

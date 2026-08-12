@@ -211,6 +211,19 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("enabled: true", values)
             self.assertIn("tokenPassthrough: false", values)
 
+    def test_rejects_agent_service_on_eks_fargate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--distribution",
+                "eks/fargate",
+                expect_success=False,
+            )
+
+            self.assertIn("requires --topology gateway", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_standard_route_inputs_default_to_gateway(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
