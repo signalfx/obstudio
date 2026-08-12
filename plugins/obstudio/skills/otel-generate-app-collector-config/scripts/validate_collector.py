@@ -756,7 +756,9 @@ def validate(bundle: Path) -> list[str]:
         "exporters:",
         "service:",
         "extensions: [health_check]",
+        "otlphttp/splunk:",
         "processors: [memory_limiter, batch]",
+        "exporters: [otlphttp/splunk]",
         "traces_endpoint: \"https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/trace/otlp\"",
         "metrics_endpoint: \"https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/datapoint/otlp\"",
         "X-SF-Token: \"${env:SPLUNK_ACCESS_TOKEN}\"",
@@ -764,6 +766,11 @@ def validate(bundle: Path) -> list[str]:
     for value in collector_required:
         if value not in collector:
             errors.append(f"collector-config.yaml missing required value: {value}")
+    if "otlp_http/splunk" in collector:
+        errors.append(
+            "collector-config.yaml uses invalid Collector exporter type "
+            "otlp_http; use otlphttp/splunk"
+        )
 
     chart = contents.get("helm/Chart.yaml", "")
     chart_repository_match = CHART_REPOSITORY.search(chart)
@@ -908,6 +915,20 @@ def validate(bundle: Path) -> list[str]:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains a token placeholder")
     if "helm.sh/hook" in manifest:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains Helm hooks")
+    manifest_required = (
+        "otlphttp/splunk:",
+        "exporters: [otlphttp/splunk]",
+    )
+    for value in manifest_required:
+        if value not in manifest:
+            errors.append(
+                f"{COLLECTOR_MANIFEST_PATH} missing required value: {value}"
+            )
+    if "otlp_http/splunk" in manifest:
+        errors.append(
+            f"{COLLECTOR_MANIFEST_PATH} uses invalid Collector exporter type "
+            "otlp_http; use otlphttp/splunk"
+        )
     image_tags = COLLECTOR_IMAGE.findall(manifest)
     if len(image_tags) != 1:
         errors.append(

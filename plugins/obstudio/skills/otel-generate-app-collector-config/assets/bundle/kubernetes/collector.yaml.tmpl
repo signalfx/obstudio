@@ -34,7 +34,7 @@ data:
         timeout: 5s
 
     exporters:
-      otlp_http/splunk:
+      otlphttp/splunk:
         traces_endpoint: "https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/trace/otlp"
         metrics_endpoint: "https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/datapoint/otlp"
         headers:
@@ -56,11 +56,11 @@ data:
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [otlp_http/splunk]
+          exporters: [otlphttp/splunk]
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [otlp_http/splunk]
+          exporters: [otlphttp/splunk]
 ---
 apiVersion: v1
 kind: Service

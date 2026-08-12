@@ -134,9 +134,15 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("enabled: false", values)
             self.assertNotIn("tokenPassthrough", values)
             self.assertIn("${env:SPLUNK_ACCESS_TOKEN}", collector)
+            self.assertIn("otlphttp/splunk:", collector)
+            self.assertIn("exporters: [otlphttp/splunk]", collector)
+            self.assertNotIn("otlp_http/splunk", collector)
             self.assertIn("kind: Service", manifest)
             self.assertIn("kind: Deployment", manifest)
             self.assertIn("name: splunk-otel-collector-agent", manifest)
+            self.assertIn("otlphttp/splunk:", manifest)
+            self.assertIn("exporters: [otlphttp/splunk]", manifest)
+            self.assertNotIn("otlp_http/splunk", manifest)
             self.assertIn(
                 "image: \"quay.io/signalfx/splunk-otel-collector:0.157.0\"",
                 manifest,
@@ -506,6 +512,54 @@ class BundleScriptsTest(unittest.TestCase):
             result = self.validate(output, expect_success=False)
 
             self.assertIn("duplicate YAML mapping key 'receivers'", result.stderr)
+
+    def test_validator_rejects_invalid_collector_exporter_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            self.generate(output)
+            config_path = output / "collector-config.yaml"
+            config_path.write_text(
+                config_path.read_text(encoding="utf-8").replace(
+                    "otlphttp/splunk",
+                    "otlp_http/splunk",
+                ),
+                encoding="utf-8",
+            )
+            manifest_path = output / "kubernetes" / "collector.yaml"
+            manifest_path.write_text(
+                manifest_path.read_text(encoding="utf-8").replace(
+                    "otlphttp/splunk",
+                    "otlp_http/splunk",
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.validate(output, expect_success=False)
+
+            self.assertIn(
+                "collector-config.yaml missing required value: otlphttp/splunk:",
+                result.stderr,
+            )
+            self.assertIn(
+                "collector-config.yaml missing required value: exporters: [otlphttp/splunk]",
+                result.stderr,
+            )
+            self.assertIn(
+                "collector-config.yaml uses invalid Collector exporter type otlp_http",
+                result.stderr,
+            )
+            self.assertIn(
+                "kubernetes/collector.yaml missing required value: otlphttp/splunk:",
+                result.stderr,
+            )
+            self.assertIn(
+                "kubernetes/collector.yaml missing required value: exporters: [otlphttp/splunk]",
+                result.stderr,
+            )
+            self.assertIn(
+                "kubernetes/collector.yaml uses invalid Collector exporter type otlp_http",
+                result.stderr,
+            )
 
     def test_validator_rejects_literal_x_sf_token(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
