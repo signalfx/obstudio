@@ -61,7 +61,12 @@ helm upgrade --install @@RELEASE_NAME_RAW@@ ./helm \
   --create-namespace \
   --wait \
   --timeout 10m
+kubectl -n @@NAMESPACE_RAW@@ rollout restart @@HELM_WORKLOAD_REF_RAW@@
+kubectl -n @@NAMESPACE_RAW@@ rollout status @@HELM_WORKLOAD_REF_RAW@@ --timeout=120s
 ```
+
+The restart makes reruns pick up external Secret rotations and regenerated
+Collector config even when the chart release itself is otherwise unchanged.
 
 ## Deploy Kubernetes YAML
 
@@ -71,10 +76,14 @@ Create the Secret first, then run:
 kubectl apply --dry-run=server --validate=strict \
   -f ./kubernetes/collector.yaml
 kubectl apply -f ./kubernetes/collector.yaml
+kubectl -n @@NAMESPACE_RAW@@ rollout restart @@KUBERNETES_WORKLOAD_REF_RAW@@
+kubectl -n @@NAMESPACE_RAW@@ rollout status @@KUBERNETES_WORKLOAD_REF_RAW@@ --timeout=120s
 ```
 
 The server dry run and apply use the current kubectl context. Confirm the
-cluster and namespace before running them.
+cluster and namespace before running them. The restart is required after
+rerunning the workflow with a rotated Secret or regenerated ConfigMap because
+existing pods do not reread those values automatically.
 
 ## Local kind smoke test
 
@@ -98,7 +107,8 @@ printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context @@KIND_CONTEXT_SHELL@@ 
   --dry-run=client -o yaml | kubectl --context @@KIND_CONTEXT_SHELL@@ apply -f -
 unset SPLUNK_ACCESS_TOKEN
 kubectl --context @@KIND_CONTEXT_SHELL@@ apply -f ./kubernetes/collector.yaml
-kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ rollout status deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --timeout=120s
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ rollout restart @@KUBERNETES_WORKLOAD_REF_RAW@@
+kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ rollout status @@KUBERNETES_WORKLOAD_REF_RAW@@ --timeout=120s
 kubectl --context @@KIND_CONTEXT_SHELL@@ -n @@NAMESPACE_RAW@@ get pods,svc
 ```
 

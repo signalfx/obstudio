@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-generate-app-collector-config |
-| Run ID | 20260812T072658240142Z |
+| Run ID | 20260812T164937007658Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,6 +18,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | deployments/generate-config-basic/qual/generate | deployments/generate-config-basic | 1 | evals/deployments/generate-config-basic/eval/qual/generate.json | 0 | 9 | 0 |
-| deployments/generate-config-basic/sanity/generate | deployments/generate-config-basic | 1 | evals/deployments/generate-config-basic/eval/sanity/generate.json | 20 | 0 | 0 |
+| deployments/generate-config-basic/sanity/generate | deployments/generate-config-basic | 1 | evals/deployments/generate-config-basic/eval/sanity/generate.json | 21 | 0 | 0 |
 | deployments/generate-config-scaffold/sanity/generate | deployments/generate-config-scaffold | 1 | evals/deployments/generate-config-scaffold/eval/sanity/generate.json | 13 | 0 | 0 |
 | sanity/skill-smoke/sanity/generate-config | sanity/skill-smoke | 2 | evals/sanity/skill-smoke/eval/sanity/generate-config.json | 0 | 0 | 0 |

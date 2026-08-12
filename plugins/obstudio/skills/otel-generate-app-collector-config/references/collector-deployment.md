@@ -104,6 +104,7 @@ stdout after file generation. Include:
 - a Secret creation command that reads `SPLUNK_ACCESS_TOKEN` and pipes it to
   `kubectl create secret --from-file=splunk_observability_access_token=/dev/stdin`;
 - `kubectl apply -f <output>/kubernetes/collector.yaml`;
+- `kubectl -n <namespace> rollout restart deployment/<collector-workload>`;
 - `kubectl -n <namespace> rollout status deployment/<collector-workload>
   --timeout=120s`;
 - a pointer to `<output>/DEPLOYMENT.md` for the full handoff.

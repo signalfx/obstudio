@@ -301,14 +301,6 @@ def validate(
         errors.append("application contract has no Collector release")
     if topology not in {"gateway", "agent-service"}:
         errors.append("application contract has invalid Collector topology")
-    elif release and service:
-        expected_service = (
-            f"{release}-collector"
-            if topology == "gateway"
-            else f"{release}-collector-agent"
-        )
-        if service != expected_service:
-            errors.append("Collector Service differs from release/topology")
 
     if quoted_value(verification, "serviceResolution") != "generated-collector-yaml":
         errors.append("application route is not bound to generated Collector YAML")

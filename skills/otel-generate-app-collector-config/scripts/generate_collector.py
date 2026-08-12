@@ -210,6 +210,9 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
     )
     collector_workload = collector_service
     collector_configmap = collector_workload
+    helm_workload_kind = "deployment" if args.gateway else "daemonset"
+    helm_workload_ref = f"{helm_workload_kind}/{collector_workload}"
+    kubernetes_workload_ref = f"deployment/{collector_workload}"
     for name, value in (
         ("collector Service", collector_service),
         ("collector workload", collector_workload),
@@ -231,6 +234,8 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         "@@GATEWAY_ENABLED@@": "true" if args.gateway else "false",
         "@@GATEWAY_TOKEN_PASSTHROUGH@@": token_passthrough,
         "@@KIND_CONTEXT_SHELL@@": shell_quote(f"kind-{args.cluster_name}"),
+        "@@HELM_WORKLOAD_REF_RAW@@": helm_workload_ref,
+        "@@KUBERNETES_WORKLOAD_REF_RAW@@": kubernetes_workload_ref,
         "@@NAMESPACE_RAW@@": args.namespace,
         "@@COLLECTOR_CONFIGMAP_NAME_RAW@@": collector_configmap,
         "@@COLLECTOR_IMAGE@@": json.dumps(
@@ -490,7 +495,7 @@ def print_next_commands(args: argparse.Namespace) -> None:
     values = replacements(args)
     namespace = values["@@NAMESPACE_RAW@@"]
     secret_name = values["@@SECRET_NAME_RAW@@"]
-    workload_name = values["@@COLLECTOR_WORKLOAD_NAME_RAW@@"]
+    workload_ref = values["@@KUBERNETES_WORKLOAD_REF_RAW@@"]
     collector_yaml = args.output / "kubernetes" / "collector.yaml"
     deployment_doc = args.output / "DEPLOYMENT.md"
 
@@ -516,8 +521,12 @@ def print_next_commands(args: argparse.Namespace) -> None:
     print("# 2. Deploy the generated Collector YAML")
     print(f"kubectl apply -f {shell_quote(collector_yaml)}")
     print(
+        f"kubectl -n {shell_quote(namespace)} rollout restart "
+        f"{shell_quote(workload_ref)}"
+    )
+    print(
         f"kubectl -n {shell_quote(namespace)} rollout status "
-        f"deployment/{shell_quote(workload_name)} --timeout=120s"
+        f"{shell_quote(workload_ref)} --timeout=120s"
     )
     print()
     print(f"# Full deployment handoff: {shell_quote(deployment_doc)}")

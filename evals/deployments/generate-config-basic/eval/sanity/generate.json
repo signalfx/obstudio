@@ -34,6 +34,16 @@
       "path": "deploy/otel-collector/kubernetes/collector.yaml"
     },
     {
+      "id": "collector-handoff-restarts-workload",
+      "description": "The generated deployment handoff must restart the Collector workload after apply so rotated Secrets and regenerated ConfigMaps are picked up.",
+      "kind": "file_contains_all",
+      "path": "deploy/otel-collector/DEPLOYMENT.md",
+      "values": [
+        "rollout restart deployment/splunk-otel-collector",
+        "rollout status deployment/splunk-otel-collector"
+      ]
+    },
+    {
       "id": "application-contract-written",
       "description": "The matched application connection contract must use the new output path.",
       "kind": "file_exists",

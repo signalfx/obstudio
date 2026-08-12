@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "sanity",
     "skill": "otel-generate-app-collector-config",
-    "run_id": "20260812T072051756282Z",
+    "run_id": "20260812T170143526792Z",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
     "rubric_enabled": false,
@@ -22,14 +22,14 @@
     "with_skill": {
       "prompt_count": 1,
       "command_count": 94,
-      "duration_seconds": 338.42,
-      "agent_duration_seconds": 337.975,
-      "tokens": 901669,
-      "agent_tokens": 901669,
+      "duration_seconds": 443.534,
+      "agent_duration_seconds": 443.113,
+      "tokens": 1139981,
+      "agent_tokens": 1139981,
       "error_count": 0,
       "checks": {
-        "passed": 22,
-        "total": 22,
+        "passed": 23,
+        "total": 23,
         "skipped": 0
       }
     },
@@ -48,23 +48,23 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 94,
-        "duration_seconds": 338.42,
-        "agent_duration_seconds": 337.975,
-        "tokens": 901669,
-        "agent_tokens": 901669,
+        "duration_seconds": 443.534,
+        "agent_duration_seconds": 443.113,
+        "tokens": 1139981,
+        "agent_tokens": 1139981,
         "error_count": 0,
         "checks": {
-          "passed": 22,
-          "total": 22,
+          "passed": 23,
+          "total": 23,
           "skipped": 0
         }
       },
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T072051756282Z/results/deployments/generate-config-basic/sanity-generate/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T072051756282Z/results/deployments/generate-config-basic/sanity-generate/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T072051756282Z/results/deployments/generate-config-basic/sanity-generate/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T170143526792Z/results/deployments/generate-config-basic/sanity-generate/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T170143526792Z/results/deployments/generate-config-basic/sanity-generate/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-generate-app-collector-config/20260812T170143526792Z/results/deployments/generate-config-basic/sanity-generate/with_baseline.json"
       }
     }
   ],

@@ -6,7 +6,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-generate-app-collector-config",
-    "run_id": "20260812T072658240142Z",
+    "run_id": "20260812T164937007658Z",
     "repo_root": "/Users/tithumma/code/splunk/obstudio-main-fresh-20260729",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
@@ -47,7 +47,7 @@
       "definition_path": "evals/deployments/generate-config-basic/eval/sanity/generate.json",
       "eval_dir": "evals/deployments/generate-config-basic",
       "skill_path": "skills/otel-generate-app-collector-config",
-      "sanity_check_count": 20,
+      "sanity_check_count": 21,
       "rubric_check_count": 0,
       "runtime_check_count": 0
     },
@@ -89,7 +89,7 @@
     "eval_count": 4,
     "case_count": 5,
     "prompt_count": 5,
-    "sanity_check_count": 33,
+    "sanity_check_count": 34,
     "rubric_check_count": 9,
     "runtime_check_count": 0
   }

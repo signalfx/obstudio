@@ -125,6 +125,10 @@ class BundleScriptsTest(unittest.TestCase):
                 result.stdout,
             )
             self.assertIn(
+                "rollout restart deployment/splunk-otel-collector-agent",
+                result.stdout,
+            )
+            self.assertIn(
                 "rollout status deployment/splunk-otel-collector-agent",
                 result.stdout,
             )
@@ -223,6 +227,14 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("read -rs SPLUNK_ACCESS_TOKEN", deployment)
             self.assertNotIn("read -rsp", deployment)
             self.assertIn(
+                "rollout restart daemonset/splunk-otel-collector-agent",
+                deployment,
+            )
+            self.assertIn(
+                "rollout restart deployment/splunk-otel-collector-agent",
+                deployment,
+            )
+            self.assertIn(
                 "ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.157.0",
                 deployment,
             )
@@ -260,9 +272,14 @@ class BundleScriptsTest(unittest.TestCase):
             self.generate(output, "--gateway")
             manifest = (output / "kubernetes" / "collector.yaml").read_text()
             values = (output / "helm" / "values.yaml").read_text()
+            deployment = (output / "DEPLOYMENT.md").read_text()
             self.assertIn("name: splunk-otel-collector", manifest)
             self.assertIn("enabled: true", values)
             self.assertIn("tokenPassthrough: false", values)
+            self.assertIn(
+                "rollout restart deployment/splunk-otel-collector",
+                deployment,
+            )
 
     def test_rejects_agent_service_on_eks_fargate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

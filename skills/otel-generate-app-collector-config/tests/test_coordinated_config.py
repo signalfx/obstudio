@@ -197,6 +197,77 @@ spec:
             contract,
         )
 
+    def test_collector_service_override_validates_against_evidence(self) -> None:
+        collector = self.run_command(
+            [
+                sys.executable,
+                str(GENERATE_COLLECTOR),
+                "--output",
+                str(self.collector),
+                "--realm",
+                "us0",
+                "--cluster-name",
+                "checkout-kind",
+                "--environment",
+                "test",
+                "--namespace",
+                "observability",
+                "--release-name",
+                "splunk-otel",
+                "--existing-secret",
+                "splunk-otel-token",
+                "--distribution",
+                "other",
+                "--collector-version",
+                "0.157.0",
+            ]
+        )
+        self.assertEqual(collector.returncode, 0, collector.stderr)
+        custom_service = "otel-us0-gateway"
+        collector_text = self.collector_yaml.read_text(encoding="utf-8")
+        collector_text = collector_text.replace(
+            "kind: Service\nmetadata:\n  name: splunk-otel-collector\n",
+            f"kind: Service\nmetadata:\n  name: {custom_service}\n",
+            1,
+        )
+        self.collector_yaml.write_text(collector_text, encoding="utf-8")
+
+        application = self.run_command(
+            [
+                sys.executable,
+                str(GENERATE_APPLICATION),
+                "--app",
+                str(self.app),
+                "--workspace-root",
+                str(self.workspace),
+                "--realm",
+                "us0",
+                "--existing-secret",
+                "splunk-otel-token",
+                "--collector-evidence",
+                str(self.collector_yaml),
+                "--collector-service",
+                custom_service,
+                "--base",
+                "kubernetes/deployment.yaml",
+                "--application-namespace",
+                "checkout",
+                "--workload-kind",
+                "Deployment",
+                "--workload-name",
+                "checkout",
+                "--container",
+                "checkout",
+            ]
+        )
+        self.assertEqual(application.returncode, 0, application.stderr)
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        contract = (self.application / "otel-connection.yaml").read_text()
+        self.assertIn(f'service: "{custom_service}"', contract)
+
     def test_realm_drift_is_rejected(self) -> None:
         self.generate()
         self.collector_yaml.write_text(
