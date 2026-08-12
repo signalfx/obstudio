@@ -146,6 +146,12 @@ must write `helm/Chart.yaml`, `helm/values.yaml`, and
 `helm-rendered.yaml`, `helm-rendered.provenance.json`, or any equivalent
 optional render artifact.
 
+The generated `DEPLOYMENT.md` must include optional local kind smoke-test
+commands for users to run after generation. Keep those commands user-run only:
+the skill must not create kind clusters, create Secrets, apply Kubernetes YAML,
+send telemetry, query Splunk, or treat absence of collector log errors as cloud
+query proof.
+
 ## Generate the matching application configuration
 
 Default application output to `<app>/deploy/otel-config`. For gateway topology,
@@ -285,7 +291,9 @@ The completed configuration is:
 
 Report the resolved application, workload/container, Collector endpoint, chart
 version, output paths, checks run, and whether the application output is
-existing-base mode or scaffold mode. End with this explicit boundary:
+existing-base mode or scaffold mode. Mention that the generated
+`DEPLOYMENT.md` includes optional user-run kind smoke steps. End with this
+explicit boundary:
 
 ```text
 Configuration files were generated and validated locally. No resources were

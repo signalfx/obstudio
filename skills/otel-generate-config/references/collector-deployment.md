@@ -94,6 +94,10 @@ splunk_observability_access_token
 
 Generate only example Secrets containing `REPLACE_AT_DEPLOY_TIME`.
 
+Generated handoff commands should prefer `kubectl create secret --from-file` fed
+from stdin over `--from-literal` so token bytes are not placed directly in the
+kubectl process arguments.
+
 ## Endpoint and signal contract
 
 Use the current Observability Cloud domains:
@@ -150,6 +154,30 @@ Run, in order:
 
 Do not run `kubectl apply` as part of ordinary generation. Static validation
 does not prove live Service readiness or Splunk Observability Cloud receipt.
+
+## Local kind smoke handoff
+
+`DEPLOYMENT.md` should include optional user-run kind smoke steps that:
+
+- create or target a local kind cluster;
+- create the Collector token Secret from stdin, not from literal command
+  arguments;
+- apply only `kubernetes/collector.yaml`;
+- wait for `deployment/<collector-workload>` to roll out;
+- render any generated application overlay separately instead of applying a
+  scaffold application;
+- send traces and a unique metric through the Collector Service using
+  `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v<version>`;
+- inspect Collector logs for `Exporting failed`, `Unauthenticated`, or
+  `error exporting`;
+- optionally query `https://api.<realm>.observability.splunkcloud.com` with a
+  separate API-capable token.
+
+State the boundary clearly: Collector readiness plus no exporter errors is a
+local smoke test, not full Splunk Observability Cloud query proof. HTTP 401 from
+the ingest endpoint means the Secret token is not accepted for that realm. HTTP
+401 from the API endpoint means the query token is not accepted for the Splunk
+Observability API.
 
 ## Primary references
 

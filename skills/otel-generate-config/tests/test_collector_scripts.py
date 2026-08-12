@@ -135,6 +135,18 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("helm/values.yaml", deployment)
             self.assertIn("kubernetes/collector.yaml", deployment)
             self.assertIn("does not require the Helm CLI", deployment)
+            self.assertIn("Local kind smoke test", deployment)
+            self.assertIn(
+                "--from-file=splunk_observability_access_token=/dev/stdin",
+                deployment,
+            )
+            self.assertIn(
+                "ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.157.0",
+                deployment,
+            )
+            self.assertIn("timeserieswindow", deployment)
+            self.assertIn("ingest.us1.observability.splunkcloud.com", deployment)
+            self.assertIn("query token is not accepted", deployment)
             self.assertNotIn("helm-rendered", deployment)
 
     def test_gateway_mode_is_explicit(self) -> None:

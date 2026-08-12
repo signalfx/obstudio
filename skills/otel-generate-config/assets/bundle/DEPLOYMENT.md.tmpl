@@ -24,12 +24,13 @@ Use a Splunk Observability Cloud organization token with ingest scope. Keep the
 token out of values files and shell history:
 
 ```bash
-# Populate SPLUNK_ACCESS_TOKEN from your approved secret manager first.
-test -n "${SPLUNK_ACCESS_TOKEN:-}"
+read -rsp "Splunk Observability ingest token: " SPLUNK_ACCESS_TOKEN
+echo
 kubectl create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
-  --from-literal=splunk_observability_access_token="${SPLUNK_ACCESS_TOKEN}" \
+printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
+  --from-file=splunk_observability_access_token=/dev/stdin \
   --dry-run=client -o yaml | kubectl apply -f -
+unset SPLUNK_ACCESS_TOKEN
 ```
 
 The example Secret files contain `REPLACE_AT_DEPLOY_TIME`, not a usable token.
@@ -71,6 +72,89 @@ kubectl apply -f ./kubernetes/collector.yaml
 
 The server dry run and apply use the current kubectl context. Confirm the
 cluster and namespace before running them.
+
+## Local kind smoke test
+
+Use this only to prove the generated YAML starts locally and can receive OTLP.
+It does not deploy the application scaffold and it does not require Helm.
+
+```bash
+kind create cluster --name @@CLUSTER_NAME_RAW@@
+kubectl cluster-info --context kind-@@CLUSTER_NAME_RAW@@
+```
+
+Create the Secret and deploy the generated Collector YAML to the kind context:
+
+```bash
+read -rsp "Splunk Observability ingest token: " SPLUNK_ACCESS_TOKEN
+echo
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ create namespace @@NAMESPACE_RAW@@ --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
+printf '%s' "${SPLUNK_ACCESS_TOKEN}" | kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ create secret generic @@SECRET_NAME_RAW@@ \
+  --from-file=splunk_observability_access_token=/dev/stdin \
+  --dry-run=client -o yaml | kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f -
+unset SPLUNK_ACCESS_TOKEN
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ apply -f ./kubernetes/collector.yaml
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ rollout status deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --timeout=120s
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ get pods,svc
+```
+
+Send test telemetry through the Collector Service with the pinned telemetrygen
+image. The tag uses a leading `v`.
+
+```bash
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-traces \
+  --rm -i --restart=Never \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
+  -- traces \
+  --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
+  --otlp-insecure \
+  --service=otel-generate-config-smoke \
+  --traces=10
+
+SMOKE_METRIC="otel_generate_config_kind_demo_$(date +%Y%m%d%H%M%S)"
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ run telemetrygen-metrics \
+  --rm -i --restart=Never \
+  --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v@@COLLECTOR_VERSION_RAW@@ \
+  -- metrics \
+  --otlp-endpoint=@@COLLECTOR_SERVICE_NAME_RAW@@.@@NAMESPACE_RAW@@.svc.cluster.local:4317 \
+  --otlp-insecure \
+  --service=otel-generate-config-smoke \
+  --otlp-metric-name="${SMOKE_METRIC}" \
+  --metrics=20 \
+  --rate=5
+```
+
+Check Collector logs for exporter authentication or delivery failures:
+
+```bash
+kubectl --context kind-@@CLUSTER_NAME_RAW@@ -n @@NAMESPACE_RAW@@ logs deployment/@@COLLECTOR_WORKLOAD_NAME_RAW@@ --since=5m | \
+  grep -E "Exporting failed|Unauthenticated|error exporting" || true
+```
+
+No matching log lines after the smoke test means the Collector did not report
+an exporter failure. It is still not the same as proving cloud queryability.
+
+If you have a Splunk Observability API-capable token, query the unique metric:
+
+```bash
+read -rsp "Splunk Observability API token: " SPLUNK_API_TOKEN
+echo
+END_MS="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+START_MS="$((END_MS - 900000))"
+curl -sS -G "https://api.@@REALM_RAW@@.observability.splunkcloud.com/v1/timeserieswindow" \
+  -H "X-SF-Token: ${SPLUNK_API_TOKEN}" \
+  --data-urlencode "query=sf_metric:${SMOKE_METRIC}" \
+  --data-urlencode "startMs=${START_MS}" \
+  --data-urlencode "endMs=${END_MS}" \
+  --data-urlencode "resolution=1000"
+unset SPLUNK_API_TOKEN
+```
+
+If Collector logs show HTTP 401 from
+`ingest.@@REALM_RAW@@.observability.splunkcloud.com`, the Secret does not
+contain an ingest token accepted for this realm. If the API query returns HTTP
+401, the query token is not accepted for the Splunk Observability API; that is a
+different failure from Collector export.
 
 ## Send application telemetry
 
