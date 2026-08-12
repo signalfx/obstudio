@@ -69,7 +69,7 @@
       "values": [
         "endpoint: 0.0.0.0:4317",
         "endpoint: 0.0.0.0:4318",
-        "processors: [memory_limiter, batch]",
+        "processors: [memory_limiter, resource/identity, batch]",
         "observability.splunkcloud.com/v2/trace/otlp",
         "observability.splunkcloud.com/v2/datapoint/otlp",
         "${env:SPLUNK_ACCESS_TOKEN}"

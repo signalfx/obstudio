@@ -7,16 +7,16 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-generate-app-collector-config |
-| Run ID | 20260811T153828209971Z |
+| Run ID | 20260812T072051756282Z |
 | Agent model | gpt-5.5 |
 | Workers | 1 |
-| Config | /private/tmp/otel-generate-app-collector-config-eval.toml |
+| Config | evals/codex-evals.toml |
 
 ## Sanity Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | deployments/generate-config-basic/sanity/generate | deployments/generate-config-basic | 1 | 100% (21/21) | 717.8K | 4.6m | - | - | - |
+| with_skill | deployments/generate-config-basic/sanity/generate | deployments/generate-config-basic | 1 | 100% (22/22) | 901.7K | 5.6m | - | - | - |
 
 ## Sanity Failures
 

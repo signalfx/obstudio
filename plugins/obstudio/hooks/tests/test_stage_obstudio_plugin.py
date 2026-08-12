@@ -72,6 +72,14 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
         self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
 
+    def test_obstudio_help_lists_generate_config_skill(self):
+        plugin_root = Path(__file__).resolve().parents[2]
+        help_text = (
+            plugin_root / "skills" / "obstudio-help" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("otel-generate-app-collector-config", help_text)
+
     def test_verify_rejects_too_many_default_prompts(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
