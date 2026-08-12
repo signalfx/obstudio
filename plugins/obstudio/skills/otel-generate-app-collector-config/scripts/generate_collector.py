@@ -28,6 +28,10 @@ SEMVER = re.compile(
     r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
+COLLECTOR_IMAGE_TAG_VERSION = re.compile(
+    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z.-]+)?$"
+)
 UNRESOLVED = re.compile(r"@@[A-Z0-9_]+@@")
 HELM_RELEASE_NAME_MAX_LENGTH = 47
 SECRET_NAME_ERROR = "invalid Kubernetes Secret name"
@@ -158,6 +162,11 @@ def replacements(args: argparse.Namespace) -> dict[str, str]:
         )
     validate_secret_name(secret_name)
     validate_input("chart version", args.chart_version, SEMVER)
+    validate_input(
+        "collector image tag",
+        args.chart_version,
+        COLLECTOR_IMAGE_TAG_VERSION,
+    )
     validate_text("cluster name", args.cluster_name)
     validate_text("environment", args.environment, max_length=128)
 

@@ -447,6 +447,18 @@ class BundleScriptsTest(unittest.TestCase):
             )
             self.assertIn("invalid chart version", result.stderr)
 
+    def test_rejects_chart_version_with_build_metadata_for_image_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--chart-version",
+                "0.157.0+build",
+                expect_success=False,
+            )
+            self.assertIn("invalid collector image tag", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_rejects_realm_with_trailing_hyphen(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
@@ -559,6 +571,31 @@ class BundleScriptsTest(unittest.TestCase):
                 manifest_path.read_text(encoding="utf-8").replace(
                     "quay.io/signalfx/splunk-otel-collector:0.157.0",
                     "quay.io/signalfx/splunk-otel-collector:latest",
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.validate(output, expect_success=False)
+
+            self.assertIn("must pin exactly one Splunk Collector image tag", result.stderr)
+
+    def test_validator_rejects_image_tag_with_build_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            self.generate(output)
+            chart_path = output / "helm" / "Chart.yaml"
+            chart_path.write_text(
+                chart_path.read_text(encoding="utf-8").replace(
+                    'version: "0.157.0"',
+                    'version: "0.157.0+build"',
+                ),
+                encoding="utf-8",
+            )
+            manifest_path = output / "kubernetes" / "collector.yaml"
+            manifest_path.write_text(
+                manifest_path.read_text(encoding="utf-8").replace(
+                    "quay.io/signalfx/splunk-otel-collector:0.157.0",
+                    "quay.io/signalfx/splunk-otel-collector:0.157.0+build",
                 ),
                 encoding="utf-8",
             )

@@ -96,7 +96,7 @@ COLLECTOR_IMAGE = re.compile(
     r"^\s*image:\s*[\"']?"
     r"quay\.io/signalfx/splunk-otel-collector:"
     r"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)"
+    r"(?:-[0-9A-Za-z.-]+)?)"
     r"[\"']?\s*$",
     re.MULTILINE,
 )
