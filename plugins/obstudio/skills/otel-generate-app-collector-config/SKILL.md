@@ -287,6 +287,7 @@ The completed configuration is:
 
 ```text
 <workspace>/deploy/otel-collector/
+├── .otel-generate-app-collector-config.json
 ├── collector-config.yaml
 ├── DEPLOYMENT.md
 ├── helm/

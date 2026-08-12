@@ -12,6 +12,7 @@ data:
   collector.yaml: |
     # Standalone Splunk OpenTelemetry Collector configuration.
     # Required environment variables: SPLUNK_REALM, SPLUNK_ACCESS_TOKEN.
+    # Cluster/environment resource attributes are rendered at generation time.
     extensions:
       health_check:
         endpoint: 0.0.0.0:13133
@@ -29,6 +30,14 @@ data:
         check_interval: 1s
         limit_percentage: 75
         spike_limit_percentage: 15
+      resource/identity:
+        attributes:
+          - key: k8s.cluster.name
+            value: @@CLUSTER_NAME@@
+            action: upsert
+          - key: deployment.environment
+            value: @@ENVIRONMENT@@
+            action: upsert
       batch:
         send_batch_size: 8192
         timeout: 5s
@@ -55,11 +64,11 @@ data:
       pipelines:
         metrics:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource/identity, batch]
           exporters: [otlphttp/splunk]
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource/identity, batch]
           exporters: [otlphttp/splunk]
 ---
 apiVersion: v1

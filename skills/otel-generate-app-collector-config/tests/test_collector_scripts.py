@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -70,19 +71,42 @@ class BundleScriptsTest(unittest.TestCase):
         values = output / "helm" / "values.yaml"
         secret = output / "helm" / "examples" / "splunk-secret.yaml"
         lock = output / "helm" / "Chart.lock"
+        owner = output / ".otel-generate-app-collector-config.json"
         archive = (
             output
             / "helm"
             / "charts"
             / "splunk-otel-collector-0.155.0.tgz"
         )
-        for path in (chart, values, secret, lock, archive):
+        for path in (chart, values, secret, lock, archive, owner):
             path.parent.mkdir(parents=True, exist_ok=True)
         chart.write_text("apiVersion: v2\nname: old\n", encoding="utf-8")
         values.write_text("collector: {}\n", encoding="utf-8")
         secret.write_text("apiVersion: v1\nkind: Secret\n", encoding="utf-8")
         lock.write_text("stale lock\n", encoding="utf-8")
         archive.write_bytes(b"stale archive")
+        owner.write_text(
+            json.dumps(
+                {
+                    "generator": "otel-generate-app-collector-config",
+                    "managedFiles": [
+                        ".otel-generate-app-collector-config.json",
+                        "DEPLOYMENT.md",
+                        "collector-config.yaml",
+                        "helm/Chart.yaml",
+                        "helm/examples/splunk-secret.yaml",
+                        "helm/values.yaml",
+                        "kubernetes/collector.yaml",
+                        "kubernetes/splunk-secret.example.yaml",
+                    ],
+                    "version": 1,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     def test_generates_token_free_kubernetes_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -122,8 +146,17 @@ class BundleScriptsTest(unittest.TestCase):
                 output / "kubernetes" / "splunk-secret.example.yaml"
             ).read_text()
             deployment = (output / "DEPLOYMENT.md").read_text()
+            owner = json.loads(
+                (output / ".otel-generate-app-collector-config.json").read_text()
+            )
 
             self.assertFalse((output / "kubernetes" / "helm-rendered.yaml").exists())
+            self.assertEqual(
+                owner["generator"],
+                "otel-generate-app-collector-config",
+            )
+            self.assertIn("collector-config.yaml", owner["managedFiles"])
+            self.assertIn("helm/values.yaml", owner["managedFiles"])
             self.assertIn("version: \"0.157.0\"", chart)
             self.assertIn(
                 "repository: \"https://signalfx.github.io/splunk-otel-collector-chart\"",
@@ -136,12 +169,30 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("${env:SPLUNK_ACCESS_TOKEN}", collector)
             self.assertIn("otlphttp/splunk:", collector)
             self.assertIn("exporters: [otlphttp/splunk]", collector)
+            self.assertIn("resource/identity:", collector)
+            self.assertIn("key: k8s.cluster.name", collector)
+            self.assertIn('value: "checkout-prod"', collector)
+            self.assertIn("key: deployment.environment", collector)
+            self.assertIn('value: "production"', collector)
+            self.assertIn(
+                "processors: [memory_limiter, resource/identity, batch]",
+                collector,
+            )
             self.assertNotIn("otlp_http/splunk", collector)
             self.assertIn("kind: Service", manifest)
             self.assertIn("kind: Deployment", manifest)
             self.assertIn("name: splunk-otel-collector-agent", manifest)
             self.assertIn("otlphttp/splunk:", manifest)
             self.assertIn("exporters: [otlphttp/splunk]", manifest)
+            self.assertIn("resource/identity:", manifest)
+            self.assertIn("key: k8s.cluster.name", manifest)
+            self.assertIn('value: "checkout-prod"', manifest)
+            self.assertIn("key: deployment.environment", manifest)
+            self.assertIn('value: "production"', manifest)
+            self.assertIn(
+                "processors: [memory_limiter, resource/identity, batch]",
+                manifest,
+            )
             self.assertNotIn("otlp_http/splunk", manifest)
             self.assertIn(
                 "image: \"quay.io/signalfx/splunk-otel-collector:0.157.0\"",
@@ -177,6 +228,8 @@ class BundleScriptsTest(unittest.TestCase):
             )
             self.assertIn("timeserieswindow", deployment)
             self.assertIn("ingest.us1.observability.splunkcloud.com", deployment)
+            self.assertIn("k8s.cluster.name=checkout-prod", deployment)
+            self.assertIn("deployment.environment=production", deployment)
             self.assertIn("query token is not accepted", deployment)
             self.assertNotIn("helm-rendered", deployment)
 
@@ -279,6 +332,22 @@ class BundleScriptsTest(unittest.TestCase):
             self.assertIn("use --overwrite", result.stderr)
             self.generate(output, "--overwrite")
 
+    def test_overwrite_rejects_unowned_managed_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            hand_authored = output / "helm" / "values.yaml"
+            hand_authored.parent.mkdir(parents=True)
+            hand_authored.write_text("collector:\n  handAuthored: true\n")
+
+            result = self.generate(output, "--overwrite", expect_success=False)
+
+            self.assertIn("refuse to overwrite unowned files", result.stderr)
+            self.assertEqual(
+                hand_authored.read_text(),
+                "collector:\n  handAuthored: true\n",
+            )
+            self.assertFalse((output / "collector-config.yaml").exists())
+
     def test_overwrite_removes_stale_rendered_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
@@ -295,16 +364,16 @@ class BundleScriptsTest(unittest.TestCase):
     def test_legacy_render_provenance_requires_overwrite_and_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir).resolve() / "bundle"
+            self.generate(output)
             provenance = (
                 output
                 / "kubernetes"
                 / "helm-rendered.provenance.json"
             )
-            provenance.parent.mkdir(parents=True)
             provenance.write_text("stale provenance\n", encoding="utf-8")
 
             refused = self.generate(output, expect_success=False)
-            self.assertIn("helm-rendered.provenance.json", refused.stderr)
+            self.assertIn("use --overwrite", refused.stderr)
             self.assertEqual(provenance.read_text(), "stale provenance\n")
 
             replaced = self.generate(output, "--overwrite")
@@ -465,6 +534,37 @@ class BundleScriptsTest(unittest.TestCase):
                 expect_success=False,
             )
             self.assertIn("invalid chart version", result.stderr)
+
+    def test_rejects_malformed_chart_prerelease_versions(self) -> None:
+        invalid_versions = (
+            "0.157.0-..",
+            "0.157.0-01",
+            "0.157.0-alpha..1",
+            "0.157.0-alpha.01",
+        )
+        for version in invalid_versions:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temp_dir:
+                output = Path(temp_dir).resolve() / "bundle"
+                result = self.generate(
+                    output,
+                    "--chart-version",
+                    version,
+                    expect_success=False,
+                )
+                self.assertIn("invalid chart version", result.stderr)
+                self.assertFalse(output.exists())
+
+    def test_accepts_valid_chart_prerelease_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir).resolve() / "bundle"
+            result = self.generate(
+                output,
+                "--chart-version",
+                "0.157.0-alpha.1",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.validate(output)
 
     def test_rejects_chart_version_with_build_metadata_for_image_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

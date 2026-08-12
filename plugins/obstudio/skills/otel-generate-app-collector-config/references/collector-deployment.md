@@ -140,6 +140,7 @@ Write:
 
 ```text
 <output>/
+├── .otel-generate-app-collector-config.json
 ├── collector-config.yaml
 ├── helm/
 │   ├── Chart.yaml
@@ -151,9 +152,10 @@ Write:
 └── DEPLOYMENT.md
 ```
 
-Regeneration with `--overwrite` removes stale legacy render artifacts,
-`Chart.lock`, and cached dependency archives so they cannot be mistaken for
-current generated output.
+Regeneration with `--overwrite` requires the ownership manifest before replacing
+managed destinations. It removes stale legacy render artifacts, `Chart.lock`,
+and cached dependency archives only from a generator-owned output bundle so
+hand-authored user files are not silently replaced.
 
 ## Validation contract
 

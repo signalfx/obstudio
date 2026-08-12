@@ -24,17 +24,29 @@ SUPPORTED_DISTRIBUTIONS = (
 )
 DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 REALM = re.compile(r"^[a-z][a-z0-9-]{0,30}[a-z0-9]$")
-SEMVER = re.compile(
-    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+SEMVER_NUMERIC_IDENTIFIER = r"(?:0|[1-9]\d*)"
+SEMVER_NONNUMERIC_IDENTIFIER = r"(?:[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER_PRERELEASE_IDENTIFIER = (
+    rf"(?:{SEMVER_NUMERIC_IDENTIFIER}|{SEMVER_NONNUMERIC_IDENTIFIER})"
 )
-COLLECTOR_IMAGE_TAG_VERSION = re.compile(
-    r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?$"
+SEMVER_PRERELEASE = (
+    rf"{SEMVER_PRERELEASE_IDENTIFIER}(?:\.{SEMVER_PRERELEASE_IDENTIFIER})*"
 )
+SEMVER_BUILD = r"(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)"
+SEMVER_CORE = (
+    rf"{SEMVER_NUMERIC_IDENTIFIER}\."
+    rf"{SEMVER_NUMERIC_IDENTIFIER}\."
+    rf"{SEMVER_NUMERIC_IDENTIFIER}"
+)
+SEMVER_PATTERN = rf"{SEMVER_CORE}(?:-{SEMVER_PRERELEASE})?(?:\+{SEMVER_BUILD})?"
+COLLECTOR_IMAGE_TAG_PATTERN = rf"{SEMVER_CORE}(?:-{SEMVER_PRERELEASE})?"
+SEMVER = re.compile(rf"^{SEMVER_PATTERN}$")
+COLLECTOR_IMAGE_TAG_VERSION = re.compile(rf"^{COLLECTOR_IMAGE_TAG_PATTERN}$")
 UNRESOLVED = re.compile(r"@@[A-Z0-9_]+@@")
 HELM_RELEASE_NAME_MAX_LENGTH = 47
 SECRET_NAME_ERROR = "invalid Kubernetes Secret name"
+OWNER_MANIFEST_NAME = ".otel-generate-app-collector-config.json"
+OWNER_MANIFEST_GENERATOR = "otel-generate-app-collector-config"
 
 
 def reject_token_argument(argv: list[str] | None) -> list[str]:
@@ -266,6 +278,87 @@ def reject_symlink_components(path: Path) -> None:
             )
 
 
+def relative_to_output(output: Path, path: Path) -> str:
+    return path.relative_to(output).as_posix()
+
+
+def owner_manifest_path(output: Path) -> Path:
+    return output / OWNER_MANIFEST_NAME
+
+
+def read_owner_manifest(output: Path) -> set[str] | None:
+    manifest = owner_manifest_path(output)
+    if manifest.is_symlink():
+        raise ValueError(f"ownership manifest must not be a symlink: {manifest}")
+    if not manifest.exists():
+        return None
+    if not manifest.is_file():
+        raise ValueError(
+            f"ownership manifest is not a regular file: {manifest}"
+        )
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"ownership manifest is invalid: {manifest}") from exc
+    managed_files = payload.get("managedFiles")
+    if (
+        payload.get("generator") != OWNER_MANIFEST_GENERATOR
+        or not isinstance(managed_files, list)
+        or not all(isinstance(item, str) for item in managed_files)
+    ):
+        raise ValueError(f"ownership manifest is invalid: {manifest}")
+    return set(managed_files)
+
+
+def write_owner_manifest(output: Path, destinations: list[Path]) -> Path:
+    manifest = owner_manifest_path(output)
+    managed_files = sorted(
+        {
+            OWNER_MANIFEST_NAME,
+            *(
+                relative_to_output(output, destination)
+                for destination in destinations
+            ),
+        }
+    )
+    payload = {
+        "generator": OWNER_MANIFEST_GENERATOR,
+        "managedFiles": managed_files,
+        "version": 1,
+    }
+    manifest.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def require_owned_overwrite(
+    output: Path,
+    existing_files: list[Path],
+    stale_artifacts: list[Path],
+) -> None:
+    protected = [*existing_files, *stale_artifacts]
+    if not protected:
+        return
+    owned_files = read_owner_manifest(output)
+    if owned_files is None:
+        joined = ", ".join(str(path) for path in protected)
+        raise ValueError(
+            "refuse to overwrite unowned files; ownership manifest is "
+            f"missing: {joined}"
+        )
+    for path in existing_files:
+        if path == owner_manifest_path(output):
+            continue
+        relative = relative_to_output(output, path)
+        if relative not in owned_files:
+            raise ValueError(
+                "refuse to overwrite unowned managed file: "
+                f"{path}"
+            )
+
+
 def generate(args: argparse.Namespace) -> list[Path]:
     output = args.output
     reject_symlink_components(output)
@@ -279,6 +372,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
         raise ValueError("no configuration templates found")
 
     destinations = [output / destination_for(template) for template in templates]
+    owner_manifest = owner_manifest_path(output)
     legacy_rendered_manifest = output / "kubernetes" / "helm-rendered.yaml"
     legacy_rendered_provenance = (
         output / "kubernetes" / "helm-rendered.provenance.json"
@@ -287,6 +381,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
     charts_directory = output / "helm" / "charts"
     for destination in [
         *destinations,
+        owner_manifest,
         legacy_rendered_manifest,
         legacy_rendered_provenance,
         chart_lock,
@@ -316,6 +411,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
         path
         for path in [
             *destinations,
+            owner_manifest,
         ]
         if path.exists()
     ]
@@ -364,6 +460,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
             f"{joined}"
         )
     if args.overwrite:
+        require_owned_overwrite(output, existing, stale_artifacts)
         for stale_file in stale_artifacts:
             stale_file.unlink()
             print(
@@ -381,6 +478,7 @@ def generate(args: argparse.Namespace) -> list[Path]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(text, encoding="utf-8")
         written.append(destination)
+    written.append(write_owner_manifest(output, destinations))
     return written
 
 

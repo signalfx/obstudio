@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 REQUIRED_FILES = (
+    ".otel-generate-app-collector-config.json",
     "collector-config.yaml",
     "helm/Chart.yaml",
     "helm/values.yaml",
@@ -26,12 +27,29 @@ EXAMPLE_SECRET_FILES = {
 OFFICIAL_CHART_REPOSITORY = (
     "https://signalfx.github.io/splunk-otel-collector-chart"
 )
+OWNER_MANIFEST_NAME = ".otel-generate-app-collector-config.json"
+OWNER_MANIFEST_GENERATOR = "otel-generate-app-collector-config"
+SEMVER_NUMERIC_IDENTIFIER = r"(?:0|[1-9]\d*)"
+SEMVER_NONNUMERIC_IDENTIFIER = r"(?:[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER_PRERELEASE_IDENTIFIER = (
+    rf"(?:{SEMVER_NUMERIC_IDENTIFIER}|{SEMVER_NONNUMERIC_IDENTIFIER})"
+)
+SEMVER_PRERELEASE = (
+    rf"{SEMVER_PRERELEASE_IDENTIFIER}(?:\.{SEMVER_PRERELEASE_IDENTIFIER})*"
+)
+SEMVER_BUILD = r"(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)"
+SEMVER_CORE = (
+    rf"{SEMVER_NUMERIC_IDENTIFIER}\."
+    rf"{SEMVER_NUMERIC_IDENTIFIER}\."
+    rf"{SEMVER_NUMERIC_IDENTIFIER}"
+)
+SEMVER_PATTERN = rf"{SEMVER_CORE}(?:-{SEMVER_PRERELEASE})?(?:\+{SEMVER_BUILD})?"
+COLLECTOR_IMAGE_TAG_PATTERN = rf"{SEMVER_CORE}(?:-{SEMVER_PRERELEASE})?"
 EXACT_CHART_VERSION = re.compile(
     r"^\s*-\s*name:\s*splunk-otel-collector\s*$"
     r"(?:(?!^\s*-\s*name:).)*?"
     r"^\s*version:\s*[\"']?"
-    r"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)"
+    rf"({SEMVER_PATTERN})"
     r"[\"']?\s*$",
     re.MULTILINE | re.DOTALL,
 )
@@ -95,8 +113,7 @@ SECRET_TOKEN_MAPPING_KEY = re.compile(
 COLLECTOR_IMAGE = re.compile(
     r"^\s*image:\s*[\"']?"
     r"quay\.io/signalfx/splunk-otel-collector:"
-    r"((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z.-]+)?)"
+    rf"({COLLECTOR_IMAGE_TAG_PATTERN})"
     r"[\"']?\s*$",
     re.MULTILINE,
 )
@@ -749,6 +766,21 @@ def validate(bundle: Path) -> list[str]:
             if "${" not in access_token:
                 errors.append(f"{relative} contains a literal access_token value")
 
+    owner = contents.get(OWNER_MANIFEST_NAME, "")
+    if owner:
+        try:
+            owner_payload = json.loads(owner)
+        except json.JSONDecodeError:
+            errors.append(f"{OWNER_MANIFEST_NAME} is not valid JSON")
+        else:
+            managed_files = owner_payload.get("managedFiles")
+            if owner_payload.get("generator") != OWNER_MANIFEST_GENERATOR:
+                errors.append(f"{OWNER_MANIFEST_NAME} has an invalid generator")
+            if managed_files != sorted(REQUIRED_FILES):
+                errors.append(
+                    f"{OWNER_MANIFEST_NAME} does not list the expected managed files"
+                )
+
     collector = contents.get("collector-config.yaml", "")
     collector_required = (
         "receivers:",
@@ -757,11 +789,14 @@ def validate(bundle: Path) -> list[str]:
         "service:",
         "extensions: [health_check]",
         "otlphttp/splunk:",
-        "processors: [memory_limiter, batch]",
-        "exporters: [otlphttp/splunk]",
+        "resource/identity:",
+        "key: k8s.cluster.name",
+        "key: deployment.environment",
+        "processors: [memory_limiter, resource/identity, batch]",
         "traces_endpoint: \"https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/trace/otlp\"",
         "metrics_endpoint: \"https://ingest.${env:SPLUNK_REALM}.observability.splunkcloud.com/v2/datapoint/otlp\"",
         "X-SF-Token: \"${env:SPLUNK_ACCESS_TOKEN}\"",
+        "exporters: [otlphttp/splunk]",
     )
     for value in collector_required:
         if value not in collector:
@@ -801,6 +836,21 @@ def validate(bundle: Path) -> list[str]:
             )
 
     values = contents.get("helm/values.yaml", "")
+    cluster_name = nested_yaml_scalar(values, ("collector", "clusterName"))
+    environment = nested_yaml_scalar(values, ("collector", "environment"))
+    if not cluster_name:
+        errors.append("helm/values.yaml has no Collector clusterName")
+    if not environment:
+        errors.append("helm/values.yaml has no Collector environment")
+    if cluster_name and environment:
+        for value in (
+            f"value: {json.dumps(cluster_name)}",
+            f"value: {json.dumps(environment)}",
+        ):
+            if value not in collector:
+                errors.append(
+                    f"collector-config.yaml missing required value: {value}"
+                )
     realm = nested_yaml_scalar(
         values,
         ("collector", "splunkObservability", "realm"),
@@ -915,9 +965,20 @@ def validate(bundle: Path) -> list[str]:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains a token placeholder")
     if "helm.sh/hook" in manifest:
         errors.append(f"{COLLECTOR_MANIFEST_PATH} contains Helm hooks")
+    identity_required: tuple[str, ...] = ()
+    if cluster_name and environment:
+        identity_required = (
+            f"value: {json.dumps(cluster_name)}",
+            f"value: {json.dumps(environment)}",
+        )
     manifest_required = (
         "otlphttp/splunk:",
+        "resource/identity:",
+        "key: k8s.cluster.name",
+        "key: deployment.environment",
+        "processors: [memory_limiter, resource/identity, batch]",
         "exporters: [otlphttp/splunk]",
+        *identity_required,
     )
     for value in manifest_required:
         if value not in manifest:

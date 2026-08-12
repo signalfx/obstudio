@@ -13,7 +13,9 @@ This configuration targets Splunk Observability Cloud realm @@REALM_RAW@@ for cl
   `quay.io/signalfx/splunk-otel-collector:@@COLLECTOR_VERSION_RAW@@`.
 - **Standalone config:** `collector-config.yaml` receives OTLP on ports 4317
   and 4318 and exports metrics and traces. Use it with a compatible current
-  Splunk Collector distribution.
+  Splunk Collector distribution. The generated Collector config also upserts
+  `k8s.cluster.name=@@CLUSTER_NAME_RAW@@` and
+  `deployment.environment=@@ENVIRONMENT_RAW@@` on metrics and traces.
 
 Logs are not exported by this configuration. Application logs require a separate
 Splunk Platform or Splunk Cloud HEC destination and index.
