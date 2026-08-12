@@ -21,7 +21,7 @@ Current scope:
 
 - bundled skills for audit, instrumentation, verification, and Splunk publish workflows
 - bundled observer control skills:
-  - `obstudio-help`
+  - `skill-help`
   - `observer-open`
   - `observer-status`
   - `observer-restart`
@@ -44,7 +44,7 @@ Shared workflow skill sources live in the top-level `skills/` directory. The
 plugin keeps its canonical bundled skills under `plugins/obstudio/skills/` so
 repo-local marketplace installs work from a fresh checkout without preserving
 cross-directory symlinks. Plugin-only command/control skills, such as
-`obstudio-help` and `observer-control/*`, live only under
+`skill-help` and `observer-control/*`, live only under
 `plugins/obstudio/skills/`. Refresh the bundled plugin copy after editing
 canonical skills:
 

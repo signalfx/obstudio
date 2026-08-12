@@ -17,7 +17,7 @@ product policy.
 
 Core workflow skills:
 
-- `$obstudio-help`
+- `$skill-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`

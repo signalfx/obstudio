@@ -194,7 +194,7 @@ class StageObstudioPluginTest(unittest.TestCase):
     def test_plugin_local_command_skills_are_not_shared(self):
         root = Path(__file__).resolve().parents[4]
 
-        self.assertFalse((root / "skills" / "obstudio-help").exists())
+        self.assertFalse((root / "skills" / "skill-help").exists())
         self.assertFalse((root / "skills" / "observer-control").exists())
 
 

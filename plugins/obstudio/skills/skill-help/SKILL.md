@@ -1,12 +1,12 @@
 ---
-name: obstudio-help
+name: skill-help
 description: >-
   List the Obstudio skills available in the plugin and point the user to the
   right skill for opening, checking, restarting, or stopping the local
   Observer.
 ---
 
-# Obstudio Help
+# Obstudio Skill Help
 
 Use this skill when you want a quick index of the available Obstudio skills.
 

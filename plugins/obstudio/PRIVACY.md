@@ -10,7 +10,7 @@ The plugin contains three capability groups.
 
 Core workflow skills:
 
-- `$obstudio-help`
+- `$skill-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`

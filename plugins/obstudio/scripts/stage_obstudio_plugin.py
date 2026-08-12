@@ -20,7 +20,7 @@ DEFAULT_OUTPUT = ROOT / ".release" / "plugins" / "obstudio"
 DEFAULT_ARCHIVE = ROOT / ".release" / "plugins" / "obstudio.zip"
 PLUGIN_SKILLS_DIR = "skills"
 PLUGIN_LOCAL_SKILL_ENTRIES = (
-    "obstudio-help",
+    "skill-help",
     "observer-control/observer-open",
     "observer-control/observer-status",
     "observer-control/observer-restart",
@@ -39,7 +39,7 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
     "splunk-sync",
 )
 PLUGIN_SKILL_ENTRIES = (
-    "obstudio-help",
+    "skill-help",
     "observer-control/observer-open",
     "otel-audit",
     "otel-instrument",

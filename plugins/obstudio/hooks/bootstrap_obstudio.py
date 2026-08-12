@@ -66,7 +66,7 @@ def skill_command(name: str) -> str:
 
 
 def help_skill_hint() -> str:
-    return f"Use {skill_command('obstudio-help')} to list available commands."
+    return f"Use {skill_command('skill-help')} to list available commands."
 
 
 HELP_SKILL_HINT = help_skill_hint()
