@@ -71,6 +71,13 @@ class StageObstudioPluginTest(unittest.TestCase):
             "./plugins/obstudio",
         )
 
+    def test_claude_marketplace_uses_legacy_compatible_metadata(self):
+        marketplace_path = Path(__file__).resolve().parents[4] / ".claude-plugin" / "marketplace.json"
+        marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+
+        self.assertNotIn("description", marketplace)
+        self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
+
     def test_plugin_manifest_uses_committed_skills(self):
         plugin_root = Path(__file__).resolve().parents[2]
         manifest_path = plugin_root / ".codex-plugin" / "plugin.json"
@@ -92,6 +99,8 @@ class StageObstudioPluginTest(unittest.TestCase):
 
         self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
+        self.assertNotIn("$schema", claude_manifest)
+        self.assertNotIn("displayName", claude_manifest)
 
     def test_verify_rejects_too_many_default_prompts(self):
         with tempfile.TemporaryDirectory() as tempdir:

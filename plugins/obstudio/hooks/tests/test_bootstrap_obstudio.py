@@ -87,6 +87,54 @@ class BootstrapLockTest(unittest.TestCase):
 
 
 class ClaudeBootstrapTest(unittest.TestCase):
+    def test_prefers_codex_paths_when_both_host_environments_are_present(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            claude_root = tempdir_path / "claude-plugin"
+            codex_root = tempdir_path / "codex-plugin"
+            claude_data = tempdir_path / "claude-data"
+            codex_data = tempdir_path / "codex-data"
+            claude_root.mkdir()
+            codex_root.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "codex",
+                    "CLAUDE_PLUGIN_ROOT": str(claude_root),
+                    "PLUGIN_ROOT": str(codex_root),
+                    "CLAUDE_PLUGIN_DATA": str(claude_data),
+                    "PLUGIN_DATA": str(codex_data),
+                },
+            ):
+                self.assertEqual(BOOTSTRAP.resolve_plugin_root(), codex_root.resolve())
+                self.assertEqual(BOOTSTRAP.resolve_plugin_data(), codex_data.resolve())
+                self.assertTrue(codex_data.is_dir())
+                self.assertFalse(claude_data.exists())
+
+    def test_prefers_claude_paths_when_both_host_environments_are_present(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            claude_root = tempdir_path / "claude-plugin"
+            codex_root = tempdir_path / "codex-plugin"
+            claude_data = tempdir_path / "claude-data"
+            codex_data = tempdir_path / "codex-data"
+            claude_root.mkdir()
+            codex_root.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "claude",
+                    "CLAUDE_PLUGIN_ROOT": str(claude_root),
+                    "PLUGIN_ROOT": str(codex_root),
+                    "CLAUDE_PLUGIN_DATA": str(claude_data),
+                    "PLUGIN_DATA": str(codex_data),
+                },
+            ):
+                self.assertEqual(BOOTSTRAP.resolve_plugin_root(), claude_root.resolve())
+                self.assertEqual(BOOTSTRAP.resolve_plugin_data(), claude_data.resolve())
+                self.assertTrue(claude_data.is_dir())
+                self.assertFalse(codex_data.exists())
+
     def test_uses_claude_manifest_and_owner(self):
         root = Path(__file__).resolve().parents[4]
         prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")

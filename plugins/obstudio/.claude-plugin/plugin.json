@@ -1,7 +1,5 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "obstudio",
-  "displayName": "Obstudio",
   "version": "0.1.0",
   "description": "OpenTelemetry workflows and observer controls for Claude Code.",
   "author": {

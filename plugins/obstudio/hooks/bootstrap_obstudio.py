@@ -332,7 +332,8 @@ def bootstrap_locked(
 
 
 def resolve_plugin_root() -> Path:
-    for env_name in ("PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"):
+    env_names = ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT") if plugin_host() == "claude" else ("PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT")
+    for env_name in env_names:
         value = os.environ.get(env_name, "").strip()
         if value:
             return Path(value).expanduser().resolve()
@@ -340,7 +341,8 @@ def resolve_plugin_root() -> Path:
 
 
 def resolve_plugin_data() -> Path:
-    for env_name in ("PLUGIN_DATA", "CLAUDE_PLUGIN_DATA"):
+    env_names = ("CLAUDE_PLUGIN_DATA", "PLUGIN_DATA") if plugin_host() == "claude" else ("PLUGIN_DATA", "CLAUDE_PLUGIN_DATA")
+    for env_name in env_names:
         value = os.environ.get(env_name, "").strip()
         if value:
             data = Path(value).expanduser().resolve()
