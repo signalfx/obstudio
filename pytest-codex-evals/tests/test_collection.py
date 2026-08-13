@@ -100,6 +100,41 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
 
 
+def test_eval_json_can_declare_a_plugin_local_skill_source(pytester: pytest.Pytester):
+    pytester.makepyprojecttoml(
+        """
+        [project]
+        name = "plugin-evals"
+        version = "0.1.0"
+
+        [tool.pytest.ini_options]
+        testpaths = ["evals"]
+        """
+    )
+    (pytester.path / "skills").mkdir()
+    skill_dir = pytester.path / "plugins" / "sample" / "skills" / "observer-control" / "sample-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: sample-skill\n---\n", encoding="utf-8")
+    eval_dir = pytester.path / "evals" / "plugins" / "sample" / "eval" / "qual"
+    eval_dir.mkdir(parents=True)
+    (eval_dir / "sample.json").write_text(
+        json.dumps(
+            {
+                "skill": "sample-skill",
+                "skill_source": "plugins/sample/skills/observer-control/sample-skill",
+                "prompts": [{"id": "direct", "task": "Run the plugin skill."}],
+                "rubric": ["The answer is valid."],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest()
+
+    result.assert_outcomes(passed=1)
+
+
 def test_prompt_selection_uses_pytest_k(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"

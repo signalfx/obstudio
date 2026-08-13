@@ -7,6 +7,7 @@ from .base import (
     GradeCheckResult,
     GradeResult,
     PromptVariant,
+    resolve_skill_source,
     SideResult,
     ValidationResult,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "GradeResult",
 
     "PromptVariant",
+    "resolve_skill_source",
     "RubricEvalCase",
     "RubricEvalDefinition",
     "RuntimeCheck",

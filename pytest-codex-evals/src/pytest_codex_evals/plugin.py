@@ -17,6 +17,7 @@ from .definitions import (
     RubricEvalDefinition,
     RuntimeEvalCase,
     RuntimeEvalDefinition,
+    resolve_skill_source,
     SanityEvalCase,
     SanityEvalDefinition,
     ValidationResult,
@@ -273,6 +274,7 @@ def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path
         "base_id": definition.id,
         "prompt_id": prompt.id,
         "skill": definition.skill,
+        "skill_source": definition.skill_source,
         "language": definition.language,
         "service": definition.service,
         "task": prompt.task,
@@ -453,7 +455,7 @@ def validate_case(case: EvalCase, repo_root: Path, skill_dir: Path | None = None
     if case.fixture_dir is None or not case.fixture_dir.is_dir():
         raise AssertionError(f"{case.id}: eval directory is missing")
 
-    skill_file = (skill_dir or repo_root / "skills" / case.skill) / "SKILL.md"
+    skill_file = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir) / "SKILL.md"
     if not skill_file.is_file():
         raise AssertionError(f"{case.id}: missing skill source {skill_file}")
 
@@ -511,7 +513,7 @@ def display_path(path: Path, repo_root: Path) -> str:
 
 
 def validation_result(case: EvalCase, repo_root: Path, skill_dir: Path | None) -> ValidationResult:
-    resolved_skill_dir = skill_dir or repo_root / "skills" / case.skill
+    resolved_skill_dir = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
     sanity_count = len(case.checks) if isinstance(case, SanityEvalCase) else 0
     rubric_count = len(case.rubric) if isinstance(case, RubricEvalCase) else 0
     runtime_count = len(case.checks) if isinstance(case, RuntimeEvalCase) else 0

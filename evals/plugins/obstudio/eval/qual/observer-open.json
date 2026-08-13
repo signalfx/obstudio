@@ -1,5 +1,6 @@
 {
   "skill": "observer-open",
+  "skill_source": "plugins/obstudio/skills/observer-control/observer-open",
   "prompts": [
     {
       "id": "codex-browser",
