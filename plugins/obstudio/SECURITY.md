@@ -17,7 +17,6 @@ product policy.
 
 Core workflow skills:
 
-- `$skill-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`
@@ -98,8 +97,8 @@ If the user trusts the SessionStart hook, the bootstrap may:
 - verify it against `checksums.txt`;
 - extract the release into plugin data;
 - use the bundled plugin `.mcp.json` endpoint policy;
-- start or reuse a local Observer process unless the active host's plugin or
-  MCP configuration opts out of the managed local endpoint.
+- start or reuse a local Observer process unless the active host's bootstrap
+  controls opt out of managed local startup.
 
 Do not trust the hook if you do not want plugin-managed binary download,
 checksum validation, or local process startup.
@@ -125,9 +124,11 @@ ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 ## User Controls
 
-Users can lower trust by disabling the plugin or its MCP server, refusing hook
-trust, or disabling specific skills where the host supports skill-level
-enablement.
+Plugin management and MCP connectivity are separate controls. Disabling a
+plugin or withholding SessionStart-hook approval prevents plugin-managed
+bootstrap. Disabling an MCP server controls whether the host connects to that
+endpoint; it does not by itself stop an already trusted hook from starting an
+Observer, nor does it stop a pre-existing local Observer process.
 
 ### Codex
 
@@ -153,8 +154,12 @@ enabled = false
 
 ### Claude Code
 
-Use Claude Code's plugin controls to disable the Obstudio plugin, and use its
-hook, MCP-server, and command permission prompts to withhold approval for
-individual higher-trust capabilities. Claude Code manages these controls under
-its own plugin and permission model; the Codex configuration examples above do
-not apply to Claude Code.
+Use Claude Code's plugin controls to disable Obstudio or withhold SessionStart
+hook approval to prevent its managed bootstrap. Use Claude Code's MCP-server
+controls to prevent Claude from connecting to the local MCP endpoint, and its
+command permission prompts to withhold individual host-local commands. A
+disabled Claude MCP server does not stop a previously trusted SessionStart hook
+from managing an Observer, and withholding a later hook prompt does not prevent
+connection to an already running endpoint. Claude Code manages these controls
+under its own plugin and permission model; the Codex configuration examples
+above do not apply to Claude Code.

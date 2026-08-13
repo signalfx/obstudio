@@ -50,6 +50,11 @@ def plugin_host() -> str:
     configured = os.environ.get("OBSTUDIO_PLUGIN_HOST", "").strip().lower()
     if configured:
         return configured
+    # Codex exports CLAUDE_PLUGIN_ROOT for compatibility as well as PLUGIN_ROOT.
+    # Prefer its native variable if both are present so a launcher that cannot
+    # set an environment variable (for example a Windows shell variant) is safe.
+    if os.environ.get("PLUGIN_ROOT", "").strip():
+        return "codex"
     return "claude" if os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip() else "codex"
 
 
@@ -63,13 +68,6 @@ def plugin_owner() -> str:
 
 def skill_command(name: str) -> str:
     return f"/obstudio:{name}" if plugin_host() == "claude" else f"${name}"
-
-
-def help_skill_hint() -> str:
-    return f"Use {skill_command('skill-help')} to list available commands."
-
-
-HELP_SKILL_HINT = help_skill_hint()
 
 
 class BootstrapLockTimeout(RuntimeError):
@@ -167,7 +165,7 @@ def bootstrap_locked(
     if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
             "Obstudio Observer is intentionally stopped for this plugin. "
-            f"{help_skill_hint()} Use {skill_command('observer-restart')} to start the managed Observer again."
+            f"Use {skill_command('observer-restart')} to start the managed Observer again."
         )
         return 0
     if stopped_state:
@@ -183,7 +181,7 @@ def bootstrap_locked(
         emit_context(
             "Obstudio plugin files were updated, and the managed Observer "
             "remains intentionally stopped. "
-            f"{help_skill_hint()} Use {skill_command('observer-restart')} to start it again."
+            f"Use {skill_command('observer-restart')} to start it again."
         )
         return 0
 
@@ -198,8 +196,7 @@ def bootstrap_locked(
         emit_context(
             "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
             "left the managed Observer stopped, did not start or restart the "
-            "plugin-managed Observer, and bundled Obstudio skills remain available. "
-            f"{help_skill_hint()}"
+            "plugin-managed Observer, and bundled Obstudio skills remain available."
         )
         return 0
     if mcp_policy == "custom":
@@ -211,14 +208,14 @@ def bootstrap_locked(
             "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
             f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
             "did not start or restart the plugin-managed Observer, and bundled "
-            f"Obstudio skills remain available. {help_skill_hint()}"
+            "Obstudio skills remain available."
         )
         return 0
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
         emit_context(
             f"Obstudio is already bootstrapped for {host_name()}. "
-            f"{help_skill_hint()} Use {skill_command('otel-audit')}, "
+            f"Use {skill_command('otel-audit')}, "
             f"{skill_command('otel-instrument')}, and {skill_command('otel-verify')} as needed."
         )
         return 0
@@ -305,21 +302,18 @@ def bootstrap_locked(
             emit_context(
                 f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and a background Observer process "
-                "was started for the bundled HTTP MCP endpoint. "
-                f"{help_skill_hint()}"
+                "was started for the bundled HTTP MCP endpoint."
             )
         elif observer_state["mode"] == "managed":
             emit_context(
                 f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and the managed background Observer "
-                "is healthy. "
-                f"{help_skill_hint()}"
+                "is healthy."
             )
         else:
             emit_context(
                 f"Obstudio bootstrap complete. {host_name()} now has the bundled skills "
-                "and the MCP config points at a shared Observer. "
-                f"{help_skill_hint()}"
+                "and the MCP config points at a shared Observer."
             )
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
@@ -357,9 +351,14 @@ def read_plugin_version(plugin_root: Path) -> str:
     with manifest_path.open("r", encoding="utf-8") as fh:
         manifest = json.load(fh)
     version = manifest.get("version", "").strip()
-    if not version:
-        raise RuntimeError("plugin manifest is missing a version")
-    return version
+    if version:
+        return version
+    if plugin_host() == "claude":
+        # Claude plugin roots are versioned cache directories. The root changes
+        # when Claude installs a new marketplace revision, so it is a stable
+        # per-install state key without pinning the manifest to a stale version.
+        return str(plugin_root.resolve())
+    raise RuntimeError("plugin manifest is missing a version")
 
 
 def read_plugin_obstudio_mcp_url(mcp_path: Path) -> str:

@@ -10,7 +10,6 @@ The plugin contains three capability groups.
 
 Core workflow skills:
 
-- `$skill-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`
@@ -74,9 +73,12 @@ The managed Observer may bind host-local endpoints such as:
 - `127.0.0.1:4317`
 - `127.0.0.1:4318`
 
-These endpoints are intended for local development. Disable the hook or the
-Obstudio MCP server if you do not want the host to manage or connect to the
-local Observer.
+These endpoints are intended for local development. Plugin/hook controls and
+MCP-server controls have different effects: disable the plugin or withhold
+SessionStart-hook approval to prevent plugin-managed startup; disable the MCP
+server to prevent the host from connecting to the endpoint. Disabling Claude
+Code's MCP server alone does not stop a previously trusted bootstrap hook from
+starting an Observer, nor does it stop a pre-existing local process.
 
 Observer command skills do not automatically follow a non-default MCP endpoint.
 They verify or control only the default loopback Observer at
@@ -124,7 +126,8 @@ tooling or project configuration, not to plugin telemetry code.
 
 Codex users can configure the plugin's MCP server and skill enablement through
 Codex configuration and approve the hook under Codex's trust model. Claude Code
-users can enable or disable the plugin through its plugin controls and approve
-the plugin hook, MCP server, and host-local commands under Claude Code's trust
-and permission model. These host controls determine whether plugin components
-run; this document does not itself configure or enforce them.
+users can enable or disable the plugin and approve its SessionStart hook to
+control managed startup; they can independently use Claude's MCP-server and
+command permissions to control connection and host-local command access. These
+host controls do not all govern the same capability, and this document does not
+itself configure or enforce them.

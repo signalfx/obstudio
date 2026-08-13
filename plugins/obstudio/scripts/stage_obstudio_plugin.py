@@ -20,7 +20,6 @@ DEFAULT_OUTPUT = ROOT / ".release" / "plugins" / "obstudio"
 DEFAULT_ARCHIVE = ROOT / ".release" / "plugins" / "obstudio.zip"
 PLUGIN_SKILLS_DIR = "skills"
 PLUGIN_LOCAL_SKILL_ENTRIES = (
-    "skill-help",
     "observer-control/observer-open",
     "observer-control/observer-status",
     "observer-control/observer-restart",
@@ -39,7 +38,6 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
     "splunk-sync",
 )
 PLUGIN_SKILL_ENTRIES = (
-    "skill-help",
     "observer-control/observer-open",
     "otel-audit",
     "otel-instrument",
@@ -66,12 +64,18 @@ PLUGIN_SHARED_PATHS = (
 MAX_DEFAULT_PROMPTS = 3
 PLUGIN_HOSTS = ("codex", "claude")
 SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
+SEMVER_PATTERN = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\Z")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="staged plugin directory")
     parser.add_argument("--archive", type=Path, default=None, help="optional zip archive to write")
+    parser.add_argument(
+        "--release-tag",
+        default="",
+        help="release tag (vMAJOR.MINOR.PATCH) to stamp and enforce in staged manifests",
+    )
     parser.add_argument(
         "--host",
         choices=("all", *PLUGIN_HOSTS),
@@ -91,30 +95,47 @@ def main() -> int:
         return 0
 
     output = args.output.expanduser().resolve()
+    release_version = release_version_from_tag(args.release_tag) if args.release_tag else ""
     if args.check:
-        verify_staged_plugin(output, args.host)
+        verify_staged_plugin(output, args.host, expected_version=release_version)
         return 0
 
-    stage_plugin(output, args.host)
+    stage_plugin(output, args.host, release_version=release_version)
     if args.archive is not None:
         write_archive(output, args.archive.expanduser().resolve())
     return 0
 
 
-def stage_plugin(output: Path, host: str = "all") -> None:
+def stage_plugin(output: Path, host: str = "all", release_version: str = "") -> None:
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
     for relative in plugin_paths(host):
         copy_path(PLUGIN_ROOT / relative, output / relative)
+    if release_version:
+        stamp_staged_manifest_versions(output, host, release_version)
     stage_hooks(output / "hooks", host)
 
     skills_output = output / PLUGIN_SKILLS_DIR
     stage_skills(skills_output)
 
-    verify_staged_plugin(output, host)
+    verify_staged_plugin(output, host, expected_version=release_version)
 
+
+def release_version_from_tag(release_tag: str) -> str:
+    version = release_tag.strip().removeprefix("v")
+    if not release_tag.strip().startswith("v") or not SEMVER_PATTERN.fullmatch(version):
+        raise RuntimeError(f"release tag must be vMAJOR.MINOR.PATCH semver: {release_tag}")
+    return version
+
+
+def stamp_staged_manifest_versions(output: Path, host: str, version: str) -> None:
+    for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
+        manifest_path = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["version"] = version
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 def plugin_paths(host: str) -> tuple[str, ...]:
     if host == "all":
@@ -127,6 +148,8 @@ def plugin_paths(host: str) -> tuple[str, ...]:
 def stage_hooks(hooks_output: Path, host: str) -> None:
     hooks_output.mkdir(parents=True, exist_ok=True)
     copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_obstudio.py", hooks_output / "bootstrap_obstudio.py")
+    if host in ("all", "claude"):
+        copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_claude.cjs", hooks_output / "bootstrap_claude.cjs")
     hook_files = ("codex-hooks.json", "claude-hooks.json") if host == "all" else (f"{host}-hooks.json",)
     for hook_file in hook_files:
         copy_path(PLUGIN_ROOT / "hooks" / hook_file, hooks_output / hook_file)
@@ -249,7 +272,7 @@ def normalize_text_line(line: str) -> str:
     return line.rstrip(" \t")
 
 
-def verify_staged_plugin(output: Path, host: str = "codex") -> None:
+def verify_staged_plugin(output: Path, host: str = "codex", expected_version: str = "") -> None:
     skills = output / PLUGIN_SKILLS_DIR
     if not skills.is_dir():
         raise RuntimeError(f"missing staged skills directory: {skills}")
@@ -261,14 +284,23 @@ def verify_staged_plugin(output: Path, host: str = "codex") -> None:
         manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
         if not manifest.is_file():
             raise RuntimeError(f"missing plugin manifest: {manifest}")
-        verify_plugin_manifest(manifest, skills, selected_host)
+        verify_plugin_manifest(manifest, skills, selected_host, expected_version=expected_version)
 
 
-def verify_plugin_manifest(manifest_path: Path, skills_root: Path, host: str = "codex") -> None:
+def verify_plugin_manifest(
+    manifest_path: Path,
+    skills_root: Path,
+    host: str = "codex",
+    expected_version: str = "",
+) -> None:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"invalid plugin manifest JSON: {manifest_path}") from exc
+    if expected_version and manifest.get("version") != expected_version:
+        raise RuntimeError(
+            f"plugin manifest version must match release version {expected_version}: {manifest_path}"
+        )
     if host == "claude":
         if not isinstance(manifest.get("name"), str) or not manifest["name"].strip():
             raise RuntimeError("plugin manifest must include a non-empty name")

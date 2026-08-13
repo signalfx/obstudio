@@ -1,0 +1,24 @@
+{
+  "skill": "observer-open",
+  "prompts": [
+    {
+      "id": "codex-browser",
+      "task": "Act as Codex with a built-in browser available. Use the observer-open skill to open the default local Obstudio Observer. Do not start, stop, or restart any process, and do not use a custom MCP endpoint. State what browser capability you used and how you would report an inconclusive browser result."
+    },
+    {
+      "id": "claude-cli-fallback",
+      "task": "Act as Claude Code CLI without a built-in browser. Use the observer-open skill to help the user open the default local Obstudio Observer. Do not start, stop, or restart any process, do not launch an OS browser without explicit approval, and do not use a custom MCP endpoint. State the clickable URL and the bounded check you would request if reachability is unknown."
+    }
+  ],
+  "judge_inputs": [
+    "Read ./last_message.md for the agent final response.",
+    "Read ./grade.json for run guard checks."
+  ],
+  "rubric": [
+    "For the Codex browser prompt, uses the host-provided browser when available, targets only http://127.0.0.1:3000/, and distinguishes a loaded UI from an inconclusive browser result.",
+    "For the Claude Code CLI prompt, provides a clickable http://127.0.0.1:3000/ URL instead of claiming a built-in browser or launching an OS browser without explicit approval.",
+    "For either prompt, does not start, stop, or restart an Observer and does not probe or control a non-default MCP endpoint.",
+    "When a shell check is needed, requests narrow elevated or outside-sandbox approval and limits it to the default UI URL or http://127.0.0.1:3000/api/health.",
+    "Reports a denied or unavailable local check as sandbox-unverified rather than declaring the Observer unhealthy, and describes endpoint reachability as distinct from proof that the UI rendered."
+  ]
+}

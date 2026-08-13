@@ -11,17 +11,19 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 1. Install the Obstudio plugin.
 2. Trust the host's `SessionStart` hook when prompted to review it.
 3. Try one of these actions:
-   - Open the local Observer with `$observer-open`.
-   - Check Observer health with `$observer-status`.
-   - Audit this repo for observability gaps with `$otel-audit`.
-   - Add instrumentation for selected findings with `$otel-instrument`.
-   - Verify emitted telemetry with `$otel-verify`.
+
+   | Action | Codex | Claude Code |
+   | --- | --- | --- |
+   | Open the local Observer | `$observer-open` | `/obstudio:observer-open` |
+   | Check Observer health | `$observer-status` | `/obstudio:observer-status` |
+   | Audit observability gaps | `$otel-audit` | `/obstudio:otel-audit` |
+   | Add instrumentation | `$otel-instrument` | `/obstudio:otel-instrument` |
+   | Verify emitted telemetry | `$otel-verify` | `/obstudio:otel-verify` |
 
 Current scope:
 
 - bundled skills for audit, instrumentation, verification, and Splunk publish workflows
 - bundled observer control skills:
-  - `skill-help`
   - `observer-open`
   - `observer-status`
   - `observer-restart`
@@ -40,13 +42,12 @@ Current scope:
 - the bootstrapper expects the release pipeline to publish a `checksums.txt`
   asset alongside the zip archives and validates the archive before extraction
 
-Shared workflow skill sources live in the top-level `skills/` directory. The
-plugin keeps its canonical bundled skills under `plugins/obstudio/skills/` so
-repo-local marketplace installs work from a fresh checkout without preserving
-cross-directory symlinks. Plugin-only command/control skills, such as
-`skill-help` and `observer-control/*`, live only under
-`plugins/obstudio/skills/`. Refresh the bundled plugin copy after editing
-canonical skills:
+Shared workflow skill sources are canonical in the top-level `skills/`
+directory. Their copies under `plugins/obstudio/skills/` are materialized so a
+repo-local marketplace install works from a fresh checkout without
+cross-directory symlinks. Plugin-only observer-control skills are authoritative
+under `plugins/obstudio/skills/observer-control/`.
+Refresh the materialized shared copies after editing canonical skills:
 
 ```bash
 make sync-obstudio-plugin-skills

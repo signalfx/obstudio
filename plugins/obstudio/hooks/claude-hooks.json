@@ -6,8 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
-            "commandWindows": "py -3 \"${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"],
+            "timeout": 120,
             "statusMessage": "Bootstrapping Obstudio for Claude Code"
           }
         ]

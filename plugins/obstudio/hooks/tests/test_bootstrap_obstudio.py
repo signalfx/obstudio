@@ -87,6 +87,29 @@ class BootstrapLockTest(unittest.TestCase):
 
 
 class ClaudeBootstrapTest(unittest.TestCase):
+    def test_fallback_detects_codex_when_compatibility_root_variables_are_present(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_ROOT": "/tmp/claude-plugin",
+                "PLUGIN_ROOT": "/tmp/codex-plugin",
+            },
+            clear=True,
+        ):
+            self.assertEqual(BOOTSTRAP.plugin_host(), "codex")
+
+    def test_codex_host_is_explicit_when_both_host_root_variables_are_present(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OBSTUDIO_PLUGIN_HOST": "codex",
+                "CLAUDE_PLUGIN_ROOT": "/tmp/claude-plugin",
+                "PLUGIN_ROOT": "/tmp/codex-plugin",
+            },
+            clear=True,
+        ):
+            self.assertEqual(BOOTSTRAP.plugin_host(), "codex")
+
     def test_prefers_codex_paths_when_both_host_environments_are_present(self):
         with tempfile.TemporaryDirectory() as tempdir:
             tempdir_path = Path(tempdir)
@@ -135,7 +158,7 @@ class ClaudeBootstrapTest(unittest.TestCase):
                 self.assertTrue(claude_data.is_dir())
                 self.assertFalse(codex_data.exists())
 
-    def test_uses_claude_manifest_and_owner(self):
+    def test_uses_claude_manifest_version_and_owner(self):
         root = Path(__file__).resolve().parents[4]
         prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")
         os.environ["OBSTUDIO_PLUGIN_HOST"] = "claude"
@@ -1051,8 +1074,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
             emit_context.assert_called_once_with(
                 "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
                 "left the managed Observer stopped, did not start or restart the "
-                "plugin-managed Observer, and bundled Obstudio skills remain available. "
-                f"{BOOTSTRAP.HELP_SKILL_HINT}"
+                "plugin-managed Observer, and bundled Obstudio skills remain available."
             )
             self.assertIn("enabled = false", config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
@@ -1105,7 +1127,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
                 "left the configured endpoint unchanged (http://127.0.0.1:4111/mcp), "
                 "did not start or restart the plugin-managed Observer, and bundled "
-                f"Obstudio skills remain available. {BOOTSTRAP.HELP_SKILL_HINT}"
+                "Obstudio skills remain available."
             )
             self.assertIn('url = "http://127.0.0.1:4111/mcp"', config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))

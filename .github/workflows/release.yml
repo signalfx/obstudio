@@ -111,6 +111,8 @@ jobs:
 
       - name: Prepare release assets
         timeout-minutes: 10
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: make release-prep
 
       - uses: goreleaser/goreleaser-action@v6
