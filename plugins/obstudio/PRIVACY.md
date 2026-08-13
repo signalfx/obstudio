@@ -1,7 +1,7 @@
 # Obstudio Plugin Privacy
 
-This document describes the current data flows for the `obstudio` plugin when
-used with Codex or Claude Code. The host, model provider, package managers,
+This document describes the current data flows for the `obstudio` plugin (shown
+as Splunk Observability Studio in Claude Code) when used with Codex or Claude Code. The host, model provider, package managers,
 operating system, and user-invoked tools have their own privacy behavior.
 
 ## What This Plugin Contains

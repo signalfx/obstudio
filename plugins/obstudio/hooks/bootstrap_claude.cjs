@@ -10,8 +10,8 @@ const path = require("node:path");
 const bootstrap = path.join(__dirname, "bootstrap_obstudio.py");
 const candidates = [
   ["python3", []],
-  ["python", []],
   ["py", ["-3"]],
+  ["python", []],
 ];
 
 for (const [command, prefix] of candidates) {
@@ -29,5 +29,5 @@ for (const [command, prefix] of candidates) {
   process.exit(result.status === null ? 2 : result.status);
 }
 
-process.stderr.write("Obstudio bootstrap requires Python 3 (python3, python, or py -3).\n");
+process.stderr.write("Splunk Observability Studio bootstrap requires Python 3 (python3, python, or py -3).\n");
 process.exit(2);

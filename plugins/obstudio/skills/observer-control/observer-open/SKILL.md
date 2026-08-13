@@ -1,8 +1,8 @@
 ---
 name: observer-open
 description: >-
-  Open the local Obstudio Observer in the built-in browser at
-  http://127.0.0.1:3000/ and confirm the UI is reachable.
+  Open the local Obstudio Observer at http://127.0.0.1:3000/ using a
+  host-provided browser when available, with a safe clickable-URL fallback.
 ---
 
 # Open Observer
@@ -21,11 +21,15 @@ process. It is limited to the loopback Observer UI at
    at 127.0.0.1:3000. I will not probe or control the custom endpoint. Use the
    MCP server directly, update the config back to the default local Observer,
    or manually verify the custom Observer.`
-2. Open `http://127.0.0.1:3000/` in the built-in browser. Do not follow
-   alternate hosts from MCP or user config.
-3. Confirm the Telemetry Explorer loads.
-4. If browser verification is inconclusive and a shell probe is needed, request
-   narrow elevated/outside-sandbox permission and check only
+2. If a host-provided browser is available, open `http://127.0.0.1:3000/` in
+   it. Do not follow alternate hosts from MCP or user config. Confirm the
+   Telemetry Explorer only when the browser shows it loaded; otherwise report
+   browser verification as inconclusive.
+3. If no host-provided browser is available, provide the clickable URL
+   `http://127.0.0.1:3000/`. Do not launch an OS browser without the user's
+   explicit approval.
+4. If a shell probe is needed, request narrow elevated/outside-sandbox approval
+   before running it, and check only
    `http://127.0.0.1:3000/` or `http://127.0.0.1:3000/api/health`.
 5. If elevated access is denied or the endpoint cannot be verified from the
    available context, report `sandbox-unverified`; do not report the Observer

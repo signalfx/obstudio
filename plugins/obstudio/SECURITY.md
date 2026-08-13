@@ -154,7 +154,7 @@ enabled = false
 
 ### Claude Code
 
-Use Claude Code's plugin controls to disable Obstudio or withhold SessionStart
+Use Claude Code's plugin controls to disable Splunk Observability Studio or withhold SessionStart
 hook approval to prevent its managed bootstrap. Use Claude Code's MCP-server
 controls to prevent Claude from connecting to the local MCP endpoint, and its
 command permission prompts to withhold individual host-local commands. A

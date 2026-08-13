@@ -73,9 +73,12 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.verify_staged_plugin(output, host="all", expected_version="1.2.3")
 
     def test_release_tag_rejects_non_semver_or_missing_v_prefix(self):
-        for tag in ("1.2.3", "vlatest", "v1.2"):
+        for tag in ("1.2.3", "vlatest", "v1.2", "v01.2.3", "v1.2.3-01", "v1.2.3-rc..1"):
             with self.assertRaisesRegex(RuntimeError, "release tag must be"):
                 STAGE.release_version_from_tag(tag)
+
+    def test_release_tag_accepts_semver_prerelease_and_build_metadata(self):
+        self.assertEqual(STAGE.release_version_from_tag("v1.2.3-rc.1+build.42"), "1.2.3-rc.1+build.42")
 
     def test_release_tag_verification_rejects_manifest_version_mismatch(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -115,6 +118,7 @@ class StageObstudioPluginTest(unittest.TestCase):
 
         self.assertNotIn("description", marketplace)
         self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
+        self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
 
     def test_plugin_manifest_uses_committed_skills(self):
         plugin_root = Path(__file__).resolve().parents[2]
@@ -138,7 +142,7 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
         self.assertNotIn("$schema", claude_manifest)
-        self.assertNotIn("displayName", claude_manifest)
+        self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
         self.assertEqual(claude_manifest["version"], "0.1.0")
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
@@ -149,7 +153,11 @@ class StageObstudioPluginTest(unittest.TestCase):
         claude_command = claude_hook["hooks"]["SessionStart"][0]["hooks"][0]
         self.assertEqual(claude_command["command"], "node")
         self.assertEqual(claude_command["args"], ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"])
+        self.assertEqual(claude_command["statusMessage"], "Bootstrapping Splunk Observability Studio for Claude Code")
         self.assertNotIn("commandWindows", claude_command)
+
+        claude_launcher = (plugin_root / "hooks" / "bootstrap_claude.cjs").read_text(encoding="utf-8")
+        self.assertLess(claude_launcher.index('["py", ["-3"]]'), claude_launcher.index('["python", []]'))
 
     def test_verify_rejects_too_many_default_prompts(self):
         with tempfile.TemporaryDirectory() as tempdir:

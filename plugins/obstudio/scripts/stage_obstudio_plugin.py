@@ -64,7 +64,12 @@ PLUGIN_SHARED_PATHS = (
 MAX_DEFAULT_PROMPTS = 3
 PLUGIN_HOSTS = ("codex", "claude")
 SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
-SEMVER_PATTERN = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\Z")
+SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER_PATTERN = re.compile(
+    rf"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    rf"(?:-{SEMVER_IDENTIFIER}(?:\.{SEMVER_IDENTIFIER})*)?"
+    rf"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
+)
 
 
 def main() -> int:

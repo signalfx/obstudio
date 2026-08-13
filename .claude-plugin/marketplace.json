@@ -1,11 +1,12 @@
 {
-  "name": "obstudio",
+  "name": "observability-studio",
   "owner": {
     "name": "Splunk"
   },
   "plugins": [
     {
-      "name": "obstudio",
+      "name": "observability-studio",
+      "displayName": "Splunk Observability Studio",
       "source": "./plugins/obstudio",
       "description": "OpenTelemetry workflows and observer controls for Claude Code."
     }

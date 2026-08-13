@@ -1,7 +1,7 @@
 {
   "name": "obstudio",
   "version": "0.1.0",
-  "description": "Obstudio bundles local OpenTelemetry workflows, observer controls, and help for Codex.",
+  "description": "Obstudio bundles local OpenTelemetry workflows and observer controls for Codex.",
   "author": {
     "name": "Splunk",
     "url": "https://github.com/signalfx/obstudio"
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Obstudio",
     "shortDescription": "OpenTelemetry workflows and observer controls for Codex.",
-    "longDescription": "Obstudio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, observer controls, and a help skill to Codex.\n\nHow to get started:\n1. Install the Obstudio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Obstudio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $observer-open, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
+    "longDescription": "Obstudio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, and observer controls to Codex.\n\nHow to get started:\n1. Install the Obstudio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Obstudio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $observer-open, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
     "developerName": "Splunk",
     "category": "Productivity",
     "capabilities": [

@@ -9,7 +9,7 @@
             "command": "node",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"],
             "timeout": 120,
-            "statusMessage": "Bootstrapping Obstudio for Claude Code"
+            "statusMessage": "Bootstrapping Splunk Observability Studio for Claude Code"
           }
         ]
       }

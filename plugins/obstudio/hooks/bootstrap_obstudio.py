@@ -62,12 +62,16 @@ def host_name() -> str:
     return "Claude Code" if plugin_host() == "claude" else "Codex"
 
 
+def plugin_display_name() -> str:
+    return "Splunk Observability Studio" if plugin_host() == "claude" else "Obstudio"
+
+
 def plugin_owner() -> str:
     return f"{plugin_host()}-plugin"
 
 
 def skill_command(name: str) -> str:
-    return f"/obstudio:{name}" if plugin_host() == "claude" else f"${name}"
+    return f"/observability-studio:{name}" if plugin_host() == "claude" else f"${name}"
 
 
 class BootstrapLockTimeout(RuntimeError):
@@ -146,7 +150,7 @@ def main() -> int:
             )
     except Exception as exc:  # pragma: no cover - defensive hook boundary
         emit_error(
-            "Obstudio bootstrap could not complete automatically. "
+            f"{plugin_display_name()} bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
         print(f"bootstrap error: {exc}", file=sys.stderr)
@@ -164,7 +168,7 @@ def bootstrap_locked(
     stopped_state = read_bootstrap_state(state_path) if bootstrap_state_requests_stop(state_path) else {}
     if stopped_state.get("pluginVersion") == plugin_version:
         emit_context(
-            "Obstudio Observer is intentionally stopped for this plugin. "
+            f"{plugin_display_name()} Observer is intentionally stopped for this plugin. "
             f"Use {skill_command('observer-restart')} to start the managed Observer again."
         )
         return 0
@@ -179,7 +183,7 @@ def bootstrap_locked(
             ),
         )
         emit_context(
-            "Obstudio plugin files were updated, and the managed Observer "
+            f"{plugin_display_name()} plugin files were updated, and the managed Observer "
             "remains intentionally stopped. "
             f"Use {skill_command('observer-restart')} to start it again."
         )
@@ -214,7 +218,7 @@ def bootstrap_locked(
 
     if is_bootstrapped(state_path, plugin_version, codex_config_path, codex_skills_path, plugin_mcp_path):
         emit_context(
-            f"Obstudio is already bootstrapped for {host_name()}. "
+            f"{plugin_display_name()} is already bootstrapped for {host_name()}. "
             f"Use {skill_command('otel-audit')}, "
             f"{skill_command('otel-instrument')}, and {skill_command('otel-verify')} as needed."
         )
@@ -300,25 +304,25 @@ def bootstrap_locked(
         )
         if process_started:
             emit_context(
-                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
+                f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and a background Observer process "
                 "was started for the bundled HTTP MCP endpoint."
             )
         elif observer_state["mode"] == "managed":
             emit_context(
-                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills, "
+                f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills, "
                 "the local Observer MCP config, and the managed background Observer "
                 "is healthy."
             )
         else:
             emit_context(
-                f"Obstudio bootstrap complete. {host_name()} now has the bundled skills "
+                f"{plugin_display_name()} bootstrap complete. {host_name()} now has the bundled skills "
                 "and the MCP config points at a shared Observer."
             )
         return 0
     except Exception as exc:  # pragma: no cover - defensive hook boundary
         emit_error(
-            "Obstudio bootstrap could not complete automatically. "
+            f"{plugin_display_name()} bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
         print(f"bootstrap error: {exc}", file=sys.stderr)
