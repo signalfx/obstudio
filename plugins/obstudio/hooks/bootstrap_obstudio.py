@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared bootstrap runtime for host-scoped Obstudio plugins."""
+"""Shared bootstrap runtime for host-scoped Splunk Observability Studio plugins."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def host_name() -> str:
 
 
 def plugin_display_name() -> str:
-    return "Splunk Observability Studio" if plugin_host() == "claude" else "Obstudio"
+    return "Splunk Observability Studio"
 
 
 def plugin_owner() -> str:
@@ -71,7 +71,7 @@ def plugin_owner() -> str:
 
 
 def skill_command(name: str) -> str:
-    return f"/observability-studio:{name}" if plugin_host() == "claude" else f"${name}"
+    return f"/obstudio:{name}" if plugin_host() == "claude" else f"${name}"
 
 
 class BootstrapLockTimeout(RuntimeError):
@@ -125,7 +125,7 @@ def acquire_windows_lock(lock_file, deadline: float) -> None:
         except OSError as exc:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise BootstrapLockTimeout("timed out waiting for Obstudio bootstrap lock") from exc
+                raise BootstrapLockTimeout("timed out waiting for Splunk Observability Studio bootstrap lock") from exc
             time.sleep(min(LOCK_POLL_SECONDS, remaining))
 
 
@@ -198,9 +198,9 @@ def bootstrap_locked(
             plugin_policy_state(plugin_version, owner="user-configured", mode="disabled"),
         )
         emit_context(
-            "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
+            "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
             "left the managed Observer stopped, did not start or restart the "
-            "plugin-managed Observer, and bundled Obstudio skills remain available."
+            "plugin-managed Observer, and bundled Splunk Observability Studio skills remain available."
         )
         return 0
     if mcp_policy == "custom":
@@ -209,10 +209,10 @@ def bootstrap_locked(
             plugin_policy_state(plugin_version, owner="external-observer", mode="custom"),
         )
         emit_context(
-            "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
+            "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
             f"left the configured endpoint unchanged ({codex_obstudio_mcp_url(codex_config_path)}), "
             "did not start or restart the plugin-managed Observer, and bundled "
-            "Obstudio skills remain available."
+            "Splunk Observability Studio skills remain available."
         )
         return 0
 
@@ -268,7 +268,7 @@ def bootstrap_locked(
                 if is_tcp_port_open(plugin_health_url):
                     raise RuntimeError(
                         f"local Observer port is already occupied at {plugin_health_url} "
-                        "but the health endpoint is not reporting Obstudio; stop the existing process or clear the stale shared-observer state"
+                        "but the health endpoint is not reporting Splunk Observability Studio; stop the existing process or clear the stale shared-observer state"
                     )
                 process, log_path = start_obstudio_background(obstudio_binary, plugin_data)
                 try:
@@ -798,8 +798,8 @@ def resolve_release_artifact() -> str:
             return "windows_amd64.zip"
     raise RuntimeError(
         f"unsupported platform: {system}/{machine}. "
-        "Obstudio releases currently ship Linux amd64, macOS arm64/amd64, and Windows amd64 assets; "
-        "install Obstudio manually from https://github.com/signalfx/obstudio/releases if your platform is not listed."
+        "Splunk Observability Studio releases currently ship Linux amd64, macOS arm64/amd64, and Windows amd64 assets; "
+        "install Splunk Observability Studio manually from https://github.com/signalfx/obstudio/releases if your platform is not listed."
     )
 
 
@@ -809,10 +809,10 @@ def resolve_latest_release_version() -> str:
         with urllib.request.urlopen(download_url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
             payload = json.load(response)
     except Exception as exc:  # pragma: no cover - network boundary
-        raise RuntimeError("failed to determine latest Obstudio release version") from exc
+        raise RuntimeError("failed to determine latest Splunk Observability Studio release version") from exc
     tag_name = str(payload.get("tag_name", "")).strip()
     if not tag_name:
-        raise RuntimeError("latest Obstudio release is missing a tag name")
+        raise RuntimeError("latest Splunk Observability Studio release is missing a tag name")
     release_version = tag_name.removeprefix("v").strip()
     if not release_version:
         raise RuntimeError(f"could not parse release version from tag {tag_name}")

@@ -111,12 +111,16 @@ class StageObstudioPluginTest(unittest.TestCase):
             marketplace["plugins"][0]["source"]["path"],
             "./plugins/obstudio",
         )
+        self.assertEqual(marketplace["interface"]["displayName"], "Splunk Observability Studio")
+        self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
 
     def test_claude_marketplace_uses_legacy_compatible_metadata(self):
         marketplace_path = Path(__file__).resolve().parents[4] / ".claude-plugin" / "marketplace.json"
         marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
 
         self.assertNotIn("description", marketplace)
+        self.assertEqual(marketplace["name"], "obstudio")
+        self.assertEqual(marketplace["plugins"][0]["name"], "obstudio")
         self.assertEqual(marketplace["plugins"][0]["source"], "./plugins/obstudio")
         self.assertEqual(marketplace["plugins"][0]["displayName"], "Splunk Observability Studio")
 
@@ -140,7 +144,10 @@ class StageObstudioPluginTest(unittest.TestCase):
         claude_manifest = json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
         self.assertEqual(codex_manifest["hooks"], "./hooks/codex-hooks.json")
+        self.assertEqual(codex_manifest["name"], "obstudio")
+        self.assertEqual(codex_manifest["interface"]["displayName"], "Splunk Observability Studio")
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
+        self.assertEqual(claude_manifest["name"], "obstudio")
         self.assertNotIn("$schema", claude_manifest)
         self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
         self.assertEqual(claude_manifest["version"], "0.0.16")
@@ -148,6 +155,10 @@ class StageObstudioPluginTest(unittest.TestCase):
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         self.assertIn("OBSTUDIO_PLUGIN_HOST=codex", codex_command)
+        self.assertEqual(
+            codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["statusMessage"],
+            "Bootstrapping Splunk Observability Studio for Codex",
+        )
 
         claude_hook = json.loads((plugin_root / "hooks" / "claude-hooks.json").read_text(encoding="utf-8"))
         claude_command = claude_hook["hooks"]["SessionStart"][0]["hooks"][0]

@@ -1,7 +1,7 @@
 {
   "name": "obstudio",
   "interface": {
-    "displayName": "Obstudio"
+    "displayName": "Splunk Observability Studio"
   },
   "plugins": [
     {

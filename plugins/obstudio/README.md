@@ -8,17 +8,17 @@ host-specific SessionStart hook manifests for first-run bootstrap.
 
 ## How to get started
 
-1. Install the plugin (shown in Claude Code as **Splunk Observability Studio**).
+1. Install the **Splunk Observability Studio** plugin.
 2. Trust the host's `SessionStart` hook when prompted to review it.
 3. Try one of these actions:
 
    | Action | Codex | Claude Code |
    | --- | --- | --- |
-   | Open the local Observer | `$observer-open` | `/observability-studio:observer-open` |
-   | Check Observer health | `$observer-status` | `/observability-studio:observer-status` |
-   | Audit observability gaps | `$otel-audit` | `/observability-studio:otel-audit` |
-   | Add instrumentation | `$otel-instrument` | `/observability-studio:otel-instrument` |
-   | Verify emitted telemetry | `$otel-verify` | `/observability-studio:otel-verify` |
+   | Open the local Observer | `$observer-open` | `/obstudio:observer-open` |
+   | Check Observer health | `$observer-status` | `/obstudio:observer-status` |
+   | Audit observability gaps | `$otel-audit` | `/obstudio:otel-audit` |
+   | Add instrumentation | `$otel-instrument` | `/obstudio:otel-instrument` |
+   | Verify emitted telemetry | `$otel-verify` | `/obstudio:otel-verify` |
 
 Current scope:
 
