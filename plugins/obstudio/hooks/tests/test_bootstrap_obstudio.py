@@ -81,7 +81,7 @@ class BootstrapLockTest(unittest.TestCase):
                 self.assertEqual(BOOTSTRAP.main(), 2)
 
         emit_error.assert_called_once_with(
-            "Obstudio bootstrap could not complete automatically. "
+            "Splunk Observability Studio bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
 
@@ -165,7 +165,7 @@ class ClaudeBootstrapTest(unittest.TestCase):
         try:
             self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
             self.assertEqual(BOOTSTRAP.plugin_display_name(), "Splunk Observability Studio")
-            self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/observability-studio:observer-open")
+            self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/obstudio:observer-open")
             self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.16")
             self.assertEqual(
                 BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
@@ -1073,9 +1073,9 @@ class BootstrapStateHealthTest(unittest.TestCase):
             fetch_expected_checksum.assert_not_called()
             start_obstudio_background.assert_not_called()
             emit_context.assert_called_once_with(
-                "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
+                "Splunk Observability Studio MCP is explicitly disabled in Codex config. The plugin hook "
                 "left the managed Observer stopped, did not start or restart the "
-                "plugin-managed Observer, and bundled Obstudio skills remain available."
+                "plugin-managed Observer, and bundled Splunk Observability Studio skills remain available."
             )
             self.assertIn("enabled = false", config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
@@ -1125,10 +1125,10 @@ class BootstrapStateHealthTest(unittest.TestCase):
             fetch_expected_checksum.assert_not_called()
             start_obstudio_background.assert_not_called()
             emit_context.assert_called_once_with(
-                "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
+                "Custom Splunk Observability Studio MCP endpoint detected in Codex config. The plugin hook "
                 "left the configured endpoint unchanged (http://127.0.0.1:4111/mcp), "
                 "did not start or restart the plugin-managed Observer, and bundled "
-                "Obstudio skills remain available."
+                "Splunk Observability Studio skills remain available."
             )
             self.assertIn('url = "http://127.0.0.1:4111/mcp"', config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))

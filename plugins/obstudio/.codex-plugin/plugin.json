@@ -1,7 +1,7 @@
 {
   "name": "obstudio",
   "version": "0.0.16",
-  "description": "Obstudio bundles local OpenTelemetry workflows and observer controls for Codex.",
+  "description": "Splunk Observability Studio bundles local OpenTelemetry workflows and observer controls for Codex.",
   "author": {
     "name": "Splunk",
     "url": "https://github.com/signalfx/obstudio"
@@ -20,9 +20,9 @@
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/codex-hooks.json",
   "interface": {
-    "displayName": "Obstudio",
+    "displayName": "Splunk Observability Studio",
     "shortDescription": "OpenTelemetry workflows and observer controls for Codex.",
-    "longDescription": "Obstudio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, and observer controls to Codex.\n\nHow to get started:\n1. Install the Obstudio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Obstudio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $observer-open, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
+    "longDescription": "Splunk Observability Studio adds local OpenTelemetry audit, instrumentation, verification, Splunk publish workflows, and observer controls to Codex.\n\nHow to get started:\n1. Install the Splunk Observability Studio plugin.\n2. Trust the SessionStart hook when Codex prompts you to review it. You can also review the Splunk Observability Studio plugin hooks from Codex plugin settings and trust the hook there.\n3. Try one of these actions: open the local Observer with $observer-open, check Observer health with $observer-status, audit this repo for observability gaps with $otel-audit, add instrumentation for selected findings with $otel-instrument, or verify emitted telemetry with $otel-verify.",
     "developerName": "Splunk",
     "category": "Productivity",
     "capabilities": [
@@ -30,7 +30,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Open the local Obstudio Observer.",
+      "Open the local Splunk Observability Studio Observer.",
       "Audit this repo for observability gaps.",
       "Verify instrumentation and suggest GenAI telemetry improvements."
     ],
