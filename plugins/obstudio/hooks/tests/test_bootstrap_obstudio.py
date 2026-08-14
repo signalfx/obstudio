@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -83,6 +84,109 @@ class BootstrapLockTest(unittest.TestCase):
             "Obstudio bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
+
+
+class ClaudeBootstrapTest(unittest.TestCase):
+    def test_fallback_detects_codex_when_compatibility_root_variables_are_present(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_ROOT": "/tmp/claude-plugin",
+                "PLUGIN_ROOT": "/tmp/codex-plugin",
+            },
+            clear=True,
+        ):
+            self.assertEqual(BOOTSTRAP.plugin_host(), "codex")
+
+    def test_codex_host_is_explicit_when_both_host_root_variables_are_present(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OBSTUDIO_PLUGIN_HOST": "codex",
+                "CLAUDE_PLUGIN_ROOT": "/tmp/claude-plugin",
+                "PLUGIN_ROOT": "/tmp/codex-plugin",
+            },
+            clear=True,
+        ):
+            self.assertEqual(BOOTSTRAP.plugin_host(), "codex")
+
+    def test_prefers_codex_paths_when_both_host_environments_are_present(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            claude_root = tempdir_path / "claude-plugin"
+            codex_root = tempdir_path / "codex-plugin"
+            claude_data = tempdir_path / "claude-data"
+            codex_data = tempdir_path / "codex-data"
+            claude_root.mkdir()
+            codex_root.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "codex",
+                    "CLAUDE_PLUGIN_ROOT": str(claude_root),
+                    "PLUGIN_ROOT": str(codex_root),
+                    "CLAUDE_PLUGIN_DATA": str(claude_data),
+                    "PLUGIN_DATA": str(codex_data),
+                },
+            ):
+                self.assertEqual(BOOTSTRAP.resolve_plugin_root(), codex_root.resolve())
+                self.assertEqual(BOOTSTRAP.resolve_plugin_data(), codex_data.resolve())
+                self.assertTrue(codex_data.is_dir())
+                self.assertFalse(claude_data.exists())
+
+    def test_prefers_claude_paths_when_both_host_environments_are_present(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempdir_path = Path(tempdir)
+            claude_root = tempdir_path / "claude-plugin"
+            codex_root = tempdir_path / "codex-plugin"
+            claude_data = tempdir_path / "claude-data"
+            codex_data = tempdir_path / "codex-data"
+            claude_root.mkdir()
+            codex_root.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "claude",
+                    "CLAUDE_PLUGIN_ROOT": str(claude_root),
+                    "PLUGIN_ROOT": str(codex_root),
+                    "CLAUDE_PLUGIN_DATA": str(claude_data),
+                    "PLUGIN_DATA": str(codex_data),
+                },
+            ):
+                self.assertEqual(BOOTSTRAP.resolve_plugin_root(), claude_root.resolve())
+                self.assertEqual(BOOTSTRAP.resolve_plugin_data(), claude_data.resolve())
+                self.assertTrue(claude_data.is_dir())
+                self.assertFalse(codex_data.exists())
+
+    def test_uses_claude_manifest_version_and_owner(self):
+        root = Path(__file__).resolve().parents[4]
+        prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")
+        os.environ["OBSTUDIO_PLUGIN_HOST"] = "claude"
+        try:
+            self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
+            self.assertEqual(BOOTSTRAP.plugin_display_name(), "Splunk Observability Studio")
+            self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/observability-studio:observer-open")
+            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.16")
+            self.assertEqual(
+                BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
+                "plugin-local",
+            )
+            state = BOOTSTRAP.observer_state_fields(
+                Path("missing-state.json"),
+                local_requested=True,
+                process_started=True,
+                live_pid="",
+                pid="1234",
+                health_payload={"owner": "claude-plugin", "mode": "managed"},
+                log_path=None,
+            )
+            self.assertEqual(state["owner"], "claude-plugin")
+            self.assertEqual(state["mode"], "managed")
+        finally:
+            if prior is None:
+                os.environ.pop("OBSTUDIO_PLUGIN_HOST", None)
+            else:
+                os.environ["OBSTUDIO_PLUGIN_HOST"] = prior
 
 
 class ResolveReleaseVersionTest(unittest.TestCase):
@@ -971,8 +1075,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
             emit_context.assert_called_once_with(
                 "Obstudio MCP is explicitly disabled in Codex config. The plugin hook "
                 "left the managed Observer stopped, did not start or restart the "
-                "plugin-managed Observer, and bundled Obstudio skills remain available. "
-                f"{BOOTSTRAP.HELP_SKILL_HINT}"
+                "plugin-managed Observer, and bundled Obstudio skills remain available."
             )
             self.assertIn("enabled = false", config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))
@@ -1025,7 +1128,7 @@ class BootstrapStateHealthTest(unittest.TestCase):
                 "Custom Obstudio MCP endpoint detected in Codex config. The plugin hook "
                 "left the configured endpoint unchanged (http://127.0.0.1:4111/mcp), "
                 "did not start or restart the plugin-managed Observer, and bundled "
-                f"Obstudio skills remain available. {BOOTSTRAP.HELP_SKILL_HINT}"
+                "Obstudio skills remain available."
             )
             self.assertIn('url = "http://127.0.0.1:4111/mcp"', config_path.read_text(encoding="utf-8"))
             state = json.loads((plugin_data / BOOTSTRAP.BOOTSTRAP_STATE_FILE).read_text(encoding="utf-8"))

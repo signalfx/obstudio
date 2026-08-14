@@ -1,0 +1,17 @@
+{
+  "name": "observability-studio",
+  "displayName": "Splunk Observability Studio",
+  "version": "0.0.16",
+  "description": "OpenTelemetry workflows and observer controls for Claude Code.",
+  "author": {
+    "name": "Splunk",
+    "url": "https://github.com/signalfx/obstudio"
+  },
+  "homepage": "https://github.com/signalfx/obstudio",
+  "repository": "https://github.com/signalfx/obstudio",
+  "license": "Apache-2.0",
+  "keywords": ["opentelemetry", "observability", "claude-code", "mcp", "skills"],
+  "skills": ["./skills/", "./skills/observer-control/"],
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/claude-hooks.json"
+}

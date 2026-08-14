@@ -1,8 +1,8 @@
-# Obstudio Codex Plugin Privacy
+# Obstudio Plugin Privacy
 
-This document describes the current data flows for the `obstudio` Codex plugin.
-Codex, model providers, package managers, the operating system, and
-user-invoked tools have their own privacy behavior.
+This document describes the current data flows for the `obstudio` plugin (shown
+as Splunk Observability Studio in Claude Code) when used with Codex or Claude Code. The host, model provider, package managers,
+operating system, and user-invoked tools have their own privacy behavior.
 
 ## What This Plugin Contains
 
@@ -10,7 +10,6 @@ The plugin contains three capability groups.
 
 Core workflow skills:
 
-- `$obstudio-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`
@@ -55,8 +54,9 @@ required API permissions.
   the user explicitly invokes the publish skills with usable Splunk
   credentials.
 
-Codex may still send prompts, file context, tool output, and user-approved
-command results according to Codex's own settings and product behavior.
+Codex or Claude Code may still send prompts, file context, tool output, and
+user-approved command results according to that host's settings and product
+behavior.
 
 ## Bootstrap and Local Observer
 
@@ -73,14 +73,16 @@ The managed Observer may bind host-local endpoints such as:
 - `127.0.0.1:4317`
 - `127.0.0.1:4318`
 
-These endpoints are intended for local development. Disable the hook or the
-Obstudio MCP server if you do not want Codex to manage or connect to the local
-Observer.
+These endpoints are intended for local development. Plugin/hook controls and
+MCP-server controls have different effects: disable the plugin or withhold
+SessionStart-hook approval to prevent plugin-managed startup; disable the MCP
+server to prevent the host from connecting to the endpoint. Disabling Claude
+Code's MCP server alone does not stop a previously trusted bootstrap hook from
+starting an Observer, nor does it stop a pre-existing local process.
 
-Users may configure a non-default Obstudio MCP URL in Codex, but Observer
-command skills do not automatically follow that custom endpoint. They report
-the custom MCP URL when detected, then verify or control only the default
-loopback Observer at `127.0.0.1:3000`.
+Observer command skills do not automatically follow a non-default MCP endpoint.
+They verify or control only the default loopback Observer at
+`127.0.0.1:3000`.
 
 ## Local Data
 
@@ -105,8 +107,8 @@ user explicitly invokes them and provides usable credentials. Those skills
 should show the live diff and confirmed gaps before creating dashboards,
 charts, or detectors.
 
-Outside-sandbox localhost checks are optional, one-time verification or control
-probes. They require user approval when Codex needs elevated execution to reach
+Host-local checks are optional, one-time verification or control probes. Codex
+and Claude Code may prompt for user approval before a shell command accesses
 host-local endpoints. Health checks use
 `http://127.0.0.1:3000/api/health`, not the MCP endpoint. Control or listener
 checks should be limited to the default loopback Observer ports:
@@ -119,3 +121,13 @@ Observer is unhealthy.
 If a project command, package manager, test runtime, OTLP exporter, or user
 configuration performs network access, that traffic belongs to the selected
 tooling or project configuration, not to plugin telemetry code.
+
+## Host-Specific Controls
+
+Codex users can configure the plugin's MCP server and skill enablement through
+Codex configuration and approve the hook under Codex's trust model. Claude Code
+users can enable or disable the plugin and approve its SessionStart hook to
+control managed startup; they can independently use Claude's MCP-server and
+command permissions to control connection and host-local command access. These
+host controls do not all govern the same capability, and this document does not
+itself configure or enforce them.

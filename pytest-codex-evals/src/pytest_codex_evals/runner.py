@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .ab import side_prompt
 from .backends import AgentBackend, CodexBackend
-from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult
+from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, resolve_skill_source
 from .definitions.base import validate_eval_input_paths
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
@@ -218,7 +218,7 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
     if side == "with_skill":
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
-        target = skill_dir or repo_root / "skills" / case.skill
+        target = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
         if not (target / "SKILL.md").exists():
             raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
         create_skill_link(target, skills_dir / target.name)

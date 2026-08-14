@@ -25,7 +25,13 @@ from pytest_codex_evals.definitions import (
     ValidationResult,
 )
 from pytest_codex_evals.graders.rubric import rubric_prompt
-from pytest_codex_evals.backends import AgentResult, _codex_subprocess_env, run_streamed_command
+from pytest_codex_evals.backends import (
+    AgentResult,
+    CodexBackend,
+    StreamedCommandResult,
+    _codex_subprocess_env,
+    run_streamed_command,
+)
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
     grade_runtime,
@@ -185,6 +191,28 @@ def test_codex_subprocess_env_uses_sandbox_local_package_caches(
 
     assert env["UV_CACHE_DIR"] == str(tmp_path / ".uv-cache")
     assert env["PIP_CACHE_DIR"] == str(tmp_path / ".pip-cache")
+
+
+def test_codex_backend_uses_current_workspace_write_auto_approval_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.extend(command)
+        return StreamedCommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("pytest_codex_evals.backends.run_streamed_command", fake_run)
+
+    CodexBackend(command="codex").run_agent(
+        prompt="Run the skill.",
+        exec_dir=tmp_path,
+    )
+
+    assert "--full-auto" not in captured
+    assert captured[captured.index("--config") + 1] == "shell_environment_policy.inherit=all"
+    assert "--sandbox" not in captured
+    assert "--approve-for-me" in captured
 
 
 def test_trace_parser_extracts_commands_and_tokens(tmp_path: Path):

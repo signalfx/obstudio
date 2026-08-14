@@ -1,22 +1,22 @@
-# Obstudio Codex Plugin Security
+# Obstudio Plugin Security
 
-This document describes the current security model for the `obstudio` Codex
-plugin. It is a behavior contract for this plugin package, not a guarantee
-about Codex, model providers, package managers, operating system services, or
-user-invoked third-party tools.
+This document describes the current security model for the `obstudio` plugin
+when used with Codex or Claude Code. It is a behavior contract for this plugin
+package, not a guarantee about either host, model providers, package managers,
+operating system services, or user-invoked third-party tools.
 
 ## Trust Boundary
 
 The plugin contains instructions, skills, assets, materialized skill
 references, local Observer MCP configuration, and a SessionStart bootstrap
-hook. Codex decides which skills to load, which tools to call, and which shell
-commands require approval according to Codex configuration and product policy.
+hook. The active host decides which skills to load, which tools to call, and
+which shell commands require approval according to its configuration and
+product policy.
 
 ## Trust Levels
 
 Core workflow skills:
 
-- `$obstudio-help`
 - `$otel-audit`
 - `$otel-instrument`
 - `$otel-verify`
@@ -79,18 +79,15 @@ The managed Observer is intended to bind loopback-local endpoints, including
 MCP endpoint, and OTLP receivers should not be exposed on public interfaces by
 default.
 
-The bundled MCP server config points to `http://127.0.0.1:3000/mcp`. Users may
-configure a non-default Obstudio MCP URL in Codex, but Observer command skills
-do not automatically follow that custom endpoint. They report the custom MCP
-URL when detected, then verify or control only the default loopback Observer at
-`127.0.0.1:3000`.
+The bundled MCP server config points to `http://127.0.0.1:3000/mcp`. Observer
+command skills do not automatically follow non-default MCP endpoints; they
+verify or control only the default loopback Observer at `127.0.0.1:3000`.
 
 Health checks use `http://127.0.0.1:3000/api/health`, not the MCP endpoint.
-When Codex needs shell-based host-local health or control checks, it should
-request narrow elevated/outside-sandbox permission before probing instead of
-first trying from inside the sandbox. If elevated access is denied or the
-endpoint cannot be verified from the available context, report
-`sandbox-unverified`, not unhealthy.
+When either host needs a shell-based host-local health or control check, it
+should request the narrow permission required by that host before probing. If
+permission is denied or the endpoint cannot be verified from the available
+context, report `sandbox-unverified`, not unhealthy.
 
 ## Managed Bootstrap Boundary
 
@@ -100,8 +97,8 @@ If the user trusts the SessionStart hook, the bootstrap may:
 - verify it against `checksums.txt`;
 - extract the release into plugin data;
 - use the bundled plugin `.mcp.json` endpoint policy;
-- start or reuse a local Observer process unless Codex has an explicit
-  Obstudio MCP opt-out or custom endpoint.
+- start or reuse a local Observer process unless the active host's bootstrap
+  controls opt out of managed local startup.
 
 Do not trust the hook if you do not want plugin-managed binary download,
 checksum validation, or local process startup.
@@ -120,15 +117,20 @@ The plugin includes several higher-trust surfaces:
   or local servers.
 
 Destructive or control actions should require explicit user intent, ownership
-evidence when controlling a local process, and narrow elevated permissions when
-Codex needs outside-sandbox localhost access. Observer command skills should
+evidence when controlling a local process, and narrow permissions when the
+active host requires approval for localhost access. Observer command skills should
 inspect only the default loopback health endpoint and the Observer listener
 ports `127.0.0.1:3000`, `127.0.0.1:4317`, and `127.0.0.1:4318`.
 
 ## User Controls
 
-Users can lower trust by disabling the MCP server, refusing hook trust, or
-disabling specific skills.
+Plugin management and MCP connectivity are separate controls. Disabling a
+plugin or withholding SessionStart-hook approval prevents plugin-managed
+bootstrap. Disabling an MCP server controls whether the host connects to that
+endpoint; it does not by itself stop an already trusted hook from starting an
+Observer, nor does it stop a pre-existing local Observer process.
+
+### Codex
 
 Disable the Obstudio MCP server in `~/.codex/config.toml`:
 
@@ -149,3 +151,15 @@ enabled = false
 path = "/path/to/obstudio/skills/splunk-detector-publish/SKILL.md"
 enabled = false
 ```
+
+### Claude Code
+
+Use Claude Code's plugin controls to disable Splunk Observability Studio or withhold SessionStart
+hook approval to prevent its managed bootstrap. Use Claude Code's MCP-server
+controls to prevent Claude from connecting to the local MCP endpoint, and its
+command permission prompts to withhold individual host-local commands. A
+disabled Claude MCP server does not stop a previously trusted SessionStart hook
+from managing an Observer, and withholding a later hook prompt does not prevent
+connection to an already running endpoint. Claude Code manages these controls
+under its own plugin and permission model; the Codex configuration examples
+above do not apply to Claude Code.
