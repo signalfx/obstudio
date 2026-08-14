@@ -1,7 +1,7 @@
 {
   "name": "observability-studio",
   "displayName": "Splunk Observability Studio",
-  "version": "0.1.0",
+  "version": "0.0.16",
   "description": "OpenTelemetry workflows and observer controls for Claude Code.",
   "author": {
     "name": "Splunk",

@@ -166,7 +166,7 @@ class ClaudeBootstrapTest(unittest.TestCase):
             self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
             self.assertEqual(BOOTSTRAP.plugin_display_name(), "Splunk Observability Studio")
             self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/observability-studio:observer-open")
-            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.1.0")
+            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.16")
             self.assertEqual(
                 BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
                 "plugin-local",

@@ -56,7 +56,7 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.stage_plugin(output, host="claude")
 
             manifest = json.loads((output / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "0.1.0")
+            self.assertEqual(manifest["version"], "0.0.16")
 
     def test_release_tag_stamps_and_enforces_both_plugin_manifest_versions(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -143,7 +143,7 @@ class StageObstudioPluginTest(unittest.TestCase):
         self.assertEqual(claude_manifest["hooks"], "./hooks/claude-hooks.json")
         self.assertNotIn("$schema", claude_manifest)
         self.assertEqual(claude_manifest["displayName"], "Splunk Observability Studio")
-        self.assertEqual(claude_manifest["version"], "0.1.0")
+        self.assertEqual(claude_manifest["version"], "0.0.16")
 
         codex_hook = json.loads((plugin_root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
         codex_command = codex_hook["hooks"]["SessionStart"][0]["hooks"][0]["command"]

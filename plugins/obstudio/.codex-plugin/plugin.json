@@ -1,6 +1,6 @@
 {
   "name": "obstudio",
-  "version": "0.1.0",
+  "version": "0.0.16",
   "description": "Obstudio bundles local OpenTelemetry workflows and observer controls for Codex.",
   "author": {
     "name": "Splunk",
