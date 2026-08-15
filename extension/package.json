@@ -110,14 +110,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
-        },
-        "observability-studio.managedObserverPort": {
-          "type": "number",
-          "default": 3000,
-          "minimum": 1,
-          "maximum": 65535,
-          "markdownDescription": "Local port used by the extension-managed Observer UI and MCP HTTP endpoint when `sharedObserverUrl` is unset."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override. When unset, the extension reuses a running local `obstudio` instance or starts one automatically."
         }
       }
     }

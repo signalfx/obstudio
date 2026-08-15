@@ -29,9 +29,6 @@ const (
 	codexManagedBlockStart = "# BEGIN OBSTUDIO MCP CONFIG"
 	codexManagedBlockEnd   = "# END OBSTUDIO MCP CONFIG"
 
-	defaultSharedObserverBaseURL      = "http://127.0.0.1:3000"
-	defaultSharedObserverMCPURL       = defaultSharedObserverBaseURL + "/mcp"
-	defaultSharedObserverHealth       = defaultSharedObserverBaseURL + "/api/health"
 	sharedObserverHealthTimeout       = 750 * time.Millisecond
 	disableSharedObserverDetectionEnv = "OBSTUDIO_DISABLE_SHARED_OBSERVER_DETECTION"
 
@@ -307,10 +304,11 @@ func runInstall(target, sharedURL string) error {
 }
 
 func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {
-	if detectedURL, ok := detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client); ok {
-		return detectedURL, true
-	}
-	return detectSharedObserverURL(defaultSharedObserverHealth, client)
+	return detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client)
+}
+
+func detectAnyRunningObserver(client *http.Client) (string, bool) {
+	return detectSharedObserverURLFromStateFile(sharedObserverStatePath(), client)
 }
 
 func ensureInstallWeaverRuntime(exePath, destDir string, requireLocalRuntime bool) (bool, string, error) {
@@ -408,7 +406,9 @@ func detectSharedObserverURL(healthURL string, client *http.Client) (string, boo
 	if mcpURL := strings.TrimSpace(health.Endpoints["mcp"]); mcpURL != "" {
 		return mcpURL, true
 	}
-	return defaultSharedObserverMCPURL, true
+	// Derive MCP URL from the health URL base as a fallback for older responses.
+	base := strings.TrimSuffix(healthURL, "/api/health")
+	return base + "/mcp", true
 }
 
 func detectSharedObserverURLFromStateFile(statePath string, client *http.Client) (string, bool) {

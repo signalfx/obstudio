@@ -84,6 +84,16 @@ func newRootCmd(config *runConfig) *cobra.Command {
 			if err := validateRunConfig(resolved); err != nil {
 				return err
 			}
+			if os.Getenv(disableSharedObserverDetectionEnv) == "" {
+				if detectedURL, ok := detectAnyRunningObserver(http.DefaultClient); ok {
+					fmt.Fprintf(os.Stderr, "obstudio already running at %s\n", detectedURL)
+					return nil
+				}
+				// Stale instance.json (health probe failed) — delete and proceed.
+				if _, err := os.Stat(sharedObserverStatePath()); err == nil {
+					_ = os.Remove(sharedObserverStatePath())
+				}
+			}
 			run(resolved)
 			return nil
 		},
@@ -91,7 +101,9 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	}
 
 	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP receivers")
+	root.Flags().StringVar(&config.observerHTTPPort, "port", "", "Observer web UI, REST API, and MCP HTTP port")
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
+	_ = root.Flags().MarkDeprecated("observer-http-port", "use --port instead")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
@@ -107,9 +119,21 @@ func run(config runConfig) {
 	startedAt := time.Now().UTC()
 
 	host := config.host
-	port := config.observerHTTPPort
 	otlpHTTPPort := config.otlpHTTPPort
 	otlpGRPCPort := config.otlpGRPCPort
+
+	// Resolve HTTP port: scan upward from 17900 when not pinned.
+	pinnedPort := config.observerHTTPPort
+	var port string
+	if pinnedPort != "" {
+		port = pinnedPort
+	} else {
+		var err error
+		port, err = scanPort(host, "17900")
+		if err != nil {
+			log.Fatalf("failed to find a free port: %v", err)
+		}
+	}
 
 	mainAddr := net.JoinHostPort(host, port)
 	otlpHTTPAddr := net.JoinHostPort(host, otlpHTTPPort)
@@ -184,6 +208,9 @@ func run(config runConfig) {
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
 	mainListener, err := net.Listen("tcp", mainAddr)
 	if err != nil {
+		if pinnedPort != "" {
+			log.Fatalf("port %s is already in use — choose a different port or omit --port to auto-scan", port)
+		}
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 
@@ -373,7 +400,7 @@ func parseEnvLine(line string) (string, string, bool, error) {
 func resolveRunConfig(config runConfig) runConfig {
 	return runConfig{
 		host:             valueOrEnv(config.host, "HOST", "127.0.0.1"),
-		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", "3000"),
+		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", ""),
 		otlpHTTPPort:     valueOrEnv(config.otlpHTTPPort, "OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318")),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
@@ -535,6 +562,24 @@ func hasNonEmptyEnvKey(keys ...string) bool {
 	return false
 }
 
+// scanPort finds a free TCP port on host starting at startPort, incrementing
+// until a free port is found. Returns the port as a string.
+func scanPort(host, startPort string) (string, error) {
+	port, err := strconv.Atoi(startPort)
+	if err != nil {
+		return "", fmt.Errorf("invalid start port %q: %w", startPort, err)
+	}
+	for {
+		addr := net.JoinHostPort(host, strconv.Itoa(port))
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			ln.Close()
+			return strconv.Itoa(port), nil
+		}
+		port++
+	}
+}
+
 func splunkMetricsExporterConfigFromEnv() (otlp.SplunkMetricsExporterConfig, error) {
 	timeout, err := durationEnv("OBSTUDIO_SPLUNK_METRICS_TIMEOUT")
 	if err != nil {
@@ -618,7 +663,7 @@ func validateRunConfig(config runConfig) error {
 		label    string
 		value    string
 	}{
-		{flagName: "--observer-http-port", label: "Observer UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
+		{flagName: "--port", label: "Observer UI, REST API, and MCP HTTP", value: config.observerHTTPPort},
 		{flagName: "--otlp-http-port", label: "OTLP/HTTP", value: config.otlpHTTPPort},
 		{flagName: "--otlp-grpc-port", label: "OTLP/gRPC", value: config.otlpGRPCPort},
 	}
@@ -626,6 +671,9 @@ func validateRunConfig(config runConfig) error {
 	seen := map[int]string{}
 	seenFlags := map[int]string{}
 	for _, port := range ports {
+		if port.value == "" {
+			continue
+		}
 		parsed, err := strconv.Atoi(port.value)
 		if err != nil || parsed < 1 || parsed > 65_535 {
 			return fmt.Errorf("%s must be a valid TCP port between 1 and 65535, got %q", port.flagName, port.value)

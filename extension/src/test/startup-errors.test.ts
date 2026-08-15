@@ -24,9 +24,9 @@ test('formatPortConflictMessage names the managed UI setting for configurable po
 			owner: 'nginx (PID 42)',
 			port: 3000,
 			role: 'Observer UI',
-			settingName: 'managedObserverPort',
+			settingName: 'sharedObserverUrl',
 		}),
-		'Observer UI port 3000 is already in use by "nginx (PID 42)". Stop the other process or change observability-studio.managedObserverPort.',
+		'Observer UI port 3000 is already in use by "nginx (PID 42)". Stop the other process or change observability-studio.sharedObserverUrl.',
 	);
 });
 
