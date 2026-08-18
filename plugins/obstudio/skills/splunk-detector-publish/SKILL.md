@@ -353,6 +353,7 @@ After the user confirms, for each GAP spec:
            for rule in rules
        ],
        "description": f"Created by splunk-detector-publish from {hcl_label}",
+       "tags": ["obstudio"],
    }
    data = json.dumps(body).encode("utf-8")
    req = urllib.request.Request(
