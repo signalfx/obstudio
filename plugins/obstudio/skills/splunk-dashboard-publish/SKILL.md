@@ -259,6 +259,7 @@ detector publish — a dashboard cannot be created before the charts it referenc
              {"chartId": cid, "column": c, "row": r, "width": w, "height": h}
              for (cid, c, r, w, h) in placed_charts
          ],
+         "tags": ["obstudio"],
      }
      ```
 
