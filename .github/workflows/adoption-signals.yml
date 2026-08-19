@@ -1,0 +1,37 @@
+name: Adoption Signals
+
+on:
+  schedule:
+    # 04:15 UTC daily. Note: schedule only runs on the default branch.
+    - cron: "15 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/collect_adoption_signals.py
+      - .github/workflows/adoption-signals.yml
+
+concurrency:
+  group: adoption-signals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    name: Collect passive adoption signals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect signals
+        run: python3 scripts/collect_adoption_signals.py --output adoption-signals.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adoption-signals
+          path: adoption-signals.json
