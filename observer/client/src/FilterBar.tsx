@@ -293,14 +293,6 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             ))}
           </select>
           <button
-            className="filter-builder__clear"
-            onClick={resetDraft}
-            type="button"
-            aria-label="Reset filter draft"
-          >
-            ×
-          </button>
-          <button
             className="filter-builder__apply"
             onClick={addClause}
             type="button"
@@ -308,6 +300,14 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             aria-label="Apply filter"
           >
             Apply
+          </button>
+          <button
+            className="filter-builder__clear"
+            onClick={resetDraft}
+            type="button"
+            aria-label="Reset filter draft"
+          >
+            ×
           </button>
         </div>
       );
@@ -365,14 +365,6 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
           aria-label={`${selectedDefinition.key} value`}
         />
         <button
-          className="filter-builder__clear"
-          onClick={resetDraft}
-          type="button"
-          aria-label="Reset filter draft"
-        >
-          ×
-        </button>
-        <button
           className="filter-builder__apply"
           onClick={addClause}
           type="button"
@@ -380,6 +372,14 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
           aria-label="Apply filter"
         >
           Apply
+        </button>
+        <button
+          className="filter-builder__clear"
+          onClick={resetDraft}
+          type="button"
+          aria-label="Reset filter draft"
+        >
+          ×
         </button>
       </div>
     );

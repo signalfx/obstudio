@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
 import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
@@ -258,7 +259,10 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
           {filterError ? (
             <p className="explorer__status explorer__status--error">{filterError}</p>
           ) : liveLogs.length === 0 && !hasActiveFilter ? (
-            <p className="explorer__status explorer__status--empty">No logs received yet. Send OTLP telemetry to port 4318 to begin exploring.</p>
+            <EmptyState
+              title="No logs received yet."
+              hint="Send OTLP telemetry to port 4318 to begin exploring."
+            />
           ) : isFiltering && hasActiveFilter && visibleLogs.length === 0 ? (
             <p className="explorer__status">Updating filtered logs...</p>
           ) : visibleLogs.length === 0 ? (

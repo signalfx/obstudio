@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
@@ -288,7 +289,10 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           ) : null}
 
           {liveTraces.length === 0 && !hasActiveFilter ? (
-            <p className="explorer__status explorer__status--empty">No traces received yet. Send OTLP telemetry to port 4318 to begin exploring.</p>
+            <EmptyState
+              title="No traces received yet."
+              hint="Send OTLP telemetry to port 4318 to begin exploring."
+            />
           ) : isFiltering && hasActiveFilter && visibleTraces.length === 0 ? (
             <p className="explorer__status">Updating filtered traces...</p>
           ) : visibleTraces.length === 0 ? (

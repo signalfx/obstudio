@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
+import { EmptyState } from "../components/EmptyState";
 import { fetchServiceStats, type ServiceStats } from "../api/client";
 
 interface ServicesTabProps {
@@ -8,10 +10,25 @@ interface ServicesTabProps {
 type SortKey = keyof ServiceStats;
 type SortDir = "asc" | "desc";
 
+const SERVICE_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
+];
+
+function matchesClauses(row: ServiceStats, clauses: FilterClause[]): boolean {
+  for (const clause of clauses) {
+    if (clause.key === "serviceName") {
+      const matches = row.name.toLowerCase().includes(clause.value.toLowerCase());
+      if (clause.op === "neq" ? matches : !matches) return false;
+    }
+  }
+  return true;
+}
+
 export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElement {
   const [rows, setRows] = useState<ServiceStats[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [clauses, setClauses] = useState<FilterClause[]>([]);
   const serviceNamesKey = serviceNames.join("\0");
 
   useEffect(() => {
@@ -27,7 +44,12 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceNamesKey]);
 
-  const sorted = [...rows].sort((a, b) => {
+  const filtered = useMemo(
+    () => clauses.length === 0 ? rows : rows.filter((r) => matchesClauses(r, clauses)),
+    [rows, clauses],
+  );
+
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
     let cmp = 0;
     if (sortKey === "name") {
       cmp = a.name.localeCompare(b.name);
@@ -37,7 +59,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
       cmp = (av as number) - (bv as number);
     }
     return sortDir === "asc" ? cmp : -cmp;
-  });
+  }), [filtered, sortKey, sortDir]);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -56,15 +78,23 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   if (rows.length === 0 && serviceNames.length === 0) {
     return (
       <section className="tab-panel" role="tabpanel">
-        <p className="explorer__status explorer__status--empty">
-          No services observed yet. Send OTLP telemetry to port 4318 to begin exploring.
-        </p>
+        <EmptyState
+          title="No services observed yet."
+          hint="Send OTLP telemetry to port 4318 to begin exploring."
+        />
       </section>
     );
   }
 
   return (
     <section className="tab-panel" role="tabpanel">
+      <div className="explorer__toolbar explorer__toolbar--controls">
+        <FilterBar
+          definitions={SERVICE_FILTER_DEFINITIONS}
+          clauses={clauses}
+          onChange={setClauses}
+        />
+      </div>
       <div className="services-table-scroll">
         <div className="services-table">
           <div className="services-table__head">
@@ -91,7 +121,9 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
             </button>
           </div>
 
-          {sorted.map((row) => (
+          {sorted.length === 0 && clauses.length > 0 ? (
+            <p className="explorer__status">No services match the current filter.</p>
+          ) : sorted.map((row) => (
             <div key={row.name} className="services-table__row">
               <span className="data-table__td data-table__td--service-name">
                 <span className="explorer-row__primary">{row.name}</span>

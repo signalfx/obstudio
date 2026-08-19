@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -230,9 +231,10 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
           ) : null}
 
           {visibleMetricList.length === 0 && liveMetrics.length === 0 && !hasActiveFilter ? (
-            <p className="explorer__status explorer__status--empty">
-              No metrics received yet. Send OTLP telemetry to port 4318 to begin exploring.
-            </p>
+            <EmptyState
+              title="No metrics received yet."
+              hint="Send OTLP telemetry to port 4318 to begin exploring."
+            />
           ) : isFiltering && hasActiveFilter && visibleMetricList.length === 0 ? (
             <p className="metrics-explorer__empty">
               Updating filtered metrics...
@@ -251,7 +253,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
             </div>
           ) : null}
 
-          <div className="metrics-card-list">
+          {visibleMetricList.length > 0 ? <div className="metrics-card-list">
             {visibleMetricList.map((metric) => {
               const isExpanded = expandedMetricKey === metric.key;
               return (
@@ -281,7 +283,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                 </div>
               );
             })}
-          </div>
+          </div> : null}
         </div>
 
         {expandedMeta ? (
