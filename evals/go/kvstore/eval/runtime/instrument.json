@@ -3,13 +3,13 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; do not add custom business spans."
+      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; ensure traces, metrics, and existing application logs export to the local Observer during the runtime check; do not add custom business spans."
     }
   ],
   "checks": [
     {
       "id": "observer-runtime-telemetry",
-      "description": "Docker runtime emits Go key-value store traces and HTTP duration metrics to Observer.",
+      "description": "Docker runtime emits Go key-value store traces, HTTP duration metrics, and application logs to the local Observer.",
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
       "expect": {
@@ -28,6 +28,11 @@
               "http.server.request.duration",
               "http.server.duration"
             ]
+          },
+          {
+            "id": "logs",
+            "url": "/api/query/logs",
+            "contains_any": ["listening on :8000"]
           }
         ]
       }

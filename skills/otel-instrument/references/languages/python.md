@@ -26,7 +26,7 @@ detected in the codebase. Only install what the project actually uses.
 | `grpcio` | `opentelemetry-instrumentation-grpc` | gRPC client/server spans |
 | `kafka-python` / `confluent-kafka` | `opentelemetry-instrumentation-kafka-python` / `opentelemetry-instrumentation-confluent-kafka` | Producer/consumer spans |
 | `boto3` / `botocore` | `opentelemetry-instrumentation-botocore` | AWS service call spans |
-| `logging` (stdlib) | `opentelemetry-instrumentation-logging` | Inject trace context into log records |
+| `logging` (stdlib) | `opentelemetry-instrumentation-logging` | Export LogRecords while preserving existing handlers; optional trace-context injection into original records |
 
 ---
 
@@ -53,6 +53,31 @@ additional convenience when the project explicitly wants broad CLI
 auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
 `opentelemetry-sdk` dependencies in the project manifest and wire a setup file.
 
+Install the official stdlib bridge. OpenTelemetry Python 1.40.0 and later moved
+automatic handler ownership from the SDK to this instrumentation package:
+
+```bash
+pip install opentelemetry-instrumentation-logging
+```
+
+```python
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+LoggingInstrumentor().instrument(
+    set_logging_format=False,
+    inject_trace_context=False,
+)
+```
+
+The instrumentor installs the stdlib-to-OTel handler by default and protects it
+across later `basicConfig`, `dictConfig`, and `fileConfig` calls without
+replacing the application's console/file handlers. Set
+`inject_trace_context=True` only when the existing formatter also needs the
+`otelTraceID`, `otelSpanID`, and `otelTraceSampled` fields. For a project pinned
+before Python OTel 1.40.0, inspect the installed APIs and retain the older SDK
+`LoggingHandler` compatibility path rather than upgrading dependencies solely
+to copy this example.
+
 ---
 
 ## Auto-Instrumentation (CLI Wrapper)
@@ -60,6 +85,26 @@ auto-discovery. For code changes, keep the explicit `opentelemetry-api` and
 Reuse the current app command and wrap it with the OTel auto-instrumentation agent. Do not introduce Docker just for observability.
 
 ```bash
+export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-otlp}"
+if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
+  export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-http/protobuf}"
+  if [ -z "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}" ]; then
+    case "$OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" in
+      http/protobuf) export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs ;;
+      grpc) export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4317 ;;
+      *) echo "unsupported OTLP logs protocol: $OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" >&2; exit 1 ;;
+    esac
+  fi
+  if [ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ] && \
+     [ -z "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}" ]; then
+    echo "move generic OTLP headers to trace/metric signal variables, or set explicit logs headers" >&2
+    exit 1
+  fi
+fi
+if [ "$OTEL_LOGS_EXPORTER" = none ]; then
+  export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
+fi
+
 opentelemetry-instrument \
   --service_name my-service \
   --exporter_otlp_endpoint http://localhost:4318 \
@@ -71,9 +116,22 @@ Wrap the same command the project already uses, such as `python`, `uv run`, `poe
 
 If the project already runs in Docker:
 ```dockerfile
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENV OTEL_EXPORTER_OTLP_HEADERS=""
+ENV OTEL_LOGS_EXPORTER=otlp
+ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4318/v1/logs
 CMD ["opentelemetry-instrument", "--service_name", "my-service", "python", "app.py"]
 ```
+
+With current `opentelemetry-instrumentation-logging`, zero-code instrumentation
+installs the log handler by default. Pair
+`OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false` with
+`OTEL_LOGS_EXPORTER=none` to omit that no-op handler as well. Do not also run the programmatic setup below;
+choose the zero-code owner or the application-owned provider/bridge, never both.
+Only the effective `otlp` branch adds or validates the Obstudio local logs
+protocol, endpoint, and header isolation. `none` and every other explicit
+operator-owned exporter bypass that added log configuration, so generic
+trace/metric cloud settings cannot make an opted-out application fail startup.
 
 ---
 
@@ -114,15 +172,57 @@ rather than copying it when provider ownership already exists.
 **File**: `otel_setup.py`
 
 ```python
-from opentelemetry import trace, metrics
+import os
+
+from opentelemetry import metrics, trace
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-import os
+
+
+LOCAL_OBSERVER_LOGS_ENDPOINT = "http://localhost:4318/v1/logs"
+
+
+def _use_default_local_log_export():
+    configured = os.environ.get("OTEL_LOGS_EXPORTER")
+    if configured is None or not configured.strip():
+        return True
+    return configured.strip().lower() == "otlp"
+
+
+def _local_log_exporter():
+    protocol = os.environ.get(
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "http/protobuf"
+    ).strip().lower()
+    if protocol != "http/protobuf":
+        raise RuntimeError(
+            "select the official exporter matching "
+            f"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL={protocol!r}"
+        )
+
+    # A signal-specific endpoint/header wins. Reject generic headers here so a
+    # direct-cloud credential cannot leak into the local application-log path.
+    if (
+        os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip()
+        and not os.environ.get("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "").strip()
+    ):
+        raise RuntimeError(
+            "move generic OTLP headers to trace/metric signal variables, or "
+            "set an explicit OTEL_EXPORTER_OTLP_LOGS_HEADERS value"
+        )
+    endpoint = os.environ.get(
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", LOCAL_OBSERVER_LOGS_ENDPOINT
+    )
+    return OTLPLogExporter(endpoint=endpoint)
 
 
 def configure_opentelemetry():
@@ -141,7 +241,51 @@ def configure_opentelemetry():
     )
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
+
+    logger_provider = None
+    logging_instrumentor = None
+    if _use_default_local_log_export():
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(
+            BatchLogRecordProcessor(_local_log_exporter())
+        )
+        set_logger_provider(logger_provider)
+
+        # Current instrumentation owns exactly one stdlib-to-OTel handler and
+        # preserves handlers established before or after this call.
+        logging_instrumentor = LoggingInstrumentor()
+        logging_instrumentor.instrument(
+            set_logging_format=False,
+            inject_trace_context=False,
+        )
+
+    def shutdown():
+        # The log provider owns the batch processor/exporter and flushes it.
+        if logging_instrumentor is not None:
+            logging_instrumentor.uninstrument()
+        if logger_provider is not None:
+            logger_provider.shutdown()
+        meter_provider.shutdown()
+        tracer_provider.shutdown()
+
+    return shutdown
 ```
+
+This new-process example defaults only an absent or explicit `otlp` log
+exporter to local Observer. If `OTEL_LOGS_EXPORTER=none`, or another explicit
+exporter is selected, it leaves logging untouched so the operator-owned setup
+can take effect. Do not broaden the condition to install local OTLP alongside
+another exporter. Register the returned `shutdown` callback with the app's
+existing lifecycle or `atexit`; do not create a second provider during reloads
+or per worker request.
+
+`LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
+additional path, and its guarded configuration wrappers let later application
+logging setup proceed before reattaching the OTel handler. Do not use
+`logging.basicConfig(force=True)`. Inspect filters, formatters, adapters,
+Flask/Django access logs, exception rendering, and structured logger wrappers.
+Apply the same project redaction policy to the final OTel record and prove
+sensitive values cannot be reintroduced later in the pipeline.
 
 The explicit `export_interval_millis` and `export_timeout_millis` are required
 for local and eval runs. Do not rely on metric reader defaults; they can be too
@@ -154,8 +298,11 @@ the collector before the process stops.
 
 ```python
 # app.py
+import atexit
+
 from otel_setup import configure_opentelemetry
-configure_opentelemetry()
+shutdown_opentelemetry = configure_opentelemetry()
+atexit.register(shutdown_opentelemetry)
 
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from flask import Flask
@@ -322,7 +469,10 @@ For Flask/FastAPI, unhandled 5xx responses automatically set ERROR status via th
 
 ## OTLP Export Configuration
 
-All configuration is via environment variables. Do not hardcode endpoints.
+Use environment variables for operator-owned configuration. The only endpoint
+literal in the SDK example is the signal-specific local Observer logs fallback,
+which prevents a generic direct-cloud endpoint from becoming the implicit log
+destination.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -330,6 +480,10 @@ All configuration is via environment variables. Do not hardcode endpoints.
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Common protocol when using port 4318 |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT` | unset | Per-signal endpoint, including `/v1/<signal>` for HTTP exporters |
 | `OTEL_EXPORTER_OTLP_<SIGNAL>_PROTOCOL` | unset | Per-signal `grpc` or `http/protobuf` |
+| `OTEL_LOGS_EXPORTER` | `otlp` for Obstudio instrumentation | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -339,6 +493,8 @@ For local development with the Observer:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
     OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+    OTEL_LOGS_EXPORTER=otlp \
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs \
     OTEL_METRIC_EXPORT_INTERVAL=1000 \
     OTEL_METRIC_EXPORT_TIMEOUT=500 \
     OTEL_BSP_SCHEDULE_DELAY=100 \
@@ -356,6 +512,27 @@ targets `localhost:4317`; an HTTP/protobuf exporter normally targets
 `localhost:4318/v1/traces`, `/v1/metrics`, or `/v1/logs`. A trace exporter can
 succeed while a separately constructed metrics exporter fails, so exercise
 each configured signal.
+
+### Local Observer application logs and cloud boundary
+
+Local OTLP application logs are the default for a detected Python logging
+stack. An explicit `OTEL_LOGS_EXPORTER` or
+`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` wins; `none` disables the added provider and
+handler while existing stdout/file logging continues. When traces or metrics
+use direct-cloud signal endpoints, keep the logs endpoint on the local Observer
+receiver. Never copy a Splunk ingest URL, realm, access token, generic cloud
+header, cloud exporter, or forwarding flag into the log pipeline. Preserve an
+explicit operator-owned logs endpoint without converting it into an additional
+local or cloud path. If that endpoint is direct-cloud, do not add or claim an
+Obstudio-owned log pipeline: preserve it as external operator configuration,
+report the boundary conflict, and require the operator to resolve it. Obstudio
+cloud forwarding remains traces and metrics only.
+
+Verify one sanitized record at each required severity both outside and inside
+an active span. Assert its body/category, severity, shared `service.name`,
+trace/span IDs when a span is active, presence in the original stdout/file
+sink, one record in Observer, and zero OTLP records with
+`OTEL_LOGS_EXPORTER=none`. This runtime check also detects duplicate handlers.
 
 ---
 
@@ -398,6 +575,10 @@ Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.d
 - **Singleton providers**: Never call any global `set_*_provider()` more than
   once. If existing OTel setup exists, extend or consolidate it and prove legacy
   instruments still use the selected provider.
+- **Duplicate log bridges**: one `LoggingInstrumentor`-managed stdlib handler is
+  enough. Do not add it when an existing OTel handler/provider already owns the
+  same records, and do not combine it with a second framework bridge that
+  exports those records.
 - **Metric export interval and timeout**: Always set
   `export_interval_millis` and `export_timeout_millis` on
   `PeriodicExportingMetricReader`. Environment variables alone are not enough

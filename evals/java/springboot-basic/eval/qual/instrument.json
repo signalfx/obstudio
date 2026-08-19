@@ -19,6 +19,7 @@
     "Uses or recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path.",
     "Keeps Spring controller code minimal and does not replace auto-instrumentation with broad manual tracing.",
     "Configures service name and OTLP endpoint through environment variables or JVM system properties.",
+    "Defaults the Java agent application log exporter to OTLP only when the operator has not selected a value, sends logs to the signal-specific local Observer /v1/logs endpoint through the agent's existing Logback bridge, preserves appenders and OTEL_LOGS_EXPORTER=none or another explicit override, and never configures cloud log credentials or forwarding.",
     "Explains how the Java agent provides HTTP server spans and request duration metrics.",
     "Preserves existing Maven/Spring Boot runtime behavior."
   ]

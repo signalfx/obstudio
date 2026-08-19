@@ -176,11 +176,21 @@ Configure your app to send telemetry:
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 export OTEL_SERVICE_NAME=my-service
 ```
 
-To forward incoming telemetry to Splunk Observability Cloud while still keeping
-the local Explorer experience, put the settings in Obstudio's default env file:
+Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+local Telemetry Explorer. Splunk Observability Cloud forwarding applies only to
+traces and metrics. Logs sent to `/v1/logs` remain in the local Explorer's Logs
+view, even when trace and metric forwarding are enabled.
+Set `OTEL_LOGS_EXPORTER=none` before starting the application to opt out while
+leaving its existing console or file logging unchanged.
+
+To forward eligible incoming telemetry to Splunk Observability Cloud while
+still keeping the local Explorer experience, put the settings in Obstudio's
+default env file:
 
 ```bash
 mkdir -p ~/.obstudio

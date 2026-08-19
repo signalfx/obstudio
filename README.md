@@ -87,9 +87,13 @@ and `4317`; these are also used by the editor extension.
 
 ### Optional Splunk Metrics Forwarding
 
-By default, Obstudio stores incoming OTLP telemetry locally for inspection. To
-also forward received metrics to Splunk Observability Cloud, put the settings
-in Obstudio's default env file:
+Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+local Telemetry Explorer. Splunk Observability Cloud forwarding is opt-in and
+applies only to traces and metrics. Logs sent to `/v1/logs` remain in the local
+Explorer's Logs view, even when trace and metric forwarding are enabled.
+
+To forward received metrics to Splunk Observability Cloud, put the settings in
+Obstudio's default env file:
 
 ```bash
 mkdir -p ~/.obstudio

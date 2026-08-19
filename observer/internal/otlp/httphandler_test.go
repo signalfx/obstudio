@@ -179,6 +179,44 @@ func TestPostLogsJSON(t *testing.T) {
 	}
 }
 
+func TestPostLogsRemainsLocalWhenCloudExportersConfigured(t *testing.T) {
+	s := store.New()
+	metricsExporter := &captureMetricsExporter{ch: make(chan pmetric.Metrics, 1)}
+	tracesExporter := &captureTracesExporter{ch: make(chan ptrace.Traces, 1)}
+	handler := &otlpHTTPHandler{
+		store:          s,
+		ct:             &ConnTracker{},
+		exporter:       metricsExporter,
+		tracesExporter: tracesExporter,
+	}
+
+	body, err := (&plog.JSONMarshaler{}).MarshalLogs(createTestLog())
+	if err != nil {
+		t.Fatalf("failed to marshal logs: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/logs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	logs := s.QueryLogs(1)
+	if len(logs) != 1 || logs[0].Body != "test log message" {
+		t.Fatalf("expected log to remain available locally, got %#v", logs)
+	}
+
+	select {
+	case <-metricsExporter.ch:
+		t.Fatal("log request unexpectedly invoked the Splunk metrics exporter")
+	case <-tracesExporter.ch:
+		t.Fatal("log request unexpectedly invoked the Splunk traces exporter")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 // Test 4: POST /v1/traces with application/x-protobuf Content-Type — 200 (using protobuf marshaler)
 func TestPostTracesProtobuf(t *testing.T) {
 	s := store.New()

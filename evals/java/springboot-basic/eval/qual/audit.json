@@ -20,6 +20,7 @@
     "Identifies TaskController routes for health and task CRUD operations.",
     "Reports no OpenTelemetry SDK, Java agent, or OTLP exporter configuration.",
     "Reports missing HTTP request rate, error status, and latency visibility with exact expected signals.",
-    "Recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path."
+    "Recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path.",
+    "Classifies the missing Java-agent application-log path to local Observer as a required default gap, while preserving explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
   ]
 }

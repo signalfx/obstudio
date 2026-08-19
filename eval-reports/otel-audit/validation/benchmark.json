@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20260728T070438150860Z",
-    "repo_root": "/Users/tithumma/code/splunk/obstudio/.workspace/origin-main-latest",
+    "run_id": "20260819T220546412828Z",
+    "repo_root": "/private/tmp/obstudio-issue-199",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -67,7 +67,7 @@
       "eval_dir": "evals/go/kvstore",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -152,7 +152,7 @@
       "eval_dir": "evals/java/springboot-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -169,7 +169,7 @@
       "eval_dir": "evals/node/express-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -252,7 +252,7 @@
       "eval_dir": "evals/python/flask-basic",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 5,
+      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -295,7 +295,7 @@
     "case_count": 30,
     "prompt_count": 30,
     "sanity_check_count": 0,
-    "rubric_check_count": 163,
+    "rubric_check_count": 171,
     "runtime_check_count": 0
   }
 }

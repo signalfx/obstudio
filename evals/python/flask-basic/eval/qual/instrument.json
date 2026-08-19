@@ -18,6 +18,7 @@
   "rubric": [
     "Initializes the SDK once in a separate file.",
     "Uses Resource service.name and env-driven OTLP endpoint configuration.",
+    "Configures one current opentelemetry-instrumentation-logging stdlib bridge backed by a shared-resource LoggerProvider, BatchLogRecordProcessor, and OTLP log exporter to the signal-specific local Observer /v1/logs endpoint by default; preserves logging configuration and existing stdout/file handlers, honors OTEL_LOGS_EXPORTER=none and other explicit operator ownership, avoids duplicate records, and never configures or inherits a direct-cloud log endpoint, header, credential, exporter, or forwarding path.",
     "Calls FlaskInstrumentor().instrument_app(app) or an equivalent setup before serving requests.",
     "Records exceptions or sets error status where custom error handling exists.",
     "Keeps the Flask app behavior and routes intact."

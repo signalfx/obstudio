@@ -18,6 +18,7 @@
   "rubric": [
     "Loads instrumentation before app.js starts.",
     "Configures NodeSDK with HTTP and Express auto-instrumentation.",
+    "Configures one version-compatible official console logging bridge with one batched OTLP log processor using @opentelemetry/exporter-logs-otlp-proto for the default http/protobuf path to the signal-specific local Observer /v1/logs endpoint; preserves console output, honors OTEL_LOGS_EXPORTER=none and other explicit operator ownership, avoids duplicate records, and never configures a direct-cloud log endpoint, header, credential, exporter, or forwarding path.",
     "Keeps service name and OTLP endpoint environment-driven.",
     "Adds graceful SDK shutdown handling.",
     "Does not rewrite the Express app structure unnecessarily."
