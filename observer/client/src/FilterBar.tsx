@@ -340,7 +340,11 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             className="filter-builder__trigger"
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            onBlur={() => { window.setTimeout(() => setMenuOpen(false), 150); }}
+            onBlur={(e) => {
+              const next = e.relatedTarget as Element | null;
+              if (next && e.currentTarget.parentElement?.contains(next)) return;
+              window.setTimeout(() => setMenuOpen(false), 150);
+            }}
             aria-haspopup="listbox"
             aria-expanded={menuOpen}
             aria-label={fieldPlaceholder ?? "Add filter"}
@@ -355,10 +359,8 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
                 <button
                   key={definition.key}
                   className="filter-builder__menu-item"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectDefinition(definition);
-                  }}
+                  onMouseDown={(event) => { event.preventDefault(); selectDefinition(definition); }}
+                  onClick={() => selectDefinition(definition)}
                   type="button"
                 >
                   <span className="filter-builder__menu-key">{definition.label ?? definition.key}</span>

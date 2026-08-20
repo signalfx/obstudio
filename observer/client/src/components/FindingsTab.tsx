@@ -197,7 +197,21 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
           <option value="improvement">Improvement</option>
           <option value="information">Information</option>
         </select>
-        <div className="findings-tab__signal-tabs" role="radiogroup" aria-label="Validation signals">
+        <div
+          className="findings-tab__signal-tabs"
+          role="radiogroup"
+          aria-label="Validation signals"
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const currentIndex = signalTabs.findIndex((t) => t.key === activeSignalTab);
+            const dir = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+            const nextIndex = (currentIndex + dir + signalTabs.length) % signalTabs.length;
+            setHasExplicitSignalTabSelection(true);
+            setActiveSignalTab(signalTabs[nextIndex].key);
+            (event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[nextIndex])?.focus();
+          }}
+        >
           {signalTabs.map((tab) => {
             const count = signalIssueCounts[tab.key] ?? 0;
             return (
@@ -209,6 +223,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 aria-checked={tab.key === activeSignalTab}
                 aria-label={formatSignalTabAriaLabel(tab.label, count)}
                 data-has-issues={count > 0 ? "true" : "false"}
+                tabIndex={tab.key === activeSignalTab ? 0 : -1}
                 onClick={() => {
                   setHasExplicitSignalTabSelection(true);
                   setActiveSignalTab(tab.key);
