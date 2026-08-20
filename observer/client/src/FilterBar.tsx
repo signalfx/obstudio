@@ -242,7 +242,6 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         }}
         placeholder={valuePlaceholder(selectedDefinition)}
         aria-label={`${selectedDefinition.key} value`}
-        autoFocus
       />
     );
 

@@ -17,7 +17,7 @@ const SERVICE_FILTER_DEFINITIONS: FilterDefinition[] = [
 function matchesClauses(row: ServiceStats, clauses: FilterClause[]): boolean {
   for (const clause of clauses) {
     if (clause.key === "serviceName") {
-      const matches = row.name.toLowerCase().includes(clause.value.toLowerCase());
+      const matches = row.name.toLowerCase() === clause.value.toLowerCase();
       if (clause.op === "neq" ? matches : !matches) return false;
     }
   }

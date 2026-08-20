@@ -14,6 +14,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function selectFilterField(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+  const menu = document.querySelector<HTMLElement>(".filter-builder__menu")!;
+  const items = menu.querySelectorAll<HTMLElement>(".filter-builder__menu-item");
+  const target = Array.from(items).find((el) => el.querySelector(".filter-builder__menu-key")?.textContent === label);
+  if (!target) throw new Error(`Filter field "${label}" not found in menu`);
+  fireEvent.mouseDown(target);
+}
+
 describe("MetricsTab", () => {
   it("filters metrics from the compact explorer toolbar via the REST query endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
@@ -74,13 +83,12 @@ describe("MetricsTab", () => {
 
     expect(screen.getByText("Type / Unit")).toBeTruthy();
     expect(screen.getByText("Description")).toBeTruthy();
-    expect(screen.getByPlaceholderText("Add filter")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add filter" })).toBeTruthy();
     expect(screen.queryByText("Type")).toBeNull();
     expect(screen.queryByText("Unit")).toBeNull();
 
-    const fieldInput = screen.getByLabelText("Filter field");
-    fireEvent.change(fieldInput, { target: { value: "metricName" } });
-    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    selectFilterField("Metric name");
+    expect((screen.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("metricName value"), {
       target: { value: "http.server.duration" },
     });
@@ -128,7 +136,7 @@ describe("MetricsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "serviceName" } });
+    selectFilterField("Service");
     fireEvent.focus(screen.getByLabelText("serviceName value"));
     fireEvent.change(screen.getByLabelText("serviceName value"), { target: { value: "che" } });
 
@@ -158,10 +166,10 @@ describe("MetricsTab", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByLabelText("Filter field"));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
 
     const items = Array.from(document.querySelectorAll(".filter-builder__menu-item .filter-builder__menu-key")).map((node) => node.textContent);
-    expect(items).toEqual(["Metric", "Service", "Scope"]);
+    expect(items).toEqual(["Metric name", "Service", "Scope"]);
   });
 
   it("does not show time range fields in the metric filter menu", () => {
@@ -184,7 +192,7 @@ describe("MetricsTab", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByLabelText("Filter field"));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
 
     expect(screen.queryByText("Time From")).toBeNull();
     expect(screen.queryByText("Time To")).toBeNull();
@@ -282,7 +290,7 @@ describe("MetricsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
     expect(document.querySelector(".signal-view__panel")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "metricName" } });
+    selectFilterField("Metric name");
     fireEvent.change(screen.getByLabelText("metricName value"), {
       target: { value: "http.server.duration" },
     });
@@ -349,7 +357,7 @@ describe("MetricsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "metricName" } });
+    selectFilterField("Metric name");
     fireEvent.change(screen.getByLabelText("metricName value"), {
       target: { value: "http.server.duration" },
     });
