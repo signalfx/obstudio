@@ -26,6 +26,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function selectFilterField(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+  const menu = document.querySelector<HTMLElement>(".filter-builder__menu")!;
+  const items = menu.querySelectorAll<HTMLElement>(".filter-builder__menu-item");
+  const target = Array.from(items).find((el) => el.querySelector(".filter-builder__menu-key")?.textContent === label);
+  if (!target) throw new Error(`Filter field "${label}" not found in menu`);
+  fireEvent.mouseDown(target);
+}
+
 describe("TracesTab", () => {
   it("renders unfiltered traces from the live websocket snapshot without a REST query", () => {
     const fetchMock = vi.fn();
@@ -95,9 +104,7 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "rootSpanName" },
-    });
+    selectFilterField("Root Span");
     fireEvent.change(screen.getByLabelText("rootSpanName value"), {
       target: { value: "GET /orders" },
     });
@@ -144,10 +151,8 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(await screen.findByLabelText("Filter field"), {
-      target: { value: "rootSpanName" },
-    });
-    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    selectFilterField("Root Span");
+    expect((screen.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("rootSpanName value"), {
       target: { value: "POST /charge" },
     });
@@ -252,10 +257,8 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(await screen.findByLabelText("Filter field"), {
-      target: { value: "serviceName" },
-    });
-    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    selectFilterField("Service");
+    expect((screen.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("serviceName value"), {
       target: { value: "missing" },
     });
@@ -287,10 +290,8 @@ describe("TracesTab", () => {
       />,
     );
 
-    fireEvent.change(await screen.findByLabelText("Filter field"), {
-      target: { value: "minDurationMs" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "<" }));
+    selectFilterField("Min Duration");
+    fireEvent.click(screen.getByRole("radio", { name: "<" }));
     fireEvent.change(screen.getByLabelText("minDurationMs value"), {
       target: { value: "100" },
     });

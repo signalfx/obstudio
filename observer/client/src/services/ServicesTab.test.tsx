@@ -1,9 +1,20 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ServicesTab } from "./ServicesTab";
+
+function selectFilterField(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+  const menu = document.querySelector<HTMLElement>(".filter-builder__menu")!;
+  const items = menu.querySelectorAll<HTMLElement>(".filter-builder__menu-item");
+  const target = Array.from(items).find(
+    (el) => el.querySelector(".filter-builder__menu-key")?.textContent === label,
+  );
+  if (!target) throw new Error(`Filter field "${label}" not found in menu`);
+  fireEvent.mouseDown(target);
+}
 
 afterEach(() => {
   cleanup();
@@ -147,5 +158,71 @@ describe("ServicesTab", () => {
     });
 
     expect(screen.getByText(/No services observed yet/)).toBeTruthy();
+  });
+
+  it("= filter keeps only the exact-match service (case-insensitive)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        makeStats({ name: "checkout" }),
+        makeStats({ name: "checkout-worker" }),
+        makeStats({ name: "payments" }),
+      ],
+    }));
+
+    await act(async () => {
+      render(<ServicesTab serviceNames={["checkout", "checkout-worker", "payments"]} />);
+    });
+
+    selectFilterField("Service");
+    fireEvent.click(screen.getByRole("radio", { name: "=" }));
+    fireEvent.change(screen.getByLabelText("serviceName value"), { target: { value: "Checkout" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    expect(screen.getByText("checkout")).toBeTruthy();
+    expect(screen.queryByText("checkout-worker")).toBeNull();
+    expect(screen.queryByText("payments")).toBeNull();
+  });
+
+  it("!= filter excludes only the exact-match service (case-insensitive)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        makeStats({ name: "checkout" }),
+        makeStats({ name: "checkout-worker" }),
+        makeStats({ name: "payments" }),
+      ],
+    }));
+
+    await act(async () => {
+      render(<ServicesTab serviceNames={["checkout", "checkout-worker", "payments"]} />);
+    });
+
+    selectFilterField("Service");
+    fireEvent.click(screen.getByRole("radio", { name: "!=" }));
+    fireEvent.change(screen.getByLabelText("serviceName value"), { target: { value: "Checkout" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    expect(screen.queryByText("checkout")).toBeNull();
+    expect(screen.getByText("checkout-worker")).toBeTruthy();
+    expect(screen.getByText("payments")).toBeTruthy();
+  });
+
+  it("shows no-match message when filter matches no services", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [makeStats({ name: "checkout" })],
+    }));
+
+    await act(async () => {
+      render(<ServicesTab serviceNames={["checkout"]} />);
+    });
+
+    selectFilterField("Service");
+    fireEvent.click(screen.getByRole("radio", { name: "=" }));
+    fireEvent.change(screen.getByLabelText("serviceName value"), { target: { value: "unknown" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    expect(screen.getByText(/No services match the current filter/)).toBeTruthy();
   });
 });

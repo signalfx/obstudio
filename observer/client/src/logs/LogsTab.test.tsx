@@ -20,6 +20,15 @@ vi.mock("@tanstack/react-virtual", () => ({
   }),
 }));
 
+function selectFilterField(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+  const menu = document.querySelector<HTMLElement>(".filter-builder__menu")!;
+  const items = menu.querySelectorAll<HTMLElement>(".filter-builder__menu-item");
+  const target = Array.from(items).find((el) => el.querySelector(".filter-builder__menu-key")?.textContent === label);
+  if (!target) throw new Error(`Filter field "${label}" not found in menu`);
+  fireEvent.mouseDown(target);
+}
+
 describe("LogsTab", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -100,10 +109,8 @@ describe("LogsTab", () => {
     expect(container.querySelector(".data-table__td--service .explorer-row__secondary")).toBeTruthy();
     expect(container.querySelector(".data-table__td--message .explorer-row__primary")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "bodyContains" },
-    });
-    expect((screen.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    selectFilterField("Message");
+    expect((screen.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(screen.getByLabelText("bodyContains value"), {
       target: { value: "payment" },
     });
@@ -159,10 +166,8 @@ describe("LogsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "serviceName" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "!=" }));
+    selectFilterField("Service");
+    fireEvent.click(screen.getByRole("radio", { name: "!=" }));
     fireEvent.change(screen.getByLabelText("serviceName value"), {
       target: { value: "checkout" },
     });
@@ -218,9 +223,7 @@ describe("LogsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), {
-      target: { value: "Severity" },
-    });
+    selectFilterField("Severity");
     fireEvent.change(screen.getByLabelText("severityDisplay value"), {
       target: { value: "WARN2" },
     });
@@ -251,7 +254,7 @@ describe("LogsTab", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByLabelText("Filter field"));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
 
     expect(screen.queryByText("Severity Number")).toBeNull();
   });
@@ -274,7 +277,7 @@ describe("LogsTab", () => {
       />,
     );
 
-    fireEvent.focus(screen.getByLabelText("Filter field"));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
 
     expect(screen.queryByText("Time From")).toBeNull();
     expect(screen.queryByText("Time To")).toBeNull();
@@ -305,7 +308,7 @@ describe("LogsTab", () => {
     expect(screen.getByRole("heading", { name: "Message" })).toBeTruthy();
     expect(screen.queryByText("Validation")).toBeNull();
     expect(screen.getByRole("button", { name: "Close panel" })).toBeTruthy();
-    expect(screen.getByLabelText("Filter field")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add filter" })).toBeTruthy();
   });
 
   it("falls back to severityNumber for number-only log badges and detail titles", () => {

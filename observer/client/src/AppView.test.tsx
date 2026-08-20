@@ -244,8 +244,8 @@ describe("AppView validation tab", () => {
     expect(screen.queryByText("Open Side Panel")).toBeNull();
     expect(screen.getAllByText("http.server.duration").length).toBeGreaterThan(0);
 
-    const tablist = screen.getByRole("tablist", { name: "Validation signals" });
-    fireEvent.click(within(tablist).getByRole("tab", { name: /Spans/ }));
+    const tablist = screen.getByRole("radiogroup", { name: "Validation signals" });
+    fireEvent.click(within(tablist).getByRole("radio", { name: /Spans/ }));
     expect(screen.getAllByText("GET /orders").length).toBeGreaterThan(0);
   });
 

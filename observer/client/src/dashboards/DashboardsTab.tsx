@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
@@ -226,12 +227,10 @@ function renderState({
   }
   if (!data || !data.available) {
     return (
-      <div className="dashboards-tab__empty">
-        <span className="dashboards-tab__empty-title">No dashboard preview yet</span>
-        <span className="dashboards-tab__empty-hint">
-          {data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
-        </span>
-      </div>
+      <EmptyState
+        title="No dashboard preview yet."
+        hint={data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
+      />
     );
   }
 

@@ -83,7 +83,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const completedAt = hasResult && isMeaningfulTimestamp(summary?.lastRunCompletedAt)
     ? summary?.lastRunCompletedAt
     : null;
-  const actionLabel = hasResult ? "Re-run Validation" : "Run Validation";
+  const actionLabel = hasResult ? "Re-validate" : "Validate";
 
   useEffect(() => {
     if (!hasExplicitSignalTabSelection && activeSignalTab !== firstAvailableFilteredSignal) {
@@ -180,7 +180,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
             disabled={isRunning || isSubmitting || !summary?.enabled}
             title={summary?.enabled === false ? "Validator is not available — weaver binary may be missing" : undefined}
           >
-            {isRunning || isSubmitting ? "Running..." : actionLabel}
+            {isRunning || isSubmitting ? "Validating..." : actionLabel}
           </button>
         </div>
       </div>
@@ -197,18 +197,33 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
           <option value="improvement">Improvement</option>
           <option value="information">Information</option>
         </select>
-        <div className="findings-tab__signal-tabs" role="tablist" aria-label="Validation signals">
+        <div
+          className="findings-tab__signal-tabs"
+          role="radiogroup"
+          aria-label="Validation signals"
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const currentIndex = signalTabs.findIndex((t) => t.key === activeSignalTab);
+            const dir = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+            const nextIndex = (currentIndex + dir + signalTabs.length) % signalTabs.length;
+            setHasExplicitSignalTabSelection(true);
+            setActiveSignalTab(signalTabs[nextIndex].key);
+            (event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[nextIndex])?.focus();
+          }}
+        >
           {signalTabs.map((tab) => {
             const count = signalIssueCounts[tab.key] ?? 0;
             return (
               <button
                 key={tab.key}
                 type="button"
-                role="tab"
+                role="radio"
                 className={tab.key === activeSignalTab ? "findings-tab__signal-tab is-active" : "findings-tab__signal-tab"}
-                aria-selected={tab.key === activeSignalTab}
+                aria-checked={tab.key === activeSignalTab}
                 aria-label={formatSignalTabAriaLabel(tab.label, count)}
                 data-has-issues={count > 0 ? "true" : "false"}
+                tabIndex={tab.key === activeSignalTab ? 0 : -1}
                 onClick={() => {
                   setHasExplicitSignalTabSelection(true);
                   setActiveSignalTab(tab.key);

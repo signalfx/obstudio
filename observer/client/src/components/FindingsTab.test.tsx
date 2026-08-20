@@ -98,11 +98,11 @@ describe("FindingsTab", () => {
       />,
     );
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
-    const metricsTab = within(tablist).getByRole("tab", { name: /^Metrics/ });
-    const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
-    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
-    expect(spansTab.getAttribute("aria-selected")).toBe("false");
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    const metricsTab = within(tablist).getByRole("radio", { name: /^Metrics/ });
+    const spansTab = within(tablist).getByRole("radio", { name: /^Spans/ });
+    expect(metricsTab.getAttribute("aria-checked")).toBe("true");
+    expect(spansTab.getAttribute("aria-checked")).toBe("false");
 
     // Signal tabs show issue counts
     expect(metricsTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
@@ -216,16 +216,16 @@ describe("FindingsTab", () => {
       />,
     );
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
 
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Spans/ }));
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Spans/ }));
     let head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Span")).toBeTruthy();
     let master = view.container.querySelector(".findings-tab__master");
     expect(master?.classList.contains("findings-tab__master--span")).toBe(true);
     expect(within(master as HTMLElement).getByText("GET /orders")).toBeTruthy();
 
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Logs/ }));
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Logs/ }));
     head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Example")).toBeTruthy();
     master = view.container.querySelector(".findings-tab__master");
@@ -233,7 +233,7 @@ describe("FindingsTab", () => {
     expect(within(master as HTMLElement).getByText("Cache hit for order ORD-1781")).toBeTruthy();
     expect(within(master as HTMLElement).getByText("missing_attribute")).toBeTruthy();
 
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Resources/ }));
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
     head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Attribute")).toBeTruthy();
     master = view.container.querySelector(".findings-tab__master");
@@ -280,15 +280,15 @@ describe("FindingsTab", () => {
       target: { value: "information" },
     });
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
-    const metricsTab = within(tablist).getByRole("tab", { name: /^Metrics/ });
-    const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    const metricsTab = within(tablist).getByRole("radio", { name: /^Metrics/ });
+    const spansTab = within(tablist).getByRole("radio", { name: /^Spans/ });
 
     expect(metricsTab.querySelector(".findings-tab__signal-count")).toBeNull();
     expect(metricsTab.getAttribute("aria-label")).toBe("Metrics");
     expect(spansTab.querySelector(".findings-tab__signal-count")?.textContent).toBe("1");
     expect(spansTab.getAttribute("aria-label")).toBe("Spans, 1 issue");
-    expect(spansTab.getAttribute("aria-selected")).toBe("true");
+    expect(spansTab.getAttribute("aria-checked")).toBe("true");
     expect(view.queryByText("No metrics validation issues match the current filters.")).toBeNull();
 
     const master = view.container.querySelector(".findings-tab__master");
@@ -303,8 +303,8 @@ describe("FindingsTab", () => {
   it("auto-selects the first non-empty tab when results arrive before any explicit tab choice", () => {
     const view = render(<FindingsTab issues={[]} summary={makeSummary()} />);
 
-    let tablist = view.getByRole("tablist", { name: "Validation signals" });
-    expect(within(tablist).getByRole("tab", { name: /^Metrics/ }).getAttribute("aria-selected")).toBe("true");
+    let tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    expect(within(tablist).getByRole("radio", { name: /^Metrics/ }).getAttribute("aria-checked")).toBe("true");
     expect(view.getByText("No metrics validation issues match the current filters.")).toBeTruthy();
 
     view.rerender(
@@ -325,9 +325,9 @@ describe("FindingsTab", () => {
       />,
     );
 
-    tablist = view.getByRole("tablist", { name: "Validation signals" });
-    const spansTab = within(tablist).getByRole("tab", { name: /^Spans/ });
-    expect(spansTab.getAttribute("aria-selected")).toBe("true");
+    tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    const spansTab = within(tablist).getByRole("radio", { name: /^Spans/ });
+    expect(spansTab.getAttribute("aria-checked")).toBe("true");
     expect(within(view.container.querySelector(".findings-tab__master") as HTMLElement).getByText("POST /orders")).toBeTruthy();
   });
 
@@ -352,15 +352,15 @@ describe("FindingsTab", () => {
       />,
     );
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
-    const resourcesTab = within(tablist).getByRole("tab", { name: /^Resources/ });
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    const resourcesTab = within(tablist).getByRole("radio", { name: /^Resources/ });
 
     expect(resourcesTab.querySelector(".findings-tab__signal-count")).toBeNull();
     expect(resourcesTab.getAttribute("aria-label")).toBe("Resources");
 
     fireEvent.click(resourcesTab);
 
-    expect(resourcesTab.getAttribute("aria-selected")).toBe("true");
+    expect(resourcesTab.getAttribute("aria-checked")).toBe("true");
     expect(view.getByText("No resources validation issues match the current filters.")).toBeTruthy();
     expect(view.container.querySelector(".findings-tab__master")).toBeNull();
   });
@@ -410,15 +410,15 @@ describe("FindingsTab", () => {
     expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
     expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Span");
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Logs/ }));
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Logs/ }));
     master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("Cache hit for order ORD-1781").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
     expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("Cache hit for order ORD-1781");
     expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Log");
 
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Resources/ }));
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
     master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("deployment.environment.name").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
@@ -520,8 +520,8 @@ describe("FindingsTab", () => {
       />,
     );
 
-    const tablist = view.getByRole("tablist", { name: "Validation signals" });
-    fireEvent.click(within(tablist).getByRole("tab", { name: /^Resources/ }));
+    const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
+    fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
 
     const master = view.container.querySelector(".findings-tab__master");
     fireEvent.click(within(master as HTMLElement).getByText("deployment.environment.name").closest("button") as HTMLElement);

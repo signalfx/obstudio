@@ -32,6 +32,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function selectFilterField(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+  const menu = document.querySelector<HTMLElement>(".filter-builder__menu")!;
+  const items = menu.querySelectorAll<HTMLElement>(".filter-builder__menu-item");
+  const target = Array.from(items).find((el) => el.querySelector(".filter-builder__menu-key")?.textContent === label);
+  if (!target) throw new Error(`Filter field "${label}" not found in menu`);
+  fireEvent.mouseDown(target);
+}
+
 describe("TracesTab row layout", () => {
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, "clientHeight", {
@@ -73,9 +82,9 @@ describe("TracesTab row layout", () => {
     expect(screen.getByText("Service")).toBeTruthy();
     expect(screen.getByText("Status")).toBeTruthy();
     expect(screen.getByText("Duration")).toBeTruthy();
-    const filterField = screen.getByLabelText("Filter field");
-    expect(filterField).toBeTruthy();
-    fireEvent.focus(filterField);
+    const addFilterBtn = screen.getByRole("button", { name: "Add filter" });
+    expect(addFilterBtn).toBeTruthy();
+    fireEvent.click(addFilterBtn);
     expect(screen.getByText("Indexed Tags")).toBeTruthy();
     const menu = container.querySelector(".filter-builder__menu");
     expect(menu?.textContent).toContain("Service");
@@ -121,8 +130,8 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    fireEvent.change(view.getByLabelText("Filter field"), { target: { value: "status" } });
-    expect((view.getByRole("button", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
+    selectFilterField("Status");
+    expect((view.getByRole("radio", { name: "=" }) as HTMLButtonElement).classList.contains("filter-builder__operator--active")).toBe(true);
     fireEvent.change(view.getByLabelText("status value"), { target: { value: "error" } });
     fireEvent.click(view.getByRole("button", { name: "Apply filter" }));
 
@@ -153,9 +162,9 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    expect(screen.getByPlaceholderText("Add filter")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add filter" })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Service" } });
+    selectFilterField("Service");
     expect(screen.getByLabelText("serviceName value").getAttribute("placeholder")).toBe("Enter checkout");
   });
 
@@ -172,14 +181,14 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Duration" } });
-    expect(screen.getByRole("button", { name: ">=" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "<" })).toBeTruthy();
+    selectFilterField("Min Duration");
+    expect(screen.getByRole("radio", { name: ">=" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "<" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Reset filter draft" }));
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Max Span Count" } });
-    expect(screen.getByRole("button", { name: "<=" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: ">" })).toBeTruthy();
+    selectFilterField("Max Span Count");
+    expect(screen.getByRole("radio", { name: "<=" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: ">" })).toBeTruthy();
   });
 
   it("does not allow negative values in numeric filters", () => {
@@ -195,7 +204,7 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Duration" } });
+    selectFilterField("Min Duration");
     const input = screen.getByLabelText("minDurationMs value") as HTMLInputElement;
 
     expect(input.getAttribute("min")).toBe("0");
@@ -217,7 +226,7 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Filter field"), { target: { value: "Min Span Count" } });
+    selectFilterField("Min Span Count");
     const input = screen.getByLabelText("minSpanCount value") as HTMLInputElement;
 
     expect(input.getAttribute("step")).toBe("1");
@@ -463,12 +472,10 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: 220px 220px 140px 1fr;\n}");
-    expect(css).toContain("--table-columns: 220px 240px 140px 72px 88px 56px 1fr;");
+    expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: minmax(80px, 2fr) minmax(80px, 3fr) minmax(80px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(80px, 3fr) minmax(80px, 4fr) minmax(80px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
     expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
-    expect(css).toContain("--table-columns: 220px 240px 88px 1fr;");
-    expect(css).toContain(".data-table__head--metrics,\n  .data-table__row--metrics {\n    --table-columns: 220px 100px 1fr;\n  }");
+    expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: minmax(72px, 1fr) minmax(128px, 2fr) minmax(160px, 3fr) minmax(192px, 6fr);\n}");
   });
 
   it("uses the same compact row shell height as logs for master rows", () => {
@@ -476,14 +483,14 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: 220px 240px 140px 72px 88px 56px 1fr;\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(80px, 3fr) minmax(80px, 4fr) minmax(80px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
     expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 32px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
-    expect(css).toContain(".filter-builder {\n  position: relative;\n  display: flex;\n  flex: 0 1 auto;");
-    expect(css).toContain("width: min(100%, 760px);");
-    expect(css).toContain("max-width: min(100%, 760px);");
-    expect(css).toContain(".filter-builder__composer--selected {\n  flex: 0 1 auto;\n  width: min(100%, 640px);");
-    expect(css).toContain(".filter-builder__composer--selected .filter-builder__value {\n  flex: 0 1 320px;");
+    expect(css).toContain(".filter-builder {\n  display: flex;\n  flex: 1 1 auto;");
+    expect(css).toContain(".filter-builder__composer--selected {\n  position: relative;\n  display: flex;\n  flex: 1 1 auto;");
+    expect(css).toContain(".filter-builder__value-wrapper {\n  position: relative;\n  display: flex;\n  flex: 1 1 auto;");
+    expect(css).toContain(".filter-builder__value {\n  flex: 1 1 auto;\n  min-width: 0;\n  width: 0;\n}");
+    expect(css).toContain(".filter-builder__trigger {\n  display: inline-flex;");
   });
 
   it("left-aligns stacked trace and metric values so content does not stretch across the cell", () => {
@@ -503,7 +510,7 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__th {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  font-size: var(--font-label);");
+    expect(css).toContain(".data-table__th {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  font-size: 12px;");
     expect(css).toContain(".data-table__td {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  padding: 3px 6px;");
     expect(css).toContain(".data-table__th--numeric,\n.data-table__td--numeric {\n  justify-self: stretch;\n  text-align: right;\n  justify-content: flex-end;\n}");
     expect(css).toContain(".findings-tab__head .data-table__th {\n  padding: 0 6px;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}");
