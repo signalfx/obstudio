@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from pytest_codex_evals.definitions import (
     EndpointExpectation,
     GradeCheckResult,
     GradeResult,
+    JSONRecordExpectation,
     PromptVariant,
     RubricEvalCase,
     RubricEvalDefinition,
@@ -21,6 +23,7 @@ from pytest_codex_evals.definitions import (
     RuntimeExpectations,
     SanityCheck,
     SanityEvalCase,
+    ServiceLogExpectation,
     SideResult,
     ValidationResult,
 )
@@ -34,10 +37,16 @@ from pytest_codex_evals.backends import (
 )
 from pytest_codex_evals.graders.runtime import (
     base_url_from_port_output,
+    check_json_record_expectations,
+    compose_ps_records,
     grade_runtime,
     resolve_compose_file,
+    run_runtime_check,
+    request_json_text,
     runtime_env,
     service_url,
+    stop_compose_services,
+    validate_service_log_expectations,
 )
 from pytest_codex_evals.graders.sanity import grade_sanity
 from pytest_codex_evals.cli import main as cli_main
@@ -193,7 +202,7 @@ def test_codex_subprocess_env_uses_sandbox_local_package_caches(
     assert env["PIP_CACHE_DIR"] == str(tmp_path / ".pip-cache")
 
 
-def test_codex_backend_uses_current_workspace_write_auto_approval_flags(
+def test_codex_backend_uses_current_workspace_write_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     captured: list[str] = []
@@ -211,8 +220,8 @@ def test_codex_backend_uses_current_workspace_write_auto_approval_flags(
 
     assert "--full-auto" not in captured
     assert captured[captured.index("--config") + 1] == "shell_environment_policy.inherit=all"
-    assert "--sandbox" not in captured
-    assert "--approve-for-me" in captured
+    assert captured[captured.index("--sandbox") + 1] == "workspace-write"
+    assert "--approve-for-me" not in captured
 
 
 def test_trace_parser_extracts_commands_and_tokens(tmp_path: Path):
@@ -808,6 +817,627 @@ def test_runtime_expectations_generic_endpoints():
     assert len(expectations.endpoints) == 1
     assert expectations.endpoints[0].id == "users"
     assert expectations.endpoints[0].url == "/api/users"
+
+
+def test_runtime_expectations_accept_service_logs_only():
+    expectations = RuntimeExpectations(
+        service_logs=[
+            ServiceLogExpectation(
+                id="preserved-sink",
+                contains_all=["runtime request completed"],
+            )
+        ]
+    )
+
+    assert expectations.has_expectations() is True
+    assert expectations.endpoints == []
+
+
+def test_runtime_expectations_reject_unknown_keys():
+    with pytest.raises(ValueError, match="service_logz"):
+        RuntimeExpectations(
+            endpoints=[EndpointExpectation(id="logs", url="/api/query/logs")],
+            service_logz=[{"id": "misspelled-sink"}],
+        )
+
+
+@pytest.mark.parametrize(
+    ("model", "values", "unknown_key"),
+    [
+        (
+            JSONRecordExpectation,
+            {"id": "request-log", "match": {}, "field_equalz": {}},
+            "field_equalz",
+        ),
+        (
+            EndpointExpectation,
+            {"id": "logs", "record_checkz": []},
+            "record_checkz",
+        ),
+        (
+            ServiceLogExpectation,
+            {
+                "id": "preserved-sink",
+                "contains_all": ["request completed"],
+                "occurrencez": {},
+            },
+            "occurrencez",
+        ),
+        (
+            RuntimeCheck,
+            {
+                "id": "observer-runtime",
+                "description": "Runtime telemetry reaches Observer.",
+                "compose_file": "docker-compose.yml",
+                "expect": {
+                    "endpoints": [{"id": "logs", "url": "/api/query/logs"}]
+                },
+                "stop_service_before_validation": ["app"],
+            },
+            "stop_service_before_validation",
+        ),
+    ],
+)
+def test_runtime_models_reject_unknown_keys(model, values, unknown_key):
+    with pytest.raises(ValueError, match=unknown_key):
+        model.model_validate(values)
+
+
+def test_runtime_json_request_rejects_non_success_status(monkeypatch):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    monkeypatch.setattr(
+        runtime_grader,
+        "request_text",
+        lambda *_args, **_kwargs: (503, "[]"),
+    )
+
+    with pytest.raises(RuntimeError, match="returned HTTP 503"):
+        request_json_text("http://observer/api/query/logs")
+
+
+def test_runtime_check_rejects_non_app_shutdown_service():
+    with pytest.raises(ValueError, match="stop_services_before_validation"):
+        RuntimeCheck(
+            id="observer-runtime",
+            description="Runtime telemetry reaches Observer.",
+            compose_file="docker-compose.yml",
+            stop_services_before_validation=["observer"],
+            expect=RuntimeExpectations(
+                service_logs=[
+                    ServiceLogExpectation(
+                        id="preserved-sink",
+                        contains_all=["runtime request completed"],
+                    )
+                ]
+            ),
+        )
+
+
+def test_runtime_structured_record_expectation_proves_log_fields_correlation_and_uniqueness(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    trace_ids = ["a" * 32, "b" * 32]
+    span_ids = ["1" * 16, "2" * 16]
+    records = [
+        {
+            "body": "runtime request completed",
+            "severityText": "WARN",
+            "traceId": trace_ids[0],
+            "spanId": span_ids[0],
+            "resource": {"serviceName": "sample-service"},
+        },
+        {
+            "body": "runtime request completed",
+            "severityText": "WARNING",
+            "traceId": trace_ids[1],
+            "spanId": span_ids[1],
+            "resource": {"serviceName": "sample-service"},
+        },
+    ]
+    requested: list[str] = []
+
+    def trace_detail(url: str, **_kwargs):
+        requested.append(url)
+        trace_id = url.rsplit("/", 1)[-1]
+        span_id = span_ids[trace_ids.index(trace_id)]
+        return 200, json.dumps(
+            {
+                "traceId": trace_id,
+                "spans": [{"traceId": trace_id, "spanId": span_id}],
+            }
+        )
+
+    monkeypatch.setattr(runtime_grader, "request_text", trace_detail)
+    expectation = JSONRecordExpectation(
+        id="request-logs",
+        match={"body": "runtime request completed"},
+        field_contains={"severityText": "WARN"},
+        field_equals={"resource.serviceName": "sample-service"},
+        non_empty=["traceId", "spanId"],
+        exact_count=2,
+        unique_by=["traceId", "spanId"],
+        correlates_with_trace=True,
+    )
+    evidence: list[str] = []
+    failures: list[str] = []
+
+    check_json_record_expectations(
+        "logs",
+        json.dumps(records),
+        [expectation],
+        evidence,
+        failures,
+        base_url="http://observer",
+    )
+
+    assert failures == []
+    assert evidence == ["logs/request-logs matched 2 structured record(s)"]
+    assert requested == [
+        f"http://observer/api/query/traces/{trace_ids[0]}",
+        f"http://observer/api/query/traces/{trace_ids[1]}",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("trace_id", "span_id", "failure"),
+    [
+        ("trace-1", "1" * 16, "nonzero 32-hex OTel ID"),
+        ("0" * 32, "1" * 16, "nonzero 32-hex OTel ID"),
+        ("a" * 32, "span-1", "nonzero 16-hex OTel ID"),
+        ("a" * 32, "0" * 16, "nonzero 16-hex OTel ID"),
+    ],
+)
+def test_runtime_trace_correlation_rejects_invalid_or_zero_otel_ids(
+    trace_id: str,
+    span_id: str,
+    failure: str,
+):
+    expectation = JSONRecordExpectation(
+        id="request-log",
+        match={"body": "runtime request completed"},
+        exact_count=1,
+        correlates_with_trace=True,
+    )
+    failures: list[str] = []
+
+    check_json_record_expectations(
+        "logs",
+        json.dumps(
+            [
+                {
+                    "body": "runtime request completed",
+                    "traceId": trace_id,
+                    "spanId": span_id,
+                }
+            ]
+        ),
+        [expectation],
+        [],
+        failures,
+        base_url="http://observer",
+    )
+
+    assert any(failure in item for item in failures)
+
+
+def test_runtime_trace_correlation_requires_span_in_observer_detail(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    trace_id = "a" * 32
+    span_id = "1" * 16
+    monkeypatch.setattr(
+        runtime_grader,
+        "request_text",
+        lambda *_args, **_kwargs: (
+            200,
+            json.dumps(
+                {
+                    "traceId": trace_id,
+                    "spans": [{"traceId": trace_id, "spanId": "2" * 16}],
+                }
+            ),
+        ),
+    )
+    expectation = JSONRecordExpectation(
+        id="request-log",
+        match={"body": "runtime request completed"},
+        exact_count=1,
+        correlates_with_trace=True,
+    )
+    failures: list[str] = []
+
+    check_json_record_expectations(
+        "logs",
+        json.dumps(
+            [
+                {
+                    "body": "runtime request completed",
+                    "traceId": trace_id,
+                    "spanId": span_id,
+                }
+            ]
+        ),
+        [expectation],
+        [],
+        failures,
+        base_url="http://observer",
+    )
+
+    assert failures == [
+        "logs/request-log record 0 trace detail did not contain correlated span "
+        + span_id
+    ]
+
+
+@pytest.mark.parametrize(
+    ("records", "failure"),
+    [
+        (
+            [
+                {
+                    "body": "runtime request completed",
+                    "severityText": "INFO",
+                    "traceId": "trace-1",
+                    "spanId": "span-1",
+                    "resource": {"serviceName": "sample-service"},
+                }
+            ],
+            "expected severityText to contain 'WARN'",
+        ),
+        (
+            [
+                {
+                    "body": "runtime request completed",
+                    "severityText": "WARN",
+                    "traceId": "",
+                    "spanId": "span-1",
+                    "resource": {"serviceName": "sample-service"},
+                }
+            ],
+            "expected non-empty traceId",
+        ),
+        (
+            [
+                {
+                    "body": "runtime request completed",
+                    "severityText": "WARN",
+                    "traceId": "trace-1",
+                    "spanId": "span-1",
+                    "resource": {"serviceName": "sample-service"},
+                },
+                {
+                    "body": "runtime request completed",
+                    "severityText": "WARN",
+                    "traceId": "trace-1",
+                    "spanId": "span-1",
+                    "resource": {"serviceName": "sample-service"},
+                },
+            ],
+            "expected 1 matching records, got 2",
+        ),
+    ],
+)
+def test_runtime_structured_record_expectation_rejects_incomplete_or_duplicate_logs(
+    records: list[dict[str, object]], failure: str
+):
+    expectation = JSONRecordExpectation(
+        id="request-log",
+        match={"body": "runtime request completed"},
+        field_contains={"severityText": "WARN"},
+        field_equals={"resource.serviceName": "sample-service"},
+        non_empty=["traceId", "spanId"],
+        exact_count=1,
+        unique_by=["traceId", "spanId"],
+    )
+    failures: list[str] = []
+
+    check_json_record_expectations(
+        "logs", json.dumps(records), [expectation], [], failures
+    )
+
+    assert any(failure in item for item in failures)
+
+
+def test_runtime_zero_record_expectation_proves_logs_opt_out():
+    expectation = JSONRecordExpectation(
+        id="no-logs",
+        match={"body": "runtime request completed"},
+        exact_count=0,
+    )
+    failures: list[str] = []
+    check_json_record_expectations("logs", "[]", [expectation], [], failures)
+    assert failures == []
+
+    check_json_record_expectations(
+        "logs",
+        json.dumps([{"body": "runtime request completed"}]),
+        [expectation],
+        [],
+        failures,
+    )
+    assert failures == ["logs/no-logs expected 0 matching records, got 1"]
+
+
+def test_runtime_structured_record_expectation_rejects_duplicate_correlation_ids():
+    duplicate = {
+        "body": "runtime request completed",
+        "traceId": "trace-1",
+        "spanId": "span-1",
+    }
+    expectation = JSONRecordExpectation(
+        id="request-logs",
+        match={"body": "runtime request completed"},
+        exact_count=2,
+        unique_by=["traceId", "spanId"],
+    )
+    failures: list[str] = []
+
+    check_json_record_expectations(
+        "logs", json.dumps([duplicate, duplicate]), [expectation], [], failures
+    )
+
+    assert failures == [
+        "logs/request-logs expected unique records by traceId, spanId"
+    ]
+
+
+def test_runtime_service_log_expectation_proves_preserved_sink(monkeypatch, tmp_path: Path):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    monkeypatch.setattr(
+        runtime_grader,
+        "compose_service_logs",
+        lambda *_args: "runtime request completed\n",
+    )
+    expectation = ServiceLogExpectation(
+        id="preserved-sink",
+        contains_all=["runtime request completed"],
+        occurrences={"runtime request completed": 1},
+    )
+
+    passed, evidence = validate_service_log_expectations(
+        [expectation], tmp_path / "compose.yml", "project", {}
+    )
+
+    assert passed is True
+    assert evidence == "preserved-sink preserved service log output"
+
+
+@pytest.mark.parametrize(
+    "expectation",
+    [
+        {"id": "empty"},
+        {"id": "empty-list", "contains_all": []},
+        {"id": "empty-map", "occurrences": {}},
+        {"id": "empty-value", "contains_all": [" "]},
+    ],
+)
+def test_runtime_service_log_expectation_requires_nonempty_assertion(
+    expectation: dict[str, object],
+):
+    with pytest.raises(ValueError, match="service log expectation"):
+        ServiceLogExpectation.model_validate(expectation)
+
+
+def test_runtime_service_log_expectation_fails_when_compose_logs_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    def unavailable(*_args):
+        raise RuntimeError("docker compose logs exited 1")
+
+    monkeypatch.setattr(runtime_grader, "compose_service_logs", unavailable)
+    expectation = ServiceLogExpectation(
+        id="preserved-sink",
+        contains_all=["runtime request completed"],
+    )
+
+    passed, evidence = validate_service_log_expectations(
+        [expectation], tmp_path / "compose.yml", "project", {}
+    )
+
+    assert passed is False
+    assert "service logs unavailable for app" in evidence
+    assert "docker compose logs exited 1" in evidence
+
+
+def test_runtime_stops_only_configured_app_before_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    check = runtime_check()
+    check.stop_services_before_validation = ["app"]
+    check.settle_seconds = 0
+    commands: list[list[str]] = []
+    events: list[str] = []
+
+    def record_process(command, *_args, **_kwargs):
+        commands.append(command)
+        if "stop" in command:
+            events.append("stop")
+        if "ps" in command:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                json.dumps(
+                    [{"Service": "app", "State": "exited", "ExitCode": 0}]
+                ),
+                "",
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    def validate_endpoints(*_args):
+        events.append("validate-endpoints")
+        return True, "endpoints passed"
+
+    def validate_logs(*_args):
+        events.append("validate-logs")
+        return True, ""
+
+    monkeypatch.setattr(runtime_grader, "run_process", record_process)
+    monkeypatch.setattr(
+        runtime_grader,
+        "discover_service_base_url",
+        lambda *_args: "http://observer",
+    )
+    monkeypatch.setattr(runtime_grader, "wait_for_service", lambda *_args: None)
+    monkeypatch.setattr(runtime_grader, "clear_service", lambda *_args: None)
+    monkeypatch.setattr(
+        runtime_grader,
+        "validate_endpoint_expectations",
+        validate_endpoints,
+    )
+    monkeypatch.setattr(
+        runtime_grader,
+        "validate_service_log_expectations",
+        validate_logs,
+    )
+
+    result = run_runtime_check(
+        check,
+        tmp_path / "service",
+        repo_root=tmp_path,
+        eval_dir=tmp_path,
+    )
+
+    stop_command = next(command for command in commands if "stop" in command)
+    traffic_command = next(command for command in commands if "traffic" in command)
+    assert result.passed is True
+    assert stop_command[-4:] == ["stop", "--timeout", "30", "app"]
+    assert "observer" not in stop_command[stop_command.index("stop") + 1 :]
+    assert commands.index(traffic_command) < commands.index(stop_command)
+    assert events == ["stop", "validate-endpoints", "validate-logs"]
+
+
+@pytest.mark.parametrize("exit_code", [1, 137, 143])
+def test_runtime_shutdown_rejects_forced_or_nonzero_app_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    exit_code: int,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    def record_process(command, *_args, **_kwargs):
+        stdout = ""
+        if "ps" in command:
+            stdout = json.dumps(
+                [{"Service": "app", "State": "exited", "ExitCode": exit_code}]
+            )
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    monkeypatch.setattr(runtime_grader, "run_process", record_process)
+
+    with pytest.raises(RuntimeError, match="did not stop gracefully"):
+        stop_compose_services(
+            tmp_path / "docker-compose.yml",
+            "project",
+            {},
+            ["app"],
+            30,
+        )
+
+
+def test_compose_ps_records_accepts_array_and_json_lines():
+    records = [
+        {"Service": "app", "State": "exited", "ExitCode": 0},
+        {"Service": "worker", "State": "exited", "ExitCode": 0},
+    ]
+
+    assert compose_ps_records(json.dumps(records)) == records
+    assert compose_ps_records("\n".join(json.dumps(item) for item in records)) == records
+
+
+def test_runtime_service_log_only_check_skips_endpoint_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    import pytest_codex_evals.graders.runtime as runtime_grader
+
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    check = RuntimeCheck(
+        id="service-log-runtime",
+        description="Runtime sink output is preserved.",
+        compose_file="docker-compose.yml",
+        settle_seconds=0,
+        expect=RuntimeExpectations(
+            service_logs=[
+                ServiceLogExpectation(
+                    id="preserved-sink",
+                    contains_all=["runtime request completed"],
+                )
+            ]
+        ),
+    )
+
+    monkeypatch.setattr(
+        runtime_grader,
+        "run_process",
+        lambda command, *_args, **_kwargs: subprocess.CompletedProcess(
+            command, 0, "", ""
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_grader,
+        "discover_service_base_url",
+        lambda *_args: "http://observer",
+    )
+    monkeypatch.setattr(runtime_grader, "wait_for_service", lambda *_args: None)
+    monkeypatch.setattr(runtime_grader, "clear_service", lambda *_args: None)
+
+    def unexpected_endpoint_validation(*_args):
+        raise AssertionError("endpoint validation must not run")
+
+    monkeypatch.setattr(
+        runtime_grader,
+        "validate_endpoint_expectations",
+        unexpected_endpoint_validation,
+    )
+    monkeypatch.setattr(
+        runtime_grader,
+        "validate_service_log_expectations",
+        lambda *_args: (True, "preserved-sink preserved service log output"),
+    )
+
+    result = run_runtime_check(
+        check,
+        tmp_path / "service",
+        repo_root=tmp_path,
+        eval_dir=tmp_path,
+    )
+
+    assert result.passed is True
+    assert result.evidence == "preserved-sink preserved service log output"
+
+
+def test_runtime_environment_overrides_are_isolated(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("CODEX_EVAL_OTEL_LOGS_EXPORTER", "host-value")
+
+    env = runtime_env(
+        tmp_path,
+        tmp_path / "service",
+        "project",
+        {
+            "CODEX_EVAL_OTEL_LOGS_EXPORTER": "none",
+            "CODEX_EVAL_SERVICE_DIR": "/untrusted/service",
+            "COMPOSE_PROJECT_NAME": "untrusted-project",
+        },
+    )
+
+    assert env["CODEX_EVAL_OTEL_LOGS_EXPORTER"] == "none"
+    assert env["CODEX_EVAL_SERVICE_DIR"] == str((tmp_path / "service").resolve())
+    assert env["COMPOSE_PROJECT_NAME"] == "project"
 
 
 def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):

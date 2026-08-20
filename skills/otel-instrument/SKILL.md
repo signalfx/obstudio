@@ -66,9 +66,13 @@ Bind `.observe/otel-instrumentation.json` to the entire normalized selection
 with `selection_sha256`, not only to its audit and executable IDs. This digest
 includes `decision_answers`; changing an answer invalidates older
 instrumentation even when `approved_ids` is unchanged.
-When no canonical audit exists, stop before application-code edits and ask the
-user to run `$otel-audit` first. Do not infer scope from generated Markdown reports
-or fabricate audit IDs and selection artifacts.
+When no canonical audit exists, a direct request for the standard
+auto-instrumentation and default-local-log baseline may proceed after this
+preflight without fabricating audit IDs or selection artifacts. Keep that
+no-audit path limited to the standard baseline: stop before custom signals,
+incident-readiness or GenAI work, or any request that needs finding-level scope,
+and ask the user to run `$otel-audit` first. Never infer scope from generated
+Markdown reports.
 
 - Confirm the language and framework from actual dependency or source files
 - Read `./references/project-runtime-validation.md`, inventory the repository's
@@ -99,13 +103,21 @@ or fabricate audit IDs and selection artifacts.
 - Inventory the application logging stack and every stdout, stderr, file,
   platform, and existing OTLP sink. For a supported Python, Node.js, Java, or
   Go logging stack, local Observer OTLP log export is part of the default
-  Obstudio baseline unless `OTEL_LOGS_EXPORTER` explicitly disables it or
-  selects another operator-owned exporter. Treat `OTEL_LOGS_EXPORTER=none` as
-  an explicit opt-out. Preserve an explicit
-  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` as the operator-owned destination for the
-  single pipeline; default only an absent endpoint to local Observer. Plan one
-  log provider, one exporter path, and one bridge; preserve existing
-  stdout/file sinks and identify any duplicate bridge before editing.
+  Obstudio baseline only when the exporter is absent or `otlp` and the logs
+  endpoint is absent or exactly the detected local Observer receiver. Treat
+  `OTEL_LOGS_EXPORTER=none` as an explicit opt-out, and preserve every other
+  explicit exporter as operator-owned without validating or supplementing its
+  endpoint. An explicit non-local logs endpoint with an absent or `otlp`
+  exporter is an operator-owned boundary conflict: do not construct or enable
+  an Obstudio log provider, exporter, or bridge; fail closed and report the
+  configuration for operator resolution. Plan one log provider, one exporter
+  path, and one bridge; preserve existing stdout/file sinks and identify any
+  duplicate bridge before editing.
+- Apply that log baseline to direct instrumentation requests even when no
+  canonical audit exists. A request that excludes custom business spans limits
+  span work only; it is not a log-export opt-out. Only the explicit exporter,
+  endpoint, and supported-stack conditions above may suppress the default local
+  log pipeline.
 - When `.observe/otel-audit.json` exists, use only the validated selected
   findings and their referenced `verification.scenarios` and environments as
   the implementation and validation plan. Preserve every stable finding,
@@ -390,9 +402,11 @@ Always write `.observe/otel-instrumentation.md`. In canonical flow,
 instrumentation-HTML authority: write and validate
 `.observe/otel-instrumentation.json`, render
 `.observe/otel-instrumentation.html`, keep every selected finding exactly once,
-and leave `.observe/otel.html` as the audit surface. When canonical JSON is
-absent, stop and ask the user to run `$otel-audit` first; do not infer scope
-from generated Markdown reports.
+and leave `.observe/otel.html` as the audit surface. On the permitted direct
+baseline path where canonical JSON is absent, write the technical Markdown
+report only, identify the source audit and selected scope as `not applicable
+(direct baseline)`, and do not create instrumentation JSON/HTML or fabricate
+audit IDs. Do not infer scope from generated Markdown reports.
 Users open `.observe/otel-instrumentation.html` after instrumentation to review
 the selected findings, what code/config changed, how observability improves,
 telemetry proof, product-delivery status, and remaining prerequisites. Do not
@@ -407,8 +421,8 @@ Use this shape:
 # OTel Instrumentation Report: <service>
 
 **Result:** Pass | Partial | Fail | Blocked
-**Source audit:** `.observe/otel-audit.json`
-**Selected scope:** `.observe/otel-selection.json`
+**Source audit:** `.observe/otel-audit.json` | not applicable (direct baseline)
+**Selected scope:** `.observe/otel-selection.json` | not applicable (direct baseline)
 **Verification report:** `.observe/otel-verify.md` | not run | blocked
 **Detector report:** `.observe/detectors.md` | not requested | blocked
 
@@ -690,7 +704,12 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`. Never copy a Splunk realm, ingest URL,
   access token, auth header, or cloud exporter into log configuration. Optional
   Obstudio cloud forwarding remains traces and metrics only; never add a log
-  forwarding flag or cloud logs pipeline.
+  forwarding flag or cloud logs pipeline. Remove a generic
+  `OTEL_EXPORTER_OTLP_HEADERS` value from the shared startup surface after
+  moving it to trace- and metric-specific headers; reject it from an
+  Obstudio-owned local log path even when
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set, because SDKs may merge generic
+  and signal-specific headers.
 - For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
@@ -954,13 +973,17 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `OTEL_LOGS_EXPORTER=none` disables the added provider/exporter and bridge.
   Another explicit exporter is operator-owned and must not be supplemented
   with a second local pipeline, but its provider/exporter/bridge must be proven;
-  an environment value by itself is not evidence of export. An explicit signal endpoint remains the
-  destination for the single provider/bridge; never replace it with the local
-  default. An unset exporter defaults to `otlp`, and an unset logs endpoint
-  defaults to the local Observer receiver appropriate to the existing runtime
-  shape. If the explicit endpoint is direct-cloud, preserve it as external
-  operator configuration but do not add or claim an Obstudio-owned log path;
-  report the boundary conflict for operator resolution.
+  an environment value by itself is not evidence of export. When the exporter
+  is absent or explicitly `otlp`, an explicit signal endpoint may be used by
+  the Obstudio-owned pipeline only when it exactly matches the detected local
+  Observer receiver for the selected runtime and protocol. Adapt the local
+  endpoint to the checked-in Docker/Compose service address when applicable.
+  Default an absent exporter to `otlp` and an absent endpoint to that detected
+  local receiver. If the explicit endpoint is non-local or direct-cloud, do not
+  construct or enable the Obstudio provider/exporter/bridge; fail closed and
+  report the operator-owned boundary conflict. Do not validate the logs
+  endpoint on the `none` or other non-OTLP exporter branches, because those
+  branches remain wholly operator-owned.
 - Preserve existing stdout, stderr, file, and platform logging sinks. Add the
   OTel bridge alongside them; do not replace their handlers, appenders,
   transports, levels, formatters, or rotation policy. If the stack cannot fan
@@ -976,9 +999,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   `http/protobuf` with `/v1/logs`; when an explicit signal-specific protocol is
   different, select its matching official exporter and endpoint shape or
   report it unsupported. Never silently send HTTP to a gRPC endpoint. A generic
-  direct-cloud header must not be inherited by logs: move it to trace/metric
-  signal variables, while preserving any explicit signal-specific log header
-  owned by the operator.
+  header must not be inherited or merged into logs: move
+  `OTEL_EXPORTER_OTLP_HEADERS` to trace/metric signal variables and remove the
+  generic value before enabling the local log path, even when an explicit
+  signal-specific log header is present. Preserve the operator-owned
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` value after the generic value is removed.
 - Before adding a bridge, search for auto-instrumentation, handlers, appenders,
   transports, hooks, and worker-thread exporters that already send the same
   record to OTel. Choose one owner and disable or omit the overlap. Preserve
@@ -1116,11 +1141,14 @@ Java:
 - Follow `./references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
 - Default the Java agent's application log exporter to `otlp` only when
-  `OTEL_LOGS_EXPORTER` is absent, set a local
+  `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
+  detected local Observer receiver. Set that local
   `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, and rely on the agent's detected
-  Logback/Log4j bridge plus JVM shutdown hook. Preserve explicit `none`, other
-  exporter choices, existing appenders, and any single existing OTel appender;
-  never install a second bridge.
+  Logback/Log4j bridge plus JVM shutdown hook. A non-local explicit endpoint on
+  the absent/`otlp` branch is a fail-closed boundary conflict and must not start
+  the agent-owned log path. Preserve explicit `none`, other exporter choices,
+  existing appenders, and any single existing OTel appender; never install a
+  second bridge.
 - In the final response, explicitly mention the agent setup or path,
   `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
   `http.server.request.duration`.
@@ -1254,10 +1282,15 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 1. Check whether `.vscode/launch.json` exists.
 2. If it exists, update at least one debug configuration for this service to include:
    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
-   - `OTEL_LOGS_EXPORTER=otlp` when no explicit value already exists
-   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when no explicit value already exists
+   - `OTEL_LOGS_EXPORTER=otlp` when no explicit exporter exists and the logs
+     endpoint is absent or is the detected local Observer endpoint
+   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when the
+     exporter is absent/`otlp` and no explicit logs endpoint exists
    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
    - `OTEL_BSP_SCHEDULE_DELAY=100`
+   If an absent/`otlp` exporter is paired with an explicit non-local logs
+   endpoint, do not add either logs setting; stop and report the operator-owned
+   boundary conflict instead of enabling an Obstudio log path.
 3. After editing, report which configuration was updated, the file path, and whether the env vars were added or already present.
 4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
 5. If `.vscode/launch.json` does not exist, explicitly report: `No .vscode/launch.json found; Step 6 skipped.`
@@ -1296,11 +1329,13 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include `$otel-verify` results and `.observe/otel-verify.md` path when run.
   If detectors/configuration were requested, include `$splunk-configure`
   outputs and `.observe/splunk-configure-verify.md` status when run.
-- Use the `render-instrumentation-html` command's returned loopback links for
-  both `otel-instrumentation.html` and `otel.html` in the final response. Do
-  not emit absolute local-file links for generated HTML and do not open either
-  report automatically. Keep Markdown and JSON report links as absolute local
-  paths.
+- In canonical flow, use the `render-instrumentation-html` command's returned
+  loopback links for both `otel-instrumentation.html` and `otel.html` in the
+  final response. Do not emit absolute local-file links for generated HTML and
+  do not open either report automatically. On the permitted direct baseline
+  path, link only the absolute `.observe/otel-instrumentation.md` report; do not
+  claim or link audit, selection, JSON, or HTML artifacts that were not created.
+  Keep Markdown and JSON report links as absolute local paths.
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
 - Never say `complete`, `working`, or `verified` when the mandatory
   compile/type/import gate failed, was blocked, or was not run. Use

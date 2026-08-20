@@ -10,7 +10,7 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 | Skill | Purpose |
 |---|---|
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
-| `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
+| `$otel-instrument` | Add OpenTelemetry auto-instrumentation, default local application logs, and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |

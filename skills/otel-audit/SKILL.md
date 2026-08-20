@@ -125,9 +125,23 @@ signal by type so the report can list them explicitly.
   cloud ingest endpoint. An unset signal-specific logs endpoint must not inherit
   a generic direct-cloud endpoint: local application logs default to Observer,
   while direct-cloud or Obstudio cloud forwarding is traces and metrics only.
-  Preserve an explicit operator-owned signal endpoint, but flag any cloud log
-  endpoint, credential/header, exporter, or forwarding flag introduced by
+  An explicit local Observer logs endpoint may participate in the default
+  pipeline. An explicit non-local endpoint paired with an absent or `otlp`
+  exporter is instead an operator-owned boundary conflict. Represent it as an
+  `external follow-up` that requires the named operator to remove the non-local
+  endpoint or replace it with the exact detected local Observer endpoint, plus
+  a dependent `required`/`default` local-log finding. The
+  dependency keeps the executable finding locked until the operator resolves
+  the conflict; do not classify the conflict as a scan blocker or authorize
+  the provider/bridge early. Preserve `none` and other
+  non-OTLP exporter branches without validating their endpoint. Flag any cloud
+  log endpoint, credential/header, exporter, or forwarding flag introduced by
   Obstudio instrumentation as a required boundary violation.
+- Treat any nonempty generic `OTEL_EXPORTER_OTLP_HEADERS` as unsafe for an
+  Obstudio-owned local log path, even when
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set. SDKs may merge generic and
+  signal-specific headers. Require the generic value to be moved to
+  trace/metric signal variables and removed before local log export is enabled.
 - Semantic-convention stability opt-ins and when they are set relative to SDK
   and framework imports. Treat a late opt-in as inactive for already-created
   instruments.
@@ -223,11 +237,15 @@ Record the metric name and source file with line number.
   configured`. Trace/MDC fields in stdout are not an OTLP log pipeline.
   `OTEL_LOGS_EXPORTER=none` is an explicit opt-out, while an absent exporter on
   a supported Python, Node.js, Java, or Go application logging stack requires a
-  default local Observer OTLP pipeline. Preserve any other explicit exporter
-  or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` as operator-owned configuration, but do
-  not classify it as working without proving its provider/exporter/bridge. If
-  `none` is set while an existing bridge still exports application records,
-  report the ineffective opt-out as a required ownership gap.
+  default local Observer OTLP pipeline only when the logs endpoint is absent or
+  matches the detected local Observer receiver. Preserve any other explicit
+  exporter as operator-owned without validating or supplementing its endpoint.
+  For an absent/`otlp` exporter with an explicit non-local endpoint, record an
+  external operator prerequisite and a dependent default local-log finding;
+  do not classify it as working or select that implementation until the
+  dependency is resolved. If `none` is set
+  while an existing bridge still exports application records, report the
+  ineffective opt-out as a required ownership gap.
 
 **Audit document contract** -- the audit is a current-state baseline source
 scan. Describe the instrumentation and gaps established by current repository
@@ -537,7 +555,14 @@ makes them mandatory. For a detected supported application logging stack, put
 a missing local Observer provider/exporter/bridge in `required` with
 `instrument_mode: default`; this makes it part of implicit broad/default
 Obstudio instrumentation. Do not create that finding when logs are explicitly
-disabled or an operator-owned exporter is already configured. Keep product
+disabled or a non-OTLP operator-owned exporter is already configured. When an
+absent/`otlp` exporter is paired with an explicit non-local logs endpoint,
+create an `external follow-up` whose exact `required_fix` and
+`external_requirement` name the operator-owned configuration change, then
+create the local-log `required`/`default` finding with that external ID in
+`dependencies`. This valid dependency closure keeps the executable finding
+locked; never put this configuration conflict in `scan_blockers`.
+Keep product
 behavior decisions,
 readiness contract choices, content governance, safety policy, cost/billing
 ownership, and external telemetry prerequisites out of canonical `findings` by

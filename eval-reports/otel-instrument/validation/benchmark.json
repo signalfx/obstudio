@@ -6,8 +6,8 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20260819T220546412839Z",
-    "repo_root": "/private/tmp/obstudio-issue-199",
+    "run_id": "20260820T011432966449Z",
+    "repo_root": "/Users/tithumma/code/splunk/obstudio/.workspace/issue-199-review",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-5.5",
     "judge_model": "gpt-5.5",
@@ -147,7 +147,7 @@
       "eval_dir": "evals/go/kvstore",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 10,
       "runtime_check_count": 0
     },
     {
@@ -164,7 +164,7 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 0,
-      "runtime_check_count": 1
+      "runtime_check_count": 2
     },
     {
       "id": "java/kafka-batch-consumer/qual/instrument",
@@ -264,7 +264,7 @@
       "eval_dir": "evals/java/springboot-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 10,
       "runtime_check_count": 0
     },
     {
@@ -281,7 +281,7 @@
       "eval_dir": "evals/node/express-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 9,
       "runtime_check_count": 0
     },
     {
@@ -298,7 +298,7 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 0,
-      "runtime_check_count": 1
+      "runtime_check_count": 2
     },
     {
       "id": "python/ai-assistant-demo/qual/instrument",
@@ -411,7 +411,7 @@
       "eval_dir": "evals/python/flask-basic",
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
-      "rubric_check_count": 6,
+      "rubric_check_count": 10,
       "runtime_check_count": 0
     },
     {
@@ -428,7 +428,7 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 0,
-      "runtime_check_count": 1
+      "runtime_check_count": 2
     },
     {
       "id": "python/mcp-ai-tool-demo/qual/instrument",
@@ -469,7 +469,7 @@
     "case_count": 39,
     "prompt_count": 39,
     "sanity_check_count": 0,
-    "rubric_check_count": 182,
-    "runtime_check_count": 6
+    "rubric_check_count": 212,
+    "runtime_check_count": 9
   }
 }

@@ -3,11 +3,11 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Add OpenTelemetry instrumentation to the Java Spring Boot service in ./service. Prefer the OpenTelemetry Java agent and avoid unnecessary application code changes."
+      "task": "Add OpenTelemetry instrumentation to the Java Spring Boot service in ./service. Prefer the OpenTelemetry Java agent and avoid unnecessary application code changes. Assume no custom business spans are requested."
     },
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving controller behavior. Prefer javaagent auto-instrumentation over programmatic SDK code."
+      "task": "Instrument the Java Spring Boot service in ./service with OpenTelemetry while preserving controller behavior. Prefer javaagent auto-instrumentation over programmatic SDK code. Add auto-instrumentation only; do not add custom business spans."
     }
   ],
   "judge_inputs": [
@@ -19,7 +19,11 @@
     "Uses or recommends the OpenTelemetry Java agent as the primary Spring Boot instrumentation path.",
     "Keeps Spring controller code minimal and does not replace auto-instrumentation with broad manual tracing.",
     "Configures service name and OTLP endpoint through environment variables or JVM system properties.",
-    "Defaults the Java agent application log exporter to OTLP only when the operator has not selected a value, sends logs to the signal-specific local Observer /v1/logs endpoint through the agent's existing Logback bridge, preserves appenders and OTEL_LOGS_EXPORTER=none or another explicit override, and never configures cloud log credentials or forwarding.",
+    "Defaults the Java agent application log exporter to OTLP only when the operator has not selected a value and sends logs to the signal-specific local Observer /v1/logs endpoint through exactly one agent-owned Logback bridge.",
+    "Exports the fixture's request-context warning exactly once with its body, WARN severity, java-springboot-basic resource identity, and non-empty trace and span IDs while preserving every configured Logback console or file appender.",
+    "Honors effective OTEL_LOGS_EXPORTER=none or another explicit operator-owned value from environment variables, JAVA_TOOL_OPTIONS, or launcher -D arguments without adding a manual SDK, appender, provider, or second bridge, while the original Logback sink remains active.",
+    "Uses one guarded host/container entrypoint that resolves environment, JAVA_TOOL_OPTIONS, and launcher -D precedence, rejects argfiles plus quoted/backslash-escaped values and non-space/tab control whitespace across JAVA_TOOL_OPTIONS, JDK_JAVA_OPTIONS, and _JAVA_OPTIONS, skips launcher option values, stops property scanning at the main class/JAR/module/source target, treats an empty -Dotel.logs.exporter= as default OTLP without adding a duplicate key, accepts either exact local generic receiver independently of the logs protocol, and rejects non-local signal-specific or generic OTLP endpoints and generic headers before Java starts; direct cloud remains trace/metric-only.",
+    "Relies on the Java agent's single JVM shutdown hook to flush its log processor; it does not add an application-owned shutdown hook or second SDK.",
     "Explains how the Java agent provides HTTP server spans and request duration metrics.",
     "Preserves existing Maven/Spring Boot runtime behavior."
   ]

@@ -12,6 +12,10 @@
       "description": "Docker runtime emits Flask traces, HTTP duration metrics, and application logs to the local Observer.",
       "compose_file": "docker-compose.yml",
       "timeout_seconds": 300,
+      "environment": {
+        "CODEX_EVAL_OTEL_LOGS_EXPORTER": ""
+      },
+      "stop_services_before_validation": ["app"],
       "expect": {
         "endpoints": [
           {
@@ -32,7 +36,107 @@
           {
             "id": "logs",
             "url": "/api/query/logs",
-            "contains_any": ["Running on"]
+            "record_checks": [
+              {
+                "id": "request-context-log",
+                "match": {
+                  "body": "runtime request completed"
+                },
+                "field_contains": {
+                  "severityText": "WARN"
+                },
+                "field_equals": {
+                  "resource.serviceName": "python-flask-basic"
+                },
+                "non_empty": ["traceId", "spanId"],
+                "exact_count": 1,
+                "unique_by": ["traceId", "spanId"],
+                "correlates_with_trace": true
+              },
+              {
+                "id": "shutdown-log",
+                "match": {
+                  "body": "runtime shutdown completed"
+                },
+                "field_contains": {
+                  "severityText": "WARN"
+                },
+                "field_equals": {
+                  "resource.serviceName": "python-flask-basic"
+                },
+                "exact_count": 1
+              }
+            ]
+          }
+        ],
+        "service_logs": [
+          {
+            "id": "preserved-application-sink",
+            "service_name": "app",
+            "contains_all": [
+              "runtime request completed",
+              "runtime shutdown completed"
+            ],
+            "occurrences": {
+              "runtime request completed": 1,
+              "runtime shutdown completed": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "observer-runtime-logs-opt-out",
+      "description": "OTEL_LOGS_EXPORTER=none leaves Flask application output intact while exporting no logs to Observer and preserving traces and metrics.",
+      "compose_file": "docker-compose.yml",
+      "timeout_seconds": 300,
+      "environment": {
+        "CODEX_EVAL_OTEL_LOGS_EXPORTER": "none"
+      },
+      "stop_services_before_validation": ["app"],
+      "expect": {
+        "endpoints": [
+          {
+            "id": "traces",
+            "url": "/api/query/traces",
+            "field_checks": {
+              "span_names": ["GET /health", "GET /tasks", "POST /tasks"]
+            }
+          },
+          {
+            "id": "metrics",
+            "url": "/api/query/metrics",
+            "contains_any": [
+              "http.server.request.duration",
+              "http.server.duration"
+            ]
+          },
+          {
+            "id": "logs",
+            "url": "/api/query/logs",
+            "record_checks": [
+              {
+                "id": "no-exported-application-logs",
+                "match": {
+                  "resource.serviceName": "python-flask-basic"
+                },
+                "exact_count": 0
+              }
+            ]
+          }
+        ],
+        "service_logs": [
+          {
+            "id": "opt-out-preserves-application-sink",
+            "service_name": "app",
+            "contains_all": [
+              "runtime request completed",
+              "runtime shutdown completed"
+            ],
+            "occurrences": {
+              "runtime request completed": 1,
+              "runtime shutdown completed": 1
+            }
           }
         ]
       }

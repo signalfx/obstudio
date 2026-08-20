@@ -240,7 +240,13 @@ func initOTel(
 
 	var lp *sdklog.LoggerProvider
 	var applicationLogHandler slog.Handler
-	if useDefaultLocalLogExport() {
+	useLocalLogExport, err := useDefaultLocalLogExport()
+	if err != nil {
+		_ = tp.Shutdown(ctx)
+		_ = mp.Shutdown(ctx)
+		return nil, err
+	}
+	if useLocalLogExport {
 		if existingLogHandler == nil {
 			_ = tp.Shutdown(ctx)
 			_ = mp.Shutdown(ctx)
@@ -297,11 +303,24 @@ func initOTel(
 	return shutdown, nil
 }
 
-func useDefaultLocalLogExport() bool {
+func useDefaultLocalLogExport() (bool, error) {
 	configured := strings.ToLower(strings.TrimSpace(
 		os.Getenv("OTEL_LOGS_EXPORTER"),
 	))
-	return configured == "" || configured == "otlp"
+	if configured != "" && configured != "otlp" {
+		// Preserve `none` and every other operator-owned exporter without
+		// interpreting its OTLP endpoint.
+		return false, nil
+	}
+
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
+	if endpoint != "" && endpoint != localObserverLogsEndpoint {
+		return false, errors.New(
+			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local " +
+				"Observer; refusing to create an Obstudio log provider or bridge",
+		)
+	}
+	return true, nil
 }
 
 func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, error) {
@@ -316,9 +335,9 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 	}
 
 	logsHeaders := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
-	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")) != "" && logsHeaders == "" {
+	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")) != "" {
 		return nil, errors.New(
-			"move generic OTLP headers to trace/metric signal variables, or set explicit logs headers",
+			"move generic OTLP headers to trace/metric signal variables and remove OTEL_EXPORTER_OTLP_HEADERS",
 		)
 	}
 
@@ -449,20 +468,40 @@ the collector before the process stops.
 
 ```go
 func main() {
-	ctx := context.Background()
+	runCtx, stop := signal.NotifyContext(
+		context.Background(), os.Interrupt, syscall.SIGTERM,
+	)
+	defer stop()
+
 	// This service uses log.Default(). Snapshot its writer, prefix, and flags
 	// before slog.SetDefault rewires it. Native slog apps pass their existing
 	// handler here instead.
 	existingLogHandler := preserveStandardLogger(log.Default())
-	shutdown, err := initOTel(ctx, existingLogHandler)
+	shutdown, err := initOTel(runCtx, existingLogHandler)
 	if err != nil {
 		log.Fatalf("failed to initialize telemetry: %v", err)
 	}
-	defer shutdown(ctx)
 
-	// ... start HTTP server, gRPC server, etc.
+	// Reuse the service's existing graceful server/worker path. It must stop
+	// accepting work and return after runCtx is canceled.
+	runErr := runService(runCtx)
+
+	// Flush with a fresh bounded context: runCtx is already canceled on a
+	// signal and cannot be reused for provider shutdown.
+	flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	shutdownErr := shutdown(flushCtx)
+	if err := errors.Join(runErr, shutdownErr); err != nil {
+		log.Printf("service stopped with error: %v", err)
+	}
 }
 ```
+
+Add `os/signal` and `syscall` to this application's imports. If the service
+already owns signal handling, integrate `shutdown` into that path instead of
+installing a second handler. Do not rely on `defer shutdown(...)` around a
+blocking server: Go skips defers on the default SIGINT/SIGTERM termination
+path, and a canceled request context cannot flush the batch processor.
 
 The example snapshots the detected standard logger, then fans each record out
 to that preserved sink and one `otelslog` handler. This keeps its writer,
@@ -483,15 +522,20 @@ record:
 slog.InfoContext(ctx, "order accepted", "order.type", "standard")
 ```
 
-An unset `OTEL_LOGS_EXPORTER` is treated as `otlp`. Exact `none` and every
-other explicit value skip the app-owned provider and bridge: `none` is the
-operator opt-out, while another value belongs to an existing or
-operator-configured exporter and must not be supplemented by local OTLP. Prove
-that its provider/exporter/bridge actually exists; if only the environment
-value exists, report `Not configured`. The
-example assumes preflight found no existing log provider or bridge. If it did,
-reuse that owner rather than registering another `LoggerProvider` or exporting
-the same record twice.
+An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only when the logs endpoint
+is absent or matches `localObserverLogsEndpoint`. Adapt that constant to the
+detected Observer service address for Docker/Compose. A non-local explicit
+endpoint on the absent/`otlp` branch returns an error before the provider or
+bridge is constructed; report the operator-owned boundary conflict instead of
+converting it to local or cloud export. Exact `none` and every other explicit
+exporter skip the app-owned provider and bridge without validating the
+operator-owned endpoint: `none` is the opt-out, while another value belongs to
+an existing or operator-configured exporter and must not be supplemented by
+local OTLP. Prove that its provider/exporter/bridge actually exists; if only
+the environment value exists, report `Not configured`. The example assumes
+preflight found no existing log provider or bridge. If it did, reuse that owner
+rather than registering another `LoggerProvider` or exporting the same record
+twice.
 
 ### Wrapping HTTP handlers
 
@@ -676,7 +720,8 @@ configuration automatically.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP HTTP endpoint |
-| `OTEL_LOGS_EXPORTER` | `otlp` for Obstudio instrumentation | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
@@ -706,23 +751,28 @@ metrics from `otelhttp`, including `http.server.request.duration` or the older
 `http.server.duration` name, export promptly to Observer.
 
 For Docker or Compose, use the checked-in local Observer service address (for
-example `http://observer:4318/v1/logs`) instead of loopback. Preserve an
-explicit `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`; do not derive the log destination
-from `OTEL_EXPORTER_OTLP_ENDPOINT` when that generic value might point directly
-to cloud ingest.
+example `http://observer:4318/v1/logs`) instead of loopback and adapt
+`localObserverLogsEndpoint` to that same detected value. On the absent/`otlp`
+branch, accept an explicit endpoint only when it matches that local value; do
+not derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` when that
+generic value might point directly to cloud ingest.
 
 ### Local Observer application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Go
-logging stack. An explicit `OTEL_LOGS_EXPORTER` or
-`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` wins; `none` omits the added provider,
-processor, exporter, and bridge while the original stdout/file sink continues.
-When traces or metrics use direct-cloud signal endpoints, keep the default logs
-endpoint on local Observer. Never copy a Splunk ingest URL, realm, access token,
-generic cloud header, cloud exporter, or forwarding flag into log
-configuration. If an explicit logs endpoint is direct-cloud, preserve it as
-operator configuration but do not add or claim an Obstudio-owned log pipeline;
-report the boundary conflict for operator resolution. Obstudio cloud
+logging stack only when the exporter is absent/`otlp` and the logs endpoint is
+absent or matches the detected local Observer receiver. `none` omits the added
+provider, processor, exporter, and bridge while the original stdout/file sink
+continues; another non-OTLP exporter remains operator-owned and its endpoint is
+not interpreted. When traces or metrics use direct-cloud signal endpoints,
+keep the default logs endpoint on local Observer. Never copy a Splunk ingest
+URL, realm, access token, generic cloud header, cloud exporter, or forwarding
+flag into log configuration. For the absent/`otlp` branch, reject a non-local
+explicit logs endpoint before constructing the provider or bridge, preserve it
+as operator configuration, report the boundary conflict, and require the
+operator to resolve it. Also reject any generic OTLP header on the local branch
+even when signal-specific logs headers exist; move the generic credentials to
+trace/metric variables and remove the generic setting. Obstudio cloud
 forwarding remains traces and metrics only.
 
 Add an in-memory SDK log test and a full local Observer runtime check. Emit one

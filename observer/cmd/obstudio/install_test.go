@@ -226,6 +226,22 @@ func TestRootCommandOnlyExposesObserverHTTPPortOverride(t *testing.T) {
 	}
 }
 
+func TestResolveRunConfigAllowsLoopbackGRPCWithWildcardHTTP(t *testing.T) {
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "3000")
+	t.Setenv("OTLP_HTTP_PORT", "4318")
+	t.Setenv("OTLP_GRPC_HOST", "127.0.0.1")
+	t.Setenv("OTLP_GRPC_PORT", "4317")
+
+	config := resolveRunConfig(runConfig{})
+	if config.host != "0.0.0.0" {
+		t.Fatalf("host = %q, want 0.0.0.0", config.host)
+	}
+	if config.otlpGRPCHost != "127.0.0.1" {
+		t.Fatalf("otlpGRPCHost = %q, want 127.0.0.1", config.otlpGRPCHost)
+	}
+}
+
 func TestCopySiblingWeaverRuntimeCopiesBundledRuntime(t *testing.T) {
 	t.Parallel()
 

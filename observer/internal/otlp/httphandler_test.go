@@ -181,8 +181,8 @@ func TestPostLogsJSON(t *testing.T) {
 
 func TestPostLogsRemainsLocalWhenCloudExportersConfigured(t *testing.T) {
 	s := store.New()
-	metricsExporter := &captureMetricsExporter{ch: make(chan pmetric.Metrics, 1)}
-	tracesExporter := &captureTracesExporter{ch: make(chan ptrace.Traces, 1)}
+	metricsExporter := &captureMetricsExporter{ch: make(chan pmetric.Metrics, 2)}
+	tracesExporter := &captureTracesExporter{ch: make(chan ptrace.Traces, 2)}
 	handler := &otlpHTTPHandler{
 		store:          s,
 		ct:             &ConnTracker{},
@@ -190,19 +190,52 @@ func TestPostLogsRemainsLocalWhenCloudExportersConfigured(t *testing.T) {
 		tracesExporter: tracesExporter,
 	}
 
-	body, err := (&plog.JSONMarshaler{}).MarshalLogs(createTestLog())
+	postJSON := func(path string, body []byte) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("POST %s: expected status 200, got %d", path, w.Code)
+		}
+	}
+
+	traceBody, err := (&ptrace.JSONMarshaler{}).MarshalTraces(createTestSpan())
+	if err != nil {
+		t.Fatalf("failed to marshal traces: %v", err)
+	}
+	postJSON("/v1/traces", traceBody)
+	select {
+	case exported := <-tracesExporter.ch:
+		spans := ConvertTraces(exported)
+		if len(spans) != 1 || spans[0].Name != "test-span" {
+			t.Fatalf("unexpected forwarded spans: %#v", spans)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for configured traces exporter")
+	}
+
+	metricBody, err := (&pmetric.JSONMarshaler{}).MarshalMetrics(createTestMetric())
+	if err != nil {
+		t.Fatalf("failed to marshal metrics: %v", err)
+	}
+	postJSON("/v1/metrics", metricBody)
+	select {
+	case exported := <-metricsExporter.ch:
+		metrics := ConvertMetrics(exported)
+		if len(metrics) != 1 || metrics[0].Name != "test.metric" {
+			t.Fatalf("unexpected forwarded metrics: %#v", metrics)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for configured metrics exporter")
+	}
+
+	logBody, err := (&plog.JSONMarshaler{}).MarshalLogs(createTestLog())
 	if err != nil {
 		t.Fatalf("failed to marshal logs: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/logs", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", w.Code)
-	}
+	postJSON("/v1/logs", logBody)
 	logs := s.QueryLogs(1)
 	if len(logs) != 1 || logs[0].Body != "test log message" {
 		t.Fatalf("expected log to remain available locally, got %#v", logs)

@@ -25,7 +25,8 @@ This builds and starts the collector on default ports:
 
 Ports 4317 and 4318 must be free. If the VS Code or Kiro extension or another
 collector is already running, either stop it first or override with
-environment variables (`PORT`, `OTLP_HTTP_PORT`, `OTLP_GRPC_PORT`).
+environment variables (`PORT`, `OTLP_HTTP_PORT`, `OTLP_GRPC_HOST`,
+`OTLP_GRPC_PORT`).
 
 Validation uses the bundled `weaver` runtime that `make build` places
 next to `build/obstudio`. If you move the binary manually, keep `weaver`
@@ -55,9 +56,10 @@ OTLP/HTTP + gRPC ──▶ In-memory Store
 
 | Variable | Default | Description |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Bind address |
+| `HOST` | `127.0.0.1` | UI, API, MCP, and OTLP/HTTP bind address; also the default for OTLP/gRPC |
 | `PORT` | `3000` | Web UI / API / MCP port |
 | `OTLP_HTTP_PORT` | `4318` | OTLP/HTTP receiver port |
+| `OTLP_GRPC_HOST` | `HOST` | OTLP/gRPC proxy bind host; set to a loopback address when `HOST` is a container wildcard |
 | `OTLP_GRPC_PORT` | `4317` | OTLP/gRPC receiver port |
 
 ### Optional Splunk Observability Cloud forwarding

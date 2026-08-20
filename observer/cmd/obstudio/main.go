@@ -57,6 +57,7 @@ var envFileShellPrecedence = struct {
 type runConfig struct {
 	host             string
 	observerHTTPPort string
+	otlpGRPCHost     string
 	otlpGRPCPort     string
 	otlpHTTPPort     string
 	envFile          string
@@ -90,7 +91,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP receivers")
+	root.Flags().StringVar(&config.host, "host", "", "Bind address for the Observer UI, MCP HTTP endpoint, and OTLP/HTTP; also the OTLP/gRPC default")
 	root.Flags().StringVar(&config.observerHTTPPort, "observer-http-port", "", "Observer web UI, REST API, and MCP HTTP port")
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
@@ -109,11 +110,12 @@ func run(config runConfig) {
 	host := config.host
 	port := config.observerHTTPPort
 	otlpHTTPPort := config.otlpHTTPPort
+	otlpGRPCHost := config.otlpGRPCHost
 	otlpGRPCPort := config.otlpGRPCPort
 
 	mainAddr := net.JoinHostPort(host, port)
 	otlpHTTPAddr := net.JoinHostPort(host, otlpHTTPPort)
-	otlpGRPCAddr := net.JoinHostPort(host, otlpGRPCPort)
+	otlpGRPCAddr := net.JoinHostPort(otlpGRPCHost, otlpGRPCPort)
 
 	s.SetEndpoints(store.Endpoints{
 		OTLPHTTP: "http://" + otlpHTTPAddr,
@@ -371,10 +373,12 @@ func parseEnvLine(line string) (string, string, bool, error) {
 }
 
 func resolveRunConfig(config runConfig) runConfig {
+	host := valueOrEnv(config.host, "HOST", "127.0.0.1")
 	return runConfig{
-		host:             valueOrEnv(config.host, "HOST", "127.0.0.1"),
+		host:             host,
 		observerHTTPPort: valueOrEnv(config.observerHTTPPort, "PORT", "3000"),
 		otlpHTTPPort:     valueOrEnv(config.otlpHTTPPort, "OTLP_HTTP_PORT", envOr("OTLP_PORT", "4318")),
+		otlpGRPCHost:     valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
 	}

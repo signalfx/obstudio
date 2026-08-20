@@ -113,26 +113,31 @@ which existing appenders remain active before editing.
   appender and agent appender for the same record.
 - Apply this exporter precedence without overwriting operator intent:
 
-  | Existing `OTEL_LOGS_EXPORTER` | Required action |
+  | Existing log configuration | Required action |
   |---|---|
-  | unset or empty | Default it to `otlp` for the local Obstudio baseline |
+  | exporter unset/empty and endpoint absent or detected-local | Default the exporter to `otlp` for the local Obstudio baseline |
+  | exporter `otlp` and endpoint absent or detected-local | Preserve `otlp` and use the detected local Observer endpoint |
+  | exporter unset/`otlp` and endpoint non-local | Fail closed before the agent starts its log path; report the operator-owned boundary conflict |
   | `none` | Keep it disabled; do not add another provider, exporter, or bridge |
   | any other explicit value | Preserve it as operator-owned; do not supplement it with a local pipeline |
 
-- When the logs exporter is the local default and
-  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` is unset, set the signal-specific
-  OTLP/HTTP endpoint to `http://localhost:4318/v1/logs` for a host JVM or the
-  equivalent Observer service address in Docker. Preserve another explicit
-  logs endpoint as operator-owned and validate its protocol/path tuple. If it
-  is a direct-cloud endpoint, report the boundary conflict rather than silently
-  replacing it or adding a second local pipeline.
+- When the logs exporter is absent/`otlp`, set the signal-specific OTLP/HTTP
+  endpoint to `http://localhost:4318/v1/logs` for a host JVM or the equivalent
+  detected Observer service address in Docker. Accept an explicit endpoint on
+  that branch only when it matches the detected local receiver and its
+  protocol/path tuple. If it is non-local or direct-cloud, do not enable the
+  agent-owned log provider/bridge; fail closed and report the boundary conflict
+  rather than silently replacing it or adding a second local pipeline. Do not
+  validate the endpoint on `none` or another non-OTLP exporter branch.
 - Never let logs inherit a generic direct-cloud endpoint or header. Move a
   direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT` and
   `OTEL_EXPORTER_OTLP_HEADERS` to trace- and metric-specific endpoint/header
   settings, then remove the generic cloud settings from the startup surface.
   Keep the logs endpoint local and do not copy a realm, ingest URL, access
   token, auth header, exporter, or forwarding flag into log configuration.
-  Obstudio cloud forwarding remains traces and metrics only.
+  Reject a generic header from the local log path even when signal-specific
+  logs headers are present, because the SDK may merge both. Obstudio cloud
+  forwarding remains traces and metrics only.
 - Treat log bodies, arguments, throwable rendering, markers, structured
   messages, and MDC/context data as a privacy surface. Capture only reviewed,
   bounded keys with the detected appender's
@@ -160,27 +165,205 @@ curl -L https://github.com/open-telemetry/opentelemetry-java-instrumentation/rel
 
 ### Host/native run
 
-Prefer the existing JVM startup path. For host-based services, `JAVA_TOOL_OPTIONS` or the current service-manager JVM args are usually the cleanest place to inject the agent.
+Prefer the existing JVM startup path. Check in one guarded launcher and use it
+from the host, service manager, and container so deployment-time overrides
+cannot skip the log ownership checks. Save this as `otel-entrypoint.sh`:
 
 ```bash
-export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-otlp}"
-if [ "$OTEL_LOGS_EXPORTER" = otlp ]; then
-  export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-http/protobuf}"
-  if [ -z "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}" ]; then
-    case "$OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" in
-      http/protobuf) export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs ;;
-      grpc) export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4317 ;;
-      *) echo "unsupported OTLP logs protocol: $OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" >&2; exit 1 ;;
+#!/bin/sh
+set -eu
+set -f
+
+fail() { printf '%s\n' "$*" >&2; exit 1; }
+
+# Java system properties override environment variables. Scan the standard JVM
+# option sources in their effective OpenJDK order; later existing -D values
+# retain normal Java precedence.
+logs_exporter=${OTEL_LOGS_EXPORTER:-}
+logs_protocol=${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-}
+logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
+logs_exporter_d=0
+logs_protocol_d=0
+logs_endpoint_d=0
+
+read_otel_property() {
+  otel_jvm_arg=${1#\"}; otel_jvm_arg=${otel_jvm_arg%\"}
+  otel_jvm_arg=${otel_jvm_arg#\'}; otel_jvm_arg=${otel_jvm_arg%\'}
+  case "$otel_jvm_arg" in
+    @*|-XX:VMOptionsFile=*)
+      fail "expand Java argument files so OTel -D ownership can be checked" ;;
+  esac
+  otel_property_name=${otel_jvm_arg%%=*}
+  case "$otel_jvm_arg" in
+    *=*) otel_property_value=${otel_jvm_arg#*=} ;;
+    *) otel_property_value= ;;
+  esac
+  otel_property_value=${otel_property_value#\"}
+  otel_property_value=${otel_property_value%\"}
+  otel_property_value=${otel_property_value#\'}
+  otel_property_value=${otel_property_value%\'}
+  case "$otel_property_name" in
+    -Dotel.logs.exporter)
+      logs_exporter=$otel_property_value; logs_exporter_d=1 ;;
+    -Dotel.exporter.otlp.logs.protocol)
+      logs_protocol=$otel_property_value; logs_protocol_d=1 ;;
+    -Dotel.exporter.otlp.logs.endpoint)
+      logs_endpoint=$otel_property_value; logs_endpoint_d=1 ;;
+    -Dotel.exporter.otlp.endpoint)
+      generic_endpoint=$otel_property_value ;;
+    -Dotel.exporter.otlp.headers)
+      generic_headers=$otel_property_value ;;
+  esac
+}
+
+# Relevant option values contain no whitespace. Plain space/tab characters may
+# separate environment options; every other control character is rejected
+# before this split. Disabling glob expansion above keeps the split from
+# expanding operator-provided wildcard characters.
+scan_otel_options() {
+  for otel_jvm_arg in $1; do
+    read_otel_property "$otel_jvm_arg"
+  done
+}
+
+validate_otel_option_env() {
+  otel_option_env_name=$1
+  otel_option_env_value=$2
+  # OpenJDK may split CR, LF, form feed, vertical tab, and other control
+  # whitespace even though this POSIX shell's unquoted expansion does not use
+  # all of them as IFS separators. Remove allowed tab separators, then reject
+  # every remaining control byte so the guard and JVM cannot parse different
+  # effective -D options.
+  otel_tab=$(printf '\t_'); otel_tab=${otel_tab%_}
+  otel_control_check=$otel_option_env_value
+  while case "$otel_control_check" in *"$otel_tab"*) true ;; *) false ;; esac; do
+    otel_control_prefix=${otel_control_check%%"$otel_tab"*}
+    otel_control_suffix=${otel_control_check#*"$otel_tab"}
+    otel_control_check=$otel_control_prefix$otel_control_suffix
+  done
+  case "$otel_control_check" in
+    *[[:cntrl:]]*)
+      fail "$otel_option_env_name contains unsupported non-space/tab control whitespace; move reviewed options to explicit launcher arguments" ;;
+  esac
+  case "$otel_option_env_value" in
+    *\"*|*\'*|*\\*)
+      fail "$otel_option_env_name contains unsupported quoting, backslashes, or a whitespace-bearing value; move reviewed options to explicit launcher arguments" ;;
+  esac
+}
+
+scan_otel_launcher_args() {
+  otel_skip_option_value=0
+  for otel_jvm_arg in "$@"; do
+    otel_launcher_arg=${otel_jvm_arg#\"}; otel_launcher_arg=${otel_launcher_arg%\"}
+    otel_launcher_arg=${otel_launcher_arg#\'}; otel_launcher_arg=${otel_launcher_arg%\'}
+    case "$otel_launcher_arg" in
+      @*) fail "expand Java argument files so OTel -D ownership can be checked" ;;
     esac
-  fi
-  if [ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ] && \
-     [ -z "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}" ]; then
-    echo "move generic OTLP headers to trace/metric signal variables, or set explicit logs headers" >&2
-    exit 1
-  fi
+    if [ "$otel_skip_option_value" -eq 1 ]; then
+      otel_skip_option_value=0
+      continue
+    fi
+    case "$otel_launcher_arg" in
+      -jar|-m|--module|--module=*) break ;;
+      -cp|-classpath|--class-path|-p|--module-path|--upgrade-module-path|\
+      --add-modules|--enable-native-access|-d|--describe-module|\
+      --add-reads|--add-exports|--add-opens|--limit-modules|--patch-module|\
+      --source)
+        otel_skip_option_value=1 ;;
+      -*) read_otel_property "$otel_launcher_arg" ;;
+      *) break ;; # main class or source file; every following value is an app arg
+    esac
+  done
+}
+validate_otel_option_env JAVA_TOOL_OPTIONS "${JAVA_TOOL_OPTIONS:-}"
+validate_otel_option_env JDK_JAVA_OPTIONS "${JDK_JAVA_OPTIONS:-}"
+validate_otel_option_env _JAVA_OPTIONS "${_JAVA_OPTIONS:-}"
+scan_otel_options "${JAVA_TOOL_OPTIONS:-}"
+# JDK_JAVA_OPTIONS and explicit launcher arguments may contain options whose
+# next token is a value. Do not mistake that value, or an application argument
+# after the launch target, for an effective JVM property.
+scan_otel_launcher_args ${JDK_JAVA_OPTIONS:-}
+scan_otel_launcher_args "$@"
+scan_otel_options "${_JAVA_OPTIONS:-}"
+
+add_logs_exporter=0
+add_logs_protocol=0
+add_logs_endpoint=0
+if [ -z "$logs_exporter" ]; then
+  logs_exporter=otlp
+  # Current agents treat an empty system property as their default OTLP
+  # exporter. Keep that property in place and do not add a duplicate key.
+  [ "$logs_exporter_d" -eq 1 ] || add_logs_exporter=1
 fi
 
-java -javaagent:./opentelemetry-javaagent.jar \
+# Explicit none and non-OTLP exporters are operator-owned. Add nothing and do
+# not interpret their endpoint or generic trace/metric configuration.
+if [ "$logs_exporter" != otlp ]; then
+  exec java "$@"
+fi
+
+if [ -z "$logs_protocol" ]; then
+  [ "$logs_protocol_d" -eq 0 ] || fail "remove the empty OTLP logs protocol property"
+  logs_protocol=http/protobuf
+  add_logs_protocol=1
+fi
+case "${OBSTUDIO_OBSERVER_TARGET:-host}" in
+  host)
+    local_http_endpoint=http://localhost:4318
+    local_grpc_endpoint=http://localhost:4317 ;;
+  docker)
+    local_http_endpoint=http://observer:4318
+    local_grpc_endpoint=http://observer:4317 ;;
+  *) fail "unsupported Observer target" ;;
+esac
+case "$logs_protocol" in
+  http/protobuf)
+    local_logs_endpoint=$local_http_endpoint/v1/logs ;;
+  grpc)
+    local_logs_endpoint=$local_grpc_endpoint ;;
+  *) fail "unsupported OTLP logs protocol" ;;
+esac
+if [ -z "$logs_endpoint" ]; then
+  [ "$logs_endpoint_d" -eq 0 ] || fail "remove the empty OTLP logs endpoint property"
+  logs_endpoint=$local_logs_endpoint
+  add_logs_endpoint=1
+elif [ "$logs_endpoint" != "$local_logs_endpoint" ]; then
+  fail "OTLP logs endpoint is not the detected local Observer"
+fi
+if [ -n "$generic_endpoint" ] && \
+   [ "$generic_endpoint" != "$local_http_endpoint" ] && \
+   [ "$generic_endpoint" != "$local_grpc_endpoint" ]; then
+  fail "move a non-local generic OTLP endpoint to trace/metric signal variables"
+fi
+if [ -n "$generic_headers" ]; then
+  fail "move generic OTLP headers to trace/metric signal variables and remove the generic value"
+fi
+
+case "${OBSTUDIO_JAVA_LOG_DEFAULTS:-environment}" in
+  environment)
+    [ "$add_logs_exporter" -eq 0 ] || export OTEL_LOGS_EXPORTER=$logs_exporter
+    [ "$add_logs_protocol" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=$logs_protocol
+    [ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=$logs_endpoint
+    ;;
+  system-properties)
+    # A key is added only when neither environment nor an existing -D supplied it.
+    [ "$add_logs_endpoint" -eq 0 ] || set -- "-Dotel.exporter.otlp.logs.endpoint=$logs_endpoint" "$@"
+    [ "$add_logs_protocol" -eq 0 ] || set -- "-Dotel.exporter.otlp.logs.protocol=$logs_protocol" "$@"
+    [ "$add_logs_exporter" -eq 0 ] || set -- "-Dotel.logs.exporter=$logs_exporter" "$@"
+    ;;
+  *) fail "OBSTUDIO_JAVA_LOG_DEFAULTS must be environment or system-properties" ;;
+esac
+
+exec java "$@"
+```
+
+Invoke the checked-in launcher with the project's existing Java arguments:
+
+```bash
+./otel-entrypoint.sh \
+  -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
   -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
   -Dotel.exporter.otlp.protocol=http/protobuf \
@@ -188,10 +371,23 @@ java -javaagent:./opentelemetry-javaagent.jar \
   -jar my-app.jar
 ```
 
-The shell defaults apply only to the effective `otlp` branch and to unset or
-empty values within that branch. `none` and any other explicit exporter remain
-unchanged and bypass Obstudio-added log protocol, endpoint, and header checks;
-an explicit signal-specific logs endpoint is also preserved.
+The launcher resolves each effective setting from the environment and standard
+JVM option sources, including `JAVA_TOOL_OPTIONS` and explicit launcher `-D`
+arguments. It never adds a property key already present on a JVM property
+surface. `none` and every other explicit exporter run unchanged; only the
+absent/`otlp` branch receives local defaults and rejects a non-local signal or
+generic endpoint and an effective generic header. An empty
+`-Dotel.logs.exporter=` keeps its one existing key and follows the current
+agent's default OTLP behavior. Launcher scanning stops at the main class,
+source file, JAR, or module so application arguments cannot alter ownership.
+Keep each relevant JVM option value whitespace-free, as required for the
+exporter, protocol, endpoint, and encoded header forms shown here; only plain
+space/tab option separators are accepted in the three standard option
+environments. The guard rejects argument files, CR/LF/form-feed/vertical-tab
+and other control whitespace, and quoted or backslash-escaped JVM option
+environment values instead of guessing how OpenJDK will parse them. Move such
+reviewed options to explicit launcher arguments, where the calling shell
+preserves each value's boundary.
 
 ### If the Project Already Runs in Docker
 
@@ -199,65 +395,47 @@ an explicit signal-specific logs endpoint is also preserved.
 FROM eclipse-temurin:21-jre
 
 COPY opentelemetry-javaagent.jar /opt/agent.jar
+COPY otel-entrypoint.sh /usr/local/bin/otel-entrypoint
 COPY my-app.jar /opt/app.jar
+RUN chmod 0755 /usr/local/bin/otel-entrypoint
 
-ENV JAVA_TOOL_OPTIONS="-javaagent:/opt/agent.jar"
+ENV OBSTUDIO_OBSERVER_TARGET=docker
 ENV OTEL_SERVICE_NAME=my-service
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
 ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-ENV OTEL_LOGS_EXPORTER=otlp
-ENV OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
-ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://observer:4318/v1/logs
 ENV OTEL_METRIC_EXPORT_INTERVAL=1000
 ENV OTEL_METRIC_EXPORT_TIMEOUT=500
 
-CMD ["java", "-jar", "/opt/app.jar"]
+ENTRYPOINT ["/usr/local/bin/otel-entrypoint"]
+CMD ["-javaagent:/opt/agent.jar", "-jar", "/opt/app.jar"]
 ```
 
-Docker `ENV` values are defaults: `docker run -e OTEL_LOGS_EXPORTER=none ...`
-disables OTLP application logs without removing the existing console/file
-appenders, and another explicit runtime value remains operator-owned.
+Docker environment, `JAVA_TOOL_OPTIONS`, and command overrides all pass through
+the same guard. `docker run -e OTEL_LOGS_EXPORTER=none ...` disables OTLP logs
+without removing existing appenders; a non-OTLP exporter remains operator-owned,
+while a non-local OTLP logs endpoint or generic header fails before Java starts.
 
 ### JVM system-property equivalent
 
-Use one configuration surface. When the existing launcher owns JVM arguments,
-translate the same operator-overridable defaults to Java system properties:
+When the existing launcher owns JVM arguments, ask the same entrypoint to add
+missing local defaults as system properties:
 
 ```bash
-logs_exporter="${OTEL_LOGS_EXPORTER:-otlp}"
-otel_log_args=("-Dotel.logs.exporter=$logs_exporter")
-if [ "$logs_exporter" = otlp ]; then
-  logs_protocol="${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL:-http/protobuf}"
-  logs_endpoint="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}"
-  if [ -z "$logs_endpoint" ]; then
-    case "$logs_protocol" in
-      http/protobuf) logs_endpoint=http://localhost:4318/v1/logs ;;
-      grpc) logs_endpoint=http://localhost:4317 ;;
-      *) echo "unsupported OTLP logs protocol: $logs_protocol" >&2; exit 1 ;;
-    esac
-  fi
-  if [ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ] && \
-     [ -z "${OTEL_EXPORTER_OTLP_LOGS_HEADERS:-}" ]; then
-    echo "move generic OTLP headers to trace/metric signal variables, or set explicit logs headers" >&2
-    exit 1
-  fi
-  otel_log_args+=(
-    "-Dotel.exporter.otlp.logs.protocol=$logs_protocol"
-    "-Dotel.exporter.otlp.logs.endpoint=$logs_endpoint"
-  )
-fi
-
-exec java -javaagent:./opentelemetry-javaagent.jar \
+OBSTUDIO_JAVA_LOG_DEFAULTS=system-properties \
+./otel-entrypoint.sh \
+  -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
   -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
   -Dotel.exporter.otlp.protocol=http/protobuf \
-  "${otel_log_args[@]}" \
   -jar my-app.jar
 ```
 
-Do not also define conflicting environment variables or duplicate `-D`
-properties. For a reviewed MDC allowlist, add only the property matching the
-detected stack, for example
+The entrypoint does not append a log property when the same key already appears
+in `JAVA_TOOL_OPTIONS` or the launcher arguments, and it does not synthesize any
+log properties when the effective exporter is `none` or non-OTLP. This prevents
+the example from overriding an operator's higher-precedence JVM configuration.
+For a reviewed MDC allowlist, add only the property matching the detected stack,
+for example
 `-Dotel.instrumentation.logback-appender.experimental.capture-mdc-attributes=operation,outcome`
 or
 `-Dotel.instrumentation.log4j-appender.experimental.capture-mdc-attributes=operation,outcome`.
@@ -434,8 +612,9 @@ Keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP endpoint only when it is local or collector-owned; never leave a direct-cloud value for logs to inherit |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for Java agent 2.x | Common protocol when using port 4318 |
-| `OTEL_LOGS_EXPORTER` | `otlp` when absent | `none` disables agent log export; any other explicit value is preserved |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or detected-local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for a host JVM | Signal-specific local Observer application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
@@ -470,8 +649,13 @@ If an existing generic endpoint/header targets cloud ingest, first move those
 values to the trace- and metric-specific variables in the table and remove the
 generic cloud variables from the launch environment. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
-inherited. Do not configure a logs cloud header or a cloud log-forwarding
-pipeline; Obstudio forwards only traces and metrics.
+inherited or merged, even when a signal-specific logs header is also present.
+Do not configure a logs cloud header or a cloud log-forwarding pipeline;
+Obstudio forwards only traces and metrics. On the absent/`otlp` branch, accept
+an explicit logs endpoint only when it matches the detected local Observer;
+otherwise fail before the agent starts and report the operator-owned boundary
+conflict. Preserve `none` and non-OTLP exporter branches without interpreting
+their endpoint.
 
 ---
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -55,6 +56,11 @@ func (a *API) handleKV(w http.ResponseWriter, r *http.Request) {
 			a.writeStoreError(w, err)
 			return
 		}
+		slog.WarnContext(
+			r.Context(),
+			"runtime request completed",
+			"operation", "put",
+		)
 		w.WriteHeader(http.StatusAccepted)
 	case http.MethodDelete:
 		err := a.store.Delete(key)

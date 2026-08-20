@@ -121,6 +121,27 @@ signal by type so the report can list them explicitly.
   (`grpc` with the gRPC receiver, or `http/protobuf` with `/v1/<signal>`), not
   just a host or port. A configured endpoint with an incompatible protocol is
   a required exporter gap.
+- Resolve whether the logs endpoint is the local Observer receiver or a direct
+  cloud ingest endpoint. An unset signal-specific logs endpoint must not inherit
+  a generic direct-cloud endpoint: local application logs default to Observer,
+  while direct-cloud or Obstudio cloud forwarding is traces and metrics only.
+  An explicit local Observer logs endpoint may participate in the default
+  pipeline. An explicit non-local endpoint paired with an absent or `otlp`
+  exporter is instead an operator-owned boundary conflict. Represent it as an
+  `external follow-up` that requires the named operator to remove the non-local
+  endpoint or replace it with the exact detected local Observer endpoint, plus
+  a dependent `required`/`default` local-log finding. The
+  dependency keeps the executable finding locked until the operator resolves
+  the conflict; do not classify the conflict as a scan blocker or authorize
+  the provider/bridge early. Preserve `none` and other
+  non-OTLP exporter branches without validating their endpoint. Flag any cloud
+  log endpoint, credential/header, exporter, or forwarding flag introduced by
+  Obstudio instrumentation as a required boundary violation.
+- Treat any nonempty generic `OTEL_EXPORTER_OTLP_HEADERS` as unsafe for an
+  Obstudio-owned local log path, even when
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set. SDKs may merge generic and
+  signal-specific headers. Require the generic value to be moved to
+  trace/metric signal variables and removed before local log export is enabled.
 - Semantic-convention stability opt-ins and when they are set relative to SDK
   and framework imports. Treat a late opt-in as inactive for already-created
   instruments.
@@ -192,17 +213,39 @@ Record the metric name and source file with line number.
 
 **Logs inventory** -- build a list of OTel log integrations:
 
-- OTel log bridge or SDK log packages (`opentelemetry-instrumentation-logging`
-for Python, `@opentelemetry/instrumentation-winston` /
-`@opentelemetry/instrumentation-pino` for Node.js).
+- OTel log bridge or SDK log packages
+  (`opentelemetry-instrumentation-logging` for current Python releases, with
+  the SDK `LoggingHandler` only as a pre-1.40 compatibility path;
+  `@opentelemetry/instrumentation-console`,
+  `@opentelemetry/instrumentation-winston`, or
+  `@opentelemetry/instrumentation-pino` for Node.js; the Java agent's detected
+  Logback/Log4j appender; and the matching
+  `go.opentelemetry.io/contrib/bridges` package for Go).
+- `LoggerProvider`, batch log record processor, OTLP log exporter,
+  signal-specific logs endpoint, global registration, and shutdown/flush.
+- Existing stdout, stderr, file, platform, appender, handler, transport, hook,
+  and worker-thread sinks. Identify which stay active and whether two bridges
+  would export the same application record twice.
 - Trace-context injection into log records (`trace_id`, `span_id` fields).
 - `span.AddEvent()` / `span.add_event()` calls used as structured log events.
 - Logging formatters, filters, adapters, MDC/context variables, access-log
   formatters, and exception helpers that can add request, user, tenant,
   session, trace, raw URL, exception text, or traceback data. Check the final
   formatting path, not only application logger call arguments.
-- Classify logs as `otlp`, `correlation-only`, or `not configured`. Trace/MDC
-  fields in stdout are not an OTLP log pipeline.
+- Classify logs as `local-otlp-default`, `explicitly-disabled`,
+  `operator-owned`, `correlation-only`, `unsupported-stack`, or `not
+  configured`. Trace/MDC fields in stdout are not an OTLP log pipeline.
+  `OTEL_LOGS_EXPORTER=none` is an explicit opt-out, while an absent exporter on
+  a supported Python, Node.js, Java, or Go application logging stack requires a
+  default local Observer OTLP pipeline only when the logs endpoint is absent or
+  matches the detected local Observer receiver. Preserve any other explicit
+  exporter as operator-owned without validating or supplementing its endpoint.
+  For an absent/`otlp` exporter with an explicit non-local endpoint, record an
+  external operator prerequisite and a dependent default local-log finding;
+  do not classify it as working or select that implementation until the
+  dependency is resolved. If `none` is set
+  while an existing bridge still exports application records, report the
+  ineffective opt-out as a required ownership gap.
 
 **Audit document contract** -- the audit is a current-state baseline source
 scan. Describe the instrumentation and gaps established by current repository
@@ -228,6 +271,14 @@ proof.
   `full runtime`, or `either`. Use `full runtime` when proof depends on agent or
   preload startup, framework-resolved route names, automatic metrics,
   runtime-installed log export, or absence of duplicate automatic spans.
+- For a default local application-log pipeline, include scenarios that prove
+  body/category, severity, the same service resource identity as traces and
+  metrics, trace/span correlation inside an active span, final-pipeline
+  redaction, preservation of the existing stdout/file sink, exactly one OTLP
+  record per log call, provider shutdown/flush, and
+  `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
+  export or forwarding exists, also prove the application record remains
+  visible in local Observer without any cloud log path.
 - For every exact custom span name or operation entrypoint, create an explicit
   scenario row. Shared helper implementation is not proof that each operation
   emits its expected name and topology.
@@ -499,8 +550,20 @@ priority-ordered finding list; do not hand-author its layout. Use only `required
 decision`, or `external follow-up` instrument modes. Put baseline correctness,
 trace continuity, error attribution, exporter/resource identity, cardinality
 safety, and duplicate signal ownership in `required`. Put safe deeper
-diagnostics, business metrics, and opt-in log export in `recommended` unless
-the request already makes them mandatory. Keep product behavior decisions,
+diagnostics and business metrics in `recommended` unless the request already
+makes them mandatory. For a detected supported application logging stack, put
+a missing local Observer provider/exporter/bridge in `required` with
+`instrument_mode: default`; this makes it part of implicit broad/default
+Obstudio instrumentation. Do not create that finding when logs are explicitly
+disabled or a non-OTLP operator-owned exporter is already configured. When an
+absent/`otlp` exporter is paired with an explicit non-local logs endpoint,
+create an `external follow-up` whose exact `required_fix` and
+`external_requirement` name the operator-owned configuration change, then
+create the local-log `required`/`default` finding with that external ID in
+`dependencies`. This valid dependency closure keeps the executable finding
+locked; never put this configuration conflict in `scan_blockers`.
+Keep product
+behavior decisions,
 readiness contract choices, content governance, safety policy, cost/billing
 ownership, and external telemetry prerequisites out of canonical `findings` by
 default; record them in readiness/context rows instead. Use `deferred` only for
@@ -538,12 +601,19 @@ markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
 **Anti-patterns** -- flag any of these:
 
 - Multiple SDK initializations in the same process
-- Hardcoded OTLP endpoints instead of env vars
+- Hardcoded OTLP endpoints instead of env vars, except the required
+  signal-specific local Observer logs fallback
 - Tracer/Meter created in hot paths instead of at startup
 - High-cardinality attributes on metrics (user IDs, request IDs)
 - Missing `recordException` in error handling paths
 - Custom span names with variable segments (IDs, paths)
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/`*, `opentelemetry-*`)
+- A generic direct-cloud OTLP endpoint implicitly receiving application logs,
+  or an Obstudio-added Splunk cloud log endpoint/header/token/exporter/
+  forwarding flag
+- Two log providers, appenders, handlers, transports, hooks, or bridges that
+  export the same application record twice
+- Replacing an existing stdout/file sink when adding local OTLP logs
 
 For partially instrumented Go services, explicitly check and report:
 
@@ -1070,7 +1140,7 @@ appear in the project.
 | `grpcio` | `opentelemetry-instrumentation-grpc` | spans |
 | `kafka-python` / `confluent-kafka` | `opentelemetry-instrumentation-kafka-python` / `opentelemetry-instrumentation-confluent-kafka` | spans |
 | `boto3` / `botocore` | `opentelemetry-instrumentation-botocore` | spans |
-| `logging` (stdlib) | `opentelemetry-instrumentation-logging` | logs |
+| `logging` (stdlib) | `opentelemetry-instrumentation-logging`; SDK `LoggingHandler` only for a pinned pre-1.40 compatibility path | logs |
 
 ### Node.js
 
@@ -1090,6 +1160,9 @@ appear in the project.
 | `kafkajs` | `@opentelemetry/instrumentation-kafkajs` | spans |
 | `graphql` | `@opentelemetry/instrumentation-graphql` | spans |
 | `aws-sdk` / `@aws-sdk/*` | `@opentelemetry/instrumentation-aws-sdk` | spans |
+| `console.*` | `@opentelemetry/instrumentation-console` 0.3.0 when Node is `^18.19.0 || >=20.6.0` and `@opentelemetry/api >=1.9.1` | logs |
+| `winston` | `@opentelemetry/instrumentation-winston` + `@opentelemetry/winston-transport` | logs |
+| `pino` | `@opentelemetry/instrumentation-pino` | logs |
 
 ### Java
 
@@ -1101,6 +1174,14 @@ The OpenTelemetry Java agent auto-instruments without code changes:
 - RabbitMQ, gRPC
 - Servlet containers (Tomcat, Jetty, Undertow)
 - JDBC drivers
+- Logback and Log4j application logs through the agent's logging appender
+
+### Go
+
+For Go application logs, detect the logging API and match exactly one official
+bridge such as `go.opentelemetry.io/contrib/bridges/otelslog`, `otelzap`,
+`otellogrus`, `otelzerolog`, or `otellogr`. The log SDK and OTLP log exporter
+are still required; a bridge alone is not an export pipeline.
 
 ## Troubleshooting
 

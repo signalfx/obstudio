@@ -111,14 +111,36 @@ Combined with route-aware span names:
 
 ## Dependencies
 
+Resolve versions against the existing `go` directive and locked OTel modules
+before editing `go.mod`. Bridge modules are independently versioned and their
+latest release can require a newer Go toolchain. Never use an unversioned
+`go get` that changes the project's `go` or `toolchain` directive. For example,
+a Go 1.22-compatible set is:
+
 ```bash
-go get go.opentelemetry.io/otel \
-  go.opentelemetry.io/otel/sdk \
-  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc \
-  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc \
-  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp \
-  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
+go get go.opentelemetry.io/otel@v1.35.0 \
+  go.opentelemetry.io/otel/sdk@v1.35.0 \
+  go.opentelemetry.io/otel/sdk/log@v0.11.0 \
+  go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp@v0.11.0 \
+  go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@v1.35.0 \
+  go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp@v1.35.0 \
+  go.opentelemetry.io/contrib/bridges/otelslog@v0.10.0 \
+  go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp@v0.60.0 \
+  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc@v0.60.0
 ```
+
+Use that set only when it is compatible with the project's existing module
+graph; otherwise select a mutually compatible published set and record the
+evidence. If no official bridge release supports the selected Go toolchain and
+SDK, report `unsupported-stack` instead of upgrading the toolchain implicitly.
+
+The example below assumes the application uses `log/slog` (and the standard
+`log` package routed through the default slog logger) and therefore installs
+`go.opentelemetry.io/contrib/bridges/otelslog`. Add exactly one official bridge
+matching the detected logging stack: `otelzap`, `otellogrus`, `otelzerolog`, or
+`otellogr` are the corresponding official alternatives for zap, Logrus,
+zerolog, and logr. Do not add every bridge speculatively, and do not combine a
+bridge with another hook or exporter that sends the same record.
 
 ---
 
@@ -134,30 +156,61 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"log"
+	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otellogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-func initOTel(ctx context.Context) (func(context.Context) error, error) {
+const localObserverLogsEndpoint = "http://localhost:4318/v1/logs"
+
+func initOTel(
+	ctx context.Context,
+	existingLogHandler slog.Handler,
+) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			attribute.String("service.name",
-				envOr("OTEL_SERVICE_NAME", "my-service")),
-		),
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
+		resource.WithProcess(),
+		resource.WithOS(),
+		resource.WithContainer(),
+		resource.WithHost(),
 	)
 	if err != nil {
 		return nil, err
+	}
+	serviceNameKey := attribute.Key("service.name")
+	serviceName := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME"))
+	if serviceName == "" {
+		if _, exists := res.Set().Value(serviceNameKey); !exists {
+			serviceName = "my-service"
+		}
+	}
+	if serviceName != "" {
+		res, err = resource.Merge(res, resource.NewSchemaless(
+			serviceNameKey.String(serviceName),
+		))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	traceExporter, err := otlptracehttp.New(ctx)
@@ -169,14 +222,10 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
 	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
 	metricExporter, err := otlpmetrichttp.New(ctx)
 	if err != nil {
+		_ = tp.Shutdown(ctx)
 		return nil, err
 	}
 
@@ -188,26 +237,205 @@ func initOTel(ctx context.Context) (func(context.Context) error, error) {
 		)),
 		sdkmetric.WithResource(res),
 	)
+
+	var lp *sdklog.LoggerProvider
+	var applicationLogHandler slog.Handler
+	useLocalLogExport, err := useDefaultLocalLogExport()
+	if err != nil {
+		_ = tp.Shutdown(ctx)
+		_ = mp.Shutdown(ctx)
+		return nil, err
+	}
+	if useLocalLogExport {
+		if existingLogHandler == nil {
+			_ = tp.Shutdown(ctx)
+			_ = mp.Shutdown(ctx)
+			return nil, errors.New("existing log handler is required to preserve its sink")
+		}
+		logExporter, err := newApplicationLogExporter(ctx)
+		if err != nil {
+			_ = tp.Shutdown(ctx)
+			_ = mp.Shutdown(ctx)
+			return nil, err
+		}
+
+		lp = sdklog.NewLoggerProvider(
+			sdklog.WithResource(res),
+			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
+		)
+		applicationLogHandler = otelslog.NewHandler(
+			"my-service",
+			otelslog.WithLoggerProvider(lp),
+		)
+	}
+
+	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+	if lp != nil {
+		otellogglobal.SetLoggerProvider(lp)
+		slog.SetDefault(slog.New(fanoutHandler{
+			existingLogHandler,
+			applicationLogHandler,
+		}))
+	}
 
 	if err := runtime.Start(); err != nil {
+		if lp != nil {
+			_ = lp.Shutdown(ctx)
+		}
+		_ = tp.Shutdown(ctx)
+		_ = mp.Shutdown(ctx)
 		return nil, err
 	}
 
 	shutdown := func(ctx context.Context) error {
-		if err := tp.Shutdown(ctx); err != nil {
-			return err
+		var errs []error
+		if lp != nil {
+			errs = append(errs, lp.Shutdown(ctx))
 		}
-		return mp.Shutdown(ctx)
+		errs = append(errs, tp.Shutdown(ctx), mp.Shutdown(ctx))
+		return errors.Join(errs...)
 	}
 	return shutdown, nil
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func useDefaultLocalLogExport() (bool, error) {
+	configured := strings.ToLower(strings.TrimSpace(
+		os.Getenv("OTEL_LOGS_EXPORTER"),
+	))
+	if configured != "" && configured != "otlp" {
+		// Preserve `none` and every other operator-owned exporter without
+		// interpreting its OTLP endpoint.
+		return false, nil
 	}
-	return fallback
+
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
+	if endpoint != "" && endpoint != localObserverLogsEndpoint {
+		return false, errors.New(
+			"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local " +
+				"Observer; refusing to create an Obstudio log provider or bridge",
+		)
+	}
+	return true, nil
+}
+
+func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, error) {
+	protocol := strings.ToLower(strings.TrimSpace(
+		os.Getenv("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"),
+	))
+	if protocol != "" && protocol != "http/protobuf" {
+		return nil, fmt.Errorf(
+			"select the official exporter matching OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=%q",
+			protocol,
+		)
+	}
+
+	logsHeaders := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
+	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")) != "" {
+		return nil, errors.New(
+			"move generic OTLP headers to trace/metric signal variables and remove OTEL_EXPORTER_OTLP_HEADERS",
+		)
+	}
+
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
+	if endpoint == "" {
+		endpoint = localObserverLogsEndpoint
+	}
+	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
+	if logsHeaders == "" {
+		// Prevent a future generic header from becoming the log credential.
+		opts = append(opts, otlploghttp.WithHeaders(map[string]string{}))
+	}
+	return otlploghttp.New(ctx, opts...)
+}
+
+// fanoutHandler preserves every existing slog sink while adding one OTel
+// bridge. Do not install it when preflight finds another OTel log bridge.
+type fanoutHandler []slog.Handler
+
+func (h fanoutHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, handler := range h {
+		if handler.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h fanoutHandler) Handle(ctx context.Context, record slog.Record) error {
+	var errs []error
+	for _, handler := range h {
+		if handler.Enabled(ctx, record.Level) {
+			errs = append(errs, handler.Handle(ctx, record.Clone()))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (h fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make(fanoutHandler, len(h))
+	for i, handler := range h {
+		handlers[i] = handler.WithAttrs(attrs)
+	}
+	return handlers
+}
+
+func (h fanoutHandler) WithGroup(name string) slog.Handler {
+	handlers := make(fanoutHandler, len(h))
+	for i, handler := range h {
+		handlers[i] = handler.WithGroup(name)
+	}
+	return handlers
+}
+
+// standardLogHandler snapshots an existing standard logger before
+// slog.SetDefault rewires log.Default. It preserves its writer, prefix, and
+// flags while otelslog receives the same record. Native slog applications
+// should pass their existing slog.Handler directly instead.
+type standardLogHandler struct {
+	logger *log.Logger
+	attrs  []slog.Attr
+	groups []string
+}
+
+func preserveStandardLogger(current *log.Logger) slog.Handler {
+	return standardLogHandler{
+		logger: log.New(current.Writer(), current.Prefix(), current.Flags()),
+	}
+}
+
+func (h standardLogHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h standardLogHandler) Handle(_ context.Context, record slog.Record) error {
+	parts := []string{record.Message}
+	appendAttr := func(attr slog.Attr) bool {
+		attr.Value = attr.Value.Resolve()
+		keyParts := append(append([]string(nil), h.groups...), attr.Key)
+		key := strings.Join(keyParts, ".")
+		parts = append(parts, fmt.Sprintf("%s=%v", key, attr.Value.Any()))
+		return true
+	}
+	for _, attr := range h.attrs {
+		appendAttr(attr)
+	}
+	record.Attrs(appendAttr)
+	return h.logger.Output(2, strings.Join(parts, " "))
+}
+
+func (h standardLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	h.attrs = append(append([]slog.Attr(nil), h.attrs...), attrs...)
+	return h
+}
+
+func (h standardLogHandler) WithGroup(name string) slog.Handler {
+	h.groups = append(append([]string(nil), h.groups...), name)
+	return h
 }
 
 func metricExportInterval() time.Duration {
@@ -240,16 +468,74 @@ the collector before the process stops.
 
 ```go
 func main() {
-	ctx := context.Background()
-	shutdown, err := initOTel(ctx)
+	runCtx, stop := signal.NotifyContext(
+		context.Background(), os.Interrupt, syscall.SIGTERM,
+	)
+	defer stop()
+
+	// This service uses log.Default(). Snapshot its writer, prefix, and flags
+	// before slog.SetDefault rewires it. Native slog apps pass their existing
+	// handler here instead.
+	existingLogHandler := preserveStandardLogger(log.Default())
+	shutdown, err := initOTel(runCtx, existingLogHandler)
 	if err != nil {
 		log.Fatalf("failed to initialize telemetry: %v", err)
 	}
-	defer shutdown(ctx)
 
-	// ... start HTTP server, gRPC server, etc.
+	// Reuse the service's existing graceful server/worker path. It must stop
+	// accepting work and return after runCtx is canceled.
+	runErr := runService(runCtx)
+
+	// Flush with a fresh bounded context: runCtx is already canceled on a
+	// signal and cannot be reused for provider shutdown.
+	flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	shutdownErr := shutdown(flushCtx)
+	if err := errors.Join(runErr, shutdownErr); err != nil {
+		log.Printf("service stopped with error: %v", err)
+	}
 }
 ```
+
+Add `os/signal` and `syscall` to this application's imports. If the service
+already owns signal handling, integrate `shutdown` into that path instead of
+installing a second handler. Do not rely on `defer shutdown(...)` around a
+blocking server: Go skips defers on the default SIGINT/SIGTERM termination
+path, and a canceled request context cannot flush the batch processor.
+
+The example snapshots the detected standard logger, then fans each record out
+to that preserved sink and one `otelslog` handler. This keeps its writer,
+prefix, and flags while the standard `log` package continues through the
+default slog logger on supported Go versions. If source-location flags or a
+custom `Output` implementation cannot be reproduced exactly, leave the stack
+unchanged and report `unsupported-stack`. For a native slog app, reuse its
+actual handler rather than this adapter. Do not pass Go's untouched built-in
+`slog.Default().Handler()` into the fan-out: `slog.SetDefault` also rewires the
+standard logger, so calling that captured default handler can recurse. For a
+project-owned `*slog.Logger`, apply the same fan-out at its construction site
+instead of changing the process default.
+
+Use context-aware logging inside traced work so `otelslog` can correlate the
+record:
+
+```go
+slog.InfoContext(ctx, "order accepted", "order.type", "standard")
+```
+
+An unset `OTEL_LOGS_EXPORTER` is treated as `otlp` only when the logs endpoint
+is absent or matches `localObserverLogsEndpoint`. Adapt that constant to the
+detected Observer service address for Docker/Compose. A non-local explicit
+endpoint on the absent/`otlp` branch returns an error before the provider or
+bridge is constructed; report the operator-owned boundary conflict instead of
+converting it to local or cloud export. Exact `none` and every other explicit
+exporter skip the app-owned provider and bridge without validating the
+operator-owned endpoint: `none` is the opt-out, while another value belongs to
+an existing or operator-configured exporter and must not be supplemented by
+local OTLP. Prove that its provider/exporter/bridge actually exists; if only
+the environment value exists, report `Not configured`. The example assumes
+preflight found no existing log provider or bridge. If it did, reuse that owner
+rather than registering another `LoggerProvider` or exporting the same record
+twice.
 
 ### Wrapping HTTP handlers
 
@@ -424,23 +710,33 @@ The `otelhttp` handler auto-sets ERROR on 5xx responses.
 
 ## OTLP Export Configuration
 
-All configuration is via environment variables. Do not hardcode endpoints.
-The `otlptracehttp` and `otlpmetrichttp` exporters read these automatically.
+Use environment variables for operator-owned configuration. The only endpoint
+literal in the SDK example is the signal-specific local Observer logs fallback,
+which prevents a generic direct-cloud endpoint from becoming the implicit log
+destination. The `otlptracehttp` and `otlpmetrichttp` exporters read their
+configuration automatically.
 
 
-| Variable                      | Default                 | Purpose                       |
-| ----------------------------- | ----------------------- | ----------------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint            |
-| `OTEL_SERVICE_NAME`           | (must be set)           | Service identity in telemetry |
-| `OTEL_METRIC_EXPORT_INTERVAL` | `60000`                 | Metric export interval (ms)   |
-| `OTEL_METRIC_EXPORT_TIMEOUT`  | `30000`                 | Metric export timeout (ms)    |
-| `OTEL_BSP_SCHEDULE_DELAY`     | `5000`                  | Span batch export delay (ms)  |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Common OTLP HTTP endpoint |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
+| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
+| `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
+| `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 
 For local development with the Observer:
 
 ```
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_LOGS_EXPORTER=otlp \
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs \
 OTEL_METRIC_EXPORT_INTERVAL=1000 \
 OTEL_METRIC_EXPORT_TIMEOUT=500 \
 OTEL_BSP_SCHEDULE_DELAY=100 \
@@ -453,6 +749,41 @@ When creating `sdkmetric.NewPeriodicReader`, pass
 `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT`. This makes HTTP
 metrics from `otelhttp`, including `http.server.request.duration` or the older
 `http.server.duration` name, export promptly to Observer.
+
+For Docker or Compose, use the checked-in local Observer service address (for
+example `http://observer:4318/v1/logs`) instead of loopback and adapt
+`localObserverLogsEndpoint` to that same detected value. On the absent/`otlp`
+branch, accept an explicit endpoint only when it matches that local value; do
+not derive the log destination from `OTEL_EXPORTER_OTLP_ENDPOINT` when that
+generic value might point directly to cloud ingest.
+
+### Local Observer application logs and cloud boundary
+
+Local OTLP application logs are the default for a detected supported Go
+logging stack only when the exporter is absent/`otlp` and the logs endpoint is
+absent or matches the detected local Observer receiver. `none` omits the added
+provider, processor, exporter, and bridge while the original stdout/file sink
+continues; another non-OTLP exporter remains operator-owned and its endpoint is
+not interpreted. When traces or metrics use direct-cloud signal endpoints,
+keep the default logs endpoint on local Observer. Never copy a Splunk ingest
+URL, realm, access token, generic cloud header, cloud exporter, or forwarding
+flag into log configuration. For the absent/`otlp` branch, reject a non-local
+explicit logs endpoint before constructing the provider or bridge, preserve it
+as operator configuration, report the boundary conflict, and require the
+operator to resolve it. Also reject any generic OTLP header on the local branch
+even when signal-specific logs headers exist; move the generic credentials to
+trace/metric variables and remove the generic setting. Obstudio cloud
+forwarding remains traces and metrics only.
+
+Add an in-memory SDK log test and a full local Observer runtime check. Emit one
+sanitized application record at each required severity both outside and inside
+an active span, then assert its exact body/category, severity, shared resource
+including `service.name`, and trace/span IDs for the active-span record. Prove
+the original stdout/file sink still receives it, exactly one OTel record exists
+per application log call, `OTEL_LOGS_EXPORTER=none` produces no OTel record
+while preserving the original sink, and the record is visible in the Obstudio
+Explorer. When trace/metric cloud export is enabled, also prove no cloud log
+endpoint, header, exporter, or forwarding path was configured.
 
 ---
 
@@ -470,12 +801,17 @@ metrics from `otelhttp`, including `http.server.request.duration` or the older
   change.
 - **`otel.Tracer` is cheap**: calling `otel.Tracer("name")` returns a
   lightweight handle. It is safe and idiomatic to call at package level.
-- **Singleton providers**: `otel.SetTracerProvider` and `otel.SetMeterProvider`
-  must only be called once. If existing OTel setup exists, extend it.
+- **Singleton providers**: `otel.SetTracerProvider`, `otel.SetMeterProvider`,
+  and `global.SetLoggerProvider` must only be called once. If existing OTel
+  setup exists, extend it.
+- **One log bridge**: use only the official bridge matching the detected logger
+  and prove one OTel record per call. Keep context-aware calls such as
+  `slog.InfoContext` so active trace/span IDs reach the log record.
 - **Metric export interval and timeout**: Always set `sdkmetric.WithInterval`
   and `sdkmetric.WithTimeout` on `sdkmetric.NewPeriodicReader`. Environment
   variables alone are not enough when constructing the reader manually.
-- **Shutdown order**: shut down the TracerProvider before the MeterProvider
-  so in-flight spans are flushed before metrics.
+- **Shutdown order**: shut down the LoggerProvider, TracerProvider, and
+  MeterProvider so their batch processors flush before process exit. Attempt
+  every shutdown even when an earlier one returns an error.
 - **`runtime.Start()`**: this registers goroutine count, memory, and GC
   metrics. Call it after the MeterProvider is set.
