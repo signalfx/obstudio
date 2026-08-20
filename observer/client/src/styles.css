@@ -4235,7 +4235,7 @@ code {
 
   .data-table__head--traces,
   .data-table__row--traces {
-    --table-columns: minmax(80px, 3fr) minmax(80px, 4fr) minmax(80px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);
+    --table-columns: minmax(80px, 3fr) minmax(64px, 1fr) minmax(72px, 1fr);
   }
 
   .data-table__head--logs,

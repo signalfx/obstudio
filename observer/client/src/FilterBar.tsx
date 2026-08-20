@@ -248,7 +248,21 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
     return (
       <div className="filter-builder__composer filter-builder__composer--selected">
         <span className="filter-builder__token">{selectedDefinition.label ?? selectedDefinition.key}</span>
-        <div className="filter-builder__operators" role="radiogroup" aria-label="Filter operator">
+        <div
+          className="filter-builder__operators"
+          role="radiogroup"
+          aria-label="Filter operator"
+          onKeyDown={(event) => {
+            if (!supportsNot) return;
+            if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+              event.preventDefault();
+              const next = draftOp === "eq" ? "neq" : "eq";
+              setDraftOp(next);
+              const btn = event.currentTarget.querySelector<HTMLElement>(`[aria-checked="false"]`);
+              btn?.focus();
+            }
+          }}
+        >
           <button
             className={`filter-builder__operator${draftOp === "eq" ? " filter-builder__operator--active" : ""}`}
             onClick={() => setDraftOp("eq")}
@@ -256,6 +270,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             role="radio"
             aria-checked={draftOp === "eq"}
             aria-label={labels.eq}
+            tabIndex={draftOp === "eq" ? 0 : -1}
           >
             {labels.eq}
           </button>
@@ -267,6 +282,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
               role="radio"
               aria-checked={draftOp === "neq"}
               aria-label={labels.neq}
+              tabIndex={draftOp === "neq" ? 0 : -1}
             >
               {labels.neq}
             </button>
