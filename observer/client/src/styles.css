@@ -2996,13 +2996,15 @@ code {
 
 .filter-builder__value-wrapper {
   position: relative;
+  display: flex;
   flex: 1 1 auto;
   min-width: 80px;
 }
 
 .filter-builder__value {
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 0;
 }
 
 .filter-builder__token {
