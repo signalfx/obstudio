@@ -20,6 +20,7 @@
     "Enumerates the Flask task CRUD routes and health route.",
     "Reports no opentelemetry packages and no SDK initialization.",
     "Mentions opentelemetry-instrumentation-flask as the auto-instrumentation gap.",
-    "Calls out request duration, rate, errors, and OTLP exporter configuration."
+    "Calls out request duration, rate, errors, and OTLP exporter configuration.",
+    "Classifies the missing supported stdlib application-log bridge and local Observer exporter as a required default gap, while preserving explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
   ]
 }

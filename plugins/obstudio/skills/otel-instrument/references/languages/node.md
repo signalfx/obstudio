@@ -25,6 +25,9 @@ detected in the codebase. Only install what the project actually uses.
 | `kafkajs` | `@opentelemetry/instrumentation-kafkajs` | Producer/consumer spans with topic |
 | `graphql` | `@opentelemetry/instrumentation-graphql` | GraphQL resolve spans |
 | `aws-sdk` / `@aws-sdk/*` | `@opentelemetry/instrumentation-aws-sdk` | AWS service call spans |
+| `console.*` | `@opentelemetry/instrumentation-console` 0.3.0 | Application LogRecords while preserving console output; Node `^18.19.0 || >=20.6.0` and `@opentelemetry/api >=1.9.1` only |
+| `pino` | `@opentelemetry/instrumentation-pino` | Log sending plus trace/span correlation |
+| `winston` | `@opentelemetry/instrumentation-winston` + `@opentelemetry/winston-transport` | Log sending plus trace/span correlation |
 
 **Registration order matters**: `@opentelemetry/instrumentation-http` must be
 registered before framework-specific instrumentations (Express, Fastify, etc.)
@@ -40,9 +43,12 @@ requirement when assessing instrumentation coverage.
 
 ```bash
 npm install @opentelemetry/sdk-node \
+  @opentelemetry/api \
   @opentelemetry/exporter-trace-otlp-http \
   @opentelemetry/exporter-metrics-otlp-http \
+  @opentelemetry/exporter-logs-otlp-proto \
   @opentelemetry/sdk-metrics \
+  @opentelemetry/sdk-logs \
   @opentelemetry/instrumentation-http \
   @opentelemetry/resources \
   @opentelemetry/semantic-conventions
@@ -59,6 +65,24 @@ project uses a known framework such as Express, Fastify, Koa, NestJS, or a
 known client library. The manifest should name the matching instrumentation
 packages directly.
 
+Install only the detected logging bridge. For detected `console.*` calls, the
+current official bridge is version 0.3.0 and requires Node
+`^18.19.0 || >=20.6.0` plus `@opentelemetry/api >=1.9.1`; verify the
+project-selected runtime and locked API version before adding it:
+
+```bash
+npm install @opentelemetry/instrumentation-console@0.3.0
+```
+
+If either selected version is older, do not force an application/toolchain
+upgrade just to add the bridge. Report `unsupported-stack` and the exact
+runtime/API prerequisite instead.
+
+For Pino install `@opentelemetry/instrumentation-pino`. For Winston install
+both `@opentelemetry/instrumentation-winston` and
+`@opentelemetry/winston-transport` because the instrumentation uses that
+transport for log sending.
+
 ---
 
 ## SDK Initialization
@@ -72,11 +96,68 @@ application code runs.
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
+import { ConsoleInstrumentation } from '@opentelemetry/instrumentation-console';
 // ... add other detected framework/client instrumentations here
+
+const LOCAL_OBSERVER_LOGS_ENDPOINT = 'http://localhost:4318/v1/logs';
+
+function defaultLocalLogConfiguration() {
+  const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
+  if (configured && configured !== 'otlp') {
+    // `none` disables logs. Any other explicit exporter and its bridge belong
+    // entirely to a proven operator-owned setup; do not add an Obstudio bridge.
+    return {
+      logRecordProcessors: undefined,
+      addDefaultLocalLogBridge: false,
+    };
+  }
+
+  const protocol = (
+    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || 'http/protobuf'
+  ).trim().toLowerCase();
+  if (protocol !== 'http/protobuf') {
+    throw new Error(
+      `select the official exporter matching OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=${protocol}`,
+    );
+  }
+
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim();
+  if (
+    endpoint &&
+    endpoint !== LOCAL_OBSERVER_LOGS_ENDPOINT
+  ) {
+    throw new Error(
+      'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is not the detected local Observer; ' +
+      'refusing to create an Obstudio log provider or bridge',
+    );
+  }
+
+  if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
+    throw new Error(
+      'move generic OTLP headers to trace/metric signal variables and remove ' +
+      'OTEL_EXPORTER_OTLP_HEADERS',
+    );
+  }
+
+  // The exporter may read OTEL_EXPORTER_OTLP_LOGS_HEADERS. The generic header
+  // source was rejected above because the SDK merges rather than replaces it.
+  const exporter = new OTLPLogExporter({
+    url: endpoint || LOCAL_OBSERVER_LOGS_ENDPOINT,
+  });
+  return {
+    logRecordProcessors: [new BatchLogRecordProcessor({ exporter })],
+    addDefaultLocalLogBridge: true,
+  };
+}
+
+const { logRecordProcessors, addDefaultLocalLogBridge } =
+  defaultLocalLogConfiguration();
 
 const sdk = new NodeSDK({
   resource: resourceFromAttributes({
@@ -88,17 +169,147 @@ const sdk = new NodeSDK({
     exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
     exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
   }),
+  ...(logRecordProcessors ? { logRecordProcessors } : {}),
   instrumentations: [
     new HttpInstrumentation(),
     new ExpressInstrumentation(),
+    // Add this only for the Obstudio-owned absent/`otlp` branch, after proving
+    // the selected Node runtime is supported and no bridge already owns it.
+    ...(addDefaultLocalLogBridge ? [new ConsoleInstrumentation()] : []),
     // ... add other detected instrumentations here
   ],
 });
 
 sdk.start();
 
-process.on('SIGTERM', () => sdk.shutdown());
+let shutdownPromise: Promise<void> | undefined;
+
+export function shutdownOnce(): Promise<void> {
+  // Integrate this function into an existing graceful shutdown path after the
+  // server/worker stops accepting work and emits its final application logs.
+  shutdownPromise ??= sdk.shutdown();
+  return shutdownPromise;
+}
+
+type StopAndDrain = () => void | Promise<void>;
+let signalHandlersInstalled = false;
+
+export function installGracefulSignalHandlers(
+  stopAndDrain: StopAndDrain,
+): void {
+  if (signalHandlersInstalled) {
+    throw new Error('graceful signal handlers are already installed');
+  }
+  signalHandlersInstalled = true;
+  let signalShutdownStarted = false;
+  const handleSignal = (forcedExitCode: number): void => {
+    if (signalShutdownStarted) {
+      process.exit(forcedExitCode);
+    }
+    signalShutdownStarted = true;
+    const forcedExit = setTimeout(() => process.exit(forcedExitCode), 10_000);
+    void (async () => {
+      let failed = false;
+      try {
+        // This must stop intake, drain in-flight work, and emit final logs.
+        await stopAndDrain();
+      } catch (error: unknown) {
+        failed = true;
+        console.error('Application drain failed', error);
+      }
+      try {
+        await shutdownOnce();
+      } catch (error: unknown) {
+        failed = true;
+        console.error('OpenTelemetry shutdown failed', error);
+      }
+      clearTimeout(forcedExit);
+      process.exit(failed ? 1 : 0);
+    })();
+  };
+
+  process.once('SIGTERM', () => handleSignal(143));
+  process.once('SIGINT', () => handleSignal(130));
+}
 ```
+
+This complete example assumes the detected application logs use `console.*`,
+preflight found no existing bridge, and
+that the selected Node runtime satisfies the console instrumentation's
+version range. The instrumentation emits one OTel LogRecord and still calls the
+original console method, so console output remains. If `console.*` is the only
+stack on an older Node runtime, do not change the toolchain or invent a bridge;
+report `unsupported-stack` with the required Node version. Integrate
+`shutdownOnce()` into the app's existing graceful shutdown sequence after it
+stops accepting work and emits final application logs, then let that owner
+terminate the process. Do not install another signal owner in that case. When
+the application has no graceful owner, call the exported handler installer
+with its actual stop-and-drain primitive after creating the server or worker:
+
+```typescript
+import { installGracefulSignalHandlers } from './instrumentation';
+
+const server = app.listen(port);
+installGracefulSignalHandlers(
+  () => new Promise<void>((resolve, reject) => {
+    server.close((error?: Error) => error ? reject(error) : resolve());
+  }),
+);
+```
+
+Adapt the callback to drain every detected queue/worker as well as the HTTP
+server. The handler always attempts telemetry shutdown after that callback
+settles, even when draining reports an error. Its bounded timeout prevents a
+stalled drain or exporter from leaving the process alive indefinitely; a
+successful drain and flush exits `0`, a drain/export failure exits `1`, and a
+timeout or second signal uses the conventional nonzero signal exit code.
+
+Adapt `LOCAL_OBSERVER_LOGS_ENDPOINT` to the detected Observer service address
+for Docker/Compose. On the absent/`otlp` branch, any other explicit endpoint
+throws before `NodeSDK` or the logging bridge is constructed. Report that
+operator-owned boundary conflict instead of converting it to local or cloud
+export.
+
+With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
+For another explicit exporter such as `console`, leave provider, exporter, and
+bridge ownership entirely to the proven operator-owned setup; this helper adds
+none of them. Verify that setup already owns exactly one detected application
+bridge. If ownership cannot be proven, report `Not configured`; an environment
+value alone is not evidence of a working pipeline. Adding
+`ConsoleInstrumentation` here would duplicate console output when NodeSDK owns
+the console exporter.
+
+The processor construction above matches current `@opentelemetry/sdk-logs`
+0.221.x, whose constructor receives `{ exporter }`. Older project-pinned SDK
+versions used `new BatchLogRecordProcessor(exporter)`; inspect the installed
+version and retain its documented signature instead of changing versions just
+to copy this example.
+
+For Pino or Winston, replace `ConsoleInstrumentation` with exactly one detected
+bridge:
+
+```typescript
+// Pino v7+ log sending; keep its existing destination/transports.
+new PinoInstrumentation({
+  disableLogSending: false,
+  disableLogCorrelation: false,
+})
+
+// Winston v3 log sending; keep its existing Console/File transports.
+new WinstonInstrumentation({
+  disableLogSending: false,
+  disableLogCorrelation: false,
+})
+```
+
+Import the matching class from `@opentelemetry/instrumentation-pino` or
+`@opentelemetry/instrumentation-winston`. Winston's instrumentation-managed
+sending already installs the OTel transport. Do not also add
+`OpenTelemetryTransportV3`; doing both exports each record twice. Similarly,
+do not combine Pino instrumentation sending with
+`pino-opentelemetry-transport`, which owns an independent provider. If the app
+already uses one of those transports, keep it as the single owner and do not
+add instrumentation log sending.
 
 The explicit `exportIntervalMillis` and `exportTimeoutMillis` are required for
 local and eval runs. Do not rely on metric reader defaults; they can be too slow
@@ -135,7 +346,9 @@ If the repo already uses `npm run start`, `npm run dev`, `tsx`, `ts-node`, or `n
 
 If the project already runs in Docker:
 ```dockerfile
-ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENV OTEL_LOGS_EXPORTER=otlp
+ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4318/v1/logs
 CMD ["node", "--require", "./instrumentation.js", "app.js"]
 ```
 
@@ -241,11 +454,19 @@ Express/Fastify auto-instrumentation automatically sets ERROR on 5xx responses.
 
 ## OTLP Export Configuration
 
-All configuration is via environment variables. Do not hardcode endpoints.
+Use environment variables for operator-owned configuration. The only endpoint
+literal in the SDK example is the signal-specific local Observer logs fallback,
+which prevents a generic direct-cloud endpoint from becoming the implicit log
+destination.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP HTTP endpoint |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Obstudio-owned local log path, even when logs headers are set |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or detected-local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | `http://localhost:4318/v1/logs` for host/native Obstudio runs | Signal-specific local application-log destination |
+| `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
 | `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -254,6 +475,8 @@ All configuration is via environment variables. Do not hardcode endpoints.
 For local development with the Observer, run with:
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+    OTEL_LOGS_EXPORTER=otlp
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
     OTEL_METRIC_EXPORT_INTERVAL=1000
     OTEL_METRIC_EXPORT_TIMEOUT=500
     OTEL_BSP_SCHEDULE_DELAY=100
@@ -264,6 +487,31 @@ and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`
 This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
 `http.server.request.duration` when stable HTTP semantic conventions are
 enabled, export promptly to Observer.
+
+### Local Observer application logs and cloud boundary
+
+Local OTLP application logs are the default for a detected supported Node.js
+logging stack only when the exporter is absent/`otlp` and the logs endpoint is
+absent or matches the detected local Observer receiver. `none` omits the added
+processor and bridge while the original console/file destination continues;
+another non-OTLP exporter remains operator-owned and its endpoint is not
+interpreted. When traces or metrics use direct-cloud signal endpoints, keep
+the logs endpoint on local Observer. Never copy a Splunk ingest URL, realm,
+access token, generic cloud header, cloud exporter, or forwarding flag into log
+configuration. For the absent/`otlp` branch, reject a non-local explicit logs
+endpoint before constructing `NodeSDK` or the bridge, preserve it as operator
+configuration, report the cloud-boundary conflict, and require the operator to
+resolve it. Also reject any generic OTLP header on the local branch even when
+signal-specific logs headers exist; move the generic credentials to
+trace/metric variables and remove the generic setting. Obstudio cloud
+forwarding remains traces and metrics only.
+
+Verify one sanitized record at each required severity both outside and inside
+an active span. Assert body/category, severity, shared `service.name`,
+trace/span IDs when active, presence in the original console/file sink, one
+record in Observer, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
+That record-count assertion is required for Console, Pino, and Winston because
+their transport/instrumentation combinations can otherwise duplicate logs.
 
 ---
 
@@ -289,8 +537,14 @@ Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included
   order-sensitive.
 - **Singleton SDK**: Never call `new NodeSDK()` more than once. If existing
   OTel setup exists, extend its instrumentation array.
-- **Graceful shutdown**: Always hook `SIGTERM` to `sdk.shutdown()` to flush
-  pending telemetry.
+- **Graceful shutdown**: Call the idempotent SDK shutdown from the app's
+  existing termination sequence after intake stops, then terminate. Only when
+  no owner exists, install bounded `SIGTERM`/`SIGINT` handlers that flush and
+  explicitly exit; awaiting `sdk.shutdown()` without exiting can leave a
+  server process alive after its default signal behavior was intercepted.
+- **One logging bridge**: choose Console, Pino, or Winston based on the actual
+  logging calls. Do not add multiple bridges to the same record path, and do
+  not pair instrumentation-managed sending with a second OTel transport.
 - **Metric reader option**: Use the `NodeSDK` option `metricReader` exactly as
   shown above. Do not write `metricReaders` unless the installed SDK version
   documents that option; older versions ignore it and fall back to env-based

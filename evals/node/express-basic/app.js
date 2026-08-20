@@ -26,6 +26,7 @@ app.get("/tasks/:id", (req, res) => {
 app.post("/tasks", (req, res) => {
   const task = { id: nextId++, title: req.body.title || "", done: false };
   tasks.push(task);
+  console.warn("runtime request completed");
   res.status(201).json(task);
 });
 
@@ -45,6 +46,26 @@ app.delete("/tasks/:id", (req, res) => {
 });
 
 const port = process.env.PORT || 8000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`listening on :${port}`);
 });
+
+let shutdownStarted = false;
+
+function shutdown() {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
+  server.close((error) => {
+    if (error) {
+      console.error("runtime shutdown failed", error);
+      process.exitCode = 1;
+      return;
+    }
+    console.warn("runtime shutdown completed");
+    process.exitCode = 0;
+  });
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);

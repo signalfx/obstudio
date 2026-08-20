@@ -9,6 +9,7 @@ services:
       - HOST=0.0.0.0
       - PORT=3000
       - OTLP_HTTP_PORT=4318
+      - OTLP_GRPC_HOST=127.0.0.1
       - OTLP_GRPC_PORT=4317
 
   redis:

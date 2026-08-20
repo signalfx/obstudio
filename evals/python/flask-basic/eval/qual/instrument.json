@@ -18,6 +18,11 @@
   "rubric": [
     "Initializes the SDK once in a separate file.",
     "Uses Resource service.name and env-driven OTLP endpoint configuration.",
+    "Configures one current opentelemetry-instrumentation-logging stdlib bridge backed by a shared-resource LoggerProvider, BatchLogRecordProcessor, and OTLP log exporter to the signal-specific local Observer /v1/logs endpoint by default; uses inject_trace_context=True without a format change on 0.64b0+/1.43.0+ and omits that unsupported argument on older locked versions.",
+    "Exports the fixture's request-context warning as one record with its body, WARN/WARNING severity, python-flask-basic resource identity, and non-empty trace and span IDs while preserving the original stdout/stderr or file handlers without duplicate records.",
+    "Honors OTEL_LOGS_EXPORTER=none and another explicit operator-owned exporter by installing no local log provider, exporter, or bridge, while leaving the original application logging sink active; only none disables the default Python logging bridge, and another exporter preserves the operator's OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION ownership.",
+    "Keeps generic or signal-specific cloud endpoints, headers, credentials, and forwarding out of the application-log path; direct cloud remains trace/metric-only and logs stay local unless explicitly operator-owned.",
+    "Registers one lifecycle shutdown callback that uninstalls the logging bridge and flushes the log provider before the shared metric and trace providers finish.",
     "Calls FlaskInstrumentor().instrument_app(app) or an equivalent setup before serving requests.",
     "Records exceptions or sets error status where custom error handling exists.",
     "Keeps the Flask app behavior and routes intact."

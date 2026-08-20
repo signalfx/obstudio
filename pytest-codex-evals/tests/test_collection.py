@@ -5,6 +5,10 @@ import json
 import pytest
 from jsonschema.exceptions import ValidationError
 
+from pytest_codex_evals.definitions.runtime import (
+    RuntimeExpectations,
+    ServiceLogExpectation,
+)
 from pytest_codex_evals.schema_resources import schema_validator
 
 
@@ -240,6 +244,188 @@ def test_eval_kind_filters_collection_by_file_role(pytester: pytest.Pytester):
     runtime = pytester.runpytest("--collect-only", "-q", "--skill", str(skill_dir), "--codex-eval-kind", "runtime")
     runtime.assert_outcomes()
     runtime.stdout.fnmatch_lines(["evals/sample/service/eval/runtime/sample.json::sample-skill::sample/service::runtime", "1 test collected*"])
+
+
+def test_runtime_eval_collects_shutdown_correlation_and_service_log_contract(
+    pytester: pytest.Pytester,
+):
+    write_eval_repo(pytester)
+    skill_dir = pytester.path / "skills" / "sample-skill"
+    runtime_dir = pytester.path / "evals" / "sample" / "service" / "eval" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "stop_services_before_validation": ["app"],
+                "expect": {
+                    "endpoints": [
+                        {
+                            "id": "logs",
+                            "url": "/api/query/logs",
+                            "record_checks": [
+                                {
+                                    "id": "request-log",
+                                    "match": {"body": "request completed"},
+                                    "exact_count": 1,
+                                    "correlates_with_trace": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "service_logs": [
+                        {
+                            "id": "preserved-sink",
+                            "occurrences": {"request completed": 1},
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    (runtime_dir / "sample.json").write_text(
+        json.dumps(definition, indent=2),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(
+        "--collect-only",
+        "-q",
+        "--skill",
+        str(skill_dir),
+        str(runtime_dir),
+    )
+
+    result.assert_outcomes()
+    result.stdout.fnmatch_lines(
+        [
+            "evals/sample/service/eval/runtime/sample.json::sample-skill::sample/service::runtime",
+            "1 test collected*",
+        ]
+    )
+
+
+def test_runtime_schema_rejects_service_log_expectation_without_assertions():
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "expect": {
+                    "endpoints": [{"id": "logs", "url": "/api/query/logs"}],
+                    "service_logs": [{"id": "no-op"}],
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        schema_validator("runtime.schema.json").validate(definition)
+
+
+def test_runtime_schema_accepts_service_log_only_expectation():
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "expect": {
+                    "service_logs": [
+                        {
+                            "id": "preserved-sink",
+                            "contains_all": ["request completed"],
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+
+    schema_validator("runtime.schema.json").validate(definition)
+
+
+def test_runtime_schema_accepts_service_log_only_model_shape_with_empty_endpoints():
+    expectations = RuntimeExpectations(
+        service_logs=[
+            ServiceLogExpectation(
+                id="preserved-sink",
+                contains_all=["request completed"],
+            )
+        ]
+    )
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "expect": expectations.model_dump(mode="json"),
+            }
+        ],
+    }
+
+    schema_validator("runtime.schema.json").validate(definition)
+
+
+def test_runtime_schema_rejects_unknown_expectation_key():
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "expect": {
+                    "endpoints": [{"id": "logs", "url": "/api/query/logs"}],
+                    "service_logz": [
+                        {"id": "misspelled-sink", "contains_all": ["request"]}
+                    ],
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        schema_validator("runtime.schema.json").validate(definition)
+
+
+def test_runtime_schema_rejects_stopping_observer_before_validation():
+    definition = {
+        "skill": "sample-skill",
+        "prompts": [{"id": "runtime", "task": "Run runtime telemetry."}],
+        "checks": [
+            {
+                "id": "runtime",
+                "description": "Runtime check.",
+                "compose_file": "docker-compose.yml",
+                "stop_services_before_validation": ["observer"],
+                "expect": {
+                    "service_logs": [
+                        {
+                            "id": "preserved-sink",
+                            "contains_all": ["request completed"],
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        schema_validator("runtime.schema.json").validate(definition)
 
 
 def test_role_schemas_reject_cross_role_fields():

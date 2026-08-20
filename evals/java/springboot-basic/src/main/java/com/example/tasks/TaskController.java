@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class TaskController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskController.class);
 
     private final List<Task> tasks = Collections.synchronizedList(new ArrayList<>(List.of(
             new Task(1, "Buy groceries", false),
@@ -49,6 +53,7 @@ public class TaskController {
     public ResponseEntity<Task> create(@RequestBody Map<String, String> body) {
         Task task = new Task(nextId.getAndIncrement(), body.get("title"), false);
         tasks.add(task);
+        LOGGER.warn("runtime request completed");
         return ResponseEntity.status(HttpStatus.CREATED).body(task);
     }
 

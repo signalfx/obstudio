@@ -1,8 +1,8 @@
 ---
 name: otel-instrument
 description: >-
-  Add OpenTelemetry observability to applications using auto-instrumentation
-  and optional custom spans/metrics, write separate instrumentation Markdown
+  Add OpenTelemetry traces, metrics, and local application logs using
+  auto-instrumentation and optional custom signals, write separate instrumentation Markdown
   and HTML reports,
   and run verification unless explicitly skipped or blocked. Use when the user
   types $otel-instrument, asks to "add OTel", "add tracing", "add metrics",
@@ -17,7 +17,8 @@ description: >-
 
 # Instrument
 
-Add OpenTelemetry observability to applications using auto-instrumentation and optional custom spans/metrics.
+Add OpenTelemetry observability to applications using auto-instrumentation,
+default local application-log export, and optional custom spans or metrics.
 
 Prefer the application's current runtime shape. If the project already uses Docker/Compose or Kubernetes, fit instrumentation into that path. If the user does not have Docker or does not want Docker, do not introduce containers just for observability; use the host/native runtime patterns.
 
@@ -65,9 +66,13 @@ Bind `.observe/otel-instrumentation.json` to the entire normalized selection
 with `selection_sha256`, not only to its audit and executable IDs. This digest
 includes `decision_answers`; changing an answer invalidates older
 instrumentation even when `approved_ids` is unchanged.
-When no canonical audit exists, stop before application-code edits and ask the
-user to run `$otel-audit` first. Do not infer scope from generated Markdown reports
-or fabricate audit IDs and selection artifacts.
+When no canonical audit exists, a direct request for the standard
+auto-instrumentation and default-local-log baseline may proceed after this
+preflight without fabricating audit IDs or selection artifacts. Keep that
+no-audit path limited to the standard baseline: stop before custom signals,
+incident-readiness or GenAI work, or any request that needs finding-level scope,
+and ask the user to run `$otel-audit` first. Never infer scope from generated
+Markdown reports.
 
 - Confirm the language and framework from actual dependency or source files
 - Read `./references/project-runtime-validation.md`, inventory the repository's
@@ -95,6 +100,24 @@ or fabricate audit IDs and selection artifacts.
   bundled scanner is available and reconcile its candidates with source.
   Existing ownership of any one signal makes this an incremental integration;
   it does not prove that the other signals are configured.
+- Inventory the application logging stack and every stdout, stderr, file,
+  platform, and existing OTLP sink. For a supported Python, Node.js, Java, or
+  Go logging stack, local Observer OTLP log export is part of the default
+  Obstudio baseline only when the exporter is absent or `otlp` and the logs
+  endpoint is absent or exactly the detected local Observer receiver. Treat
+  `OTEL_LOGS_EXPORTER=none` as an explicit opt-out, and preserve every other
+  explicit exporter as operator-owned without validating or supplementing its
+  endpoint. An explicit non-local logs endpoint with an absent or `otlp`
+  exporter is an operator-owned boundary conflict: do not construct or enable
+  an Obstudio log provider, exporter, or bridge; fail closed and report the
+  configuration for operator resolution. Plan one log provider, one exporter
+  path, and one bridge; preserve existing stdout/file sinks and identify any
+  duplicate bridge before editing.
+- Apply that log baseline to direct instrumentation requests even when no
+  canonical audit exists. A request that excludes custom business spans limits
+  span work only; it is not a log-export opt-out. Only the explicit exporter,
+  endpoint, and supported-stack conditions above may suppress the default local
+  log pipeline.
 - When `.observe/otel-audit.json` exists, use only the validated selected
   findings and their referenced `verification.scenarios` and environments as
   the implementation and validation plan. Preserve every stable finding,
@@ -379,9 +402,11 @@ Always write `.observe/otel-instrumentation.md`. In canonical flow,
 instrumentation-HTML authority: write and validate
 `.observe/otel-instrumentation.json`, render
 `.observe/otel-instrumentation.html`, keep every selected finding exactly once,
-and leave `.observe/otel.html` as the audit surface. When canonical JSON is
-absent, stop and ask the user to run `$otel-audit` first; do not infer scope
-from generated Markdown reports.
+and leave `.observe/otel.html` as the audit surface. On the permitted direct
+baseline path where canonical JSON is absent, write the technical Markdown
+report only, identify the source audit and selected scope as `not applicable
+(direct baseline)`, and do not create instrumentation JSON/HTML or fabricate
+audit IDs. Do not infer scope from generated Markdown reports.
 Users open `.observe/otel-instrumentation.html` after instrumentation to review
 the selected findings, what code/config changed, how observability improves,
 telemetry proof, product-delivery status, and remaining prerequisites. Do not
@@ -396,8 +421,8 @@ Use this shape:
 # OTel Instrumentation Report: <service>
 
 **Result:** Pass | Partial | Fail | Blocked
-**Source audit:** `.observe/otel-audit.json`
-**Selected scope:** `.observe/otel-selection.json`
+**Source audit:** `.observe/otel-audit.json` | not applicable (direct baseline)
+**Selected scope:** `.observe/otel-selection.json` | not applicable (direct baseline)
 **Verification report:** `.observe/otel-verify.md` | not run | blocked
 **Detector report:** `.observe/detectors.md` | not requested | blocked
 
@@ -622,10 +647,10 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 | Language | Reference | Key packages |
 |----------|-----------|-------------|
-| Python   | `./references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, framework instrumentation packages |
-| Node.js  | `./references/languages/node.md` | `@opentelemetry/sdk-node`, `@opentelemetry/instrumentation-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/sdk-metrics`, detected framework instrumentation packages |
+| Python   | `./references/languages/python.md` | `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, the stdlib logging bridge, framework instrumentation packages |
+| Node.js  | `./references/languages/node.md` | `@opentelemetry/sdk-node`, trace/metric/log OTLP exporters, `@opentelemetry/sdk-logs`, the detected logging bridge, framework instrumentation packages |
 | Java     | `./references/languages/java.md` | OTel Java agent (javaagent JAR) |
-| Go       | `./references/languages/go.md` | `go.opentelemetry.io/otel`, `go.opentelemetry.io/contrib` |
+| Go       | `./references/languages/go.md` | `go.opentelemetry.io/otel`, the log SDK and OTLP log exporter, and the detected `go.opentelemetry.io/contrib/bridges` package |
 
 ### 3. Instrument
 
@@ -638,6 +663,10 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - Reuse the app's current startup entrypoint instead of replacing it with a new Docker-only path
 - For Python, Node.js, and Java, prefer preload or agent wrappers plus env vars over large code refactors when auto-instrumentation already covers the framework
 - For host/native runtimes, default OTLP endpoints to loopback (`http://localhost:4318`) unless the existing platform already provides a collector address
+- For a supported application logging stack, default logs to the local Observer
+  receiver with a signal-specific endpoint such as
+  `http://localhost:4318/v1/logs`. Do not let a generic direct-cloud OTLP
+  endpoint become the implicit log destination.
 - For Python web services, do not satisfy implementation by only changing a Makefile, Docker command, or shell wrapper. Add an explicit setup module such as `otel_setup.py` and wire the app entry point to call it before framework instrumentation is activated.
 - For Java/Spring Boot, prefer the OpenTelemetry Java agent. The final response must state the service-name setting (`OTEL_SERVICE_NAME` or `otel.service.name`), OTLP endpoint setting (`OTEL_EXPORTER_OTLP_ENDPOINT` or `otel.exporter.otlp.endpoint`), and that the agent provides HTTP server spans plus request duration metrics.
 
@@ -669,6 +698,18 @@ Apply auto-instrumentation first, then add manual spans for key business operati
   configures every exporter. A successful trace export does not prove metrics
   or logs; exercise each configured signal and repair protocol errors before
   reporting it as working.
+- Keep local application-log export separate from cloud export. When a generic
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is a direct-cloud endpoint, configure traces and
+  metrics with their signal-specific endpoints and give logs a local Observer
+  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`. Never copy a Splunk realm, ingest URL,
+  access token, auth header, or cloud exporter into log configuration. Optional
+  Obstudio cloud forwarding remains traces and metrics only; never add a log
+  forwarding flag or cloud logs pipeline. Remove a generic
+  `OTEL_EXPORTER_OTLP_HEADERS` value from the shared startup surface after
+  moving it to trace- and metric-specific headers; reject it from an
+  Obstudio-owned local log path even when
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` is also set, because SDKs may merge generic
+  and signal-specific headers.
 - For Java trace wiring, DI binding, and provider rules, follow `./references/languages/java.md` (Implementation Rules section).
 - Place OTel initialization code in a separate file.
 - Minimize changes to existing code. Do not move functions between files.
@@ -907,31 +948,84 @@ Apply auto-instrumentation first, then add manual spans for key business operati
 - For custom attribute names use `{domain}.{noun}.{adjective}` format.
 - Span names must be low-cardinality (no IDs, no variable path segments).
 - Metric attributes must avoid high cardinality.
-- Preserve existing env-var patterns for telemetry config instead of hardcoding endpoints.
+- Preserve existing env-var patterns for operator-owned telemetry config. The
+  only endpoint literal the default log path may introduce is the
+  signal-specific local Observer fallback; it must not inherit a generic
+  direct-cloud endpoint.
 - If the app is a library, provide an opt-in setup path rather than forcing SDK initialization on import.
 - Keep the codebase idiomatic. Match the repo's dependency manager, config style, and lifecycle patterns.
 - Obtain OTel Tracer, Meter once during startup and reuse it. Do not call `getTracer` or `getMeter` in hot paths.
 - Create metric instruments once during startup and reuse them. Do not create instruments in hot paths.
 - Metric instruments must be created with appropriate unit and description parameters.
 
-#### Log Export Scope
+#### Default Local Application Log Export
 
-- Classify application logs as `correlation-only`, `otlp`, or `not requested`
-  during preflight.
-- Do not treat MDC/trace-context fields in stdout as OTLP log export.
-- Do not silently add an OTLP log bridge when the user or audit contract does
-  not require explorer-visible logs; log export can affect cost, privacy, and
-  duplicate ingestion.
-- When OTLP logs are required, configure the official bridge/exporter for the
-  detected logging stack and add proof for body/category, severity,
-  trace/span correlation, redaction, resource identity, and OTLP visibility.
-- Report absent requested export as `Not configured`, not `Not proven`.
+- Classify application logs during preflight as `local-otlp-default`,
+  `explicitly-disabled`, `operator-owned`, `correlation-only`, or
+  `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an
+  OTLP log pipeline.
+- For a supported Python, Node.js, Java, or Go application logging stack,
+  configure local Observer OTLP export by default. Use the official log SDK,
+  batch processor/exporter, and the official bridge for the detected stack.
+  Keep one `LoggerProvider` and exactly one bridge/export path per record.
+- Preserve operator ownership. Never overwrite an explicitly set
+  `OTEL_LOGS_EXPORTER` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
+  `OTEL_LOGS_EXPORTER=none` disables the added provider/exporter and bridge.
+  Another explicit exporter is operator-owned and must not be supplemented
+  with a second local pipeline, but its provider/exporter/bridge must be proven;
+  an environment value by itself is not evidence of export. When the exporter
+  is absent or explicitly `otlp`, an explicit signal endpoint may be used by
+  the Obstudio-owned pipeline only when it exactly matches the detected local
+  Observer receiver for the selected runtime and protocol. Adapt the local
+  endpoint to the checked-in Docker/Compose service address when applicable.
+  Default an absent exporter to `otlp` and an absent endpoint to that detected
+  local receiver. If the explicit endpoint is non-local or direct-cloud, do not
+  construct or enable the Obstudio provider/exporter/bridge; fail closed and
+  report the operator-owned boundary conflict. Do not validate the logs
+  endpoint on the `none` or other non-OTLP exporter branches, because those
+  branches remain wholly operator-owned.
+- Preserve existing stdout, stderr, file, and platform logging sinks. Add the
+  OTel bridge alongside them; do not replace their handlers, appenders,
+  transports, levels, formatters, or rotation policy. If the stack cannot fan
+  out safely, keep it `unsupported-stack` and report the exact missing bridge
+  instead of silently removing the existing sink.
+- Never derive the default log destination from a generic endpoint that points
+  directly at a cloud ingest service. Use a signal-specific local logs endpoint
+  and keep any direct-cloud endpoints signal-specific to traces and metrics.
+  Obstudio-to-Splunk cloud forwarding is traces and metrics only. Do not add a
+  cloud log endpoint, cloud log header/token, cloud log exporter, or log
+  forwarding flag.
+- Resolve the log protocol independently. The local baseline is
+  `http/protobuf` with `/v1/logs`; when an explicit signal-specific protocol is
+  different, select its matching official exporter and endpoint shape or
+  report it unsupported. Never silently send HTTP to a gRPC endpoint. A generic
+  header must not be inherited or merged into logs: move
+  `OTEL_EXPORTER_OTLP_HEADERS` to trace/metric signal variables and remove the
+  generic value before enabling the local log path, even when an explicit
+  signal-specific log header is present. Preserve the operator-owned
+  `OTEL_EXPORTER_OTLP_LOGS_HEADERS` value after the generic value is removed.
+- Before adding a bridge, search for auto-instrumentation, handlers, appenders,
+  transports, hooks, and worker-thread exporters that already send the same
+  record to OTel. Choose one owner and disable or omit the overlap. Preserve
+  correlation injection without creating a second exported record.
 - Apply privacy checks to the final logging pipeline: formatter fields,
   adapters, MDC/context variables, framework access logs, and exception
   rendering. Removing IDs from one `logger.*` call is insufficient when a
   formatter or access logger adds them back. Keep raw request/user/tenant/
   session IDs, raw dynamic URLs, exception text, and tracebacks out of the
   approved application-log surface unless the policy explicitly permits them.
+- Add focused and full-runtime proof for log body/category, severity, shared
+  resource identity, trace/span correlation in an active span, redaction,
+  preservation of the existing sink, explicit `none` opt-out, and exactly one
+  OTLP record per application log call. When cloud trace/metric forwarding is
+  configured, also prove the log is visible in local Observer and no cloud log
+  exporter or forwarding path was configured.
+- When `OTEL_LOGS_EXPORTER=none`, disable or bypass any previously discovered
+  application-log provider/bridge as needed to prove zero OTLP application log
+  records; leaving an already-active bridge in place is not a valid opt-out.
+- Report a missing default or requested local export pipeline as `Not
+  configured`, not `Not proven`. Use `Not proven` only after configuration
+  exists but its required runtime scenario did not run.
 
 #### Language-Specific Musts
 
@@ -939,7 +1033,7 @@ Python:
 - Add explicit dependency entries for `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, and each detected framework/client instrumentation package.
 - Create a separate setup file such as `otel_setup.py`, `telemetry.py`, or `instrumentation.py`.
 - Configure a shared `Resource.create({"service.name": ...})`, trace provider,
-  meter provider, and requested log provider/exporters in that setup file only
+  meter provider, and default local log provider/exporter in that setup file only
   for signals the process does not already own. If a source-owned provider
   exists, move or adapt its construction into the shared setup while preserving
   existing wrappers, views, file-export modes, and tests; do not create a
@@ -952,6 +1046,14 @@ Python:
   after the application has started serving.
 - For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
 - Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
+- For stdlib `logging` (including Flask/Django logging), use the current
+  `opentelemetry-instrumentation-logging` bridge backed by `LoggerProvider`,
+  `BatchLogRecordProcessor`, and the selected OTLP log exporter. Its guarded
+  setup must preserve logging configuration performed before or after OTel;
+  do not call `basicConfig(force=True)` or replace stdout/file handlers. For a
+  project pinned before OTel Python 1.40.0, retain the documented SDK
+  `LoggingHandler` compatibility path instead of forcing an upgrade. Shut the
+  log provider down with the other providers.
 - The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
   `http.response.status_code` on `http.server.request.duration` for every
   request, and `error.type` for a 5xx (or otherwise invalid) status, with no
@@ -965,6 +1067,19 @@ Node.js:
 - Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
 - Add the detected framework instrumentation explicitly, for example `@opentelemetry/instrumentation-express` for Express.
 - Add `@opentelemetry/exporter-metrics-otlp-http` and `@opentelemetry/sdk-metrics` when wiring SDK-based metrics.
+- Add `@opentelemetry/exporter-logs-otlp-proto` for the default
+  `http/protobuf` path and
+  `@opentelemetry/sdk-logs`, pass one `BatchLogRecordProcessor` through
+  `NodeSDK.logRecordProcessors`, and add only the detected official bridge.
+  For detected `console.*` calls, use
+  `@opentelemetry/instrumentation-console` 0.3.0 only when the selected Node
+  runtime satisfies `^18.19.0 || >=20.6.0` and the project has
+  `@opentelemetry/api >=1.9.1`; it emits LogRecords while preserving console
+  output. Treat an older pinned runtime/API as unsupported instead of forcing
+  an upgrade. Otherwise select the detected Winston or Pino
+  instrumentation/transport bridge. Keep existing console/file transports.
+  Do not enable an instrumentation sender and an OTel transport for the same
+  logger; `sdk.shutdown()` must flush logs as well as traces and metrics.
 - Configure `PeriodicExportingMetricReader` with `exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)` and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)` so HTTP duration metrics export during short runtime checks.
 - Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
 - Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
@@ -989,6 +1104,12 @@ Go:
   its low-cardinality route pattern rather than a constant `server` span name.
   Also prove the combined wrappers do not emit duplicate server spans.
 - Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
+- Add `go.opentelemetry.io/otel/sdk/log`,
+  `go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp`, and exactly
+  one official `go.opentelemetry.io/contrib/bridges` package matching the
+  detected logger. Register one global log provider, preserve the existing
+  stdout/file handler through fan-out, pass `context.Context` to logging calls
+  for trace correlation, and shut the log provider down.
 - In the final response, state the server handler wrapping, service-name setting, OTLP endpoint setting, and that HTTP server spans plus request-duration metrics are expected.
 - `otelhttp.NewHandler` already sets `http.response.status_code` on
   `http.server.request.duration` from the response status with no extra code.
@@ -1019,6 +1140,15 @@ Java:
 - Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
 - Follow `./references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
+- Default the Java agent's application log exporter to `otlp` only when
+  `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
+  detected local Observer receiver. Set that local
+  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, and rely on the agent's detected
+  Logback/Log4j bridge plus JVM shutdown hook. A non-local explicit endpoint on
+  the absent/`otlp` branch is a fail-closed boundary conflict and must not start
+  the agent-owned log path. Preserve explicit `none`, other exporter choices,
+  existing appenders, and any single existing OTel appender; never install a
+  second bridge.
 - In the final response, explicitly mention the agent setup or path,
   `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
   `http.server.request.duration`.
@@ -1152,8 +1282,15 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 1. Check whether `.vscode/launch.json` exists.
 2. If it exists, update at least one debug configuration for this service to include:
    - `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+   - `OTEL_LOGS_EXPORTER=otlp` when no explicit exporter exists and the logs
+     endpoint is absent or is the detected local Observer endpoint
+   - `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs` when the
+     exporter is absent/`otlp` and no explicit logs endpoint exists
    - `OTEL_METRIC_EXPORT_INTERVAL=1000`
    - `OTEL_BSP_SCHEDULE_DELAY=100`
+   If an absent/`otlp` exporter is paired with an explicit non-local logs
+   endpoint, do not add either logs setting; stop and report the operator-owned
+   boundary conflict instead of enabling an Obstudio log path.
 3. After editing, report which configuration was updated, the file path, and whether the env vars were added or already present.
 4. If `.vscode/launch.json` exists and you do not update it, stop and explain why.
 5. If `.vscode/launch.json` does not exist, explicitly report: `No .vscode/launch.json found; Step 6 skipped.`
@@ -1192,11 +1329,13 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include `$otel-verify` results and `.observe/otel-verify.md` path when run.
   If detectors/configuration were requested, include `$splunk-configure`
   outputs and `.observe/splunk-configure-verify.md` status when run.
-- Use the `render-instrumentation-html` command's returned loopback links for
-  both `otel-instrumentation.html` and `otel.html` in the final response. Do
-  not emit absolute local-file links for generated HTML and do not open either
-  report automatically. Keep Markdown and JSON report links as absolute local
-  paths.
+- In canonical flow, use the `render-instrumentation-html` command's returned
+  loopback links for both `otel-instrumentation.html` and `otel.html` in the
+  final response. Do not emit absolute local-file links for generated HTML and
+  do not open either report automatically. On the permitted direct baseline
+  path, link only the absolute `.observe/otel-instrumentation.md` report; do not
+  claim or link audit, selection, JSON, or HTML artifacts that were not created.
+  Keep Markdown and JSON report links as absolute local paths.
 - If verification is partial, say exactly what is working and what is still missing instead of reporting full success
 - Never say `complete`, `working`, or `verified` when the mandatory
   compile/type/import gate failed, was blocked, or was not run. Use
@@ -1204,6 +1343,10 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Always include the service-name configuration, OTLP endpoint configuration, and which automatic spans/metrics are expected from the instrumentation.
 - State the selected log scope and the full-runtime acceptance result whenever
   either is applicable.
+- For the default local log baseline, state the detected bridge, preserved
+  stdout/file sinks, effective `OTEL_LOGS_EXPORTER` and signal-specific local
+  logs endpoint, explicit opt-out behavior, duplicate-prevention proof, and
+  that cloud forwarding/configuration remains traces and metrics only.
 - For GenAI work, state which OTel GenAI operations were instrumented, which
   GenAI metrics are expected, whether trace continuity should produce a nested
   workflow/agent/tool/chat/retrieval shape, and which privacy/cardinality limits

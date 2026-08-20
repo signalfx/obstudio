@@ -29,7 +29,7 @@ kind from the baseline decision:
 | Validation | Pytest collection only | JSON shape, eval directory, skill source | Validation report |
 | Sanity | Codex with `.agents/skills/<skill>` visible | Skill loads and the task completes | Sanity report |
 | Rubric | Codex task plus schema-constrained judge | Semantic quality and workflow fit | Rubric report |
-| Runtime Checks | Docker Compose plus Observer API queries | Live spans/metrics are emitted after traffic | Runtime report |
+| Runtime Checks | Docker Compose plus Observer API queries | Live spans, metrics, and logs are emitted after traffic | Runtime report |
 | A/B | Adds the no-skill baseline side to sanity, rubric, or runtime | Skill lift over baseline | Same report shape with baseline columns populated |
 
 Validation is the fast gate for CI: it proves the eval JSONs are collectable and
@@ -88,7 +88,7 @@ service workspace.
 
 Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
 `eval-runtime` enables them automatically. The eval JSON points at a Compose
-file and declares trace/metric expectations. The Compose file owns service
+file and declares telemetry expectations. The Compose file owns service
 topology, Observer startup, app startup, and a profiled `traffic` service that
 generates requests with tools such as `siege`. The harness runs Compose,
 discovers the Observer host port with `docker compose port observer 3000`,
@@ -97,6 +97,35 @@ down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
 instrumented temp service workspace rather than the source fixture. Shared
 runtime image definitions live in `evals/runtime/`; service-specific runtime
 files stay beside each eval under `eval/runtime/`.
+
+For JSON-list endpoints such as `/api/query/logs`, use `record_checks` instead
+of response-wide substrings when fields must belong to the same record. A
+record check can select records with `match` or `match_contains`, assert
+`field_equals`, `field_contains`, and `non_empty` paths, require an
+`exact_count`, and reject duplicates with `unique_by`. Dotted paths address
+nested fields such as `resource.serviceName`. Set `correlates_with_trace` when
+a log must carry nonzero 32/16-hex trace/span IDs that identify the same span in
+the Observer trace-detail endpoint. Use a nonempty `service_logs` substring or
+occurrence check when the runtime must also prove that the original
+stdout/stderr sink is preserved; failure to retrieve Compose logs fails the
+check. Per-check `environment` values can drive isolated scenarios such as
+`OTEL_LOGS_EXPORTER=none`; harness-owned service paths and Compose project names
+remain protected. `stop_services_before_validation` can stop only the app after
+traffic while leaving Observer available, so endpoint assertions include
+shutdown-flushed telemetry and preserved container logs.
+The Python, Node.js, and Go fixtures emit `runtime shutdown completed` once at
+WARN after their graceful server stop. Default checks require that record in
+both Observer and the original service sink; `OTEL_LOGS_EXPORTER=none` checks
+require it only in the preserved sink and require zero service records in
+Observer.
+
+The standard Python, Node.js, and Go runtime topologies use an isolated local
+Observer. A shared Observer OTLP-handler integration test enables its trace and
+metric forwarding surfaces, ingests all three signals, proves the matching
+exporters receive traces and metrics, and proves logs remain locally queryable
+without any log-forwarding surface. This supplies live receiver-side proof of
+the trace/metric-only cloud boundary without duplicating a fake cloud service in
+every language topology.
 
 ## Commands
 
@@ -233,6 +262,17 @@ Running the services with `mvn exec:java` or `mvn spring-boot:run` requires a
 Kafka broker and is documented in each fixture README. See those fixture READMEs
 for eval intent, required environment variables, and the Java-agent versus
 manual-SDK boundary.
+
+The Spring Boot fixture currently has no live Java runtime eval because the
+repository does not provide a checked-in OpenTelemetry Java agent, a pinned
+agent image, or an established Java Compose launch contract. An evaluator that
+downloads and injects its own agent could pass independently of the files
+produced by the instrumentation task. Until pinned infrastructure is available,
+the fixture supplies a request-context log and grades Java's record fields,
+single bridge, preserved appenders, opt-out, cloud configuration, and
+agent-owned shutdown path as independent semantic rubric requirements; the
+shared Observer integration test supplies the live receiver-side cloud-boundary
+proof.
 
 Kafka coverage is organized by processing pattern rather than by every
 framework combination: direct producer/consumer, batch consumer, listener

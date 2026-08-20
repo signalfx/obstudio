@@ -20,6 +20,7 @@
     "Identifies GET/PUT/DELETE /kv/{key} and GET /search?word= routes without embedding concrete key values.",
     "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
     "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
-    "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation."
+    "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation.",
+    "Classifies a missing compatible Go application-log bridge and local Observer exporter as a required default gap when the existing sink can be preserved, while retaining explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
   ]
 }
