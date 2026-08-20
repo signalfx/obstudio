@@ -2950,6 +2950,7 @@ code {
 
 .filter-builder {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
@@ -2986,22 +2987,22 @@ code {
 
 .filter-builder__composer--selected {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 
 .filter-builder__value-wrapper {
   position: relative;
-  flex-shrink: 1;
+  flex: 1 1 auto;
+  min-width: 80px;
 }
 
 .filter-builder__value {
-  width: 200px;
-  min-width: 80px;
-  max-width: 200px;
-  flex-shrink: 1;
-  display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 .filter-builder__token {
