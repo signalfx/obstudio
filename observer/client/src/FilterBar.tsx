@@ -273,7 +273,28 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             </button>
           ) : null}
         </div>
-        {valueInput}
+        <div className="filter-builder__value-wrapper">
+          {valueInput}
+          {valueFocused && valueSuggestions.length > 0 ? (
+            <div className="filter-builder__menu" role="listbox" aria-label={`${selectedDefinition.key} suggestions`}>
+              <div className="filter-builder__menu-section">Suggested Values</div>
+              {valueSuggestions.slice(0, 10).map((value) => (
+                <button
+                  key={value}
+                  className="filter-builder__menu-item"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    setDraftValue(value);
+                    setValueFocused(false);
+                  }}
+                  type="button"
+                >
+                  <span className="filter-builder__menu-key">{value}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <button
           className="filter-builder__apply"
           onClick={addClause}
@@ -291,25 +312,6 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         >
           ×
         </button>
-        {selectedDefinition && valueFocused && valueSuggestions.length > 0 ? (
-          <div className="filter-builder__menu" role="listbox" aria-label={`${selectedDefinition.key} suggestions`}>
-            <div className="filter-builder__menu-section">Suggested Values</div>
-            {valueSuggestions.slice(0, 10).map((value) => (
-              <button
-                key={value}
-                className="filter-builder__menu-item"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  setDraftValue(value);
-                  setValueFocused(false);
-                }}
-                type="button"
-              >
-                <span className="filter-builder__menu-key">{value}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
     );
   }

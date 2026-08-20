@@ -2989,20 +2989,19 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 4px 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--chrome-2);
 }
 
-.filter-builder__composer--selected .filter-builder__value {
-  flex: 0 1 240px;
-  min-width: 80px;
+.filter-builder__value-wrapper {
+  position: relative;
+  flex-shrink: 1;
 }
 
 .filter-builder__value {
-  min-width: 0;
-  flex: 1 1 auto;
+  width: 200px;
+  min-width: 80px;
+  max-width: 200px;
+  flex-shrink: 1;
+  display: block;
 }
 
 .filter-builder__token {
@@ -3107,6 +3106,7 @@ code {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--text-dim);
 }
 
