@@ -18,7 +18,7 @@ interface MetricsTabProps {
 type DisplayType = "lines" | "bars" | "area";
 
 const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
-  { key: "metricName", label: "Metric", kind: "text", placeholder: "http.server.duration" },
+  { key: "metricName", label: "Metric name", kind: "text", placeholder: "http.server.duration" },
   { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "otel.http" },
 ];
@@ -247,7 +247,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
 
           {visibleMetricList.length > 0 ? (
             <div className="data-table__head data-table__head--metrics metrics-card-list__head">
-              <span className="data-table__th">Metric</span>
+              <span className="data-table__th">Metric name</span>
               <span className="data-table__th">Description</span>
               <span className="data-table__th">Type / Unit</span>
             </div>
