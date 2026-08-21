@@ -221,4 +221,21 @@ describe("useTelemetry", () => {
       expect(screen.getByTestId("snapshot").textContent).toContain('"hasNewUpdates":true');
     });
   });
+
+  it("reloads the page when the server pushes a dev-mode reload message", async () => {
+    const reloadSpy = vi.spyOn(window.location, "reload").mockImplementation(() => {});
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    const ws = MockWebSocket.instances.at(-1);
+    ws?.onmessage?.({ data: JSON.stringify({ type: "reload" }) });
+
+    await waitFor(() => {
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

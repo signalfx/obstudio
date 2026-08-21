@@ -15,6 +15,7 @@ import (
 // unsubscribe from the store.
 func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
 	mux.HandleFunc("GET /api/ws", wsHandler(s, v))
+	registerDevRoutes(mux)
 
 	subID, ch := s.Subscribe()
 	go func() {

@@ -85,6 +85,34 @@ Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
 and `4317`; these are also used by the editor extension.
 
+### Local Development
+
+Use this workflow when editing the Telemetry Explorer UI (`observer/client`)
+and you want changes to show up without a full `make build` each time.
+
+1. Start the collector with the `dev` build tag so it serves client assets
+   straight from disk instead of the snapshot embedded by `make build`:
+
+   ```bash
+   make build-client
+   cd observer && go run -tags dev ./cmd/obstudio
+   ```
+
+2. In a second terminal, watch and rebuild the client on every save:
+
+   ```bash
+   make dev
+   ```
+
+3. Open http://localhost:3000. From here it hot-reloads on its own: each
+   client rebuild pushes a reload signal over the existing telemetry
+   WebSocket to every open tab, so there's no need to manually refresh the
+   browser after a save.
+
+The `dev` build tag only affects the binary you run locally with `go run
+-tags dev`; release and embedded builds (`make build`/`make run`) never
+include it, and the reload-trigger endpoint it adds does not exist otherwise.
+
 ### Optional Splunk Metrics Forwarding
 
 Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
