@@ -126,14 +126,10 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
   };
 
   return (
-    // role="tabpanel" mirrors the Metrics/Traces/Logs/Services tabs so the
-    // Dashboards content is exposed as a tab panel to assistive tech (#22). The
-    // sibling tab buttons in AppView carry no ids, so we match their pattern
-    // (role only) rather than reference a non-existent tab id via aria-labelledby.
     // The OTLP endpoint from /api/health is provided to every panel so the
     // unmatched-panel hint names the real receiver (#19).
     <OtlpEndpointContext.Provider value={otlpEndpoint}>
-    <section className="dashboards-tab" role="tabpanel">
+    <section id="panel-dashboards" className="dashboards-tab" role="tabpanel" aria-label="Dashboards">
       <div className="dashboards-tab__bar">
         <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
           Approximate · local-data preview

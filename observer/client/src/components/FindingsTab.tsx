@@ -156,7 +156,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   };
 
   return (
-    <section className="tab-panel findings-tab">
+    <section id="panel-validation" className="tab-panel findings-tab" role="tabpanel" aria-label="Validation">
       <div className="panel-toolbar findings-tab__header">
         <div className="findings-tab__header-meta">
           {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}

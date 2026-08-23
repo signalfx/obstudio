@@ -142,15 +142,26 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           return (
             <div
               key={s.spanId}
+              role="button"
+              tabIndex={0}
+              aria-pressed={s.spanId === selectedSpanId && selectedSpanVisible}
+              aria-label={`${s.name} \u2014 ${s.resource?.serviceName ?? "unknown"}, ${s.durationMs.toFixed(1)}ms${isError ? ", error" : ""}`}
               className={`waterfall__row ${s.spanId === selectedSpanId && selectedSpanVisible ? "waterfall__row--selected" : ""}`}
               onClick={() => onSelectSpan(s.spanId)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSpan(s.spanId); } }}
             >
               <div className="waterfall__row-service" style={{ paddingLeft: `${8 + s.depth * 16}px` }}>
                 {hasChildren ? (
-                  <button className="waterfall__toggle" onClick={(e) => toggleCollapse(e, s.spanId)} type="button">
+                  <button
+                    className="waterfall__toggle"
+                    onClick={(e) => toggleCollapse(e, s.spanId)}
+                    type="button"
+                    aria-label={collapsed.has(s.spanId) ? `Expand ${s.name} (${childCount} hidden)` : `Collapse ${s.name}`}
+                    aria-expanded={!collapsed.has(s.spanId)}
+                  >
                     {collapsed.has(s.spanId) ? "\u25B6" : "\u25BC"}
                     {collapsed.has(s.spanId) ? (
-                      <span className="waterfall__child-count">{childCount}</span>
+                      <span className="waterfall__child-count" aria-hidden="true">{childCount}</span>
                     ) : null}
                   </button>
                 ) : (

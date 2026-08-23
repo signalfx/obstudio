@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 
 interface KeyboardHelpProps {
@@ -20,8 +20,20 @@ const shortcuts = [
 
 /** Modal overlay listing available keyboard shortcuts. */
 export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => { previouslyFocused?.focus(); };
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        return;
+      }
       if (event.key !== "Escape" || hasHostCommandModifier(event)) {
         return;
       }
@@ -46,7 +58,7 @@ export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement
       >
         <div className="keyboard-help__header">
           <h2 className="keyboard-help__title" id="keyboard-help-title">Keyboard Shortcuts</h2>
-          <button className="keyboard-help__close" onClick={onClose} type="button" aria-label="Close">
+          <button ref={closeRef} className="keyboard-help__close" onClick={onClose} type="button" aria-label="Close">
             &times;
           </button>
         </div>

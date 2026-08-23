@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
-import { CopyTextButton, DetailPanel, ResizablePanel } from "../layout";
+import { CopyTextButton, DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
 import { TraceWaterfall } from "./TraceWaterfall";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
@@ -123,9 +123,12 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   const tableRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
 
+  const { exiting: panelExiting, triggerExit, cancelExit } = useAnimatedPanel();
   const fetchIdRef = useRef(0);
   const traceDetailRef = useRef(traceDetail);
   traceDetailRef.current = traceDetail;
+  const selectedTraceIdRef = useRef(selectedTraceId);
+  selectedTraceIdRef.current = selectedTraceId;
   const handleInteract = useCallback(() => {
     onInteract?.();
   }, [onInteract]);
@@ -167,6 +170,21 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   }, []);
 
   const selectTrace = useCallback((traceId: string | null) => {
+    if (traceId === null) {
+      if (selectedTraceIdRef.current !== null) {
+        triggerExit(() => {
+          fetchIdRef.current++;
+          setSelectedTraceId(null);
+          setSelectedSpanId(null);
+          setTraceDetail(null);
+          setDetailError(null);
+          setDetailLoading(false);
+        });
+      }
+      onInteract?.();
+      return;
+    }
+    cancelExit();
     fetchIdRef.current++;
     setSelectedTraceId(traceId);
     setSelectedSpanId(null);
@@ -174,10 +192,8 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
     setDetailError(null);
     setDetailLoading(false);
     onInteract?.();
-    if (traceId) {
-      void loadTraceDetail(traceId, "panel");
-    }
-  }, [loadTraceDetail, onInteract]);
+    void loadTraceDetail(traceId, "panel");
+  }, [loadTraceDetail, onInteract, triggerExit, cancelExit]);
 
   const shortcuts = useMemo(() => ({
     Escape: () => {
@@ -263,7 +279,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   const hasDetail = Boolean(selectedTraceId && (traceDetail || detailLoading || detailError));
 
   return (
-    <section className="tab-panel" role="tabpanel">
+    <section id="panel-traces" className="tab-panel" role="tabpanel" aria-label="Traces">
       <div
         className={`signal-view signal-view--trace-detail${hasDetail ? " signal-view--with-panel" : ""}`}
         onPointerDownCapture={handleInteract}
@@ -281,11 +297,11 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           ) : null}
 
           {filterError ? (
-            <p className="explorer__status explorer__status--error">{filterError}</p>
+            <p className="explorer__status explorer__status--error" role="status">{filterError}</p>
           ) : null}
 
           {telemetryError ? (
-            <p className="explorer__status explorer__status--error">{telemetryError}</p>
+            <p className="explorer__status explorer__status--error" role="status">{telemetryError}</p>
           ) : null}
 
           {liveTraces.length === 0 && !hasActiveFilter ? (
@@ -294,9 +310,9 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
               hint="Send OTLP telemetry to port 4318 to begin exploring."
             />
           ) : isFiltering && hasActiveFilter && visibleTraces.length === 0 ? (
-            <p className="explorer__status">Updating filtered traces...</p>
+            <p className="explorer__status" role="status">Updating filtered traces...</p>
           ) : visibleTraces.length === 0 ? (
-            <p className="explorer__status">No traces match the current filters.</p>
+            <p className="explorer__status" role="status">No traces match the current filters.</p>
           ) : (
             <>
           <div ref={headRef} className="data-table__head data-table__head--traces data-table__head--left-cluster data-table__head--scroll-sync">
@@ -377,7 +393,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
         {/* Detail panel */}
         {selectedTraceId && traceDetail ? (
           <ResizablePanel
-            className="signal-view__panel"
+            className={`signal-view__panel${panelExiting ? " signal-view__panel--exiting" : ""}`}
             defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
             minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
             maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
@@ -404,19 +420,19 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           </ResizablePanel>
         ) : selectedTraceId && detailLoading ? (
           <ResizablePanel
-            className="signal-view__panel"
+            className={`signal-view__panel${panelExiting ? " signal-view__panel--exiting" : ""}`}
             defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
             minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
             maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
             resizeLabel="Resize traces panel"
           >
             <DetailPanel title="Loading..." onClose={() => selectTrace(null)}>
-              <p className="explorer__status">Fetching trace detail...</p>
+              <p className="explorer__status" role="status">Fetching trace detail...</p>
             </DetailPanel>
           </ResizablePanel>
         ) : selectedTraceId && detailError ? (
           <ResizablePanel
-            className="signal-view__panel"
+            className={`signal-view__panel${panelExiting ? " signal-view__panel--exiting" : ""}`}
             defaultWidth={TRACE_DETAIL_PANEL_DEFAULT_WIDTH}
             minWidth={TRACE_DETAIL_PANEL_MIN_WIDTH}
             maxWidth={TRACE_DETAIL_PANEL_MAX_WIDTH}
@@ -427,7 +443,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
               subtitle={selectedSummary?.rootSpanName ?? selectedTraceId.slice(-12)}
               onClose={() => selectTrace(null)}
             >
-              <p className="explorer__status explorer__status--error">{detailError}</p>
+              <p className="explorer__status explorer__status--error" role="status">{detailError}</p>
               <button
                 className="pill pill--muted"
                 onClick={() => void loadTraceDetail(selectedTraceId, "panel")}

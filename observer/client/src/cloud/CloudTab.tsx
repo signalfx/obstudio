@@ -339,7 +339,7 @@ export function CloudTab(): React.ReactElement {
   };
 
   return (
-    <section aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
+    <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
       <div className="cloud-tab__content">
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
           {error ? <div className="cloud-alert cloud-alert--error" role="alert">{error}</div> : null}

@@ -75,9 +75,14 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
     return sortDir === "asc" ? " ▲" : " ▼";
   }
 
+  function sortLabel(key: SortKey, label: string): string {
+    if (key !== sortKey) return label;
+    return `${label}, sorted ${sortDir === "asc" ? "ascending" : "descending"}`;
+  }
+
   if (rows.length === 0 && serviceNames.length === 0) {
     return (
-      <section className="tab-panel" role="tabpanel">
+      <section id="panel-services" className="tab-panel" role="tabpanel" aria-label="Services">
         <EmptyState
           title="No services observed yet."
           hint="Send OTLP telemetry to port 4318 to begin exploring."
@@ -87,7 +92,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   }
 
   return (
-    <section className="tab-panel" role="tabpanel">
+    <section id="panel-services" className="tab-panel" role="tabpanel" aria-label="Services">
       <div className="explorer__toolbar explorer__toolbar--controls">
         <FilterBar
           definitions={SERVICE_FILTER_DEFINITIONS}
@@ -98,31 +103,31 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
       <div className="services-table-scroll">
         <div className="services-table">
           <div className="services-table__head">
-            <button type="button" className="data-table__th data-table__th--sortable" onClick={() => handleSort("name")}>
+            <button type="button" className="data-table__th data-table__th--sortable" onClick={() => handleSort("name")} aria-label={sortLabel("name", "Service")}>
               Service{arrow("name")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("traceCount")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("traceCount")} aria-label={sortLabel("traceCount", "Traces")}>
               Traces{arrow("traceCount")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("spanCount")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("spanCount")} aria-label={sortLabel("spanCount", "Spans")}>
               Spans{arrow("spanCount")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("errorCount")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("errorCount")} aria-label={sortLabel("errorCount", "Errors")}>
               Errors{arrow("errorCount")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgDurationMs")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgDurationMs")} aria-label={sortLabel("avgDurationMs", "Avg Duration")}>
               Avg Duration{arrow("avgDurationMs")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgClientDurationMs")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgClientDurationMs")} aria-label={sortLabel("avgClientDurationMs", "Avg Client")}>
               Avg Client{arrow("avgClientDurationMs")}
             </button>
-            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgServerDurationMs")}>
+            <button type="button" className="data-table__th data-table__th--sortable data-table__th--numeric" onClick={() => handleSort("avgServerDurationMs")} aria-label={sortLabel("avgServerDurationMs", "Avg Server")}>
               Avg Server{arrow("avgServerDurationMs")}
             </button>
           </div>
 
           {sorted.length === 0 && clauses.length > 0 ? (
-            <p className="explorer__status">No services match the current filter.</p>
+            <p className="explorer__status" role="status">No services match the current filter.</p>
           ) : sorted.map((row) => (
             <div key={row.name} className="services-table__row">
               <span className="data-table__td data-table__td--service-name">

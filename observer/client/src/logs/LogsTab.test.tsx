@@ -410,7 +410,7 @@ describe("LogsTab", () => {
 
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
 
-    const jsonTab = screen.getByRole("button", { name: "JSON" });
+    const jsonTab = screen.getByRole("tab", { name: "JSON" });
     fireEvent.click(jsonTab);
 
     // Highlighted keys
@@ -440,7 +440,7 @@ describe("LogsTab", () => {
     const { container } = render(<LogsTab logs={[log]} onInteract={vi.fn()} />);
 
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
-    fireEvent.click(screen.getByRole("button", { name: "JSON" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy JSON" }));
 
     expect(writeText).toHaveBeenCalledWith(JSON.stringify(log, null, 2));

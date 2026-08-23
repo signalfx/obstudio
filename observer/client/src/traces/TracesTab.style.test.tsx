@@ -357,7 +357,7 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /AI details/i }).classList.contains("span-details__tab--active")).toBe(true);
+    expect(screen.getByRole("tab", { name: /AI details/i }).classList.contains("span-details__tab--active")).toBe(true);
     expect(screen.getByText("Evaluations")).toBeTruthy();
     expect(screen.getByText("1 issue")).toBeTruthy();
     expect(screen.getByText("Groundedness")).toBeTruthy();
@@ -385,8 +385,8 @@ describe("TracesTab row layout", () => {
     };
     const { rerender } = render(<SpanDetailsPanel span={span} validationFindings={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Attributes" }));
-    expect(screen.getByRole("button", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
+    fireEvent.click(screen.getByRole("tab", { name: "Attributes" }));
+    expect(screen.getByRole("tab", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
 
     rerender(
       <SpanDetailsPanel
@@ -408,8 +408,8 @@ describe("TracesTab row layout", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
-    expect(screen.getByRole("button", { name: /AI details/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Attributes" }).classList.contains("span-details__tab--active")).toBe(true);
+    expect(screen.getByRole("tab", { name: /AI details/i })).toBeTruthy();
   });
 
   it("does not render a close button in the span detail panel when onClose is not provided", () => {
@@ -473,9 +473,9 @@ describe("TracesTab row layout", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: minmax(80px, 2fr) minmax(80px, 3fr) minmax(80px, 1fr);\n}");
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(80px, 3fr) minmax(80px, 4fr) minmax(80px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 3fr) minmax(80px, 4fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
     expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
-    expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: minmax(72px, 1fr) minmax(128px, 2fr) minmax(160px, 3fr) minmax(192px, 6fr);\n}");
+    expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: minmax(72px, 1fr) minmax(96px, 2fr) minmax(96px, 3fr) minmax(256px, 6fr);\n}");
   });
 
   it("uses the same compact row shell height as logs for master rows", () => {
@@ -483,7 +483,7 @@ describe("TracesTab row layout", () => {
     const { resolve } = require("path");
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(80px, 3fr) minmax(80px, 4fr) minmax(80px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
+    expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 3fr) minmax(80px, 4fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
     expect(css).toContain(".data-table__row--traces {\n  align-items: center;\n  min-height: 32px;\n}");
     expect(css).toContain(".data-table__row--traces .data-table__td {\n  padding-top: 3px;\n  padding-bottom: 3px;\n}");
     expect(css).toContain(".filter-builder {\n  display: flex;\n  flex: 1 1 auto;");

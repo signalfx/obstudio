@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
 import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
-import { CopyTextButton, DetailPanel, ResizablePanel } from "../layout";
+import { CopyTextButton, DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
 
 interface LogsTabProps {
@@ -172,6 +172,15 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const tableRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
+  const { exiting: panelExiting, triggerExit, cancelExit } = useAnimatedPanel();
+  const selectedLogRef = useRef(selectedLog);
+  selectedLogRef.current = selectedLog;
+
+  const closeLogPanel = useCallback(() => {
+    if (selectedLogRef.current !== null) {
+      triggerExit(() => setSelectedLog(null));
+    }
+  }, [triggerExit]);
 
   const selectedKey = useMemo(() => selectedLog ? logKey(selectedLog) : null, [selectedLog]);
   const activeQuery = useMemo(() => buildLogsQuery(clauses), [clauses]);
@@ -221,15 +230,15 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
   // (e.g., after store clear, WebSocket reconnect, or eviction from the buffer).
   useEffect(() => {
     if (selectedKey && !liveLogs.some((r) => logKey(r) === selectedKey)) {
-      setSelectedLog(null);
+      closeLogPanel();
     }
-  }, [liveLogs, selectedKey]);
+  }, [liveLogs, selectedKey, closeLogPanel]);
 
   useEffect(() => {
     if (selectedKey && !visibleLogs.some((record) => logKey(record) === selectedKey)) {
-      setSelectedLog(null);
+      closeLogPanel();
     }
-  }, [selectedKey, visibleLogs]);
+  }, [selectedKey, visibleLogs, closeLogPanel]);
 
   const virtualizer = useVirtualizer({
     count: visibleLogs.length,
@@ -239,7 +248,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
   });
 
   return (
-    <section className="tab-panel" role="tabpanel">
+    <section id="panel-logs" className="tab-panel" role="tabpanel" aria-label="Logs">
       <div
         className={`signal-view${selectedLog ? " signal-view--with-panel" : ""}`}
         onPointerDownCapture={handleInteract}
@@ -257,16 +266,16 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
           ) : null}
 
           {filterError ? (
-            <p className="explorer__status explorer__status--error">{filterError}</p>
+            <p className="explorer__status explorer__status--error" role="status">{filterError}</p>
           ) : liveLogs.length === 0 && !hasActiveFilter ? (
             <EmptyState
               title="No logs received yet."
               hint="Send OTLP telemetry to port 4318 to begin exploring."
             />
           ) : isFiltering && hasActiveFilter && visibleLogs.length === 0 ? (
-            <p className="explorer__status">Updating filtered logs...</p>
+            <p className="explorer__status" role="status">Updating filtered logs...</p>
           ) : visibleLogs.length === 0 ? (
-            <p className="explorer__status">No logs match the current filters.</p>
+            <p className="explorer__status" role="status">No logs match the current filters.</p>
           ) : (
             <>
           <div
@@ -300,6 +309,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                     key={logKey(r)}
                     className={`data-table__row data-table__row--logs data-table__row--sev-${cls} ${active ? "data-table__row--active" : ""}`}
                     onClick={() => {
+                      cancelExit();
                       setSelectedLog(r);
                       setDetailTab("overview");
                       onInteract?.();
@@ -345,14 +355,30 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
 
         {/* Detail panel */}
         {selectedLog ? (
-          <ResizablePanel className="signal-view__panel" resizeLabel="Resize logs panel">
+          <ResizablePanel className={`signal-view__panel${panelExiting ? " signal-view__panel--exiting" : ""}`} resizeLabel="Resize logs panel">
             <DetailPanel
               title={truncateMessage(selectedLog.body) || displaySeverity(selectedLog) || "Log"}
               subtitle={[displaySeverity(selectedLog), selectedLog.resource?.serviceName].filter(Boolean).join(" · ")}
-              onClose={() => setSelectedLog(null)}
+              onClose={closeLogPanel}
             >
-              <div className="span-details__tabs">
+              <div
+                className="span-details__tabs"
+                role="tablist"
+                aria-label="Log detail sections"
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                  e.preventDefault();
+                  const next = detailTab === "overview" ? "json" : "overview";
+                  setDetailTab(next);
+                  document.getElementById(`log-detail-tab-${next}`)?.focus();
+                }}
+              >
                 <button
+                  id="log-detail-tab-overview"
+                  role="tab"
+                  aria-selected={detailTab === "overview"}
+                  aria-controls="log-detail-panel"
+                  tabIndex={detailTab === "overview" ? 0 : -1}
                   className={`span-details__tab ${detailTab === "overview" ? "span-details__tab--active" : ""}`}
                   onClick={() => setDetailTab("overview")}
                   type="button"
@@ -360,6 +386,11 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                   Overview
                 </button>
                 <button
+                  id="log-detail-tab-json"
+                  role="tab"
+                  aria-selected={detailTab === "json"}
+                  aria-controls="log-detail-panel"
+                  tabIndex={detailTab === "json" ? 0 : -1}
                   className={`span-details__tab ${detailTab === "json" ? "span-details__tab--active" : ""}`}
                   onClick={() => setDetailTab("json")}
                   type="button"
@@ -368,6 +399,11 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                 </button>
               </div>
 
+              <div
+                id="log-detail-panel"
+                role="tabpanel"
+                aria-labelledby={`log-detail-tab-${detailTab}`}
+              >
               {detailTab === "overview" ? (
                 <div className="log-detail">
                   <div className="log-detail__section">
@@ -426,6 +462,7 @@ export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement 
                   </div>
                 </div>
               )}
+              </div>
             </DetailPanel>
           </ResizablePanel>
         ) : null}

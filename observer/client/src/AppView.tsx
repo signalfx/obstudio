@@ -57,78 +57,116 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     <main className="app-shell">
       <section className="app-frame">
         <div className="tab-bar">
-          <div className="tab-bar__tabs" role="tablist" aria-label="Observer sections">
+          <div
+            className="tab-bar__tabs"
+            role="tablist"
+            aria-label="Observer sections"
+            onKeyDown={(e) => {
+              const order: AppTab[] = ["metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
+              const idx = order.indexOf(activeTab);
+              let next = idx;
+              if (e.key === "ArrowRight") next = (idx + 1) % order.length;
+              else if (e.key === "ArrowLeft") next = (idx - 1 + order.length) % order.length;
+              else if (e.key === "Home") next = 0;
+              else if (e.key === "End") next = order.length - 1;
+              else return;
+              e.preventDefault();
+              switchTab(order[next]);
+              document.getElementById(`tab-${order[next]}`)?.focus();
+            }}
+          >
           <button
+            id="tab-metrics"
             type="button"
             role="tab"
             aria-selected={activeTab === "metrics"}
+            aria-controls="panel-metrics"
             aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "metrics" ? 0 : -1}
             onClick={() => switchTab("metrics")}
           >
             Metrics
             {state.stats?.metricNameCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.metricNameCount}</span> : null}
           </button>
           <button
+            id="tab-traces"
             type="button"
             role="tab"
             aria-selected={activeTab === "traces"}
+            aria-controls="panel-traces"
             aria-label={formatTabAriaLabel("Traces", state.stats?.traceCount, "trace", "traces")}
             className={activeTab === "traces" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "traces" ? 0 : -1}
             onClick={() => switchTab("traces")}
           >
             Traces
             {state.stats?.traceCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.traceCount}</span> : null}
           </button>
           <button
+            id="tab-logs"
             type="button"
             role="tab"
             aria-selected={activeTab === "logs"}
+            aria-controls="panel-logs"
             aria-label={formatTabAriaLabel("Logs", state.stats?.logCount, "log", "logs")}
             className={activeTab === "logs" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "logs" ? 0 : -1}
             onClick={() => switchTab("logs")}
           >
             Logs
             {state.stats?.logCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.logCount}</span> : null}
           </button>
           <button
+            id="tab-services"
             type="button"
             role="tab"
             aria-selected={activeTab === "services"}
+            aria-controls="panel-services"
             aria-label={formatTabAriaLabel("Services", state.stats?.serviceNames?.length, "service", "services")}
             className={activeTab === "services" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "services" ? 0 : -1}
             onClick={() => switchTab("services")}
           >
             Services
             {state.stats?.serviceNames?.length ? <span className="tab-button__count" aria-hidden="true">{state.stats.serviceNames.length}</span> : null}
           </button>
           <button
+            id="tab-validation"
             type="button"
             role="tab"
             aria-selected={activeTab === "validation"}
+            aria-controls="panel-validation"
             aria-label={formatTabAriaLabel("Validation", validationIssues.length, "issue", "issues")}
             className={activeTab === "validation" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "validation" ? 0 : -1}
             onClick={() => switchTab("validation")}
           >
             Validation
             {validationIssues.length > 0 ? <span className="tab-button__count tab-button__count--warn" aria-hidden="true">{validationIssues.length}</span> : null}
           </button>
           <button
+            id="tab-dashboards"
             type="button"
             role="tab"
             aria-selected={activeTab === "dashboards"}
+            aria-controls="panel-dashboards"
             aria-label="Dashboards"
             className={activeTab === "dashboards" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "dashboards" ? 0 : -1}
             onClick={() => switchTab("dashboards")}
           >
             Dashboards
           </button>
           <button
+            id="tab-cloud"
             type="button"
             role="tab"
             aria-selected={activeTab === "cloud"}
+            aria-controls="panel-cloud"
             aria-label="Cloud"
             className={activeTab === "cloud" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "cloud" ? 0 : -1}
             onClick={() => switchTab("cloud")}
           >
             Cloud
