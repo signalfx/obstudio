@@ -8,7 +8,7 @@ interface TimeSeriesChartProps {
   series: MetricSeries[];
   displayType: DisplayType;
   selectedKey: string | null;
-  onSelectSeries: (key: string) => void;
+  onSelectSeries: (key: string | null) => void;
   /** When set, fixes the X-axis domain to [now - windowMs, now] so the
    *  time range matches the selected window regardless of data density. */
   windowMs?: number;
@@ -149,7 +149,7 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
             <button
               key={s.key}
               className={`ts-chart__annotation ${isActive ? "ts-chart__annotation--active" : ""} ${isDimmed ? "ts-chart__annotation--dimmed" : ""}`}
-              onClick={() => onSelectSeries(s.key)}
+              onClick={() => onSelectSeries(selectedKey === s.key ? null : s.key)}
               type="button"
             >
               <span className="ts-chart__annotation-dot" style={{ background: color }} />

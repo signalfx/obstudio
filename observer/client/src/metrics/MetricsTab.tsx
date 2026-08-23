@@ -5,7 +5,7 @@ import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBa
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { useMetricTimeSeries, type MetricSeries } from "./useMetricTimeSeries";
 import type { MetricGroup } from "../api/types";
-import { DetailPanel, ResizablePanel } from "../layout";
+import { DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 
@@ -56,6 +56,18 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
   const [selectedSeriesKey, setSelectedSeriesKey] = useState<string | null>(null);
   const [displayType, setDisplayType] = useState<DisplayType>("lines");
   const seriesOrderRef = useRef<Map<string, string[]>>(new Map());
+  const { exiting: panelExiting, triggerExit, cancelExit } = useAnimatedPanel();
+  const expandedMetricKeyRef = useRef(expandedMetricKey);
+  expandedMetricKeyRef.current = expandedMetricKey;
+
+  const closeMetricPanel = useCallback(() => {
+    if (expandedMetricKeyRef.current !== null) {
+      triggerExit(() => {
+        setExpandedMetricKey(null);
+        setSelectedSeriesKey(null);
+      });
+    }
+  }, [triggerExit]);
   const handleInteract = useCallback(() => {
     onInteract?.();
   }, [onInteract]);
@@ -201,21 +213,20 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
   useEffect(() => {
     if (!expandedMetricKey) return;
     if (!visibleMetricList.some((metric) => metric.key === expandedMetricKey)) {
-      setExpandedMetricKey(null);
-      setSelectedSeriesKey(null);
+      closeMetricPanel();
     }
-  }, [expandedMetricKey, visibleMetricList]);
+  }, [expandedMetricKey, visibleMetricList, closeMetricPanel]);
 
   return (
-    <section className="tab-panel" role="tabpanel">
+    <section id="panel-metrics" className="tab-panel" role="tabpanel" aria-label="Metrics">
       <div className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`} onPointerDownCapture={handleInteract}>
         <div className="signal-view__content">
           {telemetryError ? (
-            <p className="explorer__status explorer__status--error">{telemetryError}</p>
+            <p className="explorer__status explorer__status--error" role="status">{telemetryError}</p>
           ) : null}
 
           {filterError ? (
-            <p className="explorer__status explorer__status--error">{filterError}</p>
+            <p className="explorer__status explorer__status--error" role="status">{filterError}</p>
           ) : null}
 
           {visibleMetricList.length > 0 || hasActiveFilter ? (
@@ -261,8 +272,13 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                   <button
                     className={`data-table__row data-table__row--metrics metric-card__header ${isExpanded ? "metric-card__header--active" : ""}`}
                     onClick={() => {
-                      setExpandedMetricKey(isExpanded ? null : metric.key);
-                      setSelectedSeriesKey(null);
+                      if (isExpanded) {
+                        closeMetricPanel();
+                      } else {
+                        cancelExit();
+                        setExpandedMetricKey(metric.key);
+                        setSelectedSeriesKey(null);
+                      }
                     }}
                     type="button"
                   >
@@ -287,30 +303,45 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
         </div>
 
         {expandedMeta ? (
-          <ResizablePanel className="signal-view__panel signal-view__panel--metrics" resizeLabel="Resize metrics panel">
+          <ResizablePanel className={`signal-view__panel signal-view__panel--metrics${panelExiting ? " signal-view__panel--exiting" : ""}`} resizeLabel="Resize metrics panel">
             <DetailPanel
               title={expandedMeta.name}
               subtitle={metricSubtitle}
               scrollResetKey={expandedMeta.key}
-              onClose={() => {
-                setExpandedMetricKey(null);
-                setSelectedSeriesKey(null);
-              }}
+              onClose={closeMetricPanel}
             >
               <div className="metrics-panel">
                 <div className="metrics-explorer__controls">
                   <div className="metrics-explorer__display">
                     <span className="metrics-explorer__control-label">Display</span>
-                    {(["lines", "bars", "area"] as DisplayType[]).map((nextDisplayType) => (
-                      <button
-                        key={nextDisplayType}
-                        className={`pill pill--small ${displayType === nextDisplayType ? "pill--accent" : "pill--muted"}`}
-                        onClick={() => setDisplayType(nextDisplayType)}
-                        type="button"
-                      >
-                        {nextDisplayType.charAt(0).toUpperCase() + nextDisplayType.slice(1)}
-                      </button>
-                    ))}
+                    <div
+                      className="segmented-control"
+                      role="radiogroup"
+                      aria-label="Chart display type"
+                      onKeyDown={(event) => {
+                        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                        event.preventDefault();
+                        const options: DisplayType[] = ["lines", "bars", "area"];
+                        const dir = event.key === "ArrowRight" ? 1 : -1;
+                        const next = (options.indexOf(displayType) + dir + options.length) % options.length;
+                        setDisplayType(options[next]);
+                        (event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();
+                      }}
+                    >
+                      {(["lines", "bars", "area"] as DisplayType[]).map((nextDisplayType) => (
+                        <button
+                          key={nextDisplayType}
+                          className={`segmented-control__option${displayType === nextDisplayType ? " segmented-control__option--active" : ""}`}
+                          onClick={() => setDisplayType(nextDisplayType)}
+                          type="button"
+                          role="radio"
+                          aria-checked={displayType === nextDisplayType}
+                          tabIndex={displayType === nextDisplayType ? 0 : -1}
+                        >
+                          {nextDisplayType.charAt(0).toUpperCase() + nextDisplayType.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="metrics-explorer__control-summary">
                     {chartValueLabel ? <span className="metrics-explorer__plot-label">{chartValueLabel}</span> : null}
