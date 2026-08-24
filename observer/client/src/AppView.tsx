@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { CloudTab } from "./cloud/CloudTab";
+import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
@@ -21,6 +21,7 @@ type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "dashb
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<AppTab>(() => initialTabFromLocation());
   const [showHelp, setShowHelp] = useState(false);
+  const [cloudConnectionState, setCloudConnectionState] = useState<CloudConnectionState | null>(null);
 
   const { state, paused, hasNewUpdates, resume, toggle } = telemetry;
   const validationSummary = state.validation?.summary ?? null;
@@ -185,7 +186,22 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 </span>
                 {paused ? "Paused" : "Live"}
               </button>
-            ) : null}
+            ) : (
+              <span
+                className={`stream-toggle stream-toggle--status ${
+                  cloudConnectionState === "connected" ? "stream-toggle--live"
+                  : cloudConnectionState === "configured" ? "stream-toggle--paused"
+                  : "stream-toggle--muted"
+                }`}
+                aria-label={
+                  cloudConnectionState === "connected" ? "Cloud connected"
+                  : "Cloud not connected"
+                }
+              >
+                <span className="stream-toggle__dot" aria-hidden="true" />
+                {cloudConnectionState === "connected" ? "Connected" : "Not connected"}
+              </span>
+            )}
             {activeTab !== "cloud" && paused && hasNewUpdates ? (
               <button
                 className="pending-badge"
@@ -243,7 +259,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         {activeTab === "dashboards" ? (
           <DashboardsTab telemetryError={state.error} paused={paused} />
         ) : null}
-        {activeTab === "cloud" ? <CloudTab /> : null}
+        {activeTab === "cloud" ? <CloudTab onConnectionChange={setCloudConnectionState} /> : null}
       </section>
 
       {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}

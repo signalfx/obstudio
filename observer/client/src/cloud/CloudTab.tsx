@@ -49,7 +49,13 @@ interface SignalRow {
   tone: "error" | "idle" | "success" | "warning";
 }
 
-export function CloudTab(): React.ReactElement {
+export type CloudConnectionState = "connected" | "configured" | "disconnected";
+
+interface CloudTabProps {
+  onConnectionChange?: (state: CloudConnectionState) => void;
+}
+
+export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
   const [bridge, setBridge] = useState<CloudBridgeConfig | null>(null);
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
   const [region, setRegion] = useState("us0");
@@ -215,6 +221,16 @@ export function CloudTab(): React.ReactElement {
   }, [notice]);
 
   const connected = status?.connected === true;
+
+  useEffect(() => {
+    if (status === null) return;
+    const isConfigured = status.connected
+      || status.metrics.configured
+      || status.traces.configured;
+    const state: CloudConnectionState = status.connected ? "connected" : isConfigured ? "configured" : "disconnected";
+    onConnectionChange?.(state);
+  }, [onConnectionChange, status]);
+
   const exportEnabled = status?.enabled === true;
   const metricsConfigured = status?.metrics.configured === true;
   const tracesConfigured = status?.traces.configured === true;
@@ -352,10 +368,6 @@ export function CloudTab(): React.ReactElement {
         >
           <header className="cloud-panel__header">
             <div>
-              <p className={connected ? "cloud-state cloud-state--connected" : "cloud-state"}>
-                <span aria-hidden="true" />
-                {connectionStateLabel}
-              </p>
               <h2>Splunk Observability Cloud</h2>
               <p>{connectionSummary}</p>
             </div>

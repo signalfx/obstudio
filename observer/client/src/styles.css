@@ -4387,6 +4387,27 @@ code {
   font-size: var(--font-xs);
 }
 
+.stream-toggle__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.stream-toggle--muted {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.stream-toggle--status {
+  cursor: default;
+}
+
+.stream-toggle--status:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .stream-toggle--live {
   border-color: rgba(133, 244, 21, 0.4);
   color: var(--green);
