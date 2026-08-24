@@ -81,8 +81,7 @@ describe("CloudTab", () => {
     });
     bridge.respond(connect, { status: connectedStatus(false, "us1") });
 
-    expect(await screen.findByText("Connected")).toBeTruthy();
-    expect(screen.getByText("US1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("US1 · Access token configured")).toBeTruthy();
     expect(screen.queryByDisplayValue("token_1234567890123456")).toBeNull();
     expect(screen.queryByRole("link", { name: "Create free account" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Remote telemetry export is off" }).getAttribute("aria-checked")).toBe("false");
@@ -96,8 +95,7 @@ describe("CloudTab", () => {
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, { status });
 
-    expect(await screen.findByText("Connected")).toBeTruthy();
-    expect(screen.getByText("configured destination · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("configured destination · Access token configured")).toBeTruthy();
     expect(screen.getByText("Send metrics and traces to configured destination.")).toBeTruthy();
   });
 
@@ -109,8 +107,7 @@ describe("CloudTab", () => {
     const initialize = await bridge.next("initialize");
     bridge.reject(initialize, "Observer control token is missing");
 
-    expect(await screen.findByText("Connected")).toBeTruthy();
-    expect(screen.getByText("US1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("US1 · Access token configured")).toBeTruthy();
     expect((await screen.findByRole("alert")).textContent)
       .toContain("Observer control token is missing");
   });
@@ -212,7 +209,7 @@ describe("CloudTab", () => {
     const forget = await bridge.next("forget");
     bridge.respond(forget, { status: disconnectedStatus() });
 
-    expect(await screen.findByText("Not connected")).toBeTruthy();
+    expect(await screen.findByText("Connect to export metrics and traces.")).toBeTruthy();
     expect(screen.getByLabelText("Access token")).toBeTruthy();
   });
 
@@ -291,7 +288,6 @@ describe("CloudTab", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText("Partially configured")).toBeTruthy();
     expect(screen.getByText("US0 · Connection details incomplete")).toBeTruthy();
     expect(screen.getByRole("list", { name: "Telemetry export activity" })).toBeTruthy();
     expect(screen.getByText("7 points · 1 batch")).toBeTruthy();
