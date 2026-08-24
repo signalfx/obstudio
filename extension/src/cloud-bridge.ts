@@ -6,6 +6,7 @@ export type CloudBridgeAction =
 	| 'initialize'
 	| 'open-free-edition'
 	| 'open-ingest-token-help'
+	| 'setup-cimd'
 	| 'set-enabled';
 
 export type CloudBridgeRequest = {
@@ -55,6 +56,9 @@ export function isCloudBridgeRequest(value: unknown): value is CloudBridgeReques
 	}
 	if (request.payload === undefined) {
 		return true;
+	}
+	if (request.action === 'setup-cimd') {
+		return false;
 	}
 	if (typeof request.payload !== 'object' || request.payload === null) {
 		return false;
@@ -165,5 +169,6 @@ function isCloudBridgeAction(value: unknown): value is CloudBridgeAction {
 		|| value === 'initialize'
 		|| value === 'open-free-edition'
 		|| value === 'open-ingest-token-help'
+		|| value === 'setup-cimd'
 		|| value === 'set-enabled';
 }

@@ -449,6 +449,8 @@ it('integration: extension.js exports activate and deactivate', { timeout: 120_0
 		'observability-studio.startObserver',
 		'observability-studio.stopObserver',
 		'observability-studio.restartObserver',
+		'observability-studio.signInToSISWithCIMD',
+		'observability-studio.clearSISSession',
 	]) {
 		assert.ok(source.includes(cmd), `extension.js should register command "${cmd}"`);
 	}
@@ -482,6 +484,8 @@ it('integration: package.json registers all commands', () => {
 		'observability-studio.startObserver',
 		'observability-studio.stopObserver',
 		'observability-studio.restartObserver',
+		'observability-studio.signInToSISWithCIMD',
+		'observability-studio.clearSISSession',
 	]) {
 		assert.ok(
 			commands.includes(expected),
@@ -496,6 +500,8 @@ it('integration: contributed commands are grouped under Splunk Observability Stu
 	const commands = packageJson.contributes?.commands ?? [];
 	const expectedCommands = [
 		'observability-studio.openObserver',
+		'observability-studio.signInToSISWithCIMD',
+		'observability-studio.clearSISSession',
 		'observability-studio.configureCodexMCP',
 		'observability-studio.configureClaudeCodeMCP',
 		'observability-studio.configureCursorMCP',
@@ -519,6 +525,23 @@ it('integration: package.json contributes sharedObserverUrl setting', async () =
 	const property = packageJson.contributes?.configuration?.properties?.['observability-studio.sharedObserverUrl'];
 
 	assert.ok(property, 'sharedObserverUrl setting should be contributed');
+});
+
+it('integration: package.json contributes the CIMD client settings', async () => {
+	const packageJsonPath = path.join(extensionRoot, 'package.json');
+	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as ExtensionPackage;
+	const properties = packageJson.contributes?.configuration?.properties ?? {};
+
+	for (const setting of [
+		'observability-studio.sisCimdOAuthIssuer',
+		'observability-studio.sisCimdOAuthClientId',
+		'observability-studio.sisCimdOAuthRedirectUri',
+		'observability-studio.sisCimdOAuthScope',
+		'observability-studio.sisCimdOAuthDevelopmentCaBundlePath',
+	]) {
+		assert.ok(properties[setting], `${setting} setting should be contributed`);
+	}
+	assert.equal(properties['observability-studio.sisCimdOAuthGatewayUrl'], undefined);
 });
 
 it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t) => {

@@ -56,6 +56,15 @@ import {
 	type CloudBridgeRequest,
 	type StoredSplunkCloudConnection,
 } from './cloud-bridge';
+import {
+	authorizeWithSISCIMD,
+	parseSISCIMDOAuthSession,
+	sisCIMDOAuthRedirectUri,
+	sisCIMDOAuthSessionMatchesConfiguration,
+	sisCIMDOAuthSessionSecretStorageKey,
+	type SISCIMDOAuthConfiguration,
+	type SISCIMDOAuthSession,
+} from './sis-cimd-oauth';
 
 // Extension-global observer state. The extension hosts one local observer process
 // and optionally one WebView panel that embeds its UI.
@@ -69,6 +78,8 @@ let observerStatusBarItem: vscode.StatusBarItem | undefined;
 let observerUsesSharedServer = false;
 let observerSharedControlToken: string | undefined;
 let observerPanelBridgeToken: string | undefined;
+let sisCIMDOAuthFlowPromise: Promise<boolean> | undefined;
+let sisCIMDOAuthAbortController: AbortController | undefined;
 let agentIntegrationPromptPromise: Promise<void> | undefined;
 let recentAgentIntegrationPrompts: Array<{ detail?: string; message: string }> = [];
 const observerLifecycleState = createObserverLifecycleState();
@@ -77,6 +88,11 @@ let lastObserverPanelRenderKey: string | undefined;
 const observerPanelViewType = 'observabilityStudioObserver';
 const sharedObserverUrlSetting = 'sharedObserverUrl';
 const managedObserverPortSetting = 'managedObserverPort';
+const sisCimdOAuthIssuerSetting = 'sisCimdOAuthIssuer';
+const sisCimdOAuthClientIdSetting = 'sisCimdOAuthClientId';
+const sisCimdOAuthRedirectUriSetting = 'sisCimdOAuthRedirectUri';
+const sisCimdOAuthScopeSetting = 'sisCimdOAuthScope';
+const sisCimdOAuthDevelopmentCaBundlePathSetting = 'sisCimdOAuthDevelopmentCaBundlePath';
 const managedObserverHost = '127.0.0.1';
 const defaultManagedObserverPort = 3000;
 const observerKind = 'obstudio';
@@ -356,6 +372,14 @@ export async function activate(context: vscode.ExtensionContext) {
 			refreshObserverPanel();
 		}
 	});
+	const signInToSISWithCIMDDisposable = vscode.commands.registerCommand(
+		'observability-studio.signInToSISWithCIMD',
+		() => runSISCIMDOAuthCommand(context),
+	);
+	const clearSISSessionDisposable = vscode.commands.registerCommand(
+		'observability-studio.clearSISSession',
+		() => clearSISSession(context),
+	);
 	const configureCodexDisposable = vscode.commands.registerCommand(
 		'observability-studio.configureCodexMCP',
 		() => configureAgentMCP(context, 'codex', 'Codex'),
@@ -419,6 +443,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(startDisposable);
 	context.subscriptions.push(stopDisposable);
 	context.subscriptions.push(restartDisposable);
+	context.subscriptions.push(signInToSISWithCIMDDisposable);
+	context.subscriptions.push(clearSISSessionDisposable);
 	context.subscriptions.push(configureCodexDisposable);
 	context.subscriptions.push(configureClaudeDisposable);
 	context.subscriptions.push(configureCursorDisposable);
@@ -431,13 +457,154 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(observerStatusBarItem);
 	context.subscriptions.push({
 		dispose: () => {
+			sisCIMDOAuthAbortController?.abort();
 			disposeObserverForExtensionUnload('Extension disposed');
 		},
 	});
 }
 
 export async function deactivate(): Promise<void> {
+	sisCIMDOAuthAbortController?.abort();
 	await shutdownObserverForExtensionUnload('Extension deactivated');
+}
+
+function getSISCIMDOAuthConfiguration(): SISCIMDOAuthConfiguration {
+	const configuration = vscode.workspace.getConfiguration('observability-studio');
+	const issuer = configuration.get<string>(sisCimdOAuthIssuerSetting)?.trim() ?? '';
+	const clientId = configuration.get<string>(sisCimdOAuthClientIdSetting)?.trim() ?? '';
+	const scope = configuration.get<string>(sisCimdOAuthScopeSetting)?.trim() ?? '';
+	const redirectUri = configuration.get<string>(sisCimdOAuthRedirectUriSetting)?.trim()
+		|| sisCIMDOAuthRedirectUri;
+	const developmentCaBundlePath = configuration
+		.get<string>(sisCimdOAuthDevelopmentCaBundlePathSetting)?.trim() || undefined;
+
+	if (issuer === '') {
+		throw new Error('Set observability-studio.sisCimdOAuthIssuer before setting up SIS sign-in.');
+	}
+	if (clientId === '') {
+		throw new Error('Set observability-studio.sisCimdOAuthClientId to the HTTPS metadata document URL.');
+	}
+	if (scope === '') {
+		throw new Error('Set observability-studio.sisCimdOAuthScope to at least one SIS-supported scope.');
+	}
+	if (redirectUri !== sisCIMDOAuthRedirectUri) {
+		throw new Error(`CIMD requires the fixed callback ${sisCIMDOAuthRedirectUri}.`);
+	}
+
+	return {
+		clientId,
+		developmentCaBundlePath,
+		issuer,
+		redirectUri,
+		scope,
+	};
+}
+
+async function loadCurrentSISCIMDOAuthSession(
+	context: vscode.ExtensionContext,
+): Promise<SISCIMDOAuthSession | undefined> {
+	const stored = await context.secrets.get(sisCIMDOAuthSessionSecretStorageKey);
+	if (stored === undefined) {
+		return undefined;
+	}
+
+	try {
+		const session = parseSISCIMDOAuthSession(stored);
+		return session !== undefined
+			&& sisCIMDOAuthSessionMatchesConfiguration(session, getSISCIMDOAuthConfiguration())
+			? session
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+async function hasCurrentSISSession(context: vscode.ExtensionContext): Promise<boolean> {
+	return await loadCurrentSISCIMDOAuthSession(context) !== undefined;
+}
+
+async function signInToSISWithCIMD(context: vscode.ExtensionContext): Promise<boolean> {
+	if (sisCIMDOAuthFlowPromise !== undefined) {
+		return sisCIMDOAuthFlowPromise;
+	}
+
+	const abortController = new AbortController();
+	sisCIMDOAuthAbortController = abortController;
+	sisCIMDOAuthFlowPromise = performSISCIMDOAuthSignIn(context, abortController);
+	try {
+		return await sisCIMDOAuthFlowPromise;
+	} finally {
+		abortController.abort();
+		if (sisCIMDOAuthAbortController === abortController) {
+			sisCIMDOAuthAbortController = undefined;
+		}
+		sisCIMDOAuthFlowPromise = undefined;
+	}
+}
+
+async function performSISCIMDOAuthSignIn(
+	context: vscode.ExtensionContext,
+	abortController: AbortController,
+): Promise<boolean> {
+	if (await hasCurrentSISSession(context)) {
+		return true;
+	}
+
+	const session = await vscode.window.withProgress(
+		{
+			cancellable: true,
+			location: vscode.ProgressLocation.Notification,
+			title: 'Setting up SIS sign-in with CIMD',
+		},
+		async (progress, cancellationToken) => {
+			const cancellationDisposable = cancellationToken.onCancellationRequested(() => abortController.abort());
+			progress.report({ message: 'Validating client metadata and SIS discovery...' });
+			try {
+				return await authorizeWithSISCIMD(getSISCIMDOAuthConfiguration(), async (authorizationUrl) => {
+					progress.report({ message: 'Complete authorization in your browser...' });
+					return vscode.env.openExternal(vscode.Uri.parse(authorizationUrl.toString()));
+				}, abortController.signal);
+			} finally {
+				cancellationDisposable.dispose();
+			}
+		},
+	);
+	if (abortController.signal.aborted) {
+		throw new Error('CIMD setup was cancelled.');
+	}
+
+	await context.secrets.store(sisCIMDOAuthSessionSecretStorageKey, JSON.stringify(session));
+	return true;
+}
+
+async function runSISCIMDOAuthCommand(context: vscode.ExtensionContext): Promise<boolean> {
+	try {
+		const ready = await signInToSISWithCIMD(context);
+		if (ready) {
+			refreshObserverPanel();
+			void vscode.window.showInformationMessage(
+				'CIMD SIS session ready. Splunk Observability Cloud export remains disconnected.',
+			);
+		}
+		return ready;
+	} catch (error) {
+		void vscode.window.showErrorMessage(`CIMD setup failed: ${getErrorMessage(error)}`);
+		return false;
+	}
+}
+
+async function clearSISSession(context: vscode.ExtensionContext): Promise<boolean> {
+	if (sisCIMDOAuthFlowPromise !== undefined) {
+		void vscode.window.showWarningMessage('Finish or cancel the current CIMD setup before clearing its session.');
+		return false;
+	}
+
+	await context.secrets.delete(sisCIMDOAuthSessionSecretStorageKey);
+	refreshObserverPanel();
+	void vscode.window.showInformationMessage(
+		'Local CIMD SIS session cleared. Splunk Observability Cloud export is unchanged.',
+	);
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +1115,8 @@ function refreshObserverPanel(): void {
 }
 
 type CloudBridgeResult = {
+	message?: string;
+	sisSessionReady?: boolean;
 	status?: unknown;
 };
 
@@ -1010,14 +1179,25 @@ async function performCloudBridgeAction(
 	request: CloudBridgeRequest,
 ): Promise<CloudBridgeResult> {
 	switch (request.action) {
-		case 'initialize':
-			return { status: await refreshSplunkCloudConnection(context) };
+		case 'initialize': {
+			const [status, sisSessionReady] = await Promise.all([
+				refreshSplunkCloudConnection(context),
+				hasCurrentSISSession(context),
+			]);
+			return { sisSessionReady, status };
+		}
 		case 'open-free-edition':
 			await openCloudExternalUrl(splunkFreeEditionUrl);
 			return {};
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'setup-cimd':
+			await signInToSISWithCIMD(context);
+			return {
+				message: 'CIMD SIS session ready. Splunk Observability Cloud export remains disconnected.',
+				sisSessionReady: true,
+			};
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
 			const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);

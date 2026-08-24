@@ -76,6 +76,19 @@ test('cloud bridge accepts only bounded known requests', () => {
 		type: 'obstudio.cloud.request',
 	}), true);
 	assert.equal(isCloudBridgeRequest({
+		action: 'setup-cimd',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'setup-cimd',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { accessToken: 'must-not-cross-this-boundary' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
 		action: 'unsupported',
 		bridgeToken: 'bridge-token-1234567890123456',
 		requestId: 'request-123',
@@ -112,6 +125,62 @@ test('cloud bridge ready messages require the bound token shape', () => {
 		bridgeToken: 'bridge-token-1234567890123456',
 		type: 'obstudio.cloud.request',
 	}), false);
+});
+
+test('CIMD setup is session-only and does not configure cloud export', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const setupStart = source.indexOf("case 'setup-cimd':");
+	const setupEnd = source.indexOf("case 'connect':", setupStart);
+	assert.ok(setupStart >= 0 && setupEnd > setupStart, 'setup-cimd bridge case should exist');
+	const setupCase = source.slice(setupStart, setupEnd);
+
+	assert.match(setupCase, /await signInToSISWithCIMD\(context\)/);
+	assert.match(setupCase, /sisSessionReady: true/);
+	assert.match(setupCase, /Cloud export remains disconnected/);
+	assert.doesNotMatch(setupCase, /postObserverCloudJSON|splunkCloudConnectionSecretKey|set-enabled/);
+});
+
+test('failed or cancelled CIMD reauthorization preserves the stored session', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const signInStart = source.indexOf('async function performSISCIMDOAuthSignIn');
+	const signInEnd = source.indexOf('async function runSISCIMDOAuthCommand', signInStart);
+	assert.ok(signInStart >= 0 && signInEnd > signInStart, 'CIMD sign-in core should exist');
+	const signInCore = source.slice(signInStart, signInEnd);
+	const authorizeIndex = signInCore.indexOf('authorizeWithSISCIMD(');
+	const storeIndex = signInCore.indexOf('context.secrets.store(sisCIMDOAuthSessionSecretStorageKey');
+
+	assert.ok(authorizeIndex >= 0, 'CIMD sign-in should perform authorization');
+	assert.ok(storeIndex > authorizeIndex, 'the new session should replace the prior secret only after authorization');
+	assert.doesNotMatch(signInCore, /context\.secrets\.delete\(sisCIMDOAuthSessionSecretStorageKey\)/);
+});
+
+test('package metadata contributes CIMD commands and isolated settings', () => {
+	const packageJSONPath = path.join(extensionRoot, 'package.json');
+	const packageJSON = JSON.parse(fs.readFileSync(packageJSONPath, 'utf-8')) as {
+		contributes?: {
+			commands?: Array<{ command: string }>;
+			configuration?: { properties?: Record<string, { default?: unknown; enum?: unknown; scope?: unknown }> };
+		};
+	};
+	const commandIds = new Set(packageJSON.contributes?.commands?.map((command) => command.command));
+	const properties = packageJSON.contributes?.configuration?.properties ?? {};
+
+	assert.equal(commandIds.has('observability-studio.signInToSISWithCIMD'), true);
+	assert.equal(commandIds.has('observability-studio.clearSISSession'), true);
+	assert.equal(properties['observability-studio.sisCimdOAuthIssuer']?.scope, 'machine');
+	assert.equal(properties['observability-studio.sisCimdOAuthClientId']?.scope, 'machine');
+	assert.deepEqual(properties['observability-studio.sisCimdOAuthRedirectUri']?.enum, [
+		'http://127.0.0.1:33418/callback',
+	]);
+	assert.equal(
+		properties['observability-studio.sisCimdOAuthRedirectUri']?.default,
+		'http://127.0.0.1:33418/callback',
+	);
+	assert.equal(properties['observability-studio.sisCimdOAuthScope']?.default, 'openid offline_access');
+	assert.equal(properties['observability-studio.sisCimdOAuthDevelopmentCaBundlePath']?.default, '');
+	assert.equal(properties['observability-studio.sisCimdOAuthGatewayUrl'], undefined);
 });
 
 test('stored cloud connections require a valid realm and opaque token', () => {

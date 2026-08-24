@@ -88,6 +88,90 @@ describe("CloudTab", () => {
     expect(screen.getByRole("switch", { name: "Remote telemetry export is off" }).getAttribute("aria-checked")).toBe("false");
   });
 
+  it("sets up a CIMD SIS session while Cloud remains disconnected", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+
+    const setupButton = await screen.findByRole("button", { name: "Set up OAuth client with CIMD" });
+    fireEvent.click(setupButton);
+    const setup = await bridge.next("setup-cimd");
+    expect(setup.payload).toBeUndefined();
+    bridge.respond(setup, {
+      message: "CIMD SIS session ready. Splunk Observability Cloud export remains disconnected.",
+      sisSessionReady: true,
+    });
+
+    expect(await screen.findByText("SIS session ready")).toBeTruthy();
+    expect(screen.getByText("Not connected")).toBeTruthy();
+    expect(screen.getByLabelText("Access token")).toBeTruthy();
+    expect(screen.getByText(/Cloud export is still disconnected/u)).toBeTruthy();
+    expect(bridge.requests().some((request) => request.action === "connect")).toBe(false);
+  });
+
+  it("keeps a CIMD bridge request open beyond the default 15-second timeout", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+    const setupButton = await screen.findByRole("button", { name: "Set up OAuth client with CIMD" });
+    await waitFor(() => expect((setupButton as HTMLButtonElement).disabled).toBe(false));
+
+    vi.useFakeTimers();
+    fireEvent.click(setupButton);
+    const setup = bridge.requests().find((request) => request.action === "setup-cimd");
+    expect(setup).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_100);
+    });
+    expect(screen.getByRole("button", { name: "Setting up..." })).toBeTruthy();
+    expect(screen.queryByText("The IDE did not respond. Try again.")).toBeNull();
+
+    bridge.respond(setup as BridgeRequest, {
+      sisSessionReady: true,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText("SIS session ready")).toBeTruthy();
+  });
+
+  it("restores CIMD SIS readiness without changing Cloud export status", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      sisSessionReady: true,
+      status: disconnectedStatus(),
+    });
+
+    expect(await screen.findByText("SIS session ready")).toBeTruthy();
+    expect(screen.getByText("Not connected")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Set up OAuth client with CIMD" })).toBeNull();
+    expect(screen.getByRole("form", { name: "Cloud connection" })).toBeTruthy();
+  });
+
+  it("keeps Cloud disconnected when CIMD setup fails", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+    fireEvent.click(await screen.findByRole("button", { name: "Set up OAuth client with CIMD" }));
+    const setup = await bridge.next("setup-cimd");
+    bridge.reject(setup, "SIS discovery does not advertise CIMD support.");
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("SIS discovery does not advertise CIMD support.");
+    expect(screen.getByText("Not connected")).toBeTruthy();
+    expect(screen.getByLabelText("Access token")).toBeTruthy();
+  });
+
   it("uses endpoint-neutral copy when a connected status has no realm", async () => {
     const bridge = installBridge();
     const status = connectedStatus(false, "");
@@ -427,7 +511,11 @@ function installBridge(options: { verified?: boolean } = {}) {
     readyRequests(): BridgeReady[] {
       return readyRequests;
     },
-    respond(request: BridgeRequest, result: { status?: SplunkExportStatus }) {
+    respond(request: BridgeRequest, result: {
+      message?: string;
+      sisSessionReady?: boolean;
+      status?: SplunkExportStatus;
+    }) {
       act(() => {
         window.dispatchEvent(new MessageEvent("message", {
           data: {

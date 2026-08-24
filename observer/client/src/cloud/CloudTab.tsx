@@ -6,6 +6,8 @@ const maxSplunkRealmLength = 32;
 const splunkRealmPattern = /^[a-z]{2,12}[0-9]+$/;
 const cloudBridgeVerificationWindowMs = 15_000;
 const cloudBridgeVerificationIntervalMs = 100;
+const cloudBridgeRequestTimeoutMs = 15_000;
+const cloudBridgeCIMDSetupTimeoutMs = 6 * 60_000;
 const freeEditionURL = "https://www.splunk.com/en_us/download/observability-cloud-free-edition.html";
 const ingestTokenHelpURL = "https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens";
 
@@ -15,6 +17,7 @@ type CloudBridgeAction =
   | "initialize"
   | "open-free-edition"
   | "open-ingest-token-help"
+  | "setup-cimd"
   | "set-enabled";
 
 interface CloudBridgeConfig {
@@ -30,8 +33,10 @@ interface CloudBridgeHandshake {
 interface CloudBridgeResponse {
   bridgeToken: string;
   error?: string;
+  message?: string;
   ok: boolean;
   requestId: string;
+  sisSessionReady?: boolean;
   status?: SplunkExportStatus;
   type: "obstudio.cloud.response";
 }
@@ -54,6 +59,7 @@ export function CloudTab(): React.ReactElement {
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
   const [region, setRegion] = useState("us0");
   const [accessToken, setAccessToken] = useState("");
+  const [sisSessionReady, setSISSessionReady] = useState(false);
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,10 +85,13 @@ export function CloudTab(): React.ReactElement {
     }
     const requestId = bridgeRequestId();
     return new Promise((resolve, reject) => {
+      const requestTimeoutMs = action === "setup-cimd"
+        ? cloudBridgeCIMDSetupTimeoutMs
+        : cloudBridgeRequestTimeoutMs;
       const timeoutId = window.setTimeout(() => {
         pendingRequests.current.delete(requestId);
         reject(new Error("The IDE did not respond. Try again."));
-      }, 15_000);
+      }, requestTimeoutMs);
       pendingRequests.current.set(requestId, { reject, resolve, timeoutId });
       window.parent.postMessage({
         action,
@@ -171,7 +180,9 @@ export function CloudTab(): React.ReactElement {
         let bridgeInitializationError: unknown;
         if (bridge) {
           try {
-            nextStatus = (await callBridge("initialize")).status;
+            const response = await callBridge("initialize");
+            nextStatus = response.status;
+            setSISSessionReady(response.sisSessionReady === true);
           } catch (initializationError) {
             bridgeInitializationError = initializationError;
             nextStatus = await fetchSplunkExportStatus(controller.signal);
@@ -280,6 +291,9 @@ export function CloudTab(): React.ReactElement {
     try {
       const response = await callBridge(action, payload);
       if (response.status) setStatus(response.status);
+      if (response.sisSessionReady !== undefined) {
+        setSISSessionReady(response.sisSessionReady);
+      }
       return response;
     } catch (actionError) {
       setError(errorMessage(actionError, "The cloud connection request failed."));
@@ -310,6 +324,13 @@ export function CloudTab(): React.ReactElement {
     if (!response) return;
     setAccessToken("");
     setNotice("Cloud destination connected.");
+  };
+
+  const setupCIMD = async () => {
+    const response = await runAction("setup-cimd");
+    if (!response) return;
+    setNotice(response.message
+      ?? "CIMD SIS session ready. Splunk Observability Cloud export remains disconnected.");
   };
 
   const openExternalLink = (
@@ -373,6 +394,31 @@ export function CloudTab(): React.ReactElement {
               </div>
             ) : null}
           </header>
+
+          {!cloudConfigured ? (
+            <section aria-labelledby="cloud-cimd-title" className="cloud-cimd-setup">
+              <div>
+                <h3 id="cloud-cimd-title">Unified sign-in</h3>
+                <p>
+                  {sisSessionReady
+                    ? "CIMD SIS session ready. Cloud export is still disconnected."
+                    : "Set up this IDE as a secretless SIS OAuth client using CIMD and PKCE."}
+                </p>
+              </div>
+              {sisSessionReady ? (
+                <span className="cloud-cimd-setup__status" role="status">SIS session ready</span>
+              ) : (
+                <button
+                  className="cloud-button"
+                  disabled={busyAction !== null || !bridge}
+                  onClick={() => void setupCIMD()}
+                  type="button"
+                >
+                  {busyAction === "setup-cimd" ? "Setting up..." : "Set up OAuth client with CIMD"}
+                </button>
+              )}
+            </section>
+          ) : null}
 
           {!cloudConfigured ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" onSubmit={connect}>
@@ -662,6 +708,8 @@ function isCloudBridgeResponse(value: unknown): value is CloudBridgeResponse {
     && typeof response.requestId === "string"
     && typeof response.ok === "boolean"
     && (response.error === undefined || typeof response.error === "string")
+    && (response.message === undefined || typeof response.message === "string")
+    && (response.sisSessionReady === undefined || typeof response.sisSessionReady === "boolean")
     && (response.status === undefined || isSplunkExportStatus(response.status));
 }
 

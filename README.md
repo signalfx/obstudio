@@ -153,6 +153,10 @@ endpoint values are used exactly as configured. Use
 The access token is only read from the environment and is never returned by
 `/api/health`.
 
+The VS Code extension also supports secretless SIS client setup with CIMD. This
+creates a local SIS session but does not replace the Observability Cloud export
+token. See [SIS client registration with CIMD](docs/oauth-cimd.md).
+
 ### Optional Splunk Traces Forwarding
 
 To also forward received traces to Splunk Observability Cloud APM, add the
