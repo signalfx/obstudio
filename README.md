@@ -34,16 +34,18 @@ unzip obstudio_*_darwin_arm64.zip
 cd obstudio_*_darwin_arm64
 
 # Install for all supported agents (or pass just one target)
-./obstudio install --target=codex,claude-code,cursor,kiro
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
 ```
 
 After unzipping the release, run `obstudio install` from that extracted
 directory without moving the files. The installer expects `weaver` to be next
-to `obstudio`. `--target` accepts `codex`, `claude-code`, `cursor`, `kiro`, or a
-comma-separated list of those values. For each selected agent, the installer
-stores the managed bundle under its skills directory and creates top-level
-discoverable skill entries such as `otel-audit`, `otel-instrument`, and
-`otel-verify` in the agent skills root.
+to `obstudio`. `--target` accepts `codex`, `claude-code`, `cursor`, `kiro`,
+`windsurf`, `copilot`, or a comma-separated list of those values. For each
+selected agent with a skills directory, the installer stores the managed bundle
+under that directory and creates top-level discoverable skill entries such as
+`otel-audit`, `otel-instrument`, and `otel-verify` in the agent skills root.
+`copilot` has no agent-skills mechanism, so its install configures only the MCP
+server (VS Code user `mcp.json`) and installs no skill entries.
 After installation, restart the agent if it does not discover the new skills.
 
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its

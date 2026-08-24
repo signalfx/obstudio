@@ -23,12 +23,14 @@ run the installer:
 
 ```bash
 cd obstudio_<version>_<os>_<arch>
-./obstudio install --target=codex,claude-code,cursor,kiro
+./obstudio install --target=codex,claude-code,cursor,kiro,windsurf,copilot
 ```
 
-This installs the included skills and configures the MCP server for all four
-agents. Pass a single `codex`, `claude-code`, `cursor`, or `kiro` value when
-you only want to configure one agent.
+This installs the included skills and configures the MCP server for all
+supported agents. Pass a single `codex`, `claude-code`, `cursor`, `kiro`,
+`windsurf`, or `copilot` value when you only want to configure one agent.
+`copilot` has no agent-skills mechanism, so it configures only the MCP server
+and installs no skill entries.
 
 The Codex plugin bootstrapper also expects the release pipeline to publish a
 `checksums.txt` file alongside the zip archives and validates the archive
@@ -42,6 +44,8 @@ before extraction.
 | `claude-code` | `~/.claude/skills/obstudio/` | `~/.claude.json` |
 | `codex` | `~/.codex/skills/obstudio/` | `~/.codex/config.toml` |
 | `kiro` | `~/.kiro/skills/obstudio/` | `~/.kiro/settings/mcp.json` |
+| `windsurf` | `~/.codeium/windsurf/skills/obstudio/` | `~/.codeium/windsurf/mcp_config.json` |
+| `copilot` | _(none)_ | `<VS Code user config>/Code/User/mcp.json` |
 
 The installer:
 1. Extracts skills and references from the binary to the agent's skill directory
