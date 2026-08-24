@@ -14,7 +14,8 @@ rubric grading, optional Docker runtime checks, and aggregate reports.
 - Sanity checks from final text, files, and command output.
 - Schema-constrained rubric grading with a configurable judge model.
 - Optional Docker-backed runtime checks that can exercise a service and verify
-  traces or metrics in an Observer-compatible API.
+  traces, metrics, logs, and preserved service output through an
+  Observer-compatible API and Docker Compose.
 - Separate raw JSON execution output and kind-specific Markdown/benchmark reports.
 
 ## Install
@@ -73,6 +74,14 @@ Role-specific schemas are strict:
 - `eval/qual/*.json`: `skill`, `prompts`, required `rubric`, optional `judge_prompt` and `judge_inputs`.
 - `eval/runtime/*.json`: `skill`, `prompts`, required runtime `checks`.
 
+### 0.2 runtime-expectation migration
+
+Version 0.2 makes the public runtime `expect` object strict so misspelled
+assertions cannot be silently ignored. Remove unknown keys before upgrading and
+use `service_logs` for preserved stdout/stderr assertions. A runtime check must
+declare at least one non-empty `endpoints` or `service_logs` list; an explicitly
+empty `endpoints` list remains valid when `service_logs` is non-empty.
+
 `judge_prompt` lets a suite replace the built-in rubric judge prompt. It can
 use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
@@ -97,24 +106,58 @@ Other command-backed kinds are `command_succeeds`,
 
 Runtime checks are optional because they need Docker and a telemetry backend.
 Each runtime check runs an eval-owned Docker Compose file, then queries an
-Observer-compatible API for traces and metrics. Keep service topology, build
-instructions, startup, and traffic generation in Compose. The eval JSON only
-points at the Compose file and declares telemetry expectations. Compose can use
-`${CODEX_EVAL_SERVICE_DIR}` when it must build the instrumented temp service
-workspace instead of the source fixture.
+Observer-compatible API for telemetry and can inspect preserved service output.
+Keep service topology, build instructions, startup, and traffic generation in
+Compose. The eval JSON only points at the Compose file and declares telemetry
+expectations. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
+instrumented temp service workspace instead of the source fixture.
 
 ```json
 {
   "id": "observer-runtime",
-  "description": "Service emits traces and metrics to Observer.",
+  "description": "Service emits a correlated log and preserves console output.",
   "compose_file": "docker-compose.yml",
   "timeout_seconds": 120,
+  "environment": {
+    "CODEX_EVAL_OTEL_LOGS_EXPORTER": ""
+  },
+  "stop_services_before_validation": ["app"],
   "expect": {
-    "traces": { "span_names": ["GET /health"] },
-    "metrics": { "metric_names": ["http.server.request.duration"] }
+    "endpoints": [
+      {
+        "id": "logs",
+        "url": "/api/query/logs",
+        "record_checks": [
+          {
+            "id": "request-log",
+            "match": { "body": "request completed" },
+            "field_equals": {
+              "resource.serviceName": "sample-service"
+            },
+            "non_empty": ["traceId", "spanId"],
+            "exact_count": 1,
+            "unique_by": ["traceId", "spanId"],
+            "correlates_with_trace": true
+          }
+        ]
+      }
+    ],
+    "service_logs": [
+      {
+        "id": "preserved-console-sink",
+        "service_name": "app",
+        "occurrences": { "request completed": 1 }
+      }
+    ]
   }
 }
 ```
+
+Use `endpoints` for Observer API responses and `record_checks` when all asserted
+fields must belong to the same JSON record. `service_logs` verifies retained
+stdout or stderr output. Per-check `environment` values select isolated runtime
+scenarios, while `stop_services_before_validation` can stop only `app` so its
+shutdown-flushed telemetry is available before Observer assertions run.
 
 The referenced Compose file should expose an `observer` service on
 `127.0.0.1:3000` and a profiled one-shot `traffic` service. The harness runs:

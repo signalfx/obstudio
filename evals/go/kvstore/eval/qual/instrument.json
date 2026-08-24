@@ -20,6 +20,11 @@
     "Preserves the existing kvstore package APIs and avoids moving business logic.",
     "Uses otelhttp.NewHandler for stdlib HTTP routing and keeps span names low-cardinality.",
     "Reads service name and OTLP endpoint from environment or safe defaults.",
+    "Bridges the existing standard logger through exactly one official Go logging bridge and one shared-resource batched OTLP LoggerProvider targeting the signal-specific local Observer /v1/logs endpoint by default.",
+    "Exports each fixture request-context warning exactly once with its body, WARN severity, go-kvstore resource identity, and non-empty unique trace and span IDs while preserving the existing standard-log console sink.",
+    "Honors OTEL_LOGS_EXPORTER=none and another explicit operator-owned exporter by installing no local LoggerProvider or bridge while leaving the standard-log console sink active.",
+    "Keeps generic or signal-specific cloud endpoints, headers, credentials, and forwarding out of the application-log path; direct cloud remains trace/metric-only and logs stay local unless explicitly operator-owned.",
+    "Uses one shutdown path on every normal or signal-driven server exit so the single log provider and its batch processor flush once.",
     "Updates the existing .vscode/launch.json as required by the skill instructions."
   ]
 }

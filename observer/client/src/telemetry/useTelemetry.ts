@@ -30,7 +30,7 @@ export interface TelemetryHandle {
 }
 
 interface ServerMessage {
-  type: "connected" | "update" | "paused-update";
+  type: "connected" | "update" | "paused-update" | "reload";
   signal?: string;
   data?: unknown;
 }
@@ -217,6 +217,8 @@ export function useTelemetry(): TelemetryHandle {
           setHasNewUpdates(true);
         } else if (msg.type === "update" && msg.signal && msg.data !== undefined) {
           applyUpdate(msg.signal, msg.data);
+        } else if (msg.type === "reload") {
+          window.location.reload();
         }
       };
 

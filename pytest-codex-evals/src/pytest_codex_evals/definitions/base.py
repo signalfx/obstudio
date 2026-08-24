@@ -52,6 +52,7 @@ class BaseEvalDefinition(BaseModel):
 
     id: str
     skill: str
+    skill_source: str | None = None
     language: str
     service: str
     prompts: list[PromptVariant]
@@ -78,6 +79,7 @@ class BaseEvalCase(BaseModel):
     base_id: str
     prompt_id: str
     skill: str
+    skill_source: str | None = None
     language: str
     service: str
     task: str
@@ -100,6 +102,27 @@ class BaseEvalCase(BaseModel):
     @property
     def case_id(self) -> str:
         return self.case_key
+
+
+def resolve_skill_source(
+    repo_root: Path,
+    skill: str,
+    skill_source: str | None = None,
+    selected_skill_dir: Path | None = None,
+) -> Path:
+    """Resolve a selected or definition-declared skill source inside the repo."""
+    if selected_skill_dir is not None:
+        return selected_skill_dir
+    relative = Path(skill_source or f"skills/{skill}")
+    if relative.is_absolute():
+        raise ValueError("skill_source must be relative to the repository root")
+    resolved_root = repo_root.resolve()
+    resolved = (resolved_root / relative).resolve()
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError("skill_source must stay within the repository root") from exc
+    return resolved
 
 
 class GradeCheckResult(BaseModel):

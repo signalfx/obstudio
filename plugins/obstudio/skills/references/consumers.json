@@ -1,0 +1,46 @@
+{
+  "coverage-decision-tree.md": [
+    "splunk-dashboard-publish",
+    "splunk-detector-publish"
+  ],
+  "full-runtime-acceptance.md": [
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "genai-readiness.md": [
+    "otel-audit",
+    "otel-instrument"
+  ],
+  "incident-readiness.md": [
+    "otel-audit",
+    "otel-instrument"
+  ],
+  "ledger-template.md": [
+    "splunk-dashboard-publish",
+    "splunk-detector-publish"
+  ],
+  "report-flow-contract.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify",
+    "splunk-configure"
+  ],
+  "scripts/observe_report.py": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "signalflow-patterns.md": [
+    "splunk-configure",
+    "splunk-dashboard"
+  ],
+  "splunk-api.md": [
+    "splunk-dashboard-publish",
+    "splunk-detector-publish"
+  ],
+  "terraform-normalization.md": [
+    "splunk-dashboard",
+    "splunk-dashboard-publish",
+    "splunk-detector-publish"
+  ]
+}

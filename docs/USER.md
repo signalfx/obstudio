@@ -30,6 +30,10 @@ This installs the included skills and configures the MCP server for all four
 agents. Pass a single `codex`, `claude-code`, `cursor`, or `kiro` value when
 you only want to configure one agent.
 
+The Codex plugin bootstrapper also expects the release pipeline to publish a
+`checksums.txt` file alongside the zip archives and validates the archive
+before extraction.
+
 ### Supported Targets
 
 | Target | Skills directory | MCP config |
@@ -75,33 +79,10 @@ and creates relative symbolic links for skill discovery.
 |---------|-------------|
 | `obstudio` | Start the collector + stdio MCP server (OTLP receiver, Web UI, REST API, MCP) |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP (`cursor`, `claude-code`, `codex`, `kiro`) |
-| `obstudio install --target=<agent>[,<agent>...] --connect-remote-o11y` | Also connect the installed target(s) to the Splunk Observability remote MCP server |
 | `obstudio --observer-http-port <port>` | Override the Observer UI, REST API, and MCP HTTP port |
 | `obstudio --env-file <path>` | Load startup environment values from a `KEY=VALUE` env file |
 | `obstudio --version` | Print version |
 | `obstudio --help` | Show all available commands |
-
-### Connecting to the Splunk Observability Remote MCP Server
-
-`obstudio install` configures MCP for its own **local** server. If you also want the
-installed target(s) to connect to the **remote** Splunk Observability MCP server, opt in with
-`--connect-remote-o11y`:
-
-```bash
-./obstudio install --target=cursor,codex --connect-remote-o11y
-```
-
-This shells out to `npx @splunk/o11y-mcp-connect connect --ide <targets>` after the local
-install finishes, scoped to only the targets you installed (`kiro` has no connector
-equivalent yet and falls back to the manual snippet). obstudio never sees your realm or
-token — the connector's own prompt collects them directly, or reads
-`SPLUNK_O11Y_REALM`/`SPLUNK_O11Y_TOKEN` from the environment if you've set them. Without the
-flag, in an interactive terminal you'll be asked
-`Also connect to the Splunk Observability remote MCP server? [y/N]`; in a non-interactive
-session it's skipped silently. This step is opt-in and never fails the install — if `npx`
-isn't available, or the connect step itself fails, you'll see a note pointing at the manual
-config snippets in the [`splunk-o11y-mcp-connect`](https://github.com/signalfx/splunk-o11y-mcp-connect)
-repo's `docs/manual-setup.md`.
 
 ## Using Skills
 
@@ -195,11 +176,22 @@ Configure your app to send telemetry:
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
 export OTEL_SERVICE_NAME=my-service
 ```
 
-To forward incoming telemetry to Splunk Observability Cloud while still keeping
-the local Explorer experience, put the settings in Obstudio's default env file:
+Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+local Telemetry Explorer. Splunk Observability Cloud forwarding applies only to
+traces and metrics. Logs sent to `/v1/logs` remain in the local Explorer's Logs
+view, even when trace and metric forwarding are enabled.
+Set `OTEL_LOGS_EXPORTER=none` before starting the application to opt out while
+leaving its existing console or file logging unchanged.
+
+To forward eligible incoming telemetry to Splunk Observability Cloud while
+still keeping the local Explorer experience, put the settings in Obstudio's
+default env file:
 
 ```bash
 mkdir -p ~/.obstudio

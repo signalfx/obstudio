@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title>Observer icon</title>
+  <defs>
+    <linearGradient id="observerPulseGradient" x1="48" y1="128" x2="208" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff6a13" />
+      <stop offset="0.48" stop-color="#ffb11d" />
+      <stop offset="1" stop-color="#44d62c" />
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="#171a1f" />
+  <path
+    d="M 46 144 H 82 L 104 108 L 126 176 L 152 82 L 176 144 H 210"
+    fill="none"
+    stroke="url(#observerPulseGradient)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="22"
+  />
+</svg>

@@ -10,7 +10,7 @@ auditing, adding, and verifying OpenTelemetry instrumentation.
 | Skill | Purpose |
 |---|---|
 | `$otel-audit` | Scan a service for observability coverage gaps without modifying code |
-| `$otel-instrument` | Add OpenTelemetry auto-instrumentation and optional custom spans or metrics |
+| `$otel-instrument` | Add OpenTelemetry auto-instrumentation, default local application logs, and optional custom spans or metrics |
 | `$otel-verify` | Prove existing instrumentation with app-code tests and optional local OTLP evidence |
 | `$splunk-configure` | Generate Splunk O11y detector Terraform from an audit report |
 | `$splunk-detector-publish` | Diff local detector Terraform against live Splunk detectors and create only the gaps |
@@ -44,7 +44,6 @@ comma-separated list of those values. For each selected agent, the installer
 stores the managed bundle under its skills directory and creates top-level
 discoverable skill entries such as `otel-audit`, `otel-instrument`, and
 `otel-verify` in the agent skills root.
-
 After installation, restart the agent if it does not discover the new skills.
 
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
@@ -52,9 +51,19 @@ discoverable skill entries in `~/.kiro/skills`, and configures MCP in
 `~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,
 such as `/otel-audit`.
 
-Pass `--connect-remote-o11y` to also connect the installed target(s) to the Splunk
-Observability **remote** MCP server (separate from the local server the install above
-configures) — see [docs/USER.md](docs/USER.md#connecting-to-the-splunk-observability-remote-mcp-server).
+Pass `--connect-remote-o11y` to also connect the installed target(s) to the
+Splunk Observability **remote** MCP server (separate from the local server the
+install above configures) — see
+[docs/USER.md](docs/USER.md#connecting-to-the-splunk-observability-remote-mcp-server).
+
+Release archives are verified against `checksums.txt` published by the release
+pipeline before the Codex plugin bootstrapper extracts them.
+
+For the Codex plugin trust contract, including local Observer bootstrap,
+localhost endpoints and Splunk publish behavior,
+see [plugins/obstudio/SECURITY.md](plugins/obstudio/SECURITY.md) and
+[plugins/obstudio/PRIVACY.md](plugins/obstudio/PRIVACY.md). The same plugin
+bundle serves Claude Code through the repository's `.claude-plugin/marketplace.json`.
 
 ### Build From Source
 
@@ -76,11 +85,43 @@ Use `obstudio --observer-http-port <port>` to move the Observer UI, REST API,
 and MCP endpoint to a different port. The OTLP receivers stay fixed at `4318`
 and `4317`; these are also used by the editor extension.
 
+### Local Development
+
+Use this workflow when editing the Telemetry Explorer UI (`observer/client`)
+and you want changes to show up without a full `make build` each time.
+
+1. Start the collector with the `dev` build tag so it serves client assets
+   straight from disk instead of the snapshot embedded by `make build`:
+
+   ```bash
+   make build-client
+   cd observer && go run -tags dev ./cmd/obstudio
+   ```
+
+2. In a second terminal, watch and rebuild the client on every save:
+
+   ```bash
+   make dev
+   ```
+
+3. Open http://localhost:3000. From here it hot-reloads on its own: each
+   client rebuild pushes a reload signal over the existing telemetry
+   WebSocket to every open tab, so there's no need to manually refresh the
+   browser after a save.
+
+The `dev` build tag only affects the binary you run locally with `go run
+-tags dev`; release and embedded builds (`make build`/`make run`) never
+include it, and the reload-trigger endpoint it adds does not exist otherwise.
+
 ### Optional Splunk Metrics Forwarding
 
-By default, Obstudio stores incoming OTLP telemetry locally for inspection. To
-also forward received metrics to Splunk Observability Cloud, put the settings
-in Obstudio's default env file:
+Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
+local Telemetry Explorer. Splunk Observability Cloud forwarding is opt-in and
+applies only to traces and metrics. Logs sent to `/v1/logs` remain in the local
+Explorer's Logs view, even when trace and metric forwarding are enabled.
+
+To forward received metrics to Splunk Observability Cloud, put the settings in
+Obstudio's default env file:
 
 ```bash
 mkdir -p ~/.obstudio
@@ -267,7 +308,6 @@ report locations.
 |---|---|
 | `obstudio` | Start the collector, web UI, REST API, OTLP receivers, and MCP server |
 | `obstudio install --target=<agent>[,<agent>...]` | Install skills and configure MCP for one or more supported agents |
-| `obstudio install --target=<agent>[,<agent>...] --connect-remote-o11y` | Also connect the installed target(s) to the Splunk Observability remote MCP server |
 | `obstudio --version` | Print version |
 
 ## Contributing

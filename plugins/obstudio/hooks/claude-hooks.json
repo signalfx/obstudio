@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap_claude.cjs"],
+            "timeout": 120,
+            "statusMessage": "Bootstrapping Splunk Observability Studio for Claude Code"
+          }
+        ]
+      }
+    ]
+  }
+}

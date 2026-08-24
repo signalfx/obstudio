@@ -20,6 +20,7 @@
     "Enumerates the Express routes for health and task CRUD.",
     "Reports missing HTTP and Express auto-instrumentation packages.",
     "Calls out missing request duration, request rate, error visibility, and OTLP exporter configuration.",
-    "Avoids suggesting unrelated frameworks or package managers."
+    "Avoids suggesting unrelated frameworks or package managers.",
+    "Classifies the missing supported console application-log bridge and local Observer exporter as a required default gap, while preserving explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
   ]
 }

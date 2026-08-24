@@ -1,9 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"kvstore/kvstore"
 )
@@ -29,7 +36,33 @@ func main() {
 	log.Printf("listening on %s", *addr)
 	defer store.Close()
 
-	if err := http.ListenAndServe(*addr, api.Handler()); err != nil {
+	server := &http.Server{Addr: *addr, Handler: api.Handler()}
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdownSignals)
+
+	select {
+	case err := <-serverErrors:
+		if errors.Is(err, http.ErrServerClosed) {
+			return
+		}
 		log.Fatalf("server error: %v", err)
+	case <-shutdownSignals:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown error: %v", err)
+			return
+		}
+		if err := <-serverErrors; !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("server error during shutdown: %v", err)
+			return
+		}
+		slog.Warn("runtime shutdown completed")
 	}
 }

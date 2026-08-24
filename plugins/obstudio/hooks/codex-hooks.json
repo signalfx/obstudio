@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "OBSTUDIO_PLUGIN_HOST=codex python3 \"${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
+            "commandWindows": "set \"OBSTUDIO_PLUGIN_HOST=codex\" && py -3 \"${PLUGIN_ROOT}/hooks/bootstrap_obstudio.py\"",
+            "statusMessage": "Bootstrapping Splunk Observability Studio for Codex"
+          }
+        ]
+      }
+    ]
+  }
+}
