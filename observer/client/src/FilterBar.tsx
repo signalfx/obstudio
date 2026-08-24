@@ -120,6 +120,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
   const fieldMenuRef = useRef<HTMLDivElement>(null);
   const valueInputRef = useRef<HTMLInputElement>(null);
   const suggestionsMenuRef = useRef<HTMLDivElement>(null);
+  const suppressNextFocusRef = useRef(false);
 
   const selectedDefinition = definitions.find((definition) => definition.key === draftKey) ?? null;
   const canAdd = selectedDefinition !== null && draftOp !== null && draftValue.trim() !== "";
@@ -235,8 +236,17 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         min={selectedDefinition.kind === "number" ? 0 : undefined}
         step={selectedDefinition.kind === "number" ? selectedDefinition.step ?? "any" : undefined}
         onChange={(event) => setDraftValue(nextDraftValue(selectedDefinition, event.target.value, draftValue))}
-        onFocus={() => setValueFocused(true)}
-        onBlur={() => { window.setTimeout(() => setValueFocused(false), 100); }}
+        onFocus={() => {
+          if (suppressNextFocusRef.current) { suppressNextFocusRef.current = false; return; }
+          setValueFocused(true);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (suggestionsMenuRef.current?.contains(document.activeElement)) return;
+            if (valueInputRef.current === document.activeElement) return;
+            setValueFocused(false);
+          }, 100);
+        }}
         onKeyDown={(event) => {
           if (selectedDefinition.kind === "number" && (event.key === "-" || (selectedDefinition.step === 1 && event.key === "."))) {
             event.preventDefault();
@@ -322,6 +332,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
                   else items[idx - 1]?.focus();
                 } else if (e.key === "Escape") {
                   e.preventDefault();
+                  suppressNextFocusRef.current = true;
                   setValueFocused(false);
                   valueInputRef.current?.focus();
                 }
@@ -340,8 +351,8 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
                   }}
                   onClick={() => {
                     setDraftValue(value);
-                    setValueFocused(false);
                     valueInputRef.current?.focus();
+                    setValueFocused(false);
                   }}
                   type="button"
                 >
@@ -411,6 +422,11 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
               className="filter-builder__menu"
               role="menu"
               aria-labelledby={inputId}
+              onBlur={(e) => {
+                const next = e.relatedTarget as Node | null;
+                if (next && (fieldMenuRef.current?.contains(next) || triggerRef.current?.contains(next as Element))) return;
+                window.setTimeout(() => setMenuOpen(false), 100);
+              }}
               onKeyDown={(e) => {
                 const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
                 const idx = items.indexOf(document.activeElement as HTMLElement);

@@ -151,6 +151,7 @@ export function TimeSeriesChart({ series, displayType, selectedKey, onSelectSeri
               className={`ts-chart__annotation ${isActive ? "ts-chart__annotation--active" : ""} ${isDimmed ? "ts-chart__annotation--dimmed" : ""}`}
               onClick={() => onSelectSeries(selectedKey === s.key ? null : s.key)}
               type="button"
+              aria-pressed={isActive}
             >
               <span className="ts-chart__annotation-dot" style={{ background: color }} />
               <span className="ts-chart__annotation-label">{label}</span>

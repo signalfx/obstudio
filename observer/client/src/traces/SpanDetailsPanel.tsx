@@ -101,7 +101,7 @@ export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDeta
             id={`span-tab-${tab.id}`}
             role="tab"
             aria-selected={activeTab === tab.id}
-            aria-controls={`span-panel-${tab.id}`}
+            aria-controls={activeTab === tab.id ? `span-panel-${tab.id}` : undefined}
             className={`span-details__tab ${activeTab === tab.id ? "span-details__tab--active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
             type="button"

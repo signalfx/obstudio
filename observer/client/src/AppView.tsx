@@ -81,7 +81,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "metrics"}
-            aria-controls="panel-metrics"
+            aria-controls={activeTab === "metrics" ? "panel-metrics" : undefined}
             aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "metrics" ? 0 : -1}
@@ -95,7 +95,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "traces"}
-            aria-controls="panel-traces"
+            aria-controls={activeTab === "traces" ? "panel-traces" : undefined}
             aria-label={formatTabAriaLabel("Traces", state.stats?.traceCount, "trace", "traces")}
             className={activeTab === "traces" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "traces" ? 0 : -1}
@@ -109,7 +109,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "logs"}
-            aria-controls="panel-logs"
+            aria-controls={activeTab === "logs" ? "panel-logs" : undefined}
             aria-label={formatTabAriaLabel("Logs", state.stats?.logCount, "log", "logs")}
             className={activeTab === "logs" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "logs" ? 0 : -1}
@@ -123,7 +123,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "services"}
-            aria-controls="panel-services"
+            aria-controls={activeTab === "services" ? "panel-services" : undefined}
             aria-label={formatTabAriaLabel("Services", state.stats?.serviceNames?.length, "service", "services")}
             className={activeTab === "services" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "services" ? 0 : -1}
@@ -137,7 +137,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "validation"}
-            aria-controls="panel-validation"
+            aria-controls={activeTab === "validation" ? "panel-validation" : undefined}
             aria-label={formatTabAriaLabel("Validation", validationIssues.length, "issue", "issues")}
             className={activeTab === "validation" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "validation" ? 0 : -1}
@@ -151,7 +151,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "dashboards"}
-            aria-controls="panel-dashboards"
+            aria-controls={activeTab === "dashboards" ? "panel-dashboards" : undefined}
             aria-label="Dashboards"
             className={activeTab === "dashboards" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "dashboards" ? 0 : -1}
@@ -164,7 +164,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             type="button"
             role="tab"
             aria-selected={activeTab === "cloud"}
-            aria-controls="panel-cloud"
+            aria-controls={activeTab === "cloud" ? "panel-cloud" : undefined}
             aria-label="Cloud"
             className={activeTab === "cloud" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "cloud" ? 0 : -1}
@@ -188,18 +188,19 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
               </button>
             ) : (
               <span
+                role="status"
+                aria-live="polite"
                 className={`stream-toggle stream-toggle--status ${
                   cloudConnectionState === "connected" ? "stream-toggle--live"
                   : cloudConnectionState === "configured" ? "stream-toggle--paused"
                   : "stream-toggle--muted"
                 }`}
-                aria-label={
-                  cloudConnectionState === "connected" ? "Cloud connected"
-                  : "Cloud not connected"
-                }
               >
-                <span className="stream-toggle__dot" aria-hidden="true" />
-                {cloudConnectionState === "connected" ? "Connected" : "Not connected"}
+                {cloudConnectionState !== null ? <span className="stream-toggle__dot" aria-hidden="true" /> : null}
+                {cloudConnectionState === "connected" ? "Connected"
+                  : cloudConnectionState === "configured" ? "Configured, not connected"
+                  : cloudConnectionState === "disconnected" ? "Not connected"
+                  : "Checking connection…"}
               </span>
             )}
             {activeTab !== "cloud" && paused && hasNewUpdates ? (

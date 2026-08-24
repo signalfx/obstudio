@@ -142,13 +142,7 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
           return (
             <div
               key={s.spanId}
-              role="button"
-              tabIndex={0}
-              aria-pressed={s.spanId === selectedSpanId && selectedSpanVisible}
-              aria-label={`${s.name} \u2014 ${s.resource?.serviceName ?? "unknown"}, ${s.durationMs.toFixed(1)}ms${isError ? ", error" : ""}`}
               className={`waterfall__row ${s.spanId === selectedSpanId && selectedSpanVisible ? "waterfall__row--selected" : ""}`}
-              onClick={() => onSelectSpan(s.spanId)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectSpan(s.spanId); } }}
             >
               <div className="waterfall__row-service" style={{ paddingLeft: `${8 + s.depth * 16}px` }}>
                 {hasChildren ? (
@@ -167,21 +161,29 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
                 ) : (
                   <span className="waterfall__toggle-spacer" />
                 )}
-                <span className="waterfall__service-dot" style={{ background: svcColor }} />
-                <span className="waterfall__service-name">{s.resource?.serviceName ?? ""}</span>
-                <span className="waterfall__span-name">{s.name}</span>
-                {failedEvaluations.length > 0 ? (
-                  <span className="waterfall__ai-chip waterfall__ai-chip--issue" data-tooltip={formatEvaluationTooltip(failedEvaluations)}>
-                    <span className="waterfall__ai-chip-label">{formatWaterfallEvaluationChipLabel(failedEvaluations)}</span>
-                  </span>
-                ) : evaluations.length > 0 ? (
-                  <span className="waterfall__ai-chip waterfall__ai-chip--ok" data-tooltip="No quality issues">
-                    <span className="waterfall__ai-chip-label">Quality</span>
-                  </span>
-                ) : null}
-                <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
+                <button
+                  className="waterfall__row-select"
+                  type="button"
+                  aria-pressed={s.spanId === selectedSpanId && selectedSpanVisible}
+                  aria-label={`${s.name} \u2014 ${s.resource?.serviceName ?? "unknown"}, ${s.durationMs.toFixed(1)}ms${isError ? ", error" : ""}`}
+                  onClick={() => onSelectSpan(s.spanId)}
+                >
+                  <span className="waterfall__service-dot" style={{ background: svcColor }} />
+                  <span className="waterfall__service-name">{s.resource?.serviceName ?? ""}</span>
+                  <span className="waterfall__span-name">{s.name}</span>
+                  {failedEvaluations.length > 0 ? (
+                    <span className="waterfall__ai-chip waterfall__ai-chip--issue" data-tooltip={formatEvaluationTooltip(failedEvaluations)}>
+                      <span className="waterfall__ai-chip-label">{formatWaterfallEvaluationChipLabel(failedEvaluations)}</span>
+                    </span>
+                  ) : evaluations.length > 0 ? (
+                    <span className="waterfall__ai-chip waterfall__ai-chip--ok" data-tooltip="No quality issues">
+                      <span className="waterfall__ai-chip-label">Quality</span>
+                    </span>
+                  ) : null}
+                  <ValidationBadge count={validation?.count ?? 0} severity={validation?.highestSeverity ?? null} />
+                </button>
               </div>
-              <div className="waterfall__row-timeline">
+              <div className="waterfall__row-timeline" onClick={() => onSelectSpan(s.spanId)}>
                 <div
                   className="waterfall__bar"
                   style={{
