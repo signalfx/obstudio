@@ -23,7 +23,7 @@ PLUGIN_CODEX_ARCHIVE := $(CURDIR)/.release/plugins/obstudio-codex.zip
 PLUGIN_CLAUDE_ARCHIVE := $(CURDIR)/.release/plugins/obstudio-claude.zip
 RELEASE_TAG_ARG = $(if $(strip $(RELEASE_TAG)),--release-tag "$(RELEASE_TAG)",)
 
-.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver sync-obstudio-plugin-skills check-obstudio-plugin-skills stage-obstudio-plugin package-obstudio-plugin require-release-tag dev run load-severity-demo test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
+.PHONY: help build build-client build-vsix stage-skills bundle-weaver stage-release-weaver sync-obstudio-plugin-skills check-obstudio-plugin-skills stage-obstudio-plugin package-obstudio-plugin require-release-tag dev run load-severity-demo seed-observer test test-extension test-client test-interactive-otel-scripts test-agent-policy agent-policy-check test-all tidy fmt vet eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-evals-all test-pytest-plugin build-pytest-plugin publish-pytest-plugin release-local release list-skills clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -79,6 +79,9 @@ run: build ## Build and run the collector
 
 load-severity-demo: ## Load sample logs covering severityNumber/text combinations and keep the emitter alive for manual UI testing
 	@python3 observer/load_severity_demo.py
+
+seed-observer: ## Seed a running Observer with demo data across all tabs (traces, metrics, logs, services, validation) for local dev
+	@python3 observer/load_all_tabs_demo.py
 
 test: stage-skills ## Run all Go tests
 	cd $(GO_DIR) && $(GO) test ./...

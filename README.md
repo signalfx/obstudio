@@ -113,6 +113,27 @@ The `dev` build tag only affects the binary you run locally with `go run
 -tags dev`; release and embedded builds (`make build`/`make run`) never
 include it, and the reload-trigger endpoint it adds does not exist otherwise.
 
+### Seeding Demo Telemetry
+
+To populate a running Observer with example data while developing the UI, seed
+it over the local OTLP receiver:
+
+```bash
+make seed-observer
+```
+
+This sends demo traces, metrics, and logs so every Telemetry Explorer tab
+(Traces, Metrics, Logs, Services, Validation) has data to render, then keeps the
+emitters alive so Observer retains the records. Press Ctrl+C to stop. Tune the
+volume and target with environment variables, for example:
+
+```bash
+TRACE_COUNT=50 METRIC_STEPS=40 PORT=3000 make seed-observer
+```
+
+For logs-only data that exercises every severity level, use `make
+load-severity-demo` instead.
+
 ### Optional Splunk Metrics Forwarding
 
 Obstudio accepts OTLP traces, metrics, and logs and displays all three in the
