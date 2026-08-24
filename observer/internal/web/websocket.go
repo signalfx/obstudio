@@ -80,6 +80,22 @@ func broadcastSignal(s *store.Store, v *validator.Store, sig string) {
 	}
 }
 
+// broadcastReload tells every open tab to reload, bypassing the
+// subscribed/paused gating used for telemetry pushes: a client rebuild
+// should refresh the page regardless of stream state.
+func broadcastReload() {
+	connsMu.Lock()
+	snapshot := make([]*conn, 0, len(conns))
+	for c := range conns {
+		snapshot = append(snapshot, c)
+	}
+	connsMu.Unlock()
+
+	for _, c := range snapshot {
+		c.sendMsg(ServerMessage{Type: "reload"})
+	}
+}
+
 // ── HTTP handler ─────────────────────────────────────────
 
 func wsHandler(s *store.Store, v *validator.Store) http.HandlerFunc {
