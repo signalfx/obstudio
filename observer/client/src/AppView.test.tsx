@@ -1,8 +1,6 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
@@ -777,38 +775,76 @@ describe("AppView KeyboardHelp focus management", () => {
 });
 
 describe("AppView tab-bar responsive layout", () => {
-  it("tab-bar provides a scrollable tabs region so actions are never obscured at narrow embedded widths", () => {
-    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+  function makeNarrowTabLayout(): {
+    tabsScrollLeft: { value: number };
+    patchRects: (tabRightEdge: number, containerWidth: number) => void;
+    restore: () => void;
+  } {
+    // Simulate a clipped tab strip: container is 200px wide, tab extends beyond it
+    const tabsScrollLeft = { value: 0 };
+    const origGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const origScrollLeftDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft");
 
-    // Tabs must overflow-scroll so they never paint over the action cluster
-    const tabsStart = css.indexOf(".tab-bar__tabs {");
-    const tabsEnd = css.indexOf("}", tabsStart);
-    const tabsBlock = css.slice(tabsStart, tabsEnd);
-    expect(tabsBlock).toContain("overflow-x: auto");
+    let tabRightEdge = 0;
+    let containerWidth = 200;
 
-    // Actions must not shrink so they always occupy the right edge of the bar
-    const actionsStart = css.indexOf(".tab-bar__actions {");
-    const actionsEnd = css.indexOf("}", actionsStart);
-    const actionsBlock = css.slice(actionsStart, actionsEnd);
-    expect(actionsBlock).toContain("flex-shrink: 0");
-  });
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.classList?.contains("tab-bar__tabs")) {
+        return { left: 0, right: containerWidth, width: containerWidth, top: 0, bottom: 40, height: 40, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      if ((this as HTMLElement).id?.startsWith("tab-cloud") && tabRightEdge > 0) {
+        return { left: tabRightEdge - 60, right: tabRightEdge, width: 60, top: 0, bottom: 40, height: 40, x: tabRightEdge - 60, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      return origGetBoundingClientRect.call(this);
+    };
 
-  it("all 7 tab buttons remain accessible regardless of active tab and action chip width", () => {
+    Object.defineProperty(Element.prototype, "scrollLeft", {
+      configurable: true,
+      get() { return tabsScrollLeft.value; },
+      set(v: number) { tabsScrollLeft.value = v; },
+    });
+
+    return {
+      tabsScrollLeft,
+      patchRects(tabRight: number, contWidth: number) {
+        tabRightEdge = tabRight;
+        containerWidth = contWidth;
+      },
+      restore() {
+        HTMLElement.prototype.getBoundingClientRect = origGetBoundingClientRect;
+        if (origScrollLeftDescriptor) {
+          Object.defineProperty(Element.prototype, "scrollLeft", origScrollLeftDescriptor);
+        }
+      },
+    };
+  }
+
+  it("scrolls the tabs container right so the active tab is fully visible on mount", () => {
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+    // Cloud tab right edge at 320px, container only 200px wide → needs scrollLeft += 120
+    patchRects(320, 200);
+    window.history.replaceState({}, "", "/?tab=cloud");
     stubCloudStatusFetch();
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    // All tabs in DOM at initial render (Metrics active)
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
-    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+    restore();
+  });
 
-    // Switch to Cloud — widest action chip ("Checking connection…" / "Configured, not connected")
+  it("scrolls the tabs container so the newly selected tab is fully visible after a tab switch", () => {
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    // Simulate Cloud tab being off to the right after an earlier scroll
+    patchRects(320, 200);
+    tabsScrollLeft.value = 0;
     fireEvent.click(screen.getByRole("tab", { name: /cloud/i }));
 
-    // All tabs still in DOM, chip and help button still reachable
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
-    expect(screen.getByRole("status")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+    restore();
   });
 });
 

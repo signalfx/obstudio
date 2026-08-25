@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
@@ -20,6 +20,7 @@ type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "dashb
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<AppTab>(() => initialTabFromLocation());
+  const tabsRef = useRef<HTMLDivElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [cloudConnectionState, setCloudConnectionState] = useState<CloudConnectionState | null>(null);
 
@@ -54,11 +55,34 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   useHostKeyboardForwarding();
   useKeyboardShortcuts(shortcuts);
 
+  useEffect(() => {
+    function scrollActiveTabIntoView() {
+      const tab = document.getElementById(`tab-${activeTab}`);
+      const container = tabsRef.current;
+      if (!tab || !container) return;
+      const tabRect = tab.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      if (tabRect.right > containerRect.right) {
+        container.scrollLeft += tabRect.right - containerRect.right;
+      } else if (tabRect.left < containerRect.left) {
+        container.scrollLeft -= containerRect.left - tabRect.left;
+      }
+    }
+
+    scrollActiveTabIntoView();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(scrollActiveTabIntoView);
+    if (tabsRef.current) observer.observe(tabsRef.current);
+    return () => observer.disconnect();
+  }, [activeTab]);
+
   return (
     <main className="app-shell">
       <section className="app-frame">
         <div className="tab-bar">
           <div
+            ref={tabsRef}
             className="tab-bar__tabs"
             role="tablist"
             aria-label="Observer sections"

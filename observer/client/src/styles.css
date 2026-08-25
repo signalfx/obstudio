@@ -5370,7 +5370,7 @@ code {
 @media (max-width: 900px) {
   .metrics-card-list__head,
   .metric-card__header {
-    --table-columns: minmax(0, 1fr) minmax(0, 1fr) fit-content(10rem);
+    --table-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(60px, 9rem);
   }
 
   .metric-card__info {
