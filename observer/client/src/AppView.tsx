@@ -72,7 +72,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     scrollActiveTabIntoView();
 
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(scrollActiveTabIntoView);
+    const observer = new ResizeObserver(() => requestAnimationFrame(scrollActiveTabIntoView));
     if (tabsRef.current) observer.observe(tabsRef.current);
     return () => observer.disconnect();
   }, [activeTab]);

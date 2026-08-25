@@ -846,6 +846,43 @@ describe("AppView tab-bar responsive layout", () => {
     expect(tabsScrollLeft.value).toBeGreaterThan(0);
     restore();
   });
+
+  it("re-scrolls the active tab into view after a container resize (ResizeObserver path)", () => {
+    // Capture the ResizeObserver callback so we can invoke it directly
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) { resizeCallback = cb; }
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    // Make rAF synchronous so the deferred scroll runs inline in tests
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => { cb(0); return 0; });
+
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+
+    // Start with a wide container — Cloud tab is fully visible, no scroll needed
+    patchRects(320, 400);
+    window.history.replaceState({}, "", "/?tab=cloud");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+    expect(tabsScrollLeft.value).toBe(0);
+
+    // Simulate container shrink (e.g. viewport resize to 480px)
+    patchRects(320, 200);
+    tabsScrollLeft.value = 0;
+
+    // Fire the ResizeObserver callback — rAF is synchronous, so adjustment runs immediately
+    act(() => {
+      resizeCallback?.([{} as ResizeObserverEntry], {} as ResizeObserver);
+    });
+
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+
+    restore();
+    vi.restoreAllMocks();
+  });
 });
 
 describe("AppView dashboards tab", () => {
