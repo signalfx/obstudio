@@ -544,6 +544,42 @@ describe("MetricsTab", () => {
     expect(screen.getByRole("radio", { name: "Area" }).getAttribute("aria-checked")).toBe("true");
   });
 
+  it("display-type segmented control navigates with ArrowDown/ArrowUp", () => {
+    render(
+      <MetricsTab
+        metrics={[
+          {
+            name: "http.server.duration",
+            description: "Request duration",
+            unit: "ms",
+            type: "histogram",
+            serviceName: "checkout",
+            scopeName: "otel",
+            dataPointCount: 1,
+            dataPoints: [],
+          },
+        ]}
+        telemetryError={null}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /http\.server\.duration/i }));
+
+    const group = screen.getByRole("radiogroup", { name: "Chart display type" });
+
+    fireEvent.keyDown(group, { key: "ArrowDown" });
+    expect(screen.getByRole("radio", { name: "Bars" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "Lines" }).getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.keyDown(group, { key: "ArrowUp" });
+    expect(screen.getByRole("radio", { name: "Lines" }).getAttribute("aria-checked")).toBe("true");
+
+    // Wrap around: ArrowUp from Lines → Area
+    fireEvent.keyDown(group, { key: "ArrowUp" });
+    expect(screen.getByRole("radio", { name: "Area" }).getAttribute("aria-checked")).toBe("true");
+  });
+
   it("keeps the shared row separator on metric rows", async () => {
     const css = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
     const style = document.createElement("style");

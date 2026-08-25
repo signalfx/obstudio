@@ -199,6 +199,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       } catch (initializationError) {
         if (!active || controller.signal.aborted) return;
         setError(errorMessage(initializationError, "Could not load cloud connection status."));
+        onConnectionChange?.("disconnected");
       } finally {
         if (active) setBusyAction(null);
       }
@@ -208,7 +209,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       active = false;
       controller.abort();
     };
-  }, [bridge, callBridge]);
+  }, [bridge, callBridge, onConnectionChange]);
 
   useEffect(() => {
     if (forgetOpen) forgetCancelRef.current?.focus();

@@ -165,7 +165,7 @@ export function TraceWaterfall({ spans, selectedSpanId, onSelectSpan, traceDurat
                   className="waterfall__row-select"
                   type="button"
                   aria-pressed={s.spanId === selectedSpanId && selectedSpanVisible}
-                  aria-label={`${s.name} \u2014 ${s.resource?.serviceName ?? "unknown"}, ${s.durationMs.toFixed(1)}ms${isError ? ", error" : ""}`}
+                  aria-label={`${s.name} \u2014 ${s.resource?.serviceName ?? "unknown"}, ${s.durationMs.toFixed(1)}ms${isError ? ", error" : ""}${failedEvaluations.length > 0 ? `, ${formatEvaluationTooltip(failedEvaluations)}` : evaluations.length > 0 ? ", quality OK" : ""}${validation && validation.count > 0 ? `, ${validation.count} validation ${validation.count === 1 ? "issue" : "issues"}` : ""}`}
                   onClick={() => onSelectSpan(s.spanId)}
                 >
                   <span className="waterfall__service-dot" style={{ background: svcColor }} />

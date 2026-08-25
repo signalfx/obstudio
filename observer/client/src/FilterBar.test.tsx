@@ -232,3 +232,26 @@ describe("FilterBar suggestion menu keyboard navigation", () => {
     expect(document.querySelector('[role="menu"][aria-label="serviceName suggestions"]')).toBeNull();
   });
 });
+
+describe("FilterBar focus after field selection", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); cleanup(); });
+
+  it("moves focus to the value input after selecting a field via keyboard Enter", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+
+    const serviceItem = Array.from(
+      document.querySelectorAll<HTMLElement>(".filter-builder__menu-item"),
+    ).find((el) => el.textContent?.includes("Service"))!;
+
+    serviceItem.focus();
+    fireEvent.click(serviceItem);
+
+    act(() => { vi.runAllTimers(); });
+
+    const valueInput = document.querySelector<HTMLInputElement>('[aria-label="serviceName value"]');
+    expect(valueInput).toBeTruthy();
+    expect(document.activeElement).toBe(valueInput);
+  });
+});

@@ -319,10 +319,12 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                       role="radiogroup"
                       aria-label="Chart display type"
                       onKeyDown={(event) => {
-                        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                        const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+                        const isPrev = event.key === "ArrowLeft" || event.key === "ArrowUp";
+                        if (!isNext && !isPrev) return;
                         event.preventDefault();
                         const options: DisplayType[] = ["lines", "bars", "area"];
-                        const dir = event.key === "ArrowRight" ? 1 : -1;
+                        const dir = isNext ? 1 : -1;
                         const next = (options.indexOf(displayType) + dir + options.length) % options.length;
                         setDisplayType(options[next]);
                         (event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();

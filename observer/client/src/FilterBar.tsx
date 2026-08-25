@@ -185,6 +185,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
     setDraftValue("");
     setDraftOp("eq");
     setMenuOpen(false);
+    window.setTimeout(() => valueInputRef.current?.focus(), 0);
   }
 
   function addClause(): void {
@@ -266,6 +267,9 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         }}
         placeholder={valuePlaceholder(selectedDefinition)}
         aria-label={`${selectedDefinition.key} value`}
+        aria-haspopup="menu"
+        aria-expanded={valueFocused && valueSuggestions.length > 0}
+        aria-controls={valueFocused && valueSuggestions.length > 0 ? "filter-value-suggestions" : undefined}
       />
     );
 
@@ -317,6 +321,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
           {valueFocused && valueSuggestions.length > 0 ? (
             <div
               ref={suggestionsMenuRef}
+              id="filter-value-suggestions"
               className="filter-builder__menu"
               role="menu"
               aria-label={`${selectedDefinition.key} suggestions`}
