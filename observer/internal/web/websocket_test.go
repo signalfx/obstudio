@@ -17,7 +17,7 @@ func TestPausedConnectionStillReceivesValidationUpdates(t *testing.T) {
 	v := validator.NewStore()
 
 	mux := http.NewServeMux()
-	cleanup := Register(mux, s, v)
+	cleanup := Register(mux, s, v, "")
 	defer cleanup()
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -73,7 +73,7 @@ func TestBroadcastReloadBypassesPause(t *testing.T) {
 	v := validator.NewStore()
 
 	mux := http.NewServeMux()
-	cleanup := Register(mux, s, v)
+	cleanup := Register(mux, s, v, "")
 	defer cleanup()
 	server := httptest.NewServer(mux)
 	defer server.Close()

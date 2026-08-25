@@ -7125,6 +7125,40 @@ code {
   color: #ffc2c2;
 }
 
+.cloud-cimd-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--border);
+}
+
+.cloud-cimd-setup h3,
+.cloud-cimd-setup p {
+  margin: 0;
+}
+
+.cloud-cimd-setup h3 {
+  color: var(--row-primary-text);
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+
+.cloud-cimd-setup p {
+  margin-top: 4px;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  line-height: 1.4;
+}
+
+.cloud-cimd-setup__status {
+  color: #c7f8a2;
+  font-size: var(--font-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .cloud-connect-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -7695,6 +7729,15 @@ code {
     width: 100%;
   }
 
+  .cloud-cimd-setup {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .cloud-cimd-setup .cloud-button {
+    width: 100%;
+  }
+  
   .cloud-free-account {
     padding: 0;
   }

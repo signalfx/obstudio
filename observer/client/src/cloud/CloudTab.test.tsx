@@ -6,7 +6,7 @@ import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SplunkExportStatus } from "../api/types";
+import type { SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
 
 const browserLaunchToken = "A".repeat(43);
@@ -15,12 +15,17 @@ const disconnectedVersion = "D".repeat(43);
 const connectedVersion = "C".repeat(43);
 const enabledVersion = "E".repeat(43);
 
+function setObserverControlToken(token: string | undefined): void {
+  (window as unknown as { __OBSTUDIO_CONTROL_TOKEN__?: string }).__OBSTUDIO_CONTROL_TOKEN__ = token;
+}
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
+  setObserverControlToken(undefined);
 });
 
 describe("CloudTab", () => {
@@ -2682,6 +2687,352 @@ describe("CloudTab", () => {
     expect(screen.getByText("9 points · 2 batches")).toBeTruthy();
   });
 
+  it("shows the CIMD setup control from Observer's own status when there is no IDE bridge", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(),
+      cimdRegistrationEnabled: true,
+    })));
+
+    render(<CloudTab />);
+
+    expect(await screen.findByText("Unified sign-in")).toBeTruthy();
+  });
+
+  it("hides the CIMD setup control by default", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+
+    await screen.findByLabelText("Access token");
+    expect(screen.queryByText("Unified sign-in")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("shows the CIMD setup control when the extension enables the feature flag", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { cimdRegistrationEnabled: true, status: disconnectedStatus() });
+
+    expect(await screen.findByText("Unified sign-in")).toBeTruthy();
+    const setupButton = screen.getByRole("button", { name: "Register OAuth client with CIMD" });
+
+    fireEvent.click(setupButton);
+    const setupCIMD = await bridge.next("setup-cimd");
+    bridge.respond(setupCIMD, {
+      cimdRegistrationEnabled: true,
+      cimdRegistrationVerified: true,
+      message: "CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.",
+    });
+
+    expect(await screen.findByText("CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.")).toBeTruthy();
+    expect(await screen.findByText("Registration verified")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("signs in and disconnects through the IDE bridge, without opening a browser tab itself", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { cimdRegistrationEnabled: true, status: disconnectedStatus() });
+    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+    const setupCIMD = await bridge.next("setup-cimd");
+    bridge.respond(setupCIMD, { cimdRegistrationVerified: true });
+    await screen.findByText("Registration verified");
+
+    const openSpy = vi.spyOn(window, "open");
+    const loginButton = await screen.findByRole("button", { name: "Sign in to SIS" });
+    fireEvent.click(loginButton);
+
+    const loginCIMD = await bridge.next("login-cimd");
+    bridge.respond(loginCIMD, {
+      cimdSession: {
+        phase: "connected",
+        issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",
+        scope: "openid offline_access",
+        connectedAt: "2026-08-28T00:00:00Z",
+        expiresAt: "2026-08-28T01:00:00Z",
+      },
+    });
+
+    expect(await screen.findByText("Signed in to SIS. Cloud export is still disconnected.")).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    const disconnectCIMD = await bridge.next("disconnect-cimd");
+    bridge.respond(disconnectCIMD, { cimdSession: { phase: "disconnected" } });
+
+    expect(await screen.findByText("SIS sign-in disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Sign in to SIS" })).toBeTruthy();
+  });
+
+  it("restores a connected CIMD session from the IDE bridge on initialize", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      cimdRegistrationEnabled: true,
+      cimdSession: {
+        phase: "connected",
+        issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",
+        scope: "openid offline_access",
+      },
+      status: disconnectedStatus(),
+    });
+
+    expect(await screen.findByText("Signed in to SIS. Cloud export is still disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("registers through Observer's own backend when there is no IDE bridge", async () => {
+    setObserverControlToken("observer-control-token-1234567890");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      return jsonResponse({
+        ...disconnectedStatus(),
+        cimdRegistrationEnabled: true,
+      });
+    }));
+
+    render(<CloudTab />);
+
+    const setupButton = await screen.findByRole("button", { name: "Register OAuth client with CIMD" });
+    fireEvent.click(setupButton);
+
+    expect(await screen.findByText("Registration verified")).toBeTruthy();
+    expect(await screen.findByText(
+      "CIMD client registration verified with SIS. Splunk Observability Cloud export remains disconnected.",
+    )).toBeTruthy();
+  });
+
+  it("surfaces a registration failure from Observer's own backend when there is no IDE bridge", async () => {
+    setObserverControlToken("observer-control-token-1234567890");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({ error: "SIS discovery does not advertise CIMD support" }, 502);
+      }
+      return jsonResponse({
+        ...disconnectedStatus(),
+        cimdRegistrationEnabled: true,
+      });
+    }));
+
+    render(<CloudTab />);
+
+    const setupButton = await screen.findByRole("button", { name: "Register OAuth client with CIMD" });
+    fireEvent.click(setupButton);
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("SIS discovery does not advertise CIMD support");
+    expect(screen.queryByText("Registration verified")).toBeNull();
+  });
+
+  it("signs in through Observer's own backend and polls until connected, with no IDE bridge", async () => {
+    setObserverControlToken("observer-control-token-1234567890");
+    const sessionPhases: SISCIMDSessionStatus[] = [
+      { phase: "pending" },
+      {
+        phase: "connected",
+        issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo",
+        scope: "openid offline_access",
+        connectedAt: "2026-08-27T00:00:00Z",
+        expiresAt: "2026-08-27T01:00:00Z",
+      },
+    ];
+    const popup = fakePopup();
+    const openMock = vi.fn(() => popup);
+    vi.stubGlobal("open", openMock);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer observer-control-token-1234567890" });
+        return jsonResponse({ authorizationUrl: "https://127.0.0.1:9090/oauth2/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/cimd/session")) {
+        // Keep returning the last phase indefinitely once consumed -- shift() would
+        // otherwise leave the array empty and jsonResponse(undefined) on any later poll,
+        // corrupting the session phase the UI is asserting on.
+        const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
+        return jsonResponse(nextPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+    }));
+
+    render(<CloudTab />);
+
+    const setupButton = await screen.findByRole("button", { name: "Register OAuth client with CIMD" });
+    fireEvent.click(setupButton);
+    await screen.findByText("Registration verified");
+
+    const loginButton = await screen.findByRole("button", { name: "Sign in to SIS" });
+    fireEvent.click(loginButton);
+
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+    // The tab is opened blank, synchronously, inside the click handler -- before the
+    // login response (and its authorizationUrl) exists -- then redirected afterward.
+    // No "noreferrer"/"noopener" windowFeatures: either forces window.open to return
+    // null even on success, which is exactly the bug this call shape works around.
+    expect(openMock).toHaveBeenCalledWith("", "_blank");
+    expect(popup.location.href).toBe("https://127.0.0.1:9090/oauth2/authorize?state=abc");
+
+    expect(await screen.findByText(
+      "Signed in to SIS. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in to SIS" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  it("disconnects the SIS session through Observer's own backend", async () => {
+    setObserverControlToken("observer-control-token-1234567890");
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    let sessionPhase: "pending" | "connected" | "disconnected" = "pending";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
+        sessionPhase = "connected";
+        return jsonResponse({ authorizationUrl: "https://127.0.0.1:9090/oauth2/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/cimd/session/disconnect") && init?.method === "POST") {
+        sessionPhase = "disconnected";
+        return jsonResponse({ phase: "disconnected" });
+      }
+      if (url.includes("/api/splunk/cimd/session")) {
+        return jsonResponse(sessionPhase === "connected"
+          ? { phase: "connected", issuer: "https://127.0.0.1:9090/test-tenant/sis/v1/rg/cimd-demo" }
+          : { phase: sessionPhase });
+      }
+      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in to SIS" }));
+    const disconnectButton = await screen.findByRole("button", { name: "Disconnect" }, { timeout: 5_000 });
+
+    fireEvent.click(disconnectButton);
+
+    expect(await screen.findByText("SIS sign-in disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Sign in to SIS" })).toBeTruthy();
+  });
+
+  it("surfaces a login failure from Observer's own backend when there is no IDE bridge", async () => {
+    setObserverControlToken("observer-control-token-1234567890");
+    const popup = fakePopup();
+    vi.stubGlobal("open", vi.fn(() => popup));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
+        return jsonResponse({ error: "a SIS sign-in is already in progress" }, 409);
+      }
+      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in to SIS" }));
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("a SIS sign-in is already in progress");
+    expect(popup.close).toHaveBeenCalled();
+  });
+
+  it("requires Observer's injected control token before registering with no IDE bridge", async () => {
+    // registerSISCIMDClient is gated the same way as the sign-in routes below it, so a
+    // missing control token surfaces here, one step earlier than sign-in -- there is no
+    // way to reach the "Sign in to SIS" button at all without first registering.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("Observer did not provide a control token");
+  });
+
+  it("reports a genuinely blocked popup without an async gap masking a real success", async () => {
+    // Regression test: window.open must be called synchronously in the click handler,
+    // before any await, or Chrome silently returns null even when the tab opens for
+    // real (breaking the user-gesture chain). loginCIMD opens a blank tab first and
+    // redirects it via popup.location.href once the login response resolves, so a
+    // null return here reflects a genuinely blocked popup, not a false positive.
+    setObserverControlToken("observer-control-token-1234567890");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/cimd/register") && init?.method === "POST") {
+        return jsonResponse({
+          authorizationUrl: "https://127.0.0.1:9090/authorize?client_id=abc",
+          location: "http://127.0.0.1:9193/authorize?client_id=mock-splunkd-client",
+          cookieMaxAgeSeconds: 600,
+        });
+      }
+      if (url.includes("/api/splunk/cimd/login") && init?.method === "POST") {
+        return jsonResponse({ authorizationUrl: "https://127.0.0.1:9090/oauth2/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/cimd/session")) {
+        return jsonResponse({ phase: "pending" });
+      }
+      return jsonResponse({ ...disconnectedStatus(), cimdRegistrationEnabled: true });
+    }));
+
+    vi.stubGlobal("open", vi.fn(() => null));
+    render(<CloudTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in to SIS" }));
+
+    expect((await screen.findByRole("alert")).textContent)
+      .toContain("Could not open the SIS sign-in page");
+
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in to SIS" }));
+
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+  });
+
   it("traps dialog focus and restores it when cancellation closes the dialog", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
@@ -2835,7 +3186,11 @@ function installBridge(options: {
       return httpRequests;
     },
     respond(request: BridgeRequest, result: {
+      cimdRegistrationEnabled?: boolean;
+      cimdRegistrationVerified?: boolean;
+      cimdSession?: SISCIMDSessionStatus;
       freeAccount?: Record<string, unknown>;
+      message?: string;
       realm?: string;
       region?: string;
       status?: SplunkExportStatus;
@@ -2873,6 +3228,11 @@ function expectBrowserSessionRequest(init: RequestInit | undefined, launchToken:
   expect(body).toEqual({ launchToken });
 }
 
+// A minimal stand-in for the real popup window handle loginCIMD opens synchronously
+// and later redirects via popup.location.href once the login response resolves.
+function fakePopup(): Window {
+  return { close: vi.fn(), location: { href: "" } } as unknown as Window;
+}
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -2886,6 +3246,7 @@ function disconnectedStatus(version = disconnectedVersion): SplunkExportStatus {
     connected: false,
     enabled: false,
     version,
+    cimdRegistrationEnabled: false,
     metrics: signalStatus(false),
     traces: signalStatus(false),
   };
@@ -2901,6 +3262,7 @@ function connectedStatus(
     enabled,
     realm,
     version,
+    cimdRegistrationEnabled: false,
     metrics: {
       ...signalStatus(enabled, true),
       exportedBatches: 2,
