@@ -78,23 +78,49 @@ export function SpanDetailsPanel({ span, validationFindings, onClose }: SpanDeta
       </div>
 
       {/* Tabs */}
-      <div className="span-details__tabs">
+      <div
+        className="span-details__tabs"
+        role="tablist"
+        aria-label="Span detail sections"
+        onKeyDown={(e) => {
+          const idx = tabs.findIndex((t) => t.id === activeTab);
+          let next = idx;
+          if (e.key === "ArrowRight") next = (idx + 1) % tabs.length;
+          else if (e.key === "ArrowLeft") next = (idx - 1 + tabs.length) % tabs.length;
+          else if (e.key === "Home") next = 0;
+          else if (e.key === "End") next = tabs.length - 1;
+          else return;
+          e.preventDefault();
+          setActiveTab(tabs[next].id);
+          document.getElementById(`span-tab-${tabs[next].id}`)?.focus();
+        }}
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            id={`span-tab-${tab.id}`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={activeTab === tab.id ? `span-panel-${tab.id}` : undefined}
             className={`span-details__tab ${activeTab === tab.id ? "span-details__tab--active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
             type="button"
+            tabIndex={activeTab === tab.id ? 0 : -1}
           >
             {tab.label}
             {tab.count != null && tab.count > 0 ? (
-              <span className="span-details__tab-count">{tab.count}</span>
+              <span className="span-details__tab-count" aria-hidden="true">{tab.count}</span>
             ) : null}
           </button>
         ))}
       </div>
 
-      <div className="span-details__body">
+      <div
+        className="span-details__body"
+        role="tabpanel"
+        id={`span-panel-${activeTab}`}
+        aria-labelledby={`span-tab-${activeTab}`}
+      >
         {activeTab === "info" ? (
           <div className="span-details__section">
             <div className="span-details__section-body">

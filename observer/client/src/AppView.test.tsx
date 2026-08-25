@@ -1,8 +1,6 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
@@ -507,6 +505,383 @@ describe("AppView validation tab", () => {
 
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
     expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
+  });
+});
+
+describe("AppView cloud connection status chip", () => {
+  it("shows Checking connection… immediately when the Cloud tab is active before fetch resolves", () => {
+    // Fetch that never resolves — simulates the loading window
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Checking connection…");
+  });
+
+  it("live region is in the DOM before the fetch resolves so announcements are not dropped", () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    const { container } = render(<AppView telemetry={telemetry} />);
+
+    expect(container.querySelector('[aria-live="polite"]')).toBeTruthy();
+  });
+
+  it("shows Not connected with muted style when disconnected and unconfigured", async () => {
+    stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Not connected"));
+    expect(screen.getByRole("status").className).toContain("stream-toggle--muted");
+  });
+
+  it("shows Configured, not connected with paused style when credentials exist but connection is inactive", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        connected: false,
+        enabled: true,
+        metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+        traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+      }),
+    }));
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Configured, not connected"));
+    expect(screen.getByRole("status").className).toContain("stream-toggle--paused");
+  });
+
+  it("shows Connected with live style when the connection is active", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        connected: true,
+        enabled: true,
+        metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
+        traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
+      }),
+    }));
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Connected"));
+    expect(screen.getByRole("status").className).toContain("stream-toggle--live");
+  });
+});
+
+describe("AppView main tab keyboard navigation", () => {
+  it("ArrowRight moves focus and selection to the next tab with roving tabIndex", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    const tracesTab = screen.getByRole("tab", { name: /traces/i });
+
+    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
+    expect(metricsTab.getAttribute("tabindex")).toBe("0");
+
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+
+    expect(tracesTab.getAttribute("aria-selected")).toBe("true");
+    expect(tracesTab.getAttribute("tabindex")).toBe("0");
+    expect(metricsTab.getAttribute("tabindex")).toBe("-1");
+    expect(document.activeElement).toBe(tracesTab);
+  });
+
+  it("ArrowRight wraps focus from last tab back to first", () => {
+    stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=cloud");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(metricsTab);
+  });
+
+  it("ArrowLeft from first tab wraps focus to last", () => {
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+
+    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
+    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(cloudTab);
+  });
+
+  it("End key moves focus to the last tab", () => {
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    fireEvent.keyDown(tablist, { key: "End" });
+
+    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
+    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(cloudTab);
+  });
+
+  it("Home key moves focus to the first tab from any position", () => {
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+    fireEvent.keyDown(tablist, { key: "End" });
+    fireEvent.keyDown(tablist, { key: "Home" });
+
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(metricsTab);
+  });
+
+  it("keyboard navigation mounts the panel content for the newly selected tab", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Observer sections" });
+
+    // metrics → traces → logs → services (3 ArrowRights)
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+
+    const servicesTab = screen.getByRole("tab", { name: /services/i });
+    expect(servicesTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(servicesTab);
+    // ServicesTab column header is rendered synchronously — confirms the panel mounted
+    expect(screen.getByRole("button", { name: "Avg Duration" })).toBeTruthy();
+  });
+
+  it("active tab aria-controls resolves to a mounted panel; inactive tabs omit aria-controls", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    const controlsId = metricsTab.getAttribute("aria-controls");
+    expect(controlsId).toBe("panel-metrics");
+    // The IDREF must resolve — aria-controls is only set when the panel is mounted
+    expect(document.getElementById(controlsId!)).toBeTruthy();
+
+    // Inactive tabs carry no aria-controls to avoid dangling IDREFs
+    const tracesTab = screen.getByRole("tab", { name: /traces/i });
+    expect(tracesTab.getAttribute("aria-controls")).toBeNull();
+    expect(document.getElementById("panel-traces")).toBeNull();
+  });
+});
+
+describe("AppView KeyboardHelp focus management", () => {
+  it("focuses the close button when the dialog opens", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    helpButton.focus();
+    fireEvent.click(helpButton);
+
+    const dialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
+    const closeButton = within(dialog).getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(closeButton);
+  });
+
+  it("returns focus to the help button when the dialog closes via Escape", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    helpButton.focus();
+    fireEvent.click(helpButton);
+
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+
+    expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+    expect(document.activeElement).toBe(helpButton);
+  });
+
+  it("Tab is prevented while the dialog is open — focus stays on the Close button", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    helpButton.focus();
+    fireEvent.click(helpButton);
+
+    const closeButton = within(screen.getByRole("dialog", { name: "Keyboard Shortcuts" }))
+      .getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(closeButton);
+
+    // fireEvent returns false when the handler called preventDefault()
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(closeButton);
+  });
+
+  it("Shift+Tab is prevented while the dialog is open — focus stays on the Close button", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    helpButton.focus();
+    fireEvent.click(helpButton);
+
+    const closeButton = within(screen.getByRole("dialog", { name: "Keyboard Shortcuts" }))
+      .getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(closeButton);
+
+    expect(fireEvent.keyDown(window, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(closeButton);
+  });
+
+  it("full lifecycle: initial focus → Tab containment → close → focus restored to opener", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const helpButton = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    helpButton.focus();
+    fireEvent.click(helpButton);
+
+    const dialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
+    const closeButton = within(dialog).getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(closeButton);
+
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(closeButton);
+
+    expect(fireEvent.keyDown(window, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(closeButton);
+
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+    expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
+    expect(document.activeElement).toBe(helpButton);
+  });
+});
+
+describe("AppView tab-bar responsive layout", () => {
+  function makeNarrowTabLayout(): {
+    tabsScrollLeft: { value: number };
+    patchRects: (tabRightEdge: number, containerWidth: number) => void;
+    restore: () => void;
+  } {
+    // Simulate a clipped tab strip: container is 200px wide, tab extends beyond it
+    const tabsScrollLeft = { value: 0 };
+    const origGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const origScrollLeftDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft");
+
+    let tabRightEdge = 0;
+    let containerWidth = 200;
+
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.classList?.contains("tab-bar__tabs")) {
+        return { left: 0, right: containerWidth, width: containerWidth, top: 0, bottom: 40, height: 40, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      if ((this as HTMLElement).id?.startsWith("tab-cloud") && tabRightEdge > 0) {
+        return { left: tabRightEdge - 60, right: tabRightEdge, width: 60, top: 0, bottom: 40, height: 40, x: tabRightEdge - 60, y: 0, toJSON: () => ({}) } as DOMRect;
+      }
+      return origGetBoundingClientRect.call(this);
+    };
+
+    Object.defineProperty(Element.prototype, "scrollLeft", {
+      configurable: true,
+      get() { return tabsScrollLeft.value; },
+      set(v: number) { tabsScrollLeft.value = v; },
+    });
+
+    return {
+      tabsScrollLeft,
+      patchRects(tabRight: number, contWidth: number) {
+        tabRightEdge = tabRight;
+        containerWidth = contWidth;
+      },
+      restore() {
+        HTMLElement.prototype.getBoundingClientRect = origGetBoundingClientRect;
+        if (origScrollLeftDescriptor) {
+          Object.defineProperty(Element.prototype, "scrollLeft", origScrollLeftDescriptor);
+        }
+      },
+    };
+  }
+
+  it("scrolls the tabs container right so the active tab is fully visible on mount", () => {
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+    // Cloud tab right edge at 320px, container only 200px wide → needs scrollLeft += 120
+    patchRects(320, 200);
+    window.history.replaceState({}, "", "/?tab=cloud");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+    restore();
+  });
+
+  it("scrolls the tabs container so the newly selected tab is fully visible after a tab switch", () => {
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    // Simulate Cloud tab being off to the right after an earlier scroll
+    patchRects(320, 200);
+    tabsScrollLeft.value = 0;
+    fireEvent.click(screen.getByRole("tab", { name: /cloud/i }));
+
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+    restore();
+  });
+
+  it("re-scrolls the active tab into view after a container resize (ResizeObserver path)", () => {
+    // Capture the ResizeObserver callback so we can invoke it directly
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) { resizeCallback = cb; }
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    // Make rAF synchronous so the deferred scroll runs inline in tests
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => { cb(0); return 0; });
+
+    const { tabsScrollLeft, patchRects, restore } = makeNarrowTabLayout();
+
+    // Start with a wide container — Cloud tab is fully visible, no scroll needed
+    patchRects(320, 400);
+    window.history.replaceState({}, "", "/?tab=cloud");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+    expect(tabsScrollLeft.value).toBe(0);
+
+    // Simulate container shrink (e.g. viewport resize to 480px)
+    patchRects(320, 200);
+    tabsScrollLeft.value = 0;
+
+    // Fire the ResizeObserver callback — rAF is synchronous, so adjustment runs immediately
+    act(() => {
+      resizeCallback?.([{} as ResizeObserverEntry], {} as ResizeObserver);
+    });
+
+    expect(tabsScrollLeft.value).toBeGreaterThan(0);
+
+    restore();
+    vi.restoreAllMocks();
   });
 });
 

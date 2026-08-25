@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 
 export type FilterFieldKind = "text" | "number" | "enum" | "datetime";
 
@@ -116,6 +116,11 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
   const [valueFocused, setValueFocused] = useState(false);
   const [valueSuggestions, setValueSuggestions] = useState<string[]>([]);
   const inputId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const fieldMenuRef = useRef<HTMLDivElement>(null);
+  const valueInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsMenuRef = useRef<HTMLDivElement>(null);
+  const suppressNextFocusRef = useRef(false);
 
   const selectedDefinition = definitions.find((definition) => definition.key === draftKey) ?? null;
   const canAdd = selectedDefinition !== null && draftOp !== null && draftValue.trim() !== "";
@@ -180,6 +185,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
     setDraftValue("");
     setDraftOp("eq");
     setMenuOpen(false);
+    window.setTimeout(() => valueInputRef.current?.focus(), 0);
   }
 
   function addClause(): void {
@@ -224,17 +230,36 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
       </select>
     ) : (
       <input
+        ref={valueInputRef}
         className="explorer__input filter-builder__value"
         type={selectedDefinition.kind === "number" ? "number" : selectedDefinition.kind === "datetime" ? "datetime-local" : "text"}
         value={draftValue}
         min={selectedDefinition.kind === "number" ? 0 : undefined}
         step={selectedDefinition.kind === "number" ? selectedDefinition.step ?? "any" : undefined}
         onChange={(event) => setDraftValue(nextDraftValue(selectedDefinition, event.target.value, draftValue))}
-        onFocus={() => setValueFocused(true)}
-        onBlur={() => { window.setTimeout(() => setValueFocused(false), 100); }}
+        onFocus={() => {
+          if (suppressNextFocusRef.current) { suppressNextFocusRef.current = false; return; }
+          setValueFocused(true);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (suggestionsMenuRef.current?.contains(document.activeElement)) return;
+            if (valueInputRef.current === document.activeElement) return;
+            setValueFocused(false);
+          }, 100);
+        }}
         onKeyDown={(event) => {
           if (selectedDefinition.kind === "number" && (event.key === "-" || (selectedDefinition.step === 1 && event.key === "."))) {
             event.preventDefault();
+            return;
+          }
+          if (event.key === "ArrowDown" && valueSuggestions.length > 0) {
+            event.preventDefault();
+            suggestionsMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+            return;
+          }
+          if (event.key === "Escape" && valueSuggestions.length > 0) {
+            setValueFocused(false);
             return;
           }
           if (event.key === "Enter") { event.preventDefault(); addClause(); }
@@ -242,6 +267,9 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         }}
         placeholder={valuePlaceholder(selectedDefinition)}
         aria-label={`${selectedDefinition.key} value`}
+        aria-haspopup="menu"
+        aria-expanded={valueFocused && valueSuggestions.length > 0}
+        aria-controls={valueFocused && valueSuggestions.length > 0 ? "filter-value-suggestions" : undefined}
       />
     );
 
@@ -291,15 +319,44 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
         <div className="filter-builder__value-wrapper">
           {valueInput}
           {valueFocused && valueSuggestions.length > 0 ? (
-            <div className="filter-builder__menu" role="listbox" aria-label={`${selectedDefinition.key} suggestions`}>
+            <div
+              ref={suggestionsMenuRef}
+              id="filter-value-suggestions"
+              className="filter-builder__menu"
+              role="menu"
+              aria-label={`${selectedDefinition.key} suggestions`}
+              onKeyDown={(e) => {
+                const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+                const idx = items.indexOf(document.activeElement as HTMLElement);
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  items[(idx + 1) % items.length]?.focus();
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  if (idx <= 0) valueInputRef.current?.focus();
+                  else items[idx - 1]?.focus();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  suppressNextFocusRef.current = true;
+                  setValueFocused(false);
+                  valueInputRef.current?.focus();
+                }
+              }}
+            >
               <div className="filter-builder__menu-section">Suggested Values</div>
               {valueSuggestions.slice(0, 10).map((value) => (
                 <button
                   key={value}
                   className="filter-builder__menu-item"
+                  role="menuitem"
                   onMouseDown={(event) => {
                     event.preventDefault();
                     setDraftValue(value);
+                    setValueFocused(false);
+                  }}
+                  onClick={() => {
+                    setDraftValue(value);
+                    valueInputRef.current?.focus();
                     setValueFocused(false);
                   }}
                   type="button"
@@ -336,6 +393,7 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
       {selectedDefinition ? renderConditionCreator() : (
         <div className="filter-builder__trigger-wrapper">
           <button
+            ref={triggerRef}
             id={inputId}
             className="filter-builder__trigger"
             type="button"
@@ -345,7 +403,18 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
               if (next && e.currentTarget.parentElement?.contains(next)) return;
               window.setTimeout(() => setMenuOpen(false), 150);
             }}
-            aria-haspopup="listbox"
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (!menuOpen) setMenuOpen(true);
+                window.requestAnimationFrame(() => {
+                  fieldMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+                });
+              } else if (e.key === "Escape") {
+                setMenuOpen(false);
+              }
+            }}
+            aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label={fieldPlaceholder ?? "Add filter"}
           >
@@ -353,12 +422,39 @@ export function FilterBar({ definitions, clauses, onChange, fieldPlaceholder, on
             {fieldPlaceholder ?? "Add filter"}
           </button>
           {menuOpen && filteredDefinitions.length > 0 ? (
-            <div className="filter-builder__menu" role="listbox" aria-labelledby={inputId}>
+            <div
+              ref={fieldMenuRef}
+              className="filter-builder__menu"
+              role="menu"
+              aria-labelledby={inputId}
+              onBlur={(e) => {
+                const next = e.relatedTarget as Node | null;
+                if (next && (fieldMenuRef.current?.contains(next) || triggerRef.current?.contains(next as Element))) return;
+                window.setTimeout(() => setMenuOpen(false), 100);
+              }}
+              onKeyDown={(e) => {
+                const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+                const idx = items.indexOf(document.activeElement as HTMLElement);
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  items[(idx + 1) % items.length]?.focus();
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  if (idx <= 0) triggerRef.current?.focus();
+                  else items[idx - 1]?.focus();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMenuOpen(false);
+                  triggerRef.current?.focus();
+                }
+              }}
+            >
               <div className="filter-builder__menu-section">Indexed Tags</div>
               {filteredDefinitions.slice(0, 10).map((definition) => (
                 <button
                   key={definition.key}
                   className="filter-builder__menu-item"
+                  role="menuitem"
                   onMouseDown={(event) => { event.preventDefault(); selectDefinition(definition); }}
                   onClick={() => selectDefinition(definition)}
                   type="button"

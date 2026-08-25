@@ -73,7 +73,7 @@ function renderBody(
   panel: PreviewPanel,
   allSeries: ReturnType<typeof useMetricTimeSeries>["allSeries"],
   selectedKey: string | null,
-  setSelectedKey: (key: string) => void,
+  setSelectedKey: (key: string | null) => void,
   windowMs: number,
   otlpEndpoint: string | null,
 ): React.ReactElement {

@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MetricSeries } from "./useMetricTimeSeries";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 
@@ -51,5 +51,78 @@ describe("TimeSeriesChart", () => {
     expect(svg?.getAttribute("preserveAspectRatio")).toBe("xMidYMid meet");
     // Axis labels must render inside the same scaled SVG.
     expect(container.querySelectorAll(".ts-chart__axis-label").length).toBeGreaterThan(0);
+  });
+});
+
+describe("TimeSeriesChart annotation aria-pressed", () => {
+  it("annotation button has aria-pressed=false when no series is selected", () => {
+    render(
+      <TimeSeriesChart
+        series={makeSeries()}
+        displayType="lines"
+        selectedKey={null}
+        onSelectSeries={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /checkout/i }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("annotation button has aria-pressed=true when its series key is the selected key", () => {
+    const series = makeSeries();
+    render(
+      <TimeSeriesChart
+        series={series}
+        displayType="lines"
+        selectedKey={series[0].key}
+        onSelectSeries={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /checkout/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("clicking inactive annotation calls onSelectSeries with the key; aria-pressed transitions false → true → false", () => {
+    const series = makeSeries();
+    const onSelectSeries = vi.fn();
+    const { rerender } = render(
+      <TimeSeriesChart
+        series={series}
+        displayType="lines"
+        selectedKey={null}
+        onSelectSeries={onSelectSeries}
+      />,
+    );
+
+    const btn = screen.getByRole("button", { name: /checkout/i });
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
+
+    // Activate — transitions to pressed
+    fireEvent.click(btn);
+    expect(onSelectSeries).toHaveBeenCalledWith(series[0].key);
+
+    rerender(
+      <TimeSeriesChart
+        series={series}
+        displayType="lines"
+        selectedKey={series[0].key}
+        onSelectSeries={onSelectSeries}
+      />,
+    );
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+
+    // Deactivate — transitions back to unpressed
+    fireEvent.click(btn);
+    expect(onSelectSeries).toHaveBeenCalledWith(null);
+
+    rerender(
+      <TimeSeriesChart
+        series={series}
+        displayType="lines"
+        selectedKey={null}
+        onSelectSeries={onSelectSeries}
+      />,
+    );
+    expect(btn.getAttribute("aria-pressed")).toBe("false");
   });
 });

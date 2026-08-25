@@ -410,7 +410,7 @@ describe("LogsTab", () => {
 
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
 
-    const jsonTab = screen.getByRole("button", { name: "JSON" });
+    const jsonTab = screen.getByRole("tab", { name: "JSON" });
     fireEvent.click(jsonTab);
 
     // Highlighted keys
@@ -421,6 +421,59 @@ describe("LogsTab", () => {
     expect(container.querySelector(".json-hl__number")).toBeTruthy();
     // Highlighted keywords (true/false/null)
     expect(container.querySelector(".json-hl__keyword")).toBeTruthy();
+  });
+
+  it("log detail tabs respond to ArrowRight/ArrowLeft with roving tabIndex and wraparound", () => {
+    const { container } = render(
+      <LogsTab
+        logs={[
+          {
+            id: "1",
+            timeUnixNano: "1712700000000000000",
+            severityText: "INFO",
+            body: "keyboard nav test",
+            attributes: {},
+            resource: { serviceName: "test-svc", attributes: {} },
+            scope: { name: "otel" },
+          },
+        ]}
+        onInteract={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
+
+    const tablist = container.querySelector('[role="tablist"][aria-label="Log detail sections"]') as HTMLElement;
+    const overviewTab = screen.getByRole("tab", { name: "Overview" });
+    const jsonTab = screen.getByRole("tab", { name: "JSON" });
+
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(overviewTab.getAttribute("tabindex")).toBe("0");
+    expect(jsonTab.getAttribute("tabindex")).toBe("-1");
+
+    // ArrowRight selects JSON and moves focus
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(jsonTab.getAttribute("aria-selected")).toBe("true");
+    expect(jsonTab.getAttribute("tabindex")).toBe("0");
+    expect(overviewTab.getAttribute("tabindex")).toBe("-1");
+    expect(document.activeElement).toBe(jsonTab);
+    expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain("{");
+
+    // ArrowRight wraps back to Overview and moves focus
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(overviewTab);
+    expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain("keyboard nav test");
+
+    // ArrowLeft wraps to JSON and moves focus
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+    expect(jsonTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(jsonTab);
+
+    // ArrowLeft back to Overview and moves focus
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(overviewTab);
   });
 
   it("JSON tab copy button copies raw JSON not highlighted markup", () => {
@@ -440,7 +493,7 @@ describe("LogsTab", () => {
     const { container } = render(<LogsTab logs={[log]} onInteract={vi.fn()} />);
 
     fireEvent.click(container.querySelector(".data-table__row--logs") as HTMLElement);
-    fireEvent.click(screen.getByRole("button", { name: "JSON" }));
+    fireEvent.click(screen.getByRole("tab", { name: "JSON" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy JSON" }));
 
     expect(writeText).toHaveBeenCalledWith(JSON.stringify(log, null, 2));

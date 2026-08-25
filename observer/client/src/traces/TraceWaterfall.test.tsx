@@ -348,6 +348,118 @@ function setObservedCanvasWidth(width: number): void {
   );
 }
 
+describe("TraceWaterfall row interaction", () => {
+  afterEach(cleanup);
+
+  it("clicking the row-select button calls onSelectSpan", () => {
+    const onSelectSpan = vi.fn();
+    render(
+      <TraceWaterfall
+        spans={[makeSpan({ spanId: "plain", name: "GET /health" })]}
+        selectedSpanId={null}
+        onSelectSpan={onSelectSpan}
+        traceDurationMs={1000}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GET \/health/ }));
+
+    expect(onSelectSpan).toHaveBeenCalledWith("plain");
+  });
+
+  it("keyboard activation via the row-select button calls onSelectSpan without double-firing", () => {
+    const onSelectSpan = vi.fn();
+    const { container } = render(
+      <TraceWaterfall
+        spans={[makeSpan({ spanId: "plain", name: "GET /health" })]}
+        selectedSpanId={null}
+        onSelectSpan={onSelectSpan}
+        traceDurationMs={1000}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    // Simulates Enter/Space key activation on the select button
+    fireEvent.click(container.querySelector(".waterfall__row-select") as HTMLElement);
+
+    expect(onSelectSpan).toHaveBeenCalledTimes(1);
+    expect(onSelectSpan).toHaveBeenCalledWith("plain");
+  });
+
+  it("collapse toggle fires without triggering span selection", () => {
+    const onSelectSpan = vi.fn();
+    const { container } = render(
+      <TraceWaterfall
+        spans={[
+          makeSpan({ spanId: "parent", name: "parent-op" }),
+          makeSpan({ spanId: "child", parentSpanId: "parent", name: "child-op" }),
+        ]}
+        selectedSpanId={null}
+        onSelectSpan={onSelectSpan}
+        traceDurationMs={1000}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    fireEvent.click(container.querySelector(".waterfall__toggle") as HTMLElement);
+
+    expect(onSelectSpan).not.toHaveBeenCalled();
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(1);
+  });
+
+  it("Enter key on the collapse toggle does not bubble to row-select", () => {
+    const onSelectSpan = vi.fn();
+    const { container } = render(
+      <TraceWaterfall
+        spans={[
+          makeSpan({ spanId: "parent", name: "parent-op" }),
+          makeSpan({ spanId: "child", parentSpanId: "parent", name: "child-op" }),
+        ]}
+        selectedSpanId={null}
+        onSelectSpan={onSelectSpan}
+        traceDurationMs={1000}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    const toggle = container.querySelector(".waterfall__toggle") as HTMLElement;
+    fireEvent.keyDown(toggle, { key: "Enter" });
+
+    expect(onSelectSpan).not.toHaveBeenCalled();
+  });
+
+  it("keyboard activation of collapse toggle collapses children without selecting the span", () => {
+    const onSelectSpan = vi.fn();
+    const { container } = render(
+      <TraceWaterfall
+        spans={[
+          makeSpan({ spanId: "parent", name: "parent-op" }),
+          makeSpan({ spanId: "child", parentSpanId: "parent", name: "child-op" }),
+        ]}
+        selectedSpanId={null}
+        onSelectSpan={onSelectSpan}
+        traceDurationMs={1000}
+        validationIndex={emptyValidationIndex}
+      />,
+    );
+
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(2);
+
+    const toggle = container.querySelector(".waterfall__toggle") as HTMLElement;
+    // Simulates Enter/Space: browser fires a click event on the focused button
+    fireEvent.click(toggle);
+
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(1);
+    expect(onSelectSpan).not.toHaveBeenCalled();
+
+    // Expanding again restores the child row
+    fireEvent.click(toggle);
+    expect(container.querySelectorAll(".waterfall__row")).toHaveLength(2);
+    expect(onSelectSpan).not.toHaveBeenCalled();
+  });
+});
+
 describe("TraceWaterfall GenAI overview", () => {
   afterEach(() => {
     cleanup();
