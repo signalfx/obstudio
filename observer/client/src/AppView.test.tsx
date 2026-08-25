@@ -380,7 +380,7 @@ describe("AppView validation tab", () => {
     fireEvent.keyDown(window, { key: "8" });
 
     expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
-    await waitFor(() => expect(screen.getByText(/Splunk Observability Cloud/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Splunk Observability Cloud" })).toBeTruthy());
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {

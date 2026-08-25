@@ -1,14 +1,41 @@
 export const splunkCloudConnectionSecretKey = 'splunkCloudConnection.v1';
 export const maxCloudAccessTokenBytes = 4096;
+export const maxCloudDestinationBytes = 2048;
+export const maxFreeAccountFirstNameLength = 40;
+export const maxFreeAccountLastNameLength = 40;
+export const maxFreeAccountEmailLength = 80;
+
+const supportedFreeAccountRegionRealms: Readonly<Record<string, string>> = Object.freeze({
+	'us': 'us1',
+	'Europe (Ireland)': 'eu0',
+	'apac-au': 'au0',
+});
+const definitePreSubmitFreeAccountErrorCodes: ReadonlySet<string> = new Set([
+	'observer_control_unavailable',
+]);
+
+export type FreeAccountSubmissionResult = {
+	intakeAcknowledged: boolean;
+	realm: string;
+	region: string;
+};
 
 export const cloudBridgeActions = [
 	'connect',
+	'create-free-account',
+	'detect-free-account-region',
 	'forget',
 	'initialize',
 	'open-audit-report',
 	'open-free-edition',
+	'open-free-edition-terms',
 	'open-ingest-token-help',
+	'open-realm-help',
+	'open-observability-cloud-demo',
+	'open-observability-data-course',
+	'open-observability-docs',
 	'open-skill-docs',
+	'resolve-realm',
 	'set-enabled',
 ] as const;
 
@@ -16,6 +43,7 @@ export type CloudBridgeAction = typeof cloudBridgeActions[number];
 
 export function cloudBridgeActionRequiresLifecycleSerialization(action: CloudBridgeAction): boolean {
 	return action === 'connect'
+		|| action === 'create-free-account'
 		|| action === 'forget'
 		|| action === 'initialize'
 		|| action === 'set-enabled';
@@ -25,6 +53,8 @@ export class ObserverCloudResponseError extends Error {
 	constructor(
 		readonly statusCode: number,
 		message: string,
+		readonly code?: string,
+		readonly retrySafe?: boolean,
 	) {
 		super(message);
 		this.name = 'ObserverCloudResponseError';
@@ -89,23 +119,68 @@ export function observerCloudResponseError(
 	statusCode: number,
 	body: unknown,
 ): ObserverCloudResponseError {
-	const message = typeof body === 'object'
-		&& body !== null
-		&& typeof (body as Record<string, unknown>).error === 'string'
-		? (body as Record<string, string>).error
+	const response = typeof body === 'object' && body !== null
+		? body as Record<string, unknown>
+		: undefined;
+	const message = typeof response?.error === 'string'
+		? response.error
 		: `Observer request failed with HTTP ${statusCode}.`;
-	return new ObserverCloudResponseError(statusCode, message);
+	return new ObserverCloudResponseError(
+		statusCode,
+		message,
+		typeof response?.code === 'string' ? response.code : undefined,
+		typeof response?.retrySafe === 'boolean' ? response.retrySafe : undefined,
+	);
+}
+
+export function isSupportedFreeAccountRegion(value: string): boolean {
+	return Object.hasOwn(supportedFreeAccountRegionRealms, value);
+}
+
+export function parseFreeAccountSubmissionResult(value: unknown): FreeAccountSubmissionResult | undefined {
+	if (typeof value !== 'object' || value === null) {
+		return undefined;
+	}
+	const response = value as Record<string, unknown>;
+	const realm = typeof response.realm === 'string' ? response.realm.trim().toLowerCase() : '';
+	const region = typeof response.region === 'string' ? response.region : '';
+	const expectedRealm = supportedFreeAccountRegionRealms[region];
+	if (
+		typeof response.intakeAcknowledged !== 'boolean'
+		|| expectedRealm === undefined
+		|| realm !== expectedRealm
+	) {
+		return undefined;
+	}
+	return {
+		intakeAcknowledged: response.intakeAcknowledged,
+		realm,
+		region,
+	};
+}
+
+export function freeAccountSubmissionFailureIsOutcomeUnknown(error: unknown): boolean {
+	if (!(error instanceof ObserverCloudResponseError)) {
+		return false;
+	}
+	if (error.retrySafe === true || definitePreSubmitFreeAccountErrorCodes.has(error.code ?? '')) {
+		return false;
+	}
+	if (error.code === 'outcome_unknown' || error.retrySafe === false || error.statusCode >= 500) {
+		return true;
+	}
+	return false;
 }
 
 export async function requestObserverCloudMutationWithTokenRefresh(options: {
 	currentToken: () => string;
-	refreshToken?: (usedToken: string) => string | undefined;
+	refreshToken?: (usedToken: string) => Promise<string | undefined> | string | undefined;
 	send: (controlToken: string) => Promise<ObserverCloudHTTPResponse>;
 }): Promise<unknown> {
 	let controlToken = options.currentToken();
 	if (controlToken === '') {
 		throw new Error(
-			'Cloud connection changes require OBSTUDIO_CONTROL_TOKEN when using a shared Observer.',
+			'Cloud connection changes require OBSTUDIO_CONTROL_TOKEN and OBSTUDIO_HEALTH_PROOF_SECRET when using a shared Observer.',
 		);
 	}
 
@@ -115,7 +190,7 @@ export async function requestObserverCloudMutationWithTokenRefresh(options: {
 			return response.body;
 		}
 		if (attempt === 0 && response.statusCode === 401 && options.refreshToken !== undefined) {
-			const refreshedToken = options.refreshToken(controlToken);
+			const refreshedToken = await options.refreshToken(controlToken);
 			if (refreshedToken !== undefined && refreshedToken !== controlToken) {
 				controlToken = refreshedToken;
 				continue;
@@ -569,7 +644,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 			await options.restoreStoredState(previous);
 		} catch (restoreError) {
 			throw new Error(
-				`Could not forget the cloud key: ${cloudErrorMessage(localError)}. `
+				`Could not remove the cloud connection: ${cloudErrorMessage(localError)}. `
 				+ `Secure-storage rollback also failed: ${cloudErrorMessage(restoreError)}`,
 			);
 		}
@@ -603,7 +678,7 @@ export async function forgetSplunkCloudWithStorage(options: {
 		}
 		if (rollbackError !== undefined) {
 			throw new Error(
-				`Could not forget the cloud key: ${cloudErrorMessage(forgetError)}. `
+				`Could not remove the cloud connection: ${cloudErrorMessage(forgetError)}. `
 				+ `Cloud connection rollback also failed: ${cloudErrorMessage(rollbackError)}`,
 			);
 		}

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import time
@@ -10,7 +9,14 @@ from pathlib import Path
 from .ab import side_prompt
 from .backends import AgentBackend, CodexBackend
 from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, TokenUsage, resolve_skill_source
-from .definitions.base import validate_eval_input_paths
+from .eval_files import (
+    fixture_eval_input_sources,
+    fixture_workspace_ignore,
+    shared_skill_reference_source_files,
+    skill_workspace_ignore,
+    staged_fixture_source_files,
+    staged_skill_source_files,
+)
 from .graders import grade_side
 from .graders.rubric import run_rubric_grade
 from .trace import TraceUsage, UsageProvider
@@ -246,10 +252,11 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
     side_dir.mkdir(parents=True)
     if case.fixture_dir is None:
         raise ValueError(f"case {case.id} has no fixture_dir")
+    staged_fixture_source_files(case.fixture_dir)
     shutil.copytree(
         case.fixture_dir,
         side_dir / "service",
-        ignore=shutil.ignore_patterns("eval", "*_eval.json", ".observe", ".venv", "__pycache__", "*.pyc", "uv.lock", "*.db"),
+        ignore=fixture_workspace_ignore,
     )
     copy_eval_inputs(
         case.fixture_dir,
@@ -260,13 +267,23 @@ def prepare_side_workspace(repo_root: Path, case: EvalCase, side: str, side_dir:
         skills_dir = side_dir / ".agents" / "skills"
         skills_dir.mkdir(parents=True)
         target = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
+        staged_skill_source_files(target)
         if not (target / "SKILL.md").exists():
             raise FileNotFoundError(f"missing skill source: {target / 'SKILL.md'}")
-        create_skill_link(target, skills_dir / target.name)
+        shutil.copytree(
+            target,
+            skills_dir / target.name,
+            ignore=skill_workspace_ignore,
+        )
 
         references = repo_root / "skills" / "references"
         if references.exists():
-            create_skill_link(references, skills_dir / "references")
+            shared_skill_reference_source_files(repo_root)
+            shutil.copytree(
+                references,
+                skills_dir / "references",
+                ignore=skill_workspace_ignore,
+            )
 
 
 def copy_eval_inputs(
@@ -276,33 +293,7 @@ def copy_eval_inputs(
 ) -> None:
     """Expose only prompt-approved eval seeds, never eval definitions."""
 
-    validate_eval_input_paths(eval_inputs)
-    if not eval_inputs:
-        return
-    input_root = fixture_dir / "eval" / "inputs"
-    if (fixture_dir / "eval").is_symlink() or input_root.is_symlink():
-        raise ValueError(f"eval input directory must not be a symlink: {input_root}")
-    resolved_input_root = input_root.resolve()
-    for value in eval_inputs:
-        relative = Path(value)
-        source = fixture_dir / relative
-        if source.is_symlink() or not source.is_file():
-            raise ValueError(
-                f"eval_inputs entry must name a regular fixture file: {value}"
-            )
-        try:
-            source.resolve().relative_to(resolved_input_root)
-        except ValueError as exc:
-            raise ValueError(
-                f"eval_inputs entry resolves outside eval/inputs: {value}"
-            ) from exc
+    for relative, source in fixture_eval_input_sources(fixture_dir, eval_inputs):
         destination = service_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination, follow_symlinks=False)
-
-
-def create_skill_link(target: Path, link: Path) -> None:
-    try:
-        os.symlink(target, link, target_is_directory=True)
-    except OSError:
-        shutil.copytree(target, link)

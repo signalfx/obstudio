@@ -29,6 +29,19 @@ class CommandEvent:
 
 
 @dataclass
+class ActionEvent:
+    kind: str
+    name: str
+    status: str = ""
+    input: dict[str, Any] = field(default_factory=dict)
+    output: str = ""
+    result: Any = None
+    exit_code: int | None = None
+    start_order: int = 0
+    completion_order: int | None = None
+
+
+@dataclass
 class TraceUsage:
     provider: UsageProvider = "unknown"
     source: UsageSource = "unknown"
@@ -86,7 +99,8 @@ class TraceSummary:
     ) -> None:
         self.events = events
         self.raw_text = raw_text
-        self.commands = extract_commands(events)
+        self.actions = extract_actions(events)
+        self.commands = command_events(self.actions)
         self.usage = extract_usage(events, provider=provider)
 
 
@@ -127,20 +141,113 @@ def _parse_json_integer(raw: str) -> int | _InvalidJSONInteger:
         return _InvalidJSONInteger(raw)
 
 
-def extract_commands(events: list[dict[str, Any]]) -> list[CommandEvent]:
-    commands: list[CommandEvent] = []
-    for event in events:
+def extract_actions(events: list[dict[str, Any]]) -> list[ActionEvent]:
+    actions: list[ActionEvent] = []
+    actions_by_item_id: dict[str, ActionEvent] = {}
+    for order, event in enumerate(events):
         item = event.get("item")
         if item is None and isinstance(event.get("payload"), dict):
             item = event["payload"].get("item")
         if not isinstance(item, dict):
             continue
-        if item.get("type") != "command_execution":
+        item_type = str(item.get("type") or "")
+        if not item_type or item_type in {"agent_message", "reasoning"}:
             continue
+        item_id = str(item.get("id") or "")
+        status = action_status(event, item)
+        action = actions_by_item_id.get(item_id) if item_id else None
+        if action is None:
+            action = pending_action(actions, item_type, item) if not item_id else None
+        if action is None:
+            action = ActionEvent(
+                kind="command" if item_type == "command_execution" else "tool",
+                name=item_type,
+                status=status,
+                input=action_input(item_type, item),
+                output=action_output(item),
+                exit_code=action_exit_code(item),
+                start_order=order,
+                completion_order=order if terminal_status(status) else None,
+            )
+            actions.append(action)
+            if item_id:
+                actions_by_item_id[item_id] = action
+            continue
+        action.status = status or action.status
+        next_input = action_input(item_type, item)
+        if next_input:
+            action.input = next_input
+        output = action_output(item)
+        if output:
+            action.output = output
+        exit_code = action_exit_code(item)
+        if exit_code is not None:
+            action.exit_code = exit_code
+        if terminal_status(status):
+            action.completion_order = order
+    return actions
+
+
+def command_events(actions: list[ActionEvent]) -> list[CommandEvent]:
+    return [
+        CommandEvent(command=str(action.input["command"]), status=action.status)
+        for action in actions
+        if action.kind == "command" and isinstance(action.input.get("command"), str)
+    ]
+
+
+def action_status(event: dict[str, Any], item: dict[str, Any]) -> str:
+    status = str(item.get("status") or "")
+    if status:
+        return status
+    event_type = str(event.get("type") or "")
+    if event_type.endswith(".completed"):
+        return "completed"
+    if event_type.endswith(".started"):
+        return "started"
+    return ""
+
+
+def action_input(item_type: str, item: dict[str, Any]) -> dict[str, Any]:
+    if item_type == "command_execution":
         command = item.get("command")
-        if isinstance(command, str):
-            commands.append(CommandEvent(command=command, status=str(item.get("status", ""))))
-    return commands
+        return {"command": command} if isinstance(command, str) else {}
+    return {
+        key: value
+        for key, value in item.items()
+        if key not in {"aggregated_output", "output", "status"}
+    }
+
+
+def action_output(item: dict[str, Any]) -> str:
+    for key in ("aggregated_output", "output"):
+        output = item.get(key)
+        if isinstance(output, str):
+            return output
+    return ""
+
+
+def action_exit_code(item: dict[str, Any]) -> int | None:
+    exit_code = item.get("exit_code")
+    return exit_code if isinstance(exit_code, int) else None
+
+
+def terminal_status(status: str) -> bool:
+    return status.lower() in {"completed", "failed", "cancelled", "canceled"}
+
+
+def pending_action(
+    actions: list[ActionEvent],
+    item_type: str,
+    item: dict[str, Any],
+) -> ActionEvent | None:
+    expected_input = action_input(item_type, item)
+    for action in reversed(actions):
+        if action.status not in {"started", "in_progress"}:
+            continue
+        if action.name == item_type and action.input == expected_input:
+            return action
+    return None
 
 
 def extract_usage(
@@ -154,7 +261,9 @@ def extract_usage(
 
     cumulative = [record for record in records if record.source == "cumulative"]
     recognized_cumulative = [
-        record for record in cumulative if normalize_usage(record.usage, provider).recognized
+        record
+        for record in cumulative
+        if normalize_usage(record.usage, provider).recognized
     ]
     if recognized_cumulative:
         highest_priority = max(record.priority for record in recognized_cumulative)
@@ -172,7 +281,9 @@ def extract_usage(
         )
 
     incremental = [record for record in records if record.source == "incremental"]
-    if any(normalize_usage(record.usage, provider).recognized for record in incremental):
+    if any(
+        normalize_usage(record.usage, provider).recognized for record in incremental
+    ):
         return combine_incremental_usage(incremental, provider, len(records))
 
     return TraceUsage(
@@ -203,9 +314,7 @@ def codex_usage_records(events: list[dict[str, Any]]) -> list[_UsageRecord]:
             if isinstance(info, dict):
                 total = info.get("total_token_usage")
                 if "total_token_usage" in info:
-                    records.append(
-                        _UsageRecord(usage_mapping(total), "cumulative", 30)
-                    )
+                    records.append(_UsageRecord(usage_mapping(total), "cumulative", 30))
                 if "last_token_usage" in info:
                     records.append(
                         _UsageRecord(
@@ -232,7 +341,9 @@ def claude_usage_records(events: list[dict[str, Any]]) -> list[_UsageRecord]:
         event_type = normalized_event_type(event.get("type"))
         if "usage" in event:
             direct = usage_mapping(event["usage"])
-            source: UsageSource = "cumulative" if event_type == "result" else "incremental"
+            source: UsageSource = (
+                "cumulative" if event_type == "result" else "incremental"
+            )
             priority = 30 if source == "cumulative" else 10
             records.append(_UsageRecord(direct, source, priority))
 
@@ -281,7 +392,11 @@ def combine_incremental_usage(
     for field in token_fields():
         values = [getattr(usage, field) for usage in recognized]
         if values and all(value is not None for value in values):
-            setattr(combined, field, sum(int(value) for value in values if value is not None))
+            setattr(
+                combined,
+                field,
+                sum(int(value) for value in values if value is not None),
+            )
     effective_totals = [usage.total_tokens for usage in recognized]
     if (
         len(recognized) == len(records)
@@ -294,9 +409,7 @@ def combine_incremental_usage(
     return combined
 
 
-def normalize_usage(
-    usage: dict[str, Any], provider: UsageProvider
-) -> TraceUsage:
+def normalize_usage(usage: dict[str, Any], provider: UsageProvider) -> TraceUsage:
     if provider == "claude":
         return normalize_claude_usage(usage)
     if provider == "codex":

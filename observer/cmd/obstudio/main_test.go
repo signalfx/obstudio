@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,12 +13,13 @@ import (
 )
 
 func TestEnsureObserverControlTokenPreservesConfiguredToken(t *testing.T) {
-	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "configured-control-token")
+	configuredToken := "configured-control-token"
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", configuredToken)
 
 	if err := ensureObserverControlToken(); err != nil {
 		t.Fatalf("ensureObserverControlToken() error = %v", err)
 	}
-	if got := os.Getenv("OBSTUDIO_CONTROL_TOKEN"); got != "configured-control-token" {
+	if got := os.Getenv("OBSTUDIO_CONTROL_TOKEN"); got != configuredToken {
 		t.Fatalf("OBSTUDIO_CONTROL_TOKEN = %q, want configured token", got)
 	}
 }
@@ -33,6 +35,74 @@ func TestEnsureObserverControlTokenGeneratesStateToken(t *testing.T) {
 	}
 	if state := buildSharedObserverState("127.0.0.1", "3000"); state.ControlToken != os.Getenv("OBSTUDIO_CONTROL_TOKEN") {
 		t.Fatalf("shared observer state control token = %q, want generated token", state.ControlToken)
+	}
+}
+
+func TestEnsureObserverControlTokenRotatesAcrossProcesses(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
+	if err := ensureObserverControlToken(); err != nil {
+		t.Fatalf("generate first process token: %v", err)
+	}
+	first := os.Getenv("OBSTUDIO_CONTROL_TOKEN")
+
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "")
+	if err := ensureObserverControlToken(); err != nil {
+		t.Fatalf("generate second process token: %v", err)
+	}
+	if second := os.Getenv("OBSTUDIO_CONTROL_TOKEN"); second == first {
+		t.Fatal("Observer control token was reused across process starts")
+	}
+}
+
+func TestEnsureObserverHealthProofSecretGeneratesIndependentStateSecret(t *testing.T) {
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "configured-control-token")
+	t.Setenv(observerHealthProofSecretEnv, "")
+
+	if err := ensureObserverHealthProofSecret(); err != nil {
+		t.Fatalf("ensureObserverHealthProofSecret() error = %v", err)
+	}
+	proofSecret := os.Getenv(observerHealthProofSecretEnv)
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(proofSecret) {
+		t.Fatalf("%s = %q, want a 32-byte base64url secret", observerHealthProofSecretEnv, proofSecret)
+	}
+	if proofSecret == os.Getenv("OBSTUDIO_CONTROL_TOKEN") {
+		t.Fatal("health proof secret reused the Observer control token")
+	}
+	if state := buildSharedObserverState("127.0.0.1", "3000"); state.HealthProofSecret != proofSecret {
+		t.Fatalf("shared observer state health proof secret = %q, want generated secret", state.HealthProofSecret)
+	}
+}
+
+func TestEnsureObserverHealthProofSecretRejectsWeakConfiguredValue(t *testing.T) {
+	t.Setenv(observerHealthProofSecretEnv, "configured-control-token")
+
+	if err := ensureObserverHealthProofSecret(); err == nil {
+		t.Fatal("weak configured health proof secret was accepted")
+	}
+}
+
+func TestEnsureObserverHealthProofSecretRejectsControlTokenReuse(t *testing.T) {
+	configured := base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", configured)
+	t.Setenv(observerHealthProofSecretEnv, configured)
+
+	if err := ensureObserverHealthProofSecret(); err == nil {
+		t.Fatal("control token reused as health proof secret was accepted")
+	} else if !strings.Contains(err.Error(), "must differ") {
+		t.Fatalf("ensureObserverHealthProofSecret() error = %q, want non-reuse error", err)
+	}
+}
+
+func TestEnsureObserverHealthProofSecretPreservesCanonicalConfiguredValue(t *testing.T) {
+	configured := base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	t.Setenv("OBSTUDIO_CONTROL_TOKEN", "configured-control-token")
+	t.Setenv(observerHealthProofSecretEnv, configured)
+
+	if err := ensureObserverHealthProofSecret(); err != nil {
+		t.Fatalf("ensureObserverHealthProofSecret() error = %v", err)
+	}
+	if got := os.Getenv(observerHealthProofSecretEnv); got != configured {
+		t.Fatalf("%s = %q, want configured secret", observerHealthProofSecretEnv, got)
 	}
 }
 

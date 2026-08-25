@@ -178,6 +178,23 @@ obstudio stop     Stop Observer
 Installing an update does not restart Observer. These commands do not control
 foreground or extension-managed Observers.
 
+When publishing a shared Observer through an HTTPS reverse proxy, set
+`OBSTUDIO_PUBLIC_MCP_URL` to its complete public MCP URL (for example,
+`https://observer.example.com/mcp`). The Observer advertises and authenticates
+that URL so installers and extensions can use the protected endpoint safely.
+Every HTTP MCP `GET`, `POST`, and `DELETE` request requires the Observer control
+token as a bearer token, including requests sent over loopback. Normal local
+discovery writes this authorization header into the agent configuration.
+
+Observer also generates an independent health-proof secret and stores it in its
+private local runtime state. For an explicit remote `--shared-url`, provide both
+the same `OBSTUDIO_CONTROL_TOKEN` and `OBSTUDIO_HEALTH_PROOF_SECRET` while running
+`obstudio install`; the installer uses the proof secret to verify the control
+token before storing the authorization header. A configured health-proof secret
+must be the canonical, unpadded base64url encoding of 32 random bytes and must
+not reuse the control token. Reverse proxies must forward the `Authorization`
+header to Observer.
+
 | Service | URL |
 |---------|-----|
 | Telemetry Explorer | http://localhost:3000 |

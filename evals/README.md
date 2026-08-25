@@ -132,6 +132,7 @@ every language topology.
 | Target | Purpose |
 |---|---|
 | `make test-eval-harness` | Validate every eval JSON and fixture |
+| `make eval-report-freshness` | Verify tracked report source manifests still match canonical skill and eval inputs |
 | `make skill-eval-list SKILL=skills/otel-audit` | List collected eval items for a skill path |
 | `make eval-validation SKILL=skills/otel-audit` | Validate eval JSONs without running Codex |
 | `make eval-validation-test SKILL=skills/otel-audit` | Validate evals and write raw JSON only |
@@ -240,6 +241,18 @@ Each `benchmark.json` is kind-specific. Sanity contains sanity checks only,
 rubric contains judge/rubric fields only, and runtime contains runtime check
 fields only. Baseline columns are `-` when the run mode did not execute a
 baseline side.
+
+New reports also record a SHA-256 source manifest for the canonical skill tree,
+the shared skill references exposed to with-skill runs, each collected eval
+definition, its staged non-generated fixture and prompt-selected eval inputs,
+runtime support assets when applicable, eval configuration, the harness package
+code and schemas that ran them, and locked harness dependencies. Filtered runs
+exclude uncollected definitions and unused prompt inputs; full validation still
+detects newly added matching definitions. `make eval-report-freshness`
+recomputes those manifests without running a model and fails when a tracked
+report must be regenerated. Reports created before source manifests were
+introduced remain readable and acquire the guard on their next normal report
+run.
 
 ## Fixture Apps
 

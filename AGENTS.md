@@ -309,6 +309,8 @@ Outputs:
 
 | Skill | Purpose |
 |---|---|
+| `$create-splunk-free-account` | Submit one consent-gated Free Edition signup in a GeoIP-selected region through Observer |
+| `$connect-splunk-observability-cloud` | Open the existing local Observer Cloud tab for secure organization connection |
 | `$otel-audit` | Read-only observability coverage scan |
 | `$otel-instrument` | Add OpenTelemetry auto-instrumentation and targeted custom signals |
 | `$otel-verify` | Prove instrumentation with project-runtime, app-code, and optional OTLP checks |

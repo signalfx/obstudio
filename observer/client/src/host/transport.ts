@@ -2,12 +2,20 @@ import type { SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
+  "create-free-account",
+  "detect-free-account-region",
   "forget",
   "initialize",
   "open-audit-report",
   "open-free-edition",
+  "open-free-edition-terms",
   "open-ingest-token-help",
+  "open-realm-help",
+  "open-observability-cloud-demo",
+  "open-observability-data-course",
+  "open-observability-docs",
   "open-skill-docs",
+  "resolve-realm",
   "set-enabled",
 ] as const;
 
@@ -26,13 +34,22 @@ export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 
 export interface ObserverHostCloudPayload {
   accessToken?: string;
+  destination?: string;
+  email?: string;
   enabled?: boolean;
   expectedVersion?: string;
+  firstName?: string;
+  lastName?: string;
   realm?: string;
+  region?: string;
   skill?: ObserverHostSkillId;
+  termsAccepted?: boolean;
 }
 
 export interface ObserverHostCloudResponse {
+  freeAccount?: unknown;
+  realm?: string;
+  region?: string;
   status?: SplunkExportStatus;
   warning?: string;
 }
@@ -72,10 +89,12 @@ interface ObserverHostCancelEnvelope {
 }
 
 interface ObserverHostResponseEnvelope {
+  code?: string;
   error?: string;
   ok: boolean;
   requestId: string;
   result?: unknown;
+  retrySafe?: boolean;
   type: "obstudio.host.response";
 }
 
@@ -103,6 +122,17 @@ export class ObserverHostCloudTimeoutError extends Error {
   constructor() {
     super("The IDE did not confirm the cloud request. Reload the window to reconcile its final state before trying again.");
     this.name = "ObserverHostCloudTimeoutError";
+  }
+}
+
+export class ObserverHostCloudRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly retrySafe?: boolean,
+  ) {
+    super(message);
+    this.name = "ObserverHostCloudRequestError";
   }
 }
 
@@ -223,7 +253,10 @@ function installMessageListener(): void {
       if (event.data.ok) {
         pending.resolve(event.data.result);
       } else {
-        pending.reject(new Error(event.data.error ?? "The IDE request failed."));
+        const message = event.data.error ?? "The IDE request failed.";
+        pending.reject(event.data.code !== undefined || event.data.retrySafe !== undefined
+          ? new ObserverHostCloudRequestError(message, event.data.code, event.data.retrySafe)
+          : new Error(message));
       }
       return;
     }
@@ -316,7 +349,10 @@ function isObserverHostHTTPResult(value: unknown): value is {
 function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloudResponse {
   if (typeof value !== "object" || value === null) return false;
   const response = value as Record<string, unknown>;
-  return (response.status === undefined || isSplunkExportStatus(response.status))
+  return (response.freeAccount === undefined
+      || (typeof response.freeAccount === "object" && response.freeAccount !== null))
+    && (response.region === undefined || typeof response.region === "string")
+    && (response.status === undefined || isSplunkExportStatus(response.status))
     && (response.warning === undefined || typeof response.warning === "string");
 }
 
@@ -355,7 +391,10 @@ function isObserverHostResponseEnvelope(value: unknown): value is ObserverHostRe
     && typeof response.requestId === "string"
     && /^[A-Za-z0-9_-]{8,128}$/.test(response.requestId)
     && typeof response.ok === "boolean"
-    && (response.error === undefined || typeof response.error === "string");
+    && (response.code === undefined
+      || (typeof response.code === "string" && /^[a-z0-9_]{1,64}$/.test(response.code)))
+    && (response.error === undefined || typeof response.error === "string")
+    && (response.retrySafe === undefined || typeof response.retrySafe === "boolean");
 }
 
 function isObserverHostTelemetryEnvelope(value: unknown): value is ObserverHostTelemetryEnvelope {

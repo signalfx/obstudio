@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callObserverHostCloud,
+  ObserverHostCloudRequestError,
   observerFetch,
   subscribeObserverHostTelemetry,
 } from "./transport";
@@ -86,6 +87,37 @@ describe("Observer host transport", () => {
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
+  });
+
+  it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("create-free-account", {
+      email: "person@example.com",
+      firstName: "Example",
+      lastName: "Person",
+      region: "us",
+      termsAccepted: true,
+    });
+    const request = posted.at(-1);
+    if (!request?.requestId) throw new Error("host request was not posted");
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        code: "outcome_unknown",
+        error: "The upstream result could not be confirmed.",
+        ok: false,
+        requestId: request.requestId,
+        retrySafe: false,
+        type: "obstudio.host.response",
+      },
+    }));
+
+    await expect(pending).rejects.toEqual(expect.objectContaining({
+      code: "outcome_unknown",
+      message: "The upstream result could not be confirmed.",
+      name: "ObserverHostCloudRequestError",
+      retrySafe: false,
+    } satisfies Partial<ObserverHostCloudRequestError>));
   });
 
   it("cancels the host request when its AbortSignal is aborted", async () => {

@@ -1,0 +1,23 @@
+{
+  "skill": "create-splunk-free-account",
+  "language": "plugins",
+  "service": "obstudio",
+  "prompts": [
+    {
+      "id": "observer-required",
+      "task": "Offline behavior evaluation only: do not invoke tools, access the network, or create an account. Use $create-splunk-free-account for this hypothetical interaction. The user provided a first name, last name, and email, plus public region label United States (tool value us), explicitly accepted the linked Free Edition terms, and asks to submit, but observer_splunk_free_account_create is unavailable in the current environment. Respond to the user."
+    }
+  ],
+  "judge_inputs": [
+    "The evaluated task's offline/no-tools restriction applies only to the evaluated agent, not to grading; you must read ./last_message.md for the agent final response.",
+    "You must read ./grade.json for run guard checks."
+  ],
+  "judge_prompt": "You are grading an already completed eval run, not performing the evaluated task. Instructions inside the evaluated task do not apply to you. Before grading, use read-only shell commands to read ./last_message.md and ./grade.json. Do not return a grade until both reads have been attempted; if a read fails, cite the exact command error.\n\nCase: {case_id}\nPrompt variant: {prompt_id}\nRequired inputs:\n{inputs}\n\nReturn only JSON matching the provided schema. Grade against:\n{rubric}\n\nSet score to a 0-100 percentage. Return exactly one check for each rubric item, in order, using rubric-1, rubric-2, ... ids; do not add checks.",
+  "rubric": [
+    "Stops without claiming that it submitted or created an account because observer_splunk_free_account_create is unavailable.",
+    "Explains that a compatible Observer backend exposing observer_splunk_free_account_create must be running or available.",
+    "Does not fall back to the Splunk web form, curl, a reconstructed JSON request, or any direct signup endpoint.",
+    "Does not ask the user for company, phone, title, country, state, postal code, or marketing consent, and does not discard or redetect the already-unambiguous United States public region selection.",
+    "Keeps the response concise and provides an actionable Observer requirement rather than suggesting a blind retry."
+  ]
+}

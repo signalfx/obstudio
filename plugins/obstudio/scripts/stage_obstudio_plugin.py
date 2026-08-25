@@ -26,6 +26,8 @@ PLUGIN_LOCAL_SKILL_ENTRIES = (
     "observer-control/observer-stop",
 )
 PLUGIN_SHARED_SKILL_ENTRIES = (
+    "connect-splunk-observability-cloud",
+    "create-splunk-free-account",
     "otel-audit",
     "otel-instrument",
     "otel-verify",
@@ -39,6 +41,8 @@ PLUGIN_SHARED_SKILL_ENTRIES = (
 )
 PLUGIN_SKILL_ENTRIES = (
     "observer-control/observer-open",
+    "connect-splunk-observability-cloud",
+    "create-splunk-free-account",
     "otel-audit",
     "otel-instrument",
     "otel-verify",

@@ -48,7 +48,7 @@ EVAL_LIST_FLAGS = $(EVAL_FLAGS)
 EVAL_REPORT_SKILL_FLAG = $(if $(SKILL),--skill "$(EVAL_SKILL_PATH)",)
 EVAL_REPORT_FLAGS = --repo-root "$(ROOT_DIR)" $(EVAL_REPORT_SKILL_FLAG)
 
-.PHONY: build test eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all test-eval-harness test-interactive-guidance test-all
+.PHONY: build test eval-validation eval-validation-test eval-validation-report eval-sanity eval-sanity-test eval-sanity-report eval-sanity-ab eval-rubric eval-rubric-test eval-rubric-report eval-rubric-ab eval-runtime eval-runtime-test eval-runtime-report eval-runtime-ab eval-with-skill eval-with-baseline eval-ab eval-all eval-all-ab skill-eval skill-eval-all skill-eval-list skill-eval-ab skill-eval-ab-all eval-report-freshness test-eval-harness test-interactive-guidance test-all
 
 build test:
 	@for dir in $(SUBDIRS); do \
@@ -116,7 +116,10 @@ skill-eval-ab: eval-ab ## Alias for eval-ab
 
 skill-eval-ab-all: eval-ab ## Alias for eval-ab
 
-test-eval-harness: ## Run fast unit tests for the Codex eval harness
+eval-report-freshness: ## Verify tracked reports still match their skill and eval inputs
+	@uv run codex-eval-harness verify-reports --repo-root "$(ROOT_DIR)"
+
+test-eval-harness: eval-report-freshness ## Run fast unit tests for the Codex eval harness
 	@uv run pytest . --codex-eval-config "$(EVAL_VALIDATION_CONFIG)"
 
 test-interactive-guidance: ## Run interactive OTel workflow guidance tests

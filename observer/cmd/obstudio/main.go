@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"github.com/signalfx/obstudio/observer/internal/api"
 	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
+	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -36,7 +38,10 @@ var listenObserverHTTP = net.Listen
 
 const (
 	observerCloudBrowserLaunchTokenEnv     = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
+	observerHealthProofSecretEnv           = "OBSTUDIO_HEALTH_PROOF_SECRET"
 	observerHideCloudBrowserLaunchTokenEnv = "OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN"
+	observerPublicMCPURLEnv                = "OBSTUDIO_PUBLIC_MCP_URL"
+	observerPublicMCPURLMaxLength          = 2048
 )
 
 var splunkEnvFilePrecedenceKeys = []string{
@@ -70,6 +75,7 @@ type runConfig struct {
 	otlpGRPCPort     string
 	otlpHTTPPort     string
 	envFile          string
+	publicMCPURL     string
 }
 
 func main() {
@@ -115,6 +121,9 @@ func run(config runConfig) error {
 	if err := ensureObserverControlToken(); err != nil {
 		log.Fatalf("configure Observer control token: %v", err)
 	}
+	if err := ensureObserverHealthProofSecret(); err != nil {
+		log.Fatalf("configure Observer health proof secret: %v", err)
+	}
 	if err := ensureObserverCloudBrowserLaunchToken(); err != nil {
 		log.Fatalf("configure standalone browser cloud launch: %v", err)
 	}
@@ -141,6 +150,15 @@ func run(config runConfig) error {
 		OTLPgRPC: otlpGRPCAddr,
 		REST:     "http://" + mainAddr,
 	})
+	publicMCPURL := ""
+	if strings.TrimSpace(config.publicMCPURL) != "" {
+		var err error
+		publicMCPURL, err = normalizePublicMCPURL(config.publicMCPURL)
+		if err != nil {
+			log.Fatalf("configure public MCP URL: %v", err)
+		}
+	}
+	observerState := buildSharedObserverState(host, port, publicMCPURL)
 
 	ctx := context.Background()
 	if err := validatorManager.Start(ctx); err != nil {
@@ -191,6 +209,7 @@ func run(config runConfig) error {
 		observerMode = "standalone"
 	}
 	stopManaged := make(chan struct{}, 1)
+	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
 	api.Register(mux, s, v, validatorManager, api.ServerInfo{
 		Kind:       "obstudio",
@@ -206,15 +225,29 @@ func run(config runConfig) error {
 	}, audit.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		ReportPath:    envOr("OBSTUDIO_AUDIT_REPORT", ""),
+	}, api.HealthProofConfig{
+		ControlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		ProofSecret:  strings.TrimSpace(os.Getenv(observerHealthProofSecretEnv)),
+		MCPURL:       observerState.MCPURL,
 	}, splunkExportController, splunkTracesController,
-		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController))
+		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController),
+		freeAccountSubmitter)
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
 		registerManagedStop(mux, strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")), stopManaged)
 	}
 	repositoryCorrelationModeResolver := mcp.RepositoryCorrelationModeResolver(func(provider string) string {
 		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
 	})
-	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController, repositoryCorrelationModeResolver)
+	mcp.Register(
+		mux,
+		s,
+		v,
+		validatorManager,
+		splunkExportController,
+		splunkTracesController,
+		repositoryCorrelationModeResolver,
+		freeAccountSubmitter,
+	)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
@@ -223,7 +256,6 @@ func run(config runConfig) error {
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
 
-	observerState := buildSharedObserverState(host, port)
 	observerStatePath := sharedObserverStatePath()
 	if err := writeSharedObserverState(observerStatePath, observerState); err != nil {
 		log.Printf("failed to write shared observer state: %v", err)
@@ -272,6 +304,7 @@ func run(config runConfig) error {
 		splunkExportController,
 		splunkTracesController,
 		repositoryCorrelationModeResolver,
+		freeAccountSubmitter,
 	)
 
 	sig := make(chan os.Signal, 1)
@@ -306,8 +339,32 @@ func ensureObserverControlToken() error {
 	if _, err := rand.Read(token); err != nil {
 		return fmt.Errorf("generate control token: %w", err)
 	}
-	if err := os.Setenv("OBSTUDIO_CONTROL_TOKEN", base64.RawURLEncoding.EncodeToString(token)); err != nil {
+	encoded := base64.RawURLEncoding.EncodeToString(token)
+	if err := os.Setenv("OBSTUDIO_CONTROL_TOKEN", encoded); err != nil {
 		return fmt.Errorf("store generated control token: %w", err)
+	}
+	return nil
+}
+
+func ensureObserverHealthProofSecret() error {
+	configured := strings.TrimSpace(os.Getenv(observerHealthProofSecretEnv))
+	if configured != "" {
+		decoded, err := base64.RawURLEncoding.DecodeString(configured)
+		if err != nil || len(decoded) != 32 || base64.RawURLEncoding.EncodeToString(decoded) != configured {
+			return fmt.Errorf("%s must be exactly 32 bytes encoded as unpadded base64url", observerHealthProofSecretEnv)
+		}
+		if configured == strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) {
+			return fmt.Errorf("%s must differ from OBSTUDIO_CONTROL_TOKEN", observerHealthProofSecretEnv)
+		}
+		return nil
+	}
+
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return fmt.Errorf("generate health proof secret: %w", err)
+	}
+	if err := os.Setenv(observerHealthProofSecretEnv, base64.RawURLEncoding.EncodeToString(secret)); err != nil {
+		return fmt.Errorf("store generated health proof secret: %w", err)
 	}
 	return nil
 }
@@ -479,6 +536,7 @@ func resolveRunConfig(config runConfig) runConfig {
 		otlpGRPCHost:     valueOrEnv(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOrEnv(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
+		publicMCPURL:     valueOrEnv(config.publicMCPURL, observerPublicMCPURLEnv, ""),
 	}
 }
 
@@ -791,6 +849,14 @@ func valueOrEnv(value, envKey, fallback string) string {
 }
 
 func validateRunConfig(config runConfig) error {
+	if publicMCPURL := strings.TrimSpace(config.publicMCPURL); publicMCPURL != "" {
+		if len(publicMCPURL) > observerPublicMCPURLMaxLength {
+			return fmt.Errorf("%s exceeds %d bytes", observerPublicMCPURLEnv, observerPublicMCPURLMaxLength)
+		}
+		if _, err := normalizePublicMCPURL(publicMCPURL); err != nil {
+			return err
+		}
+	}
 	ports := []struct {
 		flagName string
 		label    string
@@ -824,7 +890,39 @@ func validateRunConfig(config runConfig) error {
 	return nil
 }
 
-func buildSharedObserverState(host, port string) sharedObserverState {
+func normalizePublicMCPURL(raw string) (string, error) {
+	normalized, err := normalizeSharedURL(raw, observerPublicMCPURLEnv)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s: %w", observerPublicMCPURLEnv, err)
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "", fmt.Errorf("invalid %s: URL must not include a query", observerPublicMCPURLEnv)
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+	if address := net.ParseIP(hostname); address != nil {
+		hostname = address.String()
+	} else if strings.HasSuffix(hostname, ".") && isLoopbackSharedObserverHost(hostname) {
+		hostname = strings.TrimSuffix(hostname, ".")
+	}
+	port := parsed.Port()
+	if (parsed.Scheme == "https" && port == "443") || (parsed.Scheme == "http" && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		parsed.Host = net.JoinHostPort(hostname, port)
+	} else if strings.Contains(hostname, ":") {
+		parsed.Host = "[" + hostname + "]"
+	} else {
+		parsed.Host = hostname
+	}
+	return parsed.String(), nil
+}
+
+func buildSharedObserverState(host, port string, publicMCPURLs ...string) sharedObserverState {
 	connectHost := host
 	switch connectHost {
 	case "", "0.0.0.0", "::", "[::]":
@@ -832,13 +930,18 @@ func buildSharedObserverState(host, port string) sharedObserverState {
 	}
 
 	baseURL := fmt.Sprintf("http://%s", net.JoinHostPort(connectHost, port))
+	mcpURL := baseURL + "/mcp"
+	if len(publicMCPURLs) > 0 && strings.TrimSpace(publicMCPURLs[0]) != "" {
+		mcpURL = strings.TrimSpace(publicMCPURLs[0])
+	}
 	return sharedObserverState{
-		BaseURL:      baseURL,
-		ControlToken: strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
-		HealthURL:    baseURL + "/api/health",
-		MCPURL:       baseURL + "/mcp",
-		PID:          os.Getpid(),
-		UpdatedAt:    time.Now().UTC(),
+		BaseURL:           baseURL,
+		ControlToken:      strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")),
+		HealthProofSecret: strings.TrimSpace(os.Getenv(observerHealthProofSecretEnv)),
+		HealthURL:         baseURL + "/api/health",
+		MCPURL:            mcpURL,
+		PID:               os.Getpid(),
+		UpdatedAt:         time.Now().UTC(),
 	}
 }
 

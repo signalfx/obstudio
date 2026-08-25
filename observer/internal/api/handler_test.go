@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1432,6 +1433,200 @@ func TestQueryHealthReturnsServerMetadataAndEndpoints(t *testing.T) {
 	}
 	if got := endpoints["otlpGrpc"]; got != "127.0.0.1:4317" {
 		t.Fatalf("expected otlpGrpc endpoint, got %#v", got)
+	}
+}
+
+func TestQueryHealthReturnsChallengeBoundProofWithoutExposingControlToken(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
+	const (
+		controlToken = "configured-control-token"
+		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+	)
+
+	mux := http.NewServeMux()
+	Register(mux, s, HealthProofConfig{ControlToken: controlToken, ProofSecret: proofSecret})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	challenge, err := NewHealthProofChallenge()
+	if err != nil {
+		t.Fatalf("generate health proof challenge: %v", err)
+	}
+	requestURL, err := url.Parse(server.URL + "/api/health")
+	if err != nil {
+		t.Fatalf("parse health URL: %v", err)
+	}
+	query := requestURL.Query()
+	query.Set(HealthProofChallengeQuery, challenge)
+	requestURL.RawQuery = query.Encode()
+
+	resp := mustGet(t, requestURL.String())
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read health response: %v", err)
+	}
+	if bytes.Contains(body, []byte(controlToken)) {
+		t.Fatal("health response exposed the Observer control token")
+	}
+	if bytes.Contains(body, []byte(proofSecret)) {
+		t.Fatal("health response exposed the health proof secret")
+	}
+	var health healthResponse
+	if err := json.Unmarshal(body, &health); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	mcpURL := "http://127.0.0.1:3000/mcp"
+	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpURL, health.ChallengeProof) {
+		t.Fatal("health response challenge proof did not verify")
+	}
+	if VerifyHealthChallengeProof(proofSecret, controlToken, challenge, "http://127.0.0.1:3999/mcp", health.ChallengeProof) {
+		t.Fatal("health response challenge proof verified for a different MCP endpoint")
+	}
+}
+
+func TestQueryHealthProofBindsCanonicalConnectionURLForWildcardListener(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{REST: "http://0.0.0.0:3000"})
+	const (
+		controlToken  = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		proofSecret   = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+		connectionURL = "http://127.0.0.1:3000/mcp"
+	)
+
+	mux := http.NewServeMux()
+	Register(mux, s, HealthProofConfig{
+		ControlToken: controlToken,
+		ProofSecret:  proofSecret,
+		MCPURL:       connectionURL,
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	challenge, err := NewHealthProofChallenge()
+	if err != nil {
+		t.Fatalf("generate health proof challenge: %v", err)
+	}
+	requestURL := server.URL + "/api/health?" + url.Values{
+		HealthProofChallengeQuery: []string{challenge},
+	}.Encode()
+	resp := mustGet(t, requestURL)
+	defer resp.Body.Close()
+	var health healthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, connectionURL, health.ChallengeProof) {
+		t.Fatal("health proof did not verify for the canonical connection URL")
+	}
+	if health.Endpoints["mcp"] != connectionURL {
+		t.Fatalf("advertised MCP endpoint = %q, want %q", health.Endpoints["mcp"], connectionURL)
+	}
+}
+
+func TestQueryHealthAdvertisesAndSignsConfiguredPublicMCPEndpoint(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
+	const (
+		controlToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+		publicMCPURL = "https://observer.example.test/team/mcp"
+	)
+	mux := http.NewServeMux()
+	Register(mux, s, HealthProofConfig{ControlToken: controlToken, ProofSecret: proofSecret, MCPURL: publicMCPURL})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	challenge, err := NewHealthProofChallenge()
+	if err != nil {
+		t.Fatalf("generate health proof challenge: %v", err)
+	}
+	requestURL := server.URL + "/api/health?" + url.Values{
+		HealthProofChallengeQuery: []string{challenge},
+	}.Encode()
+	resp := mustGet(t, requestURL)
+	defer resp.Body.Close()
+	var health healthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if health.Endpoints["mcp"] != publicMCPURL {
+		t.Fatalf("advertised MCP endpoint = %q, want %q", health.Endpoints["mcp"], publicMCPURL)
+	}
+	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, publicMCPURL, health.ChallengeProof) {
+		t.Fatal("health proof did not verify for configured public MCP endpoint")
+	}
+}
+
+func TestQueryHealthWithoutChallengeRemainsUnauthenticated(t *testing.T) {
+	s := store.New()
+	s.SetEndpoints(store.Endpoints{REST: "http://127.0.0.1:3000"})
+
+	mux := http.NewServeMux()
+	Register(mux, s, HealthProofConfig{
+		ControlToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		ProofSecret:  "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI",
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp := mustGet(t, server.URL+"/api/health")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var health healthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if health.ChallengeProof != "" {
+		t.Fatalf("ordinary health response included challenge proof %q", health.ChallengeProof)
+	}
+}
+
+func TestHealthChallengeProofUsesIndependentSecretWithConfiguredControlToken(t *testing.T) {
+	challenge, err := NewHealthProofChallenge()
+	if err != nil {
+		t.Fatalf("generate health proof challenge: %v", err)
+	}
+	const (
+		controlToken = "configured-control-token"
+		proofSecret  = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+		mcpURL       = "http://127.0.0.1:3000/mcp"
+	)
+	proof := HealthChallengeProof(proofSecret, controlToken, challenge, mcpURL)
+	if proof == "" {
+		t.Fatal("independent health proof secret did not produce a proof")
+	}
+	if !VerifyHealthChallengeProof(proofSecret, controlToken, challenge, mcpURL, proof) {
+		t.Fatal("existing configured control token proof did not verify")
+	}
+	if VerifyHealthChallengeProof(proofSecret, "different-token", challenge, mcpURL, proof) {
+		t.Fatal("existing configured control token proof verified with a different token")
+	}
+	if VerifyHealthChallengeProof(
+		"Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M",
+		controlToken,
+		challenge,
+		mcpURL,
+		proof,
+	) {
+		t.Fatal("health proof verified with a different proof secret")
+	}
+}
+
+func TestHealthChallengeProofRejectsWeakProofSecret(t *testing.T) {
+	challenge, err := NewHealthProofChallenge()
+	if err != nil {
+		t.Fatalf("generate health proof challenge: %v", err)
+	}
+	if proof := HealthChallengeProof(
+		"configured-control-token",
+		"configured-control-token",
+		challenge,
+		"http://127.0.0.1:3000/mcp",
+	); proof != "" {
+		t.Fatalf("weak non-canonical proof secret produced public verifier %q", proof)
 	}
 }
 

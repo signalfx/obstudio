@@ -800,6 +800,7 @@ func readManagedLaunch() (managedLaunch, error) {
 func currentManagedEnvironment() []string {
 	keys := []string{
 		"HOST", "PORT", "OTLP_HOST", "OTLP_PORT", "OTLP_HTTP_PORT", "OTLP_GRPC_HOST", "OTLP_GRPC_PORT",
+		observerPublicMCPURLEnv,
 		"OBSTUDIO_WORKSPACE_ROOT", "OBSTUDIO_DASHBOARDS_PREVIEW", "OBSTUDIO_AUDIT_REPORT",
 		"OBSTUDIO_SPLUNK_REALM", "SPLUNK_REALM", "SPLUNK_ACCESS_TOKEN",
 		"OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT", "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT",
@@ -869,6 +870,7 @@ func resolveManagedRunConfig(config runConfig, overrides []string) runConfig {
 		otlpGRPCHost:     valueOr(config.otlpGRPCHost, "OTLP_GRPC_HOST", host),
 		otlpGRPCPort:     valueOr(config.otlpGRPCPort, "OTLP_GRPC_PORT", "4317"),
 		envFile:          config.envFile,
+		publicMCPURL:     valueOr(config.publicMCPURL, observerPublicMCPURLEnv, ""),
 	}
 }
 

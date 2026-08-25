@@ -32,6 +32,8 @@ class StageObstudioPluginTest(unittest.TestCase):
             self.assertTrue((output / "SECURITY.md").is_file())
             self.assertTrue((output / "hooks" / "bootstrap_obstudio.py").is_file())
             self.assertTrue((output / "hooks" / "bootstrap_claude.cjs").is_file())
+            self.assertTrue((output / "skills" / "connect-splunk-observability-cloud" / "SKILL.md").is_file())
+            self.assertTrue((output / "skills" / "create-splunk-free-account" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "otel-instrument" / "SKILL.md").is_file())
             self.assertTrue((output / "skills" / "references" / "report-flow-contract.md").is_file())
             self.assertFalse((output / "skills" / "otel-instrument").is_symlink())
@@ -140,6 +142,8 @@ class StageObstudioPluginTest(unittest.TestCase):
             STAGE.MAX_DEFAULT_PROMPTS,
         )
         self.assertTrue((skills_path / "otel-instrument" / "SKILL.md").is_file())
+        self.assertTrue((skills_path / "connect-splunk-observability-cloud" / "SKILL.md").is_file())
+        self.assertTrue((skills_path / "create-splunk-free-account" / "SKILL.md").is_file())
         self.assertFalse(any(path.is_symlink() for path in skills_path.rglob("*")))
 
     def test_host_manifests_explicitly_select_hook_files(self):
@@ -264,7 +268,10 @@ class StageObstudioPluginTest(unittest.TestCase):
                         seen.add(skill)
                         skill_dirs.append(skill)
 
-            self.assertEqual(skill_dirs[:14], list(STAGE.PLUGIN_SKILL_ENTRIES[:14]))
+            self.assertEqual(
+                skill_dirs[: len(STAGE.PLUGIN_SKILL_ENTRIES)],
+                list(STAGE.PLUGIN_SKILL_ENTRIES),
+            )
 
     def test_plugin_local_observer_control_skills_are_not_shared(self):
         root = Path(__file__).resolve().parents[4]
