@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	weaverVersion = "v0.22.1"
+	weaverVersion = "v0.25.1"
 	downloadBase  = "https://github.com/open-telemetry/weaver/releases/download/" + weaverVersion
 )
 
