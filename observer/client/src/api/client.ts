@@ -181,3 +181,51 @@ export interface ServiceStats {
   avgClientDurationMs: number | null;
   avgServerDurationMs: number | null;
 }
+
+/** One scored line item behind an instrumentation score. */
+export interface InstrumentationScoreComponent {
+  label: string;
+  earned: number;
+  max: number;
+  detail: string;
+}
+
+/**
+ * Instrumentation score derived from the `.observe/otel.md` report written by
+ * `$otel-audit`. `available` is false when no report has been generated yet.
+ */
+export interface InstrumentationScore {
+  available: boolean;
+  source: string;
+  message?: string;
+  serviceName?: string;
+  language?: string;
+  framework?: string;
+  generatedAt?: string;
+  score: number;
+  breakdown: {
+    coverage: number;
+    coverageMax: number;
+    quality: number;
+    qualityMax: number;
+    components: InstrumentationScoreComponent[];
+  };
+  rate: "covered" | "partial" | "missing";
+  errors: "covered" | "partial" | "missing";
+  duration: "covered" | "partial" | "missing";
+  hasSpans: boolean;
+  hasMetrics: boolean;
+  hasLogs: boolean;
+  gapCount: number;
+  antiPatternCount: number;
+  recommendationCount: number;
+  /** Verbatim bullet text from the report's corresponding sections. */
+  gaps: string[];
+  antiPatterns: string[];
+  recommendations: string[];
+}
+
+/** Fetch the instrumentation score derived from the latest $otel-audit report. */
+export async function fetchInstrumentationScore(signal?: AbortSignal): Promise<InstrumentationScore> {
+  return fetchJSON<InstrumentationScore>("/api/audit/score", { signal });
+}

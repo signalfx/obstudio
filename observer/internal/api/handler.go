@@ -4,11 +4,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -42,6 +44,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	validationStore := validator.NewStore()
 	var runner validator.Runner
 	var dashboardsConfig dashboards.Config
+	var auditConfig audit.Config
 	var metricsController *otlp.SplunkMetricsExportController
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
@@ -71,6 +74,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				dashboardsConfig = *value
 			}
+		case audit.Config:
+			auditConfig = value
+		case *audit.Config:
+			if value != nil {
+				auditConfig = *value
+			}
 		case *otlp.SplunkMetricsExportController:
 			metricsController = value
 		case *otlp.SplunkTracesExportController:
@@ -81,6 +90,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	validationService := validator.NewService(validationStore, runner)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
+	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
@@ -93,6 +103,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
 	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(dashboardResolver))
+	mux.HandleFunc("GET /api/audit/score", queryAuditScore(auditResolver))
+	mux.HandleFunc("GET /api/audit/report", queryAuditReport(auditResolver))
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
@@ -133,6 +145,43 @@ func queryMetrics(s *store.Store) http.HandlerFunc {
 func queryDashboardPreview(resolver *dashboards.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, resolver.Build())
+	}
+}
+
+func queryAuditScore(resolver *audit.Resolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, resolver.Build())
+	}
+}
+
+// queryAuditReport serves the report's Markdown source so the UI can link to
+// the file it scored. It is served as text/plain so browsers display it inline
+// rather than downloading it, with nosniff to prevent content-type guessing.
+func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, err := resolver.ReadRaw()
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, audit.ErrNoReport) {
+				status = http.StatusNotFound
+				err = fmt.Errorf("no instrumentation report found at %s. Run $otel-audit to generate it", resolver.Source())
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(status)
+			fmt.Fprintln(w, err.Error())
+
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if _, err := w.Write(raw); err != nil {
+			log.Printf("[api] queryAuditReport: %v", err)
+		}
 	}
 }
 

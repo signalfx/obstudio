@@ -7534,17 +7534,17 @@ code {
 
 .overview-tab__top {
   display: grid;
-  grid-template-columns: minmax(200px, 260px) 1fr;
+  grid-template-columns: minmax(240px, 320px) 1fr;
   gap: 12px;
+  align-items: start;
 }
 
 .overview-score {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   gap: 6px;
-  padding: 20px 16px;
+  padding: 18px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--chrome);
@@ -7553,14 +7553,103 @@ code {
 .overview-score__label {
   margin: 0;
   font-size: var(--font-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
   color: var(--text-dim);
 }
 
 .overview-score__value {
   margin: 0;
-  font-size: 64px;
+  font-size: 56px;
   font-weight: 600;
   line-height: 1;
+  text-align: center;
+}
+
+.overview-score__max {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+/* --- Score breakdown ------------------------------------------------------ */
+
+.overview-score__breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.overview-score__totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.overview-score__totals .overview-score__row-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.overview-score__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.overview-score__row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
+.overview-score__row-detail {
+  overflow: hidden;
+  font-size: var(--font-xs);
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-score__row-value {
+  margin: 0;
+  flex-shrink: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Shortfalls stand out; satisfied rows recede. */
+.overview-score__row--full .overview-score__row-value {
+  color: var(--green);
+}
+
+.overview-score__row--partial .overview-score__row-value {
+  color: var(--yellow);
+}
+
+.overview-score__row--empty .overview-score__row-value {
+  color: var(--red);
+}
+
+.overview-score__source {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--font-xs);
+  color: var(--text-dim);
+  text-align: center;
 }
 
 .overview-score--good .overview-score__value {
@@ -7579,6 +7668,21 @@ code {
   margin: 0;
   font-size: var(--font-meta);
   color: var(--text-dim);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.overview-score--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.overview-score--empty .overview-score__value--empty {
+  color: var(--text-dim);
+}
+
+.overview-score--empty {
+  border-style: dashed;
 }
 
 .overview-checklist {
@@ -7606,6 +7710,8 @@ code {
   list-style: none;
 }
 
+/* The row is a flex container, which suppresses ::marker, so the bullet is
+   drawn explicitly. */
 .overview-checklist__item {
   display: flex;
   align-items: center;
@@ -7614,28 +7720,10 @@ code {
   color: var(--text);
 }
 
-.overview-checklist__marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.overview-checklist__item::before {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  font-size: 11px;
-  line-height: 1;
-  color: transparent;
-}
-
-.overview-checklist__item.is-done .overview-checklist__marker {
-  border-color: var(--green);
-  background: var(--green);
-  color: #03210b;
-}
-
-.overview-checklist__item.is-done .overview-checklist__label {
-  color: var(--row-primary-text);
+  color: var(--text-dim);
+  content: "•";
 }
 
 .overview-checklist__actions {
@@ -7690,24 +7778,178 @@ code {
   background: var(--accent-soft);
 }
 
-/* Completed steps keep their command for re-runs, but recede visually. */
-.overview-checklist__item.is-done .overview-checklist__actions {
-  opacity: 0.55;
+/* --- Report disclosure ---------------------------------------------------- */
+
+.overview-disclosure {
+  display: flex;
+  flex-direction: column;
 }
 
-.overview-checklist__item.is-done .overview-checklist__actions:hover,
-.overview-checklist__item.is-done .overview-checklist__actions:focus-within {
-  opacity: 1;
+.overview-report {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--chrome);
+}
+
+/* When open, the trigger and panel read as one unit. */
+.overview-disclosure.is-open .overview-callout {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.overview-disclosure.is-open .overview-report {
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.overview-report__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.overview-report__title {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-title-sm);
+  font-weight: 600;
+  color: var(--row-primary-text);
+}
+
+.overview-report-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+
+.overview-report-link:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+.overview-report__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.overview-report__view {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--chrome-2);
+  font-size: var(--font-meta);
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.overview-report__view:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.overview-report__timestamp {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
+.overview-report__meta {
+  margin: 4px 0 0;
+  font-size: var(--font-meta);
+  color: var(--text-soft);
+}
+
+.overview-report__group {
+  margin-top: 16px;
+}
+
+.overview-report__group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: var(--font-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.overview-report__count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--chrome-3);
+  font-size: var(--font-xs);
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.overview-report__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: disc outside;
+}
+
+.overview-report__item {
+  font-size: var(--font-body);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.overview-report__item::marker {
+  color: var(--text-dim);
+}
+
+.overview-report__empty {
+  margin: 0;
+  font-size: var(--font-body);
+  color: var(--text-dim);
 }
 
 .overview-callout {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   padding: 12px 14px;
   border: 1px solid rgba(244, 145, 6, 0.45);
   border-radius: 10px;
   background: rgba(244, 145, 6, 0.08);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-callout:hover {
+  background: rgba(244, 145, 6, 0.14);
+}
+
+/* No gaps reported — the row is informational, not a warning. */
+.overview-callout--clear {
+  border-color: var(--border);
+  background: rgba(133, 244, 21, 0.06);
+}
+
+.overview-callout--clear:hover {
+  background: rgba(133, 244, 21, 0.12);
+}
+
+.overview-callout--clear .overview-callout__icon {
+  background: var(--green);
+  color: #03210b;
 }
 
 .overview-callout__icon {
@@ -7734,18 +7976,17 @@ code {
 }
 
 .overview-callout__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
   font-size: var(--font-body);
   color: var(--accent);
-  cursor: pointer;
 }
 
-.overview-callout__action:hover {
-  background: var(--accent-soft);
+.overview-callout__caret {
+  font-size: 9px;
 }
 
 .overview-services {

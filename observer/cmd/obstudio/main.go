@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/signalfx/obstudio/observer/internal/api"
+	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/mcp"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
@@ -178,6 +179,9 @@ func run(config runConfig) {
 	}, dashboards.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		SpecPath:      envOr("OBSTUDIO_DASHBOARDS_PREVIEW", ""),
+	}, audit.Config{
+		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
+		ReportPath:    envOr("OBSTUDIO_AUDIT_REPORT", ""),
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController))
 	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController)

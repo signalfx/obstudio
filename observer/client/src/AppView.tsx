@@ -267,10 +267,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         </div>
 
         {activeTab === "overview" ? (
-          <OverviewTab
-            onReviewFindings={() => switchTab("validation")}
-            onOpenCloud={() => switchTab("cloud")}
-          />
+          <OverviewTab onOpenCloud={() => switchTab("cloud")} />
         ) : null}
         {activeTab === "services" ? (
           <ServicesTab
@@ -314,7 +311,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
 }
 
 function initialTabFromLocation(): AppTab {
-  if (typeof window === "undefined") return "metrics";
+  if (typeof window === "undefined") return "overview";
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
   switch (tab) {
@@ -328,7 +325,7 @@ function initialTabFromLocation(): AppTab {
     case "cloud":
       return tab;
     default:
-      return "metrics";
+      return "overview";
   }
 }
 
