@@ -9,13 +9,14 @@ const shortcuts = [
   { key: "?", description: "Toggle keyboard shortcuts" },
   { key: "P", description: "Pause / resume live updates" },
   { key: "Escape", description: "Close help or deselect trace (Traces tab)" },
-  { key: "1", description: "Switch to Metrics tab" },
-  { key: "2", description: "Switch to Traces tab" },
-  { key: "3", description: "Switch to Logs tab" },
-  { key: "4", description: "Switch to Services tab" },
-  { key: "5", description: "Switch to Validation tab" },
-  { key: "6", description: "Switch to Dashboards tab" },
-  { key: "7", description: "Switch to Cloud tab" },
+  { key: "1", description: "Switch to Overview tab" },
+  { key: "2", description: "Switch to Metrics tab" },
+  { key: "3", description: "Switch to Traces tab" },
+  { key: "4", description: "Switch to Logs tab" },
+  { key: "5", description: "Switch to Services tab" },
+  { key: "6", description: "Switch to Validation tab" },
+  { key: "7", description: "Switch to Dashboards tab" },
+  { key: "8", description: "Switch to Cloud tab" },
 ];
 
 /** Modal overlay listing available keyboard shortcuts. */

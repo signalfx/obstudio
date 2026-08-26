@@ -449,23 +449,24 @@ describe("AppView validation tab", () => {
     const descs = Array.from(dialog.querySelectorAll(".keyboard-help__desc")).map((el) => el.textContent);
     const helpMap = Object.fromEntries(keys.map((k, i) => [k, descs[i]]));
 
-    expect(helpMap["4"]).toMatch(/services/i);
-    expect(helpMap["5"]).toMatch(/validation/i);
-    expect(helpMap["1"]).toMatch(/metrics/i);
-    expect(helpMap["2"]).toMatch(/traces/i);
-    expect(helpMap["3"]).toMatch(/logs/i);
-    expect(helpMap["6"]).toMatch(/dashboards/i);
-    expect(helpMap["7"]).toMatch(/cloud/i);
+    expect(helpMap["1"]).toMatch(/overview/i);
+    expect(helpMap["2"]).toMatch(/metrics/i);
+    expect(helpMap["3"]).toMatch(/traces/i);
+    expect(helpMap["4"]).toMatch(/logs/i);
+    expect(helpMap["5"]).toMatch(/services/i);
+    expect(helpMap["6"]).toMatch(/validation/i);
+    expect(helpMap["7"]).toMatch(/dashboards/i);
+    expect(helpMap["8"]).toMatch(/cloud/i);
     expect(helpMap["P"]).toMatch(/pause/i);
   });
 
-  it("switches to the Cloud tab with the 7 shortcut", async () => {
+  it("switches to the Cloud tab with the 8 shortcut", async () => {
     window.history.replaceState({}, "", "/?tab=metrics");
     stubCloudStatusFetch();
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    fireEvent.keyDown(window, { key: "7" });
+    fireEvent.keyDown(window, { key: "8" });
 
     expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByText(/Splunk Observability Cloud/i)).toBeTruthy());
@@ -505,6 +506,30 @@ describe("AppView validation tab", () => {
 
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
     expect(container.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
+  });
+});
+
+describe("AppView overview tab hand-offs", () => {
+  it("switches to the Validation tab from the findings callout", () => {
+    window.history.replaceState({}, "", "/?tab=overview");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+
+    expect(screen.getByRole("tab", { name: /validation/i }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("switches to the Cloud tab from the Splunk O11y checklist step", async () => {
+    stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=overview");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /manage/i }));
+
+    expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByText(/Splunk Observability Cloud/i)).toBeTruthy());
   });
 });
 
@@ -609,13 +634,14 @@ describe("AppView main tab keyboard navigation", () => {
     const tablist = screen.getByRole("tablist", { name: "Observer sections" });
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
 
-    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
-    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(metricsTab);
+    const overviewTab = screen.getByRole("tab", { name: /overview/i });
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(overviewTab);
   });
 
   it("ArrowLeft from first tab wraps focus to last", () => {
     stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=overview");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
@@ -649,9 +675,9 @@ describe("AppView main tab keyboard navigation", () => {
     fireEvent.keyDown(tablist, { key: "End" });
     fireEvent.keyDown(tablist, { key: "Home" });
 
-    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
-    expect(metricsTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(metricsTab);
+    const overviewTab = screen.getByRole("tab", { name: /overview/i });
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(overviewTab);
   });
 
   it("keyboard navigation mounts the panel content for the newly selected tab", () => {
@@ -904,7 +930,7 @@ describe("AppView dashboards tab", () => {
     const keys = Array.from(dialog.querySelectorAll(".keyboard-help__key")).map((el) => el.textContent);
     const descs = Array.from(dialog.querySelectorAll(".keyboard-help__desc")).map((el) => el.textContent);
     const helpMap = Object.fromEntries(keys.map((k, i) => [k, descs[i]]));
-    expect(helpMap["6"]).toMatch(/dashboards/i);
+    expect(helpMap["7"]).toMatch(/dashboards/i);
   });
 
   it("mounts the Dashboards panel when the tab is clicked", async () => {

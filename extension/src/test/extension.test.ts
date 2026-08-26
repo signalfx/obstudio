@@ -82,6 +82,28 @@ test('cloud bridge accepts only bounded known requests', () => {
 		type: 'obstudio.cloud.request',
 	}), false);
 	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: 'otel-instrument' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	// Only known skill ids pass; the webview can never name a URL.
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: 'https://evil.example.com' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: '../../etc/passwd' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
 		action: 'connect',
 		bridgeToken: 'short',
 		requestId: 'request-123',

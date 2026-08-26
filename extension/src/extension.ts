@@ -50,10 +50,12 @@ import {
 	cloudStatusEnabled,
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
+	isSkillDocsId,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	splunkCloudConnectionSecretKey,
 	type CloudBridgeRequest,
+	type SkillDocsId,
 	type StoredSplunkCloudConnection,
 } from './cloud-bridge';
 
@@ -95,6 +97,11 @@ const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHt
 const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
 const splunkIngestTokenHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens';
+const skillDocsUrls: Record<SkillDocsId, string> = {
+	'otel-audit': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-audit/SKILL.md',
+	'otel-instrument': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-instrument/SKILL.md',
+	'otel-verify': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-verify/SKILL.md',
+};
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -1018,6 +1025,14 @@ async function performCloudBridgeAction(
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'open-skill-docs': {
+			const skill = request.payload?.skill;
+			if (!isSkillDocsId(skill)) {
+				throw new Error('Unknown skill documentation request.');
+			}
+			await openCloudExternalUrl(skillDocsUrls[skill]);
+			return {};
+		}
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
 			const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);

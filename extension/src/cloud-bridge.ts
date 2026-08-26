@@ -6,7 +6,17 @@ export type CloudBridgeAction =
 	| 'initialize'
 	| 'open-free-edition'
 	| 'open-ingest-token-help'
+	| 'open-skill-docs'
 	| 'set-enabled';
+
+/**
+ * Skills whose documentation the webview may ask the extension to open. The
+ * webview names a skill, never a URL — the extension owns the URL mapping so a
+ * compromised webview cannot open an arbitrary page.
+ */
+export const skillDocsIds = ['otel-audit', 'otel-instrument', 'otel-verify'] as const;
+
+export type SkillDocsId = typeof skillDocsIds[number];
 
 export type CloudBridgeRequest = {
 	action: CloudBridgeAction;
@@ -15,6 +25,7 @@ export type CloudBridgeRequest = {
 		accessToken?: string;
 		enabled?: boolean;
 		realm?: string;
+		skill?: SkillDocsId;
 	};
 	requestId: string;
 	type: 'obstudio.cloud.request';
@@ -60,12 +71,17 @@ export function isCloudBridgeRequest(value: unknown): value is CloudBridgeReques
 		return false;
 	}
 	const payload = request.payload as Record<string, unknown>;
-	return Object.keys(payload).every((key) => ['accessToken', 'enabled', 'realm'].includes(key))
+	return Object.keys(payload).every((key) => ['accessToken', 'enabled', 'realm', 'skill'].includes(key))
 		&& (payload.accessToken === undefined
 			|| (typeof payload.accessToken === 'string' && payload.accessToken.length <= 4096))
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
 		&& (payload.realm === undefined
-			|| (typeof payload.realm === 'string' && payload.realm.length <= 32));
+			|| (typeof payload.realm === 'string' && payload.realm.length <= 32))
+		&& (payload.skill === undefined || isSkillDocsId(payload.skill));
+}
+
+export function isSkillDocsId(value: unknown): value is SkillDocsId {
+	return typeof value === 'string' && (skillDocsIds as readonly string[]).includes(value);
 }
 
 export function isCloudBridgeReady(value: unknown): value is CloudBridgeReady {
@@ -165,5 +181,6 @@ function isCloudBridgeAction(value: unknown): value is CloudBridgeAction {
 		|| value === 'initialize'
 		|| value === 'open-free-edition'
 		|| value === 'open-ingest-token-help'
+		|| value === 'open-skill-docs'
 		|| value === 'set-enabled';
 }
