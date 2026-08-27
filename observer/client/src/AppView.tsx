@@ -3,6 +3,7 @@ import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
+import { OverviewTab } from "./overview";
 import { ServicesTab } from "./services";
 import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
@@ -15,7 +16,7 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud";
+type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud";
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -43,13 +44,14 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const shortcuts = useMemo(() => ({
     "?": () => setShowHelp((v) => !v),
     p: () => toggle(),
-    "1": () => switchTab("metrics"),
-    "2": () => switchTab("traces"),
-    "3": () => switchTab("logs"),
-    "4": () => switchTab("services"),
-    "5": () => switchTab("validation"),
-    "6": () => switchTab("dashboards"),
-    "7": () => switchTab("cloud"),
+    "1": () => switchTab("overview"),
+    "2": () => switchTab("metrics"),
+    "3": () => switchTab("traces"),
+    "4": () => switchTab("logs"),
+    "5": () => switchTab("services"),
+    "6": () => switchTab("validation"),
+    "7": () => switchTab("dashboards"),
+    "8": () => switchTab("cloud"),
   }), [toggle, switchTab]);
 
   useHostKeyboardForwarding();
@@ -87,7 +89,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             role="tablist"
             aria-label="Observer sections"
             onKeyDown={(e) => {
-              const order: AppTab[] = ["metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
+              const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
               const idx = order.indexOf(activeTab);
               let next = idx;
               if (e.key === "ArrowRight") next = (idx + 1) % order.length;
@@ -100,6 +102,19 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
               document.getElementById(`tab-${order[next]}`)?.focus();
             }}
           >
+          <button
+            id="tab-overview"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "overview"}
+            aria-controls={activeTab === "overview" ? "panel-overview" : undefined}
+            aria-label="Overview"
+            className={activeTab === "overview" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "overview" ? 0 : -1}
+            onClick={() => switchTab("overview")}
+          >
+            Overview
+          </button>
           <button
             id="tab-metrics"
             type="button"
@@ -251,6 +266,9 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           </div>
         </div>
 
+        {activeTab === "overview" ? (
+          <OverviewTab onOpenCloud={() => switchTab("cloud")} />
+        ) : null}
         {activeTab === "services" ? (
           <ServicesTab
             serviceNames={state.stats?.serviceNames ?? []}
@@ -293,10 +311,11 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
 }
 
 function initialTabFromLocation(): AppTab {
-  if (typeof window === "undefined") return "metrics";
+  if (typeof window === "undefined") return "overview";
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
   switch (tab) {
+    case "overview":
     case "services":
     case "metrics":
     case "traces":
@@ -306,7 +325,7 @@ function initialTabFromLocation(): AppTab {
     case "cloud":
       return tab;
     default:
-      return "metrics";
+      return "overview";
   }
 }
 

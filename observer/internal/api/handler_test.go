@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/store"
 	"github.com/signalfx/obstudio/observer/internal/validator"
@@ -2506,5 +2507,281 @@ func TestQueryDashboardPreviewNoSidecar(t *testing.T) {
 	}
 	if preview.Message == "" {
 		t.Errorf("expected an actionable message when sidecar is absent")
+	}
+}
+
+// --- /api/audit/* -----------------------------------------------------------
+
+const auditJSONFixture = `{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {"service_name": "checkout", "language": "go", "framework": "chi", "date": "2026-08-27", "status": "Partial"},
+  "current_instrumentation": {
+    "spans": [{"name": "GET /health"}],
+    "metrics": [{"name": "http.server.request.duration"}],
+    "logs": [],
+    "incident_readiness": [{"area": "HTTP latency", "status": "covered"}]
+  },
+  "findings": [{"id": "OTEL-001", "title": "No log pipeline", "severity": "medium", "status": "proposed"}],
+  "anti_patterns": [],
+  "recommendation": ["Add an OTLP log pipeline."]
+}`
+
+// newAuditServer starts a test server whose audit artifacts live in a temp
+// workspace. An empty json skips writing the audit entirely.
+func newAuditServer(t *testing.T, auditJSON, reportHTML string) *httptest.Server {
+	t.Helper()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if auditJSON != "" {
+		if err := os.WriteFile(filepath.Join(root, ".observe", "otel-audit.json"), []byte(auditJSON), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reportHTML != "" {
+		if err := os.WriteFile(filepath.Join(root, ".observe", "otel.html"), []byte(reportHTML), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mux := http.NewServeMux()
+	Register(mux, store.New(), audit.Config{WorkspaceRoot: root})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	return server
+}
+
+func TestAuditScoreEndpoint(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var body struct {
+		Available bool     `json:"available"`
+		Score     int      `json:"score"`
+		Status    string   `json:"status"`
+		Gaps      []string `json:"gaps"`
+		AntiPats  []string `json:"antiPatterns"`
+		HasHTML   bool     `json:"hasHtmlReport"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if !body.Available {
+		t.Error("available = false, want true")
+	}
+	// Spans 15 + metrics 15 + logs 0 + readiness 25 + findings (20-3)=17 + anti 10
+	// = 82 of 100.
+	if body.Score != 82 {
+		t.Errorf("score = %d, want 82", body.Score)
+	}
+	if body.Status != "Partial" {
+		t.Errorf("status = %q, want Partial", body.Status)
+	}
+	if len(body.Gaps) != 1 {
+		t.Errorf("gaps = %v, want one entry", body.Gaps)
+	}
+	if len(body.AntiPats) != 0 {
+		t.Errorf("antiPatterns = %v, want empty", body.AntiPats)
+	}
+	if body.HasHTML {
+		t.Error("hasHtmlReport = true when no otel.html was written")
+	}
+}
+
+// The score is derived from the developer's working tree, so it must not be
+// readable cross-origin the way the telemetry routes are.
+func TestAuditScoreIsNotCORSOpen(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset on the audit routes", got)
+	}
+}
+
+func TestAuditReportServesSkillHTML(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>OpenTelemetry audit report</h1>")
+
+	resp := mustGet(t, server.URL+"/api/audit/report")
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want HTML", got)
+	}
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "<h1>OpenTelemetry audit report</h1>" {
+		t.Errorf("body = %q, want the skill's own report verbatim", raw)
+	}
+}
+
+func TestAuditReportMissing(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/report")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, "$otel-audit") {
+		t.Errorf("body = %q, want it to name $otel-audit", body)
+	}
+	if strings.Contains(body, os.TempDir()) {
+		t.Errorf("404 body leaked a filesystem path: %q", body)
+	}
+}
+
+func TestAuditScoreUnavailableWithoutReport(t *testing.T) {
+	server := newAuditServer(t, "", "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	var body struct {
+		Available bool   `json:"available"`
+		Message   string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Available {
+		t.Error("available = true with no audit present")
+	}
+	if !strings.Contains(body.Message, "otel-audit.json") {
+		t.Errorf("message = %q, want it to name the canonical artifact", body.Message)
+	}
+}
+
+// The report is workspace-controlled markup served on the Observer's own
+// origin, so it must carry the same lockdown the skill's report server applies.
+func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>report</h1><script>fetch('/api/query/traces')</script>")
+
+	resp := mustGet(t, server.URL+"/api/audit/report")
+	defer resp.Body.Close()
+
+	csp := resp.Header.Get("Content-Security-Policy")
+	if csp == "" {
+		t.Fatal("no Content-Security-Policy on the served report")
+	}
+	// default-src 'none' denies fetch/XHR/websocket, so a tampered report cannot
+	// call the local APIs; inline style and script still render the document.
+	for _, want := range []string{
+		"default-src 'none'",
+		"script-src 'unsafe-inline'",
+		"style-src 'unsafe-inline'",
+		"base-uri 'none'",
+		"form-action 'none'",
+	} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q missing %q", csp, want)
+		}
+	}
+	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
+	}
+	// The sandbox is what denies the report the Observer's origin; without it
+	// inline script could still reach same-origin API documents.
+	if !strings.Contains(csp, "sandbox allow-scripts") {
+		t.Errorf("CSP %q must sandbox the report into an opaque origin", csp)
+	}
+	if strings.Contains(csp, "allow-same-origin") {
+		t.Errorf("CSP %q must not grant the report the Observer origin", csp)
+	}
+}
+
+// The generated report links to its siblings relatively. Served at
+// /api/audit/report, "otel-audit.json" resolves to /api/audit/otel-audit.json,
+// so that path must serve the paired file rather than 404.
+func TestAuditReportSiblingLinksResolve(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, `<a href="otel-audit.json">Canonical audit data (JSON)</a>`)
+
+	resp := mustGet(t, server.URL+"/api/audit/otel-audit.json")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — the report's JSON link must resolve", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want JSON", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != auditJSONFixture {
+		t.Error("sibling route did not serve the scored audit verbatim")
+	}
+}
+
+// The HTML sibling is also workspace-controlled markup and must carry the CSP.
+func TestAuditHTMLSiblingCarriesCSP(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>report</h1>")
+
+	resp := mustGet(t, server.URL+"/api/audit/otel.html")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Errorf("CSP = %q, want the report lockdown", resp.Header.Get("Content-Security-Policy"))
+	}
+}
+
+// A sibling the audit never generated must 404 rather than error obscurely.
+func TestAuditMissingSiblingIs404(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/otel-instrumentation.html")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// The dedicated routes must still win over the sibling routes.
+func TestAuditScoreRouteNotShadowed(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q; the score route must not be shadowed", got)
 	}
 }

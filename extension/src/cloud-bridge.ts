@@ -4,9 +4,75 @@ export type CloudBridgeAction =
 	| 'connect'
 	| 'forget'
 	| 'initialize'
+	| 'open-audit-report'
 	| 'open-free-edition'
 	| 'open-ingest-token-help'
+	| 'open-skill-docs'
 	| 'set-enabled';
+
+/**
+ * Path the Observer serves the $otel-audit HTML report from.
+ *
+ * The webview asks for "the audit report", never for a URL, so the extension
+ * decides what gets opened. The webview runs in a sandboxed iframe whose
+ * `target="_blank"` the host may not honour, and the path is fixed here rather
+ * than passed in so a compromised webview cannot turn this into an open
+ * redirect against the collector's own origin.
+ */
+export const auditReportPath = '/api/audit/report';
+
+/** Builds the audit report URL for a collector base URL, or undefined. */
+export function auditReportUrl(baseUrl: unknown): string | undefined {
+	if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
+		return undefined;
+	}
+	let parsed: URL;
+	try {
+		parsed = new URL(baseUrl);
+	} catch {
+		return undefined;
+	}
+	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+		return undefined;
+	}
+
+	return new URL(auditReportPath, parsed).toString();
+}
+
+/**
+ * Skills whose documentation the webview may ask the extension to open. The
+ * webview names a skill, never a URL — the extension owns the URL mapping so a
+ * compromised webview cannot open an arbitrary page.
+ */
+export const skillDocsIds = [
+	'otel-audit',
+	'otel-instrument',
+	'otel-verify',
+	'splunk-configure',
+	'splunk-detector-publish',
+	'splunk-dashboard-publish',
+] as const;
+
+export type SkillDocsId = typeof skillDocsIds[number];
+
+/**
+ * Documentation URL per skill id. The mapping lives here, beside the id list,
+ * so a new id cannot be added without a URL and so both are testable without a
+ * VS Code host.
+ */
+const skillDocsUrls: Record<SkillDocsId, string> = {
+	'otel-audit': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-audit/SKILL.md',
+	'otel-instrument': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-instrument/SKILL.md',
+	'otel-verify': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-verify/SKILL.md',
+	'splunk-configure': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-configure/SKILL.md',
+	'splunk-detector-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-detector-publish/SKILL.md',
+	'splunk-dashboard-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-dashboard-publish/SKILL.md',
+};
+
+/** Returns the docs URL for a skill id, or undefined when the id is unknown. */
+export function skillDocsUrl(skill: unknown): string | undefined {
+	return isSkillDocsId(skill) ? skillDocsUrls[skill] : undefined;
+}
 
 export type CloudBridgeRequest = {
 	action: CloudBridgeAction;
@@ -15,6 +81,7 @@ export type CloudBridgeRequest = {
 		accessToken?: string;
 		enabled?: boolean;
 		realm?: string;
+		skill?: SkillDocsId;
 	};
 	requestId: string;
 	type: 'obstudio.cloud.request';
@@ -60,12 +127,17 @@ export function isCloudBridgeRequest(value: unknown): value is CloudBridgeReques
 		return false;
 	}
 	const payload = request.payload as Record<string, unknown>;
-	return Object.keys(payload).every((key) => ['accessToken', 'enabled', 'realm'].includes(key))
+	return Object.keys(payload).every((key) => ['accessToken', 'enabled', 'realm', 'skill'].includes(key))
 		&& (payload.accessToken === undefined
 			|| (typeof payload.accessToken === 'string' && payload.accessToken.length <= 4096))
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
 		&& (payload.realm === undefined
-			|| (typeof payload.realm === 'string' && payload.realm.length <= 32));
+			|| (typeof payload.realm === 'string' && payload.realm.length <= 32))
+		&& (payload.skill === undefined || isSkillDocsId(payload.skill));
+}
+
+export function isSkillDocsId(value: unknown): value is SkillDocsId {
+	return typeof value === 'string' && (skillDocsIds as readonly string[]).includes(value);
 }
 
 export function isCloudBridgeReady(value: unknown): value is CloudBridgeReady {
@@ -163,7 +235,9 @@ function isCloudBridgeAction(value: unknown): value is CloudBridgeAction {
 	return value === 'connect'
 		|| value === 'forget'
 		|| value === 'initialize'
+		|| value === 'open-audit-report'
 		|| value === 'open-free-edition'
 		|| value === 'open-ingest-token-help'
+		|| value === 'open-skill-docs'
 		|| value === 'set-enabled';
 }

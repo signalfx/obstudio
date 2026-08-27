@@ -4,11 +4,14 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/signalfx/obstudio/observer/internal/audit"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
 	"github.com/signalfx/obstudio/observer/internal/store"
@@ -42,6 +45,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	validationStore := validator.NewStore()
 	var runner validator.Runner
 	var dashboardsConfig dashboards.Config
+	var auditConfig audit.Config
 	var metricsController *otlp.SplunkMetricsExportController
 	var tracesController *otlp.SplunkTracesExportController
 	var splunkExportRefresher SplunkExportConfigurationRefresher
@@ -71,6 +75,12 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			if value != nil {
 				dashboardsConfig = *value
 			}
+		case audit.Config:
+			auditConfig = value
+		case *audit.Config:
+			if value != nil {
+				auditConfig = *value
+			}
 		case *otlp.SplunkMetricsExportController:
 			metricsController = value
 		case *otlp.SplunkTracesExportController:
@@ -81,6 +91,7 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	validationService := validator.NewService(validationStore, runner)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
+	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
@@ -93,6 +104,13 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
 	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(dashboardResolver))
+	mux.HandleFunc("GET /api/audit/score", queryAuditScore(auditResolver))
+	mux.HandleFunc("GET /api/audit/report", queryAuditReport(auditResolver))
+	// The report links to its siblings relatively, so they must resolve under
+	// the same path prefix or those links 404.
+	for name := range audit.ReportArtifacts {
+		mux.HandleFunc("GET /api/audit/"+name, queryAuditArtifact(auditResolver, name))
+	}
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
@@ -133,6 +151,112 @@ func queryMetrics(s *store.Store) http.HandlerFunc {
 func queryDashboardPreview(resolver *dashboards.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, resolver.Build())
+	}
+}
+
+// queryAuditScore returns the scored audit. Like queryAuditReport it carries
+// content derived from the developer's working tree — finding text and file
+// paths — so it omits the wildcard CORS header the telemetry routes use.
+func queryAuditScore(resolver *audit.Resolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeSameOriginJSON(w, resolver.Build())
+	}
+}
+
+// writeSameOriginJSON is writeJSON without Access-Control-Allow-Origin, for
+// responses that must not be readable cross-origin.
+func writeSameOriginJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[api] writeSameOriginJSON: %v", err)
+	}
+}
+
+// auditReportCSP locks down the workspace-controlled report served on the
+// Observer's own origin. It extends the policy the $otel-audit report server
+// applies with a sandbox, because that server is an isolated origin and this
+// one also hosts the local APIs.
+// The sandbox directive is the important part: it puts the document in an
+// opaque origin, so its inline script cannot read same-origin API responses,
+// storage, or cookies belonging to the Observer, and cannot navigate the top
+// level. allow-scripts keeps the report interactive without granting it the
+// Observer's origin, which a policy built only from default-src would.
+const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; " +
+	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+
+// queryAuditArtifact serves one allowlisted file the report links to, so the
+// generated report's own relative links ("Canonical audit data (JSON)", the
+// audit/instrumentation cross-links) resolve instead of 404ing.
+func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, contentType, err := resolver.ReadArtifact(name)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, audit.ErrNoReport) {
+				status = http.StatusNotFound
+				err = fmt.Errorf("no %s found. Run $otel-audit to generate it", name)
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(status)
+			fmt.Fprintln(w, err.Error())
+
+			return
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		// HTML siblings are workspace-controlled markup on this origin and get
+		// the same lockdown as the primary report.
+		if strings.HasSuffix(name, ".html") {
+			w.Header().Set("Content-Security-Policy", auditReportCSP)
+		}
+		if _, err := w.Write(raw); err != nil {
+			log.Printf("[api] queryAuditArtifact %s: %v", name, err)
+		}
+	}
+}
+
+// queryAuditReport serves the human-readable report the $otel-audit skill
+// generates next to the JSON it scores. It is the skill's own artifact, served
+// as-is; nosniff keeps the content type from being guessed.
+//
+// Unlike the telemetry routes, this returns a file from the developer's working
+// tree, so it deliberately omits the wildcard CORS header: only the Observer UI
+// itself, which is same-origin, needs to read it.
+func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, err := resolver.ReadHTML()
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, audit.ErrNoReport) {
+				status = http.StatusNotFound
+				err = fmt.Errorf("no instrumentation report found at %s. Run $otel-audit to generate it", resolver.HTMLSource())
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(status)
+			fmt.Fprintln(w, err.Error())
+
+			return
+		}
+
+		// The report is workspace-controlled markup served on the Observer's own
+		// origin, so it is locked down the same way the skill's own report server
+		// locks it down: inline style and script still work, but default-src
+		// 'none' denies network access, so a tampered report cannot call the
+		// local APIs or exfiltrate anything.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", auditReportCSP)
+		if _, err := w.Write(raw); err != nil {
+			log.Printf("[api] queryAuditReport: %v", err)
+		}
 	}
 }
 

@@ -46,10 +46,12 @@ import {
 	type ObserverPortRole,
 } from './startup-errors';
 import {
+	auditReportUrl,
 	cloudStatusConnected,
 	cloudStatusEnabled,
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
+	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	splunkCloudConnectionSecretKey,
@@ -1018,6 +1020,24 @@ async function performCloudBridgeAction(
 		case 'open-ingest-token-help':
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
+		case 'open-skill-docs': {
+			const url = skillDocsUrl(request.payload?.skill);
+			if (url === undefined) {
+				throw new Error('Unknown skill documentation request.');
+			}
+			await openCloudExternalUrl(url);
+			return {};
+		}
+		case 'open-audit-report': {
+			// The webview is sandboxed, so target="_blank" is not reliably
+			// honoured inside the host; the extension opens the report instead.
+			const url = auditReportUrl(observerBaseUrl);
+			if (url === undefined) {
+				throw new Error('The Observer is not running, so the audit report cannot be opened.');
+			}
+			await openCloudExternalUrl(url);
+			return {};
+		}
 		case 'connect': {
 			const connection = cloudConnectionFromRequest(request);
 			const storedValue = await context.secrets.get(splunkCloudConnectionSecretKey);

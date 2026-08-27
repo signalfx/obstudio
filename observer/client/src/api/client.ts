@@ -181,3 +181,63 @@ export interface ServiceStats {
   avgClientDurationMs: number | null;
   avgServerDurationMs: number | null;
 }
+
+/** One scored line item behind an instrumentation score. */
+export interface InstrumentationScoreComponent {
+  label: string;
+  earned: number;
+  max: number;
+  detail: string;
+}
+
+/**
+ * Instrumentation score derived from `.observe/otel-audit.json`, the canonical
+ * report written by `$otel-audit`. `available` is false when no audit exists.
+ */
+export interface InstrumentationScore {
+  available: boolean;
+  source: string;
+  message?: string;
+  serviceName?: string;
+  language?: string;
+  framework?: string;
+  generatedAt?: string;
+  score: number;
+  breakdown: {
+    coverage: number;
+    coverageMax: number;
+    quality: number;
+    qualityMax: number;
+    components: InstrumentationScoreComponent[];
+  };
+  /** The audit's own verdict: Pass, Partial, or Blocked. */
+  status?: string;
+  /** Commit the audit ran against, and the checkout's current HEAD. */
+  auditCommit?: string;
+  workspaceCommit?: string;
+  /**
+   * Whether the audit no longer describes the working tree, and which check
+   * found it: "commit" when HEAD moved, "changes" when files were edited after
+   * the audit was written. Both are conservative — anything indeterminate
+   * reports not-stale rather than warning wrongly.
+   */
+  stale: boolean;
+  staleReason?: "commit" | "changes";
+  /** Whether the skill's human-readable otel.html sits next to the JSON. */
+  hasHtmlReport: boolean;
+  hasSpans: boolean;
+  hasMetrics: boolean;
+  hasLogs: boolean;
+  gapCount: number;
+  antiPatternCount: number;
+  recommendationCount: number;
+  /** Verbatim bullet text from the report's corresponding sections. */
+  gaps: string[];
+  antiPatterns: string[];
+  recommendations: string[];
+}
+
+/** Fetch the instrumentation score derived from the latest $otel-audit report. */
+export async function fetchInstrumentationScore(signal?: AbortSignal): Promise<InstrumentationScore> {
+  return fetchJSON<InstrumentationScore>("/api/audit/score", { signal });
+}

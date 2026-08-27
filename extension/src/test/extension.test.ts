@@ -12,8 +12,13 @@ import {
 	resolveBackend,
 } from '../backend';
 import {
+	auditReportPath,
+	auditReportUrl,
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
+	isSkillDocsId,
+	skillDocsIds,
+	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 } from '../cloud-bridge';
@@ -81,6 +86,39 @@ test('cloud bridge accepts only bounded known requests', () => {
 		requestId: 'request-123',
 		type: 'obstudio.cloud.request',
 	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: 'otel-instrument' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	// Only known skill ids pass; the webview can never name a URL.
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: 'https://evil.example.com' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-skill-docs',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { skill: '../../etc/passwd' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	// Every advertised skill id must pass validation, including the Splunk
+	// Observability Cloud skills surfaced on the Overview tab.
+	for (const skill of skillDocsIds) {
+		assert.equal(isCloudBridgeRequest({
+			action: 'open-skill-docs',
+			bridgeToken: 'bridge-token-1234567890123456',
+			payload: { skill },
+			requestId: 'request-123',
+			type: 'obstudio.cloud.request',
+		}), true, `skill id ${skill} should validate`);
+	}
 	assert.equal(isCloudBridgeRequest({
 		action: 'connect',
 		bridgeToken: 'short',
@@ -520,4 +558,81 @@ test('resetObserverOutputDirs removes stale output and recreates the directory',
 		assert.equal(fs.existsSync(path.join(paths.observerOutDir, 'stale.txt')), false);
 		assert.equal(fs.existsSync(paths.observerOutDir), true);
 	});
+});
+
+test('skill docs ids cover the skills the Overview tab offers', () => {
+	// The client lists these commands; the extension owns their URLs. If the two
+	// drift, the webview's docs links silently stop opening.
+	for (const expected of [
+		'otel-audit',
+		'otel-instrument',
+		'otel-verify',
+		'splunk-configure',
+		'splunk-detector-publish',
+		'splunk-dashboard-publish',
+	]) {
+		assert.ok(isSkillDocsId(expected), `${expected} should be a known skill id`);
+	}
+	assert.equal(skillDocsIds.length, 6);
+	assert.equal(isSkillDocsId('splunk-sync'), false);
+	assert.equal(isSkillDocsId(''), false);
+});
+
+test('every skill id maps to its own documentation URL', () => {
+	// A broken or duplicated mapping would otherwise only surface as a dead
+	// link inside the IDE webview, which the unit suite cannot drive.
+	const seen = new Set<string>();
+	for (const skill of skillDocsIds) {
+		const url = skillDocsUrl(skill);
+		assert.ok(url, `${skill} has no documentation URL`);
+		assert.equal(
+			url,
+			`https://github.com/signalfx/obstudio/blob/main/skills/${skill}/SKILL.md`,
+			`${skill} maps to an unexpected URL`,
+		);
+		assert.ok(!seen.has(url!), `${skill} reuses another skill's URL`);
+		seen.add(url!);
+	}
+	assert.equal(seen.size, skillDocsIds.length);
+});
+
+test('unknown skill ids resolve to no URL', () => {
+	for (const bogus of ['splunk-sync', 'https://evil.example.com', '../../etc/passwd', '', undefined, null, 7]) {
+		assert.equal(skillDocsUrl(bogus), undefined, `${String(bogus)} should not resolve`);
+	}
+});
+
+test('cloud bridge accepts the audit report action without a payload', () => {
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-audit-report',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	// The webview names the action only; it can never smuggle a destination.
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-audit-report',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { url: 'https://evil.example.com' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+});
+
+test('audit report URL is built from the observer base URL alone', () => {
+	assert.equal(auditReportUrl('http://127.0.0.1:3000'), `http://127.0.0.1:3000${auditReportPath}`);
+	// A base URL carrying a path must not produce a nested report path.
+	assert.equal(auditReportUrl('http://127.0.0.1:3000/ui/'), `http://127.0.0.1:3000${auditReportPath}`);
+	assert.equal(auditReportUrl('https://observer.example.com'), `https://observer.example.com${auditReportPath}`);
+
+	// Nothing usable produces no URL, so the caller reports it rather than
+	// opening something unintended.
+	assert.equal(auditReportUrl(undefined), undefined);
+	assert.equal(auditReportUrl(''), undefined);
+	assert.equal(auditReportUrl('   '), undefined);
+	assert.equal(auditReportUrl('not a url'), undefined);
+	assert.equal(auditReportUrl(3000), undefined);
+	// Only http(s): a file: or javascript: base must never be opened.
+	assert.equal(auditReportUrl('file:///etc/passwd'), undefined);
+	assert.equal(auditReportUrl('javascript:alert(1)'), undefined);
 });
