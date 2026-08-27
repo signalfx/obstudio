@@ -2710,3 +2710,70 @@ func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
 		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
 	}
 }
+
+// The generated report links to its siblings relatively. Served at
+// /api/audit/report, "otel-audit.json" resolves to /api/audit/otel-audit.json,
+// so that path must serve the paired file rather than 404.
+func TestAuditReportSiblingLinksResolve(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, `<a href="otel-audit.json">Canonical audit data (JSON)</a>`)
+
+	resp := mustGet(t, server.URL+"/api/audit/otel-audit.json")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — the report's JSON link must resolve", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want JSON", got)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
+	}
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != auditJSONFixture {
+		t.Error("sibling route did not serve the scored audit verbatim")
+	}
+}
+
+// The HTML sibling is also workspace-controlled markup and must carry the CSP.
+func TestAuditHTMLSiblingCarriesCSP(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>report</h1>")
+
+	resp := mustGet(t, server.URL+"/api/audit/otel.html")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Errorf("CSP = %q, want the report lockdown", resp.Header.Get("Content-Security-Policy"))
+	}
+}
+
+// A sibling the audit never generated must 404 rather than error obscurely.
+func TestAuditMissingSiblingIs404(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/otel-instrumentation.html")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// The dedicated routes must still win over the sibling routes.
+func TestAuditScoreRouteNotShadowed(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type = %q; the score route must not be shadowed", got)
+	}
+}

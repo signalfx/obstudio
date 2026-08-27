@@ -199,6 +199,34 @@ func pathErrMsg(err error) string {
 	return err.Error()
 }
 
+// ReportArtifacts are the files the $otel-audit report links to relatively,
+// mirroring the allowlist the skill's own report server exposes. Serving the
+// report without its siblings leaves those links broken.
+var ReportArtifacts = map[string]string{
+	"otel.html":                 "text/html; charset=utf-8",
+	"otel-instrumentation.html": "text/html; charset=utf-8",
+	"otel-audit.json":           "application/json; charset=utf-8",
+}
+
+// ReadArtifact returns one allowlisted report artifact and its content type.
+// The name is looked up in ReportArtifacts rather than joined from the request,
+// so it can never address a file the report does not link to.
+func (r *Resolver) ReadArtifact(name string) ([]byte, string, error) {
+	contentType, ok := ReportArtifacts[name]
+	if !ok {
+		return nil, "", ErrNoReport
+	}
+
+	// Siblings of the audit actually being scored, so an override keeps the
+	// report and its data together.
+	raw, err := r.readContained(filepath.Join(filepath.Dir(r.reportPath), name))
+	if err != nil {
+		return nil, "", err
+	}
+
+	return raw, contentType, nil
+}
+
 // ReadHTML returns the skill's own human-readable report.
 func (r *Resolver) ReadHTML() ([]byte, error) {
 	return r.readContained(r.htmlPath)

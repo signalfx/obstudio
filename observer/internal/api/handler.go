@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
@@ -105,6 +106,11 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(dashboardResolver))
 	mux.HandleFunc("GET /api/audit/score", queryAuditScore(auditResolver))
 	mux.HandleFunc("GET /api/audit/report", queryAuditReport(auditResolver))
+	// The report links to its siblings relatively, so they must resolve under
+	// the same path prefix or those links 404.
+	for name := range audit.ReportArtifacts {
+		mux.HandleFunc("GET /api/audit/"+name, queryAuditArtifact(auditResolver, name))
+	}
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/latest", queryValidationLatest(validationService))
@@ -173,6 +179,41 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 // are closed off.
 const auditReportCSP = "default-src 'none'; style-src 'unsafe-inline'; " +
 	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+
+// queryAuditArtifact serves one allowlisted file the report links to, so the
+// generated report's own relative links ("Canonical audit data (JSON)", the
+// audit/instrumentation cross-links) resolve instead of 404ing.
+func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, contentType, err := resolver.ReadArtifact(name)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, audit.ErrNoReport) {
+				status = http.StatusNotFound
+				err = fmt.Errorf("no %s found. Run $otel-audit to generate it", name)
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.WriteHeader(status)
+			fmt.Fprintln(w, err.Error())
+
+			return
+		}
+
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		// HTML siblings are workspace-controlled markup on this origin and get
+		// the same lockdown as the primary report.
+		if strings.HasSuffix(name, ".html") {
+			w.Header().Set("Content-Security-Policy", auditReportCSP)
+		}
+		if _, err := w.Write(raw); err != nil {
+			log.Printf("[api] queryAuditArtifact %s: %v", name, err)
+		}
+	}
+}
 
 // queryAuditReport serves the human-readable report the $otel-audit skill
 // generates next to the JSON it scores. It is the skill's own artifact, served
