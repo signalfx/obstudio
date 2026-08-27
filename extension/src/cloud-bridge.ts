@@ -25,6 +25,25 @@ export const skillDocsIds = [
 
 export type SkillDocsId = typeof skillDocsIds[number];
 
+/**
+ * Documentation URL per skill id. The mapping lives here, beside the id list,
+ * so a new id cannot be added without a URL and so both are testable without a
+ * VS Code host.
+ */
+const skillDocsUrls: Record<SkillDocsId, string> = {
+	'otel-audit': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-audit/SKILL.md',
+	'otel-instrument': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-instrument/SKILL.md',
+	'otel-verify': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-verify/SKILL.md',
+	'splunk-configure': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-configure/SKILL.md',
+	'splunk-detector-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-detector-publish/SKILL.md',
+	'splunk-dashboard-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-dashboard-publish/SKILL.md',
+};
+
+/** Returns the docs URL for a skill id, or undefined when the id is unknown. */
+export function skillDocsUrl(skill: unknown): string | undefined {
+	return isSkillDocsId(skill) ? skillDocsUrls[skill] : undefined;
+}
+
 export type CloudBridgeRequest = {
 	action: CloudBridgeAction;
 	bridgeToken: string;

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -45,11 +46,17 @@ type Resolver struct {
 }
 
 // NewResolver returns a Resolver bound to the configured workspace.
+//
+// The HTML report is always resolved as a sibling of the JSON audit actually
+// being scored. Pinning it to the default location instead would let an
+// override score one audit while serving a different, possibly stale, report.
 func NewResolver(cfg Config) *Resolver {
+	reportPath := resolveArtifactPath(cfg, cfg.ReportPath, DefaultReportRelPath)
+
 	return &Resolver{
 		workspaceRoot: cfg.WorkspaceRoot,
-		reportPath:    resolveArtifactPath(cfg, cfg.ReportPath, DefaultReportRelPath),
-		htmlPath:      resolveArtifactPath(cfg, "", DefaultHTMLRelPath),
+		reportPath:    reportPath,
+		htmlPath:      filepath.Join(filepath.Dir(reportPath), filepath.Base(DefaultHTMLRelPath)),
 	}
 }
 
@@ -98,6 +105,9 @@ func resolveArtifactPath(cfg Config, override, defaultRel string) string {
 func (r *Resolver) readContained(path string) ([]byte, error) {
 	source := filepath.Base(path)
 
+	// Resolve symlinks and confirm containment before opening. os.ReadFile
+	// follows symlinks, so without this a symlinked artifact would serve a file
+	// from anywhere on disk through a network endpoint.
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -108,25 +118,32 @@ func (r *Resolver) readContained(path string) ([]byte, error) {
 		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
 
-	if r.workspaceRoot != "" {
-		root, err := filepath.EvalSymlinks(r.workspaceRoot)
-		if err != nil {
-			root = r.workspaceRoot
-		}
-		rel, err := filepath.Rel(root, real)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			log.Printf("[audit] refused %s: resolves outside the workspace", path)
+	if !r.contains(real) {
+		log.Printf("[audit] refused %s: resolves outside the workspace", path)
 
-			return nil, ErrNoReport
-		}
+		return nil, ErrNoReport
 	}
 
-	info, err := os.Stat(real)
+	// Open once and validate the descriptor rather than the pathname. Checking
+	// the path and then reopening it leaves a window in which the file can be
+	// swapped for a symlink, device, or oversized file; fstat on the open
+	// descriptor describes exactly the bytes about to be read. openNoFollow
+	// additionally refuses a final symlink planted after the check above.
+	file, err := openNoFollow(real)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNoReport
 		}
+		// ELOOP from O_NOFOLLOW lands here: the path became a symlink after the
+		// containment check, so refuse it the same way.
+		log.Printf("[audit] open %s: %v", path, err)
 
+		return nil, ErrNoReport
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
 	if !info.Mode().IsRegular() {
@@ -138,17 +155,37 @@ func (r *Resolver) readContained(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is too large (%d bytes, limit %d)", source, info.Size(), maxReportBytes)
 	}
 
-	raw, err := os.ReadFile(real)
+	// Bound the read itself so a file growing between fstat and read cannot
+	// pull an unbounded amount into memory.
+	raw, err := io.ReadAll(io.LimitReader(file, maxReportBytes+1))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrNoReport
-		}
 		log.Printf("[audit] read %s: %v", path, err)
 
 		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
+	if int64(len(raw)) > maxReportBytes {
+		return nil, fmt.Errorf("%s is too large (limit %d bytes)", source, maxReportBytes)
+	}
 
 	return raw, nil
+}
+
+// contains reports whether a resolved path is inside the workspace. With no
+// workspace configured (plain CLI use) there is nothing to contain against.
+func (r *Resolver) contains(real string) bool {
+	if r.workspaceRoot == "" {
+		return true
+	}
+	root, err := filepath.EvalSymlinks(r.workspaceRoot)
+	if err != nil {
+		root = r.workspaceRoot
+	}
+	rel, err := filepath.Rel(root, real)
+	if err != nil {
+		return false
+	}
+
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // pathErrMsg returns an error message that excludes the absolute path, which
@@ -200,14 +237,10 @@ func (r *Resolver) Build() Report {
 		return unavailable(fmt.Sprintf("Instrumentation report at %s is not valid JSON: %v", source, err))
 	}
 
-	if file.Kind != "" && file.Kind != "otel-audit" {
-		return unavailable(fmt.Sprintf("%s is not an $otel-audit report (kind %q).", source, file.Kind))
-	}
-	if file.SchemaVersion > CurrentSchemaVersion {
-		return unavailable(fmt.Sprintf(
-			"Instrumentation report at %s has unsupported schema_version %d (expected %d or lower). Re-run $otel-audit.",
-			source, file.SchemaVersion, CurrentSchemaVersion,
-		))
+	if problem := validateCanonical(file); problem != "" {
+		// Syntactically valid JSON is not enough: a truncated or hand-edited
+		// artifact would otherwise be presented as a real score.
+		return unavailable(fmt.Sprintf("Instrumentation report at %s is not a usable $otel-audit report: %s. Re-run $otel-audit.", source, problem))
 	}
 
 	report := Report{
@@ -301,4 +334,34 @@ func nonNil(items []string) []string {
 
 func itoa(n int) string {
 	return strconv.Itoa(n)
+}
+
+// auditStatuses mirrors the skill's meta.status domain.
+var auditStatuses = map[string]bool{"Pass": true, "Partial": true, "Blocked": true}
+
+// validateCanonical reports why a report cannot be scored, or "" when it can.
+// It checks the parts the score actually depends on, so a partial artifact is
+// reported as unusable rather than scored as if it were complete.
+func validateCanonical(file auditFile) string {
+	if file.Kind != "otel-audit" {
+		if file.Kind == "" {
+			return "missing kind"
+		}
+
+		return fmt.Sprintf("kind is %q, not \"otel-audit\"", file.Kind)
+	}
+	if file.SchemaVersion <= 0 {
+		return "missing schema_version"
+	}
+	if file.SchemaVersion > CurrentSchemaVersion {
+		return fmt.Sprintf("unsupported schema_version %d (expected %d or lower)", file.SchemaVersion, CurrentSchemaVersion)
+	}
+	if strings.TrimSpace(file.Meta.ServiceName) == "" {
+		return "missing meta.service_name"
+	}
+	if !auditStatuses[strings.TrimSpace(file.Meta.Status)] {
+		return fmt.Sprintf("meta.status is %q, expected Pass, Partial, or Blocked", file.Meta.Status)
+	}
+
+	return ""
 }

@@ -50,12 +50,11 @@ import {
 	cloudStatusEnabled,
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
-	isSkillDocsId,
+	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 	splunkCloudConnectionSecretKey,
 	type CloudBridgeRequest,
-	type SkillDocsId,
 	type StoredSplunkCloudConnection,
 } from './cloud-bridge';
 
@@ -97,14 +96,6 @@ const observerOtlpHttpEndpoint = `http://${managedObserverHost}:${observerOtlpHt
 const observerOtlpGrpcEndpoint = `${managedObserverHost}:${observerOtlpGrpcPort}`;
 const splunkFreeEditionUrl = 'https://www.splunk.com/en_us/download/observability-cloud-free-edition.html';
 const splunkIngestTokenHelpUrl = 'https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens';
-const skillDocsUrls: Record<SkillDocsId, string> = {
-	'otel-audit': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-audit/SKILL.md',
-	'otel-instrument': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-instrument/SKILL.md',
-	'otel-verify': 'https://github.com/signalfx/obstudio/blob/main/skills/otel-verify/SKILL.md',
-	'splunk-configure': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-configure/SKILL.md',
-	'splunk-detector-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-detector-publish/SKILL.md',
-	'splunk-dashboard-publish': 'https://github.com/signalfx/obstudio/blob/main/skills/splunk-dashboard-publish/SKILL.md',
-};
 
 type InternalRuntimeState = {
 	observerPort?: number;
@@ -1029,11 +1020,11 @@ async function performCloudBridgeAction(
 			await openCloudExternalUrl(splunkIngestTokenHelpUrl);
 			return {};
 		case 'open-skill-docs': {
-			const skill = request.payload?.skill;
-			if (!isSkillDocsId(skill)) {
+			const url = skillDocsUrl(request.payload?.skill);
+			if (url === undefined) {
 				throw new Error('Unknown skill documentation request.');
 			}
-			await openCloudExternalUrl(skillDocsUrls[skill]);
+			await openCloudExternalUrl(url);
 			return {};
 		}
 		case 'connect': {

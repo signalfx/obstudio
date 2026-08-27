@@ -16,6 +16,7 @@ import {
 	isCloudBridgeRequest,
 	isSkillDocsId,
 	skillDocsIds,
+	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 } from '../cloud-bridge';
@@ -573,4 +574,28 @@ test('skill docs ids cover the skills the Overview tab offers', () => {
 	assert.equal(skillDocsIds.length, 6);
 	assert.equal(isSkillDocsId('splunk-sync'), false);
 	assert.equal(isSkillDocsId(''), false);
+});
+
+test('every skill id maps to its own documentation URL', () => {
+	// A broken or duplicated mapping would otherwise only surface as a dead
+	// link inside the IDE webview, which the unit suite cannot drive.
+	const seen = new Set<string>();
+	for (const skill of skillDocsIds) {
+		const url = skillDocsUrl(skill);
+		assert.ok(url, `${skill} has no documentation URL`);
+		assert.equal(
+			url,
+			`https://github.com/signalfx/obstudio/blob/main/skills/${skill}/SKILL.md`,
+			`${skill} maps to an unexpected URL`,
+		);
+		assert.ok(!seen.has(url!), `${skill} reuses another skill's URL`);
+		seen.add(url!);
+	}
+	assert.equal(seen.size, skillDocsIds.length);
+});
+
+test('unknown skill ids resolve to no URL', () => {
+	for (const bogus of ['splunk-sync', 'https://evil.example.com', '../../etc/passwd', '', undefined, null, 7]) {
+		assert.equal(skillDocsUrl(bogus), undefined, `${String(bogus)} should not resolve`);
+	}
 });

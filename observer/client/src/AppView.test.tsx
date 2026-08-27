@@ -517,6 +517,10 @@ describe("AppView overview tab hand-offs", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
+    // The cloud card starts in a loading state until the status request settles.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^connect/i })).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole("button", { name: /^connect/i }));
 
     expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");

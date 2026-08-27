@@ -205,7 +205,10 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   const [scoreReport, setScoreReport] = useState<InstrumentationScore | null>(null);
   const [scoreLoaded, setScoreLoaded] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [cloudConnected, setCloudConnected] = useState(false);
+  // Tri-state: a failed status request is not the same as a confirmed
+  // disconnection, and must not be shown as one.
+  const [cloudStatus, setCloudStatus] = useState<"loading" | "connected" | "disconnected" | "error">("loading");
+  const [cloudReloads, setCloudReloads] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -224,15 +227,18 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
 
   useEffect(() => {
     const controller = new AbortController();
+    setCloudStatus("loading");
     fetchSplunkExportStatus(controller.signal)
       .then((status) => {
         if (controller.signal.aborted) return;
-        setCloudConnected(status?.connected === true);
+        setCloudStatus(status?.connected === true ? "connected" : "disconnected");
       })
-      // No connection, or the status call failed: the cloud skills stay gated.
-      .catch(() => {});
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setCloudStatus("error");
+      });
     return () => controller.abort();
-  }, []);
+  }, [cloudReloads]);
 
   const scored = scoreReport?.available === true ? scoreReport : null;
   const gapLabel = scored ? `${scored.gapCount} ${scored.gapCount === 1 ? "gap" : "gaps"}` : "";
@@ -322,18 +328,39 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               title="Observability Cloud Skills"
               items={CLOUD_SKILLS}
               onOpenSkillDocs={openSkillDocs}
-              empty={cloudConnected ? null : (
+              empty={cloudStatus === "connected" ? null : (
                 <div className="overview-skills__empty">
-                  <p className="overview-skills__empty-title">Connect Splunk Observability Cloud</p>
-                  <p className="overview-skills__empty-hint">
-                    Configure alerting and monitoring by publishing detectors and dashboards
-                    right from the IDE
-                  </p>
-                  {onOpenCloud ? (
-                    <button type="button" className="overview-checklist__nav" onClick={onOpenCloud}>
-                      Connect <span aria-hidden="true">→</span>
-                    </button>
-                  ) : null}
+                  {cloudStatus === "loading" ? (
+                    <p className="overview-skills__empty-hint">Checking connection…</p>
+                  ) : cloudStatus === "error" ? (
+                    <>
+                      <p className="overview-skills__empty-title">Connection status unavailable</p>
+                      <p className="overview-skills__empty-hint">
+                        Could not reach the Observer to check your Splunk connection, so these
+                        skills are hidden. You may still be connected.
+                      </p>
+                      <button
+                        type="button"
+                        className="overview-checklist__nav"
+                        onClick={() => setCloudReloads((n) => n + 1)}
+                      >
+                        Retry <span aria-hidden="true">↻</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="overview-skills__empty-title">Connect Splunk Observability Cloud</p>
+                      <p className="overview-skills__empty-hint">
+                        Configure alerting and monitoring by publishing detectors and dashboards
+                        right from the IDE
+                      </p>
+                      {onOpenCloud ? (
+                        <button type="button" className="overview-checklist__nav" onClick={onOpenCloud}>
+                          Connect <span aria-hidden="true">→</span>
+                        </button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               )}
             />

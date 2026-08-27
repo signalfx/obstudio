@@ -345,3 +345,95 @@ func TestAntiPatternObjectsAreRendered(t *testing.T) {
 		t.Errorf("AntiPatterns = %q", got.AntiPatterns)
 	}
 }
+
+// Syntactically valid JSON is not enough: a truncated or hand-edited artifact
+// must be reported as unusable rather than scored as if it were complete.
+func TestRejectsStructurallyIncompleteAudit(t *testing.T) {
+	cases := map[string]string{
+		"only schema and kind": `{"schema_version":2,"kind":"otel-audit"}`,
+		"missing service_name": `{"schema_version":2,"kind":"otel-audit","meta":{"status":"Partial"}}`,
+		"missing status":       `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"checkout"}}`,
+		"bogus status":         `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"checkout","status":"Great"}}`,
+		"missing kind":         `{"schema_version":2,"meta":{"service_name":"checkout","status":"Partial"}}`,
+		"missing schema":       `{"kind":"otel-audit","meta":{"service_name":"checkout","status":"Partial"}}`,
+	}
+
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := NewResolver(Config{WorkspaceRoot: writeAudit(t, body)}).Build()
+
+			if got.Available {
+				t.Errorf("Available = true with score %d; want the report refused as unusable", got.Score)
+			}
+			if !strings.Contains(got.Message, "$otel-audit") {
+				t.Errorf("Message = %q, want it to point at $otel-audit", got.Message)
+			}
+		})
+	}
+}
+
+// The HTML report must be the sibling of whichever audit is actually scored,
+// so an override cannot score one audit while serving another's report.
+func TestHTMLReportPairsWithOverriddenAudit(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "svc", ".observe")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "otel-audit.json"), []byte(coveredAudit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "otel.html"), []byte("<h1>nested</h1>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A stale report at the default location must not be served instead.
+	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".observe", "otel.html"), []byte("<h1>stale</h1>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewResolver(Config{WorkspaceRoot: root, ReportPath: filepath.Join("svc", ".observe", "otel-audit.json")})
+
+	raw, err := r.ReadHTML()
+	if err != nil {
+		t.Fatalf("ReadHTML: %v", err)
+	}
+	if string(raw) != "<h1>nested</h1>" {
+		t.Errorf("ReadHTML = %q, want the report paired with the scored audit", raw)
+	}
+}
+
+// A file swapped for a symlink after validation must not be readable.
+func TestSymlinkPlantedAfterResolutionIsRefused(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte(coveredAudit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, ".observe", "otel-audit.json")
+	if err := os.WriteFile(target, []byte(coveredAudit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewResolver(Config{WorkspaceRoot: root})
+	if got := r.Build(); !got.Available {
+		t.Fatalf("baseline audit not readable: %s", got.Message)
+	}
+
+	// Swap the validated regular file for a symlink pointing outside.
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, target); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if got := r.Build(); got.Available {
+		t.Error("Build read a symlink planted in place of the validated file")
+	}
+}

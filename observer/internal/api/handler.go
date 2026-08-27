@@ -167,6 +167,13 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 	}
 }
 
+// auditReportCSP mirrors the policy the $otel-audit report server applies to
+// the same document: inline style and script are allowed so the report renders,
+// while default-src 'none' denies fetch/XHR/websocket, and base-uri/form-action
+// are closed off.
+const auditReportCSP = "default-src 'none'; style-src 'unsafe-inline'; " +
+	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+
 // queryAuditReport serves the human-readable report the $otel-audit skill
 // generates next to the JSON it scores. It is the skill's own artifact, served
 // as-is; nosniff keeps the content type from being guessed.
@@ -191,9 +198,16 @@ func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 			return
 		}
 
+		// The report is workspace-controlled markup served on the Observer's own
+		// origin, so it is locked down the same way the skill's own report server
+		// locks it down: inline style and script still work, but default-src
+		// 'none' denies network access, so a tampered report cannot call the
+		// local APIs or exfiltrate anything.
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Security-Policy", auditReportCSP)
 		if _, err := w.Write(raw); err != nil {
 			log.Printf("[api] queryAuditReport: %v", err)
 		}

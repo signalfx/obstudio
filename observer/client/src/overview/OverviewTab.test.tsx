@@ -56,18 +56,27 @@ function makeScore(overrides: Record<string, unknown>) {
   };
 }
 
-/** Stubs the Splunk export status the cloud skills card gates on. */
+function statusBody(connected: boolean) {
+  return {
+    connected,
+    enabled: false,
+    metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+    traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+  };
+}
+
+function ok(body: unknown) {
+  return { ok: true, status: 200, statusText: "OK", json: async () => body };
+}
+
+/**
+ * Stubs the Splunk export status the cloud skills card gates on. The tab also
+ * requests its score, so the stub routes by URL rather than by call order.
+ */
 function stubStatusFetch(status: { connected: boolean }) {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: "OK",
-    json: async () => ({
-      connected: status.connected,
-      enabled: false,
-      metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-    }),
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+    if (String(input).includes("/api/splunk/export")) return ok(statusBody(status.connected));
+    return ok(makeScore({}));
   }));
 }
 
@@ -386,10 +395,12 @@ describe("OverviewTab", () => {
   });
 
   it("explains what the cloud skills do in the connect prompt", async () => {
+    stubStatusFetch({ connected: false });
     const { container } = render(<OverviewTab onOpenCloud={vi.fn()} />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-skills__empty-hint")).toBeTruthy();
+      expect(container.querySelector(".overview-skills__empty-title")?.textContent)
+        .toBe("Connect Splunk Observability Cloud");
     });
     expect(container.querySelector(".overview-skills__empty-hint")?.textContent?.replace(/\s+/g, " ").trim())
       .toBe("Configure alerting and monitoring by publishing detectors and dashboards right from the IDE");
@@ -449,6 +460,50 @@ describe("OverviewTab", () => {
 
     fireEvent.click(card.querySelector<HTMLButtonElement>(".overview-checklist__nav")!);
     expect(onOpenCloud).toHaveBeenCalledTimes(1);
+  });
+
+  // A failed status request is not a confirmed disconnection and must not be
+  // presented as one.
+  it("distinguishes an unreachable status check from being disconnected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/splunk/export")) throw new Error("network down");
+      return ok(makeScore({}));
+    }));
+    const { container } = render(<OverviewTab onOpenCloud={vi.fn()} />);
+
+    const card = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(card.querySelector(".overview-skills__empty-title")?.textContent)
+        .toBe("Connection status unavailable");
+    });
+    expect(card.querySelector(".overview-skills__empty-hint")?.textContent)
+      .toContain("You may still be connected");
+    // It must not claim the user needs to connect.
+    expect(card.textContent).not.toContain("Connect Splunk Observability Cloud");
+    expect(card.querySelector<HTMLButtonElement>(".overview-checklist__nav")?.textContent)
+      .toContain("Retry");
+  });
+
+  it("retries the status check when Retry is pressed", async () => {
+    let statusCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (!String(input).includes("/api/splunk/export")) return ok(makeScore({}));
+      statusCalls += 1;
+      if (statusCalls === 1) throw new Error("network down");
+      return ok(statusBody(true));
+    }));
+    const { container } = render(<OverviewTab />);
+
+    const card = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(card.querySelector(".overview-checklist__nav")?.textContent).toContain("Retry");
+    });
+
+    fireEvent.click(card.querySelector<HTMLButtonElement>(".overview-checklist__nav")!);
+
+    await waitFor(() => {
+      expect(card.querySelectorAll(".overview-checklist__item").length).toBe(3);
+    });
   });
 
   it("lists the cloud skills once Splunk is connected", async () => {

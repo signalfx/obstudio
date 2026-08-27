@@ -2680,3 +2680,33 @@ func TestAuditScoreUnavailableWithoutReport(t *testing.T) {
 		t.Errorf("message = %q, want it to name the canonical artifact", body.Message)
 	}
 }
+
+// The report is workspace-controlled markup served on the Observer's own
+// origin, so it must carry the same lockdown the skill's report server applies.
+func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>report</h1><script>fetch('/api/query/traces')</script>")
+
+	resp := mustGet(t, server.URL+"/api/audit/report")
+	defer resp.Body.Close()
+
+	csp := resp.Header.Get("Content-Security-Policy")
+	if csp == "" {
+		t.Fatal("no Content-Security-Policy on the served report")
+	}
+	// default-src 'none' denies fetch/XHR/websocket, so a tampered report cannot
+	// call the local APIs; inline style and script still render the document.
+	for _, want := range []string{
+		"default-src 'none'",
+		"script-src 'unsafe-inline'",
+		"style-src 'unsafe-inline'",
+		"base-uri 'none'",
+		"form-action 'none'",
+	} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q missing %q", csp, want)
+		}
+	}
+	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
+	}
+}
