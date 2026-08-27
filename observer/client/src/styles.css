@@ -7685,6 +7685,34 @@ code {
   border-style: dashed;
 }
 
+.overview-tab__skills {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.overview-skills__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+
+.overview-skills__empty-title {
+  margin: 0;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--row-primary-text);
+}
+
+.overview-skills__empty-hint {
+  margin: 0 0 6px;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
 .overview-checklist {
   padding: 16px 18px;
   border: 1px solid var(--border);
@@ -7975,6 +8003,11 @@ code {
   color: var(--text);
 }
 
+.overview-callout__lead {
+  font-weight: 600;
+  color: var(--row-primary-text);
+}
+
 .overview-callout__action {
   display: inline-flex;
   align-items: center;
@@ -7989,88 +8022,8 @@ code {
   font-size: 9px;
 }
 
-.overview-services {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.overview-service {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 200px) 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--chrome);
-}
-
-.overview-service__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.overview-service--good .overview-service__dot {
-  background: var(--green);
-}
-
-.overview-service--warn .overview-service__dot {
-  background: var(--yellow);
-}
-
-.overview-service--bad .overview-service__dot {
-  background: var(--red);
-}
-
-.overview-service__name {
-  font-size: var(--font-row-primary);
-  font-weight: 600;
-  color: var(--row-primary-text);
-}
-
-.overview-service__note {
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--font-meta);
-  font-style: italic;
-  color: var(--text-soft);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.overview-service__score {
-  font-size: 20px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.overview-service--good .overview-service__score {
-  color: var(--green);
-}
-
-.overview-service--warn .overview-service__score {
-  color: var(--yellow);
-}
-
-.overview-service--bad .overview-service__score {
-  color: var(--red);
-}
-
 @media (max-width: 720px) {
   .overview-tab__top {
     grid-template-columns: 1fr;
-  }
-
-  .overview-service {
-    grid-template-columns: auto 1fr auto;
-  }
-
-  .overview-service__note {
-    display: none;
   }
 }

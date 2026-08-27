@@ -14,6 +14,8 @@ import {
 import {
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
+	isSkillDocsId,
+	skillDocsIds,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
 } from '../cloud-bridge';
@@ -103,6 +105,17 @@ test('cloud bridge accepts only bounded known requests', () => {
 		requestId: 'request-123',
 		type: 'obstudio.cloud.request',
 	}), false);
+	// Every advertised skill id must pass validation, including the Splunk
+	// Observability Cloud skills surfaced on the Overview tab.
+	for (const skill of skillDocsIds) {
+		assert.equal(isCloudBridgeRequest({
+			action: 'open-skill-docs',
+			bridgeToken: 'bridge-token-1234567890123456',
+			payload: { skill },
+			requestId: 'request-123',
+			type: 'obstudio.cloud.request',
+		}), true, `skill id ${skill} should validate`);
+	}
 	assert.equal(isCloudBridgeRequest({
 		action: 'connect',
 		bridgeToken: 'short',
@@ -542,4 +555,22 @@ test('resetObserverOutputDirs removes stale output and recreates the directory',
 		assert.equal(fs.existsSync(path.join(paths.observerOutDir, 'stale.txt')), false);
 		assert.equal(fs.existsSync(paths.observerOutDir), true);
 	});
+});
+
+test('skill docs ids cover the skills the Overview tab offers', () => {
+	// The client lists these commands; the extension owns their URLs. If the two
+	// drift, the webview's docs links silently stop opening.
+	for (const expected of [
+		'otel-audit',
+		'otel-instrument',
+		'otel-verify',
+		'splunk-configure',
+		'splunk-detector-publish',
+		'splunk-dashboard-publish',
+	]) {
+		assert.ok(isSkillDocsId(expected), `${expected} should be a known skill id`);
+	}
+	assert.equal(skillDocsIds.length, 6);
+	assert.equal(isSkillDocsId('splunk-sync'), false);
+	assert.equal(isSkillDocsId(''), false);
 });

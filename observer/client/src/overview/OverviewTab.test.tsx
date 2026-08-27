@@ -57,6 +57,21 @@ function makeScore(overrides: Record<string, unknown>) {
   };
 }
 
+/** Stubs the Splunk export status the cloud skills card gates on. */
+function stubStatusFetch(status: { connected: boolean }) {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => ({
+      connected: status.connected,
+      enabled: false,
+      metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+    }),
+  }));
+}
+
 function stubScoreFetch(payload: unknown) {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true,
@@ -127,12 +142,12 @@ describe("OverviewTab", () => {
     expect(container.querySelector(".overview-score__meta")).toBeNull();
   });
 
-  it("singularizes the gap and rec counts", async () => {
+  it("singularizes the gap and recommendation counts", async () => {
     stubScoreFetch(makeScore({ score: 64, gapCount: 1, recommendationCount: 1 }));
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("1 gap · 1 rec");
+      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("Improve Instrumentation: 1 gap · 1 recommendation");
     });
     expect(container.querySelector(".overview-score")?.className).toContain("overview-score--warn");
   });
@@ -316,13 +331,14 @@ describe("OverviewTab", () => {
     expect(container.querySelector(".overview-score__value")?.textContent).toBe("—");
   });
 
-  it("renders the getting-started steps as a plain bulleted list", () => {
+  it("renders the instrumentation skills as a plain bulleted list", () => {
     const { container } = render(<OverviewTab />);
 
-    const items = Array.from(container.querySelectorAll(".overview-checklist__item"));
+    const items = Array.from(
+      container.querySelectorAll("#overview-instrumentation-skills .overview-checklist__item"),
+    );
     expect(items.map((el) => el.querySelector(".overview-checklist__label")?.textContent)).toEqual([
       "Audit instrumentation",
-      "Connect Splunk O11y",
       "Add auto-instrumentation",
       "Confirm data flowing",
     ]);
@@ -352,21 +368,108 @@ describe("OverviewTab", () => {
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
-  it("links the Splunk O11y step to the Cloud tab instead of a skill command", () => {
+  it("titles both skill sections", async () => {
+    stubStatusFetch({ connected: true });
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".overview-checklist__title").length).toBe(2);
+    });
+    expect(Array.from(container.querySelectorAll(".overview-checklist__title")).map((el) => el.textContent))
+      .toEqual(["Instrumentation Skills", "Observability Cloud Skills"]);
+  });
+
+  it("explains what the cloud skills do in the connect prompt", async () => {
+    const { container } = render(<OverviewTab onOpenCloud={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-skills__empty-hint")).toBeTruthy();
+    });
+    expect(container.querySelector(".overview-skills__empty-hint")?.textContent?.replace(/\s+/g, " ").trim())
+      .toBe("Configure alerting and monitoring by publishing detectors and dashboards right from the IDE");
+  });
+
+  it.each([
+    ["Generate detector Terraform", "$splunk-configure", "splunk-configure"],
+    ["Publish detectors", "$splunk-detector-publish", "splunk-detector-publish"],
+    ["Publish dashboards", "$splunk-dashboard-publish", "splunk-dashboard-publish"],
+  ])("links the connected cloud skill %s to %s", async (label, command, skillName) => {
+    stubStatusFetch({ connected: true });
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("#overview-cloud-skills .overview-checklist__item").length).toBe(3);
+    });
+
+    const step = Array.from(
+      container.querySelectorAll("#overview-cloud-skills .overview-checklist__item"),
+    ).find((el) => el.querySelector(".overview-checklist__label")?.textContent === label);
+
+    expect(step?.querySelector(".overview-checklist__command")?.textContent).toBe(command);
+    expect(step?.querySelector<HTMLAnchorElement>(".overview-checklist__docs-link")?.getAttribute("href"))
+      .toBe(`https://github.com/signalfx/obstudio/blob/main/skills/${skillName}/SKILL.md`);
+  });
+
+  it("copies a cloud skill command to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubStatusFetch({ connected: true });
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("#overview-cloud-skills .overview-checklist__item").length).toBe(3);
+    });
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+
+    fireEvent.click(screen.getByRole("button", { name: /copy \$splunk-configure command/i }));
+
+    expect(writeText).toHaveBeenCalledWith("$splunk-configure");
+  });
+
+  it("gates the cloud skills behind a connect prompt when disconnected", async () => {
     const onOpenCloud = vi.fn();
+    stubScoreFetch(makeScore({}));
     const { container } = render(<OverviewTab onOpenCloud={onOpenCloud} />);
 
-    const step = Array.from(container.querySelectorAll(".overview-checklist__item")).find(
-      (el) => el.querySelector(".overview-checklist__label")?.textContent === "Connect Splunk O11y",
-    );
+    const card = container.querySelector("#overview-cloud-skills")!;
+    expect(card.querySelector(".overview-checklist__title")?.textContent).toBe("Observability Cloud Skills");
 
-    expect(step?.querySelector(".overview-checklist__command")).toBeNull();
+    await waitFor(() => {
+      expect(card.querySelector(".overview-skills__empty-title")?.textContent)
+        .toBe("Connect Splunk Observability Cloud");
+    });
+    // The skills themselves are withheld until a connection exists.
+    expect(card.querySelectorAll(".overview-checklist__item")).toHaveLength(0);
+    expect(card.querySelector(".overview-checklist__command")).toBeNull();
 
-    const nav = step?.querySelector<HTMLButtonElement>(".overview-checklist__nav");
-    expect(nav?.textContent).toContain("Connect");
-
-    fireEvent.click(nav!);
+    fireEvent.click(card.querySelector<HTMLButtonElement>(".overview-checklist__nav")!);
     expect(onOpenCloud).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists the cloud skills once Splunk is connected", async () => {
+    stubStatusFetch({ connected: true });
+    const { container } = render(<OverviewTab />);
+
+    const card = container.querySelector("#overview-cloud-skills")!;
+    await waitFor(() => {
+      expect(card.querySelectorAll(".overview-checklist__item").length).toBe(3);
+    });
+
+    expect(Array.from(card.querySelectorAll(".overview-checklist__command")).map((el) => el.textContent))
+      .toEqual(["$splunk-configure", "$splunk-detector-publish", "$splunk-dashboard-publish"]);
+    expect(card.querySelector(".overview-skills__empty-title")).toBeNull();
+  });
+
+  it("renders the cloud skills card below the instrumentation skills card", async () => {
+    stubScoreFetch(makeScore({}));
+    const { container } = render(<OverviewTab />);
+
+    const instrumentation = container.querySelector("#overview-instrumentation-skills")!;
+    const cloud = container.querySelector("#overview-cloud-skills")!;
+    // eslint-disable-next-line no-bitwise
+    const cloudFollows = Boolean(
+      instrumentation.compareDocumentPosition(cloud) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(cloudFollows).toBe(true);
   });
 
   it("omits the Cloud hand-off when no handler is supplied", () => {
@@ -424,7 +527,7 @@ describe("OverviewTab", () => {
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("3 gaps · 3 recs");
+      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("Improve Instrumentation: 3 gaps · 3 recommendations");
     });
     // Warning tone while gaps remain.
     expect(container.querySelector(".overview-callout")?.className).not.toContain("overview-callout--clear");
@@ -436,7 +539,7 @@ describe("OverviewTab", () => {
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("0 gaps · 1 rec");
+      expect(container.querySelector(".overview-callout__text")?.textContent).toBe("Improve Instrumentation: 0 gaps · 1 recommendation");
     });
     expect(container.querySelector(".overview-callout")?.className).toContain("overview-callout--clear");
     expect(container.querySelector(".overview-callout__icon")?.textContent).toBe("✓");
@@ -450,23 +553,6 @@ describe("OverviewTab", () => {
       expect(container.querySelector(".overview-score--empty")).toBeTruthy();
     });
     expect(container.querySelector(".overview-callout")).toBeNull();
-  });
-
-  it("renders each service row with a tone matching its score", () => {
-    const { container } = render(<OverviewTab />);
-
-    const rows = Array.from(container.querySelectorAll(".overview-service"));
-    expect(rows.map((el) => el.querySelector(".overview-service__name")?.textContent)).toEqual([
-      "checkout-api",
-      "cart-service",
-      "auth-svc",
-    ]);
-    expect(rows.map((el) => el.querySelector(".overview-service__score")?.textContent)).toEqual(["82", "64", "38"]);
-    expect(rows.map((el) => el.className.replace("overview-service ", ""))).toEqual([
-      "overview-service--good",
-      "overview-service--warn",
-      "overview-service--bad",
-    ]);
   });
 
   it("exposes the panel with a tabpanel role for the tab bar to control", () => {

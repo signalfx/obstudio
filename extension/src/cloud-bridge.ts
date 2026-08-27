@@ -14,7 +14,14 @@ export type CloudBridgeAction =
  * webview names a skill, never a URL — the extension owns the URL mapping so a
  * compromised webview cannot open an arbitrary page.
  */
-export const skillDocsIds = ['otel-audit', 'otel-instrument', 'otel-verify'] as const;
+export const skillDocsIds = [
+	'otel-audit',
+	'otel-instrument',
+	'otel-verify',
+	'splunk-configure',
+	'splunk-detector-publish',
+	'splunk-dashboard-publish',
+] as const;
 
 export type SkillDocsId = typeof skillDocsIds[number];
 

@@ -18,7 +18,14 @@ export type CloudBridgeAction =
  * never a URL — the extension owns the URL mapping, so this side can never
  * steer the IDE to an arbitrary page.
  */
-export const skillDocsIds = ["otel-audit", "otel-instrument", "otel-verify"] as const;
+export const skillDocsIds = [
+  "otel-audit",
+  "otel-instrument",
+  "otel-verify",
+  "splunk-configure",
+  "splunk-detector-publish",
+  "splunk-dashboard-publish",
+] as const;
 
 export type SkillDocsId = typeof skillDocsIds[number];
 

@@ -154,9 +154,10 @@ func queryAuditScore(resolver *audit.Resolver) http.HandlerFunc {
 	}
 }
 
-// queryAuditReport serves the report's Markdown source so the UI can link to
-// the file it scored. It is served as text/plain so browsers display it inline
-// rather than downloading it, with nosniff to prevent content-type guessing.
+// queryAuditReport serves the report the score was derived from. It renders the
+// Markdown to HTML by default so the page is readable in a browser tab;
+// ?format=raw returns the Markdown source as text/plain. Both send nosniff so
+// the content type is never guessed.
 func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, err := resolver.ReadRaw()
@@ -175,11 +176,19 @@ func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if _, err := w.Write(raw); err != nil {
+
+		body := raw
+		if r.URL.Query().Get("format") == "raw" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		} else {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			body = []byte(audit.RenderHTML(string(raw), resolver.Source()))
+		}
+
+		if _, err := w.Write(body); err != nil {
 			log.Printf("[api] queryAuditReport: %v", err)
 		}
 	}

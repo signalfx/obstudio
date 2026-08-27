@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { fetchInstrumentationScore, type InstrumentationScore } from "../api/client";
+import {
+  fetchInstrumentationScore,
+  fetchSplunkExportStatus,
+  type InstrumentationScore,
+} from "../api/client";
 import { useCloudBridge, type SkillDocsId } from "../cloud/bridge";
 import { CopyTextButton } from "../layout";
 
@@ -10,12 +14,6 @@ export interface OverviewSkillRef {
   docsUrl: string;
   /** Identifier the IDE bridge maps to a docs URL on its own side. */
   id: SkillDocsId;
-}
-
-export interface OverviewServiceScore {
-  name: string;
-  score: number;
-  note: string;
 }
 
 /** In-app tab a checklist step hands off to, when no skill covers it. */
@@ -54,22 +52,37 @@ interface OverviewTabProps {
 }
 
 // --- Stub data -------------------------------------------------------------
-// The instrumentation score is real (see /api/audit/score). These remaining
-// placeholders keep the rest of the tab's shape until backing data exists:
-// checklist completion has no source yet, and the per-service scores need a
-// per-service audit report rather than the single workspace report.
+// The instrumentation score is real (see /api/audit/score). The skill list is
+// still fixed: there is no source for per-step completion yet.
 
-const STUB_CHECKLIST: OverviewChecklistItem[] = [
+const INSTRUMENTATION_SKILLS: OverviewChecklistItem[] = [
   { label: "Audit instrumentation", skill: OTEL_AUDIT_SKILL },
-  { label: "Connect Splunk O11y", target: "cloud" },
   { label: "Add auto-instrumentation", skill: OTEL_INSTRUMENT_SKILL },
   { label: "Confirm data flowing", skill: OTEL_VERIFY_SKILL },
 ];
 
-const STUB_SERVICES: OverviewServiceScore[] = [
-  { name: "checkout-api", score: 82, note: "Looks good — add a p95 detector" },
-  { name: "cart-service", score: 64, note: "Missing outbound HTTP spans" },
-  { name: "auth-svc", score: 38, note: "No traces yet; run $otel-instrument" },
+export const SPLUNK_CONFIGURE_SKILL: OverviewSkillRef = {
+  command: "$splunk-configure",
+  docsUrl: skillDocsUrl("splunk-configure"),
+  id: "splunk-configure",
+};
+
+export const SPLUNK_DETECTOR_PUBLISH_SKILL: OverviewSkillRef = {
+  command: "$splunk-detector-publish",
+  docsUrl: skillDocsUrl("splunk-detector-publish"),
+  id: "splunk-detector-publish",
+};
+
+export const SPLUNK_DASHBOARD_PUBLISH_SKILL: OverviewSkillRef = {
+  command: "$splunk-dashboard-publish",
+  docsUrl: skillDocsUrl("splunk-dashboard-publish"),
+  id: "splunk-dashboard-publish",
+};
+
+const CLOUD_SKILLS: OverviewChecklistItem[] = [
+  { label: "Generate detector Terraform", skill: SPLUNK_CONFIGURE_SKILL },
+  { label: "Publish detectors", skill: SPLUNK_DETECTOR_PUBLISH_SKILL },
+  { label: "Publish dashboards", skill: SPLUNK_DASHBOARD_PUBLISH_SKILL },
 ];
 
 /** Path the collector serves the scored report's Markdown source from. */
@@ -142,6 +155,53 @@ function ReportList({ title, items, emptyLabel }: {
   );
 }
 
+/**
+ * A titled card listing skills, each with its trigger command and docs link.
+ * When `empty` is supplied the skills are withheld and that node is rendered
+ * instead — used to gate the cloud skills behind a live connection.
+ */
+function SkillCard({ id, title, items, onOpenSkillDocs, empty }: {
+  id: string;
+  title: string;
+  items: OverviewChecklistItem[];
+  onOpenSkillDocs: (event: React.MouseEvent<HTMLAnchorElement>, skill: SkillDocsId) => void;
+  empty?: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <article className="overview-checklist" id={id} aria-labelledby={`${id}-title`}>
+      <h2 className="overview-checklist__title" id={`${id}-title`}>{title}</h2>
+      {empty ?? (
+        <ul className="overview-checklist__list">
+          {items.map((item) => {
+            const { skill } = item;
+            return (
+              <li key={item.label} className="overview-checklist__item">
+                <span className="overview-checklist__label">{item.label}</span>
+                {skill ? (
+                  <span className="overview-checklist__actions">
+                    <code className="overview-checklist__command">{skill.command}</code>
+                    <CopyTextButton text={skill.command} label={`${skill.command} command`} />
+                    <a
+                      className="overview-checklist__docs-link"
+                      href={skill.docsUrl}
+                      onClick={(event) => onOpenSkillDocs(event, skill.id)}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Skill docs
+                      <span aria-hidden="true"> ↗</span>
+                    </a>
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </article>
+  );
+}
+
 /** Maps a 0–100 instrumentation score to a qualitative tone. */
 export function scoreTone(score: number): "good" | "warn" | "bad" {
   if (score >= 75) return "good";
@@ -152,7 +212,7 @@ export function scoreTone(score: number): "good" | "warn" | "bad" {
 /**
  * Landing tab summarizing instrumentation quality, coverage, and setup
  * progress. The score is derived from the latest `$otel-audit` report; the
- * checklist and per-service rows are still stub data.
+ * instrumentation skill list is fixed.
  */
 export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
@@ -160,6 +220,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   const [scoreReport, setScoreReport] = useState<InstrumentationScore | null>(null);
   const [scoreLoaded, setScoreLoaded] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [cloudConnected, setCloudConnected] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -176,10 +237,22 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSplunkExportStatus(controller.signal)
+      .then((status) => {
+        if (controller.signal.aborted) return;
+        setCloudConnected(status?.connected === true);
+      })
+      // No connection, or the status call failed: the cloud skills stay gated.
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
   const scored = scoreReport?.available === true ? scoreReport : null;
   const gapLabel = scored ? `${scored.gapCount} ${scored.gapCount === 1 ? "gap" : "gaps"}` : "";
   const recLabel = scored
-    ? `${scored.recommendationCount} ${scored.recommendationCount === 1 ? "rec" : "recs"}`
+    ? `${scored.recommendationCount} ${scored.recommendationCount === 1 ? "recommendation" : "recommendations"}`
     : "";
 
   // In a normal browser the anchor's target="_blank" already does the right
@@ -251,49 +324,39 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
             </article>
           )}
 
-          <article className="overview-checklist" aria-labelledby="overview-checklist-title">
-            <h2 className="overview-checklist__title" id="overview-checklist-title">Getting started</h2>
-            <ul className="overview-checklist__list">
-              {STUB_CHECKLIST.map((item) => {
-                const { skill } = item;
-                return (
-                <li key={item.label} className="overview-checklist__item">
-                  <span className="overview-checklist__label">{item.label}</span>
-                  {skill ? (
-                    <span className="overview-checklist__actions">
-                      <code className="overview-checklist__command">{skill.command}</code>
-                      <CopyTextButton text={skill.command} label={`${skill.command} command`} />
-                      <a
-                        className="overview-checklist__docs-link"
-                        href={skill.docsUrl}
-                        onClick={(event) => openSkillDocs(event, skill.id)}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                      >
-                        Skill docs
-                        <span aria-hidden="true"> ↗</span>
-                      </a>
-                    </span>
+          <div className="overview-tab__skills">
+            <SkillCard
+              id="overview-instrumentation-skills"
+              title="Instrumentation Skills"
+              items={INSTRUMENTATION_SKILLS}
+              onOpenSkillDocs={openSkillDocs}
+            />
+
+            <SkillCard
+              id="overview-cloud-skills"
+              title="Observability Cloud Skills"
+              items={CLOUD_SKILLS}
+              onOpenSkillDocs={openSkillDocs}
+              empty={cloudConnected ? null : (
+                <div className="overview-skills__empty">
+                  <p className="overview-skills__empty-title">Connect Splunk Observability Cloud</p>
+                  <p className="overview-skills__empty-hint">
+                    Configure alerting and monitoring by publishing detectors and dashboards
+                    right from the IDE
+                  </p>
+                  {onOpenCloud ? (
+                    <button type="button" className="overview-checklist__nav" onClick={onOpenCloud}>
+                      Connect <span aria-hidden="true">→</span>
+                    </button>
                   ) : null}
-                  {item.target === "cloud" && onOpenCloud ? (
-                    <span className="overview-checklist__actions">
-                      <button
-                        type="button"
-                        className="overview-checklist__nav"
-                        onClick={onOpenCloud}
-                      >
-                        Connect <span aria-hidden="true">→</span>
-                      </button>
-                    </span>
-                  ) : null}
-                </li>
-                );
-              })}
-            </ul>
+                </div>
+              )}
+            />
+
             {docsError ? (
               <p className="overview-checklist__error" role="alert">{docsError}</p>
             ) : null}
-          </article>
+          </div>
         </div>
 
         {scored ? (
@@ -308,7 +371,10 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               <span className="overview-callout__icon" aria-hidden="true">
                 {scored.gapCount > 0 ? "!" : "✓"}
               </span>
-              <span className="overview-callout__text">{gapLabel} · {recLabel}</span>
+              <span className="overview-callout__text">
+                <span className="overview-callout__lead">Improve Instrumentation:</span>{" "}
+                {gapLabel} · {recLabel}
+              </span>
               <span className="overview-callout__action" aria-hidden="true">
                 {reportOpen ? "Hide" : "Details"}
                 <span className="overview-callout__caret">{reportOpen ? "▾" : "▸"}</span>
@@ -357,22 +423,6 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
             ) : null}
           </div>
         ) : null}
-
-        <ul className="overview-services" aria-label="Service instrumentation scores">
-          {STUB_SERVICES.map((service) => {
-            const tone = scoreTone(service.score);
-            return (
-              <li key={service.name} className={`overview-service overview-service--${tone}`}>
-                <span className="overview-service__dot" aria-hidden="true" />
-                <span className="overview-service__name">{service.name}</span>
-                <span className="overview-service__note">{service.note}</span>
-                <span className="overview-service__score" aria-label={`score ${service.score}`}>
-                  {service.score}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
       </div>
     </section>
   );
