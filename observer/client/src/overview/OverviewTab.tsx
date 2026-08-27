@@ -343,9 +343,13 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                 </div>
               ) : null}
 
+              {/* The commit is shown even when current: staleness only detects a
+                  different HEAD, so uncommitted edits since the audit are not
+                  flagged and the reader needs the reference point. */}
               <p className="overview-score__source">
                 From {scored.source}
                 {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
+                {scored.auditCommit ? ` · ${shortCommit(scored.auditCommit)}` : ""}
               </p>
             </article>
           ) : (

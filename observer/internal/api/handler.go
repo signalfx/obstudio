@@ -173,11 +173,16 @@ func writeSameOriginJSON(w http.ResponseWriter, v any) {
 	}
 }
 
-// auditReportCSP mirrors the policy the $otel-audit report server applies to
-// the same document: inline style and script are allowed so the report renders,
-// while default-src 'none' denies fetch/XHR/websocket, and base-uri/form-action
-// are closed off.
-const auditReportCSP = "default-src 'none'; style-src 'unsafe-inline'; " +
+// auditReportCSP locks down the workspace-controlled report served on the
+// Observer's own origin. It extends the policy the $otel-audit report server
+// applies with a sandbox, because that server is an isolated origin and this
+// one also hosts the local APIs.
+// The sandbox directive is the important part: it puts the document in an
+// opaque origin, so its inline script cannot read same-origin API responses,
+// storage, or cookies belonging to the Observer, and cannot navigate the top
+// level. allow-scripts keeps the report interactive without granting it the
+// Observer's origin, which a policy built only from default-src would.
+const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; " +
 	"script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
 
 // queryAuditArtifact serves one allowlisted file the report links to, so the

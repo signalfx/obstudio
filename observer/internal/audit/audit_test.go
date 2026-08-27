@@ -245,22 +245,42 @@ func TestSymlinkedReportIsRefused(t *testing.T) {
 	}
 }
 
-// A symlink that stays inside the workspace is legitimate and must still work.
-func TestSymlinkInsideWorkspaceIsAllowed(t *testing.T) {
+// A relative symlink that stays inside the workspace is legitimate and resolves.
+func TestRelativeSymlinkInsideWorkspaceIsAllowed(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	real := filepath.Join(root, "real-audit.json")
-	if err := os.WriteFile(real, []byte(coveredAudit), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "real-audit.json"), []byte(coveredAudit), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(real, filepath.Join(root, ".observe", "otel-audit.json")); err != nil {
+	if err := os.Symlink(filepath.Join("..", "real-audit.json"), filepath.Join(root, ".observe", "otel-audit.json")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
 	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); !got.Available {
-		t.Errorf("in-workspace symlink refused: %s", got.Message)
+		t.Errorf("relative in-workspace symlink refused: %s", got.Message)
+	}
+}
+
+// Root-scoped opens refuse an absolute symlink target even when it points back
+// inside the workspace: the kernel cannot honour it within the root scope. This
+// fails closed, which is the intended trade-off for the containment guarantee.
+func TestAbsoluteSymlinkIsRefused(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "real-audit.json")
+	if err := os.WriteFile(target, []byte(coveredAudit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, ".observe", "otel-audit.json")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Available {
+		t.Error("an absolute symlink target was followed; expected it to fail closed")
 	}
 }
 
@@ -559,5 +579,79 @@ func TestWorkspaceCommitRejectsJunk(t *testing.T) {
 
 	if got := workspaceCommit(root); got != "" {
 		t.Errorf("workspaceCommit = %q, want empty for junk", got)
+	}
+}
+
+// A linked worktree keeps HEAD in its own gitdir but shares refs through
+// commondir; without following it, stale audits are never flagged there.
+func TestWorkspaceCommitFromLinkedWorktree(t *testing.T) {
+	main := t.TempDir()
+	sha := "abc1234567890abcdef1234567890abcdef12345"
+	mainGit := filepath.Join(main, ".git")
+	if err := os.MkdirAll(filepath.Join(mainGit, "refs", "heads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mainGit, "refs", "heads", "feature"), []byte(sha+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// The worktree's own gitdir holds HEAD and a commondir pointer, not refs.
+	tree := t.TempDir()
+	wtGit := filepath.Join(main, ".git", "worktrees", "wt1")
+	if err := os.MkdirAll(wtGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtGit, "HEAD"), []byte("ref: refs/heads/feature\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtGit, "commondir"), []byte("../..\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, ".git"), []byte("gitdir: "+wtGit+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := workspaceCommit(tree); got != sha {
+		t.Errorf("workspaceCommit = %q, want %q resolved through commondir", got, sha)
+	}
+}
+
+// Averaged readiness must not surface as 16.666666666666668 in the UI.
+func TestReportedValuesAreRounded(t *testing.T) {
+	body := strings.Replace(coveredAudit, `"incident_readiness": [
+      {"area": "HTTP latency", "status": "covered"},
+      {"area": "Error rate", "status": "covered"}
+    ]`, `"incident_readiness": [
+      {"area": "a", "status": "covered"},
+      {"area": "b", "status": "missing"},
+      {"area": "c", "status": "missing"}
+    ]`, 1)
+
+	got := NewResolver(Config{WorkspaceRoot: writeAudit(t, body)}).Build()
+
+	for _, c := range got.Breakdown.Components {
+		if c.Earned != round2(c.Earned) {
+			t.Errorf("component %q earned %v is not rounded", c.Label, c.Earned)
+		}
+	}
+	if got.Breakdown.Coverage != round2(got.Breakdown.Coverage) {
+		t.Errorf("coverage %v is not rounded", got.Breakdown.Coverage)
+	}
+}
+
+// Presence matters: omitted sections unmarshal as empty values, so a truncated
+// file would otherwise look like a legitimately sparse audit.
+func TestRejectsTruncatedCanonicalSections(t *testing.T) {
+	for name, body := range map[string]string{
+		"no sections at all":              `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"x","status":"Pass"}}`,
+		"missing findings":                `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"x","status":"Pass"},"current_instrumentation":{}}`,
+		"missing current_instrumentation": `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"x","status":"Pass"},"findings":[]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := NewResolver(Config{WorkspaceRoot: writeAudit(t, body)}).Build()
+			if got.Available {
+				t.Errorf("Available = true with score %d; want refused", got.Score)
+			}
+		})
 	}
 }

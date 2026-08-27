@@ -2709,6 +2709,14 @@ func TestAuditReportCarriesContentSecurityPolicy(t *testing.T) {
 	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
 		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
 	}
+	// The sandbox is what denies the report the Observer's origin; without it
+	// inline script could still reach same-origin API documents.
+	if !strings.Contains(csp, "sandbox allow-scripts") {
+		t.Errorf("CSP %q must sandbox the report into an opaque origin", csp)
+	}
+	if strings.Contains(csp, "allow-same-origin") {
+		t.Errorf("CSP %q must not grant the report the Observer origin", csp)
+	}
 }
 
 // The generated report links to its siblings relatively. Served at

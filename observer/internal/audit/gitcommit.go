@@ -39,11 +39,24 @@ func workspaceCommit(root string) string {
 		return ""
 	}
 
-	if raw, err := os.ReadFile(filepath.Join(gitDir, filepath.FromSlash(ref))); err == nil {
-		return sanitizeCommit(strings.TrimSpace(string(raw)))
+	// A linked worktree keeps HEAD in its own gitdir but shares refs and
+	// packed-refs with the directory named by its commondir file, so refs are
+	// looked up in both.
+	for _, dir := range []string{gitDir, commonDir(gitDir)} {
+		if dir == "" {
+			continue
+		}
+		if raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(ref))); err == nil {
+			if sha := sanitizeCommit(strings.TrimSpace(string(raw))); sha != "" {
+				return sha
+			}
+		}
+		if sha := sanitizeCommit(lookupPackedRef(dir, ref)); sha != "" {
+			return sha
+		}
 	}
 
-	return sanitizeCommit(lookupPackedRef(gitDir, ref))
+	return ""
 }
 
 // resolveGitDir handles both a normal .git directory and the "gitdir: <path>"
@@ -124,4 +137,22 @@ func commitsDiffer(auditCommit, workspaceCommit string) bool {
 	}
 
 	return !strings.HasPrefix(a, b) && !strings.HasPrefix(b, a)
+}
+
+// commonDir returns the shared git directory a linked worktree points at, or
+// "" when this is not a linked worktree.
+func commonDir(gitDir string) string {
+	raw, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
+	if err != nil {
+		return ""
+	}
+	target := strings.TrimSpace(string(raw))
+	if target == "" {
+		return ""
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(gitDir, target)
+	}
+
+	return filepath.Clean(target)
 }

@@ -59,15 +59,16 @@ func readinessFraction(status string) float64 {
 // --- Canonical report shape (.observe/otel-audit.json) ----------------------
 
 type auditFile struct {
-	SchemaVersion  int          `json:"schema_version"`
-	Kind           string       `json:"kind"`
-	Meta           auditMeta    `json:"meta"`
-	Summary        []string     `json:"summary"`
-	Routes         []auditRoute `json:"routes"`
-	Current        currentInstr `json:"current_instrumentation"`
-	Findings       []auditFind  `json:"findings"`
-	AntiPatterns   []any        `json:"anti_patterns"`
-	Recommendation []string     `json:"recommendation"`
+	SchemaVersion  int           `json:"schema_version"`
+	Kind           string        `json:"kind"`
+	Meta           auditMeta     `json:"meta"`
+	Summary        []string      `json:"summary"`
+	Routes         []auditRoute  `json:"routes"`
+	Current        currentInstr  `json:"current_instrumentation"`
+	CurrentRaw     *currentInstr `json:"-"`
+	Findings       []auditFind   `json:"findings"`
+	AntiPatterns   []any         `json:"anti_patterns"`
+	Recommendation []string      `json:"recommendation"`
 }
 
 type auditMeta struct {
@@ -178,7 +179,9 @@ func (r *Report) score(file auditFile) {
 	earned, max := 0.0, 0.0
 
 	add := func(label string, got, weight float64, detail string) {
-		components = append(components, Component{Label: label, Earned: got, Max: weight, Detail: detail})
+		// Readiness averages across an arbitrary number of areas, so round what
+		// is reported; the UI interpolates these values directly.
+		components = append(components, Component{Label: label, Earned: round2(got), Max: weight, Detail: detail})
 		earned += got
 		max += weight
 	}
@@ -239,9 +242,9 @@ func (r *Report) score(file auditFile) {
 	qualityMax := weightFindings + weightAntiPatterns
 
 	r.Breakdown = Breakdown{
-		Coverage:    coverage,
+		Coverage:    round2(coverage),
 		CoverageMax: coverageMax,
-		Quality:     quality,
+		Quality:     round2(quality),
 		QualityMax:  qualityMax,
 		Components:  components,
 	}
@@ -263,6 +266,11 @@ func clampFloat(v, lo, hi float64) float64 {
 	}
 
 	return v
+}
+
+// round2 keeps at most two decimals so derived values render cleanly.
+func round2(v float64) float64 {
+	return float64(int(v*100+0.5)) / 100
 }
 
 func roundHalfUp(v float64) float64 {

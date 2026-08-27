@@ -208,6 +208,19 @@ describe("OverviewTab", () => {
       .toBe("From otel-audit.json · 2026-08-27");
   });
 
+  // Staleness only detects a different HEAD, so the audited commit is shown
+  // even on a current card: uncommitted edits since the audit are not flagged.
+  it("names the audited commit on a current score", async () => {
+    stubScoreFetch(makeScore({ stale: false, auditCommit: "a646ba5cafe" }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__source")?.textContent)
+        .toBe("From otel-audit.json · 2026-08-27 · a646ba5");
+    });
+    expect(container.querySelector(".overview-score__stale")).toBeNull();
+  });
+
   it("offers the skill's report when it exists, and cites the JSON source", async () => {
     stubScoreFetch(makeScore({ hasHtmlReport: true }));
     const { container } = render(<OverviewTab />);
@@ -218,6 +231,19 @@ describe("OverviewTab", () => {
     // The score card names the canonical JSON it was derived from.
     expect(container.querySelector(".overview-score__source")?.textContent)
       .toBe("From otel-audit.json · 2026-08-27");
+  });
+
+  // Staleness only detects a different HEAD, so the audited commit is shown
+  // even on a current card: uncommitted edits since the audit are not flagged.
+  it("names the audited commit on a current score", async () => {
+    stubScoreFetch(makeScore({ stale: false, auditCommit: "a646ba5cafe" }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__source")?.textContent)
+        .toBe("From otel-audit.json · 2026-08-27 · a646ba5");
+    });
+    expect(container.querySelector(".overview-score__stale")).toBeNull();
 
     fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const view = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;

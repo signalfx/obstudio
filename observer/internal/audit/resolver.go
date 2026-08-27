@@ -51,6 +51,15 @@ type Resolver struct {
 // being scored. Pinning it to the default location instead would let an
 // override score one audit while serving a different, possibly stale, report.
 func NewResolver(cfg Config) *Resolver {
+	// Documented to fall back to the process CWD. Resolving it here rather than
+	// leaving it empty keeps containment and staleness active in the default
+	// CLI configuration instead of silently disabling both.
+	if cfg.WorkspaceRoot == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			cfg.WorkspaceRoot = cwd
+		}
+	}
+
 	reportPath := resolveArtifactPath(cfg, cfg.ReportPath, DefaultReportRelPath)
 
 	return &Resolver{
@@ -96,58 +105,56 @@ func resolveArtifactPath(cfg Config, override, defaultRel string) string {
 	return override
 }
 
-// readContained reads a file after resolving symlinks and re-checking that the
-// real target is a regular file still inside the workspace.
-//
-// The string-level checks in resolveArtifactPath are not enough on their own:
-// os.ReadFile follows symlinks, so a symlinked artifact could otherwise serve
-// a file from anywhere on disk through a network endpoint.
+// readContained reads an artifact through a root-scoped handle on the
+// workspace, so no path operation can leave it.
 func (r *Resolver) readContained(path string) ([]byte, error) {
 	source := filepath.Base(path)
 
-	// Resolve symlinks and confirm containment before opening. os.ReadFile
-	// follows symlinks, so without this a symlinked artifact would serve a file
-	// from anywhere on disk through a network endpoint.
-	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrNoReport
-		}
-		log.Printf("[audit] resolve %s: %v", path, err)
-
-		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
+	if r.workspaceRoot == "" {
+		// Nothing to contain against; refuse rather than read an unbounded path.
+		return nil, ErrNoReport
 	}
 
-	if !r.contains(real) {
-		log.Printf("[audit] refused %s: resolves outside the workspace", path)
+	rel, err := filepath.Rel(r.workspaceRoot, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		log.Printf("[audit] refused %s: outside the workspace", source)
 
 		return nil, ErrNoReport
 	}
 
-	// Open once and validate the descriptor rather than the pathname. Checking
-	// the path and then reopening it leaves a window in which the file can be
-	// swapped for a symlink, device, or oversized file; fstat on the open
-	// descriptor describes exactly the bytes about to be read. openNoFollow
-	// additionally refuses a final symlink planted after the check above.
-	file, err := openNoFollow(real)
+	// os.Root scopes every path operation to the workspace and is resolved by
+	// the kernel per component, so a symlink, junction, or reparse point that
+	// escapes the root is refused even when planted between checks. This
+	// replaces resolve-then-reopen, which left a window in which the validated
+	// file could be swapped, and it behaves the same on Windows, where
+	// O_NOFOLLOW does not exist.
+	root, err := os.OpenRoot(r.workspaceRoot)
+	if err != nil {
+		log.Printf("[audit] open workspace root: %v", err)
+
+		return nil, ErrNoReport
+	}
+	defer root.Close()
+
+	file, err := root.Open(rel)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNoReport
 		}
-		// ELOOP from O_NOFOLLOW lands here: the path became a symlink after the
-		// containment check, so refuse it the same way.
-		log.Printf("[audit] open %s: %v", path, err)
+		// An escape attempt surfaces here too; treat it as absent.
+		log.Printf("[audit] refused %s: %v", source, err)
 
 		return nil, ErrNoReport
 	}
 	defer file.Close()
 
+	// fstat on the open descriptor describes exactly the bytes about to be read.
 	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
 	if !info.Mode().IsRegular() {
-		log.Printf("[audit] refused %s: not a regular file", path)
+		log.Printf("[audit] refused %s: not a regular file", source)
 
 		return nil, ErrNoReport
 	}
@@ -155,11 +162,11 @@ func (r *Resolver) readContained(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is too large (%d bytes, limit %d)", source, info.Size(), maxReportBytes)
 	}
 
-	// Bound the read itself so a file growing between fstat and read cannot
-	// pull an unbounded amount into memory.
+	// Bound the read so a file growing after fstat cannot pull an unbounded
+	// amount into memory.
 	raw, err := io.ReadAll(io.LimitReader(file, maxReportBytes+1))
 	if err != nil {
-		log.Printf("[audit] read %s: %v", path, err)
+		log.Printf("[audit] read %s: %v", source, err)
 
 		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
@@ -168,24 +175,6 @@ func (r *Resolver) readContained(path string) ([]byte, error) {
 	}
 
 	return raw, nil
-}
-
-// contains reports whether a resolved path is inside the workspace. With no
-// workspace configured (plain CLI use) there is nothing to contain against.
-func (r *Resolver) contains(real string) bool {
-	if r.workspaceRoot == "" {
-		return true
-	}
-	root, err := filepath.EvalSymlinks(r.workspaceRoot)
-	if err != nil {
-		root = r.workspaceRoot
-	}
-	rel, err := filepath.Rel(root, real)
-	if err != nil {
-		return false
-	}
-
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // pathErrMsg returns an error message that excludes the absolute path, which
@@ -265,7 +254,14 @@ func (r *Resolver) Build() Report {
 		return unavailable(fmt.Sprintf("Instrumentation report at %s is not valid JSON: %v", source, err))
 	}
 
-	if problem := validateCanonical(file); problem != "" {
+	// Presence, not just shape: omitted sections unmarshal as empty values, so a
+	// truncated file would otherwise look like a legitimately sparse audit.
+	var present map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &present); err != nil {
+		return unavailable(fmt.Sprintf("Instrumentation report at %s is not a JSON object: %v", source, err))
+	}
+
+	if problem := validateCanonical(file, present); problem != "" {
 		// Syntactically valid JSON is not enough: a truncated or hand-edited
 		// artifact would otherwise be presented as a real score.
 		return unavailable(fmt.Sprintf("Instrumentation report at %s is not a usable $otel-audit report: %s. Re-run $otel-audit.", source, problem))
@@ -376,7 +372,7 @@ var auditStatuses = map[string]bool{"Pass": true, "Partial": true, "Blocked": tr
 // validateCanonical reports why a report cannot be scored, or "" when it can.
 // It checks the parts the score actually depends on, so a partial artifact is
 // reported as unusable rather than scored as if it were complete.
-func validateCanonical(file auditFile) string {
+func validateCanonical(file auditFile, present map[string]json.RawMessage) string {
 	if file.Kind != "otel-audit" {
 		if file.Kind == "" {
 			return "missing kind"
@@ -395,6 +391,13 @@ func validateCanonical(file auditFile) string {
 	}
 	if !auditStatuses[strings.TrimSpace(file.Meta.Status)] {
 		return fmt.Sprintf("meta.status is %q, expected Pass, Partial, or Blocked", file.Meta.Status)
+	}
+	// finalize-audit always emits these sections, so a file missing one never
+	// went through finalization and must not be scored as if it had.
+	for _, key := range []string{"current_instrumentation", "findings"} {
+		if _, ok := present[key]; !ok {
+			return "missing " + key
+		}
 	}
 
 	return ""
