@@ -437,3 +437,127 @@ func TestSymlinkPlantedAfterResolutionIsRefused(t *testing.T) {
 		t.Error("Build read a symlink planted in place of the validated file")
 	}
 }
+
+// --- staleness -------------------------------------------------------------
+
+func initGitRepo(t *testing.T, root, headSHA string) {
+	t.Helper()
+
+	gitDir := filepath.Join(root, ".git", "refs", "heads")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "main"), []byte(headSHA+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func auditWithCommit(commit string) string {
+	return strings.Replace(coveredAudit, `"service_name": "checkout",`,
+		`"service_name": "checkout", "commit": "`+commit+`",`, 1)
+}
+
+// The score describes the tree the audit ran against; when the checkout has
+// moved on the report must say so rather than presenting it as current.
+func TestStaleWhenWorkspaceMovedOn(t *testing.T) {
+	root := writeAudit(t, auditWithCommit("abc1234"))
+	initGitRepo(t, root, "def567890abcdef1234567890abcdef123456789")
+
+	got := NewResolver(Config{WorkspaceRoot: root}).Build()
+
+	if !got.Stale {
+		t.Errorf("Stale = false; audit commit %q vs HEAD %q", got.AuditCommit, got.WorkspaceCommit)
+	}
+	if got.AuditCommit != "abc1234" {
+		t.Errorf("AuditCommit = %q", got.AuditCommit)
+	}
+	if got.WorkspaceCommit == "" {
+		t.Error("WorkspaceCommit not resolved from .git")
+	}
+}
+
+// Audits record a short id while HEAD is full length; a prefix match is the
+// same commit and must not be flagged.
+func TestNotStaleWhenShortCommitMatches(t *testing.T) {
+	root := writeAudit(t, auditWithCommit("def5678"))
+	initGitRepo(t, root, "def567890abcdef1234567890abcdef123456789")
+
+	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Stale {
+		t.Errorf("Stale = true for a matching short commit (%q vs %q)", got.AuditCommit, got.WorkspaceCommit)
+	}
+}
+
+// An unknown commit on either side must never be reported as stale.
+func TestNotStaleWhenCommitUnknown(t *testing.T) {
+	t.Run("no git checkout", func(t *testing.T) {
+		root := writeAudit(t, auditWithCommit("abc1234"))
+
+		got := NewResolver(Config{WorkspaceRoot: root}).Build()
+		if got.Stale {
+			t.Error("Stale = true with no .git present")
+		}
+		if got.WorkspaceCommit != "" {
+			t.Errorf("WorkspaceCommit = %q, want empty", got.WorkspaceCommit)
+		}
+	})
+
+	t.Run("audit records no commit", func(t *testing.T) {
+		root := writeAudit(t, coveredAudit)
+		initGitRepo(t, root, "def567890abcdef1234567890abcdef123456789")
+
+		if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Stale {
+			t.Error("Stale = true when the audit records no commit")
+		}
+	})
+}
+
+func TestWorkspaceCommitFromPackedRefs(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	packed := "# pack-refs with: peeled fully-peeled sorted\nabc1234567890abcdef1234567890abcdef12345 refs/heads/main\n"
+	if err := os.WriteFile(filepath.Join(root, ".git", "packed-refs"), []byte(packed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := workspaceCommit(root); got != "abc1234567890abcdef1234567890abcdef12345" {
+		t.Errorf("workspaceCommit = %q, want the packed ref", got)
+	}
+}
+
+func TestWorkspaceCommitDetachedHead(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sha := "abc1234567890abcdef1234567890abcdef12345"
+	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte(sha+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := workspaceCommit(root); got != sha {
+		t.Errorf("workspaceCommit = %q, want the detached HEAD sha", got)
+	}
+}
+
+// Nothing unexpected from the filesystem should reach the API response.
+func TestWorkspaceCommitRejectsJunk(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("not-a-sha; rm -rf /\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := workspaceCommit(root); got != "" {
+		t.Errorf("workspaceCommit = %q, want empty for junk", got)
+	}
+}

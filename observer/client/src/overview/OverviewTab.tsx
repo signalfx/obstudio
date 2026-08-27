@@ -187,10 +187,21 @@ function SkillCard({ id, title, items, onOpenSkillDocs, empty }: {
   );
 }
 
-/** Maps a 0–100 instrumentation score to a qualitative tone. */
+/** Abbreviates a commit id for display, tolerating an unknown value. */
+export function shortCommit(commit: string | undefined): string {
+  const value = (commit ?? "").trim();
+  if (value === "") return "unknown";
+
+  return value.length > 7 ? value.slice(0, 7) : value;
+}
+
+/**
+ * Maps a 0–100 instrumentation score to a qualitative tone: green at 80 and
+ * above, orange from 65 to 79, red below 65.
+ */
 export function scoreTone(score: number): "good" | "warn" | "bad" {
-  if (score >= 75) return "good";
-  if (score >= 50) return "warn";
+  if (score >= 80) return "good";
+  if (score >= 65) return "warn";
   return "bad";
 }
 
@@ -203,7 +214,10 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   const { bridge, callBridge } = useCloudBridge();
   const [docsError, setDocsError] = useState<string | null>(null);
   const [scoreReport, setScoreReport] = useState<InstrumentationScore | null>(null);
-  const [scoreLoaded, setScoreLoaded] = useState(false);
+  // A failed request is not the same as "no audit yet" and must not tell the
+  // user to run a command they may already have run.
+  const [scoreState, setScoreState] = useState<"loading" | "loaded" | "error">("loading");
+  const [scoreReloads, setScoreReloads] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   // Tri-state: a failed status request is not the same as a confirmed
   // disconnection, and must not be shown as one.
@@ -212,18 +226,25 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
 
   useEffect(() => {
     const controller = new AbortController();
+    setScoreState("loading");
     fetchInstrumentationScore(controller.signal)
       .then((report) => {
         if (controller.signal.aborted) return;
         setScoreReport(report);
-        setScoreLoaded(true);
+        setScoreState("loaded");
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setScoreLoaded(true);
+        setScoreReport(null);
+        setScoreState("error");
       });
     return () => controller.abort();
-  }, []);
+  }, [scoreReloads]);
+
+  const refreshAll = () => {
+    setScoreReloads((n) => n + 1);
+    setCloudReloads((n) => n + 1);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -266,7 +287,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
         <div className="overview-tab__top">
           {scored ? (
             <article
-              className={`overview-score overview-score--${scoreTone(scored.score)}`}
+              className={`overview-score overview-score--${scoreTone(scored.score)}${scored.stale ? " is-stale" : ""}`}
               aria-label={`Instrumentation score ${scored.score} out of 100, ${gapLabel}, ${recLabel}`}
             >
               <p className="overview-score__label">Instrumentation Score</p>
@@ -298,6 +319,30 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                 ))}
               </dl>
 
+              {scored.stale ? (
+                <div className="overview-score__stale" role="status">
+                  <p className="overview-score__stale-title">
+                    <span aria-hidden="true">⚠ </span>Audit is out of date
+                  </p>
+                  <p className="overview-score__stale-hint">
+                    This score describes commit <code>{shortCommit(scored.auditCommit)}</code>
+                    {scored.generatedAt ? ` from ${scored.generatedAt}` : ""}; the workspace is now on{" "}
+                    <code>{shortCommit(scored.workspaceCommit)}</code>. Re-run the audit to score the
+                    current code.
+                  </p>
+                  <span className="overview-score__stale-actions">
+                    <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
+                    <CopyTextButton
+                      text={OTEL_AUDIT_SKILL.command}
+                      label={`${OTEL_AUDIT_SKILL.command} command`}
+                    />
+                    <button type="button" className="overview-checklist__nav" onClick={refreshAll}>
+                      Refresh <span aria-hidden="true">↻</span>
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+
               <p className="overview-score__source">
                 From {scored.source}
                 {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
@@ -307,11 +352,22 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
             <article className="overview-score overview-score--empty" aria-label="Instrumentation score unavailable">
               <p className="overview-score__label">Instrumentation Score</p>
               <p className="overview-score__value overview-score__value--empty" aria-hidden="true">—</p>
-              <p className="overview-score__meta">
-                {scoreLoaded
-                  ? scoreReport?.message ?? "No instrumentation report yet. Run $otel-audit to generate one."
-                  : "Loading…"}
-              </p>
+              {scoreState === "error" ? (
+                <>
+                  <p className="overview-score__meta">
+                    Could not reach the Observer to load the audit. An audit may already exist.
+                  </p>
+                  <button type="button" className="overview-checklist__nav" onClick={refreshAll}>
+                    Retry <span aria-hidden="true">↻</span>
+                  </button>
+                </>
+              ) : (
+                <p className="overview-score__meta">
+                  {scoreState === "loaded"
+                    ? scoreReport?.message ?? "No instrumentation report yet. Run $otel-audit to generate one."
+                    : "Loading…"}
+                </p>
+              )}
             </article>
           )}
 

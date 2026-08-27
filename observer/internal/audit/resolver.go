@@ -279,6 +279,7 @@ func (r *Resolver) Build() Report {
 		Framework:   file.Meta.Framework,
 		GeneratedAt: file.Meta.Date,
 		Status:      file.Meta.Status,
+		AuditCommit: sanitizeCommit(file.Meta.Commit),
 		HasSpans:    len(file.Current.Spans) > 0,
 		HasMetrics:  len(file.Current.Metrics) > 0,
 		HasLogs:     len(file.Current.Logs) > 0,
@@ -294,6 +295,11 @@ func (r *Resolver) Build() Report {
 	if _, err := r.readContained(r.htmlPath); err == nil {
 		report.HasHTMLReport = true
 	}
+
+	// A saved audit describes the tree it was run against. When the checkout has
+	// moved on, say so rather than presenting an old score as current.
+	report.WorkspaceCommit = workspaceCommit(r.workspaceRoot)
+	report.Stale = commitsDiffer(report.AuditCommit, report.WorkspaceCommit)
 
 	report.score(file)
 

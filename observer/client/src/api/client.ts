@@ -212,6 +212,11 @@ export interface InstrumentationScore {
   };
   /** The audit's own verdict: Pass, Partial, or Blocked. */
   status?: string;
+  /** Commit the audit ran against, and the checkout's current HEAD. */
+  auditCommit?: string;
+  workspaceCommit?: string;
+  /** True only when both commits are known and differ. */
+  stale: boolean;
   /** Whether the skill's human-readable otel.html sits next to the JSON. */
   hasHtmlReport: boolean;
   hasSpans: boolean;

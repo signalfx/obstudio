@@ -137,6 +137,12 @@ type Report struct {
 	GeneratedAt string `json:"generatedAt,omitempty"`
 	// Status is the audit's own verdict: Pass, Partial, or Blocked.
 	Status string `json:"status,omitempty"`
+	// AuditCommit is the commit the audit recorded; WorkspaceCommit is the
+	// checkout's current HEAD. Stale is true only when both are known and
+	// differ, so an unknown commit is never reported as stale.
+	AuditCommit     string `json:"auditCommit,omitempty"`
+	WorkspaceCommit string `json:"workspaceCommit,omitempty"`
+	Stale           bool   `json:"stale"`
 	// HasHTMLReport reports whether the skill's human-readable report exists
 	// next to the JSON, so the UI only links to it when it is there.
 	HasHTMLReport bool `json:"hasHtmlReport"`

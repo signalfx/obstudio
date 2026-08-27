@@ -3,7 +3,7 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OverviewTab, scoreTone } from "./OverviewTab";
+import { OverviewTab, scoreTone, shortCommit } from "./OverviewTab";
 
 const bridgeToken = "cloud-bridge-token-1234567890";
 const bridgeOrigin = "vscode-webview://extension";
@@ -24,6 +24,7 @@ function makeScore(overrides: Record<string, unknown>) {
     generatedAt: "2026-08-27",
     status: "Partial",
     hasHtmlReport: true,
+    stale: false,
     score: 91,
     breakdown: {
       coverage: 70,
@@ -128,11 +129,13 @@ afterEach(() => {
 
 describe("scoreTone", () => {
   it("maps scores to tones at the boundaries", () => {
+    // Green at 80 and above, orange across 65-79, red below 65.
     expect(scoreTone(100)).toBe("good");
-    expect(scoreTone(75)).toBe("good");
-    expect(scoreTone(74)).toBe("warn");
-    expect(scoreTone(50)).toBe("warn");
-    expect(scoreTone(49)).toBe("bad");
+    expect(scoreTone(80)).toBe("good");
+    expect(scoreTone(79)).toBe("warn");
+    expect(scoreTone(76)).toBe("warn");
+    expect(scoreTone(65)).toBe("warn");
+    expect(scoreTone(64)).toBe("bad");
     expect(scoreTone(0)).toBe("bad");
   });
 });
@@ -151,7 +154,7 @@ describe("OverviewTab", () => {
   });
 
   it("singularizes the gap and recommendation counts", async () => {
-    stubScoreFetch(makeScore({ score: 64, gapCount: 1, recommendationCount: 1 }));
+    stubScoreFetch(makeScore({ score: 70, gapCount: 1, recommendationCount: 1 }));
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
@@ -622,5 +625,109 @@ describe("OverviewTab", () => {
     const panel = container.querySelector("#panel-overview");
     expect(panel?.getAttribute("role")).toBe("tabpanel");
     expect(panel?.getAttribute("aria-label")).toBe("Overview");
+  });
+});
+
+describe("shortCommit", () => {
+  it("abbreviates a commit and names an unknown one", () => {
+    expect(shortCommit("abc1234567890")).toBe("abc1234");
+    expect(shortCommit("abc1234")).toBe("abc1234");
+    expect(shortCommit(undefined)).toBe("unknown");
+    expect(shortCommit("   ")).toBe("unknown");
+  });
+});
+
+describe("OverviewTab staleness and failures", () => {
+  // A score describes the tree its audit ran against; when the checkout moves
+  // on, the card must say so instead of presenting it as current.
+  it("flags a score whose audit predates the current checkout", async () => {
+    stubScoreFetch(makeScore({
+      stale: true,
+      auditCommit: "abc1234",
+      workspaceCommit: "def567890abcdef",
+      generatedAt: "2026-08-20",
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__stale")).toBeTruthy();
+    });
+    expect(container.querySelector(".overview-score__stale-title")?.textContent)
+      .toContain("Audit is out of date");
+
+    const hint = container.querySelector(".overview-score__stale-hint")?.textContent ?? "";
+    expect(hint).toContain("abc1234");
+    expect(hint).toContain("def5678".slice(0, 7));
+    expect(hint).toContain("2026-08-20");
+
+    // The score is still shown, but marked rather than presented as current.
+    expect(container.querySelector(".overview-score")?.className).toContain("is-stale");
+    expect(container.querySelector(".overview-score__value")?.textContent).toBe("91/100");
+    // And the audit command is offered for re-running.
+    expect(container.querySelector(".overview-score__stale-actions .overview-checklist__command")?.textContent)
+      .toBe("$otel-audit");
+  });
+
+  it("does not flag a current score", async () => {
+    stubScoreFetch(makeScore({ stale: false }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__value")).toBeTruthy();
+    });
+    expect(container.querySelector(".overview-score__stale")).toBeNull();
+    expect(container.querySelector(".overview-score")?.className).not.toContain("is-stale");
+  });
+
+  // A failed request is not "no audit yet" and must not tell the user to run a
+  // command they may already have run.
+  it("distinguishes an unreachable score request from a missing report", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/audit/score")) throw new Error("observer stopped");
+      return ok(statusBody(false));
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score--empty")).toBeTruthy();
+    });
+    const meta = container.querySelector(".overview-score__meta")?.textContent ?? "";
+    expect(meta).toContain("Could not reach the Observer");
+    expect(meta).toContain("audit may already exist");
+    // It must not instruct the user to generate a report that may exist.
+    expect(meta).not.toContain("Run $otel-audit to generate one");
+    expect(container.querySelector(".overview-score .overview-checklist__nav")?.textContent)
+      .toContain("Retry");
+  });
+
+  it("still reports a genuinely missing audit as missing", async () => {
+    stubScoreFetch({ available: false, source: "otel-audit.json", message: "No instrumentation report found at otel-audit.json. Run $otel-audit to generate it." });
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__meta")?.textContent)
+        .toContain("Run $otel-audit to generate it");
+    });
+  });
+
+  it("refetches the score when Refresh is pressed on a stale card", async () => {
+    let scoreCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (!String(input).includes("/api/audit/score")) return ok(statusBody(false));
+      scoreCalls += 1;
+      return ok(makeScore(scoreCalls === 1 ? { stale: true, auditCommit: "abc1234", workspaceCommit: "def5678" } : { stale: false }));
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__stale")).toBeTruthy();
+    });
+
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-score__stale-actions .overview-checklist__nav")!);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__stale")).toBeNull();
+    });
+    expect(scoreCalls).toBe(2);
   });
 });

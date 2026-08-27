@@ -7643,6 +7643,52 @@ code {
   color: var(--red);
 }
 
+.overview-score__stale {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(244, 145, 6, 0.45);
+  border-radius: 8px;
+  background: rgba(244, 145, 6, 0.08);
+}
+
+.overview-score--good.is-stale .overview-score__value,
+.overview-score--warn.is-stale .overview-score__value,
+.overview-score--bad.is-stale .overview-score__value {
+  opacity: 0.65;
+}
+
+.overview-score__stale-title {
+  margin: 0;
+  font-size: var(--font-meta);
+  font-weight: 600;
+  color: var(--yellow);
+}
+
+.overview-score__stale-hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.overview-score__stale-hint code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--chrome-2);
+  font-family: var(--font-family-mono);
+}
+
+.overview-score__stale-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .overview-score__source {
   margin: 10px 0 0;
   padding-top: 8px;
