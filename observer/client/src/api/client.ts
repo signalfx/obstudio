@@ -215,8 +215,14 @@ export interface InstrumentationScore {
   /** Commit the audit ran against, and the checkout's current HEAD. */
   auditCommit?: string;
   workspaceCommit?: string;
-  /** True only when both commits are known and differ. */
+  /**
+   * Whether the audit no longer describes the working tree, and which check
+   * found it: "commit" when HEAD moved, "changes" when files were edited after
+   * the audit was written. Both are conservative — anything indeterminate
+   * reports not-stale rather than warning wrongly.
+   */
   stale: boolean;
+  staleReason?: "commit" | "changes";
   /** Whether the skill's human-readable otel.html sits next to the JSON. */
   hasHtmlReport: boolean;
   hasSpans: boolean;

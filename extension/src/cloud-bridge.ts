@@ -4,10 +4,40 @@ export type CloudBridgeAction =
 	| 'connect'
 	| 'forget'
 	| 'initialize'
+	| 'open-audit-report'
 	| 'open-free-edition'
 	| 'open-ingest-token-help'
 	| 'open-skill-docs'
 	| 'set-enabled';
+
+/**
+ * Path the Observer serves the $otel-audit HTML report from.
+ *
+ * The webview asks for "the audit report", never for a URL, so the extension
+ * decides what gets opened. The webview runs in a sandboxed iframe whose
+ * `target="_blank"` the host may not honour, and the path is fixed here rather
+ * than passed in so a compromised webview cannot turn this into an open
+ * redirect against the collector's own origin.
+ */
+export const auditReportPath = '/api/audit/report';
+
+/** Builds the audit report URL for a collector base URL, or undefined. */
+export function auditReportUrl(baseUrl: unknown): string | undefined {
+	if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
+		return undefined;
+	}
+	let parsed: URL;
+	try {
+		parsed = new URL(baseUrl);
+	} catch {
+		return undefined;
+	}
+	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+		return undefined;
+	}
+
+	return new URL(auditReportPath, parsed).toString();
+}
 
 /**
  * Skills whose documentation the webview may ask the extension to open. The
@@ -205,6 +235,7 @@ function isCloudBridgeAction(value: unknown): value is CloudBridgeAction {
 	return value === 'connect'
 		|| value === 'forget'
 		|| value === 'initialize'
+		|| value === 'open-audit-report'
 		|| value === 'open-free-edition'
 		|| value === 'open-ingest-token-help'
 		|| value === 'open-skill-docs'

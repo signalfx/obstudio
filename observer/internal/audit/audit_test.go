@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // writeAudit writes a canonical audit artifact into a temp workspace and
@@ -653,5 +654,122 @@ func TestRejectsTruncatedCanonicalSections(t *testing.T) {
 				t.Errorf("Available = true with score %d; want refused", got.Score)
 			}
 		})
+	}
+}
+
+// touchFile writes a file with a modification time relative to the audit, so
+// the freshness check can be exercised without sleeping.
+func touchFile(t *testing.T, path, body string, modTime time.Time) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, modTime, modTime); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// auditModTime returns the mtime the resolver compares source files against.
+func auditModTime(t *testing.T, root string) time.Time {
+	t.Helper()
+
+	info, err := os.Stat(filepath.Join(root, ".observe", "otel-audit.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return info.ModTime()
+}
+
+// The flow the commit check cannot see: $otel-instrument edits source and
+// commits nothing, so HEAD still matches the audit while the score describes
+// the pre-instrumentation tree.
+func TestStaleWhenSourceEditedWithoutCommit(t *testing.T) {
+	root := writeAudit(t, auditWithCommit("def5678"))
+	initGitRepo(t, root, "def567890abcdef1234567890abcdef123456789")
+	audited := auditModTime(t, root)
+
+	touchFile(t, filepath.Join(root, "app.py"), "from otel_setup import configure\n", audited.Add(time.Minute))
+
+	got := NewResolver(Config{WorkspaceRoot: root}).Build()
+	if !got.Stale {
+		t.Fatal("Stale = false after a source edit that postdates the audit")
+	}
+	if got.StaleReason != StaleChanges {
+		t.Errorf("StaleReason = %q, want %q", got.StaleReason, StaleChanges)
+	}
+	// The commit is unchanged, so the reason must not claim otherwise.
+	if got.AuditCommit == "" || !strings.HasPrefix(got.WorkspaceCommit, got.AuditCommit) {
+		t.Errorf("expected matching commits, got audit %q workspace %q", got.AuditCommit, got.WorkspaceCommit)
+	}
+}
+
+// A source file older than the audit is what the audit already described.
+func TestNotStaleWhenSourcePredatesAudit(t *testing.T) {
+	root := writeAudit(t, coveredAudit)
+	audited := auditModTime(t, root)
+
+	touchFile(t, filepath.Join(root, "app.py"), "print('hi')\n", audited.Add(-time.Hour))
+
+	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Stale {
+		t.Errorf("Stale = true (%q) for source older than the audit", got.StaleReason)
+	}
+}
+
+// The audit writes its own artifacts, and tooling writes into build and cache
+// directories. Neither is authored source, and treating them as such would
+// make every audit stale the moment it was written.
+func TestGeneratedOutputDoesNotMakeAuditStale(t *testing.T) {
+	root := writeAudit(t, coveredAudit)
+	audited := auditModTime(t, root)
+	later := audited.Add(time.Minute)
+
+	for _, rel := range []string{
+		filepath.Join(".observe", "otel.html"),
+		filepath.Join(".observe", "nested", "trace.json"),
+		filepath.Join("node_modules", "pkg", "index.js"),
+		filepath.Join("__pycache__", "app.pyc"),
+		filepath.Join("dist", "bundle.js"),
+		filepath.Join(".git", "index"),
+	} {
+		touchFile(t, filepath.Join(root, rel), "generated", later)
+	}
+
+	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Stale {
+		t.Errorf("Stale = true (%q) from generated output alone", got.StaleReason)
+	}
+}
+
+// A moved checkout is reported as a commit change, not as an edit, because the
+// two have different remedies.
+func TestCommitStalenessTakesPrecedence(t *testing.T) {
+	root := writeAudit(t, auditWithCommit("abc1234"))
+	initGitRepo(t, root, "def567890abcdef1234567890abcdef123456789")
+	touchFile(t, filepath.Join(root, "app.py"), "edited\n", auditModTime(t, root).Add(time.Minute))
+
+	got := NewResolver(Config{WorkspaceRoot: root}).Build()
+	if got.StaleReason != StaleCommit {
+		t.Errorf("StaleReason = %q, want %q", got.StaleReason, StaleCommit)
+	}
+}
+
+// The freshness walk must not follow a symlink out of the workspace: an
+// unrelated file elsewhere on the machine cannot make the audit stale.
+func TestFreshnessWalkDoesNotFollowSymlinksOut(t *testing.T) {
+	outside := t.TempDir()
+	root := writeAudit(t, coveredAudit)
+	audited := auditModTime(t, root)
+
+	touchFile(t, filepath.Join(outside, "recent.txt"), "new", audited.Add(time.Hour))
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if got := NewResolver(Config{WorkspaceRoot: root}).Build(); got.Stale {
+		t.Errorf("Stale = true (%q) from a file outside the workspace", got.StaleReason)
 	}
 }

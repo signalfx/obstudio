@@ -8,6 +8,7 @@ export type CloudBridgeAction =
   | "connect"
   | "forget"
   | "initialize"
+  | "open-audit-report"
   | "open-free-edition"
   | "open-ingest-token-help"
   | "open-skill-docs"

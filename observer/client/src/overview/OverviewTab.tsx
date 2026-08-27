@@ -89,6 +89,20 @@ const CLOUD_SKILLS: OverviewChecklistItem[] = [
 export const AUDIT_REPORT_URL = "/api/audit/report";
 
 /**
+ * Renders a score component to at most one decimal place.
+ *
+ * Partial credit divides, so a readiness average can arrive as
+ * 16.666666666666668. The server rounds too; this keeps the UI readable
+ * regardless of which build is serving it, and drops a trailing ".0" so whole
+ * numbers stay whole.
+ */
+export function formatScoreValue(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+
+  return String(Math.round(value * 10) / 10);
+}
+
+/**
  * One line of the score derivation: what it is worth, what it earned, and why.
  * A row that earned nothing is dimmed so the shortfalls stand out.
  */
@@ -106,7 +120,9 @@ function ScoreRow({ label, earned, max, detail }: {
         {label}
         {detail ? <span className="overview-score__row-detail">{detail}</span> : null}
       </dt>
-      <dd className="overview-score__row-value">{earned}/{max}</dd>
+      <dd className="overview-score__row-value">
+        {formatScoreValue(earned)}/{formatScoreValue(max)}
+      </dd>
     </div>
   );
 }
@@ -266,6 +282,14 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   const recLabel = scored
     ? `${scored.recommendationCount} ${scored.recommendationCount === 1 ? "recommendation" : "recommendations"}`
     : "";
+  // Anti-patterns cost quality score and are listed in the disclosure just like
+  // gaps, so they are outstanding work too: a report with none of one but some
+  // of the other has not earned a clear check.
+  const antiPatternLabel = scored && scored.antiPatternCount > 0
+    ? `${scored.antiPatternCount} anti-pattern${scored.antiPatternCount === 1 ? "" : "s"}`
+    : "";
+  const outstandingCount = scored ? scored.gapCount + scored.antiPatternCount : 0;
+  const summaryLabel = [gapLabel, antiPatternLabel, recLabel].filter(Boolean).join(" · ");
 
   // In a normal browser the anchor's target="_blank" already does the right
   // thing. Inside the IDE webview the app runs in a sandboxed iframe, so the
@@ -281,6 +305,20 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
     });
   };
 
+  // Same reason as the skill docs, and the same shape: the host owns the URL,
+  // the webview only names what it wants opened. Outside the IDE the anchor's
+  // href is used unchanged.
+  const openAuditReport = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!bridge) return;
+    event.preventDefault();
+    setDocsError(null);
+    void callBridge("open-audit-report").catch((openError: unknown) => {
+      setDocsError(openError instanceof Error && openError.message.trim() !== ""
+        ? openError.message
+        : "Could not open the audit report.");
+    });
+  };
+
   return (
     <section id="panel-overview" className="tab-panel overview-tab" role="tabpanel" aria-label="Overview">
       <div className="overview-tab__scroll">
@@ -288,7 +326,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
           {scored ? (
             <article
               className={`overview-score overview-score--${scoreTone(scored.score)}${scored.stale ? " is-stale" : ""}`}
-              aria-label={`Instrumentation score ${scored.score} out of 100, ${gapLabel}, ${recLabel}`}
+              aria-label={`Instrumentation score ${scored.score} out of 100, ${summaryLabel}`}
             >
               <p className="overview-score__label">Instrumentation Score</p>
               <p className="overview-score__value" aria-hidden="true">
@@ -324,12 +362,24 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                   <p className="overview-score__stale-title">
                     <span aria-hidden="true">⚠ </span>Audit is out of date
                   </p>
-                  <p className="overview-score__stale-hint">
-                    This score describes commit <code>{shortCommit(scored.auditCommit)}</code>
-                    {scored.generatedAt ? ` from ${scored.generatedAt}` : ""}; the workspace is now on{" "}
-                    <code>{shortCommit(scored.workspaceCommit)}</code>. Re-run the audit to score the
-                    current code.
-                  </p>
+                  {/* The two causes have different explanations: a moved
+                      checkout names the commits, while an uncommitted edit —
+                      what $otel-instrument produces — has no second commit to
+                      name. */}
+                  {scored.staleReason === "changes" ? (
+                    <p className="overview-score__stale-hint">
+                      Files have changed since this audit ran
+                      {scored.generatedAt ? ` on ${scored.generatedAt}` : ""}, so the score describes
+                      the earlier code. Re-run the audit to score the current code.
+                    </p>
+                  ) : (
+                    <p className="overview-score__stale-hint">
+                      This score describes commit <code>{shortCommit(scored.auditCommit)}</code>
+                      {scored.generatedAt ? ` from ${scored.generatedAt}` : ""}; the workspace is now on{" "}
+                      <code>{shortCommit(scored.workspaceCommit)}</code>. Re-run the audit to score the
+                      current code.
+                    </p>
+                  )}
                   <span className="overview-score__stale-actions">
                     <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
                     <CopyTextButton
@@ -343,9 +393,8 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                 </div>
               ) : null}
 
-              {/* The commit is shown even when current: staleness only detects a
-                  different HEAD, so uncommitted edits since the audit are not
-                  flagged and the reader needs the reference point. */}
+              {/* The commit is shown even when current, so the reader always
+                  has the reference point the score describes. */}
               <p className="overview-score__source">
                 From {scored.source}
                 {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
@@ -435,17 +484,17 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
           <div className={reportOpen ? "overview-disclosure is-open" : "overview-disclosure"}>
             <button
               type="button"
-              className={`overview-callout ${scored.gapCount > 0 ? "" : "overview-callout--clear"}`}
+              className={`overview-callout ${outstandingCount > 0 ? "" : "overview-callout--clear"}`}
               aria-expanded={reportOpen}
               aria-controls="overview-report-details"
               onClick={() => setReportOpen((open) => !open)}
             >
               <span className="overview-callout__icon" aria-hidden="true">
-                {scored.gapCount > 0 ? "!" : "✓"}
+                {outstandingCount > 0 ? "!" : "✓"}
               </span>
               <span className="overview-callout__text">
                 <span className="overview-callout__lead">Improve Instrumentation:</span>{" "}
-                {gapLabel} · {recLabel}
+                {summaryLabel}
               </span>
               <span className="overview-callout__action" aria-hidden="true">
                 {reportOpen ? "Hide" : "Details"}
@@ -468,8 +517,10 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                       <span className="overview-report__timestamp">Generated {scored.generatedAt}</span>
                     ) : null}
                     {/* An anchor, not a button element: it opens a URL, so
-                        middle-click and open-in-new-tab keep working. Only
-                        offered when $otel-audit generated the HTML report. */}
+                        middle-click and open-in-new-tab keep working in a
+                        browser. In the IDE webview the click is intercepted and
+                        the host opens it. Only offered when $otel-audit
+                        generated the HTML report. */}
                     {scored.hasHtmlReport ? (
                       <a
                         className="overview-report__view"
@@ -477,6 +528,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                         rel="noopener noreferrer"
                         target="_blank"
                         title="Open the $otel-audit report"
+                        onClick={openAuditReport}
                       >
                         View full report
                         <span aria-hidden="true"> ↗</span>

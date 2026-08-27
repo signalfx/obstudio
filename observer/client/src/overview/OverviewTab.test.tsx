@@ -3,7 +3,7 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OverviewTab, scoreTone, shortCommit } from "./OverviewTab";
+import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
 
 const bridgeToken = "cloud-bridge-token-1234567890";
 const bridgeOrigin = "vscode-webview://extension";
@@ -90,8 +90,14 @@ function stubScoreFetch(payload: unknown) {
   }));
 }
 
-/** Simulates the IDE webview host so bridge-routed behavior can be exercised. */
-function installBridge() {
+/**
+ * Simulates the IDE webview host so bridge-routed behavior can be exercised.
+ *
+ * Pass a score payload to answer /api/audit/score with it; every other request
+ * (the bridge's own token verification included) gets a bare success, so a
+ * bridge test can still render a scored card.
+ */
+function installBridge(score?: unknown) {
   const requests: BridgeRequest[] = [];
   const parent = {
     postMessage(message: BridgeRequest & { type: string }) {
@@ -100,10 +106,12 @@ function installBridge() {
     },
   };
   Object.defineProperty(window, "parent", { configurable: true, value: parent });
-  vi.stubGlobal("fetch", vi.fn(async () => ({
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
     ok: true,
     status: 200,
-    json: async () => ({ ok: true }),
+    json: async () => (
+      score !== undefined && String(input).includes("/api/audit/score") ? score : { ok: true }
+    ),
   })));
 
   return {
@@ -208,8 +216,8 @@ describe("OverviewTab", () => {
       .toBe("From otel-audit.json · 2026-08-27");
   });
 
-  // Staleness only detects a different HEAD, so the audited commit is shown
-  // even on a current card: uncommitted edits since the audit are not flagged.
+  // The audited commit is shown even on a current card, so the reader always
+  // has the reference point the score describes.
   it("names the audited commit on a current score", async () => {
     stubScoreFetch(makeScore({ stale: false, auditCommit: "a646ba5cafe" }));
     const { container } = render(<OverviewTab />);
@@ -755,5 +763,154 @@ describe("OverviewTab staleness and failures", () => {
       expect(container.querySelector(".overview-score__stale")).toBeNull();
     });
     expect(scoreCalls).toBe(2);
+  });
+});
+
+describe("OverviewTab outstanding work and formatting", () => {
+  // Anti-patterns lower the quality score and are listed in the disclosure, so
+  // they are outstanding work: a clear check with one still open is wrong.
+  it("does not show a clear check when only anti-patterns remain", async () => {
+    stubScoreFetch(makeScore({
+      gapCount: 0,
+      gaps: [],
+      antiPatternCount: 1,
+      antiPatterns: ["Span names carry the raw URL path."],
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    const callout = container.querySelector(".overview-callout")!;
+    expect(callout.className).not.toContain("overview-callout--clear");
+    expect(callout.querySelector(".overview-callout__icon")?.textContent).toBe("!");
+    // The count is named, not silently folded into the gap total.
+    expect(callout.textContent).toContain("1 anti-pattern");
+  });
+
+  it("shows a clear check only when no gaps and no anti-patterns remain", async () => {
+    stubScoreFetch(makeScore({ gapCount: 0, gaps: [], antiPatternCount: 0, antiPatterns: [] }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    const callout = container.querySelector(".overview-callout")!;
+    expect(callout.className).toContain("overview-callout--clear");
+    expect(callout.querySelector(".overview-callout__icon")?.textContent).toBe("✓");
+    // With none outstanding the summary carries no anti-pattern clause.
+    expect(callout.textContent).not.toContain("anti-pattern");
+  });
+
+  it("pluralizes the anti-pattern count", async () => {
+    stubScoreFetch(makeScore({
+      antiPatternCount: 2,
+      antiPatterns: ["Raw URL in span name.", "Unbounded metric cardinality."],
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    expect(container.querySelector(".overview-callout")?.textContent).toContain("2 anti-patterns");
+  });
+
+  // Partial credit divides, so a readiness average arrives with a long
+  // fractional tail. Rendering it raw makes the card look broken.
+  it("bounds the precision of fractional score components", async () => {
+    stubScoreFetch(makeScore({
+      breakdown: {
+        coverage: 45,
+        coverageMax: 45,
+        quality: 16.666666666666668,
+        qualityMax: 25,
+        components: [
+          { label: "Readiness", earned: 16.666666666666668, max: 25, detail: "1 of 3 areas" },
+        ],
+      },
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__row-value")).toBeTruthy();
+    });
+    const values = Array.from(container.querySelectorAll(".overview-score__row-value"))
+      .map((node) => node.textContent?.replace(/\s+/g, "") ?? "");
+    expect(values).toContain("16.7/25");
+    expect(values.join(" ")).not.toContain("16.666");
+  });
+
+  it("formats score values to at most one decimal without trailing zeros", () => {
+    expect(formatScoreValue(16.666666666666668)).toBe("16.7");
+    expect(formatScoreValue(15)).toBe("15");
+    expect(formatScoreValue(7.5)).toBe("7.5");
+    expect(formatScoreValue(0)).toBe("0");
+    expect(formatScoreValue(Number.NaN)).toBe("—");
+  });
+
+  // A commit comparison cannot see uncommitted edits, so the banner must not
+  // name a second commit that never changed.
+  it("explains an edit-based stale audit without naming a moved commit", async () => {
+    stubScoreFetch(makeScore({
+      stale: true,
+      staleReason: "changes",
+      auditCommit: "abc1234",
+      workspaceCommit: "abc1234",
+      generatedAt: "2026-08-20",
+    }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-score__stale")).toBeTruthy();
+    });
+    const hint = container.querySelector(".overview-score__stale-hint")?.textContent ?? "";
+    expect(hint).toContain("Files have changed since this audit ran");
+    expect(hint).toContain("2026-08-20");
+    expect(hint).not.toContain("the workspace is now on");
+    // Re-running the audit is still the remedy offered.
+    expect(container.querySelector(".overview-score__stale-actions .overview-checklist__command")?.textContent)
+      .toBe("$otel-audit");
+  });
+
+  it("routes the report link through the IDE bridge when hosted in a webview", async () => {
+    const harness = installBridge(makeScore({ hasHtmlReport: true }));
+    const { container } = render(<OverviewTab />);
+    harness.handshake();
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
+    const link = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
+
+    await waitFor(() => {
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    const request = harness.requests.find((r) => r.action === "open-audit-report");
+    expect(request).toBeTruthy();
+    // The webview names the action; the extension owns the URL.
+    expect(JSON.stringify(request)).not.toContain("/api/audit/report");
+  });
+
+  it("lets the browser open the report when no IDE bridge is present", async () => {
+    stubScoreFetch(makeScore({ hasHtmlReport: true }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
+    const link = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
+
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+
+    // Not intercepted — the anchor's own href and target do the work.
+    expect(event.defaultPrevented).toBe(false);
+    expect(link.getAttribute("href")).toBe("/api/audit/report");
+    expect(link.getAttribute("target")).toBe("_blank");
   });
 });

@@ -12,6 +12,8 @@ import {
 	resolveBackend,
 } from '../backend';
 import {
+	auditReportPath,
+	auditReportUrl,
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
 	isSkillDocsId,
@@ -598,4 +600,39 @@ test('unknown skill ids resolve to no URL', () => {
 	for (const bogus of ['splunk-sync', 'https://evil.example.com', '../../etc/passwd', '', undefined, null, 7]) {
 		assert.equal(skillDocsUrl(bogus), undefined, `${String(bogus)} should not resolve`);
 	}
+});
+
+test('cloud bridge accepts the audit report action without a payload', () => {
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-audit-report',
+		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	// The webview names the action only; it can never smuggle a destination.
+	assert.equal(isCloudBridgeRequest({
+		action: 'open-audit-report',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { url: 'https://evil.example.com' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+});
+
+test('audit report URL is built from the observer base URL alone', () => {
+	assert.equal(auditReportUrl('http://127.0.0.1:3000'), `http://127.0.0.1:3000${auditReportPath}`);
+	// A base URL carrying a path must not produce a nested report path.
+	assert.equal(auditReportUrl('http://127.0.0.1:3000/ui/'), `http://127.0.0.1:3000${auditReportPath}`);
+	assert.equal(auditReportUrl('https://observer.example.com'), `https://observer.example.com${auditReportPath}`);
+
+	// Nothing usable produces no URL, so the caller reports it rather than
+	// opening something unintended.
+	assert.equal(auditReportUrl(undefined), undefined);
+	assert.equal(auditReportUrl(''), undefined);
+	assert.equal(auditReportUrl('   '), undefined);
+	assert.equal(auditReportUrl('not a url'), undefined);
+	assert.equal(auditReportUrl(3000), undefined);
+	// Only http(s): a file: or javascript: base must never be opened.
+	assert.equal(auditReportUrl('file:///etc/passwd'), undefined);
+	assert.equal(auditReportUrl('javascript:alert(1)'), undefined);
 });

@@ -105,61 +105,122 @@ func resolveArtifactPath(cfg Config, override, defaultRel string) string {
 	return override
 }
 
-// readContained reads an artifact through a root-scoped handle on the
-// workspace, so no path operation can leave it.
-func (r *Resolver) readContained(path string) ([]byte, error) {
-	source := filepath.Base(path)
-
+// containedRel converts an absolute artifact path into a path relative to the
+// workspace root, refusing anything that points outside it.
+func (r *Resolver) containedRel(path string) (string, error) {
 	if r.workspaceRoot == "" {
-		// Nothing to contain against; refuse rather than read an unbounded path.
-		return nil, ErrNoReport
+		// Nothing to contain against; refuse rather than touch an unbounded path.
+		return "", ErrNoReport
 	}
 
 	rel, err := filepath.Rel(r.workspaceRoot, path)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		log.Printf("[audit] refused %s: outside the workspace", source)
+		log.Printf("[audit] refused %s: outside the workspace", filepath.Base(path))
 
-		return nil, ErrNoReport
+		return "", ErrNoReport
 	}
 
-	// os.Root scopes every path operation to the workspace and is resolved by
-	// the kernel per component, so a symlink, junction, or reparse point that
-	// escapes the root is refused even when planted between checks. This
-	// replaces resolve-then-reopen, which left a window in which the validated
-	// file could be swapped, and it behaves the same on Windows, where
-	// O_NOFOLLOW does not exist.
+	return rel, nil
+}
+
+// openRoot returns a root-scoped handle on the workspace.
+//
+// os.Root scopes every path operation to the workspace and is resolved by the
+// kernel per component, so a symlink, junction, or reparse point that escapes
+// the root is refused even when planted between checks. This replaces
+// resolve-then-reopen, which left a window in which the validated file could be
+// swapped, and it behaves the same on Windows, where O_NOFOLLOW does not exist.
+func (r *Resolver) openRoot() (*os.Root, error) {
 	root, err := os.OpenRoot(r.workspaceRoot)
 	if err != nil {
 		log.Printf("[audit] open workspace root: %v", err)
 
 		return nil, ErrNoReport
 	}
+
+	return root, nil
+}
+
+// statContained reports an artifact's metadata without reading it, for callers
+// that only need to know whether the file is there.
+func (r *Resolver) statContained(path string) (os.FileInfo, error) {
+	rel, err := r.containedRel(path)
+	if err != nil {
+		return nil, err
+	}
+
+	root, err := r.openRoot()
+	if err != nil {
+		return nil, err
+	}
 	defer root.Close()
 
-	file, err := root.Open(rel)
+	info, err := root.Stat(rel)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNoReport
 		}
 		// An escape attempt surfaces here too; treat it as absent.
-		log.Printf("[audit] refused %s: %v", source, err)
+		log.Printf("[audit] refused %s: %v", filepath.Base(path), err)
 
 		return nil, ErrNoReport
+	}
+	if !info.Mode().IsRegular() {
+		return nil, ErrNoReport
+	}
+
+	return info, nil
+}
+
+// readContained reads an artifact through a root-scoped handle on the
+// workspace, so no path operation can leave it.
+func (r *Resolver) readContained(path string) ([]byte, error) {
+	raw, _, err := r.readContainedInfo(path)
+
+	return raw, err
+}
+
+// readContainedInfo reads an artifact and also returns the metadata of the
+// exact descriptor it read, so callers can use the file's modification time
+// without a second, racy stat by path.
+func (r *Resolver) readContainedInfo(path string) ([]byte, os.FileInfo, error) {
+	source := filepath.Base(path)
+
+	rel, err := r.containedRel(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	root, err := r.openRoot()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer root.Close()
+
+	file, err := root.Open(rel)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, ErrNoReport
+		}
+		// An escape attempt surfaces here too; treat it as absent.
+		log.Printf("[audit] refused %s: %v", source, err)
+
+		return nil, nil, ErrNoReport
 	}
 	defer file.Close()
 
 	// fstat on the open descriptor describes exactly the bytes about to be read.
 	info, err := file.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
+		return nil, nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
 	if !info.Mode().IsRegular() {
 		log.Printf("[audit] refused %s: not a regular file", source)
 
-		return nil, ErrNoReport
+		return nil, nil, ErrNoReport
 	}
 	if info.Size() > maxReportBytes {
-		return nil, fmt.Errorf("%s is too large (%d bytes, limit %d)", source, info.Size(), maxReportBytes)
+		return nil, nil, fmt.Errorf("%s is too large (%d bytes, limit %d)", source, info.Size(), maxReportBytes)
 	}
 
 	// Bound the read so a file growing after fstat cannot pull an unbounded
@@ -168,13 +229,13 @@ func (r *Resolver) readContained(path string) ([]byte, error) {
 	if err != nil {
 		log.Printf("[audit] read %s: %v", source, err)
 
-		return nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
+		return nil, nil, fmt.Errorf("could not read %s: %s", source, pathErrMsg(err))
 	}
 	if int64(len(raw)) > maxReportBytes {
-		return nil, fmt.Errorf("%s is too large (limit %d bytes)", source, maxReportBytes)
+		return nil, nil, fmt.Errorf("%s is too large (limit %d bytes)", source, maxReportBytes)
 	}
 
-	return raw, nil
+	return raw, info, nil
 }
 
 // pathErrMsg returns an error message that excludes the absolute path, which
@@ -240,7 +301,7 @@ func (r *Resolver) Build() Report {
 		return Report{Source: source, Message: message, Gaps: []string{}, AntiPatterns: []string{}, Recommendations: []string{}}
 	}
 
-	raw, err := r.readContained(r.reportPath)
+	raw, info, err := r.readContainedInfo(r.reportPath)
 	if err != nil {
 		if errors.Is(err, ErrNoReport) {
 			return unavailable(fmt.Sprintf("No instrumentation report found at %s. Run $otel-audit to generate it.", source))
@@ -288,14 +349,25 @@ func (r *Resolver) Build() Report {
 	report.AntiPatternCount = len(report.AntiPatterns)
 	report.RecommendationCount = len(report.Recommendations)
 
-	if _, err := r.readContained(r.htmlPath); err == nil {
+	// Only existence matters here, and the report endpoint reads the file
+	// itself; statting keeps an 8 MiB read off every score request.
+	if _, err := r.statContained(r.htmlPath); err == nil {
 		report.HasHTMLReport = true
 	}
 
 	// A saved audit describes the tree it was run against. When the checkout has
 	// moved on, say so rather than presenting an old score as current.
 	report.WorkspaceCommit = workspaceCommit(r.workspaceRoot)
-	report.Stale = commitsDiffer(report.AuditCommit, report.WorkspaceCommit)
+	switch {
+	case commitsDiffer(report.AuditCommit, report.WorkspaceCommit):
+		report.Stale, report.StaleReason = true, StaleCommit
+	case sourceChangedAfter(r.workspaceRoot, info.ModTime()):
+		// $otel-instrument edits source in place and commits nothing, so the
+		// commit check alone would keep presenting the pre-instrumentation
+		// score as current. The audit artifact's own mtime is the reference
+		// point: anything in the tree written after it postdates the audit.
+		report.Stale, report.StaleReason = true, StaleChanges
+	}
 
 	report.score(file)
 
