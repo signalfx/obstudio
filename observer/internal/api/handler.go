@@ -148,27 +148,42 @@ func queryDashboardPreview(resolver *dashboards.Resolver) http.HandlerFunc {
 	}
 }
 
+// queryAuditScore returns the scored audit. Like queryAuditReport it carries
+// content derived from the developer's working tree — finding text and file
+// paths — so it omits the wildcard CORS header the telemetry routes use.
 func queryAuditScore(resolver *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, resolver.Build())
+		writeSameOriginJSON(w, resolver.Build())
 	}
 }
 
-// queryAuditReport serves the report the score was derived from. It renders the
-// Markdown to HTML by default so the page is readable in a browser tab;
-// ?format=raw returns the Markdown source as text/plain. Both send nosniff so
-// the content type is never guessed.
+// writeSameOriginJSON is writeJSON without Access-Control-Allow-Origin, for
+// responses that must not be readable cross-origin.
+func writeSameOriginJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[api] writeSameOriginJSON: %v", err)
+	}
+}
+
+// queryAuditReport serves the human-readable report the $otel-audit skill
+// generates next to the JSON it scores. It is the skill's own artifact, served
+// as-is; nosniff keeps the content type from being guessed.
+//
+// Unlike the telemetry routes, this returns a file from the developer's working
+// tree, so it deliberately omits the wildcard CORS header: only the Observer UI
+// itself, which is same-origin, needs to read it.
 func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		raw, err := resolver.ReadRaw()
+		raw, err := resolver.ReadHTML()
 		if err != nil {
 			status := http.StatusInternalServerError
 			if errors.Is(err, audit.ErrNoReport) {
 				status = http.StatusNotFound
-				err = fmt.Errorf("no instrumentation report found at %s. Run $otel-audit to generate it", resolver.Source())
+				err = fmt.Errorf("no instrumentation report found at %s. Run $otel-audit to generate it", resolver.HTMLSource())
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.WriteHeader(status)
 			fmt.Fprintln(w, err.Error())
@@ -176,19 +191,10 @@ func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-
-		body := raw
-		if r.URL.Query().Get("format") == "raw" {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		} else {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			body = []byte(audit.RenderHTML(string(raw), resolver.Source()))
-		}
-
-		if _, err := w.Write(body); err != nil {
+		if _, err := w.Write(raw); err != nil {
 			log.Printf("[api] queryAuditReport: %v", err)
 		}
 	}

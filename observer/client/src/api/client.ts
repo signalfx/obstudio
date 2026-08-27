@@ -191,8 +191,8 @@ export interface InstrumentationScoreComponent {
 }
 
 /**
- * Instrumentation score derived from the `.observe/otel.md` report written by
- * `$otel-audit`. `available` is false when no report has been generated yet.
+ * Instrumentation score derived from `.observe/otel-audit.json`, the canonical
+ * report written by `$otel-audit`. `available` is false when no audit exists.
  */
 export interface InstrumentationScore {
   available: boolean;
@@ -210,9 +210,10 @@ export interface InstrumentationScore {
     qualityMax: number;
     components: InstrumentationScoreComponent[];
   };
-  rate: "covered" | "partial" | "missing";
-  errors: "covered" | "partial" | "missing";
-  duration: "covered" | "partial" | "missing";
+  /** The audit's own verdict: Pass, Partial, or Blocked. */
+  status?: string;
+  /** Whether the skill's human-readable otel.html sits next to the JSON. */
+  hasHtmlReport: boolean;
   hasSpans: boolean;
   hasMetrics: boolean;
   hasLogs: boolean;

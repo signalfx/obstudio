@@ -2512,39 +2512,37 @@ func TestQueryDashboardPreviewNoSidecar(t *testing.T) {
 
 // --- /api/audit/* -----------------------------------------------------------
 
-const auditReportFixture = `# Observability Report: checkout
+const auditJSONFixture = `{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {"service_name": "checkout", "language": "go", "framework": "chi", "date": "2026-08-27", "status": "Partial"},
+  "current_instrumentation": {
+    "spans": [{"name": "GET /health"}],
+    "metrics": [{"name": "http.server.request.duration"}],
+    "logs": [],
+    "incident_readiness": [{"area": "HTTP latency", "status": "covered"}]
+  },
+  "findings": [{"id": "OTEL-001", "title": "No log pipeline", "severity": "medium", "status": "proposed"}],
+  "anti_patterns": [],
+  "recommendation": ["Add an OTLP log pipeline."]
+}`
 
-**Language:** Go | **Framework:** net/http | **Date:** 2026-08-26
-
-## RED Signals
-
-| Signal | Status | Detail |
-|--------|--------|--------|
-| Rate | covered | server spans |
-| Errors | covered | 5xx sets ERROR |
-| Duration | covered | histogram |
-
-## Gaps
-- No OTLP log pipeline.
-
-## Anti-Patterns
-- None detected.
-
-## Recommendation
-- Instrumentation is complete for RED.
-`
-
-// newAuditServer starts a test server whose audit report lives in a temp
-// workspace, returning the server and that workspace root.
-func newAuditServer(t *testing.T, report string) *httptest.Server {
+// newAuditServer starts a test server whose audit artifacts live in a temp
+// workspace. An empty json skips writing the audit entirely.
+func newAuditServer(t *testing.T, auditJSON, reportHTML string) *httptest.Server {
 	t.Helper()
 
 	root := t.TempDir()
-	if report != "" {
-		if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".observe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if auditJSON != "" {
+		if err := os.WriteFile(filepath.Join(root, ".observe", "otel-audit.json"), []byte(auditJSON), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(root, ".observe", "otel.md"), []byte(report), 0o600); err != nil {
+	}
+	if reportHTML != "" {
+		if err := os.WriteFile(filepath.Join(root, ".observe", "otel.html"), []byte(reportHTML), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2558,7 +2556,7 @@ func newAuditServer(t *testing.T, report string) *httptest.Server {
 }
 
 func TestAuditScoreEndpoint(t *testing.T) {
-	server := newAuditServer(t, auditReportFixture)
+	server := newAuditServer(t, auditJSONFixture, "")
 
 	resp := mustGet(t, server.URL+"/api/audit/score")
 	defer resp.Body.Close()
@@ -2570,8 +2568,10 @@ func TestAuditScoreEndpoint(t *testing.T) {
 	var body struct {
 		Available bool     `json:"available"`
 		Score     int      `json:"score"`
+		Status    string   `json:"status"`
 		Gaps      []string `json:"gaps"`
 		AntiPats  []string `json:"antiPatterns"`
+		HasHTML   bool     `json:"hasHtmlReport"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -2580,22 +2580,40 @@ func TestAuditScoreEndpoint(t *testing.T) {
 	if !body.Available {
 		t.Error("available = false, want true")
 	}
-	// RED fully covered but no signal tables: 45 coverage + 15 anti-patterns
-	// + (15 - 3) gaps = 72.
-	if body.Score != 72 {
-		t.Errorf("score = %d, want 72", body.Score)
+	// Spans 15 + metrics 15 + logs 0 + readiness 25 + findings (20-3)=17 + anti 10
+	// = 82 of 100.
+	if body.Score != 82 {
+		t.Errorf("score = %d, want 82", body.Score)
+	}
+	if body.Status != "Partial" {
+		t.Errorf("status = %q, want Partial", body.Status)
 	}
 	if len(body.Gaps) != 1 {
 		t.Errorf("gaps = %v, want one entry", body.Gaps)
 	}
-	// "None detected." must not leak through as a finding.
 	if len(body.AntiPats) != 0 {
 		t.Errorf("antiPatterns = %v, want empty", body.AntiPats)
 	}
+	if body.HasHTML {
+		t.Error("hasHtmlReport = true when no otel.html was written")
+	}
 }
 
-func TestAuditReportEndpointRendersHTML(t *testing.T) {
-	server := newAuditServer(t, auditReportFixture)
+// The score is derived from the developer's working tree, so it must not be
+// readable cross-origin the way the telemetry routes are.
+func TestAuditScoreIsNotCORSOpen(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset on the audit routes", got)
+	}
+}
+
+func TestAuditReportServesSkillHTML(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "<h1>OpenTelemetry audit report</h1>")
 
 	resp := mustGet(t, server.URL+"/api/audit/report")
 	defer resp.Body.Close()
@@ -2606,45 +2624,21 @@ func TestAuditReportEndpointRendersHTML(t *testing.T) {
 	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
 	}
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(raw)
-
-	for _, want := range []string{"<!doctype html>", "<h1>", "<table>", "<li>No OTLP log pipeline.</li>"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("rendered report missing %q", want)
-		}
-	}
-	// The Markdown source must not be served verbatim in the HTML view.
-	if strings.Contains(body, "\n## RED Signals") {
-		t.Error("raw Markdown headings leaked into the HTML view")
-	}
-}
-
-func TestAuditReportEndpointServesRawMarkdown(t *testing.T) {
-	server := newAuditServer(t, auditReportFixture)
-
-	resp := mustGet(t, server.URL+"/api/audit/report?format=raw")
-	defer resp.Body.Close()
-
-	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
-		t.Errorf("Content-Type = %q, want text/plain", got)
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want unset", got)
 	}
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(raw) != auditReportFixture {
-		t.Error("raw format did not return the file byte-for-byte")
+	if string(raw) != "<h1>OpenTelemetry audit report</h1>" {
+		t.Errorf("body = %q, want the skill's own report verbatim", raw)
 	}
 }
 
-func TestAuditReportEndpointMissingReport(t *testing.T) {
-	server := newAuditServer(t, "")
+func TestAuditReportMissing(t *testing.T) {
+	server := newAuditServer(t, auditJSONFixture, "")
 
 	resp := mustGet(t, server.URL+"/api/audit/report")
 	defer resp.Body.Close()
@@ -2661,8 +2655,28 @@ func TestAuditReportEndpointMissingReport(t *testing.T) {
 	if !strings.Contains(body, "$otel-audit") {
 		t.Errorf("body = %q, want it to name $otel-audit", body)
 	}
-	// The endpoint is CORS-open, so the resolved path must never be disclosed.
-	if strings.Contains(body, string(filepath.Separator)+"var") || strings.Contains(body, os.TempDir()) {
+	if strings.Contains(body, os.TempDir()) {
 		t.Errorf("404 body leaked a filesystem path: %q", body)
+	}
+}
+
+func TestAuditScoreUnavailableWithoutReport(t *testing.T) {
+	server := newAuditServer(t, "", "")
+
+	resp := mustGet(t, server.URL+"/api/audit/score")
+	defer resp.Body.Close()
+
+	var body struct {
+		Available bool   `json:"available"`
+		Message   string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Available {
+		t.Error("available = true with no audit present")
+	}
+	if !strings.Contains(body.Message, "otel-audit.json") {
+		t.Errorf("message = %q, want it to name the canonical artifact", body.Message)
 	}
 }

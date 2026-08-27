@@ -19,9 +19,11 @@ interface BridgeRequest {
 function makeScore(overrides: Record<string, unknown>) {
   return {
     available: true,
-    source: "otel.md",
+    source: "otel-audit.json",
     serviceName: "checkout",
-    generatedAt: "2026-08-26 20:52 UTC",
+    generatedAt: "2026-08-27",
+    status: "Partial",
+    hasHtmlReport: true,
     score: 91,
     breakdown: {
       coverage: 70,
@@ -34,9 +36,6 @@ function makeScore(overrides: Record<string, unknown>) {
         { label: "Duration", earned: 15, max: 15, detail: "covered" },
       ],
     },
-    rate: "covered",
-    errors: "covered",
-    duration: "covered",
     hasSpans: true,
     hasMetrics: true,
     hasLogs: true,
@@ -194,34 +193,41 @@ describe("OverviewTab", () => {
       expect(container.querySelector(".overview-score__source")).toBeTruthy();
     });
     expect(container.querySelector(".overview-score__source")?.textContent)
-      .toBe("From otel.md · 2026-08-26 20:52 UTC");
+      .toBe("From otel-audit.json · 2026-08-27");
   });
 
-  it("links the report filename to the served Markdown", async () => {
-    stubScoreFetch(makeScore({}));
+  it("offers the skill's report when it exists, and cites the JSON source", async () => {
+    stubScoreFetch(makeScore({ hasHtmlReport: true }));
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {
-      expect(container.querySelector(".overview-report-link")).toBeTruthy();
+      expect(container.querySelector(".overview-score__source")).toBeTruthy();
     });
+    // The score card names the canonical JSON it was derived from.
+    expect(container.querySelector(".overview-score__source")?.textContent)
+      .toBe("From otel-audit.json · 2026-08-27");
 
-    const cardLink = container.querySelector<HTMLAnchorElement>(".overview-score__source .overview-report-link")!;
-    expect(cardLink.textContent).toBe("otel.md");
-    expect(cardLink.getAttribute("href")).toBe("/api/audit/report");
-    expect(cardLink.getAttribute("target")).toBe("_blank");
-    expect(cardLink.getAttribute("rel")).toBe("noopener noreferrer");
-
-    // The expanded report offers the same source as a "View full report" action.
     fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const view = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
     expect(view.textContent).toContain("View full report");
     expect(view.getAttribute("href")).toBe("/api/audit/report");
     expect(view.getAttribute("target")).toBe("_blank");
     expect(view.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(view.getAttribute("title")).toBe("Open otel.md");
-    // The header title is now just the service, with no filename link.
     expect(container.querySelector(".overview-report__title")?.textContent).toBe("checkout");
-    expect(container.querySelector(".overview-report__title .overview-report-link")).toBeNull();
+  });
+
+  // $otel-audit may not have generated otel.html; do not offer a dead link.
+  it("omits the report link when the skill generated no HTML report", async () => {
+    stubScoreFetch(makeScore({ hasHtmlReport: false }));
+    const { container } = render(<OverviewTab />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-callout")).toBeTruthy();
+    });
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
+
+    expect(container.querySelector("#overview-report-details")).toBeTruthy();
+    expect(container.querySelector(".overview-report__view")).toBeNull();
   });
 
   it("falls back to a generic report title when the service is unknown", async () => {
@@ -268,7 +274,7 @@ describe("OverviewTab", () => {
     expect(items).toContain("Consider adding an OTLP log pipeline.");
     // Sourced from the report, not from any hardcoded copy in the component.
     expect(container.querySelector(".overview-report__title")?.textContent).toBe("checkout");
-    expect(container.querySelector(".overview-report__timestamp")?.textContent).toContain("2026-08-26 20:52 UTC");
+    expect(container.querySelector(".overview-report__timestamp")?.textContent).toContain("2026-08-27");
   });
 
   it("renders the details directly beneath the callout that toggles them", async () => {
@@ -309,8 +315,8 @@ describe("OverviewTab", () => {
   it("shows an empty state when no audit report exists", async () => {
     stubScoreFetch({
       available: false,
-      source: "otel.md",
-      message: "No instrumentation report found at otel.md. Run $otel-audit to generate it.",
+      source: "otel-audit.json",
+      message: "No instrumentation report found at otel-audit.json. Run $otel-audit to generate it.",
     });
     const { container } = render(<OverviewTab />);
 
@@ -546,7 +552,7 @@ describe("OverviewTab", () => {
   });
 
   it("hides the callout entirely when no report exists", async () => {
-    stubScoreFetch({ available: false, source: "otel.md", message: "No instrumentation report found." });
+    stubScoreFetch({ available: false, source: "otel-audit.json", message: "No instrumentation report found." });
     const { container } = render(<OverviewTab />);
 
     await waitFor(() => {

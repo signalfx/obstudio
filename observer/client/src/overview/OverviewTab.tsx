@@ -85,23 +85,8 @@ const CLOUD_SKILLS: OverviewChecklistItem[] = [
   { label: "Publish dashboards", skill: SPLUNK_DASHBOARD_PUBLISH_SKILL },
 ];
 
-/** Path the collector serves the scored report's Markdown source from. */
+/** Path the collector serves the skill's human-readable report from. */
 export const AUDIT_REPORT_URL = "/api/audit/report";
-
-/** Links a report filename to the Markdown the collector scored. */
-function ReportLink({ source }: { source: string }): React.ReactElement {
-  return (
-    <a
-      className="overview-report-link"
-      href={AUDIT_REPORT_URL}
-      rel="noopener noreferrer"
-      target="_blank"
-      title={`Open ${source}`}
-    >
-      {source}
-    </a>
-  );
-}
 
 /**
  * One line of the score derivation: what it is worth, what it earned, and why.
@@ -308,7 +293,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               </dl>
 
               <p className="overview-score__source">
-                From <ReportLink source={scored.source} />
+                From {scored.source}
                 {scored.generatedAt ? ` · ${scored.generatedAt}` : ""}
               </p>
             </article>
@@ -396,17 +381,20 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                       <span className="overview-report__timestamp">Generated {scored.generatedAt}</span>
                     ) : null}
                     {/* An anchor, not a button element: it opens a URL, so
-                        middle-click and open-in-new-tab keep working. */}
-                    <a
-                      className="overview-report__view"
-                      href={AUDIT_REPORT_URL}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                      title={`Open ${scored.source}`}
-                    >
-                      View full report
-                      <span aria-hidden="true"> ↗</span>
-                    </a>
+                        middle-click and open-in-new-tab keep working. Only
+                        offered when $otel-audit generated the HTML report. */}
+                    {scored.hasHtmlReport ? (
+                      <a
+                        className="overview-report__view"
+                        href={AUDIT_REPORT_URL}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                        title="Open the $otel-audit report"
+                      >
+                        View full report
+                        <span aria-hidden="true"> ↗</span>
+                      </a>
+                    ) : null}
                   </div>
                 </header>
 
