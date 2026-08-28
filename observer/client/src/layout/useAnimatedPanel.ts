@@ -15,7 +15,20 @@ export function useAnimatedPanel(durationMs = 300) {
 
   const triggerExit = useCallback(
     (onComplete: () => void) => {
-      if (timerRef.current !== null) return; // already exiting — ignore duplicate calls
+      if (timerRef.current !== null) {
+        // Already animating out — complete immediately rather than silently dropping the call
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+        setExiting(false);
+        onComplete();
+        return;
+      }
+      // When the user prefers reduced motion, CSS collapses all transitions to ~0ms.
+      // Skip the JS timer entirely so DOM cleanup happens synchronously.
+      if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        onComplete();
+        return;
+      }
       setExiting(true);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;

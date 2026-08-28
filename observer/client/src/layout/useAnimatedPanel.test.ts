@@ -6,7 +6,7 @@ import { useAnimatedPanel } from "./useAnimatedPanel";
 
 describe("useAnimatedPanel", () => {
   beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   it("starts with exiting=false", () => {
     const { result } = renderHook(() => useAnimatedPanel());
@@ -26,7 +26,7 @@ describe("useAnimatedPanel", () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
-  it("ignores duplicate triggerExit calls while already exiting", () => {
+  it("second triggerExit call while exiting completes immediately, cancelling the first", () => {
     const first = vi.fn();
     const second = vi.fn();
     const { result } = renderHook(() => useAnimatedPanel(200));
@@ -34,9 +34,15 @@ describe("useAnimatedPanel", () => {
     act(() => { result.current.triggerExit(first); });
     act(() => { result.current.triggerExit(second); });
 
+    // second call fires immediately and resets exiting; first timer was cleared
+    expect(second).toHaveBeenCalledOnce();
+    expect(first).not.toHaveBeenCalled();
+    expect(result.current.exiting).toBe(false);
+
+    // no stale timer fires after duration
     act(() => { vi.advanceTimersByTime(200); });
-    expect(first).toHaveBeenCalledOnce();
-    expect(second).not.toHaveBeenCalled();
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
   });
 
   it("cancelExit resets exiting to false and prevents the callback", () => {
@@ -63,6 +69,18 @@ describe("useAnimatedPanel", () => {
 
     act(() => { vi.advanceTimersByTime(200); });
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("skips the animation and calls onComplete synchronously when prefers-reduced-motion is reduce", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+
+    const onComplete = vi.fn();
+    const { result } = renderHook(() => useAnimatedPanel(200));
+
+    act(() => { result.current.triggerExit(onComplete); });
+
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(result.current.exiting).toBe(false);
   });
 
   it("unmount while a timer is pending clears the timer so onComplete never fires", () => {

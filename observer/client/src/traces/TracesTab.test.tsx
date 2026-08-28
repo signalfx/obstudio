@@ -302,7 +302,7 @@ describe("TracesTab", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/query/traces?range%5BdurationMs%5D%5Blt%5D=100", expect.any(Object));
   });
 
-  it("keeps the trace detail panel at the side for typical app widths", async () => {
+  it("stacks the trace detail panel below the list at ≤900px widths", async () => {
     const [{ Window }, { readFile }, { resolve }] = await Promise.all([
       import("happy-dom"),
       import("node:fs/promises"),
@@ -330,17 +330,15 @@ describe("TracesTab", () => {
     const panelStyles = window.getComputedStyle(panel);
     const contentStyles = window.getComputedStyle(content);
 
-    expect(css).toContain("width: var(--panel-width, min(560px, calc(100vw - 320px)));");
-    expect(css).toContain("flex: 0 0 var(--panel-width, min(560px, calc(100vw - 320px)));");
-    expect(layoutStyles.flexDirection).toBe("row");
+    expect(layoutStyles.flexDirection).toBe("column");
     expect(panelStyles.position).toBe("static");
-    expect(panelStyles.borderTopWidth).toBe("0px");
-    expect(panelStyles.borderLeftWidth).toBe("1px");
-    expect(panelStyles.borderLeftStyle).toBe("solid");
-    expect(contentStyles.minWidth).toBe("0");
+    expect(panelStyles.borderTopWidth).toBe("1px");
+    expect(panelStyles.borderTopStyle).toBe("solid");
+    expect(panelStyles.borderLeftWidth).toBe("0px");
+    expect(contentStyles.minHeight).toBe("0");
   });
 
-  it("stacks the trace detail panel below the list only on very narrow widths", async () => {
+  it("stacks the trace detail panel below the list at 640px", async () => {
     const [{ Window }, { readFile }, { resolve }] = await Promise.all([
       import("happy-dom"),
       import("node:fs/promises"),

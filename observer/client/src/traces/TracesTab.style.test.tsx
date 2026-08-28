@@ -474,7 +474,6 @@ describe("TracesTab row layout", () => {
 
     expect(css).toContain(".data-table__head--metrics,\n.data-table__row--metrics {\n  --table-columns: minmax(80px, 2fr) minmax(80px, 3fr) minmax(80px, 1fr);\n}");
     expect(css).toContain(".data-table__head--traces,\n.data-table__row--traces {\n  --table-columns: minmax(128px, 3fr) minmax(80px, 4fr) minmax(96px, 2fr) minmax(64px, 1fr) minmax(72px, 1fr) minmax(48px, 1fr);\n}");
-    expect(css).toContain("--findings-tab-grid: 220px 140px 64px 64px 64px 1fr;");
     expect(css).toContain(".data-table__head--logs,\n.data-table__row--logs {\n  --table-columns: minmax(72px, 1fr) minmax(96px, 2fr) minmax(96px, 3fr) minmax(256px, 6fr);\n}");
   });
 
@@ -513,7 +512,6 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".data-table__th {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  font-size: 12px;");
     expect(css).toContain(".data-table__td {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  padding: 3px 6px;");
     expect(css).toContain(".data-table__th--numeric,\n.data-table__td--numeric {\n  justify-self: stretch;\n  text-align: right;\n  justify-content: flex-end;\n}");
-    expect(css).toContain(".findings-tab__head .data-table__th {\n  padding: 0 6px;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}");
   });
 
   it("uses the same vertical centering model for metric and validation master cells", () => {
@@ -524,8 +522,5 @@ describe("TracesTab row layout", () => {
     expect(css).toContain(".data-table__cell-content {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  width: 100%;\n  min-width: 0;\n}");
     expect(css).toContain(".data-table__cell-content--meta {\n  gap: 8px;\n}");
     expect(css).toContain(".data-table__td--metric-meta {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;\n  min-width: 0;\n}");
-    expect(css).toContain(".findings-tab__item-title {\n  display: flex;\n  align-items: center;");
-    expect(css).toContain(".findings-tab__item-rule {\n  display: flex;\n  align-items: center;");
-    expect(css).toContain(".findings-tab__item-count {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;");
   });
 });
