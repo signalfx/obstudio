@@ -110,7 +110,7 @@
         "observability-studio.sharedObserverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
+          "markdownDescription": "Optional shared `obstudio` base URL or `/mcp` URL override for the UI and MCP connection. Local shared Observers may use HTTP; non-local shared Observers must use HTTPS. When unset, the extension reuses or starts a managed local `obstudio` on `http://127.0.0.1:<managedObserverPort>`. A configured shared Observer's OTLP receiver ports are not remapped or validated."
         },
         "observability-studio.managedObserverPort": {
           "type": "number",
@@ -151,6 +151,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "1.82.0",
+    "@types/ws": "8.18.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
@@ -160,5 +161,8 @@
     "ovsx": "1.0.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
   }
 }

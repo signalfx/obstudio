@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { observerFetch } from "../host/transport";
 import { EmptyState } from "../components/EmptyState";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { DashboardGrid } from "./DashboardGrid";
@@ -44,7 +45,7 @@ function useOtlpEndpoint(): string | null {
   const [endpoint, setEndpoint] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/health", { signal: controller.signal })
+    observerFetch("/api/health", { signal: controller.signal })
       .then((r) => (r.ok ? (r.json() as Promise<HealthResponse>) : null))
       .then((health) => {
         const otlpHttp = health?.endpoints?.otlpHttp;

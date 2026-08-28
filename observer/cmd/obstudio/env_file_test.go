@@ -394,85 +394,177 @@ OBSTUDIO_SPLUNK_TRACES_EXPORT=true
 	}
 }
 
-func TestSplunkExportConfigurationRefresherIgnoresLegacyEndpointConfiguration(t *testing.T) {
+func TestSplunkExportConfigurationRefresherProtectsActiveLegacyEnvConfiguration(t *testing.T) {
+	resetEnvFileShellPrecedence(t)
 	path := filepath.Join(t.TempDir(), "obstudio.env")
-	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled:     true,
-		Realm:       "us1",
-		Endpoint:    "https://metrics.example.com/v2/datapoint/otlp",
-		AccessToken: "old-token-123456",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled:     true,
-		Realm:       "us1",
-		Endpoint:    "https://traces.example.com/v2/trace/otlp",
-		AccessToken: "old-token-123456",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(path, []byte(`
-SPLUNK_ACCESS_TOKEN=new-token-123456
+SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=env-token-123456
 OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-OBSTUDIO_SPLUNK_METRICS_ENDPOINT=https://custom.example.com/v2/datapoint/otlp
+OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+OBSTUDIO_SPLUNK_METRICS_ENDPOINT=https://metrics.example.com/v2/datapoint/otlp
+OBSTUDIO_SPLUNK_TRACES_ENDPOINT=https://traces.example.com/v2/trace/otlp
 `), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range append(append([]string{}, splunkEnvFilePrecedenceKeys...), splunkEnvFileLegacyEndpointKeys...) {
+		key := key
+		_ = os.Unsetenv(key)
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+	}
+	if err := loadConfiguredEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+	metricsConfig, err := splunkMetricsExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := otlp.NewSplunkMetricsExportController(metricsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracesConfig, err := splunkTracesExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(tracesConfig)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	refresh := newSplunkExportConfigurationRefresher(path, metrics, traces)
-	if applied := mustRefresh(t, refresh); applied {
-		t.Fatal("legacy endpoint env file should not apply")
+	if managed := mustRefresh(t, refresh); !managed {
+		t.Fatal("active legacy env configuration should remain managed")
 	}
 
-	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "old-token-123456" {
+	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "env-token-123456" {
 		t.Fatalf("metrics config = %+v", got)
 	}
-	if got := traces.Config(); got.Realm != "us1" || got.Endpoint != "https://traces.example.com/v2/trace/otlp" || got.AccessToken != "old-token-123456" {
+	if got := traces.Config(); got.Realm != "us1" || got.Endpoint != "https://traces.example.com/v2/trace/otlp" || got.AccessToken != "env-token-123456" {
+		t.Fatalf("traces config = %+v", got)
+	}
+
+	manualMetrics := otlp.SplunkMetricsExporterConfig{Realm: "eu0", AccessToken: "manual-token-123456"}
+	manualTraces := otlp.SplunkTracesExporterConfig{Realm: "eu0", AccessToken: "manual-token-123456"}
+	if err := metrics.Configure(manualMetrics); err != nil {
+		t.Fatal(err)
+	}
+	if err := traces.Configure(manualTraces); err != nil {
+		t.Fatal(err)
+	}
+	if managed := mustRefresh(t, refresh); managed {
+		t.Fatal("manual cloud configuration should not be marked managed by legacy env settings")
+	}
+}
+
+func TestSplunkExportConfigurationRefresherUsesFreshFileAfterLegacyEndpointsAreRemoved(t *testing.T) {
+	resetEnvFileShellPrecedence(t)
+	path := filepath.Join(t.TempDir(), "obstudio.env")
+	if err := os.WriteFile(path, []byte(`
+SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=old-env-token-123456
+OBSTUDIO_SPLUNK_METRICS_EXPORT=true
+OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+OBSTUDIO_SPLUNK_METRICS_ENDPOINT=https://metrics.example.com/v2/datapoint/otlp
+OBSTUDIO_SPLUNK_TRACES_ENDPOINT=https://traces.example.com/v2/trace/otlp
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range append(append([]string{}, splunkEnvFilePrecedenceKeys...), splunkEnvFileLegacyEndpointKeys...) {
+		key := key
+		_ = os.Unsetenv(key)
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+	}
+	if err := loadConfiguredEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+	metricsConfig, err := splunkMetricsExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := otlp.NewSplunkMetricsExportController(metricsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracesConfig, err := splunkTracesExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(tracesConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(`
+SPLUNK_REALM=eu1
+SPLUNK_ACCESS_TOKEN=new-env-token-123456
+OBSTUDIO_SPLUNK_METRICS_EXPORT=false
+OBSTUDIO_SPLUNK_TRACES_EXPORT=true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refresh := newSplunkExportConfigurationRefresher(path, metrics, traces)
+	if managed := mustRefresh(t, refresh); !managed {
+		t.Fatal("updated env configuration should remain managed")
+	}
+
+	if got := metrics.Config(); got.Enabled || got.Realm != "eu1" || got.Endpoint != "" || got.AccessToken != "new-env-token-123456" {
+		t.Fatalf("metrics config = %+v", got)
+	}
+	if got := traces.Config(); !got.Enabled || got.Realm != "eu1" || got.Endpoint != "" || got.AccessToken != "new-env-token-123456" {
 		t.Fatalf("traces config = %+v", got)
 	}
 }
 
-func TestSplunkExportConfigurationRefresherPreservesShellLegacyEndpointConfiguration(t *testing.T) {
+func TestSplunkExportConfigurationRefresherRecognizesActiveShellLegacyConfiguration(t *testing.T) {
+	resetEnvFileShellPrecedence(t)
 	path := filepath.Join(t.TempDir(), "obstudio.env")
 	t.Setenv("OBSTUDIO_SPLUNK_METRICS_ENDPOINT", "https://metrics.example.com/v2/datapoint/otlp")
-	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
-		Enabled:     true,
-		Realm:       "us1",
-		Endpoint:    "https://metrics.example.com/v2/datapoint/otlp",
-		AccessToken: "old-token-123456",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	traces, err := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{
-		Enabled:     true,
-		Realm:       "us1",
-		AccessToken: "old-token-123456",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(path, []byte(`
-SPLUNK_REALM=eu0
-SPLUNK_ACCESS_TOKEN=new-token-123456
+SPLUNK_REALM=us1
+SPLUNK_ACCESS_TOKEN=env-token-123456
 OBSTUDIO_SPLUNK_METRICS_EXPORT=true
 OBSTUDIO_SPLUNK_TRACES_EXPORT=true
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	for _, key := range append(append([]string{}, splunkEnvFilePrecedenceKeys...), splunkEnvFileLegacyEndpointKeys...) {
+		if key == "OBSTUDIO_SPLUNK_METRICS_ENDPOINT" {
+			continue
+		}
+		key := key
+		_ = os.Unsetenv(key)
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+	}
+	if err := loadConfiguredEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+	metricsConfig, err := splunkMetricsExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := otlp.NewSplunkMetricsExportController(metricsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracesConfig, err := splunkTracesExporterConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	traces, err := otlp.NewSplunkTracesExportController(tracesConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	refresh := newSplunkExportConfigurationRefresher(path, metrics, traces)
-	if applied := mustRefresh(t, refresh); applied {
-		t.Fatal("shell legacy endpoint configuration should not apply")
+	if managed := mustRefresh(t, refresh); !managed {
+		t.Fatal("active shell legacy configuration should remain managed")
 	}
 
-	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "old-token-123456" {
+	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "env-token-123456" {
 		t.Fatalf("metrics config = %+v", got)
 	}
-	if got := traces.Config(); got.Realm != "us1" || got.AccessToken != "old-token-123456" {
+	if got := traces.Config(); got.Realm != "us1" || got.AccessToken != "env-token-123456" {
 		t.Fatalf("traces config = %+v", got)
 	}
 }

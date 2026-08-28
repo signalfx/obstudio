@@ -387,7 +387,7 @@ it('integration: VSIX contains observer binary', { timeout: 120_000 }, async () 
 	}
 });
 
-it('integration: VSIX contains extension.js', { timeout: 120_000 }, async () => {
+it('integration: VSIX contains extension host and top-level webview assets', { timeout: 120_000 }, async () => {
 	const context: TestContext = {};
 
 	try {
@@ -404,6 +404,12 @@ it('integration: VSIX contains extension.js', { timeout: 120_000 }, async () => 
 			unzipOutput.includes('extension/dist/extension.js'),
 			'VSIX should contain extension/dist/extension.js'
 		);
+		for (const asset of ['main.css', 'main.js']) {
+			assert.ok(
+				unzipOutput.includes(`extension/dist/webview/${asset}`),
+				`VSIX should contain extension/dist/webview/${asset}`,
+			);
+		}
 	} finally {
 		cleanup(context);
 	}

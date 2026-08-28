@@ -49,9 +49,6 @@ async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, 
 		}
 		await new Promise((resolve) => setTimeout(resolve, 200));
 	}
-	if (last !== undefined) {
-		return last;
-	}
 	if (lastError instanceof Error) {
 		throw lastError;
 	}
@@ -936,7 +933,7 @@ suite('VS Code Host', () => {
 						&& value.sharedMode
 						&& value.observerUrl === sharedObserver.baseUrl
 						&& typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes(sharedObserver.baseUrl);
+						&& value.panelHtml.includes('main.js');
 				},
 				20_000,
 			);
@@ -944,10 +941,17 @@ suite('VS Code Host', () => {
 			assert.equal(state.panelVisible, true);
 			assert.equal(state.sharedMode, true);
 			assert.equal(state.observerUrl, sharedObserver.baseUrl);
-			assert.ok(state.panelHtml?.includes('<iframe '), 'observer panel should embed the Observer UI in an iframe');
+			assert.equal(state.panelHtml?.includes('<iframe '), false, 'observer UI should be the top-level webview');
 			assert.ok(
-				state.panelHtml?.includes(sharedObserver.baseUrl),
-				'observer panel iframe should point at the shared backend',
+				state.panelHtml?.includes('<div id="root"></div>') && state.panelHtml.includes('main.js'),
+				'observer panel should load the bundled React client directly',
+			);
+			assert.equal(state.panelHtml?.includes(sharedObserver.baseUrl), false,
+				'the shared backend URL should stay in the extension host transport');
+			assert.equal(
+				state.panelHtml?.includes('allow="clipboard-read; clipboard-write"'),
+				false,
+				'native paste should not require privileged clipboard permissions',
 			);
 
 			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');
@@ -1643,17 +1647,14 @@ suite('VS Code Host', () => {
 						&& value.sharedMode
 						&& value.observerUrl === sharedObserver.baseUrl
 						&& typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes(sharedObserver.baseUrl)
+						&& value.panelHtml.includes('main.js')
 						&& typeof value.validatorSummaryUrl === 'string';
 				},
 				20_000,
 			);
 
-			assert.ok(state.panelHtml?.includes('<iframe '), 'observer panel should embed the Observer UI in an iframe');
-			assert.ok(
-				state.panelHtml?.includes(sharedObserver.baseUrl),
-				'observer panel iframe should point at the shared backend',
-			);
+			assert.equal(state.panelHtml?.includes('<iframe '), false, 'observer UI should be the top-level webview');
+			assert.ok(state.panelHtml?.includes('<div id="root"></div>') && state.panelHtml.includes('main.js'));
 
 			const idleSummary = await waitFor(
 				() => fetchJson(state.validatorSummaryUrl!),
@@ -1702,17 +1703,16 @@ suite('VS Code Host', () => {
 						&& value.sharedMode
 						&& value.observerUrl === sharedObserver.baseUrl
 						&& typeof value.panelHtml === 'string'
-						&& value.panelHtml.includes(sharedObserver.baseUrl);
+						&& value.panelHtml.includes('main.js');
 				},
 				20_000,
 			);
 
 			assert.equal(state.sharedMode, true);
 			assert.equal(state.observerUrl, sharedObserver.baseUrl);
-			assert.ok(
-				state.panelHtml?.includes(sharedObserver.baseUrl),
-				'observer panel iframe should point at the shared backend after retrying a timeout',
-			);
+			assert.equal(state.panelHtml?.includes('<iframe '), false);
+			assert.ok(state.panelHtml?.includes('main.js'),
+				'observer panel should load the bundled client after retrying a timeout');
 		} finally {
 			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
 			await sharedObserver.dispose();

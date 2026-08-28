@@ -291,9 +291,8 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
   const outstandingCount = scored ? scored.gapCount + scored.antiPatternCount : 0;
   const summaryLabel = [gapLabel, antiPatternLabel, recLabel].filter(Boolean).join(" · ");
 
-  // In a normal browser the anchor's target="_blank" already does the right
-  // thing. Inside the IDE webview the app runs in a sandboxed iframe, so the
-  // host has to open the page for us.
+  // In a normal browser the anchor's target="_blank" opens the page. In an IDE
+  // webview the host owns external navigation so the app never navigates away.
   const openSkillDocs = (event: React.MouseEvent<HTMLAnchorElement>, skill: SkillDocsId) => {
     if (!bridge) return;
     event.preventDefault();
