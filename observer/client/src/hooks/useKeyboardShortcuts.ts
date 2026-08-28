@@ -25,6 +25,18 @@ export interface HostKeyboardEventMessage {
 const suppressedBrowserShortcutKeyCodes = new Set(
   ["P", "S"].map((key) => key.charCodeAt(0)),
 );
+const editablePrimaryShortcutKeys = new Set(["a", "c", "v", "x", "y", "z"]);
+const editableNavigationKeys = new Set([
+  "arrowdown",
+  "arrowleft",
+  "arrowright",
+  "arrowup",
+  "backspace",
+  "delete",
+  "end",
+  "home",
+  "insert",
+]);
 
 /** Whether a key event belongs to a host-level Alt, Ctrl, or Cmd shortcut. */
 export function hasHostCommandModifier(event: KeyboardModifierEvent): boolean {
@@ -50,6 +62,26 @@ function shouldPreventBrowserDefault(event: KeyboardEvent): boolean {
   return suppressedBrowserShortcutKeyCodes.has(event.keyCode);
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== "object") return false;
+  const element = target as HTMLElement;
+  const tagName = element.tagName?.toUpperCase();
+  return tagName === "INPUT"
+    || tagName === "TEXTAREA"
+    || tagName === "SELECT"
+    || element.isContentEditable === true;
+}
+
+function isEditableEditingShortcut(event: KeyboardEvent): boolean {
+  if (!isEditableTarget(event.target)) return false;
+  const key = event.key.toLowerCase();
+  const primaryModifier = event.ctrlKey || event.metaKey;
+  if (primaryModifier) {
+    return editablePrimaryShortcutKeys.has(key) || editableNavigationKeys.has(key);
+  }
+  return event.altKey && editableNavigationKeys.has(key);
+}
+
 /** Forward a host shortcut out of the nested Observer iframe. */
 export function forwardHostKeyboardEvent(
   event: KeyboardEvent,
@@ -62,6 +94,7 @@ export function forwardHostKeyboardEvent(
   const code = eventCode(event);
   if (event.type === "keydown") {
     if (!hasHostCommandModifier(event)) return false;
+    if (isEditableEditingShortcut(event)) return false;
     forwardedCodes.add(code);
   } else if (event.type === "keyup") {
     const wasForwarded = forwardedCodes.delete(code);
@@ -74,7 +107,7 @@ export function forwardHostKeyboardEvent(
         if (!isModifierCode(forwardedCode)) forwardedCodes.delete(forwardedCode);
       }
     }
-    if (!wasForwarded && !hasHostCommandModifier(event) && !isReleasedHostModifier) return false;
+    if (!wasForwarded && !isReleasedHostModifier) return false;
   } else {
     return false;
   }

@@ -1,14 +1,71 @@
 export const splunkCloudConnectionSecretKey = 'splunkCloudConnection.v1';
+export const maxCloudClipboardTextBytes = 4096;
 
-export type CloudBridgeAction =
-	| 'connect'
-	| 'forget'
-	| 'initialize'
-	| 'open-audit-report'
-	| 'open-free-edition'
-	| 'open-ingest-token-help'
-	| 'open-skill-docs'
-	| 'set-enabled';
+export const cloudBridgeActions = [
+	'connect',
+	'forget',
+	'initialize',
+	'open-audit-report',
+	'open-free-edition',
+	'open-ingest-token-help',
+	'open-skill-docs',
+	'read-clipboard',
+	'set-enabled',
+] as const;
+
+export type CloudBridgeAction = typeof cloudBridgeActions[number];
+
+export class ObserverCloudResponseError extends Error {
+	constructor(
+		readonly statusCode: number,
+		message: string,
+	) {
+		super(message);
+		this.name = 'ObserverCloudResponseError';
+	}
+}
+
+/**
+ * A 4xx response is an authoritative rejection, so the Observer did not apply
+ * the requested mutation. Transport failures and 5xx responses have an
+ * uncertain outcome and require restoring the previous Observer state.
+ */
+export function shouldRestoreObserverAfterCloudMutationFailure(error: unknown): boolean {
+	return !(error instanceof ObserverCloudResponseError
+		&& error.statusCode >= 400
+		&& error.statusCode < 500);
+}
+
+export function parseObserverCloudResponseBody(statusCode: number, responseBody: string): unknown {
+	if (responseBody === '') {
+		return {};
+	}
+	try {
+		return JSON.parse(responseBody) as unknown;
+	} catch {
+		if (statusCode < 200 || statusCode >= 300) {
+			return {};
+		}
+		throw new Error(`Observer returned an invalid response (HTTP ${statusCode}).`);
+	}
+}
+
+export async function restoreSplunkCloudConnectionWithLegacyFallback(
+	restore: () => Promise<unknown>,
+	configureLegacy: () => Promise<unknown>,
+): Promise<unknown> {
+	try {
+		return await restore();
+	} catch (error) {
+		if (
+			!(error instanceof ObserverCloudResponseError)
+			|| (error.statusCode !== 404 && error.statusCode !== 405)
+		) {
+			throw error;
+		}
+		return configureLegacy();
+	}
+}
 
 /**
  * Path the Observer serves the $otel-audit HTML report from.
@@ -120,6 +177,9 @@ export function isCloudBridgeRequest(value: unknown): value is CloudBridgeReques
 	) {
 		return false;
 	}
+	if (request.action === 'read-clipboard') {
+		return request.payload === undefined;
+	}
 	if (request.payload === undefined) {
 		return true;
 	}
@@ -129,7 +189,8 @@ export function isCloudBridgeRequest(value: unknown): value is CloudBridgeReques
 	const payload = request.payload as Record<string, unknown>;
 	return Object.keys(payload).every((key) => ['accessToken', 'enabled', 'realm', 'skill'].includes(key))
 		&& (payload.accessToken === undefined
-			|| (typeof payload.accessToken === 'string' && payload.accessToken.length <= 4096))
+			|| (typeof payload.accessToken === 'string'
+				&& Buffer.byteLength(payload.accessToken, 'utf8') <= maxCloudClipboardTextBytes))
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
 		&& (payload.realm === undefined
 			|| (typeof payload.realm === 'string' && payload.realm.length <= 32))
@@ -148,6 +209,13 @@ export function isCloudBridgeReady(value: unknown): value is CloudBridgeReady {
 	return ready.type === 'obstudio.cloud.ready'
 		&& typeof ready.bridgeToken === 'string'
 		&& /^[A-Za-z0-9_-]{24,128}$/.test(ready.bridgeToken);
+}
+
+export function validateCloudClipboardText(value: string): string {
+	if (Buffer.byteLength(value, 'utf8') > maxCloudClipboardTextBytes) {
+		throw new Error('Clipboard text exceeds the 4,096 UTF-8-byte cloud field limit.');
+	}
+	return value;
 }
 
 export function parseStoredSplunkCloudConnection(value: string | undefined): StoredSplunkCloudConnection | undefined {
@@ -174,8 +242,8 @@ export function parseStoredSplunkCloudConnection(value: string | undefined): Sto
 }
 
 function isValidSplunkTokenSecret(value: string): boolean {
-	return value.length >= 16
-		&& value.length <= 4096
+	return value.length > 0
+		&& Buffer.byteLength(value, 'utf8') <= maxCloudClipboardTextBytes
 		&& !/[\s\u0000-\u001F\u007F]/u.test(value);
 }
 
@@ -232,12 +300,5 @@ function cloudSignalConfigured(value: unknown): boolean | undefined {
 }
 
 function isCloudBridgeAction(value: unknown): value is CloudBridgeAction {
-	return value === 'connect'
-		|| value === 'forget'
-		|| value === 'initialize'
-		|| value === 'open-audit-report'
-		|| value === 'open-free-edition'
-		|| value === 'open-ingest-token-help'
-		|| value === 'open-skill-docs'
-		|| value === 'set-enabled';
+	return typeof value === 'string' && (cloudBridgeActions as readonly string[]).includes(value);
 }

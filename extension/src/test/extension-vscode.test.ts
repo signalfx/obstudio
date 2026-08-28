@@ -25,6 +25,12 @@ type SharedObserverHandle = {
 	dispose: () => Promise<void>;
 };
 
+type CloudBridgeObserverHandle = SharedObserverHandle & {
+	authorizations: (pathname: string) => string[];
+	capturedResponses: () => Array<Record<string, unknown>>;
+	statusReads: () => number;
+};
+
 type FileSnapshot = {
 	content?: string;
 	existed: boolean;
@@ -48,9 +54,6 @@ async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, 
 			lastError = error;
 		}
 		await new Promise((resolve) => setTimeout(resolve, 200));
-	}
-	if (last !== undefined) {
-		return last;
 	}
 	if (lastError instanceof Error) {
 		throw lastError;
@@ -278,6 +281,151 @@ async function startDiscoverableSharedObserver(firstHealthDelayMs: number): Prom
 			});
 		},
 	};
+}
+
+async function startCloudBridgeObserver(
+	initialControlToken: string,
+	rotatedControlToken: string,
+	onRotate: () => void,
+): Promise<CloudBridgeObserverHandle> {
+	const port = await getAvailablePort();
+	const baseUrl = `http://127.0.0.1:${port}`;
+	const authorizations = new Map<string, string[]>();
+	const capturedResponses: Array<Record<string, unknown>> = [];
+	let expectedControlToken = initialControlToken;
+	let refreshRejectedOnce = false;
+	let statusReads = 0;
+	const cloudStatus = {
+		connected: false,
+		enabled: false,
+		metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+		traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+	};
+	const server = http.createServer(async (request, response) => {
+		const pathname = new URL(request.url ?? '/', baseUrl).pathname;
+		if (pathname === '/api/health') {
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify({ apiVersion: 'v1', kind: 'obstudio' }));
+			return;
+		}
+		if (pathname === '/capture' && request.method === 'POST') {
+			const parsed = JSON.parse(await readRequestText(request)) as Record<string, unknown>;
+			capturedResponses.push(parsed);
+			response.statusCode = 204;
+			response.end();
+			return;
+		}
+		if (request.method === 'GET' && pathname === '/api/splunk/export') {
+			statusReads += 1;
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(cloudStatus));
+			return;
+		}
+		if (request.method === 'POST' && pathname.startsWith('/api/splunk/export')) {
+			const authorization = String(request.headers.authorization ?? '');
+			const requests = authorizations.get(pathname) ?? [];
+			requests.push(authorization);
+			authorizations.set(pathname, requests);
+			await readRequestText(request);
+			if (authorization !== `Bearer ${expectedControlToken}`) {
+				response.statusCode = 401;
+				response.setHeader('Content-Type', 'application/json');
+				response.end(JSON.stringify({ error: 'invalid Observer control token' }));
+				return;
+			}
+			if (pathname === '/api/splunk/export/refresh') {
+				if (!refreshRejectedOnce) {
+					refreshRejectedOnce = true;
+					expectedControlToken = rotatedControlToken;
+					onRotate();
+					response.statusCode = 401;
+					response.setHeader('Content-Type', 'application/json');
+					response.end(JSON.stringify({ error: 'rotated Observer control token' }));
+					return;
+				}
+				response.statusCode = 405;
+				response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+				response.end('method not allowed');
+				return;
+			}
+			response.setHeader('Content-Type', 'application/json');
+			response.end(JSON.stringify(pathname === '/api/splunk/export/bridge' ? { ok: true } : cloudStatus));
+			return;
+		}
+
+		response.setHeader('Content-Type', 'text/html; charset=utf-8');
+		response.end(`<!doctype html>
+			<script>
+				let sent = false;
+				let sentSecondClipboardRequest = false;
+				window.addEventListener('message', (event) => {
+					const message = event.data;
+					if (!message || typeof message !== 'object') return;
+					if (message.type === 'obstudio.cloud.bridge') {
+						if (sent) return;
+						sent = true;
+						parent.postMessage({ type: 'obstudio.cloud.ready' }, '*');
+						parent.postMessage({
+							action: 'initialize',
+							bridgeToken: message.bridgeToken,
+							requestId: 'initialize-request',
+							type: 'obstudio.cloud.request',
+						}, '*');
+						parent.postMessage({
+							action: 'read-clipboard',
+							bridgeToken: message.bridgeToken,
+							requestId: 'clipboard-request',
+							type: 'obstudio.cloud.request',
+						}, '*');
+						return;
+					}
+					if (message.type === 'obstudio.cloud.response') {
+						void fetch('/capture', {
+							body: JSON.stringify(message),
+							headers: { 'Content-Type': 'application/json' },
+							method: 'POST',
+						});
+						if (message.requestId === 'clipboard-request'
+							&& message.ok
+							&& !sentSecondClipboardRequest) {
+							sentSecondClipboardRequest = true;
+							parent.postMessage({
+								action: 'read-clipboard',
+								bridgeToken: message.bridgeToken,
+								requestId: 'second-clipboard-request',
+								type: 'obstudio.cloud.request',
+							}, '*');
+						}
+					}
+				});
+			</script>`);
+	});
+
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(port, '127.0.0.1', () => resolve());
+	});
+
+	return {
+		authorizations: (pathname) => [...(authorizations.get(pathname) ?? [])],
+		baseUrl,
+		capturedResponses: () => [...capturedResponses],
+		dispose: async () => {
+			server.closeAllConnections();
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => error ? reject(error) : resolve());
+			});
+		},
+		statusReads: () => statusReads,
+	};
+}
+
+async function readRequestText(request: http.IncomingMessage): Promise<string> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of request) {
+		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+	}
+	return Buffer.concat(chunks).toString('utf8');
 }
 
 async function startConflictingHttpService(port: number): Promise<SharedObserverHandle> {
@@ -658,6 +806,123 @@ suite('VS Code Host', () => {
 		}
 	});
 
+	test('cloud bridge requires per-paste approval and handles rotated control tokens with legacy status fallback', async function () {
+		this.timeout(40_000);
+
+		await getExtension();
+		const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-cloud-bridge-home-'));
+		const stateDir = path.join(tempHome, '.obstudio');
+		const statePath = path.join(stateDir, 'shared-observer.json');
+		const initialControlToken = 'current-shared-control-token';
+		const rotatedControlToken = 'rotated-shared-control-token';
+		let sharedBaseUrl = '';
+		const writeSharedState = (controlToken: string) => {
+			fs.mkdirSync(stateDir, { recursive: true });
+			fs.writeFileSync(statePath, JSON.stringify({
+				baseUrl: sharedBaseUrl,
+				controlToken,
+				updatedAt: new Date().toISOString(),
+			}));
+		};
+		const sharedObserver = await startCloudBridgeObserver(
+			initialControlToken,
+			rotatedControlToken,
+			() => writeSharedState(rotatedControlToken),
+		);
+		sharedBaseUrl = sharedObserver.baseUrl;
+		writeSharedState(initialControlToken);
+
+		const config = vscode.workspace.getConfiguration('observability-studio');
+		const originalSharedObserverStatePath = process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+		const originalControlToken = process.env.OBSTUDIO_CONTROL_TOKEN;
+		const originalClipboard = await vscode.env.clipboard.readText();
+		const pastedToken = 'host_clipboard_token_123456789';
+		process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = statePath;
+		process.env.OBSTUDIO_CONTROL_TOKEN = 'stale-inherited-control-token';
+
+		try {
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await vscode.env.clipboard.writeText(pastedToken);
+			await config.update('sharedObserverUrl', sharedObserver.baseUrl, vscode.ConfigurationTarget.Global);
+			await waitFor(
+				() => Promise.resolve(vscode.commands.executeCommand<RuntimeState>('observability-studio.internal.getRuntimeState')),
+				(value) => Boolean(value?.sharedMode && value.observerUrl === sharedObserver.baseUrl),
+				20_000,
+			);
+
+			await vscode.commands.executeCommand('observability-studio.openObserver');
+			const initialResponses = await waitFor(
+				() => Promise.resolve(sharedObserver.capturedResponses()),
+				(value) => value.some((item) => item.requestId === 'initialize-request'),
+				20_000,
+			);
+			const initializeResponse = initialResponses.find((item) => item.requestId === 'initialize-request');
+			assert.equal(initializeResponse?.ok, true);
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			assert.equal(
+				sharedObserver.capturedResponses().some((item) => item.requestId === 'clipboard-request'),
+				false,
+				'the embedded page must not read the host clipboard before explicit approval',
+			);
+
+			await vscode.commands.executeCommand('notification.acceptPrimaryAction');
+			const responses = await waitFor(
+				() => Promise.resolve(sharedObserver.capturedResponses()),
+				(value) => value.some((item) => item.requestId === 'clipboard-request'),
+				20_000,
+			);
+			const clipboardResponse = responses.find((item) => item.requestId === 'clipboard-request');
+			assert.equal(clipboardResponse?.ok, true);
+			assert.equal(clipboardResponse?.clipboardText, pastedToken);
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			assert.equal(
+				sharedObserver.capturedResponses().some((item) => item.requestId === 'second-clipboard-request'),
+				false,
+				'a prior paste approval must not authorize a later clipboard read',
+			);
+
+			await vscode.commands.executeCommand('notification.acceptPrimaryAction');
+			const secondResponses = await waitFor(
+				() => Promise.resolve(sharedObserver.capturedResponses()),
+				(value) => value.some((item) => item.requestId === 'second-clipboard-request'),
+				20_000,
+			);
+			const secondClipboardResponse = secondResponses
+				.find((item) => item.requestId === 'second-clipboard-request');
+			assert.equal(secondClipboardResponse?.ok, true);
+			assert.equal(secondClipboardResponse?.clipboardText, pastedToken);
+
+			const bridgeAuthorizations = sharedObserver.authorizations('/api/splunk/export/bridge');
+			assert.ok(bridgeAuthorizations.length > 0, 'the extension should register the cloud bridge');
+			assert.equal(bridgeAuthorizations[0], `Bearer ${initialControlToken}`);
+			assert.equal(bridgeAuthorizations.includes('Bearer stale-inherited-control-token'), false);
+			assert.deepEqual(
+				sharedObserver.authorizations('/api/splunk/export/refresh').slice(0, 2),
+				[`Bearer ${initialControlToken}`, `Bearer ${rotatedControlToken}`],
+			);
+			assert.ok(
+				sharedObserver.statusReads() > 0,
+				'the extension should fall back to the legacy status route when refresh is unavailable',
+			);
+		} finally {
+			await vscode.env.clipboard.writeText(originalClipboard);
+			if (originalSharedObserverStatePath === undefined) {
+				delete process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH;
+			} else {
+				process.env.OBSTUDIO_SHARED_OBSERVER_STATE_PATH = originalSharedObserverStatePath;
+			}
+			if (originalControlToken === undefined) {
+				delete process.env.OBSTUDIO_CONTROL_TOKEN;
+			} else {
+				process.env.OBSTUDIO_CONTROL_TOKEN = originalControlToken;
+			}
+			await config.update('sharedObserverUrl', '', vscode.ConfigurationTarget.Global);
+			await vscode.commands.executeCommand('observability-studio.stopObserver');
+			await sharedObserver.dispose();
+			cleanupTempDir(tempHome);
+		}
+	});
+
 	test('extension ignores mismatched shared state and continues with the managed observer', async function () {
 		this.timeout(30_000);
 
@@ -948,6 +1213,11 @@ suite('VS Code Host', () => {
 			assert.ok(
 				state.panelHtml?.includes(sharedObserver.baseUrl),
 				'observer panel iframe should point at the shared backend',
+			);
+			assert.equal(
+				state.panelHtml?.includes('allow="clipboard-read; clipboard-write"'),
+				false,
+				'clipboard paste should use the validated extension bridge instead of iframe permission',
 			);
 
 			await vscode.commands.executeCommand('observability-studio.configureCodexMCP');

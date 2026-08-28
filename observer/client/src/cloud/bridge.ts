@@ -3,16 +3,21 @@ import type { SplunkExportSignalStatus, SplunkExportStatus } from "../api/types"
 
 const cloudBridgeVerificationWindowMs = 15_000;
 const cloudBridgeVerificationIntervalMs = 100;
+export const maxCloudClipboardTextBytes = 4096;
 
-export type CloudBridgeAction =
-  | "connect"
-  | "forget"
-  | "initialize"
-  | "open-audit-report"
-  | "open-free-edition"
-  | "open-ingest-token-help"
-  | "open-skill-docs"
-  | "set-enabled";
+export const cloudBridgeActions = [
+  "connect",
+  "forget",
+  "initialize",
+  "open-audit-report",
+  "open-free-edition",
+  "open-ingest-token-help",
+  "open-skill-docs",
+  "read-clipboard",
+  "set-enabled",
+] as const;
+
+export type CloudBridgeAction = typeof cloudBridgeActions[number];
 
 /**
  * Skills whose docs the IDE may be asked to open. The webview names a skill,
@@ -39,16 +44,19 @@ export interface CloudBridgePayload {
 
 export interface CloudBridgeConfig {
   parentOrigin: string;
+  supportedActions: readonly string[];
   token: string;
 }
 
 export interface CloudBridgeHandshake {
   bridgeToken: string;
+  supportedActions?: readonly string[];
   type: "obstudio.cloud.bridge";
 }
 
 export interface CloudBridgeResponse {
   bridgeToken: string;
+  clipboardText?: string;
   error?: string;
   ok: boolean;
   requestId: string;
@@ -65,7 +73,7 @@ interface PendingBridgeRequest {
 export interface UseCloudBridgeResult {
   bridge: CloudBridgeConfig | null;
   callBridge: (action: CloudBridgeAction, payload?: CloudBridgePayload) => Promise<CloudBridgeResponse>;
-  /** True once a handshake arrived but its token failed server-side verification. */
+  /** True when the expected IDE handshake is missing or fails server-side verification. */
   verificationFailed: boolean;
 }
 
@@ -79,6 +87,7 @@ export function useCloudBridge(): UseCloudBridgeResult {
   const [bridge, setBridge] = useState<CloudBridgeConfig | null>(null);
   const [verificationFailed, setVerificationFailed] = useState(false);
   const pendingRequests = useRef(new Map<string, PendingBridgeRequest>());
+  const verificationSequence = useRef(0);
 
   const callBridge = useCallback((
     action: CloudBridgeAction,
@@ -106,6 +115,7 @@ export function useCloudBridge(): UseCloudBridgeResult {
 
   useEffect(() => {
     let active = true;
+    let handshakeTimeoutId: number | undefined;
     const receiveBridgeConfig = (event: MessageEvent<unknown>) => {
       if (
         event.source !== window.parent
@@ -114,26 +124,48 @@ export function useCloudBridge(): UseCloudBridgeResult {
       ) {
         return;
       }
-      const { bridgeToken } = event.data;
+      if (handshakeTimeoutId !== undefined) {
+        window.clearTimeout(handshakeTimeoutId);
+        handshakeTimeoutId = undefined;
+      }
+      const { bridgeToken, supportedActions = [] } = event.data;
       const { origin } = event;
+      const sequence = ++verificationSequence.current;
       void verifyCloudBridgeToken(bridgeToken).then((verified) => {
-        if (!active) return;
+        if (!active || sequence !== verificationSequence.current) return;
         if (!verified) {
+          setBridge(null);
           setVerificationFailed(true);
           return;
         }
-        setBridge({
-          parentOrigin: origin,
-          token: bridgeToken,
+        setVerificationFailed(false);
+        setBridge((current) => {
+          if (
+            current?.parentOrigin === origin
+            && current.token === bridgeToken
+            && sameStringValues(current.supportedActions, supportedActions)
+          ) {
+            return current;
+          }
+          return {
+            parentOrigin: origin,
+            supportedActions,
+            token: bridgeToken,
+          };
         });
       });
     };
     window.addEventListener("message", receiveBridgeConfig);
     if (window.parent !== window) {
       window.parent.postMessage({ type: "obstudio.cloud.ready" }, "*");
+      handshakeTimeoutId = window.setTimeout(() => {
+        handshakeTimeoutId = undefined;
+        if (active) setVerificationFailed(true);
+      }, cloudBridgeVerificationWindowMs);
     }
     return () => {
       active = false;
+      if (handshakeTimeoutId !== undefined) window.clearTimeout(handshakeTimeoutId);
       window.removeEventListener("message", receiveBridgeConfig);
     };
   }, []);
@@ -179,7 +211,17 @@ export function isCloudBridgeHandshake(value: unknown): value is CloudBridgeHand
   const handshake = value as Record<string, unknown>;
   return handshake.type === "obstudio.cloud.bridge"
     && typeof handshake.bridgeToken === "string"
-    && /^[A-Za-z0-9_-]{24,128}$/.test(handshake.bridgeToken);
+    && /^[A-Za-z0-9_-]{24,128}$/.test(handshake.bridgeToken)
+    && (handshake.supportedActions === undefined
+      || (Array.isArray(handshake.supportedActions)
+        && handshake.supportedActions.length <= 64
+        && handshake.supportedActions.every((action) => (
+          typeof action === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(action)
+        ))));
+}
+
+function sameStringValues(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export function isTrustedCloudBridgeOrigin(origin: string): boolean {
@@ -238,8 +280,15 @@ export function isCloudBridgeResponse(value: unknown): value is CloudBridgeRespo
     && typeof response.bridgeToken === "string"
     && typeof response.requestId === "string"
     && typeof response.ok === "boolean"
+    && (response.clipboardText === undefined
+      || (typeof response.clipboardText === "string"
+        && utf8ByteLength(response.clipboardText) <= maxCloudClipboardTextBytes))
     && (response.error === undefined || typeof response.error === "string")
     && (response.status === undefined || isSplunkExportStatus(response.status));
+}
+
+export function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 export function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {

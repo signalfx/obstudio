@@ -1,15 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchSplunkExportStatus } from "../api/client";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  createSplunkExportBrowserSession,
+  fetchSplunkExportStatus,
+  isUnusableSplunkExportBrowserSession,
+  runSplunkExportBrowserAction,
+} from "../api/client";
 import type { SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
 import {
   isSplunkExportStatus,
+  utf8ByteLength,
   useCloudBridge,
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
 
 const maxSplunkRealmLength = 32;
+const maxSplunkAccessTokenBytes = 4096;
 const splunkRealmPattern = /^[a-z]{2,12}[0-9]+$/;
+const splunkAccessTokenTooLongMessage = "Access token must be 4,096 UTF-8 bytes or fewer.";
+const stalePasteMessage = "The field or selection changed while clipboard approval was pending. Paste again.";
+const ideControlUnavailableMessage = "Cloud connection changes are not available in this IDE session.";
 const freeEditionURL = "https://www.splunk.com/en_us/download/observability-cloud-free-edition.html";
 const ingestTokenHelpURL = "https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens";
 
@@ -21,20 +31,39 @@ interface SignalRow {
 }
 
 export type CloudConnectionState = "connected" | "configured" | "disconnected";
+type CloudPasteTarget = "region" | "token";
+
+interface CloudPasteRequest {
+  selectionEnd: number;
+  selectionStart: number;
+  target: CloudPasteTarget;
+  value: string;
+}
 
 interface CloudTabProps {
   onConnectionChange?: (state: CloudConnectionState) => void;
 }
 
+interface CloudActionResponse {
+  status?: SplunkExportStatus;
+}
+
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
   const { bridge, callBridge, verificationFailed } = useCloudBridge();
+  const [initializedBridge, setInitializedBridge] = useState<typeof bridge>(null);
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
-  const [region, setRegion] = useState("us0");
+  const [browserToken, setBrowserToken] = useState<string | null>(null);
+  const [region, setRegion] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
+  const [controlError, setControlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [forgetOpen, setForgetOpen] = useState(false);
+  const [pasteCaretRevision, setPasteCaretRevision] = useState(0);
+  const actionInFlightRef = useRef(false);
+  const pendingPasteCaretRef = useRef<{ caret: number; target: CloudPasteTarget } | null>(null);
+  const regionDirtyRef = useRef(false);
   const forgetCancelRef = useRef<HTMLButtonElement>(null);
   const forgetConfirmRef = useRef<HTMLButtonElement>(null);
   const forgetTriggerRef = useRef<HTMLButtonElement>(null);
@@ -47,27 +76,44 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, []);
 
   useEffect(() => {
-    if (!verificationFailed) return;
-    setBusyAction(null);
-    setError("Cloud connection changes are not available in this IDE session.");
-  }, [verificationFailed]);
+    if (verificationFailed) {
+      setBusyAction(null);
+      setControlError(ideControlUnavailableMessage);
+      return;
+    }
+    if (bridge) {
+      setControlError((current) => current === ideControlUnavailableMessage ? null : current);
+    }
+  }, [bridge, verificationFailed]);
 
   useEffect(() => {
     if (!bridge && window.parent !== window) return undefined;
+    setBusyAction("initialize");
     let active = true;
     const controller = new AbortController();
     const initialize = async () => {
+      let bridgeInitialized = false;
       try {
         let nextStatus: unknown;
-        let bridgeInitializationError: unknown;
+        let nextBrowserToken: string | null = null;
+        let controlInitializationError: unknown;
         if (bridge) {
           try {
             nextStatus = (await callBridge("initialize")).status;
+            bridgeInitialized = true;
+            if (!isSplunkExportStatus(nextStatus)) {
+              nextStatus = await fetchSplunkExportStatus(controller.signal);
+            }
           } catch (initializationError) {
-            bridgeInitializationError = initializationError;
+            controlInitializationError = initializationError;
             nextStatus = await fetchSplunkExportStatus(controller.signal);
           }
         } else {
+          try {
+            nextBrowserToken = await createSplunkExportBrowserSession(controller.signal);
+          } catch (browserSessionError) {
+            controlInitializationError = browserSessionError;
+          }
           nextStatus = await fetchSplunkExportStatus(controller.signal);
         }
         if (!active) return;
@@ -75,18 +121,25 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           throw new Error("Observer returned an invalid cloud status.");
         }
         setStatus(nextStatus);
-        if (nextStatus.realm?.trim()) {
+        setBrowserToken(nextBrowserToken);
+        if (bridge || nextBrowserToken) setControlError(null);
+        if (!regionDirtyRef.current && nextStatus.realm?.trim()) {
           setRegion(nextStatus.realm.trim().toLowerCase());
         }
-        setError(bridgeInitializationError
-          ? errorMessage(bridgeInitializationError, "Could not restore cloud connection status.")
-          : null);
+        if (controlInitializationError) {
+          const message = errorMessage(controlInitializationError, "Could not enable cloud connection controls.");
+          setControlError(message);
+        }
       } catch (initializationError) {
         if (!active || controller.signal.aborted) return;
-        setError(errorMessage(initializationError, "Could not load cloud connection status."));
+        const message = errorMessage(initializationError, "Could not load cloud connection status.");
+        setControlError(message);
         onConnectionChange?.("disconnected");
       } finally {
-        if (active) setBusyAction(null);
+        if (active) {
+          setInitializedBridge(bridgeInitialized ? bridge : null);
+          setBusyAction(null);
+        }
       }
     };
     void initialize();
@@ -107,6 +160,10 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, [notice]);
 
   const connected = status?.connected === true;
+  const controlAvailable = bridge !== null
+    ? initializedBridge === bridge
+    : browserToken !== null;
+  const displayedError = error ?? controlError;
 
   useEffect(() => {
     if (status === null) return;
@@ -174,34 +231,169 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   const runAction = async (
     action: CloudBridgeAction,
     payload?: { accessToken?: string; enabled?: boolean; realm?: string },
-  ): Promise<CloudBridgeResponse | null> => {
-    if (busyAction) return null;
+  ): Promise<CloudActionResponse | null> => {
+    if (busyAction || actionInFlightRef.current || (!bridge && !browserToken)) return null;
+    let browserSessionUnavailable = false;
+    actionInFlightRef.current = true;
     setBusyAction(action);
     setError(null);
     setNotice(null);
     try {
-      const response = await callBridge(action, payload);
+      let response: CloudBridgeResponse | CloudActionResponse;
+      if (bridge) {
+        response = await callBridge(action, payload);
+      } else if (browserToken) {
+        if (action !== "connect" && action !== "forget" && action !== "set-enabled") {
+          throw new Error("This cloud action requires an IDE session.");
+        }
+        try {
+          response = {
+            status: await runSplunkExportBrowserAction(action, payload, browserToken),
+          };
+        } catch (browserActionError) {
+          if (!isUnusableSplunkExportBrowserSession(browserActionError)) throw browserActionError;
+          browserSessionUnavailable = true;
+          setBrowserToken(null);
+          const renewedBrowserToken = await createSplunkExportBrowserSession();
+          setBrowserToken(renewedBrowserToken);
+          browserSessionUnavailable = false;
+          response = {
+            status: await runSplunkExportBrowserAction(action, payload, renewedBrowserToken),
+          };
+        }
+      } else {
+        throw new Error("Cloud connection changes are not available in this session.");
+      }
       if (response.status) setStatus(response.status);
+      setControlError(null);
       return response;
     } catch (actionError) {
-      setError(errorMessage(actionError, "The cloud connection request failed."));
+      const message = errorMessage(actionError, "The cloud connection request failed.");
+      if (
+        !bridge
+        && (browserSessionUnavailable || isUnusableSplunkExportBrowserSession(actionError))
+      ) {
+        setBrowserToken(null);
+        setError(null);
+        setControlError(message);
+      } else {
+        setError(message);
+      }
       return null;
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction(null);
     }
   };
 
+  useLayoutEffect(() => {
+    const pendingCaret = pendingPasteCaretRef.current;
+    if (!pendingCaret) return;
+    pendingPasteCaretRef.current = null;
+    const input = pendingCaret.target === "region" ? regionInputRef.current : tokenInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(pendingCaret.caret, pendingCaret.caret);
+  }, [accessToken, pasteCaretRevision, region]);
+
+  const pasteFromIDEClipboard = useCallback(async (request: CloudPasteRequest) => {
+    try {
+      const response = await callBridge("read-clipboard");
+      const input = request.target === "region" ? regionInputRef.current : tokenInputRef.current;
+      if (!input) {
+        setError(stalePasteMessage);
+        return;
+      }
+      const selectionStart = input.selectionStart ?? input.value.length;
+      const selectionEnd = input.selectionEnd ?? selectionStart;
+      if (
+        input.value !== request.value
+        || selectionStart !== request.selectionStart
+        || selectionEnd !== request.selectionEnd
+      ) {
+        setError(stalePasteMessage);
+        return;
+      }
+      const clipboardText = response.clipboardText ?? "";
+      const insertedText = request.target === "region"
+        ? clipboardText.trim().toUpperCase()
+        : clipboardText;
+      const { caret: nextCaret, value: nextValue } = pasteTextAtSelection(request, insertedText);
+      if (request.target === "region") {
+        if (nextValue.length > maxSplunkRealmLength) {
+          setError("Enter a valid Splunk Observability Cloud region.");
+          return;
+        }
+        regionDirtyRef.current = true;
+        pendingPasteCaretRef.current = { caret: nextCaret, target: request.target };
+        setRegion(nextValue.toLowerCase());
+      } else {
+        if (utf8ByteLength(nextValue) > maxSplunkAccessTokenBytes) {
+          setError(splunkAccessTokenTooLongMessage);
+          return;
+        }
+        pendingPasteCaretRef.current = { caret: nextCaret, target: request.target };
+        setAccessToken(nextValue);
+      }
+      setPasteCaretRevision((revision) => revision + 1);
+      setError(null);
+    } catch (pasteError) {
+      setError(errorMessage(pasteError, "Could not paste from the IDE clipboard."));
+    }
+  }, [callBridge]);
+
+  const handleIDEClipboardPaste = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    target: CloudPasteTarget,
+  ) => {
+    // VS Code-compatible hosts may not perform native paste shortcuts inside
+    // an iframe nested in a webview, so route an explicit paste through the host.
+    const key = event.key.toLowerCase();
+    const primaryPaste = key === "v"
+      && (event.metaKey || event.ctrlKey)
+      && !event.altKey;
+    const shiftInsertPaste = key === "insert"
+      && event.shiftKey
+      && !event.metaKey
+      && !event.ctrlKey
+      && !event.altKey;
+    if (
+      window.parent === window
+      || verificationFailed
+      || !bridge?.supportedActions.includes("read-clipboard")
+      || (!primaryPaste && !shiftInsertPaste)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const input = event.currentTarget;
+    const selectionStart = input.selectionStart ?? input.value.length;
+    const request: CloudPasteRequest = {
+      selectionEnd: input.selectionEnd ?? selectionStart,
+      selectionStart,
+      target,
+      value: input.value,
+    };
+    void pasteFromIDEClipboard(request);
+  };
+
   const connect = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const token = accessToken.trim();
+    const submittedAccessToken = accessToken;
+    const token = submittedAccessToken.trim();
     const realm = region.trim().toLowerCase();
     if (realm.length > maxSplunkRealmLength || !splunkRealmPattern.test(realm)) {
       setError("Enter a valid Splunk Observability Cloud region.");
       regionInputRef.current?.focus();
       return;
     }
-    if (token.length < 16) {
+    if (token.length === 0) {
       setError("Paste the access token secret.");
+      tokenInputRef.current?.focus();
+      return;
+    }
+    if (utf8ByteLength(token) > maxSplunkAccessTokenBytes) {
+      setError(splunkAccessTokenTooLongMessage);
       tokenInputRef.current?.focus();
       return;
     }
@@ -210,7 +402,13 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       realm,
     });
     if (!response) return;
-    setAccessToken("");
+    if (response.status?.connected !== true) {
+      setError("Splunk Observability Cloud did not confirm the connection.");
+      return;
+    }
+    setAccessToken((currentAccessToken) => (
+      currentAccessToken === submittedAccessToken ? "" : currentAccessToken
+    ));
     setNotice("Cloud destination connected.");
   };
 
@@ -244,8 +442,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
       <div className="cloud-tab__content">
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
-          {error ? <div className="cloud-alert cloud-alert--error" role="alert">{error}</div> : null}
-          {!error && notice ? <div className="cloud-alert cloud-alert--success" role="status">{notice}</div> : null}
+          {displayedError ? <div className="cloud-alert cloud-alert--error" role="alert">{displayedError}</div> : null}
+          {!displayedError && notice ? <div className="cloud-alert cloud-alert--success" role="status">{notice}</div> : null}
         </div>
 
         <section
@@ -261,7 +459,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               <div className="cloud-panel__actions">
                 <button
                   className="cloud-button cloud-button--danger"
-                  disabled={busyAction !== null || !bridge}
+                  disabled={busyAction !== null || !controlAvailable}
                   onClick={() => setForgetOpen(true)}
                   ref={forgetTriggerRef}
                   type="button"
@@ -280,13 +478,15 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   autoCapitalize="none"
                   autoComplete="off"
                   autoCorrect="off"
-                  disabled={busyAction !== null || !bridge}
                   id="cloud-region"
+                  maxLength={maxSplunkRealmLength}
                   onChange={(event) => {
+                    regionDirtyRef.current = true;
                     setRegion(event.target.value.trim().toLowerCase());
                     setError(null);
                   }}
-                  placeholder="US0"
+                  onKeyDown={(event) => handleIDEClipboardPaste(event, "region")}
+                  placeholder="US1"
                   ref={regionInputRef}
                   spellCheck={false}
                   value={region.toUpperCase()}
@@ -298,12 +498,29 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   autoCapitalize="none"
                   autoComplete="new-password"
                   autoCorrect="off"
-                  disabled={busyAction !== null || !bridge}
                   id="cloud-access-token"
-                  maxLength={4096}
                   onChange={(event) => {
+                    if (utf8ByteLength(event.target.value) > maxSplunkAccessTokenBytes) {
+                      setError(splunkAccessTokenTooLongMessage);
+                      return;
+                    }
                     setAccessToken(event.target.value);
                     setError(null);
+                  }}
+                  onKeyDown={(event) => handleIDEClipboardPaste(event, "token")}
+                  onPaste={(event) => {
+                    const pastedToken = event.clipboardData.getData("text");
+                    if (pastedToken === "") return;
+                    const input = event.currentTarget;
+                    const selectionStart = input.selectionStart ?? input.value.length;
+                    const selectionEnd = input.selectionEnd ?? selectionStart;
+                    const nextValue = input.value.slice(0, selectionStart)
+                      + pastedToken
+                      + input.value.slice(selectionEnd);
+                    if (utf8ByteLength(nextValue) > maxSplunkAccessTokenBytes) {
+                      event.preventDefault();
+                      setError(splunkAccessTokenTooLongMessage);
+                    }
                   }}
                   placeholder="Paste Ingest token"
                   ref={tokenInputRef}
@@ -324,7 +541,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               <div className="cloud-connect-form__action">
                 <button
                   className="cloud-button cloud-button--primary"
-                  disabled={busyAction !== null || !bridge || accessToken.trim().length < 16}
+                  disabled={busyAction !== null || !controlAvailable}
                   type="submit"
                 >
                   {busyAction === "connect" ? "Connecting..." : "Connect"}
@@ -342,7 +559,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   aria-checked={exportEnabled}
                   aria-label={`Remote telemetry export is ${exportStateLabel}`}
                   className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
-                  disabled={busyAction !== null || !bridge}
+                  disabled={busyAction !== null || !controlAvailable}
                   onClick={() => void toggleExport()}
                   role="switch"
                   type="button"
@@ -455,6 +672,21 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       ) : null}
     </section>
   );
+}
+
+function pasteTextAtSelection(
+  request: CloudPasteRequest,
+  insertedText: string,
+): { caret: number; value: string } {
+  const selectionStart = Math.max(0, Math.min(request.selectionStart, request.value.length));
+  const selectionEnd = Math.max(
+    selectionStart,
+    Math.min(request.selectionEnd, request.value.length),
+  );
+  return {
+    caret: selectionStart + insertedText.length,
+    value: `${request.value.slice(0, selectionStart)}${insertedText}${request.value.slice(selectionEnd)}`,
+  };
 }
 
 function signalRow(label: string, signal: SplunkExportSignalStatus | undefined): SignalRow {

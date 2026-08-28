@@ -166,6 +166,199 @@ export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<Spl
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
+export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";
+
+export class SplunkExportBrowserActionError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "SplunkExportBrowserActionError";
+  }
+}
+
+const unusableSplunkBrowserSessionMessages = new Set([
+  "browser cloud control session is not valid",
+  // Mixed-version compatibility with Observers that used the former timed-session wording.
+  "browser cloud control session expired; reload Observer",
+]);
+
+export function isUnusableSplunkExportBrowserSession(error: unknown): boolean {
+  return error instanceof SplunkExportBrowserActionError
+    && error.statusCode === 401
+    && unusableSplunkBrowserSessionMessages.has(error.message);
+}
+
+const splunkBrowserRequestHeader = "X-Obstudio-Browser-Request";
+const splunkBrowserTokenHeader = "X-Obstudio-Browser-Token";
+const splunkBrowserLaunchFragmentKey = "obstudio-cloud-control";
+const splunkBrowserSessionStorageKey = "obstudio.cloud.browser-session.v1";
+const splunkBrowserLaunchPattern = /^[A-Za-z0-9_-]{43}$/;
+const splunkBrowserSessionPattern = /^[A-Za-z0-9_-]{76}$/;
+let pendingSplunkBrowserSession: Promise<string> | null = null;
+
+/** Create an in-memory, same-origin control session for the standalone browser UI. */
+export function createSplunkExportBrowserSession(signal?: AbortSignal): Promise<string> {
+  if (pendingSplunkBrowserSession === null) {
+    const operation = issueSplunkExportBrowserSession();
+    pendingSplunkBrowserSession = operation;
+    void operation.then(
+      () => {
+        if (pendingSplunkBrowserSession === operation) pendingSplunkBrowserSession = null;
+      },
+      () => {
+        if (pendingSplunkBrowserSession === operation) pendingSplunkBrowserSession = null;
+      },
+    );
+  }
+  return waitForSplunkBrowserSession(pendingSplunkBrowserSession, signal);
+}
+
+async function issueSplunkExportBrowserSession(): Promise<string> {
+  const launchToken = readSplunkBrowserLaunchToken();
+  const storedBrowserToken = readStoredSplunkBrowserToken();
+  if (!launchToken && !storedBrowserToken) {
+    throw new Error("Open Observer using the secure Telemetry Explorer URL printed by the Observer process.");
+  }
+  const response = await postSplunkExportBrowserJSON(
+    "/api/splunk/export/browser/session",
+    { launchToken },
+    storedBrowserToken || undefined,
+  );
+  const token = typeof response === "object"
+    && response !== null
+    && typeof (response as Record<string, unknown>).browserToken === "string"
+    ? (response as Record<string, string>).browserToken
+    : "";
+  if (!splunkBrowserSessionPattern.test(token)) {
+    throw new Error("Observer returned an invalid browser cloud control session.");
+  }
+  storeSplunkBrowserToken(token);
+  clearSplunkBrowserLaunchFragment();
+  return token;
+}
+
+function waitForSplunkBrowserSession(
+  operation: Promise<string>,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!signal) return operation;
+  if (signal.aborted) return Promise.reject(new DOMException("The operation was aborted.", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    void operation.then(
+      (token) => {
+        signal.removeEventListener("abort", abort);
+        resolve(token);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function readSplunkBrowserLaunchToken(): string {
+  const fragment = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const fragmentParameters = new URLSearchParams(fragment);
+  const fragmentToken = fragmentParameters.get(splunkBrowserLaunchFragmentKey)?.trim() ?? "";
+  return splunkBrowserLaunchPattern.test(fragmentToken) ? fragmentToken : "";
+}
+
+function clearSplunkBrowserLaunchFragment(): void {
+  const fragment = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const fragmentParameters = new URLSearchParams(fragment);
+  if (fragmentParameters.has(splunkBrowserLaunchFragmentKey)) {
+    fragmentParameters.delete(splunkBrowserLaunchFragmentKey);
+    const remainingFragment = fragmentParameters.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${remainingFragment ? `#${remainingFragment}` : ""}`,
+    );
+  }
+}
+
+function readStoredSplunkBrowserToken(): string {
+  try {
+    const token = window.sessionStorage.getItem(splunkBrowserSessionStorageKey)?.trim() ?? "";
+    return splunkBrowserSessionPattern.test(token) ? token : "";
+  } catch {
+    return "";
+  }
+}
+
+function storeSplunkBrowserToken(token: string): void {
+  try {
+    window.sessionStorage.setItem(splunkBrowserSessionStorageKey, token);
+  } catch {
+    // The in-memory browser session remains usable until the page reloads.
+  }
+}
+
+/** Run a cloud mutation directly from the trusted standalone browser origin. */
+export async function runSplunkExportBrowserAction(
+  action: SplunkExportBrowserAction,
+  payload: { accessToken?: string; enabled?: boolean; realm?: string } | undefined,
+  browserToken: string,
+): Promise<SplunkExportStatus> {
+  const path = action === "connect"
+    ? "/api/splunk/export"
+    : action === "forget"
+      ? "/api/splunk/export/forget"
+      : "/api/splunk/export/enabled";
+  return postSplunkExportBrowserJSON(path, payload ?? {}, browserToken) as Promise<SplunkExportStatus>;
+}
+
+async function postSplunkExportBrowserJSON(
+  path: string,
+  body: object,
+  browserToken?: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const storedBrowserToken = readStoredSplunkBrowserToken();
+  const effectiveBrowserToken = storedBrowserToken || browserToken;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    [splunkBrowserRequestHeader]: "1",
+  };
+  if (effectiveBrowserToken) headers[splunkBrowserTokenHeader] = effectiveBrowserToken;
+  const response = await fetch(`${BASE}${path}`, {
+    body: JSON.stringify(body),
+    cache: "no-store",
+    credentials: "same-origin",
+    headers,
+    method: "POST",
+    signal,
+  });
+  const renewedBrowserToken = response.headers.get(splunkBrowserTokenHeader)?.trim() ?? "";
+  if (splunkBrowserSessionPattern.test(renewedBrowserToken)) {
+    storeSplunkBrowserToken(renewedBrowserToken);
+  }
+  let parsed: unknown;
+  try {
+    parsed = await response.json();
+  } catch {
+    parsed = null;
+  }
+  if (!response.ok) {
+    const message = typeof parsed === "object"
+      && parsed !== null
+      && typeof (parsed as Record<string, unknown>).error === "string"
+      ? (parsed as Record<string, string>).error
+      : `Observer request failed with HTTP ${response.status}.`;
+    throw new SplunkExportBrowserActionError(message, response.status);
+  }
+  return parsed;
+}
+
 /** Fetch per-service aggregates computed from the full span store. */
 export async function fetchServiceStats(signal?: AbortSignal): Promise<ServiceStats[]> {
   const data = await fetchJSON<ServiceStats[] | null>("/api/query/stats/services", { signal });

@@ -97,6 +97,67 @@ export function readSharedObserverDiscovery(
 	}
 }
 
+export function readSharedObserverControlToken(
+	observerUrl: string,
+	homeDir: string,
+	statePathOverride?: string,
+): string | undefined {
+	const discovered = readSharedObserverDiscovery(homeDir, statePathOverride);
+	if (discovered === undefined || !sameObserverControlEndpoint(discovered.baseUrl, observerUrl)) {
+		return undefined;
+	}
+	return discovered.controlToken;
+}
+
+function sameObserverControlEndpoint(left: string, right: string): boolean {
+	return canonicalObserverControlEndpoint(left) === canonicalObserverControlEndpoint(right);
+}
+
+export function isLocalObserverControlHost(rawHostname: string): boolean {
+	const hostname = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
+	const ipv4Octets = hostname.split('.');
+	const ipv4Loopback = ipv4Octets.length === 4
+		&& ipv4Octets[0] === '127'
+		&& ipv4Octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
+	return hostname === 'localhost'
+		|| hostname === '0.0.0.0'
+		|| hostname === '::1'
+		|| hostname === '::'
+		|| ipv4Loopback;
+}
+
+function canonicalObserverControlEndpoint(raw: string): string {
+	const parsed = new URL(normalizeObserverBaseUrl(raw));
+	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+	if (
+		hostname === 'localhost'
+		|| hostname === '127.0.0.1'
+		|| hostname === '0.0.0.0'
+		|| hostname === '::1'
+		|| hostname === '::'
+	) {
+		parsed.hostname = '127.0.0.1';
+	}
+	return parsed.toString().replace(/\/$/, '');
+}
+
+export function resolveSharedObserverControlToken(
+	observerUrl: string,
+	homeDir: string,
+	inheritedToken: string | undefined,
+	statePathOverride?: string,
+): string | undefined {
+	const discovered = readSharedObserverDiscovery(homeDir, statePathOverride);
+	if (
+		discovered?.controlToken !== undefined
+		&& sameObserverControlEndpoint(discovered.baseUrl, observerUrl)
+	) {
+		return discovered.controlToken;
+	}
+	const normalizedInheritedToken = inheritedToken?.trim();
+	return normalizedInheritedToken === '' ? undefined : normalizedInheritedToken;
+}
+
 export function resolveBackend(extensionPath: string): ObserverBackend {
 	const candidates = process.platform === 'win32'
 		? ['obstudio.exe', 'obstudio']

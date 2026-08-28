@@ -394,7 +394,7 @@ OBSTUDIO_SPLUNK_TRACES_EXPORT=true
 	}
 }
 
-func TestSplunkExportConfigurationRefresherIgnoresLegacyEndpointConfiguration(t *testing.T) {
+func TestSplunkExportConfigurationRefresherPreservesLegacyEndpointsAsEnvManaged(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "obstudio.env")
 	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
 		Enabled:     true,
@@ -423,8 +423,8 @@ OBSTUDIO_SPLUNK_METRICS_ENDPOINT=https://custom.example.com/v2/datapoint/otlp
 	}
 
 	refresh := newSplunkExportConfigurationRefresher(path, metrics, traces)
-	if applied := mustRefresh(t, refresh); applied {
-		t.Fatal("legacy endpoint env file should not apply")
+	if managed := mustRefresh(t, refresh); !managed {
+		t.Fatal("legacy endpoint env file should remain managed without being reapplied")
 	}
 
 	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "old-token-123456" {
@@ -435,7 +435,7 @@ OBSTUDIO_SPLUNK_METRICS_ENDPOINT=https://custom.example.com/v2/datapoint/otlp
 	}
 }
 
-func TestSplunkExportConfigurationRefresherPreservesShellLegacyEndpointConfiguration(t *testing.T) {
+func TestSplunkExportConfigurationRefresherPreservesShellLegacyEndpointsAsEnvManaged(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "obstudio.env")
 	t.Setenv("OBSTUDIO_SPLUNK_METRICS_ENDPOINT", "https://metrics.example.com/v2/datapoint/otlp")
 	metrics, err := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{
@@ -465,8 +465,8 @@ OBSTUDIO_SPLUNK_TRACES_EXPORT=true
 	}
 
 	refresh := newSplunkExportConfigurationRefresher(path, metrics, traces)
-	if applied := mustRefresh(t, refresh); applied {
-		t.Fatal("shell legacy endpoint configuration should not apply")
+	if managed := mustRefresh(t, refresh); !managed {
+		t.Fatal("env-file cloud settings should remain managed without replacing shell legacy endpoints")
 	}
 
 	if got := metrics.Config(); got.Realm != "us1" || got.Endpoint != "https://metrics.example.com/v2/datapoint/otlp" || got.AccessToken != "old-token-123456" {

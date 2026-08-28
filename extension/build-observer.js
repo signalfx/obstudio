@@ -52,17 +52,11 @@ function stageSkills(paths) {
 	console.log("Skills staged.");
 }
 
-function buildClientAssets(paths) {
-	const assetsDir = path.join(paths.observerRoot, "internal", "web", "static", "assets");
-	if (fs.existsSync(path.join(assetsDir, "main.js"))) {
-		console.log("Client assets already built, skipping...");
-		return;
-	}
-
+function buildClientAssets(paths, run = execFileSync) {
 	// Use the Go client builder (cmd/build-client) which uses esbuild's Go API.
 	// No npm/Node.js required — only the Go toolchain.
 	console.log("Building client assets via Go...");
-	execFileSync("go", ["run", "./cmd/build-client"], {
+	run("go", ["run", "./cmd/build-client"], {
 		cwd: paths.observerRoot,
 		stdio: "inherit",
 	});

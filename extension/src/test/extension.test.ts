@@ -6,9 +6,12 @@ import test from 'node:test';
 import {
 	buildObserverHealthUrl,
 	buildObserverValidatorSummaryUrl,
+	isLocalObserverControlHost,
 	normalizeObserverBaseUrl,
 	observerPortFromUrl,
+	readSharedObserverControlToken,
 	readSharedObserverDiscovery,
+	resolveSharedObserverControlToken,
 	resolveBackend,
 } from '../backend';
 import {
@@ -17,14 +20,23 @@ import {
 	isCloudBridgeReady,
 	isCloudBridgeRequest,
 	isSkillDocsId,
+	ObserverCloudResponseError,
+	parseObserverCloudResponseBody,
 	skillDocsIds,
 	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
 	restoreSplunkCloudConnectionFromStorage,
+	restoreSplunkCloudConnectionWithLegacyFallback,
+	shouldRestoreObserverAfterCloudMutationFailure,
+	validateCloudClipboardText,
 } from '../cloud-bridge';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
-const { getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
+const { buildClientAssets, getBuildPaths, resetObserverOutputDirs } = require('../../build-observer.js') as {
+	buildClientAssets: (
+		paths: ReturnType<typeof getBuildPaths>,
+		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
+	) => void;
 	getBuildPaths: (extensionRoot?: string, env?: NodeJS.ProcessEnv) => {
 		observerRoot: string;
 		observerOutDir: string;
@@ -63,8 +75,29 @@ test('cloud bridge accepts only bounded known requests', () => {
 		type: 'obstudio.cloud.request',
 	}), true);
 	assert.equal(isCloudBridgeRequest({
-		action: 'paste-token',
+		action: 'read-clipboard',
 		bridgeToken: 'bridge-token-1234567890123456',
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'connect',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { accessToken: 'é'.repeat(2048), realm: 'us0' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), true);
+	assert.equal(isCloudBridgeRequest({
+		action: 'connect',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { accessToken: 'é'.repeat(2049), realm: 'us0' },
+		requestId: 'request-123',
+		type: 'obstudio.cloud.request',
+	}), false);
+	assert.equal(isCloudBridgeRequest({
+		action: 'read-clipboard',
+		bridgeToken: 'bridge-token-1234567890123456',
+		payload: { accessToken: 'clipboard reads take no payload' },
 		requestId: 'request-123',
 		type: 'obstudio.cloud.request',
 	}), false);
@@ -134,6 +167,73 @@ test('cloud bridge accepts only bounded known requests', () => {
 	}), false);
 });
 
+test('cloud clipboard text fails clearly instead of being silently truncated', () => {
+	assert.equal(validateCloudClipboardText('x'.repeat(4096)), 'x'.repeat(4096));
+	assert.equal(validateCloudClipboardText('é'.repeat(2048)), 'é'.repeat(2048));
+	assert.throws(
+		() => validateCloudClipboardText('é'.repeat(2049)),
+		/4,096 UTF-8-byte cloud field limit/,
+	);
+});
+
+test('observer cloud response parsing preserves non-JSON route errors for compatibility fallback', () => {
+	assert.deepEqual(parseObserverCloudResponseBody(404, '404 page not found\n'), {});
+	assert.deepEqual(parseObserverCloudResponseBody(401, '{"error":"unauthorized"}'), { error: 'unauthorized' });
+	assert.throws(
+		() => parseObserverCloudResponseBody(200, 'not JSON'),
+		/invalid response \(HTTP 200\)/,
+	);
+});
+
+test('Observer rollback is skipped after authoritative cloud mutation rejections', () => {
+	for (const statusCode of [400, 401, 404, 409]) {
+		assert.equal(
+			shouldRestoreObserverAfterCloudMutationFailure(
+				new ObserverCloudResponseError(statusCode, 'request rejected'),
+			),
+			false,
+		);
+	}
+	assert.equal(
+		shouldRestoreObserverAfterCloudMutationFailure(
+			new ObserverCloudResponseError(500, 'uncertain server failure'),
+		),
+		true,
+	);
+	assert.equal(shouldRestoreObserverAfterCloudMutationFailure(new Error('connection reset')), true);
+});
+
+test('cloud restore falls back to the legacy configure route only when restore is unavailable', async () => {
+	for (const statusCode of [404, 405]) {
+		const calls: string[] = [];
+		const fallbackResult = await restoreSplunkCloudConnectionWithLegacyFallback(
+			async () => {
+				calls.push('restore');
+				throw new ObserverCloudResponseError(statusCode, 'route unavailable');
+			},
+			async () => {
+				calls.push('legacy');
+				return { connected: true };
+			},
+		);
+		assert.deepEqual(fallbackResult, { connected: true });
+		assert.deepEqual(calls, ['restore', 'legacy']);
+	}
+
+	let legacyCalled = false;
+	await assert.rejects(
+		() => restoreSplunkCloudConnectionWithLegacyFallback(
+			async () => { throw new ObserverCloudResponseError(401, 'unauthorized'); },
+			async () => {
+				legacyCalled = true;
+				return {};
+			},
+		),
+		/unauthorized/,
+	);
+	assert.equal(legacyCalled, false);
+});
+
 test('cloud bridge ready messages require the bound token shape', () => {
 	assert.equal(isCloudBridgeReady({
 		bridgeToken: 'bridge-token-1234567890123456',
@@ -163,8 +263,15 @@ test('stored cloud connections require a valid realm and opaque token', () => {
 			realm: 'us0',
 		},
 	);
-	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+	assert.deepEqual(parseStoredSplunkCloudConnection(JSON.stringify({
 		accessToken: 'too-short',
+		realm: 'us0',
+	})), {
+		accessToken: 'too-short',
+		realm: 'us0',
+	});
+	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: '',
 		realm: 'us0',
 	})), undefined);
 	assert.deepEqual(
@@ -184,6 +291,17 @@ test('stored cloud connections require a valid realm and opaque token', () => {
 	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
 		accessToken: 'token_1234567890123456',
 		realm: 'https://attacker.example',
+	})), undefined);
+	assert.deepEqual(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: 'é'.repeat(2048),
+		realm: 'us0',
+	})), {
+		accessToken: 'é'.repeat(2048),
+		realm: 'us0',
+	});
+	assert.equal(parseStoredSplunkCloudConnection(JSON.stringify({
+		accessToken: 'é'.repeat(2049),
+		realm: 'us0',
 	})), undefined);
 	assert.equal(parseStoredSplunkCloudConnection('not-json'), undefined);
 });
@@ -411,17 +529,56 @@ test('cloud export bridge persists preference keys and refresh fallback paths', 
 		source,
 		/case 'set-enabled':[\s\S]*?context\.globalState\.update\(\s*splunkCloudExportEnabledStateKey,\s*request\.payload\.enabled[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/enabled'/,
 	);
+	const setEnabledStart = source.indexOf("case 'set-enabled':");
+	const setEnabledEnd = source.indexOf("case 'forget':", setEnabledStart);
+	assert.notEqual(setEnabledStart, -1);
+	assert.notEqual(setEnabledEnd, -1);
+	const setEnabledSource = source.slice(setEnabledStart, setEnabledEnd);
 	assert.match(
-		source,
-		/async function refreshSplunkCloudConnection[\s\S]*?restoreSplunkCloudConnectionFromStorage\(\{[\s\S]*?context\.globalState\.get<boolean>\(splunkCloudExportEnabledStateKey\)[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/enabled', \{ enabled \}\)/,
+		setEnabledSource,
+		/restoreObserverCloudConnection\(\s*storedValue,\s*storedExportEnabled,\s*\{\s*clearWhenMissing:\s*false\s*\},?\s*\)/,
 	);
 	assert.match(
 		source,
-		/case 'connect':[\s\S]*?context\.globalState\.update\(splunkCloudExportEnabledStateKey, false\)/,
+		/async function refreshSplunkCloudConnection[\s\S]*?configure: \(connection\) => restoreSplunkCloudConnectionWithLegacyFallback\([\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/restore', connection\)[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export', connection\)[\s\S]*?context\.globalState\.get<boolean>\(splunkCloudExportEnabledStateKey\)[\s\S]*?refresh: \(\) => refreshObserverCloudStatus\(\)[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/enabled', \{ enabled \}\)/,
+	);
+	assert.match(
+		source,
+		/async function refreshObserverCloudStatus[\s\S]*?restoreSplunkCloudConnectionWithLegacyFallback\([\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export\/refresh', \{\}\)[\s\S]*?getObserverCloudJSON\('\/api\/splunk\/export'\)/,
+	);
+	assert.match(
+		source,
+		/case 'connect':[\s\S]*?postObserverCloudJSON\('\/api\/splunk\/export', connection\)[\s\S]*?context\.secrets\.store\(splunkCloudConnectionSecretKey[\s\S]*?context\.globalState\.update\(splunkCloudExportEnabledStateKey, false\)/,
+	);
+	assert.match(
+		source,
+		/case 'read-clipboard':[\s\S]*?readApprovedCloudClipboard\(request\.bridgeToken\)/,
+	);
+	assert.match(
+		source,
+		/async function readApprovedCloudClipboard[\s\S]*?vscode\.window\.showInformationMessage\([\s\S]*?allowCloudClipboardAction[\s\S]*?validateCloudClipboardText\(await vscode\.env\.clipboard\.readText\(\)\)/,
 	);
 	assert.match(
 		source,
 		/async function forgetSplunkCloudConnection[\s\S]*?context\.globalState\.update\(splunkCloudExportEnabledStateKey, undefined\)/,
+	);
+});
+
+test('authoritative cloud mutation rejections do not trigger Observer rollback writes', () => {
+	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
+	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
+	const setEnabledStart = source.indexOf("case 'set-enabled':");
+	const setEnabledEnd = source.indexOf("case 'forget':", setEnabledStart);
+	const forgetStart = source.indexOf('async function forgetSplunkCloudConnection');
+	const forgetEnd = source.indexOf('async function restoreStoredCloudConnectionState', forgetStart);
+
+	assert.match(
+		source.slice(setEnabledStart, setEnabledEnd),
+		/shouldRestoreObserverAfterCloudMutationFailure\(serverError\)/,
+	);
+	assert.match(
+		source.slice(forgetStart, forgetEnd),
+		/shouldRestoreObserverAfterCloudMutationFailure\(forgetError\)/,
 	);
 });
 
@@ -434,13 +591,17 @@ function cloudStatus(connected: boolean, enabled: boolean, configured: boolean) 
 	};
 }
 
-test('shared observer discovery token takes precedence over inherited env token', () => {
+test('shared observer control requests refresh rotated state tokens and retry one unauthorized response', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
 
 	assert.match(
 		source,
-		/function activeObserverControlToken\(\): string \{[\s\S]*?return observerSharedControlToken \?\? sharedObserverControlTokenFromEnv\(\) \?\? '';/,
+		/function activeObserverControlToken\(\): string \{[\s\S]*?sharedObserverControlTokenForUrl\(observerBaseUrl\)[\s\S]*?observerSharedControlToken = currentToken/,
+	);
+	assert.match(
+		source,
+		/response\.statusCode === 401[\s\S]*?sharedObserverControlTokenForUrl\(observerBaseUrl\)[\s\S]*?refreshedToken !== controlToken[\s\S]*?continue;/,
 	);
 });
 
@@ -524,6 +685,155 @@ test('readSharedObserverDiscovery reads the CLI shared observer state', () => {
 	}
 });
 
+test('readSharedObserverControlToken matches the shared observer URL', () => {
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'shared-control-token' }),
+		);
+
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.1:3001/mcp', homeDir),
+			'shared-control-token',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://localhost:3001/mcp', homeDir),
+			'shared-control-token',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://[::1]:3001/mcp', homeDir),
+			'shared-control-token',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://0.0.0.0:3001/mcp', homeDir),
+			'shared-control-token',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://[::]:3001/mcp', homeDir),
+			'shared-control-token',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.2:3001/mcp', homeDir),
+			undefined,
+			'distinct 127.x listeners must not share bearer tokens',
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.1:3002', homeDir),
+			undefined,
+		);
+		assert.equal(
+			readSharedObserverControlToken('https://localhost:3001', homeDir),
+			undefined,
+		);
+
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'http://localhost:3001', controlToken: 'localhost-state-token' }),
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.1:3001/mcp', homeDir),
+			'localhost-state-token',
+		);
+
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'http://[::1]:3001', controlToken: 'ipv6-state-token' }),
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.1:3001/mcp', homeDir),
+			'ipv6-state-token',
+		);
+
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'http://localhost', controlToken: 'http-default-port-token' }),
+		);
+		assert.equal(
+			readSharedObserverControlToken('http://127.0.0.1:80/mcp', homeDir),
+			'http-default-port-token',
+		);
+
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'https://localhost', controlToken: 'https-default-port-token' }),
+		);
+		assert.equal(
+			readSharedObserverControlToken('https://127.0.0.1:443/mcp', homeDir),
+			'https-default-port-token',
+		);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('cloud control treats loopback and wildcard bind hosts as local', () => {
+	for (const hostname of [
+		'localhost',
+		'127.0.0.1',
+		'127.0.0.2',
+		'0.0.0.0',
+		'::1',
+		'[::1]',
+		'::',
+		'[::]',
+	]) {
+		assert.equal(isLocalObserverControlHost(hostname), true, hostname);
+	}
+	for (const hostname of ['192.0.2.10', 'example.test', '127.example.test', '127.999.0.1']) {
+		assert.equal(isLocalObserverControlHost(hostname), false, hostname);
+	}
+});
+
+test('matching shared observer state wins while mismatched state preserves the inherited token', () => {
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		const stateDir = path.join(homeDir, '.obstudio');
+		fs.mkdirSync(stateDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(stateDir, 'shared-observer.json'),
+			JSON.stringify({ baseUrl: 'http://127.0.0.1:3001', controlToken: 'current-state-token' }),
+		);
+
+		assert.equal(
+			resolveSharedObserverControlToken(
+				'http://127.0.0.1:3001',
+				homeDir,
+				'stale-inherited-token',
+			),
+			'current-state-token',
+		);
+		assert.equal(
+			resolveSharedObserverControlToken(
+				'http://127.0.0.1:3002',
+				homeDir,
+				'inherited-token',
+			),
+			'inherited-token',
+		);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
+test('inherited shared observer token remains available when no discovery state exists', () => {
+	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
+	try {
+		assert.equal(
+			resolveSharedObserverControlToken(
+				'http://127.0.0.1:3001',
+				homeDir,
+				'configured-inherited-token',
+			),
+			'configured-inherited-token',
+		);
+	} finally {
+		fs.rmSync(homeDir, { force: true, recursive: true });
+	}
+});
+
 test('readSharedObserverDiscovery ignores missing, malformed, and incomplete state', () => {
 	const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-home-'));
 	try {
@@ -558,6 +868,31 @@ test('resetObserverOutputDirs removes stale output and recreates the directory',
 		assert.equal(fs.existsSync(path.join(paths.observerOutDir, 'stale.txt')), false);
 		assert.equal(fs.existsSync(paths.observerOutDir), true);
 	});
+});
+
+test('buildClientAssets rebuilds committed static assets before packaging', () => {
+	const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-build-client-'));
+	try {
+		const fakeExtensionRoot = path.join(repoRoot, 'extension');
+		fs.mkdirSync(fakeExtensionRoot);
+		const paths = getBuildPaths(fakeExtensionRoot);
+		const assetsDir = path.join(paths.observerRoot, 'internal', 'web', 'static', 'assets');
+		fs.mkdirSync(assetsDir, { recursive: true });
+		fs.writeFileSync(path.join(assetsDir, 'main.js'), 'committed build');
+
+		const calls: Array<{ args: string[]; cwd: string; file: string }> = [];
+		buildClientAssets(paths, (file, args, options) => {
+			calls.push({ args, cwd: options.cwd, file });
+		});
+
+		assert.deepEqual(calls, [{
+			args: ['run', './cmd/build-client'],
+			cwd: paths.observerRoot,
+			file: 'go',
+		}]);
+	} finally {
+		fs.rmSync(repoRoot, { force: true, recursive: true });
+	}
 });
 
 test('skill docs ids cover the skills the Overview tab offers', () => {

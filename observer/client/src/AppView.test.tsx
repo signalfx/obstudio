@@ -3,7 +3,7 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
+import type { MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
 import { forwardHostKeyboardEvent, hostKeyboardEventMessageType } from "./hooks/useKeyboardShortcuts";
 import type { TelemetryHandle } from "./telemetry";
@@ -144,18 +144,21 @@ function makeTraceDetail(): TraceDetail {
   };
 }
 
-function stubCloudStatusFetch(): void {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+function stubCloudStatusFetch(status: SplunkExportStatus = {
+  connected: false,
+  enabled: false,
+  metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+  traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+}): void {
+  window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", "A".repeat(76));
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
     ok: true,
     status: 200,
     statusText: "OK",
-    json: async () => ({
-      connected: false,
-      enabled: false,
-      metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-    }),
-  }));
+    json: async () => String(input) === "/api/splunk/export/browser/session"
+      ? { browserToken: "B".repeat(76) }
+      : status,
+  })));
 }
 
 beforeEach(() => {
@@ -185,6 +188,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
 
@@ -396,6 +400,52 @@ describe("AppView validation tab", () => {
     expect(postMessage).toHaveBeenCalledTimes(commands.length * 2);
   });
 
+  it("leaves editing shortcuts and their keyup events inside focused controls", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const forwardedCodes = new Set<string>();
+    const editingShortcuts = [
+      { code: "KeyV", ctrlKey: true, key: "v" },
+      { code: "Backspace", metaKey: true, key: "Backspace" },
+      { code: "ArrowRight", ctrlKey: true, key: "ArrowRight" },
+      { altKey: true, code: "ArrowLeft", key: "ArrowLeft" },
+    ];
+
+    for (const shortcut of editingShortcuts) {
+      for (const type of ["keydown", "keyup"] as const) {
+        const event = new KeyboardEvent(type, shortcut);
+        Object.defineProperty(event, "target", { value: input });
+        expect(forwardHostKeyboardEvent(event, forwardedCodes, parentWindow, window)).toBe(false);
+      }
+    }
+
+    expect(forwardedCodes.size).toBe(0);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("still forwards non-editing Alt shortcuts from focused controls", () => {
+    const postMessage = vi.fn();
+    const parentWindow = { postMessage } as unknown as Window;
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const forwardedCodes = new Set<string>();
+
+    for (const type of ["keydown", "keyup"] as const) {
+      const event = new KeyboardEvent(type, {
+        altKey: true,
+        code: "KeyV",
+        key: "v",
+      });
+      Object.defineProperty(event, "target", { value: input });
+      expect(forwardHostKeyboardEvent(event, forwardedCodes, parentWindow, window)).toBe(true);
+    }
+
+    expect(forwardedCodes.size).toBe(0);
+    expect(postMessage).toHaveBeenCalledTimes(2);
+  });
+
   it("does not bridge host key events outside an iframe", () => {
     const postMessage = vi.fn();
     const currentWindow = { postMessage } as unknown as Window;
@@ -560,17 +610,12 @@ describe("AppView cloud connection status chip", () => {
   });
 
   it("shows Configured, not connected with paused style when credentials exist but connection is inactive", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({
-        connected: false,
-        enabled: true,
-        metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-        traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-      }),
-    }));
+    stubCloudStatusFetch({
+      connected: false,
+      enabled: true,
+      metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+    });
     window.history.replaceState({}, "", "/?tab=cloud");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
@@ -580,17 +625,12 @@ describe("AppView cloud connection status chip", () => {
   });
 
   it("shows Connected with live style when the connection is active", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({
-        connected: true,
-        enabled: true,
-        metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
-        traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
-      }),
-    }));
+    stubCloudStatusFetch({
+      connected: true,
+      enabled: true,
+      metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
+      traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
+    });
     window.history.replaceState({}, "", "/?tab=cloud");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);

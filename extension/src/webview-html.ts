@@ -2,6 +2,7 @@
 // Extracted from extension.ts so they can be unit-tested without VS Code APIs.
 
 import { getObserverStartupHint } from './startup-errors';
+import { cloudBridgeActions } from './cloud-bridge';
 
 export function escapeHtml(text: string): string {
 	return text
@@ -26,6 +27,7 @@ export function getObserverWebviewHtml(
 	const iframeSrc = escapeHtml(observerURL.toString());
 	const observerOrigin = JSON.stringify(observerURL.origin).replace(/</g, '\\u003c');
 	const serializedCloudBridgeToken = JSON.stringify(cloudBridgeToken).replace(/</g, '\\u003c');
+	const serializedCloudBridgeActions = JSON.stringify(cloudBridgeActions).replace(/</g, '\\u003c');
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -59,12 +61,14 @@ export function getObserverWebviewHtml(
 	<script nonce="${nonce}">
 		const vscode = acquireVsCodeApi();
 		const observerFrame = document.getElementById('observer-frame');
-		const observerOrigin = ${observerOrigin};
-		const cloudBridgeToken = ${serializedCloudBridgeToken};
-		function sendCloudBridgeConfig() {
-			observerFrame.contentWindow?.postMessage({
-				bridgeToken: cloudBridgeToken,
-				type: 'obstudio.cloud.bridge',
+			const observerOrigin = ${observerOrigin};
+			const cloudBridgeToken = ${serializedCloudBridgeToken};
+			const cloudBridgeSupportedActions = ${serializedCloudBridgeActions};
+			function sendCloudBridgeConfig() {
+				observerFrame.contentWindow?.postMessage({
+					bridgeToken: cloudBridgeToken,
+					supportedActions: cloudBridgeSupportedActions,
+					type: 'obstudio.cloud.bridge',
 			}, observerOrigin);
 		}
 		observerFrame.addEventListener('load', sendCloudBridgeConfig);

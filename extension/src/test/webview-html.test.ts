@@ -8,6 +8,7 @@ import {
 	getObserverStoppedWebviewHtml,
 	getStatusBarUpdate,
 } from '../webview-html';
+import { cloudBridgeActions } from '../cloud-bridge';
 import { getObserverStartupHint } from '../startup-errors';
 
 const cloudBridgeToken = 'cloud-bridge-token-1234567890';
@@ -34,6 +35,7 @@ describe('getObserverWebviewHtml', () => {
 	it('includes sandbox attributes on the iframe', () => {
 		const html = getObserverWebviewHtml('http://127.0.0.1:3000', 'test-nonce', cloudBridgeToken);
 		assert.ok(html.includes('sandbox="allow-scripts allow-same-origin allow-forms allow-popups"'));
+		assert.equal(html.includes('allow="clipboard-read; clipboard-write"'), false);
 	});
 
 	it('bridges keyboard events from the Observer iframe to VS Code', () => {
@@ -197,9 +199,10 @@ describe('getObserverWebviewHtml', () => {
 		});
 		assert.ok(messageListener, 'expected message listener to be registered');
 		assert.equal(JSON.stringify(observerMessages), JSON.stringify([{
-			message: {
-				bridgeToken: cloudBridgeToken,
-				type: 'obstudio.cloud.bridge',
+				message: {
+					bridgeToken: cloudBridgeToken,
+					supportedActions: cloudBridgeActions,
+					type: 'obstudio.cloud.bridge',
 			},
 			targetOrigin: 'https://observer.example.test',
 		}]));
@@ -214,9 +217,10 @@ describe('getObserverWebviewHtml', () => {
 		assert.equal((extensionMessages[0] as { bridgeToken?: unknown }).bridgeToken, cloudBridgeToken);
 		assert.equal((extensionMessages[0] as { type?: unknown }).type, 'obstudio.cloud.ready');
 		assert.equal(JSON.stringify(observerMessages), JSON.stringify([{
-			message: {
-				bridgeToken: cloudBridgeToken,
-				type: 'obstudio.cloud.bridge',
+				message: {
+					bridgeToken: cloudBridgeToken,
+					supportedActions: cloudBridgeActions,
+					type: 'obstudio.cloud.bridge',
 			},
 			targetOrigin: 'https://observer.example.test',
 		}]));

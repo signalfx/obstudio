@@ -4,6 +4,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +33,12 @@ import (
 )
 
 var version = "dev"
+
+const (
+	observerCloudBrowserSigningKeyEnv      = "OBSTUDIO_CLOUD_BROWSER_SIGNING_KEY"
+	observerCloudBrowserSigningKeyFileName = "cloud-browser-signing-key-v1"
+	observerCloudBrowserLaunchTokenEnv     = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
+)
 
 var splunkEnvFilePrecedenceKeys = []string{
 	"OBSTUDIO_SPLUNK_REALM",
@@ -101,6 +110,16 @@ func newRootCmd(config *runConfig) *cobra.Command {
 }
 
 func run(config runConfig) {
+	if err := ensureObserverControlToken(); err != nil {
+		log.Fatalf("configure Observer control token: %v", err)
+	}
+	if err := ensureObserverCloudBrowserSigningKey(); err != nil {
+		log.Fatalf("configure standalone browser cloud control: %v", err)
+	}
+	if err := ensureObserverCloudBrowserLaunchToken(); err != nil {
+		log.Fatalf("configure standalone browser cloud launch: %v", err)
+	}
+
 	s := store.New()
 	v := validator.NewStore()
 	validatorManager := validator.NewManager(v, s)
@@ -228,6 +247,120 @@ func run(config runConfig) {
 	rcv.Shutdown(ctx)
 	splunkExportController.Shutdown(shutCtx)
 	splunkTracesController.Shutdown(shutCtx)
+}
+
+func ensureObserverControlToken() error {
+	if strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) != "" {
+		return nil
+	}
+
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		return fmt.Errorf("generate control token: %w", err)
+	}
+	if err := os.Setenv("OBSTUDIO_CONTROL_TOKEN", base64.RawURLEncoding.EncodeToString(token)); err != nil {
+		return fmt.Errorf("store generated control token: %w", err)
+	}
+	return nil
+}
+
+func ensureObserverCloudBrowserSigningKey() error {
+	return ensureObserverCloudBrowserSigningKeyAt(filepath.Join(
+		userHome(),
+		sharedObserverStateDirName,
+		observerCloudBrowserSigningKeyFileName,
+	))
+}
+
+func ensureObserverCloudBrowserSigningKeyAt(keyPath string) error {
+	if configured := strings.TrimSpace(os.Getenv(observerCloudBrowserSigningKeyEnv)); configured != "" {
+		if !isObserverCloudBrowserSigningKey(configured) {
+			return errors.New("configured browser signing key must be 32 bytes of base64url")
+		}
+		return nil
+	}
+
+	replaceInvalid := false
+	if persisted, err := os.ReadFile(keyPath); err == nil {
+		key := strings.TrimSpace(string(persisted))
+		if isObserverCloudBrowserSigningKey(key) {
+			return os.Setenv(observerCloudBrowserSigningKeyEnv, key)
+		}
+		log.Printf("ignoring invalid persisted browser signing key at %s", keyPath)
+		replaceInvalid = true
+	} else if !errors.Is(err, os.ErrNotExist) {
+		log.Printf("could not read persisted browser signing key at %s: %v", keyPath, err)
+	}
+
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return fmt.Errorf("generate browser signing key: %w", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(key)
+	if replaceInvalid {
+		if err := os.Remove(keyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("could not replace invalid browser signing key at %s: %v", keyPath, err)
+		}
+	}
+	if err := persistObserverCloudBrowserSigningKey(keyPath, encoded); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			persisted, readErr := os.ReadFile(keyPath)
+			winner := strings.TrimSpace(string(persisted))
+			if readErr == nil && isObserverCloudBrowserSigningKey(winner) {
+				encoded = winner
+			} else if readErr != nil {
+				log.Printf("could not read concurrently persisted browser signing key at %s: %v", keyPath, readErr)
+			} else {
+				log.Printf("ignoring invalid concurrently persisted browser signing key at %s", keyPath)
+			}
+		} else {
+			log.Printf("could not persist browser signing key at %s: %v", keyPath, err)
+		}
+	}
+	if err := os.Setenv(observerCloudBrowserSigningKeyEnv, encoded); err != nil {
+		return fmt.Errorf("store generated browser signing key: %w", err)
+	}
+	return nil
+}
+
+func isObserverCloudBrowserSigningKey(key string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(key)
+	return err == nil && len(decoded) == 32 && base64.RawURLEncoding.EncodeToString(decoded) == key
+}
+
+func ensureObserverCloudBrowserLaunchToken() error {
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		return fmt.Errorf("generate browser launch token: %w", err)
+	}
+	if err := os.Setenv(observerCloudBrowserLaunchTokenEnv, base64.RawURLEncoding.EncodeToString(token)); err != nil {
+		return fmt.Errorf("store generated browser launch token: %w", err)
+	}
+	return nil
+}
+
+func persistObserverCloudBrowserSigningKey(keyPath string, key string) error {
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		return err
+	}
+	tempFile, err := os.CreateTemp(filepath.Dir(keyPath), ".browser-signing-key-*")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	if err := tempFile.Chmod(0o600); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if _, err := tempFile.WriteString(key + "\n"); err != nil {
+		tempFile.Close()
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	return os.Link(tempPath, keyPath)
 }
 
 func envOr(key, fallback string) string {
@@ -388,10 +521,20 @@ func resolveRunConfig(config runConfig) runConfig {
 	}
 }
 
+type splunkMetricsExportConfigurator interface {
+	Config() otlp.SplunkMetricsExporterConfig
+	Configure(otlp.SplunkMetricsExporterConfig) error
+}
+
+type splunkTracesExportConfigurator interface {
+	Config() otlp.SplunkTracesExporterConfig
+	Configure(otlp.SplunkTracesExporterConfig) error
+}
+
 func newSplunkExportConfigurationRefresher(
 	flagValue string,
-	metrics *otlp.SplunkMetricsExportController,
-	traces *otlp.SplunkTracesExportController,
+	metrics splunkMetricsExportConfigurator,
+	traces splunkTracesExportConfigurator,
 ) api.SplunkExportConfigurationRefresher {
 	return func() (bool, error) {
 		path, explicit := configuredEnvFilePath(flagValue)
@@ -403,11 +546,20 @@ func newSplunkExportConfigurationRefresher(
 			return false, err
 		}
 
+		envFileManagesCloud := firstNonEmpty(
+			values["OBSTUDIO_SPLUNK_REALM"],
+			values["SPLUNK_REALM"],
+			values["SPLUNK_ACCESS_TOKEN"],
+			values["OBSTUDIO_SPLUNK_METRICS_ENDPOINT"],
+			values["OBSTUDIO_SPLUNK_TRACES_ENDPOINT"],
+		) != "" ||
+			hasEnvMapBool(values, "OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT") ||
+			hasEnvMapBool(values, "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT")
 		if hasNonEmptyEnvKey(splunkEnvFileLegacyEndpointKeys...) {
-			return false, nil
+			return envFileManagesCloud, nil
 		}
 		if hasEnvMapKey(values, splunkEnvFileLegacyEndpointKeys...) {
-			return false, nil
+			return envFileManagesCloud, nil
 		}
 		values = applyEnvFileShellPrecedence(values)
 
@@ -439,14 +591,28 @@ func newSplunkExportConfigurationRefresher(
 		}
 
 		previousMetrics := metrics.Config()
-		if err := metrics.Configure(metricsConfig); err != nil {
-			return false, err
+		previousTraces := traces.Config()
+		metricsConfig.Timeout = previousMetrics.Timeout
+		tracesConfig.Timeout = previousTraces.Timeout
+		metricsChanged := metricsConfig != previousMetrics
+		tracesChanged := tracesConfig != previousTraces
+		if !metricsChanged && !tracesChanged {
+			return true, nil
 		}
-		if err := traces.Configure(tracesConfig); err != nil {
-			if rollbackErr := metrics.Configure(previousMetrics); rollbackErr != nil {
-				return false, fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+		if metricsChanged {
+			if err := metrics.Configure(metricsConfig); err != nil {
+				return false, err
 			}
-			return false, err
+		}
+		if tracesChanged {
+			if err := traces.Configure(tracesConfig); err != nil {
+				if metricsChanged {
+					if rollbackErr := metrics.Configure(previousMetrics); rollbackErr != nil {
+						return false, fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+					}
+				}
+				return false, err
+			}
 		}
 		return true, nil
 	}
@@ -675,14 +841,37 @@ func buildSharedObserverState(host, port string) sharedObserverState {
 func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
 		"\nObservability Studio (collector)\n"+
-			"  Telemetry Explorer:  http://%s\n"+
+			"  Telemetry Explorer:  %s\n"+
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n\n",
-		mainAddr,
+		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
 	)
+}
+
+func observerBrowserURL(mainAddr string) string {
+	host, port, err := net.SplitHostPort(mainAddr)
+	if err != nil {
+		return "http://" + mainAddr
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		host = "127.0.0.1"
+	}
+	if !strings.EqualFold(host, "localhost") {
+		ip := net.ParseIP(strings.Trim(host, "[]"))
+		if ip == nil || !ip.IsLoopback() {
+			return "http://" + mainAddr
+		}
+	}
+	baseURL := "http://" + net.JoinHostPort(host, port)
+	launchToken := strings.TrimSpace(os.Getenv(observerCloudBrowserLaunchTokenEnv))
+	if launchToken == "" {
+		return baseURL
+	}
+	return baseURL + "/#obstudio-cloud-control=" + launchToken
 }
