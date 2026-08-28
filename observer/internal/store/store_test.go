@@ -452,6 +452,605 @@ func TestEvictConnection_EvictMultipleTypes(t *testing.T) {
 	}
 }
 
+func TestEvictConnection_PreservesProviderUsageHistoryAndTrace(t *testing.T) {
+	s := New()
+	now := time.Now()
+	providerRoot := newTestSpan("provider-trace", "provider-root", "turn/start", now, 10)
+	providerRoot.Resource.ServiceName = "codex"
+	providerRoot.Attributes = map[string]any{"turn.id": "turn-1"}
+	providerBoundary := newTestSpan("provider-trace", "provider-boundary", "session_task.turn", now.Add(time.Millisecond), 8)
+	providerBoundary.ParentSpanID = providerRoot.SpanID
+	providerBoundary.Attributes = map[string]any{"turn.id": "turn-1"}
+	providerChild := newTestSpan("provider-trace", "provider-child", "model request", now.Add(2*time.Millisecond), 5)
+	providerChild.ParentSpanID = providerBoundary.SpanID
+	appSpan := newTestSpan("app-trace", "app-span", "request", now, 10)
+	providerLog := newTestLog("codex.sse_event", now)
+	providerLog.TraceID = providerRoot.TraceID
+	providerLog.Attributes = map[string]any{
+		"event.name":        "codex.sse_event",
+		"event.kind":        "response.completed",
+		"input_token_count": int64(10),
+	}
+	appLog := newTestLog("application log", now)
+	providerMetric := newTestMetric("claude_code.token.usage", 7, now)
+	providerMetric.Type = "sum"
+	providerMetric.Temporality = "delta"
+	providerMetric.Resource.ServiceName = "claude-code"
+	providerMetric.Attributes = map[string]any{"session.id": "provider-session", "type": "input"}
+
+	s.AddSpansForConnection("conn-1", []Span{providerRoot, providerBoundary, providerChild, appSpan})
+	s.AddMetricsForConnection("conn-1", []MetricDataPoint{providerMetric, newTestMetric("app.metric", 1, now)})
+	s.AddLogsForConnection("conn-1", []LogRecord{providerLog, appLog})
+	s.EvictConnection("conn-1")
+
+	stats := s.Stats()
+	if stats.SpanCount != 3 || stats.TraceCount != 1 || stats.LogCount != 1 {
+		t.Fatalf("provider history was not retained after eviction: %+v", stats)
+	}
+	logs := s.SnapshotLogs()
+	if len(logs) != 1 || ClassifyProviderUsageLog(logs[0]) != ProviderUsageLogCodex {
+		t.Fatalf("unexpected retained logs: %+v", logs)
+	}
+	if detail := s.Trace("provider-trace", 10); detail == nil || detail.SpanCount != 3 {
+		t.Fatalf("provider trace tree was not retained: %+v", detail)
+	}
+	metrics := s.SnapshotProviderUsageMetrics()
+	if len(metrics) != 1 || ClassifyProviderUsageMetric(metrics[0]) != ProviderUsageMetricClaude || metrics[0].Value != 7 {
+		t.Fatalf("provider metric history was not retained after eviction: %+v", metrics)
+	}
+}
+
+func TestEvictConnection_DoesNotRetainGenericProviderBoundaryName(t *testing.T) {
+	s := New()
+	span := newTestSpan("application-trace", "generic-boundary", "session_task.turn", time.Now(), 1)
+	span.Resource.ServiceName = "order-service"
+	span.Attributes = map[string]any{
+		"turn.id":                             "application-turn",
+		"codex.turn.token_usage.total_tokens": int64(100),
+	}
+	s.AddSpansForConnection("application", []Span{span})
+	s.EvictConnection("application")
+	if got := s.SnapshotProviderTaskSpansByTraceID(); len(got) != 0 {
+		t.Fatalf("generic application span was retained as provider accounting: %+v", got)
+	}
+	if stats := s.Stats(); stats.SpanCount != 0 {
+		t.Fatalf("generic application span survived connection eviction: %+v", stats)
+	}
+}
+
+func TestProviderAccountingRingsOutliveGenericRingOverwrite(t *testing.T) {
+	s := New()
+	s.spans = newRingBuffer[Span](2)
+	s.metrics = newRingBuffer[MetricDataPoint](2)
+	s.logs = newRingBuffer[LogRecord](2)
+	now := time.Now()
+	boundary := newTestSpan("provider-trace", "provider-boundary", "session_task.turn", now, 10)
+	boundary.Resource.ServiceName = "codex-app-server"
+	boundary.Attributes = map[string]any{
+		"thread.id":                           "thread-1",
+		"turn.id":                             "turn-1",
+		"codex.turn.token_usage.input_tokens": int64(10),
+		"codex.turn.token_usage.total_tokens": int64(12),
+	}
+	usageLog := newTestLog("codex.sse_event", now)
+	usageLog.Attributes = map[string]any{
+		"event.name":        "codex.sse_event",
+		"event.kind":        "response.completed",
+		"conversation.id":   "thread-1",
+		"input_token_count": int64(10),
+		"tool_token_count":  int64(12),
+	}
+	usageMetric := newTestMetric("claude_code.token.usage", 4, now)
+	usageMetric.Type = "sum"
+	usageMetric.Temporality = "delta"
+	usageMetric.Resource.ServiceName = "claude-code"
+	usageMetric.Attributes = map[string]any{"session.id": "session-1", "type": "output"}
+
+	s.AddSpansForConnection("provider", []Span{boundary})
+	s.AddMetricsForConnection("provider", []MetricDataPoint{usageMetric})
+	s.AddLogsForConnection("provider", []LogRecord{usageLog})
+	s.AddSpansForConnection("app", []Span{
+		newTestSpan("noise-1", "noise-1", "request", now.Add(time.Second), 1),
+		newTestSpan("noise-2", "noise-2", "request", now.Add(2*time.Second), 1),
+		newTestSpan("noise-3", "noise-3", "request", now.Add(3*time.Second), 1),
+	})
+	s.AddLogsForConnection("app", []LogRecord{
+		newTestLog("noise-1", now.Add(time.Second)),
+		newTestLog("noise-2", now.Add(2*time.Second)),
+		newTestLog("noise-3", now.Add(3*time.Second)),
+	})
+	s.AddMetricsForConnection("app", []MetricDataPoint{
+		newTestMetric("noise-1", 1, now.Add(time.Second)),
+		newTestMetric("noise-2", 2, now.Add(2*time.Second)),
+		newTestMetric("noise-3", 3, now.Add(3*time.Second)),
+	})
+
+	if detail := s.Trace("provider-trace", 10); detail != nil {
+		t.Fatalf("provider trace should have been overwritten in the generic ring: %+v", detail)
+	}
+	for _, point := range s.SnapshotMetrics() {
+		if ClassifyProviderUsageMetric(point) != ProviderUsageMetricUnknown {
+			t.Fatalf("provider metric should have been overwritten in the generic ring: %+v", point)
+		}
+	}
+	providerTasks := s.SnapshotProviderTaskSpansByTraceID()
+	if spans := providerTasks["provider-trace"]; len(spans) != 1 || spans[0].SpanID != "provider-boundary" {
+		t.Fatalf("completed provider task was not independently retained: %+v", providerTasks)
+	}
+	if logs := s.SnapshotProviderUsageLogs(); len(logs) != 1 || ClassifyProviderUsageLog(logs[0]) != ProviderUsageLogCodex {
+		t.Fatalf("provider usage log was not independently retained: %+v", logs)
+	}
+	if metrics := s.SnapshotProviderUsageMetrics(); len(metrics) != 1 || ClassifyProviderUsageMetric(metrics[0]) != ProviderUsageMetricClaude {
+		t.Fatalf("provider usage metric was not independently retained: %+v", metrics)
+	}
+
+	s.Clear()
+	if len(s.SnapshotProviderTaskSpansByTraceID()) != 0 || len(s.SnapshotProviderUsageLogs()) != 0 || len(s.SnapshotProviderUsageMetrics()) != 0 {
+		t.Fatal("explicit clear did not clear provider accounting history")
+	}
+}
+
+func TestProviderUsageMetricRingRecordsEvictionWatermark(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerUsageMetrics = newRingBuffer[MetricDataPoint](2)
+	now := time.Now()
+	metric := func(offset time.Duration) MetricDataPoint {
+		point := newTestMetric("claude_code.token.usage", 1, now.Add(offset))
+		point.Type = "sum"
+		point.Temporality = "delta"
+		point.Attributes = map[string]any{"session.id": "session", "type": "input"}
+		return point
+	}
+	s.AddMetricsForConnection("claude", []MetricDataPoint{metric(0), metric(time.Second), metric(2 * time.Second)})
+
+	if got := s.ProviderUsageMetricUnavailableThrough(); !got.Equal(now) {
+		t.Fatalf("provider metric eviction watermark = %s, want %s", got, now)
+	}
+	beforeClear := time.Now()
+	s.Clear()
+	if got := s.ProviderUsageMetricUnavailableThrough(); got.Before(beforeClear) {
+		t.Fatalf("provider metric availability watermark did not advance on explicit clear: %s", got)
+	}
+}
+
+func TestProviderUsageLogRingRecordsEvictionWatermark(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerUsageLogs = newRingBuffer[LogRecord](1)
+	now := time.Now()
+	usageLog := func(timestamp time.Time, requestID string) LogRecord {
+		record := newTestLog("codex.sse_event", timestamp)
+		record.Attributes = map[string]any{
+			"event.name":  "codex.sse_event",
+			"event.kind":  "response.completed",
+			"response.id": requestID,
+		}
+		return record
+	}
+	s.AddLogsForConnection("codex", []LogRecord{
+		usageLog(now, "response-1"),
+		usageLog(now.Add(time.Second), "response-2"),
+	})
+
+	if got := s.ProviderUsageLogUnavailableThrough(); !got.Equal(now) {
+		t.Fatalf("provider log eviction watermark = %s, want %s", got, now)
+	}
+	beforeClear := time.Now()
+	s.Clear()
+	if got := s.ProviderUsageLogUnavailableThrough(); got.Before(beforeClear) {
+		t.Fatalf("provider log availability watermark did not advance on explicit clear: %s", got)
+	}
+}
+
+func TestProviderRepositoryCorrelationIsRetainedAndCleared(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	correlationLog := newTestLog("obstudio.repository_correlation", now)
+	correlationLog.Resource.ServiceName = "obstudio-agent-correlation"
+	correlationLog.Attributes = map[string]any{
+		"event.name":                             "obstudio.repository_correlation",
+		"gen_ai.provider.name":                   "anthropic",
+		"session.id":                             "session-1",
+		"repository.name":                        "entity-model-service",
+		"repository.path":                        "/work/entity-model-service",
+		"workspace.path":                         "/work/entity-model-service/subdir",
+		"obstudio.repository_correlation.mode":   "path",
+		"obstudio.repository_correlation.source": "SessionStart",
+	}
+
+	s.AddLogsForConnection("provider", []LogRecord{correlationLog})
+	s.EvictConnection("provider")
+	correlations := s.SnapshotProviderRepositoryCorrelations()
+	if len(correlations) != 1 {
+		t.Fatalf("repository correlations = %+v", correlations)
+	}
+	got := correlations[0]
+	if got.Provider != "claude" || got.ConversationID != "session-1" ||
+		got.RepositoryName != "entity-model-service" || got.RepositoryPath != "/work/entity-model-service" ||
+		got.WorkspacePath != "/work/entity-model-service/subdir" || got.Mode != "path" ||
+		got.Source != "SessionStart" || !got.ObservedAt.Equal(now) {
+		t.Fatalf("unexpected repository correlation: %+v", got)
+	}
+
+	s.Clear()
+	if correlations := s.SnapshotProviderRepositoryCorrelations(); len(correlations) != 0 {
+		t.Fatalf("explicit clear retained repository correlations: %+v", correlations)
+	}
+}
+
+func TestProviderRepositoryCorrelationRejectsMalformedOrPathlessEvents(t *testing.T) {
+	now := time.Now().UTC()
+	base := newTestLog("obstudio.repository_correlation", now)
+	base.Attributes = map[string]any{
+		"event.name":                           "obstudio.repository_correlation",
+		"gen_ai.provider.name":                 "claude",
+		"session.id":                           "session-1",
+		"repository.name":                      "service",
+		"obstudio.repository_correlation.mode": "path",
+	}
+	if got, ok := ProviderRepositoryCorrelationFromLog(base); ok {
+		t.Fatalf("accepted path correlation without a path: %+v", got)
+	}
+	base.Attributes["obstudio.repository_correlation.mode"] = "unsupported"
+	if got, ok := ProviderRepositoryCorrelationFromLog(base); ok {
+		t.Fatalf("accepted unsupported mode: %+v", got)
+	}
+	base.Attributes["obstudio.repository_correlation.mode"] = "name"
+	delete(base.Attributes, "session.id")
+	if got, ok := ProviderRepositoryCorrelationFromLog(base); ok {
+		t.Fatalf("accepted correlation without task or conversation identity: %+v", got)
+	}
+}
+
+func TestProviderUsageMetricRingRecordsUntimestampedEviction(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerUsageMetrics = newRingBuffer[MetricDataPoint](1)
+	metric := func(sessionID string) MetricDataPoint {
+		return MetricDataPoint{
+			Name:        "claude_code.token.usage",
+			Type:        "sum",
+			Temporality: "delta",
+			Value:       1,
+			Attributes:  map[string]any{"session.id": sessionID, "type": "input"},
+		}
+	}
+	s.AddMetricsForConnection("claude", []MetricDataPoint{metric("first"), metric("second")})
+
+	if got := s.ProviderUsageMetricUnavailableThrough(); got.IsZero() {
+		t.Fatal("untimestamped provider metric eviction did not advance the truncation watermark")
+	}
+}
+
+func TestCompletedProviderTaskReexportUpsertsNewestSpans(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerTasks = newRingBuffer[providerTaskTrace](2)
+	now := time.Now()
+	boundary := func(traceID, spanID string, total int64, timestamp time.Time) Span {
+		span := newTestSpan(traceID, spanID, "session_task.turn", timestamp, 10)
+		span.Resource.ServiceName = "codex-app-server"
+		span.Attributes = map[string]any{
+			"thread.id":                           "thread-1",
+			"turn.id":                             traceID,
+			"codex.turn.token_usage.total_tokens": total,
+		}
+		return span
+	}
+
+	s.AddSpansForConnection("codex", []Span{boundary("trace-a", "boundary-a", 10, now)})
+	s.AddSpansForConnection("codex", []Span{boundary("trace-b", "boundary-b", 20, now.Add(time.Second))})
+	s.AddSpansForConnection("codex", []Span{boundary("trace-a", "boundary-a", 30, now.Add(2*time.Second))})
+
+	if s.providerTasks.size() != 2 {
+		t.Fatalf("provider task re-export consumed another retention slot: %d", s.providerTasks.size())
+	}
+	tasks := s.SnapshotProviderTaskSpansByTraceID()
+	if len(tasks) != 2 || len(tasks["trace-b"]) != 1 {
+		t.Fatalf("provider task re-export evicted an unrelated task: %+v", tasks)
+	}
+	traceA := tasks["trace-a"]
+	if len(traceA) != 1 || traceA[0].Attributes["codex.turn.token_usage.total_tokens"] != int64(30) {
+		t.Fatalf("newest provider span did not win re-export: %+v", traceA)
+	}
+}
+
+func TestCompletedProviderTaskSameBatchCorrectionKeepsLatestSpan(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	now := time.Now()
+	boundary := func(total int64) Span {
+		span := newTestSpan("corrected-trace", "corrected-boundary", "session_task.turn", now, 10)
+		span.Resource.ServiceName = "codex-app-server"
+		span.Attributes = map[string]any{
+			"thread.id":                           "corrected-thread",
+			"turn.id":                             "corrected-turn",
+			"codex.turn.token_usage.total_tokens": total,
+		}
+		return span
+	}
+	s.AddSpansForConnection("codex", []Span{boundary(10), boundary(30)})
+	noise := make([]Span, DefaultSpanCap+1)
+	for index := range noise {
+		noise[index] = newTestSpan("noise-trace", fmt.Sprintf("noise-%d", index), "noise", now.Add(time.Second), 1)
+	}
+	s.AddSpansForConnection("noise", noise)
+
+	retained := s.SnapshotProviderTaskSpansByTraceID()["corrected-trace"]
+	if len(retained) != 1 || retained[0].Attributes["codex.turn.token_usage.total_tokens"] != int64(30) {
+		t.Fatalf("same-batch corrected span was not retained after generic-ring eviction: %+v", retained)
+	}
+}
+
+func TestCompletedProviderTaskCapturesLateAccountingDescendant(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	now := time.Now()
+	boundary := newTestSpan("late-descendant-trace", "interaction", "claude_code.interaction", now, 10)
+	boundary.Resource.ServiceName = "claude-code"
+	boundary.Attributes = map[string]any{
+		"prompt.id":  "late-descendant-prompt",
+		"session.id": "late-descendant-session",
+	}
+	s.AddSpansForConnection("claude", []Span{boundary})
+
+	request := newTestSpan("late-descendant-trace", "request", "claude_code.llm_request", now.Add(time.Millisecond), 1)
+	request.ParentSpanID = "interaction"
+	request.Resource.ServiceName = "claude-code"
+	request.Attributes = map[string]any{
+		"gen_ai.provider.name": "anthropic",
+		"input_tokens":         int64(5),
+		"output_tokens":        int64(2),
+	}
+	s.AddSpansForConnection("claude", []Span{request})
+
+	noise := make([]Span, DefaultSpanCap+1)
+	for index := range noise {
+		noise[index] = newTestSpan("noise-trace", fmt.Sprintf("noise-%d", index), "noise", now.Add(time.Second), 1)
+	}
+	s.AddSpansForConnection("noise", noise)
+
+	retained := s.SnapshotProviderTaskSpansByTraceID()["late-descendant-trace"]
+	spanIDs := make(map[string]struct{}, len(retained))
+	for _, span := range retained {
+		spanIDs[span.SpanID] = struct{}{}
+	}
+	if _, ok := spanIDs["request"]; !ok {
+		t.Fatalf("late provider accounting descendant was not retained: %+v", retained)
+	}
+}
+
+func TestCompletedProviderTaskCompactionBoundsOversizedBatch(t *testing.T) {
+	s := New()
+	now := time.Now()
+	spans := make([]Span, DefaultSpanCap+1)
+	for index := range spans {
+		spanID := fmt.Sprintf("span-%05d", index)
+		parentID := "interaction"
+		if index == 0 {
+			spanID = "interaction"
+			parentID = ""
+		}
+		spans[index] = newTestSpan("oversized-provider-trace", spanID, "claude_code.llm_request", now, 1)
+		spans[index].ParentSpanID = parentID
+		spans[index].Resource.ServiceName = "claude-code"
+		spans[index].Attributes = map[string]any{
+			"gen_ai.provider.name": "anthropic",
+			"input_tokens":         int64(1),
+		}
+	}
+	spans[0].Name = "claude_code.interaction"
+	spans[0].Attributes = map[string]any{
+		"prompt.id":  "oversized-provider-prompt",
+		"session.id": "oversized-provider-session",
+	}
+
+	s.AddSpansForConnection("claude", spans)
+	retained := s.SnapshotProviderTaskSpansByTraceID()["oversized-provider-trace"]
+	if len(retained) > DefaultSpanCap {
+		t.Fatalf("provider task retained %d spans, want at most %d", len(retained), DefaultSpanCap)
+	}
+	truncated := false
+	for _, span := range retained {
+		truncated = truncated || ProviderTaskSpanRetentionTruncated(span)
+	}
+	if !truncated || !s.ProviderTaskHistoryEvicted() {
+		t.Fatal("bounded provider task compaction did not expose incomplete retention")
+	}
+}
+
+func TestCompletedProviderTaskReexportPreservesCompletionRetentionOrder(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerTasks = newRingBuffer[providerTaskTrace](2)
+	now := time.Now()
+	boundary := func(traceID, spanID string, timestamp time.Time) Span {
+		span := newTestSpan(traceID, spanID, "session_task.turn", timestamp, 10)
+		span.Resource.ServiceName = "codex-app-server"
+		span.Attributes = map[string]any{
+			"thread.id":                           "thread-1",
+			"turn.id":                             traceID,
+			"codex.turn.token_usage.total_tokens": int64(10),
+		}
+		return span
+	}
+	taskA := boundary("trace-a", "boundary-a", now)
+	taskB := boundary("trace-b", "boundary-b", now.Add(time.Second))
+	taskC := boundary("trace-c", "boundary-c", now.Add(2*time.Second))
+	s.AddSpansForConnection("codex", []Span{taskA, taskB})
+	s.AddSpansForConnection("codex", []Span{taskA})
+	s.AddSpansForConnection("codex", []Span{taskC})
+
+	tasks := s.SnapshotProviderTaskSpansByTraceID()
+	if _, retainedOldest := tasks["trace-a"]; retainedOldest {
+		t.Fatalf("retransmitted oldest task displaced newer retention: %+v", tasks)
+	}
+	if len(tasks["trace-b"]) != 1 || len(tasks["trace-c"]) != 1 || len(tasks) != 2 {
+		t.Fatalf("completion-ordered provider retention = %+v, want trace-b and trace-c", tasks)
+	}
+}
+
+func TestCompletedProviderTasksInSameTraceRetainSeparateRingSlots(t *testing.T) {
+	t.Parallel()
+
+	s := New()
+	s.providerTasks = newRingBuffer[providerTaskTrace](2)
+	now := time.Now()
+	boundary := func(spanID, turnID string, total int64, timestamp time.Time) Span {
+		span := newTestSpan("shared-trace", spanID, "session_task.turn", timestamp, 10)
+		span.Resource.ServiceName = "codex-app-server"
+		span.Attributes = map[string]any{
+			"thread.id":                           "shared-thread",
+			"turn.id":                             turnID,
+			"codex.turn.token_usage.total_tokens": total,
+		}
+		return span
+	}
+
+	s.AddSpansForConnection("codex", []Span{boundary("boundary-1", "turn-1", 10, now)})
+	noise := make([]Span, DefaultSpanCap+1)
+	for index := range noise {
+		noise[index] = newTestSpan("noise-trace", fmt.Sprintf("noise-%d", index), "noise", now.Add(time.Second), 1)
+	}
+	s.AddSpansForConnection("noise", noise)
+	if detail := s.Trace("shared-trace", 1); detail != nil {
+		t.Fatal("fixture did not evict the first turn from the generic span ring")
+	}
+	s.AddSpansForConnection("codex", []Span{boundary("boundary-2", "turn-2", 20, now.Add(2*time.Second))})
+
+	if s.providerTasks.size() != 2 {
+		t.Fatalf("same-trace turns occupy %d provider ring slots, want 2", s.providerTasks.size())
+	}
+	retained := s.SnapshotProviderTaskSpansByTraceID()["shared-trace"]
+	totals := make(map[string]int64)
+	for _, span := range retained {
+		turnID, _ := span.Attributes["turn.id"].(string)
+		total, _ := span.Attributes["codex.turn.token_usage.total_tokens"].(int64)
+		if turnID != "" {
+			totals[turnID] = total
+		}
+	}
+	if totals["turn-1"] != 10 || totals["turn-2"] != 20 || len(totals) != 2 {
+		t.Fatalf("same-trace retained task totals = %+v, want both turns", totals)
+	}
+}
+
+func TestCompletedProviderTaskCompactionScalesToSpanRetentionCap(t *testing.T) {
+	s := New()
+	now := time.Now()
+	spans := make([]Span, DefaultSpanCap)
+	for index := range spans {
+		spanID := fmt.Sprintf("span-%05d", index)
+		parentID := ""
+		if index > 0 {
+			parentID = fmt.Sprintf("span-%05d", index-1)
+		}
+		spans[index] = newTestSpan("retention-cap-trace", spanID, "chat", now, 1)
+		spans[index].ParentSpanID = parentID
+		spans[index].Resource.ServiceName = "codex-app-server"
+		spans[index].Attributes["gen_ai.usage.input_tokens"] = int64(1)
+	}
+	spans[0].Name = "session_task.turn"
+	spans[0].Attributes = map[string]any{
+		"turn.id":                             "retention-cap-turn",
+		"codex.turn.token_usage.total_tokens": int64(1),
+	}
+
+	s.AddSpansForConnection("codex", spans)
+	retained := s.SnapshotProviderTaskSpansByTraceID()["retention-cap-trace"]
+	if len(retained) != len(spans) {
+		t.Fatalf("retention-cap provider task compaction kept %d spans, want %d", len(retained), len(spans))
+	}
+}
+
+func TestCompletedProviderTaskCompactionScalesAcrossRetentionCapBoundaries(t *testing.T) {
+	s := New()
+	now := time.Now()
+	spans := make([]Span, DefaultSpanCap)
+	for index := range spans {
+		spanID := fmt.Sprintf("turn-%05d", index)
+		spans[index] = newTestSpan("many-turns-trace", spanID, "session_task.turn", now, 1)
+		spans[index].Resource.ServiceName = "codex-app-server"
+		spans[index].Attributes = map[string]any{
+			"turn.id":                             spanID,
+			"codex.turn.token_usage.total_tokens": int64(1),
+		}
+	}
+
+	s.AddSpansForConnection("codex", spans)
+	if s.providerTasks.size() != DefaultProviderTaskCap {
+		t.Fatalf("many-boundary provider task retention = %d, want %d", s.providerTasks.size(), DefaultProviderTaskCap)
+	}
+}
+
+func TestProviderTaskBoundaryAssignmentsMatchReferenceAncestry(t *testing.T) {
+	spanIDs := []string{"a", "b", "c", "d"}
+	parentChoices := []string{"", "a", "b", "c", "d", "missing"}
+	graphCount := 1
+	for range spanIDs {
+		graphCount *= len(parentChoices)
+	}
+
+	for graph := 0; graph < graphCount; graph++ {
+		encoded := graph
+		parents := make(map[string]string, len(spanIDs))
+		for _, spanID := range spanIDs {
+			parents[spanID] = parentChoices[encoded%len(parentChoices)]
+			encoded /= len(parentChoices)
+		}
+		for mask := 0; mask < 1<<len(spanIDs); mask++ {
+			spansByID := make(map[string]Span, len(spanIDs))
+			boundaryIDs := make(map[string]struct{})
+			for index, spanID := range spanIDs {
+				span := newTestSpan("trace", spanID, "chat", time.Time{}, 0)
+				span.ParentSpanID = parents[spanID]
+				if mask&(1<<index) != 0 {
+					span.Name = "session_task.turn"
+					span.Resource.ServiceName = "codex-app-server"
+					span.Attributes["turn.id"] = spanID
+					boundaryIDs[spanID] = struct{}{}
+				}
+				spansByID[spanID] = span
+			}
+
+			assignments := providerTaskBoundaryAssignments(spansByID)
+			for _, spanID := range spanIDs {
+				want := referenceNearestProviderTaskBoundary(spanID, parents, boundaryIDs)
+				if got := assignments[spanID]; got != want {
+					t.Fatalf("boundary mismatch for parents=%+v boundaries=%+v span=%q: got %q, want %q", parents, boundaryIDs, spanID, got, want)
+				}
+			}
+		}
+	}
+}
+
+func referenceNearestProviderTaskBoundary(spanID string, parents map[string]string, boundaryIDs map[string]struct{}) string {
+	seen := make(map[string]struct{})
+	for spanID != "" {
+		if _, boundary := boundaryIDs[spanID]; boundary {
+			return spanID
+		}
+		if _, duplicate := seen[spanID]; duplicate {
+			return ""
+		}
+		seen[spanID] = struct{}{}
+		parentID, retained := parents[spanID]
+		if !retained {
+			return ""
+		}
+		spanID = parentID
+	}
+	return ""
+}
+
 func TestEvictConnection_EmptyConnIDNoOp(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -528,6 +1127,48 @@ func TestSessionReset_GapLessThan30sDoesNotClear(t *testing.T) {
 	}
 	if stats.TraceCount != 2 {
 		t.Errorf("expected 2 traces, got %d", stats.TraceCount)
+	}
+}
+
+func TestSessionReset_PreservesProviderUsageHistory(t *testing.T) {
+	s := New()
+	now := time.Now()
+	providerSpan := newTestSpan("claude-trace", "interaction", "claude_code.interaction", now, 10)
+	providerSpan.Resource.ServiceName = "claude-code"
+	providerSpan.Attributes = map[string]any{"prompt.id": "prompt-1"}
+	appSpan := newTestSpan("old-app-trace", "old-app-span", "request", now, 10)
+	providerLog := newTestLog("claude_code.api_request", now)
+	providerLog.TraceID = providerSpan.TraceID
+	providerLog.Resource.ServiceName = "claude-code"
+	providerLog.Attributes = map[string]any{
+		"event.name":   "api_request",
+		"input_tokens": int64(10),
+	}
+	appLog := newTestLog("old application log", now)
+	providerMetric := newTestMetric("claude_code.token.usage", 0, now)
+	providerMetric.Type = "sum"
+	providerMetric.Temporality = "delta"
+	providerMetric.Resource.ServiceName = "claude-code"
+	providerMetric.Attributes = map[string]any{"session.id": "session-1", "type": "cacheRead"}
+
+	s.AddSpansForConnection("conn-1", []Span{providerSpan, appSpan})
+	s.AddMetricsForConnection("conn-1", []MetricDataPoint{providerMetric, newTestMetric("old.metric", 1, now)})
+	s.AddLogsForConnection("conn-1", []LogRecord{providerLog, appLog})
+	s.mu.Lock()
+	s.lastIngest = time.Now().Add(-35 * time.Second)
+	s.mu.Unlock()
+	s.AddSpansForConnection("conn-2", []Span{newTestSpan("new-app-trace", "new-app-span", "request", now.Add(time.Minute), 10)})
+
+	stats := s.Stats()
+	if stats.SpanCount != 2 || stats.TraceCount != 2 || stats.LogCount != 1 {
+		t.Fatalf("provider history was not retained across session reset: %+v", stats)
+	}
+	if logs := s.SnapshotLogs(); len(logs) != 1 || ClassifyProviderUsageLog(logs[0]) != ProviderUsageLogClaude {
+		t.Fatalf("unexpected retained provider logs: %+v", logs)
+	}
+	metrics := s.SnapshotMetrics()
+	if len(metrics) != 1 || ClassifyProviderUsageMetric(metrics[0]) != ProviderUsageMetricClaude || metrics[0].Value != 0 {
+		t.Fatalf("unexpected retained provider metrics: %+v", metrics)
 	}
 }
 
@@ -2299,6 +2940,46 @@ func TestQueryTracesFiltered_RespectsLimit(t *testing.T) {
 	}
 }
 
+func TestQueryGenAITracesFilteredAppliesLimitAfterGenAIFilter(t *testing.T) {
+	s := New()
+	now := time.Now()
+	genAI := newTestSpan("genai-trace", "span-1", "chat", now, 10)
+	genAI.Attributes["gen_ai.operation.name"] = "chat"
+	genAI.Attributes["gen_ai.request.model"] = "gpt-5"
+	s.AddSpansForConnection("conn-1", []Span{genAI})
+
+	for i := 0; i < 5; i++ {
+		plain := newTestSpan(
+			fmt.Sprintf("plain-%d", i),
+			"span-1",
+			"http.request",
+			now.Add(time.Duration(i+1)*time.Second),
+			10,
+		)
+		s.AddSpansForConnection("conn-1", []Span{plain})
+	}
+
+	results := s.QueryGenAITracesFiltered("", "", "", "", 1, 1)
+	if len(results) != 1 || results[0].TraceID != "genai-trace" {
+		t.Fatalf("newer non-GenAI traces hid retained GenAI usage: %+v", results)
+	}
+}
+
+func TestSnapshotSpansByTraceIDsUsesRequestedSubset(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddSpansForConnection("conn-1", []Span{
+		newTestSpan("trace-a", "span-1", "root-a", now, 10),
+		newTestSpan("trace-a", "span-2", "child-a", now.Add(time.Millisecond), 5),
+		newTestSpan("trace-b", "span-3", "root-b", now.Add(2*time.Millisecond), 10),
+	})
+
+	spans := s.SnapshotSpansByTraceIDs([]string{"trace-a", "missing"})
+	if len(spans) != 1 || len(spans["trace-a"]) != 2 {
+		t.Fatalf("unexpected trace span snapshot: %+v", spans)
+	}
+}
+
 func TestQueryTraceSummariesFiltered_FilterBySummaryFields(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -2715,6 +3396,97 @@ func TestQueryLogsFiltered_FilterByBody(t *testing.T) {
 	}
 	if !contains(results[0].Body, "timeout") {
 		t.Errorf("expected body containing timeout, got %s", results[0].Body)
+	}
+}
+
+func TestQueryLogRecordsFilteredBodyContainsUsesRawBody(t *testing.T) {
+	s := New()
+	now := time.Now()
+	attributeOnly := newTestLog("", now)
+	attributeOnly.Attributes = map[string]any{"event.name": "api_request"}
+	rawBody := newTestLog("api_request completed", now.Add(time.Millisecond))
+	rawBody.Attributes = map[string]any{"event.name": "different_event"}
+	s.AddLogsForConnection("conn-1", []LogRecord{attributeOnly, rawBody})
+
+	included := s.QueryLogRecordsFiltered(LogRecordFilter{
+		BodyContains: "api_request",
+		Limit:        10,
+	})
+	if len(included) != 1 || included[0].Body != rawBody.Body {
+		t.Fatalf("raw-body inclusion filter matched a display fallback: %+v", included)
+	}
+
+	excluded := s.QueryLogRecordsFiltered(LogRecordFilter{
+		ExcludeBodyContains: "api_request",
+		Limit:               10,
+	})
+	if len(excluded) != 1 || excluded[0].Attributes["event.name"] != "api_request" {
+		t.Fatalf("raw-body exclusion filter removed a display fallback: %+v", excluded)
+	}
+}
+
+func TestQueryLogRecordsFilteredMessageContainsUsesDisplayMessage(t *testing.T) {
+	s := New()
+	now := time.Now()
+	attributeOnly := newTestLog("", now)
+	attributeOnly.Attributes = map[string]any{"event.name": "api_request"}
+	rawBody := newTestLog("payment failed", now.Add(time.Millisecond))
+	rawBody.Attributes = map[string]any{"event.name": "different_event"}
+	s.AddLogsForConnection("conn-1", []LogRecord{attributeOnly, rawBody})
+
+	fallback := s.QueryLogRecordsFiltered(LogRecordFilter{
+		MessageContains: "api_request",
+		Limit:           10,
+	})
+	if len(fallback) != 1 || fallback[0].Attributes["event.name"] != "api_request" {
+		t.Fatalf("message inclusion filter did not match the event.name fallback: %+v", fallback)
+	}
+
+	body := s.QueryLogRecordsFiltered(LogRecordFilter{
+		MessageContains: "payment",
+		Limit:           10,
+	})
+	if len(body) != 1 || body[0].Body != rawBody.Body {
+		t.Fatalf("message inclusion filter did not match the raw body: %+v", body)
+	}
+
+	excluded := s.QueryLogRecordsFiltered(LogRecordFilter{
+		ExcludeMessageContains: "api_request",
+		Limit:                  10,
+	})
+	if len(excluded) != 1 || excluded[0].Body != rawBody.Body {
+		t.Fatalf("message exclusion filter did not use the event.name fallback: %+v", excluded)
+	}
+}
+
+func TestQueryLogsFiltered_AttributeOnlyProviderEventsUseDisplayFields(t *testing.T) {
+	s := New()
+	eventTime := time.Date(2026, time.August, 27, 17, 27, 3, 227_000_000, time.UTC)
+	observedTime := eventTime.Add(time.Second)
+	s.AddLogsForConnection("conn-1", []LogRecord{
+		{
+			Timestamp:  time.Unix(0, 0),
+			Attributes: map[string]any{"event.name": "codex.turn_ttft", "event.timestamp": eventTime.Format(time.RFC3339Nano)},
+		},
+		{
+			Timestamp:         time.Unix(0, 0),
+			ObservedTimestamp: &observedTime,
+			Attributes:        map[string]any{"event.name": "api_request", "event.timestamp": "malformed"},
+		},
+	})
+
+	codex := s.QueryLogRecordsFiltered(LogRecordFilter{Query: "turn_ttft", Limit: 10})
+	if len(codex) != 1 || codex[0].Body != "" || !LogEventTimestamp(codex[0]).Equal(eventTime) {
+		t.Fatalf("Codex attribute-only event was not queryable without changing its raw body: %+v", codex)
+	}
+	claude := s.QueryLogRecordsFiltered(LogRecordFilter{
+		Query:    "api_request",
+		TimeFrom: timePointer(observedTime.Add(-time.Millisecond)),
+		TimeTo:   timePointer(observedTime.Add(time.Millisecond)),
+		Limit:    10,
+	})
+	if len(claude) != 1 || claude[0].Body != "" || !LogEventTimestamp(claude[0]).Equal(observedTime) {
+		t.Fatalf("Claude attribute-only event did not use observed-time fallback: %+v", claude)
 	}
 }
 

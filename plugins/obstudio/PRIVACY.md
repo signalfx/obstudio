@@ -1,7 +1,7 @@
 # Obstudio Plugin Privacy
 
-This document describes the current data flows for the `obstudio` plugin (shown
-as Splunk Observability Studio in Claude Code) when used with Codex or Claude Code. The host, model provider, package managers,
+This document describes the current data flows for the `obstudio` plugin when
+used with Codex or Claude Code. The host, model provider, package managers,
 operating system, and user-invoked tools have their own privacy behavior.
 
 ## What This Plugin Contains
@@ -47,7 +47,8 @@ required API permissions.
 
 ## What the Plugin Does Not Add
 
-- The plugin package does not add analytics or usage telemetry code of its own.
+- The plugin package does not enable token telemetry or repository correlation
+  unless the user explicitly opts in with `obstudio token-telemetry enable`.
 - The plugin package does not automatically upload workspace contents to
   Splunk Observability Cloud.
 - The plugin package does not publish dashboards or detectors to Splunk unless
@@ -64,6 +65,21 @@ When the SessionStart hook is reviewed and trusted, Obstudio may bootstrap the
 managed Observer. The bootstrap may download an Obstudio release binary,
 verify `checksums.txt`, extract the release into plugin data, and start a local
 Observer process.
+
+When token telemetry is enabled and no repository-correlation mode has been
+recorded, correlation defaults to `path`; `off` disables it and `name` omits
+filesystem paths. The SessionStart hook sends one content-free OTLP log to the
+configured loopback Observer. In `name` mode it contains the provider,
+session or task identity, hook type, and repository name. In `path` mode it
+additionally contains the canonical repository path and active workspace path.
+It does not contain prompts, tool arguments, tool results, or file contents.
+The hook rejects non-loopback correlation endpoints, and a failed correlation
+send does not prevent the host session from starting.
+
+These modes govern the correlation hook and normalized token-usage results.
+Raw provider telemetry is preserved and may independently contain fields such
+as a provider-emitted working directory; use the provider's telemetry controls
+when raw-signal collection must also be disabled.
 
 The managed Observer may bind host-local endpoints such as:
 
@@ -95,6 +111,10 @@ elsewhere.
 OTLP data received by the local Observer stays local unless the user configures
 forwarding or export endpoints such as Splunk Observability Cloud ingest or
 another OTLP destination.
+
+Provider usage records, completed task accounting, token metrics, and optional
+repository-correlation events are retained in separate bounded in-memory rings.
+They are removed by ring overwrite, explicit Observer clear, or process exit.
 
 ## External Calls
 

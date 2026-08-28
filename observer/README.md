@@ -124,11 +124,170 @@ AI agents can query telemetry via JSON-RPC at `/mcp`:
 |---|---|
 | `observer_traces_overview` | List recent traces with span previews |
 | `observer_trace_detail` | Fetch full trace by traceId |
+| `observer_token_usage_overview` | Answer questions about normalized Codex, Claude, or span-based agent/task token usage, including cache/reasoning breakdowns and coverage |
 | `observer_metrics_overview` | List metrics with summaries |
 | `observer_metric_detail` | Fetch single metric by name |
 | `observer_logs_overview` | List recent logs with filtering |
 | `observer_status` | Return collector endpoints and stats |
 | `observer_clear` | Clear all telemetry data |
+
+### Audit token-usage demo
+
+Installing the extension or plugin configures MCP but does not change provider
+OTLP settings. Start Observer, then explicitly opt in one or both providers:
+
+```bash
+obstudio token-telemetry status --target=codex,claude-code
+obstudio token-telemetry enable --target=codex,claude-code
+```
+
+The default sends logs to `http://127.0.0.1:4318/v1/logs`, traces to the
+corresponding `/v1/traces` endpoint, and Claude metrics to `/v1/metrics`. Pass a
+different full logs endpoint with `--endpoint`. Restart Codex or Claude Code
+after enabling the configuration. A later `status` uses the recorded custom
+endpoint unless `--endpoint` is supplied explicitly. Prompt text, tool content,
+and raw API bodies remain disabled by provider defaults. For Claude, setup also
+selects cumulative metric temporality when no preference exists so Observer can
+prove full-session metric totals. An explicit user-owned temporality preference
+is preserved and is never adopted for cleanup.
+
+Repository correlation defaults to `path` when no mode has been recorded.
+`path` exposes the repository name plus canonical repository and active
+workspace paths; `name` omits the filesystem paths. Raw
+provider telemetry is preserved and may contain a provider-emitted working
+directory independently of these normalized fields. Pass
+`--repository-correlation=off` to disable normalized repository attribution
+or `--repository-correlation=name` to omit filesystem paths. Omitting the flag for
+an already configured target preserves its recorded mode. Codex task spans can
+provide a per-turn working directory directly. The plugin SessionStart hook
+supplies the equivalent session-to-repository association for Claude and a
+lifecycle fallback for Codex. These content-free correlation events are sent
+only to the configured loopback Observer logs endpoint and retained in a
+dedicated bounded in-memory ring. `name` and `path` reject a non-loopback
+`--endpoint` before provider configuration is changed.
+
+The Codex and Claude plugin SessionStart hooks can start or reuse the detached
+Observer serving the plugin's direct HTTP MCP endpoint. The VS Code extension
+can instead run or connect to an Observer. Provider telemetry and MCP queries
+must target that same Observer process to share its bounded in-memory history.
+Stopping that process clears the ephemeral history.
+
+1. Run `$otel-audit` against a service as the only work in a fresh Codex turn, or run `/obstudio:otel-audit` as the only work in a fresh Claude prompt.
+2. Ask: "How many agent tokens did the latest audit use? Compare the provider-reported and independently derived totals, and state measurement coverage and accounting status."
+3. Ask: "Break that audit down into input, cached input, cache-creation input, output, and reasoning output. Show unknown values as unknown, not zero."
+4. Ask: "Which of the five most recent audit tasks used the most tokens?"
+5. For a known task URL, ask: "How many exact tokens were used in Codex conversation `<ID from codex://threads/...>`?" The agent passes that ID as `conversationId`; the tool also accepts `threadId` as an alias because agents commonly infer that name from the URL. Claude session IDs use the canonical `conversationId` filter.
+6. Ask: "How many agent tokens did the latest audit in repository `entity-model-service` use? State both token-accounting and repository-correlation coverage."
+
+The agent discovers and calls `observer_token_usage_overview` internally; the
+user does not need to issue a JSON-RPC request. A completed native provider task
+span with recognized aggregate usage defines an exact task boundary and can
+supply the accounting directly when provider logs are incomplete or have been
+evicted. A completed Claude interaction span without aggregate usage does not
+prove that every child request span has arrived; its retained child total is a
+measured subtotal with partial accounting until an exact cumulative metric or
+another complete provider source replaces it. For an explicit thread
+or session query, a still-in-progress question is omitted when completed tasks
+for that conversation are retained. Without a trace ID, Codex
+`response.completed` logs are grouped by turn before conversation fallback;
+Claude `api_request` logs are grouped by prompt before session fallback. When
+Claude's richer log/trace exporters are unavailable, provider-native
+`claude_code.token.usage` metrics are grouped by `session.id`; unique delta
+points are summed for retained-window measurement and cumulative series use
+only their latest non-decreasing point. Metrics are exact only when monotonic
+cumulative input, cache-read, cache-creation, and output are all retained,
+including explicit zero values. Non-monotonic sums or same-series cumulative
+decreases remain available as raw metrics but are not interpreted as exact
+token consumption. Delta series remain partial because a newly started Observer
+cannot prove that it received earlier intervals.
+Exact matching logs or spans take precedence over metrics; exact metrics
+replace malformed or partial richer telemetry, while two partial sources are
+not combined into a guessed total. If cumulative metrics show that a Claude
+session predates retained Observer history, later exact per-request details
+remain a measured subtotal but session accounting stays partial; the overlapping
+metric value is not added to that subtotal.
+Codex
+cached input and reasoning remain breakdowns of reported input and output.
+Claude normalized input is derived from uncached input plus cache-read and
+cache-creation input. Claude's metric output includes provider thinking tokens,
+so separate reasoning output and provider-reported total remain unknown while
+the normalized input-plus-output total is derived exactly. Duplicate
+response/request IDs and exact metric retransmissions are counted once. When a
+completed Codex turn emits startup or earlier cumulative records, the tool
+selects the record that matches the turn span's provider total instead of adding
+those records together; `providerEventCount` exposes how many raw events were
+considered. Completed provider-task snapshots, provider usage logs, and provider
+token metrics have dedicated bounded in-memory rings, so unrelated high-volume
+telemetry does not evict the accounting record. They remain available across
+agent-process disconnects and idle session resets while Observer remains
+running.
+
+Repository queries use `repositoryName` or `repositoryPath`. The result reports
+`repositoryCorrelationStatus` and `repositoryCoverage` separately from
+`accountingStatus` and token measurement coverage. A task with exact token
+accounting but no provable repository association is excluded from a repository
+filter rather than guessed. No match returns `status: absent` with null totals,
+which is distinct from a matched task whose provider explicitly reported zero.
+
+Reconciled provider logs take precedence; a completed task span replaces rather
+than augments incomplete logs, so the same request is never counted from both
+sources. When no provider-native task accounting matches, the tool falls back to
+generic GenAI spans, de-duplicates enclosing workflow summaries from model-call
+spans, and excludes evaluation-only judge branches. Rubric/judge usage is not
+stored as agent/task usage. `accountingStatus` distinguishes exact correlated
+provider accounting from uncorrelated, partial, estimated, and unknown results.
+The data remains ephemeral and is evicted by explicit clear, Observer exit, or
+its dedicated bounded-ring overwrite. The tool's `limit` bounds returned task
+rows only; totals and measurement coverage include every retained matching
+task. `highestUsageTask` is also selected across every retained match and is
+`null` when any matched task has an unknown effective total, so an unknown
+measurement is never ranked as zero. Aggregate accounting becomes partial when completed-task retention has
+discarded history, and Claude cumulative metric series that began before the
+current Observer startup or most recent clear are partial rather than exact.
+
+The setup command has no force mode. Matching Codex or Claude settings remain
+user-owned. A nonmatching exporter, endpoint, protocol, header, or certificate
+causes that provider target to fail without changing it; other requested targets
+are still processed. Obstudio records only settings it adds. Disable removes
+only those unchanged settings and preserves values the user modified later:
+
+```bash
+obstudio token-telemetry disable --target=codex,claude-code
+```
+
+Disable also removes that target's repository-correlation opt-in. To keep token
+telemetry enabled but stop repository correlation, rerun enable with
+`--repository-correlation=off`.
+
+The command respects `CODEX_HOME` and `CLAUDE_CONFIG_DIR`. Codex and Claude
+ownership is stored in `~/.obstudio/token-telemetry.json`; use
+`OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH` only when an isolated state location is
+required. Relative overrides and `~/...` resolve from the user home so the CLI
+and plugin hook address the same file regardless of working directory. For
+new provider configuration files and all ownership/recovery state, Obstudio
+uses user-only permissions (a protected current-user DACL on Windows). Existing
+Obstudio-owned state is hardened on replacement, while the mode or DACL of
+existing provider files is preserved. Commands serialize
+ownership changes and recover an interrupted config/state publish on the next
+enable, disable, or status command. Recovery journals and ownership deltas are
+target-specific, so an unresolved Codex change does not block or overwrite
+Claude state, or vice versa. A provider file changed after the interruption is
+preserved and reported instead of being overwritten.
+For Claude Code, the command edits only the user-level
+`settings.json` and inspects that file plus its inherited process environment.
+Higher-precedence managed, command-line, local-project, or shared-project
+settings remain untouched and can supersede the user-level values; use Claude
+Code's `/status` view to verify the active setting sources for the target
+project.
+
+Exact accounting requires complete provider-native usage from a correlated
+task boundary, correlated provider logs, or all four monotonic cumulative Claude
+session metric components to reach the same Observer. The opt-in command leaves an existing
+nonmatching exporter unchanged and reports the conflict; resolve that conflict
+or route the existing destination through Observer before relying on
+`accountingStatus: exact`. If a provider version emits neither usable signal,
+the result remains `absent`/`unknown`; Observer does not fabricate an exact
+value from a missing measurement.
 
 ## REST API
 

@@ -1100,6 +1100,23 @@ func isGenAIEvaluationOnlySpan(span Span) bool {
 	return true
 }
 
+// ClassifyGenAISpan returns the normalized GenAI role used by Observer's trace
+// projection.
+func ClassifyGenAISpan(span Span) GenAISpanKind {
+	return classifyGenAISpan(span)
+}
+
+// IsGenAIEvaluationOnlySpan reports whether a span contains only evaluation
+// signals. Agent-task accounting omits these branches and their descendants.
+func IsGenAIEvaluationOnlySpan(span Span) bool {
+	return isGenAIEvaluationOnlySpan(span)
+}
+
+// IsGenAISpan reports whether a span carries a GenAI or evaluation signal.
+func IsGenAISpan(span Span) bool {
+	return isGenAISpan(span)
+}
+
 func hasGenAIEvaluationSignal(span Span) bool {
 	if hasGenAIEvaluationAttributes(span.Attributes) {
 		return true

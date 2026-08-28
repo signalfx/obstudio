@@ -139,6 +139,18 @@ def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     return env
 
 
+def _judge_subprocess_env(env: dict[str, str], *, claude: bool = False) -> dict[str, str]:
+    scoped = env.copy()
+    scoped["OTEL_SDK_DISABLED"] = "true"
+    scoped["OTEL_LOGS_EXPORTER"] = "none"
+    scoped["OTEL_TRACES_EXPORTER"] = "none"
+    scoped["OTEL_METRICS_EXPORTER"] = "none"
+    if claude:
+        scoped["CLAUDE_CODE_ENABLE_TELEMETRY"] = "0"
+        scoped["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"] = "0"
+    return scoped
+
+
 @dataclass
 class CodexBackend:
     command: str = "codex"
@@ -224,9 +236,23 @@ class CodexBackend:
         cmd.extend(["--output-last-message", str(output_path), *self.extra_args])
         if model:
             cmd.extend(["--model", model])
+        cmd.extend(
+            [
+                "--config",
+                'otel.exporter="none"',
+                "--config",
+                'otel.trace_exporter="none"',
+            ]
+        )
         cmd.append(prompt)
 
-        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=_judge_subprocess_env(_codex_subprocess_env(exec_dir)),
+        )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
 
@@ -258,7 +284,7 @@ class CodexBackend:
         )
 
     def parse_trace(self, trace_path: Path) -> TraceSummary:
-        return parse_trace(trace_path)
+        return parse_trace(trace_path, provider="codex")
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +406,7 @@ class CursorBackend:
         )
 
     def parse_trace(self, trace_path: Path) -> TraceSummary:
-        return parse_trace(trace_path)
+        return parse_trace(trace_path, provider="unknown")
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +502,7 @@ class ClaudeBackend:
             text=True,
             timeout=timeout,
             cwd=exec_dir,
+            env=_judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -523,7 +550,7 @@ def _extract_claude_final_message(trace_path: Path, output_path: Path) -> None:
     """Extract the last assistant text from Claude JSON output."""
     try:
         raw = trace_path.read_text(encoding="utf-8", errors="replace")
-        data = json.loads(raw) if raw.strip() else {}
+        data = json.loads(raw, parse_int=str) if raw.strip() else {}
         result_text = ""
         if isinstance(data, dict):
             result_text = data.get("result", "") or ""
@@ -538,25 +565,13 @@ def _extract_claude_final_message(trace_path: Path, output_path: Path) -> None:
 
 def _parse_claude_trace(trace_path: Path) -> TraceSummary:
     """Parse Claude Code JSON output into TraceSummary (best-effort)."""
-    from .trace import CommandEvent, TraceSummary, TraceUsage
+    from .trace import CommandEvent, TraceSummary, parse_events
 
     raw = trace_path.read_text(encoding="utf-8", errors="replace")
-    try:
-        data = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
-        return TraceSummary([], raw)
-
-    events: list[dict[str, Any]] = []
-    if isinstance(data, dict):
-        events = [data]
-    elif isinstance(data, list):
-        events = data
+    events = parse_events(raw)
 
     commands: list[CommandEvent] = []
-    usage = TraceUsage()
     for event in events:
-        if not isinstance(event, dict):
-            continue
         if event.get("type") == "tool_use" and event.get("name") in {"bash", "execute_command"}:
             cmd_text = ""
             inp = event.get("input", {})
@@ -564,16 +579,8 @@ def _parse_claude_trace(trace_path: Path) -> TraceSummary:
                 cmd_text = inp.get("command", "")
             if cmd_text:
                 commands.append(CommandEvent(command=cmd_text))
-        u = event.get("usage")
-        if isinstance(u, dict):
-            usage.input_tokens += int(u.get("input_tokens") or 0)
-            usage.output_tokens += int(u.get("output_tokens") or 0)
-
-    if usage.total_tokens == 0:
-        usage.total_tokens = usage.input_tokens + usage.output_tokens
-    summary = TraceSummary(events, raw)
+    summary = TraceSummary(events, raw, provider="claude")
     summary.commands = commands
-    summary.usage = usage
     return summary
 
 

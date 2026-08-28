@@ -37,11 +37,17 @@ type jsonRPCError struct {
 }
 
 type toolDef struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	InputSchema jsonSchema `json:"inputSchema"`
-	Annotations toolAnnot  `json:"annotations"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema jsonSchema     `json:"inputSchema"`
+	Annotations toolAnnot      `json:"annotations"`
+	Meta        map[string]any `json:"_meta,omitempty"`
 }
+
+const (
+	TokenAccountingProtocolMetaKey = "obstudio/token-accounting-version"
+	TokenAccountingProtocolVersion = 3
+)
 
 type jsonSchema struct {
 	Type                 string                `json:"type"`
@@ -73,13 +79,18 @@ type toolContent struct {
 	Text string `json:"text"`
 }
 
+// RepositoryCorrelationModeResolver returns the currently configured
+// repository-correlation mode for a provider.
+type RepositoryCorrelationModeResolver func(provider string) string
+
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
-	store             *store.Store
-	validationService *validator.Service
-	splunkMetricsCtrl *otlp.SplunkMetricsExportController
-	splunkTracesCtrl  *otlp.SplunkTracesExportController
-	tools             []toolDef
+	store                             *store.Store
+	validationService                 *validator.Service
+	splunkMetricsCtrl                 *otlp.SplunkMetricsExportController
+	splunkTracesCtrl                  *otlp.SplunkTracesExportController
+	repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
+	tools                             []toolDef
 }
 
 // NewDispatcher creates a new transport-agnostic MCP dispatcher.
@@ -88,6 +99,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var runner validator.Runner
 	var splunkMetricsCtrl *otlp.SplunkMetricsExportController
 	var splunkTracesCtrl *otlp.SplunkTracesExportController
+	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	for _, param := range params {
 		switch value := param.(type) {
 		case *validator.Store:
@@ -106,17 +118,22 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 			if value != nil {
 				splunkTracesCtrl = value
 			}
+		case RepositoryCorrelationModeResolver:
+			if value != nil {
+				repositoryCorrelationModeResolver = value
+			}
 		}
 	}
 	if validationStore == nil {
 		validationStore = validator.NewStore()
 	}
 	return &Dispatcher{
-		store:             s,
-		validationService: validator.NewService(validationStore, runner),
-		splunkMetricsCtrl: splunkMetricsCtrl,
-		splunkTracesCtrl:  splunkTracesCtrl,
-		tools:             buildToolDefs(splunkMetricsCtrl != nil),
+		store:                             s,
+		validationService:                 validator.NewService(validationStore, runner),
+		splunkMetricsCtrl:                 splunkMetricsCtrl,
+		splunkTracesCtrl:                  splunkTracesCtrl,
+		repositoryCorrelationModeResolver: repositoryCorrelationModeResolver,
+		tools:                             buildToolDefs(splunkMetricsCtrl != nil),
 	}
 }
 
@@ -175,6 +192,8 @@ func (d *Dispatcher) handleToolsCall(req jsonRPCRequest) jsonRPCResponse {
 		result = d.tracesOverview(args)
 	case "observer_trace_detail":
 		result = d.traceDetail(args)
+	case "observer_token_usage_overview":
+		result = d.tokenUsageOverview(args)
 	case "observer_logs_overview":
 		result = d.logsOverview(args)
 	case "observer_clear":
@@ -463,6 +482,31 @@ func buildToolDefs(withSplunk bool) []toolDef {
 				},
 			},
 			Annotations: toolAnnot{Title: "Observer Trace Detail", ReadOnlyHint: true, IdempotentHint: true},
+		},
+		{
+			Name:        "observer_token_usage_overview",
+			Description: "Answer questions about recent agent or task token usage retained in Observer's bounded in-memory history. Provider-native Codex response.completed logs, Claude api_request logs, and completed native task/request spans are normalized without adding logs and spans together. Returns normalized input, cached input, cache-creation input, output, reasoning output, provider-reported total, independently derived total, effective total, measurement coverage, trace/task identity, repository attribution, and accountingStatus. Use this when the user asks how many tokens a recent task or audit used, requests cache or reasoning breakdowns, compares provider and derived totals, asks which recent task used the most tokens, provides a Codex thread or Claude session ID, or asks about usage for a repository name or absolute path. highestUsageTask is computed across every retained match rather than only returned rows, and is null when any matched task has an unknown effective total. accountingStatus=exact describes token accounting only; repositoryCorrelationStatus separately describes repository attribution. Codex task traces can provide per-turn cwd, while explicit provider lifecycle events correlate Claude sessions when repository correlation is enabled. accountingStatus=exact requires one complete provider accounting source correlated to a completed native task boundary, or all four provider-native Claude cumulative metric components for an explicitly queried session. Delta metrics measure only their retained export window and remain partial. Codex logs are reconciled against the completed turn total; when retained logs are incomplete or evicted, the completed task span is authoritative. An explicit thread/session query omits a still-in-progress prompt when completed tasks for that conversation are retained. Uncorrelated, partial, estimated, and unknown are reported distinctly. Null means unknown and is distinct from an explicit zero. Raw provider events remain available as logs. Enclosing span summaries are de-duplicated from model-call spans, and evaluation-only judge branches are excluded.",
+			InputSchema: jsonSchema{
+				Type: "object", AdditionalProperties: &f,
+				Properties: map[string]jsonSchema{
+					"limit":          {Type: "integer", Minimum: intPtr(1), Maximum: intPtr(100), Default: 20, Description: "Maximum number of recent provider task rows or GenAI traces to return. Provider-task totals, coverage, and highestUsageTask include all retained matches."},
+					"serviceName":    {Type: "string", Description: "Optional case-insensitive provider or span service.name filter."},
+					"spanName":       {Type: "string", Description: "Optional case-insensitive span name filter; setting this explicitly selects span fallback data."},
+					"traceId":        {Type: "string", Description: "Optional exact provider trace ID. Use this for exact accounting of one dedicated task or audit trace."},
+					"traceIdPrefix":  {Type: "string", Description: "Optional provider task/conversation ID or lowercase hex trace ID prefix filter."},
+					"taskId":         {Type: "string", Description: "Optional exact Codex turn ID, Claude prompt ID, or fallback task ID."},
+					"conversationId": {Type: "string", Description: "Optional exact Codex conversation/thread ID or Claude session ID. For a codex://threads/... URL, use its trailing ID."},
+					"threadId":       {Type: "string", Description: "Backward-compatible alias for conversationId when an agent maps a codex://threads/... URL to threadId."},
+					"provider":       {Type: "string", Enum: []string{"codex", "claude"}, Description: "Optional provider-native telemetry filter."},
+					"skillName":      {Type: "string", Description: "Optional exact skill.name filter when the provider emits a skill marker, such as otel-audit."},
+					"repositoryName": {Type: "string", Description: "Optional case-insensitive repository name filter. Use this for a bare name such as entity-model-service or to include linked worktrees."},
+					"repositoryPath": {Type: "string", Description: "Optional absolute repository or workspace path filter. Canonical repository paths and provider worktree paths are both matched when retained."},
+				},
+			},
+			Annotations: toolAnnot{Title: "Observer Agent Token Usage", ReadOnlyHint: true, IdempotentHint: true},
+			Meta: map[string]any{
+				TokenAccountingProtocolMetaKey: TokenAccountingProtocolVersion,
+			},
 		},
 		{
 			Name:        "observer_logs_overview",

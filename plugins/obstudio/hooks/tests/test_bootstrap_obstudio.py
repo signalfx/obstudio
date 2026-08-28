@@ -77,6 +77,8 @@ class BootstrapLockTest(unittest.TestCase):
                 mock.patch.object(BOOTSTRAP.Path, "home", return_value=Path(tempdir) / "home"),
                 mock.patch.object(BOOTSTRAP, "bootstrap_lock", side_effect=BOOTSTRAP.BootstrapLockTimeout("busy")),
                 mock.patch.object(BOOTSTRAP, "emit_error") as emit_error,
+                mock.patch.object(BOOTSTRAP, "read_hook_payload", return_value={"session_id": "session-1"}),
+                mock.patch.object(BOOTSTRAP, "emit_repository_correlation") as emit_correlation,
             ):
                 self.assertEqual(BOOTSTRAP.main(), 2)
 
@@ -84,6 +86,7 @@ class BootstrapLockTest(unittest.TestCase):
             "Splunk Observability Studio bootstrap could not complete automatically. "
             "The plugin bundle is present, but the managed runtime could not be prepared."
         )
+        emit_correlation.assert_called_once_with({"session_id": "session-1"})
 
 
 class ClaudeBootstrapTest(unittest.TestCase):
@@ -158,6 +161,27 @@ class ClaudeBootstrapTest(unittest.TestCase):
                 self.assertTrue(claude_data.is_dir())
                 self.assertFalse(codex_data.exists())
 
+    def test_claude_data_falls_back_under_config_directory(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_dir = Path(tempdir) / "claude-config"
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "claude",
+                    "CLAUDE_CONFIG_DIR": str(config_dir),
+                },
+                clear=True,
+            ):
+                data = BOOTSTRAP.resolve_plugin_data()
+
+            self.assertEqual(data, (config_dir / "plugins" / "data" / "obstudio").resolve())
+            self.assertTrue(data.is_dir())
+
+    def test_codex_data_still_requires_host_provided_directory(self):
+        with mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "PLUGIN_DATA is not set"):
+                BOOTSTRAP.resolve_plugin_data()
+
     def test_uses_claude_manifest_version_and_owner(self):
         root = Path(__file__).resolve().parents[4]
         prior = os.environ.get("OBSTUDIO_PLUGIN_HOST")
@@ -166,7 +190,7 @@ class ClaudeBootstrapTest(unittest.TestCase):
             self.assertEqual(BOOTSTRAP.plugin_owner(), "claude-plugin")
             self.assertEqual(BOOTSTRAP.plugin_display_name(), "Splunk Observability Studio")
             self.assertEqual(BOOTSTRAP.skill_command("observer-open"), "/obstudio:observer-open")
-            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.16")
+            self.assertEqual(BOOTSTRAP.read_plugin_version(root / "plugins" / "obstudio"), "0.0.18")
             self.assertEqual(
                 BOOTSTRAP.codex_obstudio_mcp_policy(Path("ignored"), "http://127.0.0.1:3000/mcp"),
                 "plugin-local",
@@ -187,6 +211,233 @@ class ClaudeBootstrapTest(unittest.TestCase):
                 os.environ.pop("OBSTUDIO_PLUGIN_HOST", None)
             else:
                 os.environ["OBSTUDIO_PLUGIN_HOST"] = prior
+
+
+class RepositoryCorrelationTest(unittest.TestCase):
+    def test_reads_only_object_hook_payloads(self):
+        self.assertEqual(
+            BOOTSTRAP.read_hook_payload(io.StringIO('{"session_id":"session-1"}')),
+            {"session_id": "session-1"},
+        )
+        self.assertEqual(BOOTSTRAP.read_hook_payload(io.StringIO("[1,2,3]")), {})
+        self.assertEqual(BOOTSTRAP.read_hook_payload(io.StringIO("{")), {})
+
+    def test_reads_opt_in_repository_correlation_without_requiring_provider_ownership(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "token-telemetry.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "repositoryCorrelation": {
+                            "claude-code": {
+                                "mode": "path",
+                                "endpoint": "http://127.0.0.1:4318/v1/logs",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "claude",
+                    "OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH": str(state_path),
+                },
+                clear=True,
+            ):
+                self.assertEqual(
+                    BOOTSTRAP.read_repository_correlation_config(),
+                    {"mode": "path", "endpoint": "http://127.0.0.1:4318/v1/logs"},
+                )
+
+    def test_resolves_relative_repository_correlation_state_from_user_home(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            home = Path(tempdir)
+            state_path = home / "state" / "token-telemetry.json"
+            state_path.parent.mkdir()
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "repositoryCorrelation": {
+                            "codex": {
+                                "mode": "name",
+                                "endpoint": "http://localhost:4318/v1/logs",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "OBSTUDIO_PLUGIN_HOST": "codex",
+                        "OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH": "state/token-telemetry.json",
+                    },
+                    clear=True,
+                ),
+                mock.patch.object(BOOTSTRAP.Path, "home", return_value=home),
+            ):
+                self.assertEqual(
+                    BOOTSTRAP.read_repository_correlation_config(),
+                    {"mode": "name", "endpoint": "http://localhost:4318/v1/logs"},
+                )
+
+    def test_rejects_remote_path_correlation_endpoint(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            state_path = Path(tempdir) / "token-telemetry.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "repositoryCorrelation": {
+                            "codex": {
+                                "mode": "path",
+                                "endpoint": "https://telemetry.example/v1/logs",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OBSTUDIO_PLUGIN_HOST": "codex",
+                    "OBSTUDIO_TOKEN_TELEMETRY_STATE_PATH": str(state_path),
+                },
+                clear=True,
+            ):
+                self.assertIsNone(BOOTSTRAP.read_repository_correlation_config())
+
+    def test_builds_content_free_claude_repository_event(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            repository = Path(tempdir) / "entity-model-service"
+            workspace = repository / "internal" / "entity"
+            (repository / ".git").mkdir(parents=True)
+            workspace.mkdir(parents=True)
+            payload = {
+                "session_id": "session-1",
+                "cwd": str(workspace),
+                "hook_event_name": "SessionStart",
+                "prompt": "must not be exported",
+            }
+            with mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True):
+                event = BOOTSTRAP.build_repository_correlation_event(
+                    payload,
+                    {"mode": "path", "endpoint": "http://127.0.0.1:4318/v1/logs"},
+                )
+
+        self.assertIsNotNone(event)
+        encoded = json.dumps(event)
+        self.assertNotIn("must not be exported", encoded)
+        record = event["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+        attributes = {
+            item["key"]: item["value"]["stringValue"]
+            for item in record["attributes"]
+        }
+        self.assertEqual(attributes["gen_ai.provider.name"], "claude")
+        self.assertEqual(attributes["conversation.id"], "session-1")
+        self.assertEqual(attributes["repository.name"], "entity-model-service")
+        self.assertEqual(attributes["repository.path"], str(repository.resolve()))
+        self.assertEqual(attributes["workspace.path"], str(repository.resolve()))
+
+    def test_name_mode_does_not_export_paths(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            repository = Path(tempdir) / "entity-model-service"
+            (repository / ".git").mkdir(parents=True)
+            with mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "codex"}, clear=True):
+                event = BOOTSTRAP.build_repository_correlation_event(
+                    {"session_id": "thread-1", "cwd": str(repository)},
+                    {"mode": "name", "endpoint": "http://localhost:4318/v1/logs"},
+                )
+
+        encoded = json.dumps(event)
+        self.assertIn("entity-model-service", encoded)
+        self.assertNotIn(str(repository), encoded)
+        self.assertNotIn("repository.path", encoded)
+        self.assertNotIn("workspace.path", encoded)
+
+    def test_emits_repository_event_to_configured_local_otlp_endpoint(self):
+        class FakeResponse(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            repository = Path(tempdir) / "service"
+            (repository / ".git").mkdir(parents=True)
+            config = {"mode": "path", "endpoint": "http://127.0.0.1:4318/v1/logs"}
+            opener = mock.Mock()
+            opener.open.return_value = FakeResponse()
+            with (
+                mock.patch.dict(os.environ, {"OBSTUDIO_PLUGIN_HOST": "claude"}, clear=True),
+                mock.patch.object(BOOTSTRAP, "read_repository_correlation_config", return_value=config),
+                mock.patch.object(BOOTSTRAP.urllib.request, "build_opener", return_value=opener),
+            ):
+                emitted = BOOTSTRAP.emit_repository_correlation(
+                    {"session_id": "session-1", "cwd": str(repository), "hook_event_name": "SessionStart"}
+                )
+
+        self.assertTrue(emitted)
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, config["endpoint"])
+        self.assertEqual(request.get_header("Content-type"), "application/json")
+        self.assertEqual(
+            json.loads(request.data)["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["body"]["stringValue"],
+            BOOTSTRAP.REPOSITORY_CORRELATION_EVENT,
+        )
+
+    def test_repository_event_bypasses_inherited_proxies(self):
+        class FakeResponse(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        opener = mock.Mock()
+        opener.open.return_value = FakeResponse()
+        with tempfile.TemporaryDirectory() as tempdir:
+            repository = Path(tempdir) / "service"
+            (repository / ".git").mkdir(parents=True)
+            config = {"mode": "path", "endpoint": "http://127.0.0.1:4318/v1/logs"}
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "OBSTUDIO_PLUGIN_HOST": "claude",
+                        "HTTP_PROXY": "http://proxy.invalid:9876",
+                        "HTTPS_PROXY": "http://proxy.invalid:9876",
+                        "NO_PROXY": "",
+                        "no_proxy": "",
+                    },
+                    clear=True,
+                ),
+                mock.patch.object(BOOTSTRAP, "read_repository_correlation_config", return_value=config),
+                mock.patch.object(BOOTSTRAP.urllib.request, "build_opener", return_value=opener) as build_opener,
+                mock.patch.object(BOOTSTRAP.urllib.request, "urlopen") as urlopen,
+            ):
+                emitted = BOOTSTRAP.emit_repository_correlation(
+                    {"session_id": "session-1", "cwd": str(repository), "hook_event_name": "SessionStart"}
+                )
+
+        self.assertTrue(emitted)
+        urlopen.assert_not_called()
+        proxy_handler = build_opener.call_args.args[0]
+        self.assertIsInstance(proxy_handler, BOOTSTRAP.urllib.request.ProxyHandler)
+        self.assertEqual(proxy_handler.proxies, {})
+        opener.open.assert_called_once()
 
 
 class ResolveReleaseVersionTest(unittest.TestCase):
