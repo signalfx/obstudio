@@ -676,10 +676,11 @@ describe("FindingsTab", () => {
 
     act(() => { vi.advanceTimersByTime(300); });
 
-    // After animation completes: panel removed, stub remains for aria-controls
+    // After animation completes: panel removed, stub remains for aria-controls, focus returns to row
     expect(view.container.querySelector(".signal-view--with-panel")).toBeNull();
     expect(view.container.querySelector("#validation-issue-detail")?.hasAttribute("hidden")).toBe(true);
     expect(row.classList.contains("data-table__row--active")).toBe(false);
+    expect(document.activeElement).toBe(row);
   });
 
   it("clicking a row during the close animation cancels the exit and selects the new row", () => {

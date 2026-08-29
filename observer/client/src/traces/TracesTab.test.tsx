@@ -336,6 +336,14 @@ describe("TracesTab", () => {
     expect(panelStyles.borderTopStyle).toBe("solid");
     expect(panelStyles.borderLeftWidth).toBe("0px");
     expect(contentStyles.minHeight).toBe("0");
+
+    // Exiting panel must not collapse horizontally — width stays auto, only height collapses
+    window.document.body.innerHTML =
+      "<div class=\"signal-view signal-view--trace-detail signal-view--with-panel\"><div class=\"signal-view__content\"></div><div class=\"signal-view__panel signal-view__panel--exiting\"></div></div>";
+    const exitingPanel = window.document.querySelector(".signal-view__panel--exiting");
+    if (!exitingPanel) throw new Error("expected exiting panel");
+    const exitingStyles = window.getComputedStyle(exitingPanel);
+    expect(exitingStyles.width).not.toBe("0px");
   });
 
   it("stacks the trace detail panel below the list at 640px", async () => {

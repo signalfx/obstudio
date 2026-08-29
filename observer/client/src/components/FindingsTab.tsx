@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ValidationFinding, ValidationIssue, ValidationSeverity, ValidationSummary } from "../api/types";
 import { DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import {
@@ -57,6 +57,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, forceRelativeTimeRefresh] = useState(0);
   const { exiting: panelExiting, triggerExit, cancelExit } = useAnimatedPanel();
+  const lastOpenedRowRef = useRef<HTMLElement | null>(null);
   const signalFilteredIssues = useMemo(
     () => filterValidationIssues(issues, { ...filters, signalType: "" }),
     [issues, filters],
@@ -127,7 +128,11 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
   const hasDetail = selectedKey !== null || panelExiting;
 
   const closeIssuePanel = useCallback(() => {
-    triggerExit(() => setSelectedKey(null));
+    const rowToFocus = lastOpenedRowRef.current;
+    triggerExit(() => {
+      setSelectedKey(null);
+      rowToFocus?.focus();
+    });
   }, [triggerExit]);
 
   const selectedIssue = useMemo(
@@ -282,7 +287,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                             key={issue.key}
                             type="button"
                             className={`data-table__row data-table__row--findings validation-item--${issue.severity}${isSelected ? " data-table__row--active" : ""}`}
-                            onClick={() => { cancelExit(); setSelectedKey(issue.key); }}
+                            onClick={(e) => { cancelExit(); setSelectedKey(issue.key); lastOpenedRowRef.current = e.currentTarget; }}
                             aria-pressed={isSelected && !panelExiting}
                             aria-controls="validation-issue-detail"
                             aria-label={formatIssueRowAriaLabel(row.issue, row.rule, totals)}
