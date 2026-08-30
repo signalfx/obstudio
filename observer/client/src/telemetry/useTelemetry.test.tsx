@@ -2,8 +2,24 @@
 
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import type {
+  ObserverHostTelemetryMessage,
+  ObserverHostTelemetrySubscription,
+} from "../host/transport";
 import { useTelemetry } from "./useTelemetry";
+
+const hostTransportMock = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+}));
+
+vi.mock("../host/transport", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../host/transport")>();
+  return {
+    ...actual,
+    subscribeObserverHostTelemetry: hostTransportMock.subscribe,
+  };
+});
 
 class MockWebSocket {
   static OPEN = 1;
@@ -31,12 +47,14 @@ class MockWebSocket {
 }
 
 function Harness(): React.ReactElement {
-  const { state, pause, paused, hasNewUpdates } = useTelemetry();
+  const { state, pause, resume, paused, hasNewUpdates } = useTelemetry();
   return (
     <>
       <button type="button" onClick={pause}>pause</button>
+      <button type="button" onClick={resume}>resume</button>
       <output data-testid="snapshot">
         {JSON.stringify({
+          error: state.error,
           traces: state.traces.length,
           metrics: state.metrics.length,
           logs: state.logs.length,
@@ -55,6 +73,8 @@ function Harness(): React.ReactElement {
 describe("useTelemetry", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
+    hostTransportMock.subscribe.mockReset();
+    hostTransportMock.subscribe.mockReturnValue(null);
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -156,6 +176,60 @@ describe("useTelemetry", () => {
       expect(screen.getByTestId("snapshot").textContent).toContain('"validationIssueServiceName":""');
       expect(screen.getByTestId("snapshot").textContent).toContain('"validationStatus":"ready"');
     });
+  });
+
+  it("uses the IDE host subscription for connection state, pause, resume, and cleanup", async () => {
+    let hostListener: ((message: ObserverHostTelemetryMessage) => void) | undefined;
+    const hostSubscription: ObserverHostTelemetrySubscription = {
+      dispose: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(),
+    };
+    hostTransportMock.subscribe.mockImplementation(
+      (listener: (message: ObserverHostTelemetryMessage) => void) => {
+        hostListener = listener;
+        return hostSubscription;
+      },
+    );
+
+    const { unmount } = render(<Harness />);
+
+    await waitFor(() => {
+      expect(hostTransportMock.subscribe).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toContain('"traceCount":1');
+    });
+    expect(MockWebSocket.instances).toHaveLength(0);
+
+    act(() => hostListener?.({ type: "disconnected" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot").textContent)
+        .toContain('"error":"Disconnected. Reconnecting..."');
+    });
+
+    act(() => hostListener?.({ type: "connected" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot").textContent).toContain('"error":null');
+    });
+
+    screen.getByRole("button", { name: "pause" }).click();
+    await waitFor(() => {
+      expect(hostSubscription.pause).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toContain('"paused":true');
+    });
+    act(() => hostListener?.({ type: "paused-update" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot").textContent).toContain('"hasNewUpdates":true');
+    });
+
+    screen.getByRole("button", { name: "resume" }).click();
+    await waitFor(() => {
+      expect(hostSubscription.resume).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toContain('"paused":false');
+      expect(screen.getByTestId("snapshot").textContent).toContain('"hasNewUpdates":false');
+    });
+
+    unmount();
+    expect(hostSubscription.dispose).toHaveBeenCalledTimes(1);
   });
 
   it("keeps validation live while buffering telemetry updates during pause", async () => {

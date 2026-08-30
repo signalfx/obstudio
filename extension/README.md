@@ -15,6 +15,8 @@ Splunk Observability Studio combines agent skills for auditing, instrumenting, v
 | Visual Studio Code | Supported on `1.82.0` or later | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Splunk.observability-studio) |
 | Windsurf / Devin Desktop | Supported | [Open VSX](https://open-vsx.org/extension/splunk/observability-studio) |
 
+The Observer panel follows one host-neutral path in every listed Code-OSS editor: the extension loads the same bundled React application as a top-level `WebviewPanel` and uses the same request bridge. It does not replace native paste or intercept editor modifier shortcuts. Cloud fields therefore remain normal editable inputs, while a missing or failed host control capability disables only the cloud mutation controls that depend on it; the rest of Observer remains usable.
+
 ### Coding-agent integration
 
 Editor compatibility and coding-agent integration are separate. Setup for Cursor and Kiro is built into the extension. In Visual Studio Code, the extension configures Claude Code and Codex; GitHub Copilot uses the standalone CLI. Windsurf / Devin Desktop agent setup is also CLI-only: the current `windsurf` target configures legacy Cascade automatically, while Devin Local needs one additional MCP command. See [Commands](#commands) for the exact local targets.

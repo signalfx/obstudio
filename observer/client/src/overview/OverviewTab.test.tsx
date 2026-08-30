@@ -1,18 +1,14 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
-
-const bridgeToken = "cloud-bridge-token-1234567890";
-const bridgeOrigin = "vscode-webview://extension";
 
 interface BridgeRequest {
   action: string;
   payload?: { skill?: string };
   requestId: string;
-  type: string;
 }
 
 /** Builds an available InstrumentationScore payload with a full breakdown. */
@@ -91,48 +87,68 @@ function stubScoreFetch(payload: unknown) {
 }
 
 /**
- * Simulates the IDE webview host so bridge-routed behavior can be exercised.
- *
- * Pass a score payload to answer /api/audit/score with it; every other request
- * (the bridge's own token verification included) gets a bare success, so a
- * bridge test can still render a scored card.
+ * Simulates the top-level IDE webview host. HTTP reads and host-owned actions
+ * use the same typed message channel as the packaged extension.
  */
 function installBridge(score?: unknown) {
   const requests: BridgeRequest[] = [];
-  const parent = {
-    postMessage(message: BridgeRequest & { type: string }) {
-      if (message.type === "obstudio.cloud.ready") return;
-      requests.push(message);
+  const api = {
+    postMessage(message: unknown) {
+      if (typeof message !== "object" || message === null) return;
+      const envelope = message as {
+        request?: {
+          action?: string;
+          kind?: string;
+          path?: string;
+          payload?: { skill?: string };
+        };
+        requestId?: string;
+        type?: string;
+      };
+      if (envelope.type !== "obstudio.host.request" || !envelope.requestId || !envelope.request) return;
+      if (envelope.request.kind === "cloud" && envelope.request.action) {
+        requests.push({
+          action: envelope.request.action,
+          payload: envelope.request.payload,
+          requestId: envelope.requestId,
+        });
+        respond(envelope.requestId, {});
+        return;
+      }
+      if (envelope.request.kind === "http" && envelope.request.path) {
+        const body = envelope.request.path.startsWith("/api/audit/score")
+          ? score ?? makeScore({})
+          : statusBody(false);
+        respond(envelope.requestId, {
+          body: JSON.stringify(body),
+          headers: { "content-type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        });
+      }
     },
   };
-  Object.defineProperty(window, "parent", { configurable: true, value: parent });
-  vi.stubGlobal("fetch", vi.fn(async (input: unknown) => ({
-    ok: true,
-    status: 200,
-    json: async () => (
-      score !== undefined && String(input).includes("/api/audit/score") ? score : { ok: true }
-    ),
-  })));
+  vi.stubGlobal("acquireVsCodeApi", vi.fn(() => api));
 
-  return {
-    handshake() {
-      act(() => {
-        window.dispatchEvent(new MessageEvent("message", {
-          data: { bridgeToken, type: "obstudio.cloud.bridge" },
-          origin: bridgeOrigin,
-          source: parent as unknown as Window,
-        }));
-      });
-    },
-    requests,
-  };
+  function respond(requestId: string, result: unknown) {
+    void Promise.resolve().then(() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: {
+          ok: true,
+          requestId,
+          result,
+          type: "obstudio.host.response",
+        },
+      }));
+    });
+  }
+
+  return { requests };
 }
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  // Restore the non-iframe default so other tests take the no-bridge path.
-  Object.defineProperty(window, "parent", { configurable: true, value: window });
 });
 
 describe("scoreTone", () => {
@@ -590,17 +606,12 @@ describe("OverviewTab", () => {
   it("routes docs links through the IDE bridge when hosted in a webview", async () => {
     const harness = installBridge();
     render(<OverviewTab />);
-    harness.handshake();
 
     const link = screen.getAllByRole("link", { name: /skill docs/i })[0];
 
-    // Retry until the async token verification completes and the bridge is live;
-    // clicks before that simply fall through to normal anchor behavior.
-    await waitFor(() => {
-      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
-      link.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-    });
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
 
     const request = harness.requests.find((r) => r.action === "open-skill-docs");
     expect(request).toBeTruthy();
@@ -875,7 +886,6 @@ describe("OverviewTab outstanding work and formatting", () => {
   it("routes the report link through the IDE bridge when hosted in a webview", async () => {
     const harness = installBridge(makeScore({ hasHtmlReport: true }));
     const { container } = render(<OverviewTab />);
-    harness.handshake();
 
     await waitFor(() => {
       expect(container.querySelector(".overview-callout")).toBeTruthy();
@@ -883,11 +893,9 @@ describe("OverviewTab outstanding work and formatting", () => {
     fireEvent.click(container.querySelector<HTMLButtonElement>(".overview-callout")!);
     const link = container.querySelector<HTMLAnchorElement>(".overview-report__view")!;
 
-    await waitFor(() => {
-      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
-      link.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-    });
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
 
     const request = harness.requests.find((r) => r.action === "open-audit-report");
     expect(request).toBeTruthy();

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TraceSummary, MetricGroup, LogRecord, Stats, ValidationSnapshot } from "../api/types";
+import {
+  observerFetch,
+  subscribeObserverHostTelemetry,
+  type ObserverHostTelemetrySubscription,
+} from "../host/transport";
 
 /** Snapshot of all telemetry signals received from the server. */
 export interface TelemetryState {
@@ -30,7 +35,7 @@ export interface TelemetryHandle {
 }
 
 interface ServerMessage {
-  type: "connected" | "update" | "paused-update" | "reload";
+  type: "connected" | "disconnected" | "update" | "paused-update" | "reload";
   signal?: string;
   data?: unknown;
 }
@@ -47,7 +52,7 @@ const emptyState: TelemetryState = {
 const RECONNECT_MS = 1000;
 
 async function fetchJSON<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+  const response = await observerFetch(path);
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
@@ -182,6 +187,7 @@ export function useTelemetry(): TelemetryHandle {
   telemetryRef.current = telemetry;
 
   const wsRef = useRef<WebSocket | null>(null);
+  const hostSubscriptionRef = useRef<ObserverHostTelemetrySubscription | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -189,6 +195,28 @@ export function useTelemetry(): TelemetryHandle {
 
     function connect() {
       if (!active) return;
+
+      const handleMessage = (msg: ServerMessage) => {
+        if (!active) return;
+        if (msg.type === "paused-update") {
+          setHasNewUpdates(true);
+        } else if (msg.type === "update" && msg.signal && msg.data !== undefined) {
+          applyUpdate(msg.signal, msg.data);
+        } else if (msg.type === "reload") {
+          window.location.reload();
+        } else if (msg.type === "connected") {
+          setTelemetry((current) => ({ ...current, error: null }));
+        } else if (msg.type === "disconnected") {
+          setTelemetry((current) => ({ ...current, error: "Disconnected. Reconnecting..." }));
+        }
+      };
+
+      const hostSubscription = subscribeObserverHostTelemetry(handleMessage);
+      if (hostSubscription) {
+        hostSubscriptionRef.current = hostSubscription;
+        if (pausedRef.current) hostSubscription.pause();
+        return;
+      }
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
@@ -213,13 +241,7 @@ export function useTelemetry(): TelemetryHandle {
           return;
         }
 
-        if (msg.type === "paused-update") {
-          setHasNewUpdates(true);
-        } else if (msg.type === "update" && msg.signal && msg.data !== undefined) {
-          applyUpdate(msg.signal, msg.data);
-        } else if (msg.type === "reload") {
-          window.location.reload();
-        }
+        handleMessage(msg);
       };
 
       ws.onerror = () => {
@@ -301,6 +323,8 @@ export function useTelemetry(): TelemetryHandle {
     return () => {
       active = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      hostSubscriptionRef.current?.dispose();
+      hostSubscriptionRef.current = null;
       const ws = wsRef.current;
       if (ws) {
         ws.onclose = null; // Prevent reconnect on intentional close.
@@ -326,6 +350,11 @@ export function useTelemetry(): TelemetryHandle {
     bufferRef.current = null;
     setHasNewUpdates(false);
     const ws = wsRef.current;
+    const hostSubscription = hostSubscriptionRef.current;
+    if (hostSubscription) {
+      hostSubscription.pause();
+      return;
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "pause" }));
     }
@@ -340,6 +369,11 @@ export function useTelemetry(): TelemetryHandle {
     bufferRef.current = null;
     setHasNewUpdates(false);
     const ws = wsRef.current;
+    const hostSubscription = hostSubscriptionRef.current;
+    if (hostSubscription) {
+      hostSubscription.resume();
+      return;
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "resume" }));
     }

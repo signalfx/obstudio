@@ -9,7 +9,7 @@ import type { TelemetryHandle } from "./telemetry";
 import { TracesTab } from "./traces";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { FindingsTab } from "./components/FindingsTab";
-import { useHostKeyboardForwarding, useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { buildValidationIndex, buildValidationIssues } from "./validation/utils";
 
 interface AppViewProps {
@@ -54,7 +54,6 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "8": () => switchTab("cloud"),
   }), [toggle, switchTab]);
 
-  useHostKeyboardForwarding();
   useKeyboardShortcuts(shortcuts);
 
   useEffect(() => {
