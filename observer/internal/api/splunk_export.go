@@ -520,10 +520,11 @@ func splunkBrowserTokenCookieName(r *http.Request) string {
 func (s *splunkExportService) browserSessionForLocalPage(
 	launchToken string,
 ) (string, bool, error) {
-	// Origin and fetch-metadata checks prevent cross-site browser requests, while
-	// the launch capability also prevents other local processes from minting a
-	// browser mutation session by forging those headers.
-	if !equalSplunkBrowserLaunchToken(launchToken, s.browserLaunch) {
+	// The caller's loopback, Origin, request-marker, and fetch-metadata checks are
+	// the browser security boundary. A launch capability is optional so a local
+	// standalone page can be the first controller, but it must be valid whenever
+	// one is supplied so stale or tampered secure launch URLs fail closed.
+	if launchToken != "" && !equalSplunkBrowserLaunchToken(launchToken, s.browserLaunch) {
 		return "", false, nil
 	}
 
@@ -787,6 +788,9 @@ func hasBearerAuthorization(r *http.Request) bool {
 	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
+// isSameOriginLoopbackBrowserRequest is the standalone browser CSRF boundary.
+// Observer trusts same-user local processes; these checks prevent a remote web
+// origin from driving cloud mutations through the loopback HTTP API.
 func isSameOriginLoopbackBrowserRequest(r *http.Request) bool {
 	if r.Header.Get(splunkBrowserRequestHeader) != "1" {
 		return false

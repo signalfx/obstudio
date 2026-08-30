@@ -572,12 +572,12 @@ describe("CloudTab", () => {
     expect(css).toMatch(/\.cloud-connect-form__action \.cloud-button\s*\{[^}]*min-height:\s*44px;[^}]*border-radius:\s*24px;/s);
   });
 
-  it("keeps standalone inputs editable but requires a secure launch for mutations", async () => {
+  it("keeps bare standalone controls available for the first local session", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path === "/api/splunk/export/browser/session") {
         expectBareBrowserSessionRequest(init);
-        return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
+        return jsonResponse({ browserToken });
       }
       if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
       throw new Error(`unexpected request: ${path}`);
@@ -587,13 +587,14 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(true));
+    await waitFor(() => expect(connectButton.disabled).toBe(false));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByLabelText("Region") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     fireEvent.change(screen.getByLabelText("Region"), { target: { value: "us1" } });
     fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "still_editable" } });
+    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1")).toBe(browserToken);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -619,20 +620,17 @@ describe("CloudTab", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("requires a secure launch to replace a stored session from a prior Observer process", async () => {
+  it("replaces a stored session from a prior Observer process without disabling controls", async () => {
     window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", browserToken);
+    const replacementBrowserToken = "C".repeat(43);
     let sessionCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path === "/api/splunk/export/browser/session") {
         sessionCalls += 1;
         expectBareBrowserSessionRequest(init);
-        if (sessionCalls === 1) {
-          expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBe(browserToken);
-          return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
-        }
-        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBeNull();
-        return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
+        expect(new Headers(init?.headers).get("X-Obstudio-Browser-Token")).toBe(browserToken);
+        return jsonResponse({ browserToken: replacementBrowserToken });
       }
       if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
       throw new Error(`unexpected request: ${path}`);
@@ -642,13 +640,46 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
-    await waitFor(() => expect(connectButton.disabled).toBe(true));
+    await waitFor(() => expect(connectButton.disabled).toBe(false));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Observer state is read-only in this browser session.")).toBeTruthy();
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
     expect((screen.getByLabelText("Region") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
-      .toBeNull();
+      .toBe(replacementBrowserToken);
+    expect(sessionCalls).toBe(1);
+  });
+
+  it("retries a rejected stored session as an authorized bare standalone page", async () => {
+    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", browserToken);
+    const replacementBrowserToken = "C".repeat(43);
+    let sessionCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/browser/session") {
+        sessionCalls += 1;
+        expectBareBrowserSessionRequest(init);
+        const requestToken = new Headers(init?.headers).get("X-Obstudio-Browser-Token");
+        if (sessionCalls === 1) {
+          expect(requestToken).toBe(browserToken);
+          return jsonResponse({ error: "browser cloud control launch is not valid" }, 401);
+        }
+        expect(requestToken).toBeNull();
+        return jsonResponse({ browserToken: replacementBrowserToken });
+      }
+      if (path === "/api/splunk/export") return jsonResponse(disconnectedStatus());
+      throw new Error(`unexpected request: ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CloudTab />);
+
+    const connectButton = await screen.findByRole("button", { name: "Connect" }) as HTMLButtonElement;
+    await waitFor(() => expect(connectButton.disabled).toBe(false));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Observer state is read-only in this browser session.")).toBeNull();
+    expect(window.sessionStorage.getItem("obstudio.cloud.browser-session.v1"))
+      .toBe(replacementBrowserToken);
     expect(sessionCalls).toBe(2);
   });
 
