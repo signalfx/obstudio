@@ -43,6 +43,8 @@ func Register(mux *http.ServeMux, s *store.Store, v *validator.Store) func() {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("X-Frame-Options", "DENY")
 		index, err := fs.ReadFile(sub, "index.html")
 		if err != nil {
 			fileServer.ServeHTTP(w, r)

@@ -1219,7 +1219,7 @@ func TestSplunkExportBrowserSessionAuthorizesSameOriginLoopbackMutations(t *test
 	}
 }
 
-func TestSplunkExportBrowserSessionRequiresNewLaunchAfterObserverRestart(t *testing.T) {
+func TestSplunkExportBrowserSessionReplacesStaleSessionAfterObserverRestart(t *testing.T) {
 	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
@@ -1246,30 +1246,21 @@ func TestSplunkExportBrowserSessionRequiresNewLaunchAfterObserverRestart(t *test
 
 	renewedResponse := splunkBrowserExportRequest(t, restartedMux, http.MethodPost,
 		"/api/splunk/export/browser/session", `{}`, firstSession.BrowserToken)
-	if renewedResponse.Code != http.StatusUnauthorized {
+	if renewedResponse.Code != http.StatusOK {
 		t.Fatalf("post-restart stale session status = %d, body = %s",
 			renewedResponse.Code, renewedResponse.Body.String())
-	}
-
-	newLaunchToken := strings.Repeat("C", 43)
-	newSessionResponse := splunkBrowserExportRequest(t, restartedMux, http.MethodPost,
-		"/api/splunk/export/browser/session",
-		splunkBrowserLaunchRequestBody(newLaunchToken), "")
-	if newSessionResponse.Code != http.StatusOK {
-		t.Fatalf("new process launch status = %d, body = %s",
-			newSessionResponse.Code, newSessionResponse.Body.String())
 	}
 	var newSession struct {
 		BrowserToken string `json:"browserToken"`
 	}
-	if err := json.Unmarshal(newSessionResponse.Body.Bytes(), &newSession); err != nil {
+	if err := json.Unmarshal(renewedResponse.Body.Bytes(), &newSession); err != nil {
 		t.Fatal(err)
 	}
 	if newSession.BrowserToken == firstSession.BrowserToken {
 		t.Fatal("restarted Observer reused the prior process browser session")
 	}
 	var freshCookie *http.Cookie
-	for _, cookie := range newSessionResponse.Result().Cookies() {
+	for _, cookie := range renewedResponse.Result().Cookies() {
 		if cookie.Name == splunkBrowserCookiePrefix+"3000" {
 			freshCookie = cookie
 			break
@@ -1554,7 +1545,7 @@ func TestSplunkExportBrowserSessionProtectsEnvManagedConfigurationBeforeForget(t
 	}
 }
 
-func TestSplunkExportBrowserSessionRejectsBareLoopbackPage(t *testing.T) {
+func TestSplunkExportBrowserSessionAuthorizesBareLoopbackPage(t *testing.T) {
 	t.Setenv("OBSTUDIO_CONTROL_TOKEN", testObserverControlToken)
 	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{})
 	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{})
@@ -1564,14 +1555,23 @@ func TestSplunkExportBrowserSessionRejectsBareLoopbackPage(t *testing.T) {
 
 	response := splunkBrowserExportRequest(t, mux, http.MethodPost,
 		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(""), "")
-	if response.Code != http.StatusUnauthorized {
+	if response.Code != http.StatusOK {
 		t.Fatalf("session status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var session struct {
+		BrowserToken string `json:"browserToken"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	if !splunkBrowserTokenPattern.MatchString(session.BrowserToken) {
+		t.Fatalf("browser token has invalid shape: %q", session.BrowserToken)
 	}
 
 	connectResponse := splunkBrowserExportRequest(t, mux, http.MethodPost, "/api/splunk/export",
-		`{"realm":"us1","accessToken":"opaque-browser-token"}`, "")
-	if connectResponse.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated connect status = %d, body = %s",
+		`{"realm":"us1","accessToken":"opaque-browser-token"}`, session.BrowserToken)
+	if connectResponse.Code != http.StatusOK {
+		t.Fatalf("browser connect status = %d, body = %s",
 			connectResponse.Code, connectResponse.Body.String())
 	}
 }
@@ -1585,12 +1585,6 @@ func TestSplunkExportBrowserSessionRejectsInvalidLaunchWhenProvided(t *testing.T
 	service.register(mux)
 
 	response := splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", `{}`, "")
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("missing launch status = %d, body = %s", response.Code, response.Body.String())
-	}
-
-	response = splunkBrowserExportRequest(t, mux, http.MethodPost,
 		"/api/splunk/export/browser/session",
 		splunkBrowserLaunchRequestBody(strings.Repeat("A", 43)), "")
 	if response.Code != http.StatusUnauthorized {
@@ -1602,12 +1596,6 @@ func TestSplunkExportBrowserSessionRejectsInvalidLaunchWhenProvided(t *testing.T
 		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(testSplunkBrowserLaunchToken), "")
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("unconfigured launch status = %d, body = %s", response.Code, response.Body.String())
-	}
-
-	response = splunkBrowserExportRequest(t, mux, http.MethodPost,
-		"/api/splunk/export/browser/session", splunkBrowserLaunchRequestBody(""), "")
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("empty launch status = %d, body = %s", response.Code, response.Body.String())
 	}
 }
 
