@@ -4,6 +4,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -30,6 +32,11 @@ import (
 )
 
 var version = "dev"
+
+const (
+	observerCloudBrowserLaunchTokenEnv     = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
+	observerHideCloudBrowserLaunchTokenEnv = "OBSTUDIO_HIDE_CLOUD_BROWSER_LAUNCH_TOKEN"
+)
 
 var splunkEnvFilePrecedenceKeys = []string{
 	"OBSTUDIO_SPLUNK_REALM",
@@ -101,6 +108,13 @@ func newRootCmd(config *runConfig) *cobra.Command {
 }
 
 func run(config runConfig) {
+	if err := ensureObserverControlToken(); err != nil {
+		log.Fatalf("configure Observer control token: %v", err)
+	}
+	if err := ensureObserverCloudBrowserLaunchToken(); err != nil {
+		log.Fatalf("configure standalone browser cloud launch: %v", err)
+	}
+
 	s := store.New()
 	v := validator.NewStore()
 	validatorManager := validator.NewManager(v, s)
@@ -230,6 +244,32 @@ func run(config runConfig) {
 	splunkTracesController.Shutdown(shutCtx)
 }
 
+func ensureObserverControlToken() error {
+	if strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")) != "" {
+		return nil
+	}
+
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		return fmt.Errorf("generate control token: %w", err)
+	}
+	if err := os.Setenv("OBSTUDIO_CONTROL_TOKEN", base64.RawURLEncoding.EncodeToString(token)); err != nil {
+		return fmt.Errorf("store generated control token: %w", err)
+	}
+	return nil
+}
+
+func ensureObserverCloudBrowserLaunchToken() error {
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		return fmt.Errorf("generate browser launch token: %w", err)
+	}
+	if err := os.Setenv(observerCloudBrowserLaunchTokenEnv, base64.RawURLEncoding.EncodeToString(token)); err != nil {
+		return fmt.Errorf("store generated browser launch token: %w", err)
+	}
+	return nil
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -329,7 +369,8 @@ func existingEnvKeys() map[string]struct{} {
 }
 
 func rememberEnvFileShellPrecedence() {
-	for _, key := range splunkEnvFilePrecedenceKeys {
+	keys := append(append([]string{}, splunkEnvFilePrecedenceKeys...), splunkEnvFileLegacyEndpointKeys...)
+	for _, key := range keys {
 		if _, ok := os.LookupEnv(key); ok {
 			markEnvFileShellPrecedence(key)
 		}
@@ -388,10 +429,20 @@ func resolveRunConfig(config runConfig) runConfig {
 	}
 }
 
+type splunkMetricsExportConfigurator interface {
+	Config() otlp.SplunkMetricsExporterConfig
+	Configure(otlp.SplunkMetricsExporterConfig) error
+}
+
+type splunkTracesExportConfigurator interface {
+	Config() otlp.SplunkTracesExporterConfig
+	Configure(otlp.SplunkTracesExporterConfig) error
+}
+
 func newSplunkExportConfigurationRefresher(
 	flagValue string,
-	metrics *otlp.SplunkMetricsExportController,
-	traces *otlp.SplunkTracesExportController,
+	metrics splunkMetricsExportConfigurator,
+	traces splunkTracesExportConfigurator,
 ) api.SplunkExportConfigurationRefresher {
 	return func() (bool, error) {
 		path, explicit := configuredEnvFilePath(flagValue)
@@ -403,13 +454,10 @@ func newSplunkExportConfigurationRefresher(
 			return false, err
 		}
 
-		if hasNonEmptyEnvKey(splunkEnvFileLegacyEndpointKeys...) {
-			return false, nil
-		}
-		if hasEnvMapKey(values, splunkEnvFileLegacyEndpointKeys...) {
-			return false, nil
-		}
 		values = applyEnvFileShellPrecedence(values)
+		if hasEnvMapKey(values, splunkEnvFileLegacyEndpointKeys...) {
+			return activeSplunkExportConfigurationMatchesValues(values, metrics, traces)
+		}
 
 		realm := firstNonEmpty(values["OBSTUDIO_SPLUNK_REALM"], values["SPLUNK_REALM"])
 		accessToken := strings.TrimSpace(values["SPLUNK_ACCESS_TOKEN"])
@@ -439,17 +487,91 @@ func newSplunkExportConfigurationRefresher(
 		}
 
 		previousMetrics := metrics.Config()
-		if err := metrics.Configure(metricsConfig); err != nil {
-			return false, err
+		previousTraces := traces.Config()
+		metricsConfig.Timeout = previousMetrics.Timeout
+		tracesConfig.Timeout = previousTraces.Timeout
+		metricsChanged := metricsConfig != previousMetrics
+		tracesChanged := tracesConfig != previousTraces
+		if !metricsChanged && !tracesChanged {
+			return true, nil
 		}
-		if err := traces.Configure(tracesConfig); err != nil {
-			if rollbackErr := metrics.Configure(previousMetrics); rollbackErr != nil {
-				return false, fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+		if metricsChanged {
+			if err := metrics.Configure(metricsConfig); err != nil {
+				return false, err
 			}
-			return false, err
+		}
+		if tracesChanged {
+			if err := traces.Configure(tracesConfig); err != nil {
+				if metricsChanged {
+					if rollbackErr := metrics.Configure(previousMetrics); rollbackErr != nil {
+						return false, fmt.Errorf("configure traces: %w; rollback metrics: %v", err, rollbackErr)
+					}
+				}
+				return false, err
+			}
 		}
 		return true, nil
 	}
+}
+
+func activeSplunkExportConfigurationMatchesValues(
+	values map[string]string,
+	metrics splunkMetricsExportConfigurator,
+	traces splunkTracesExportConfigurator,
+) (bool, error) {
+	expectedMetrics, err := splunkMetricsExporterConfigFromValues(values)
+	if err != nil {
+		return false, err
+	}
+	expectedTraces, err := splunkTracesExporterConfigFromValues(values)
+	if err != nil {
+		return false, err
+	}
+
+	actualMetrics := metrics.Config()
+	actualTraces := traces.Config()
+	if expectedMetrics.Timeout <= 0 {
+		expectedMetrics.Timeout = actualMetrics.Timeout
+	}
+	if expectedTraces.Timeout <= 0 {
+		expectedTraces.Timeout = actualTraces.Timeout
+	}
+	expectedMetrics.Realm = strings.TrimSpace(expectedMetrics.Realm)
+	expectedMetrics.Endpoint = strings.TrimSpace(expectedMetrics.Endpoint)
+	expectedMetrics.AccessToken = strings.TrimSpace(expectedMetrics.AccessToken)
+	expectedTraces.Realm = strings.TrimSpace(expectedTraces.Realm)
+	expectedTraces.Endpoint = strings.TrimSpace(expectedTraces.Endpoint)
+	expectedTraces.AccessToken = strings.TrimSpace(expectedTraces.AccessToken)
+
+	return actualMetrics == expectedMetrics && actualTraces == expectedTraces, nil
+}
+
+func splunkMetricsExporterConfigFromValues(values map[string]string) (otlp.SplunkMetricsExporterConfig, error) {
+	timeout, err := durationValue("OBSTUDIO_SPLUNK_METRICS_TIMEOUT", values["OBSTUDIO_SPLUNK_METRICS_TIMEOUT"])
+	if err != nil {
+		return otlp.SplunkMetricsExporterConfig{}, err
+	}
+	return otlp.SplunkMetricsExporterConfig{
+		Enabled:     envMapBool(values, "OBSTUDIO_SPLUNK_METRICS_EXPORT", "SPLUNK_METRICS_EXPORT"),
+		Realm:       firstNonEmpty(values["OBSTUDIO_SPLUNK_REALM"], values["SPLUNK_REALM"]),
+		Endpoint:    strings.TrimSpace(values["OBSTUDIO_SPLUNK_METRICS_ENDPOINT"]),
+		AccessToken: strings.TrimSpace(values["SPLUNK_ACCESS_TOKEN"]),
+		Timeout:     timeout,
+	}, nil
+}
+
+func splunkTracesExporterConfigFromValues(values map[string]string) (otlp.SplunkTracesExporterConfig, error) {
+	timeout, err := durationValue("OBSTUDIO_SPLUNK_TRACES_TIMEOUT", values["OBSTUDIO_SPLUNK_TRACES_TIMEOUT"])
+	if err != nil {
+		return otlp.SplunkTracesExporterConfig{}, err
+	}
+	return otlp.SplunkTracesExporterConfig{
+		Enabled:     envMapBool(values, "OBSTUDIO_SPLUNK_TRACES_EXPORT", "SPLUNK_TRACES_EXPORT"),
+		Realm:       firstNonEmpty(values["OBSTUDIO_SPLUNK_REALM"], values["SPLUNK_REALM"]),
+		Endpoint:    strings.TrimSpace(values["OBSTUDIO_SPLUNK_TRACES_ENDPOINT"]),
+		AccessToken: strings.TrimSpace(values["SPLUNK_ACCESS_TOKEN"]),
+		Timeout:     timeout,
+	}, nil
 }
 
 func applyEnvFileShellPrecedence(values map[string]string) map[string]string {
@@ -534,15 +656,6 @@ func hasEnvMapKey(values map[string]string, keys ...string) bool {
 	return false
 }
 
-func hasNonEmptyEnvKey(keys ...string) bool {
-	for _, key := range keys {
-		if strings.TrimSpace(os.Getenv(key)) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func splunkMetricsExporterConfigFromEnv() (otlp.SplunkMetricsExporterConfig, error) {
 	timeout, err := durationEnv("OBSTUDIO_SPLUNK_METRICS_TIMEOUT")
 	if err != nil {
@@ -572,7 +685,11 @@ func splunkTracesExporterConfigFromEnv() (otlp.SplunkTracesExporterConfig, error
 }
 
 func durationEnv(key string) (time.Duration, error) {
-	value := strings.TrimSpace(os.Getenv(key))
+	return durationValue(key, os.Getenv(key))
+}
+
+func durationValue(key, rawValue string) (time.Duration, error) {
+	value := strings.TrimSpace(rawValue)
 	if value == "" {
 		return 0, nil
 	}
@@ -675,14 +792,42 @@ func buildSharedObserverState(host, port string) sharedObserverState {
 func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
 		"\nObservability Studio (collector)\n"+
-			"  Telemetry Explorer:  http://%s\n"+
+			"  Telemetry Explorer:  %s\n"+
 			"  OTLP/HTTP receiver:  http://%s\n"+
 			"  OTLP/gRPC receiver:  %s\n"+
 			"  MCP endpoint:        http://%s/mcp\n"+
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n\n",
-		mainAddr,
+		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
 	)
+}
+
+func observerBrowserURL(mainAddr string) string {
+	host, port, err := net.SplitHostPort(mainAddr)
+	if err != nil {
+		return "http://" + mainAddr
+	}
+	switch host {
+	case "", "0.0.0.0":
+		host = "127.0.0.1"
+	case "::", "[::]":
+		host = "::1"
+	}
+	if !strings.EqualFold(host, "localhost") {
+		ip := net.ParseIP(strings.Trim(host, "[]"))
+		if ip == nil || !ip.IsLoopback() {
+			return "http://" + mainAddr
+		}
+	}
+	baseURL := "http://" + net.JoinHostPort(host, port)
+	if envBool(observerHideCloudBrowserLaunchTokenEnv) {
+		return baseURL
+	}
+	launchToken := strings.TrimSpace(os.Getenv(observerCloudBrowserLaunchTokenEnv))
+	if launchToken == "" {
+		return baseURL
+	}
+	return baseURL + "/#obstudio-cloud-control=" + launchToken
 }

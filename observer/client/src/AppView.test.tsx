@@ -3,9 +3,8 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MetricGroup, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
+import type { MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
-import { forwardHostKeyboardEvent, hostKeyboardEventMessageType } from "./hooks/useKeyboardShortcuts";
 import type { TelemetryHandle } from "./telemetry";
 import { buildValidationIssues } from "./validation/utils";
 
@@ -144,21 +143,28 @@ function makeTraceDetail(): TraceDetail {
   };
 }
 
-function stubCloudStatusFetch(): void {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+function stubCloudStatusFetch(status: SplunkExportStatus = {
+  connected: false,
+  enabled: false,
+  version: "V".repeat(43),
+  metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+  traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+}, withBrowserSession = true): void {
+  if (withBrowserSession) {
+    window.sessionStorage.setItem("obstudio.cloud.browser-session.v1", "A".repeat(43));
+  }
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
     ok: true,
     status: 200,
     statusText: "OK",
-    json: async () => ({
-      connected: false,
-      enabled: false,
-      metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-    }),
-  }));
+    json: async () => withBrowserSession && String(input) === "/api/splunk/export/browser/session"
+      ? { browserToken: "B".repeat(43) }
+      : status,
+  })));
 }
 
 beforeEach(() => {
+  stubCloudStatusFetch(undefined, false);
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     value: 400,
@@ -185,6 +191,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
 
@@ -305,7 +312,7 @@ describe("AppView validation tab", () => {
     expect(container.querySelector(".tab-bar__tabs")).toBeTruthy();
   });
 
-  it("does not run Studio commands for VS Code modifier shortcuts", () => {
+  it("leaves VS Code modifier shortcuts uncancelled for the host", () => {
     window.history.replaceState({}, "", "/?tab=services");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
@@ -315,118 +322,21 @@ describe("AppView validation tab", () => {
       { key: "p", ctrlKey: true },
       { key: "p", metaKey: true, shiftKey: true },
       { key: "1", metaKey: true },
+      { key: "c", metaKey: true },
+      { key: "v", metaKey: true },
+      { key: "x", metaKey: true },
+      { key: "z", metaKey: true },
       { key: "c", ctrlKey: true },
       { key: "v", ctrlKey: true },
-      { key: "z", metaKey: true },
+      { key: "Tab", metaKey: true },
     ];
     for (const shortcut of vscodeShortcuts) {
-      fireEvent.keyDown(window, shortcut);
+      expect(fireEvent.keyDown(window, shortcut)).toBe(true);
     }
 
     expect(telemetry.toggle).not.toHaveBeenCalled();
     expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
-  });
-
-  it("bridges modified keydown and keyup events out of a nested webview", () => {
-    const postMessage = vi.fn();
-    const parentWindow = { postMessage } as unknown as Window;
-    const commands: Array<{
-      key: string;
-      code: string;
-      keyCode: number;
-      metaKey?: boolean;
-      ctrlKey?: boolean;
-      shiftKey?: boolean;
-      preventsBrowserDefault: boolean;
-    }> = [
-      { key: "p", code: "KeyP", keyCode: 80, metaKey: true, preventsBrowserDefault: true },
-      { key: "p", code: "KeyP", keyCode: 80, ctrlKey: true, preventsBrowserDefault: true },
-      {
-        key: "p",
-        code: "KeyP",
-        keyCode: 80,
-        metaKey: true,
-        shiftKey: true,
-        preventsBrowserDefault: true,
-      },
-      { key: "1", code: "Digit1", keyCode: 49, metaKey: true, preventsBrowserDefault: false },
-      { key: "c", code: "KeyC", keyCode: 67, ctrlKey: true, preventsBrowserDefault: false },
-      { key: "v", code: "KeyV", keyCode: 86, ctrlKey: true, preventsBrowserDefault: false },
-      { key: "z", code: "KeyZ", keyCode: 90, metaKey: true, preventsBrowserDefault: false },
-    ];
-
-    for (const command of commands) {
-      const forwardedCodes = new Set<string>();
-      const keydown = new KeyboardEvent("keydown", {
-        key: command.key,
-        code: command.code,
-        metaKey: command.metaKey,
-        ctrlKey: command.ctrlKey,
-        shiftKey: command.shiftKey,
-        cancelable: true,
-      });
-      Object.defineProperty(keydown, "keyCode", { value: command.keyCode });
-
-      expect(forwardHostKeyboardEvent(keydown, forwardedCodes, parentWindow, window)).toBe(true);
-      expect(keydown.defaultPrevented).toBe(command.preventsBrowserDefault);
-      expect(postMessage).toHaveBeenLastCalledWith({
-        type: hostKeyboardEventMessageType,
-        event: expect.objectContaining({
-          type: "keydown",
-          key: command.key,
-          code: command.code,
-          keyCode: command.keyCode,
-          metaKey: Boolean(command.metaKey),
-          ctrlKey: Boolean(command.ctrlKey),
-          shiftKey: Boolean(command.shiftKey),
-        }),
-      }, "*");
-
-      const keyup = new KeyboardEvent("keyup", { key: command.key, code: command.code });
-      Object.defineProperty(keyup, "keyCode", { value: command.keyCode });
-      expect(forwardHostKeyboardEvent(keyup, forwardedCodes, parentWindow, window)).toBe(true);
-      expect(postMessage).toHaveBeenLastCalledWith({
-        type: hostKeyboardEventMessageType,
-        event: expect.objectContaining({ type: "keyup", code: command.code, metaKey: false }),
-      }, "*");
-      expect(forwardedCodes.size).toBe(0);
-    }
-
-    expect(postMessage).toHaveBeenCalledTimes(commands.length * 2);
-  });
-
-  it("does not bridge host key events outside an iframe", () => {
-    const postMessage = vi.fn();
-    const currentWindow = { postMessage } as unknown as Window;
-    const forwardedCodes = new Set<string>();
-    const keydown = new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true });
-
-    expect(forwardHostKeyboardEvent(keydown, forwardedCodes, currentWindow, currentWindow)).toBe(false);
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  it("clears stale shortcut keys when the host modifier is released first", () => {
-    const postMessage = vi.fn();
-    const parentWindow = { postMessage } as unknown as Window;
-    const forwardedCodes = new Set<string>();
-    const events = [
-      new KeyboardEvent("keydown", { key: "Meta", code: "MetaLeft", metaKey: true }),
-      new KeyboardEvent("keydown", { key: "p", code: "KeyP", metaKey: true }),
-      new KeyboardEvent("keyup", { key: "Meta", code: "MetaLeft" }),
-    ];
-    for (const event of events) {
-      expect(forwardHostKeyboardEvent(event, forwardedCodes, parentWindow, window)).toBe(true);
-    }
-
-    expect(forwardedCodes.size).toBe(0);
-    expect(forwardHostKeyboardEvent(
-      new KeyboardEvent("keyup", { key: "p", code: "KeyP" }),
-      forwardedCodes,
-      parentWindow,
-      window,
-    )).toBe(false);
-    expect(postMessage).toHaveBeenCalledTimes(3);
   });
 
   it("handles the unmodified P shortcut case-insensitively", () => {
@@ -560,17 +470,13 @@ describe("AppView cloud connection status chip", () => {
   });
 
   it("shows Configured, not connected with paused style when credentials exist but connection is inactive", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({
-        connected: false,
-        enabled: true,
-        metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-        traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
-      }),
-    }));
+    stubCloudStatusFetch({
+      connected: false,
+      enabled: true,
+      version: "V".repeat(43),
+      metrics: { configured: true, enabled: true, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+      traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
+    });
     window.history.replaceState({}, "", "/?tab=cloud");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
@@ -580,17 +486,13 @@ describe("AppView cloud connection status chip", () => {
   });
 
   it("shows Connected with live style when the connection is active", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({
-        connected: true,
-        enabled: true,
-        metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
-        traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
-      }),
-    }));
+    stubCloudStatusFetch({
+      connected: true,
+      enabled: true,
+      version: "V".repeat(43),
+      metrics: { configured: true, enabled: true, exportedBatches: 5, exportedItems: 100, failedBatches: 0 },
+      traces: { configured: true, enabled: true, exportedBatches: 3, exportedItems: 50, failedBatches: 0 },
+    });
     window.history.replaceState({}, "", "/?tab=cloud");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
@@ -770,6 +672,17 @@ describe("AppView KeyboardHelp focus management", () => {
 
     expect(fireEvent.keyDown(window, { key: "Tab", shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(closeButton);
+  });
+
+  it("leaves modified Tab shortcuts uncancelled while the keyboard-help dialog is open", () => {
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+
+    expect(fireEvent.keyDown(window, { key: "Tab", metaKey: true })).toBe(true);
+    expect(fireEvent.keyDown(window, { key: "Tab", ctrlKey: true })).toBe(true);
+    expect(fireEvent.keyDown(window, { key: "Tab", altKey: true })).toBe(true);
   });
 
   it("full lifecycle: initial focus → Tab containment → close → focus restored to opener", () => {

@@ -50,3 +50,23 @@ func TestStaticAssetsAreRevalidated(t *testing.T) {
 		t.Fatalf("expected Cache-Control max-age=0, must-revalidate, got %q", cache)
 	}
 }
+
+func TestStaticIndexCannotBeFramedByAnotherSite(t *testing.T) {
+	mux := http.NewServeMux()
+	cleanup := Register(mux, store.New(), validator.NewStore())
+	defer cleanup()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/?tab=cloud", nil)
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected index response status 200, got %d", recorder.Code)
+	}
+	if csp := recorder.Header().Get("Content-Security-Policy"); csp != "frame-ancestors 'none'" {
+		t.Fatalf("Content-Security-Policy = %q, want frame-ancestors 'none'", csp)
+	}
+	if frameOptions := recorder.Header().Get("X-Frame-Options"); frameOptions != "DENY" {
+		t.Fatalf("X-Frame-Options = %q, want DENY", frameOptions)
+	}
+}

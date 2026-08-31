@@ -16,6 +16,67 @@ export class ObserverLifecycleCancelledError extends Error {
 	}
 }
 
+export class AsyncSingleFlight {
+	private active: Promise<void> | undefined;
+
+	get current(): Promise<void> | undefined {
+		return this.active;
+	}
+
+	run(operation: () => Promise<void>): Promise<void> {
+		if (this.active !== undefined) {
+			return this.active;
+		}
+
+		const active = Promise.resolve()
+			.then(operation)
+			.finally(() => {
+				if (this.active === active) {
+					this.active = undefined;
+				}
+			});
+		this.active = active;
+		return active;
+	}
+
+	clear(): void {
+		this.active = undefined;
+	}
+}
+
+export class AsyncOperationQueue {
+	private tail: Promise<void> = Promise.resolve();
+
+	/** Run operations in invocation order without letting one rejection poison the queue. */
+	run<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.tail.then(operation);
+		this.tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+}
+
+export async function operationCompletesWithin(
+	operation: Promise<void>,
+	timeoutMs: number,
+): Promise<boolean> {
+	let timeout: NodeJS.Timeout | undefined;
+	try {
+		return await Promise.race([
+			operation.then(() => true),
+			new Promise<boolean>((resolve) => {
+				timeout = setTimeout(() => resolve(false), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeout !== undefined) {
+			clearTimeout(timeout);
+		}
+	}
+}
+
 export function createObserverLifecycleState(): ObserverLifecycleState {
 	return {
 		activeRunId: undefined,

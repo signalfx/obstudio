@@ -1,15 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchSplunkExportStatus } from "../api/client";
+import {
+  createSplunkExportBrowserSession,
+  fetchSplunkExportStatus,
+  isUnusableSplunkExportBrowserSession,
+  recoverSplunkExportBrowserSession,
+  runSplunkExportBrowserAction,
+} from "../api/client";
 import type { SplunkExportSignalStatus, SplunkExportStatus } from "../api/types";
 import {
+  isObserverHostCloudTimeoutError,
   isSplunkExportStatus,
   useCloudBridge,
   type CloudBridgeAction,
   type CloudBridgeResponse,
 } from "./bridge";
+import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 
 const maxSplunkRealmLength = 32;
+const maxSplunkAccessTokenBytes = 4096;
 const splunkRealmPattern = /^[a-z]{2,12}[0-9]+$/;
+const splunkAccessTokenTooLongMessage = "Access token must be 4,096 UTF-8 bytes or fewer.";
 const freeEditionURL = "https://www.splunk.com/en_us/download/observability-cloud-free-edition.html";
 const ingestTokenHelpURL = "https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens";
 
@@ -26,48 +36,95 @@ interface CloudTabProps {
   onConnectionChange?: (state: CloudConnectionState) => void;
 }
 
+interface CloudActionResponse {
+  status?: SplunkExportStatus;
+}
+
 export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElement {
-  const { bridge, callBridge, verificationFailed } = useCloudBridge();
+  const { bridge, callBridge } = useCloudBridge();
+  const [initializedBridge, setInitializedBridge] = useState<typeof bridge>(null);
   const [status, setStatus] = useState<SplunkExportStatus | null>(null);
-  const [region, setRegion] = useState("us0");
+  const [browserToken, setBrowserToken] = useState<string | null>(null);
+  const [region, setRegion] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [busyAction, setBusyAction] = useState<CloudBridgeAction | null>("initialize");
+  const [controlError, setControlError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [forgetOpen, setForgetOpen] = useState(false);
+  const actionGenerationRef = useRef(0);
+  const actionInFlightRef = useRef(false);
+  const forgetOpenRef = useRef(false);
+  const latestAppliedStatusRequestRef = useRef(0);
+  const mountedRef = useRef(false);
+  const restoreFocusAfterForgetCloseRef = useRef(false);
+  const statusRequestSequenceRef = useRef(0);
+  const statusRef = useRef<SplunkExportStatus | null>(null);
   const forgetCancelRef = useRef<HTMLButtonElement>(null);
   const forgetConfirmRef = useRef<HTMLButtonElement>(null);
   const forgetTriggerRef = useRef<HTMLButtonElement>(null);
   const regionInputRef = useRef<HTMLInputElement>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
+  forgetOpenRef.current = forgetOpen;
+  statusRef.current = status;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const closeForgetDialog = useCallback(() => {
+    restoreFocusAfterForgetCloseRef.current = true;
     setForgetOpen(false);
-    window.setTimeout(() => forgetTriggerRef.current?.focus(), 0);
   }, []);
 
   useEffect(() => {
-    if (!verificationFailed) return;
-    setBusyAction(null);
-    setError("Cloud connection changes are not available in this IDE session.");
-  }, [verificationFailed]);
+    if (forgetOpen || !restoreFocusAfterForgetCloseRef.current) return;
+    const focusTarget = forgetTriggerRef.current ?? regionInputRef.current;
+    if (!focusTarget) return;
+    restoreFocusAfterForgetCloseRef.current = false;
+    focusTarget.focus();
+  }, [forgetOpen, status]);
 
   useEffect(() => {
-    if (!bridge && window.parent !== window) return undefined;
+    setBusyAction("initialize");
     let active = true;
     const controller = new AbortController();
     const initialize = async () => {
+      let bridgeInitialized = false;
+      let nextBrowserToken: string | null = null;
       try {
         let nextStatus: unknown;
-        let bridgeInitializationError: unknown;
+        let controlInitializationError: unknown;
         if (bridge) {
           try {
-            nextStatus = (await callBridge("initialize")).status;
+            const response = await callBridge("initialize");
+            nextStatus = response.status;
+            bridgeInitialized = true;
+            if (response.warning?.trim()) {
+              controlInitializationError = new Error(response.warning);
+            }
+            if (!isSplunkExportStatus(nextStatus)) {
+              nextStatus = await fetchSplunkExportStatus(controller.signal);
+            }
           } catch (initializationError) {
-            bridgeInitializationError = initializationError;
+            if (controller.signal.aborted) return;
+            controlInitializationError = initializationError;
             nextStatus = await fetchSplunkExportStatus(controller.signal);
           }
         } else {
+          try {
+            const session = await createSplunkExportBrowserSession(controller.signal);
+            nextBrowserToken = session.browserToken;
+            if (session.warning?.trim()) {
+              controlInitializationError = new Error(session.warning);
+            }
+          } catch (browserSessionError) {
+            if (controller.signal.aborted) return;
+            controlInitializationError = browserSessionError;
+          }
           nextStatus = await fetchSplunkExportStatus(controller.signal);
         }
         if (!active) return;
@@ -75,18 +132,22 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           throw new Error("Observer returned an invalid cloud status.");
         }
         setStatus(nextStatus);
-        if (nextStatus.realm?.trim()) {
-          setRegion(nextStatus.realm.trim().toLowerCase());
+        if (bridge || nextBrowserToken) setControlError(null);
+        if (controlInitializationError) {
+          const message = errorMessage(controlInitializationError, "Could not enable cloud connection controls.");
+          setControlError(message);
         }
-        setError(bridgeInitializationError
-          ? errorMessage(bridgeInitializationError, "Could not restore cloud connection status.")
-          : null);
       } catch (initializationError) {
         if (!active || controller.signal.aborted) return;
-        setError(errorMessage(initializationError, "Could not load cloud connection status."));
+        const message = errorMessage(initializationError, "Could not load cloud connection status.");
+        setError(message);
         onConnectionChange?.("disconnected");
       } finally {
-        if (active) setBusyAction(null);
+        if (active) {
+          setBrowserToken(nextBrowserToken);
+          setInitializedBridge(bridgeInitialized ? bridge : null);
+          setBusyAction(null);
+        }
       }
     };
     void initialize();
@@ -107,6 +168,82 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   }, [notice]);
 
   const connected = status?.connected === true;
+  const controlAvailable = bridge !== null
+    ? initializedBridge === bridge
+    : browserToken !== null;
+  const mutationsDisabled = busyAction !== null || status === null || !controlAvailable;
+  const displayedError = error ?? (controlAvailable ? controlError : null);
+  const controlUnavailable = busyAction === null && status !== null && !controlAvailable;
+
+  const applyObserverStatus = useCallback((
+    nextStatus: SplunkExportStatus,
+    clearReconciledFeedback: boolean,
+  ) => {
+    const previousStatus = statusRef.current;
+    const controlStateChanged = previousStatus
+      ? cloudControlStateChanged(previousStatus, nextStatus)
+      : false;
+    if (clearReconciledFeedback && (!previousStatus || controlStateChanged)) {
+      setError(null);
+    }
+    if (previousStatus && controlStateChanged) {
+      if (clearReconciledFeedback) setNotice(null);
+      if (
+        cloudConfigurationStateChanged(previousStatus, nextStatus)
+        && forgetOpenRef.current
+      ) {
+        closeForgetDialog();
+      }
+    }
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+    if (
+      clearReconciledFeedback
+      && controlAvailable
+      && (!previousStatus || controlStateChanged)
+    ) {
+      setControlError(null);
+    }
+    return controlStateChanged;
+  }, [closeForgetDialog, controlAvailable]);
+
+  const loadObserverStatus = useCallback(async (
+    clearReconciledFeedback: boolean,
+    signal?: AbortSignal,
+    shouldApply: () => boolean = () => true,
+  ) => {
+    const sequence = ++statusRequestSequenceRef.current;
+    const nextStatus = await fetchSplunkExportStatus(signal);
+    if (
+      !mountedRef.current
+      || !shouldApply()
+      || !isSplunkExportStatus(nextStatus)
+      || sequence < latestAppliedStatusRequestRef.current
+    ) {
+      return { applied: false, stateChanged: false };
+    }
+    latestAppliedStatusRequestRef.current = sequence;
+    return {
+      applied: true,
+      stateChanged: applyObserverStatus(nextStatus, clearReconciledFeedback),
+    };
+  }, [applyObserverStatus]);
+
+  const reconcileFailedAction = useCallback(async (actionGeneration: number) => {
+    try {
+      const result = await loadObserverStatus(
+        false,
+        undefined,
+        () => actionGenerationRef.current === actionGeneration,
+      );
+      if (result.applied && result.stateChanged) {
+        setError(null);
+        setNotice("Cloud state refreshed from Observer.");
+      }
+    } catch {
+      // Normal polling will retry if the Observer is temporarily unavailable.
+    }
+  }, [loadObserverStatus]);
 
   useEffect(() => {
     if (status === null) return;
@@ -144,7 +281,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
   ], [status]);
 
   useEffect(() => {
-    if (!exportActive) return undefined;
+    if (busyAction !== null) return undefined;
     let active = true;
     let controller: AbortController | undefined;
     let timeoutId: number | undefined;
@@ -152,10 +289,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     const poll = async () => {
       controller = new AbortController();
       try {
-        const nextStatus = await fetchSplunkExportStatus(controller.signal);
-        if (active && isSplunkExportStatus(nextStatus)) {
-          setStatus(nextStatus);
-        }
+        await loadObserverStatus(true, controller.signal, () => active);
       } catch {
         // Keep the last known status if a background status request fails.
       } finally {
@@ -169,39 +303,98 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       controller?.abort();
     };
-  }, [exportActive]);
+  }, [busyAction, loadObserverStatus]);
 
   const runAction = async (
     action: CloudBridgeAction,
     payload?: { accessToken?: string; enabled?: boolean; realm?: string },
-  ): Promise<CloudBridgeResponse | null> => {
-    if (busyAction) return null;
+  ): Promise<CloudActionResponse | null> => {
+    if (busyAction || actionInFlightRef.current || !controlAvailable) return null;
+    const expectedVersion = statusRef.current?.version;
+    if (!expectedVersion) {
+      setError("Observer cloud state is unavailable. Refresh and try again.");
+      return null;
+    }
+    const versionedPayload = { ...payload, expectedVersion };
+    const actionGeneration = ++actionGenerationRef.current;
+    actionInFlightRef.current = true;
     setBusyAction(action);
     setError(null);
     setNotice(null);
     try {
-      const response = await callBridge(action, payload);
+      let response: CloudBridgeResponse | CloudActionResponse;
+      if (bridge) {
+        response = await callBridge(action, versionedPayload);
+      } else if (browserToken) {
+        if (action !== "connect" && action !== "forget" && action !== "set-enabled") {
+          throw new Error("This cloud action requires an IDE session.");
+        }
+        response = {
+          status: await runSplunkExportBrowserAction(action, versionedPayload, browserToken),
+        };
+      } else {
+        throw new Error("Cloud connection changes are not available in this session.");
+      }
       if (response.status) setStatus(response.status);
+      setControlError(null);
       return response;
     } catch (actionError) {
-      setError(errorMessage(actionError, "The cloud connection request failed."));
+      const message = errorMessage(actionError, "The cloud connection request failed.");
+      if (bridge && isObserverHostCloudTimeoutError(actionError)) {
+        setInitializedBridge(null);
+        setError(message);
+        setControlError(null);
+      } else if (!bridge && isUnusableSplunkExportBrowserSession(actionError)) {
+        setBrowserToken(null);
+        setControlError(null);
+        try {
+          const recovered = await recoverSplunkExportBrowserSession();
+          const result = await loadObserverStatus(
+            false,
+            undefined,
+            () => actionGenerationRef.current === actionGeneration,
+          );
+          if (!result.applied) {
+            throw new Error("Observer returned an invalid cloud status.");
+          }
+          setBrowserToken(recovered.browserToken);
+          setError(null);
+          setControlError(recovered.warning?.trim() || null);
+          setNotice("Cloud controls refreshed. Retry the action.");
+        } catch {
+          setError(message);
+          void reconcileFailedAction(actionGeneration);
+        }
+        return null;
+      } else {
+        setError(message);
+      }
+      void reconcileFailedAction(actionGeneration);
       return null;
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction(null);
     }
   };
 
   const connect = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const token = accessToken.trim();
+    if (mutationsDisabled) return;
+    const submittedAccessToken = accessToken;
+    const token = submittedAccessToken.trim();
     const realm = region.trim().toLowerCase();
     if (realm.length > maxSplunkRealmLength || !splunkRealmPattern.test(realm)) {
       setError("Enter a valid Splunk Observability Cloud region.");
       regionInputRef.current?.focus();
       return;
     }
-    if (token.length < 16) {
+    if (token.length === 0) {
       setError("Paste the access token secret.");
+      tokenInputRef.current?.focus();
+      return;
+    }
+    if (utf8ByteLength(token) > maxSplunkAccessTokenBytes) {
+      setError(splunkAccessTokenTooLongMessage);
       tokenInputRef.current?.focus();
       return;
     }
@@ -210,8 +403,24 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       realm,
     });
     if (!response) return;
-    setAccessToken("");
+    if (response.status?.connected !== true) {
+      setError("Splunk Observability Cloud did not confirm the connection.");
+      return;
+    }
+    setAccessToken((currentAccessToken) => (
+      currentAccessToken === submittedAccessToken ? "" : currentAccessToken
+    ));
     setNotice("Cloud destination connected.");
+  };
+
+  const submitConnectionOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.key !== "Enter"
+      || event.nativeEvent.isComposing
+      || hasHostCommandModifier(event)
+    ) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
   };
 
   const openExternalLink = (
@@ -236,6 +445,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     const response = await runAction("forget");
     if (!response) return;
     closeForgetDialog();
+    setRegion("");
     setAccessToken("");
     setNotice("Cloud key forgotten.");
   };
@@ -244,8 +454,8 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
     <section id="panel-cloud" aria-label="Cloud" className="tab-panel cloud-tab" role="tabpanel">
       <div className="cloud-tab__content">
         <div aria-atomic="true" aria-live="polite" className="cloud-alert-region">
-          {error ? <div className="cloud-alert cloud-alert--error" role="alert">{error}</div> : null}
-          {!error && notice ? <div className="cloud-alert cloud-alert--success" role="status">{notice}</div> : null}
+          {displayedError ? <div className="cloud-alert cloud-alert--error" role="alert">{displayedError}</div> : null}
+          {!displayedError && notice ? <div className="cloud-alert cloud-alert--success" role="status">{notice}</div> : null}
         </div>
 
         <section
@@ -256,12 +466,17 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
             <div>
               <h2>Splunk Observability Cloud</h2>
               <p>{connectionSummary}</p>
+              {controlUnavailable ? (
+                <p className="cloud-control-note" role="status">
+                  Observer state is read-only in this browser session.
+                </p>
+              ) : null}
             </div>
             {cloudConfigured ? (
               <div className="cloud-panel__actions">
                 <button
                   className="cloud-button cloud-button--danger"
-                  disabled={busyAction !== null || !bridge}
+                  disabled={mutationsDisabled}
                   onClick={() => setForgetOpen(true)}
                   ref={forgetTriggerRef}
                   type="button"
@@ -275,42 +490,72 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
           {!cloudConfigured ? (
             <form aria-label="Cloud connection" className="cloud-connect-form" onSubmit={connect}>
               <div className="cloud-field cloud-field--region">
-                <label htmlFor="cloud-region">Region</label>
-                <input
-                  autoCapitalize="none"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  disabled={busyAction !== null || !bridge}
-                  id="cloud-region"
-                  onChange={(event) => {
-                    setRegion(event.target.value.trim().toLowerCase());
-                    setError(null);
-                  }}
-                  placeholder="US0"
-                  ref={regionInputRef}
-                  spellCheck={false}
-                  value={region.toUpperCase()}
-                />
+                <div
+                  className={region
+                    ? "cloud-field__control cloud-field__control--filled"
+                    : "cloud-field__control"}
+                >
+                  <label className="cloud-field__floating-label" htmlFor="cloud-region">Region</label>
+                  <input
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    id="cloud-region"
+                    maxLength={maxSplunkRealmLength}
+                    onChange={(event) => {
+                      setRegion(event.target.value.trim().toLowerCase());
+                      setError(null);
+                    }}
+                    onKeyDown={submitConnectionOnEnter}
+                    placeholder="Region"
+                    ref={regionInputRef}
+                    spellCheck={false}
+                    value={region.toUpperCase()}
+                  />
+                </div>
               </div>
               <div className="cloud-field cloud-field--token">
-                <label htmlFor="cloud-access-token">Access token</label>
-                <input
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                  autoCorrect="off"
-                  disabled={busyAction !== null || !bridge}
-                  id="cloud-access-token"
-                  maxLength={4096}
-                  onChange={(event) => {
-                    setAccessToken(event.target.value);
-                    setError(null);
-                  }}
-                  placeholder="Paste Ingest token"
-                  ref={tokenInputRef}
-                  spellCheck={false}
-                  type="password"
-                  value={accessToken}
-                />
+                <div
+                  className={accessToken
+                    ? "cloud-field__control cloud-field__control--filled"
+                    : "cloud-field__control"}
+                >
+                  <label className="cloud-field__floating-label" htmlFor="cloud-access-token">Access token</label>
+                  <input
+                    autoCapitalize="none"
+                    autoComplete="new-password"
+                    autoCorrect="off"
+                    id="cloud-access-token"
+                    onChange={(event) => {
+                      if (utf8ByteLength(event.target.value) > maxSplunkAccessTokenBytes) {
+                        setError(splunkAccessTokenTooLongMessage);
+                        return;
+                      }
+                      setAccessToken(event.target.value);
+                      setError(null);
+                    }}
+                    onKeyDown={submitConnectionOnEnter}
+                    onPaste={(event) => {
+                      const pastedToken = event.clipboardData.getData("text");
+                      if (pastedToken === "") return;
+                      const input = event.currentTarget;
+                      const selectionStart = input.selectionStart ?? input.value.length;
+                      const selectionEnd = input.selectionEnd ?? selectionStart;
+                      const nextValue = input.value.slice(0, selectionStart)
+                        + pastedToken
+                        + input.value.slice(selectionEnd);
+                      if (utf8ByteLength(nextValue) > maxSplunkAccessTokenBytes) {
+                        event.preventDefault();
+                        setError(splunkAccessTokenTooLongMessage);
+                      }
+                    }}
+                    placeholder="Access token"
+                    ref={tokenInputRef}
+                    spellCheck={false}
+                    type="password"
+                    value={accessToken}
+                  />
+                </div>
                 <a
                   className="cloud-field__help-link"
                   href={ingestTokenHelpURL}
@@ -324,7 +569,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
               <div className="cloud-connect-form__action">
                 <button
                   className="cloud-button cloud-button--primary"
-                  disabled={busyAction !== null || !bridge || accessToken.trim().length < 16}
+                  disabled={mutationsDisabled}
                   type="submit"
                 >
                   {busyAction === "connect" ? "Connecting..." : "Connect"}
@@ -342,7 +587,7 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
                   aria-checked={exportEnabled}
                   aria-label={`Remote telemetry export is ${exportStateLabel}`}
                   className={exportEnabled ? "cloud-switch cloud-switch--on" : "cloud-switch"}
-                  disabled={busyAction !== null || !bridge}
+                  disabled={mutationsDisabled}
                   onClick={() => void toggleExport()}
                   role="switch"
                   type="button"
@@ -455,6 +700,31 @@ export function CloudTab({ onConnectionChange }: CloudTabProps): React.ReactElem
       ) : null}
     </section>
   );
+}
+
+function cloudControlStateChanged(
+  current: SplunkExportStatus,
+  next: SplunkExportStatus,
+): boolean {
+  return cloudConfigurationStateChanged(current, next)
+    || current.enabled !== next.enabled
+    || current.metrics.enabled !== next.metrics.enabled
+    || current.traces.enabled !== next.traces.enabled;
+}
+
+function cloudConfigurationStateChanged(
+  current: SplunkExportStatus,
+  next: SplunkExportStatus,
+): boolean {
+  return current.version !== next.version
+    || current.connected !== next.connected
+    || (current.realm ?? "").trim().toLowerCase() !== (next.realm ?? "").trim().toLowerCase()
+    || current.metrics.configured !== next.metrics.configured
+    || current.traces.configured !== next.traces.configured;
+}
+
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 function signalRow(label: string, signal: SplunkExportSignalStatus | undefined): SignalRow {

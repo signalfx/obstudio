@@ -6950,8 +6950,20 @@ code {
 }
 
 .cloud-panel--setup {
-  max-width: 540px;
+  max-width: 432px;
   margin: 0 auto;
+  border-top: 5px solid #ce0070;
+  border-radius: 0;
+}
+
+.cloud-panel--setup .cloud-panel__header {
+  padding: 20px;
+}
+
+.cloud-panel--setup .cloud-panel__header h2 {
+  margin-top: 0;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .cloud-panel__header {
@@ -6973,6 +6985,11 @@ code {
   margin: 0;
   color: var(--text-dim);
   font-size: var(--font-body);
+}
+
+.cloud-panel__header .cloud-control-note {
+  margin-top: 8px;
+  font-size: var(--font-meta);
 }
 
 .cloud-state {
@@ -7056,8 +7073,7 @@ code {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 16px;
-  padding: 20px 24px 24px;
-  border-top: 1px solid var(--border);
+  padding: 0 20px 20px;
 }
 
 .cloud-field {
@@ -7065,36 +7081,51 @@ code {
   min-width: 0;
 }
 
-.cloud-field--region {
-  max-width: 190px;
+.cloud-field__control {
+  position: relative;
 }
 
-.cloud-field--token {
-  max-width: 360px;
-}
-
-.cloud-field label {
-  display: block;
-  margin-bottom: 7px;
+.cloud-field__floating-label {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  left: 15px;
   color: var(--text-dim);
-  font-size: var(--font-meta);
-  font-weight: 600;
+  font-family: Inter, "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.cloud-field__control--filled .cloud-field__floating-label {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .cloud-field input,
 .cloud-field select {
   width: 100%;
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background-color: #040912;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--font-body);
+  height: 52px;
+  border: 1px solid #969daa;
+  border-radius: 3px;
+  background-color: transparent;
+  color: var(--row-primary-text);
+  font-family: Inter, "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .cloud-field input {
-  padding: 0 11px;
+  padding: 0 15px;
+}
+
+.cloud-field__control--filled input {
+  padding: 16px 15px 0;
 }
 
 .cloud-field select {
@@ -7106,7 +7137,9 @@ code {
 }
 
 .cloud-field input::placeholder {
-  color: #686b72;
+  color: var(--text-dim);
+  font-weight: 400;
+  opacity: 1;
 }
 
 .cloud-field__help-link {
@@ -7127,7 +7160,12 @@ code {
 }
 
 .cloud-connect-form__action .cloud-button {
-  min-width: 120px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 24px;
+  font-family: Inter, "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 15px;
 }
 
 .cloud-free-account {
@@ -7358,9 +7396,12 @@ code {
     padding: 18px;
   }
 
-  .cloud-connect-form {
-    grid-template-columns: 1fr;
+  .cloud-panel--setup .cloud-panel__header {
     padding: 18px;
+  }
+
+  .cloud-connect-form {
+    padding: 0 18px 18px;
   }
 
   .cloud-connect-form__action,

@@ -31,11 +31,14 @@ export function KeyboardHelp({ onClose }: KeyboardHelpProps): React.ReactElement
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (hasHostCommandModifier(event)) {
+        return;
+      }
       if (event.key === "Tab") {
         event.preventDefault();
         return;
       }
-      if (event.key !== "Escape" || hasHostCommandModifier(event)) {
+      if (event.key !== "Escape") {
         return;
       }
       event.preventDefault();

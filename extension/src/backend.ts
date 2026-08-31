@@ -45,6 +45,14 @@ export function normalizeObserverBaseUrl(raw: string): string {
 	if (parsed.pathname.endsWith('/mcp')) {
 		parsed.pathname = parsed.pathname.slice(0, -4) || '/';
 	}
+	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+	if (hostname === '0.0.0.0') {
+		// Wildcard addresses are valid listener addresses, not destinations.
+		// Connect to the same local listener through an explicit loopback host.
+		parsed.hostname = '127.0.0.1';
+	} else if (hostname === '::') {
+		parsed.hostname = '[::1]';
+	}
 
 	parsed.search = '';
 	parsed.hash = '';
@@ -88,13 +96,73 @@ export function readSharedObserverDiscovery(
 			? state.controlToken.trim()
 			: undefined;
 		return {
-			baseUrl: normalizeObserverBaseUrl(state.baseUrl),
+			baseUrl: normalizeSharedObserverBaseUrl(state.baseUrl),
 			...(controlToken !== undefined ? { controlToken } : {}),
 			...(Number.isFinite(updatedAtMs) ? { updatedAtMs } : {}),
 		};
 	} catch {
 		return undefined;
 	}
+}
+
+function sameObserverControlEndpoint(left: string, right: string): boolean {
+	return canonicalObserverControlEndpoint(left) === canonicalObserverControlEndpoint(right);
+}
+
+export function isLocalObserverControlHost(rawHostname: string): boolean {
+	const hostname = rawHostname.toLowerCase().replace(/^\[|\]$/g, '');
+	const ipv4Octets = hostname.split('.');
+	const ipv4Loopback = ipv4Octets.length === 4
+		&& ipv4Octets[0] === '127'
+		&& ipv4Octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
+	return hostname === 'localhost'
+		|| hostname === '::1'
+		|| ipv4Loopback;
+}
+
+export function normalizeSharedObserverBaseUrl(raw: string): string {
+	const normalized = normalizeObserverBaseUrl(raw);
+	const parsed = new URL(normalized);
+	if (parsed.protocol === 'http:' && !isLocalObserverControlHost(parsed.hostname)) {
+		throw new Error('A non-local shared Observer URL must use HTTPS.');
+	}
+	return normalized;
+}
+
+function canonicalObserverControlEndpoint(raw: string): string {
+	const parsed = new URL(normalizeObserverBaseUrl(raw));
+	const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+	if (
+		hostname === 'localhost'
+		|| hostname === '127.0.0.1'
+		|| hostname === '0.0.0.0'
+	) {
+		parsed.hostname = '127.0.0.1';
+	} else if (hostname === '::1' || hostname === '::') {
+		parsed.hostname = '[::1]';
+	}
+	return parsed.toString().replace(/\/$/, '');
+}
+
+export function resolveSharedObserverControlToken(
+	observerUrl: string,
+	homeDir: string,
+	inheritedToken: string | undefined,
+	statePathOverride?: string,
+	rejectedToken?: string,
+): string | undefined {
+	const discovered = readSharedObserverDiscovery(homeDir, statePathOverride);
+	if (
+		discovered?.controlToken !== undefined
+		&& sameObserverControlEndpoint(discovered.baseUrl, observerUrl)
+		&& discovered.controlToken !== rejectedToken
+	) {
+		return discovered.controlToken;
+	}
+	const normalizedInheritedToken = inheritedToken?.trim();
+	return normalizedInheritedToken === '' || normalizedInheritedToken === rejectedToken
+		? undefined
+		: normalizedInheritedToken;
 }
 
 export function resolveBackend(extensionPath: string): ObserverBackend {

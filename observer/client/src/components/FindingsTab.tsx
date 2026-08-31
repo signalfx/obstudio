@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { observerFetch } from "../host/transport";
 import type { ValidationFinding, ValidationIssue, ValidationSeverity, ValidationSummary } from "../api/types";
 import { DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import {
@@ -144,7 +145,7 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     setIsSubmitting(true);
     setRunError(null);
     try {
-      const response = await fetch("/api/validation/run", {
+      const response = await observerFetch("/api/validation/run", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

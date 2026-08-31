@@ -300,6 +300,7 @@ export interface SplunkExportStatus {
   connected: boolean;
   enabled: boolean;
   realm?: string;
+  version: string;
   metrics: SplunkExportSignalStatus;
   traces: SplunkExportSignalStatus;
 }
