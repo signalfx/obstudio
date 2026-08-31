@@ -53,11 +53,6 @@ discoverable skill entries in `~/.kiro/skills`, and configures MCP in
 `~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,
 such as `/otel-audit`.
 
-Pass `--connect-remote-o11y` to also connect the installed target(s) to the
-Splunk Observability **remote** MCP server (separate from the local server the
-install above configures) — see
-[docs/USER.md](docs/USER.md#connecting-to-the-splunk-observability-remote-mcp-server).
-
 Release archives are verified against `checksums.txt` published by the release
 pipeline before the Codex plugin bootstrapper extracts them.
 
