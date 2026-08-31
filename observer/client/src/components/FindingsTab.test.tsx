@@ -113,24 +113,30 @@ describe("FindingsTab", () => {
     const head = view.container.querySelector(".findings-tab__head");
     expect(head).toBeTruthy();
     expect(within(head as HTMLElement).getByText("Metric")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Rule")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Viol.")).toBeTruthy();
-    expect(within(head as HTMLElement).getByText("Impr.")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Rules")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Violations")).toBeTruthy();
+    expect(within(head as HTMLElement).getByText("Improvements")).toBeTruthy();
     expect(within(head as HTMLElement).getByText("Info")).toBeTruthy();
 
-    const master = view.container.querySelector(".findings-tab__master");
-    expect(master?.classList.contains("findings-tab__master--metric")).toBe(true);
-    const rowButton = within(master as HTMLElement).getByText("http.server.duration").closest("button");
+    const list = view.container.querySelector(".findings-tab__list");
+    expect(list).toBeTruthy();
+    const rowButton = within(list as HTMLElement).getByText("http.server.duration").closest("button");
     expect(rowButton).toBeTruthy();
-    expect(within(rowButton as HTMLElement).getByText("unit_mismatch +2 more")).toBeTruthy();
-    const counts = Array.from((rowButton as HTMLElement).querySelectorAll(".findings-tab__item-count")).map((node) => node.textContent?.trim());
-    expect(counts).toEqual(["1", "1", "1"]);
+    // Each rule renders as its own chip
+    expect(within(rowButton as HTMLElement).getByText("unit_mismatch")).toBeTruthy();
+    expect(within(rowButton as HTMLElement).getByText("missing_description")).toBeTruthy();
+    expect(within(rowButton as HTMLElement).getByText("naming")).toBeTruthy();
+    // Counts
+    const violCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--violation");
+    const imprCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--improvement");
+    const infoCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--information");
+    expect(violCount?.textContent?.trim()).toBe("1");
+    expect(imprCount?.textContent?.trim()).toBe("1");
+    expect(infoCount?.textContent?.trim()).toBe("1");
     expect((rowButton as HTMLElement).getAttribute("aria-label")).toBe("http.server.duration, unit_mismatch +2 more, 1 violation, 1 improvement, 1 information finding");
-    expect((rowButton as HTMLElement).querySelector(".findings-tab__item-title")?.classList.contains("explorer-row__primary")).toBe(true);
-    expect((rowButton as HTMLElement).querySelector(".findings-tab__item-rule")?.classList.contains("explorer-row__secondary")).toBe(true);
-    expect((rowButton as HTMLElement).querySelector(".findings-tab__item-rule")?.classList.contains("mono")).toBe(false);
-    expect(Array.from((rowButton as HTMLElement).querySelectorAll(".findings-tab__item-count")).every((node) => node.classList.contains("explorer-row__numeric"))).toBe(true);
-    expect(view.container.querySelector("#validation-issue-detail")).toBeNull();
+    expect((rowButton as HTMLElement).querySelector(".explorer-row__primary")).toBeTruthy();
+    expect(violCount?.classList.contains("explorer-row__numeric")).toBe(true);
+    expect(view.container.querySelector("#validation-issue-detail")?.hasAttribute("hidden")).toBe(true);
   });
 
   it("does not show a validated timestamp before validation has produced a real result", () => {
@@ -221,25 +227,25 @@ describe("FindingsTab", () => {
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Spans/ }));
     let head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Span")).toBeTruthy();
-    let master = view.container.querySelector(".findings-tab__master");
-    expect(master?.classList.contains("findings-tab__master--span")).toBe(true);
-    expect(within(master as HTMLElement).getByText("GET /orders")).toBeTruthy();
+    let list = view.container.querySelector(".findings-tab__list");
+    expect(list).toBeTruthy();
+    expect(within(list as HTMLElement).getByText("GET /orders")).toBeTruthy();
 
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Logs/ }));
     head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Example")).toBeTruthy();
-    master = view.container.querySelector(".findings-tab__master");
-    expect(master?.classList.contains("findings-tab__master--log")).toBe(true);
-    expect(within(master as HTMLElement).getByText("Cache hit for order ORD-1781")).toBeTruthy();
-    expect(within(master as HTMLElement).getByText("missing_attribute")).toBeTruthy();
+    list = view.container.querySelector(".findings-tab__list");
+    expect(list).toBeTruthy();
+    expect(within(list as HTMLElement).getByText("Cache hit for order ORD-1781")).toBeTruthy();
+    expect(within(list as HTMLElement).getByText("missing_attribute")).toBeTruthy();
 
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
     head = view.container.querySelector(".findings-tab__head");
     expect(within(head as HTMLElement).getByText("Attribute")).toBeTruthy();
-    master = view.container.querySelector(".findings-tab__master");
-    expect(master?.classList.contains("findings-tab__master--resource")).toBe(true);
-    expect(within(master as HTMLElement).getByText("deployment.environment.name")).toBeTruthy();
-    expect(within(master as HTMLElement).getByText("not_stable")).toBeTruthy();
+    list = view.container.querySelector(".findings-tab__list");
+    expect(list).toBeTruthy();
+    expect(within(list as HTMLElement).getByText("deployment.environment.name")).toBeTruthy();
+    expect(within(list as HTMLElement).getByText("not_stable")).toBeTruthy();
   });
 
   it("shows per-tab counts for the currently filtered rows and keeps span rows reachable", () => {
@@ -291,12 +297,17 @@ describe("FindingsTab", () => {
     expect(spansTab.getAttribute("aria-checked")).toBe("true");
     expect(view.queryByText("No metrics validation issues match the current filters.")).toBeNull();
 
-    const master = view.container.querySelector(".findings-tab__master");
-    expect(master?.classList.contains("findings-tab__master--span")).toBe(true);
-    const rowButton = within(master as HTMLElement).getByText("POST /orders").closest("button");
+    const list = view.container.querySelector(".findings-tab__list");
+    expect(list).toBeTruthy();
+    const rowButton = within(list as HTMLElement).getByText("POST /orders").closest("button");
     expect(rowButton).toBeTruthy();
-    const rowCounts = Array.from((rowButton as HTMLElement).querySelectorAll(".findings-tab__item-count")).map((node) => node.textContent?.trim());
-    expect(rowCounts).toEqual(["", "", "1"]);
+    // Zero-count cells show em-dash
+    const violCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--violation");
+    const imprCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--improvement");
+    const infoCount = (rowButton as HTMLElement).querySelector(".findings-tab__count--information");
+    expect(violCount?.textContent?.trim()).toBe("—");
+    expect(imprCount?.textContent?.trim()).toBe("—");
+    expect(infoCount?.textContent?.trim()).toBe("1");
     expect((rowButton as HTMLElement).getAttribute("aria-label")).toBe("POST /orders, missing_http_method, 1 information finding");
   });
 
@@ -328,7 +339,7 @@ describe("FindingsTab", () => {
     tablist = view.getByRole("radiogroup", { name: "Validation signals" });
     const spansTab = within(tablist).getByRole("radio", { name: /^Spans/ });
     expect(spansTab.getAttribute("aria-checked")).toBe("true");
-    expect(within(view.container.querySelector(".findings-tab__master") as HTMLElement).getByText("POST /orders")).toBeTruthy();
+    expect(within(view.container.querySelector(".findings-tab__list") as HTMLElement).getByText("POST /orders")).toBeTruthy();
   });
 
   it("keeps an empty validation tab selected and shows its empty state", () => {
@@ -362,7 +373,7 @@ describe("FindingsTab", () => {
 
     expect(resourcesTab.getAttribute("aria-checked")).toBe("true");
     expect(view.getByText("No resources validation issues match the current filters.")).toBeTruthy();
-    expect(view.container.querySelector(".findings-tab__master")).toBeNull();
+    expect(view.container.querySelector(".findings-tab__list")).toBeNull();
   });
 
   it("does not render generic detail titles or subtitles in any validation subtab", () => {
@@ -404,23 +415,20 @@ describe("FindingsTab", () => {
       />,
     );
 
-    let master = view.container.querySelector(".findings-tab__master");
-    fireEvent.click(within(master as HTMLElement).getByText("GET /orders").closest("button") as HTMLElement);
+    fireEvent.click(view.getByText("GET /orders").closest("button") as HTMLElement);
     let detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
     expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("GET /orders");
     expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Span");
 
     const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Logs/ }));
-    master = view.container.querySelector(".findings-tab__master");
-    fireEvent.click(within(master as HTMLElement).getByText("Cache hit for order ORD-1781").closest("button") as HTMLElement);
+    fireEvent.click(view.getByText("Cache hit for order ORD-1781").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
     expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("Cache hit for order ORD-1781");
     expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Log");
 
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
-    master = view.container.querySelector(".findings-tab__master");
-    fireEvent.click(within(master as HTMLElement).getByText("deployment.environment.name").closest("button") as HTMLElement);
+    fireEvent.click(view.getByText("deployment.environment.name").closest("button") as HTMLElement);
     detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
     expect(detailPanel.querySelector(".detail-panel__title")?.textContent).toBe("deployment.environment.name");
     expect(detailPanel.querySelector(".detail-panel__subtitle")?.textContent).toContain("Resource");
@@ -458,18 +466,17 @@ describe("FindingsTab", () => {
       />,
     );
 
-    const layout = view.container.querySelector(".findings-tab__layout");
-    expect(layout?.classList.contains("findings-tab__layout--with-panel")).toBe(false);
+    const signalView = view.container.querySelector(".signal-view");
+    expect(signalView?.classList.contains("signal-view--with-panel")).toBe(false);
 
-    const master = view.container.querySelector(".findings-tab__master");
-    const rowButton = within(master as HTMLElement).getByText("jvm.thread.count").closest("button");
-    expect(view.container.querySelector("#validation-issue-detail")).toBeNull();
+    const rowButton = view.getByText("jvm.thread.count").closest("button");
+    expect(view.container.querySelector("#validation-issue-detail")?.hasAttribute("hidden")).toBe(true);
 
     fireEvent.click(rowButton as HTMLElement);
 
     const detailPanel = view.container.querySelector("#validation-issue-detail");
     expect(detailPanel).toBeTruthy();
-    expect(view.container.querySelector(".findings-tab__layout--with-panel")).toBeTruthy();
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeTruthy();
     expect((detailPanel as HTMLElement).querySelector(".detail-panel__title")?.textContent).toBe("jvm.thread.count");
     expect((detailPanel as HTMLElement).querySelector(".detail-panel__subtitle")?.textContent).toContain("Metric");
     expect((detailPanel as HTMLElement).querySelector(".findings-tab__detail-grid")).toBeNull();
@@ -523,8 +530,7 @@ describe("FindingsTab", () => {
     const tablist = view.getByRole("radiogroup", { name: "Validation signals" });
     fireEvent.click(within(tablist).getByRole("radio", { name: /^Resources/ }));
 
-    const master = view.container.querySelector(".findings-tab__master");
-    fireEvent.click(within(master as HTMLElement).getByText("deployment.environment.name").closest("button") as HTMLElement);
+    fireEvent.click(view.getByText("deployment.environment.name").closest("button") as HTMLElement);
 
     const detailPanel = view.container.querySelector("#validation-issue-detail");
     expect(within(detailPanel as HTMLElement).getByText("Stability")).toBeTruthy();
@@ -586,7 +592,11 @@ describe("FindingsTab", () => {
     fireEvent.click(row as HTMLElement);
 
     const detailPanel = view.container.querySelector("#validation-issue-detail") as HTMLElement;
-    expect(within(detailPanel).getAllByText("1 finding")).toHaveLength(3);
+    // Each severity group heading includes the count and severity name
+    expect(within(detailPanel).getByText("1 violation finding")).toBeTruthy();
+    expect(within(detailPanel).getByText("1 improvement finding")).toBeTruthy();
+    expect(within(detailPanel).getByText("1 information finding")).toBeTruthy();
+    // Column headers from the table outside the panel should not appear inside the panel
     expect(within(detailPanel).queryByText("Violations")).toBeNull();
     expect(within(detailPanel).queryByText("Improvements")).toBeNull();
     expect(within(detailPanel).queryByText("Information")).toBeNull();
@@ -619,19 +629,122 @@ describe("FindingsTab", () => {
     );
 
     const row = view.getByText("jvm.thread.count").closest("button");
-    const item = row?.closest(".findings-tab__item");
     fireEvent.click(row as HTMLElement);
 
-    const layout = view.container.querySelector(".findings-tab__layout");
+    const signalView = view.container.querySelector(".signal-view");
     const detailPanel = view.container.querySelector("#validation-issue-detail");
-    const selected = view.container.querySelector(".findings-tab__item.is-selected");
 
-    expect(layout?.classList.contains("findings-tab__layout--with-panel")).toBe(true);
+    expect(signalView?.classList.contains("signal-view--with-panel")).toBe(true);
     expect(detailPanel).toBeTruthy();
+    // Opened panel must expose a complementary landmark for assistive technology
+    expect(detailPanel?.tagName.toLowerCase()).toBe("aside");
+    expect(view.getByRole("complementary", { name: "Validation finding detail" })).toBeTruthy();
     expect(detailPanel?.querySelector(".detail-panel__header--close-only")).toBeNull();
     expect(detailPanel?.querySelector(".detail-panel__header .detail-panel__close")).toBeTruthy();
-    expect(selected).toBe(item);
+    expect(row?.classList.contains("data-table__row--active")).toBe(true);
     expect(detailPanel?.querySelector(".detail-panel__title")?.textContent).toBe("jvm.thread.count");
     expect((detailPanel?.closest(".resizable-panel") as HTMLElement | null)?.style.getPropertyValue("--panel-width")).toBe("560px");
+  });
+
+  it("close button animates the panel out and restores the hidden aria-controls stub", () => {
+    vi.useFakeTimers();
+
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "metric:checkout:jvm.thread.count",
+            ruleId: "unit_mismatch",
+            message: "Metric unit should be {thread}.",
+            signal: { type: "metric", serviceName: "checkout", scopeName: "otel", metricName: "jvm.thread.count" },
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    const row = view.getByText("jvm.thread.count").closest("button") as HTMLElement;
+    fireEvent.click(row);
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeTruthy();
+
+    const closeBtn = view.container.querySelector(".detail-panel__header .detail-panel__close") as HTMLElement;
+    fireEvent.click(closeBtn);
+
+    // Panel is still mounted during the 300ms exit animation, but aria-pressed clears immediately
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeTruthy();
+    expect(row.getAttribute("aria-pressed")).toBe("false");
+
+    act(() => { vi.advanceTimersByTime(300); });
+
+    // After animation completes: panel removed, stub remains for aria-controls, focus returns to row
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeNull();
+    expect(view.container.querySelector("#validation-issue-detail")?.hasAttribute("hidden")).toBe(true);
+    expect(row.classList.contains("data-table__row--active")).toBe(false);
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("clicking a row during the close animation cancels the exit and selects the new row", () => {
+    vi.useFakeTimers();
+
+    const view = render(
+      <FindingsTab
+        issues={buildValidationIssues([
+          makeFinding({
+            entityKey: "metric:checkout:jvm.thread.count",
+            ruleId: "unit_mismatch",
+            message: "Metric unit should be {thread}.",
+            signal: { type: "metric", serviceName: "checkout", scopeName: "otel", metricName: "jvm.thread.count" },
+          }),
+          makeFinding({
+            entityKey: "metric:checkout:http.server.duration",
+            ruleId: "missing_description",
+            message: "Metric needs a description.",
+            signal: { type: "metric", serviceName: "checkout", scopeName: "otel", metricName: "http.server.duration" },
+          }),
+        ])}
+        summary={makeSummary()}
+      />,
+    );
+
+    const row1 = view.getByText("jvm.thread.count").closest("button") as HTMLElement;
+    fireEvent.click(row1);
+    expect(row1.classList.contains("data-table__row--active")).toBe(true);
+
+    const closeBtn = view.container.querySelector(".detail-panel__header .detail-panel__close") as HTMLElement;
+    fireEvent.click(closeBtn);
+
+    // Mid-animation: click a different row to cancel exit and switch selection
+    const row2 = view.getByText("http.server.duration").closest("button") as HTMLElement;
+    fireEvent.click(row2);
+
+    expect(row2.classList.contains("data-table__row--active")).toBe(true);
+    expect(row1.classList.contains("data-table__row--active")).toBe(false);
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeTruthy();
+
+    // Advancing past the original animation window must not close the panel
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(view.container.querySelector(".signal-view--with-panel")).toBeTruthy();
+    expect(view.container.querySelector("#validation-issue-detail")?.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("shows running-since timestamp that refreshes with the 1-second interval", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-09T00:02:00Z"));
+
+    const runningSummary: ValidationSummary = {
+      ...makeSummary(),
+      status: "running",
+      lastRunStartedAt: "2026-04-09T00:01:00Z",
+    };
+
+    const view = render(
+      <FindingsTab issues={[]} summary={runningSummary} />,
+    );
+
+    expect(view.getByText("Validation is running since 1 minute ago.")).toBeTruthy();
+
+    act(() => { vi.advanceTimersByTime(60_000); });
+
+    expect(view.getByText("Validation is running since 2 minutes ago.")).toBeTruthy();
   });
 });
