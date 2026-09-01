@@ -48,6 +48,21 @@ under that directory and creates top-level discoverable skill entries such as
 server (VS Code user `mcp.json`) and installs no skill entries.
 After installation, restart the agent if it does not discover the new skills.
 
+For an Observer that should keep running independently of a terminal, use the
+explicit managed background lifecycle:
+
+```bash
+obstudio start
+obstudio status
+obstudio restart
+obstudio stop
+```
+
+Installation never restarts a running Observer. After installing a higher
+version, run `obstudio restart` when convenient to activate it. These commands
+control only an Observer launched by `obstudio start`; a foreground Observer is
+still stopped with `Ctrl+C`, and the editor extension manages its own process.
+
 Kiro installs the bundle under `~/.kiro/skills/obstudio`, creates its
 discoverable skill entries in `~/.kiro/skills`, and configures MCP in
 `~/.kiro/settings/mcp.json`. Invoke a skill in Kiro with its slash command,

@@ -32,6 +32,7 @@ import (
 )
 
 var version = "dev"
+var listenObserverHTTP = net.Listen
 
 const (
 	observerCloudBrowserLaunchTokenEnv     = "OBSTUDIO_CLOUD_BROWSER_LAUNCH_TOKEN"
@@ -93,8 +94,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 			if err := validateRunConfig(resolved); err != nil {
 				return err
 			}
-			run(resolved)
-			return nil
+			return run(resolved)
 		},
 		SilenceUsage: true,
 	}
@@ -104,10 +104,13 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.Flags().StringVar(&config.envFile, "env-file", "", "Load KEY=VALUE settings from an env file before startup")
 
 	root.AddCommand(newInstallCmd())
+	root.AddCommand(newLifecycleCommands()...)
 	return root
 }
 
-func run(config runConfig) {
+func run(config runConfig) error {
+	managedLaunchAuthorized := consumeManagedLaunchCapability()
+	configureManagedLogging()
 	if err := ensureObserverControlToken(); err != nil {
 		log.Fatalf("configure Observer control token: %v", err)
 	}
@@ -181,13 +184,19 @@ func run(config runConfig) {
 		log.Fatalf("failed to start OTLP receiver: %v", err)
 	}
 
+	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
+	observerMode := envOr("OBSTUDIO_MODE", "standalone")
+	if observerMode == managedObserverMode && !managedLaunchAuthorized {
+		observerMode = "standalone"
+	}
+	stopManaged := make(chan struct{}, 1)
 	mux := http.NewServeMux()
 	api.Register(mux, s, v, validatorManager, api.ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
 		Version:    version,
-		Owner:      envOr("OBSTUDIO_OWNER", "cli"),
-		Mode:       envOr("OBSTUDIO_MODE", "standalone"),
+		Owner:      observerOwner,
+		Mode:       observerMode,
 		StartedAt:  startedAt,
 		Exporters:  exporterInfo(splunkExportController, splunkTracesController),
 	}, dashboards.Config{
@@ -198,11 +207,14 @@ func run(config runConfig) {
 		ReportPath:    envOr("OBSTUDIO_AUDIT_REPORT", ""),
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(config.envFile, splunkExportController, splunkTracesController))
+	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
+		registerManagedStop(mux, strings.TrimSpace(os.Getenv("OBSTUDIO_CONTROL_TOKEN")), stopManaged)
+	}
 	mcp.Register(mux, s, v, validatorManager, splunkExportController, splunkTracesController)
 	webCleanup := web.Register(mux, s, v)
 
 	srv := &http.Server{Addr: mainAddr, Handler: mux}
-	mainListener, err := net.Listen("tcp", mainAddr)
+	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %v", err)
 	}
@@ -218,10 +230,30 @@ func run(config runConfig) {
 			}
 		}()
 	}
+	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
+		managedPath := managedControlStatePath()
+		if err := writeSharedObserverState(managedPath, observerState); err != nil {
+			log.Printf("failed to write managed Observer state: %v", err)
+			_ = mainListener.Close()
+			webCleanup()
+			validatorManager.Shutdown(ctx)
+			rcv.Shutdown(ctx)
+			splunkExportController.Shutdown(ctx)
+			splunkTracesController.Shutdown(ctx)
+			return fmt.Errorf("write managed Observer state: %w", err)
+		} else {
+			defer func() {
+				if err := clearSharedObserverStateIfOwned(managedPath, observerState); err != nil {
+					log.Printf("failed to clear managed Observer state: %v", err)
+				}
+			}()
+		}
+	}
 
+	serveErrors := make(chan error, 1)
 	go func() {
 		if err := srv.Serve(mainListener); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
+			serveErrors <- err
 		}
 	}()
 
@@ -231,7 +263,14 @@ func run(config runConfig) {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	var runErr error
+	select {
+	case <-sig:
+	case <-stopManaged:
+	case err := <-serveErrors:
+		runErr = fmt.Errorf("HTTP server failed: %w", err)
+		log.Printf("%v", runErr)
+	}
 	fmt.Fprintf(os.Stderr, "\nShutting down...\n")
 
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -239,9 +278,10 @@ func run(config runConfig) {
 	srv.Shutdown(shutCtx)
 	webCleanup()
 	validatorManager.Shutdown(shutCtx)
-	rcv.Shutdown(ctx)
+	rcv.Shutdown(shutCtx)
 	splunkExportController.Shutdown(shutCtx)
 	splunkTracesController.Shutdown(shutCtx)
+	return runErr
 }
 
 func ensureObserverControlToken() error {
