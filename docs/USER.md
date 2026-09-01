@@ -166,6 +166,18 @@ auto-detects its current HTTP MCP endpoint from local runtime state, including
 nondefault `--observer-http-port` values. Use `--shared-url` only when you want
 to point an agent at a different already-running Observer explicitly.
 
+Manage a standalone Observer in the background:
+
+```text
+obstudio start    Start Observer
+obstudio status   Show its status
+obstudio restart  Restart and activate an installed update
+obstudio stop     Stop Observer
+```
+
+Installing an update does not restart Observer. These commands do not control
+foreground or extension-managed Observers.
+
 | Service | URL |
 |---------|-----|
 | Telemetry Explorer | http://localhost:3000 |

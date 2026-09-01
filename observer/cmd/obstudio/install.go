@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -65,6 +66,9 @@ type sharedObserverHealth struct {
 	APIVersion string            `json:"apiVersion"`
 	Endpoints  map[string]string `json:"endpoints"`
 	Kind       string            `json:"kind"`
+	Mode       string            `json:"mode"`
+	Owner      string            `json:"owner"`
+	Version    string            `json:"version"`
 }
 
 type sharedObserverState struct {
@@ -153,6 +157,11 @@ func newInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			release, err := acquireManagedLifecycleLock()
+			if err != nil {
+				return err
+			}
+			defer release()
 			return runInstallTargets(targetNames, sharedURL)
 		},
 	}
@@ -300,10 +309,46 @@ func runInstall(target, sharedURL string) error {
 		fmt.Printf("\nDone. Restart %s to activate the MCP server.\n", target)
 		return nil
 	}
+	if managedObserverMatchesURL(resolvedSharedURL, http.DefaultClient) {
+		fmt.Println("\nUpdate installed. Run `obstudio restart` when convenient to activate the new version.")
+		return nil
+	}
 
 	fmt.Printf("\nDone. Start the shared obstudio server before using %s:\n", target)
 	fmt.Println("  obstudio")
 	return nil
+}
+
+func managedObserverMatchesURL(sharedURL string, client *http.Client) bool {
+	health, state, err := managedObserverHealth(client)
+	if err != nil || health.Owner != "cli" || health.Mode != managedObserverMode {
+		return false
+	}
+	managedEndpoint, managedErr := canonicalManagedEndpoint(state.MCPURL)
+	configuredEndpoint, configuredErr := canonicalManagedEndpoint(sharedURL)
+	return managedErr == nil && configuredErr == nil && managedEndpoint == configuredEndpoint
+}
+
+func canonicalManagedEndpoint(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" {
+		return "", errors.New("invalid managed endpoint URL")
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "localhost" {
+		host = "127.0.0.1"
+	} else if ip := net.ParseIP(host); ip != nil {
+		host = ip.String()
+	}
+	port := parsed.Port()
+	if port == "" {
+		if strings.EqualFold(parsed.Scheme, "http") {
+			port = "80"
+		} else if strings.EqualFold(parsed.Scheme, "https") {
+			port = "443"
+		}
+	}
+	return strings.ToLower(parsed.Scheme) + "://" + net.JoinHostPort(host, port) + strings.TrimRight(parsed.EscapedPath(), "/"), nil
 }
 
 func detectConfiguredSharedObserverURL(client *http.Client) (string, bool) {

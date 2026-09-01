@@ -106,7 +106,7 @@ jobs:
         working-directory: observer
         run: |
           go run ./cmd/stage-skills
-          go test ./cmd/obstudio -run TestInstallSmokeInstallsBinaryAndAcceptsOTLP -count=1
+          go test ./cmd/obstudio -run 'Test(InstallSmokeInstallsBinaryAndAcceptsOTLP|ManagedLifecycleRealBinary|ManagedUpgradeActivatesOnlyAfterRestart)$' -count=1
 
   extension:
     name: Extension – test & package
