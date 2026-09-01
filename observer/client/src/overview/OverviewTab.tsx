@@ -112,7 +112,7 @@ function ScoreRow({ label, earned, max, detail }: {
   max: number;
   detail?: string;
 }): React.ReactElement {
-  const state = earned >= max ? "full" : earned > 0 ? "partial" : "empty";
+  const state = max > 0 && earned >= max ? "full" : earned > 0 ? "partial" : "empty";
 
   return (
     <div className={`overview-score__row overview-score__row--${state}`}>
@@ -180,8 +180,10 @@ function SkillCard({ id, title, items, onOpenSkillDocs, empty }: {
                 <span className="overview-checklist__label">{item.label}</span>
                 {skill ? (
                   <span className="overview-checklist__actions">
-                    <code className="overview-checklist__command">{skill.command}</code>
-                    <CopyTextButton text={skill.command} label={`${skill.command} command`} />
+                    <span className="command-chip">
+                      <code className="overview-checklist__command">{skill.command}</code>
+                      <CopyTextButton text={skill.command} label={`${skill.command} command`} />
+                    </span>
                     <a
                       className="overview-checklist__docs-link"
                       href={skill.docsUrl}
@@ -327,7 +329,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
               className={`overview-score overview-score--${scoreTone(scored.score)}${scored.stale ? " is-stale" : ""}`}
               aria-label={`Instrumentation score ${scored.score} out of 100, ${summaryLabel}`}
             >
-              <p className="overview-score__label">Instrumentation Score</p>
+              <p className="overview-score__label" aria-hidden="true">Instrumentation Score</p>
               <p className="overview-score__value" aria-hidden="true">
                 {scored.score}<span className="overview-score__max">/100</span>
               </p>
@@ -380,13 +382,15 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                     </p>
                   )}
                   <span className="overview-score__stale-actions">
-                    <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
-                    <CopyTextButton
-                      text={OTEL_AUDIT_SKILL.command}
-                      label={`${OTEL_AUDIT_SKILL.command} command`}
-                    />
-                    <button type="button" className="overview-checklist__nav" onClick={refreshAll}>
-                      Refresh <span aria-hidden="true">↻</span>
+                    <span className="command-chip">
+                      <code className="overview-checklist__command">{OTEL_AUDIT_SKILL.command}</code>
+                      <CopyTextButton
+                        text={OTEL_AUDIT_SKILL.command}
+                        label={`${OTEL_AUDIT_SKILL.command} command`}
+                      />
+                    </span>
+                    <button type="button" className="overview-checklist__nav" onClick={() => setScoreReloads((n) => n + 1)}>
+                      <span aria-hidden="true">↻</span> Refresh
                     </button>
                   </span>
                 </div>
@@ -402,7 +406,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
             </article>
           ) : (
             <article className="overview-score overview-score--empty" aria-label="Instrumentation score unavailable">
-              <p className="overview-score__label">Instrumentation Score</p>
+              <p className="overview-score__label" aria-hidden="true">Instrumentation Score</p>
               <p className="overview-score__value overview-score__value--empty" aria-hidden="true">—</p>
               {scoreState === "error" ? (
                 <>
@@ -410,7 +414,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                     Could not reach the Observer to load the audit. An audit may already exist.
                   </p>
                   <button type="button" className="overview-checklist__nav" onClick={refreshAll}>
-                    Retry <span aria-hidden="true">↻</span>
+                    <span aria-hidden="true">↻</span> Retry
                   </button>
                 </>
               ) : (
@@ -452,7 +456,7 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                         className="overview-checklist__nav"
                         onClick={() => setCloudReloads((n) => n + 1)}
                       >
-                        Retry <span aria-hidden="true">↻</span>
+                        <span aria-hidden="true">↻</span> Retry
                       </button>
                     </>
                   ) : (
@@ -495,9 +499,9 @@ export function OverviewTab({ onOpenCloud }: OverviewTabProps): React.ReactEleme
                 <span className="overview-callout__lead">Improve Instrumentation:</span>{" "}
                 {summaryLabel}
               </span>
-              <span className="overview-callout__action" aria-hidden="true">
-                {reportOpen ? "Hide" : "Details"}
-                <span className="overview-callout__caret">{reportOpen ? "▾" : "▸"}</span>
+              <span className="overview-callout__action">
+                {reportOpen ? "Hide details" : "Show details"}
+                <span className="overview-callout__caret" aria-hidden="true">{reportOpen ? "▾" : "▸"}</span>
               </span>
             </button>
 

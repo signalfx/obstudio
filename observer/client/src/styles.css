@@ -259,9 +259,9 @@ body {
 }
 
 .copy-button--copied {
-  border-color: rgba(57, 147, 255, 0.35);
-  background: rgba(57, 147, 255, 0.12);
-  color: var(--blue);
+  border-color: rgba(133, 244, 21, 0.35);
+  background: rgba(133, 244, 21, 0.1);
+  color: var(--green);
 }
 
 .copy-button:focus-visible {
@@ -7454,7 +7454,7 @@ code {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .overview-score {
@@ -7607,6 +7607,10 @@ code {
   margin-top: 4px;
 }
 
+.overview-score__stale-actions .overview-checklist__nav {
+  margin-left: auto;
+}
+
 .overview-score__source {
   margin: 10px 0 0;
   padding-top: 8px;
@@ -7654,6 +7658,11 @@ code {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  height: 100%;
+}
+
+.overview-tab__skills > .overview-checklist:last-child {
+  flex: 1;
 }
 
 .overview-skills__empty {
@@ -7727,25 +7736,57 @@ code {
 }
 
 .overview-checklist__command {
-  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--chrome-2);
   font-family: var(--font-family-mono);
   font-size: var(--font-mono);
-  color: var(--accent);
+  color: var(--text);
   white-space: nowrap;
+}
+
+.command-chip {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.command-chip .overview-checklist__command {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.command-chip .copy-button {
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--chrome-2);
+}
+
+.command-chip .copy-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.command-chip .copy-button.copy-button--copied {
+  border-left-color: rgba(133, 244, 21, 0.35);
+  background: rgba(133, 244, 21, 0.1);
+  color: var(--green);
 }
 
 .overview-checklist__docs-link {
   font-size: var(--font-meta);
-  color: var(--text-dim);
+  color: var(--accent);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .overview-checklist__docs-link:hover {
-  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -7764,6 +7805,10 @@ code {
   color: var(--accent);
   white-space: nowrap;
   cursor: pointer;
+}
+
+.overview-checklist__nav span[aria-hidden] {
+  font-size: 1.15em;
 }
 
 .overview-checklist__nav:hover {

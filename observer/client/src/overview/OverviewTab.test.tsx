@@ -259,7 +259,7 @@ describe("OverviewTab", () => {
 
   // Staleness only detects a different HEAD, so the audited commit is shown
   // even on a current card: uncommitted edits since the audit are not flagged.
-  it("names the audited commit on a current score", async () => {
+  it("shows the expanded report view link and service title for a current score", async () => {
     stubScoreFetch(makeScore({ stale: false, auditCommit: "a646ba5cafe" }));
     const { container } = render(<OverviewTab />);
 
